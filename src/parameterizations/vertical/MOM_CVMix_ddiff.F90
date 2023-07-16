@@ -150,9 +150,11 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
   integer,                                    intent(in)    :: j    !< Meridional grid index to work on.
   ! Kd_T and Kd_S are intent inout because only one j-row is set here, but they are essentially outputs.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kd_T !< Interface double diffusion diapycnal
-                                                                    !! diffusivity for temp [Z2 T-1 ~> m2 s-1].
+                                                                    !! diffusivity for temperature
+                                                                    !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kd_S !< Interface double diffusion diapycnal
-                                                                    !! diffusivity for salt [Z2 T-1 ~> m2 s-1].
+                                                                    !! diffusivity for salinity
+                                                                    !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   type(CVMix_ddiff_cs),                       pointer       :: CS   !< The control structure returned
                                                                     !! by a previous call to CVMix_ddiff_init.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
@@ -254,8 +256,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
                             nlev=GV%ke,    &
                             max_nlev=GV%ke)
     do K=1,GV%ke+1
-      Kd_T(i,j,K) = US%m2_s_to_Z2_T * Kd1_T(K)
-      Kd_S(i,j,K) = US%m2_s_to_Z2_T * Kd1_S(K)
+      Kd_T(i,j,K) = GV%m2_s_to_HZ_T * Kd1_T(K)
+      Kd_S(i,j,K) = GV%m2_s_to_HZ_T * Kd1_S(K)
     enddo
 
     ! Do not apply mixing due to convection within the boundary layer

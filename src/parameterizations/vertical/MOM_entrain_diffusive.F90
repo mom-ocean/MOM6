@@ -78,10 +78,10 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
   ! At least one of the two following arguments must be present.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                   optional, intent(in)    :: Kd_Lay !< The diapycnal diffusivity of layers
-                                                !! [Z2 T-1 ~> m2 s-1].
+                                                !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                   optional, intent(in)    :: Kd_int !< The diapycnal diffusivity of interfaces
-                                                !! [Z2 T-1 ~> m2 s-1].
+                                                !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
 
 !   This subroutine calculates ea and eb, the rates at which a layer entrains
 ! from the layers above and below.  The entrainment rates are proportional to
@@ -274,23 +274,23 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
     if (present(Kd_Lay)) then
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = GV%Z_to_H**2 * (dt * Kd_lay(i,j,k))
+        dtKd(i,k) = GV%Z_to_H * (dt * Kd_lay(i,j,k))
       enddo ; enddo
       if (present(Kd_int)) then
         do K=1,nz+1 ; do i=is,ie
-          dtKd_int(i,K) = GV%Z_to_H**2 * (dt * Kd_int(i,j,K))
+          dtKd_int(i,K) = GV%Z_to_H * (dt * Kd_int(i,j,K))
         enddo ; enddo
       else
         do K=2,nz ; do i=is,ie
-          dtKd_int(i,K) = GV%Z_to_H**2 * (0.5 * dt * (Kd_lay(i,j,k-1) + Kd_lay(i,j,k)))
+          dtKd_int(i,K) = GV%Z_to_H * (0.5 * dt * (Kd_lay(i,j,k-1) + Kd_lay(i,j,k)))
         enddo ; enddo
       endif
     else ! Kd_int must be present, or there already would have been an error.
       do k=1,nz ; do i=is,ie
-        dtKd(i,k) = GV%Z_to_H**2 * (0.5 * dt * (Kd_int(i,j,K)+Kd_int(i,j,K+1)))
+        dtKd(i,k) = GV%Z_to_H * (0.5 * dt * (Kd_int(i,j,K)+Kd_int(i,j,K+1)))
       enddo ; enddo
       dO K=1,nz+1 ; do i=is,ie
-        dtKd_int(i,K) = GV%Z_to_H**2 * (dt * Kd_int(i,j,K))
+        dtKd_int(i,K) = GV%Z_to_H * (dt * Kd_int(i,j,K))
       enddo ; enddo
     endif
 

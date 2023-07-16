@@ -143,15 +143,16 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   type(CVMix_conv_cs),                       intent(in)  :: CS !< CVMix convection control structure
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                             intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
-                                                                 !! will be incremented here [Z2 T-1 ~> m2 s-1].
+                                             intent(inout) :: Kd !< Diapycnal diffusivity at each interface
+                                                                 !! that will be incremented here
+                                                                 !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                             intent(inout) :: KV !< Viscosity at each interface that will be
+                                             intent(inout) :: Kv !< Viscosity at each interface that will be
                                                                  !! incremented here [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: Kd_aux !< A second diapycnal diffusivity at each
                                                                  !! interface that will also be incremented
-                                                                 !! here [Z2 T-1 ~> m2 s-1].
+                                                                 !! here [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   ! local variables
   real, dimension(SZK_(GV)) :: rho_lwr !< Adiabatic Water Density [kg m-3], this is a dummy
@@ -238,12 +239,12 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
 
       ! Increment the diffusivity outside of the boundary layer.
       do K=max(1,kOBL+1),GV%ke+1
-        Kd(i,j,K) = Kd(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+        Kd(i,j,K) = Kd(i,j,K) + GV%m2_s_to_HZ_T * kd_col(K)
       enddo
       if (present(Kd_aux)) then
         ! Increment the other diffusivity outside of the boundary layer.
         do K=max(1,kOBL+1),GV%ke+1
-          Kd_aux(i,j,K) = Kd_aux(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+          Kd_aux(i,j,K) = Kd_aux(i,j,K) + GV%m2_s_to_HZ_T * kd_col(K)
         enddo
       endif
 
@@ -277,7 +278,7 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
     !   call hchksum(Kd_conv, "MOM_CVMix_conv: Kd_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     ! if (CS%id_kv_conv > 0) &
     !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
     call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
   endif
 

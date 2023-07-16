@@ -239,11 +239,11 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, tv, dt, G, GV)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(in)    :: Kd_T !< The extra diffusivity of temperature due to
                                                  !! double diffusion relative to the diffusivity of
-                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
+                                                 !! density [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(in)    :: Kd_S !< The extra diffusivity of salinity due to
                                                  !! double diffusion relative to the diffusivity of
-                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
+                                                 !! density [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   type(thermo_var_ptrs),   intent(in)    :: tv   !< Structure containing pointers to any
                                                  !! available thermodynamic fields.
   real,                    intent(in)    :: dt   !<  Time increment [T ~> s].
@@ -272,8 +272,8 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, tv, dt, G, GV)
   do j=js,je
     do i=is,ie
       I_h_int = 1.0 / (0.5 * (h(i,j,1) + h(i,j,2)) + h_neglect)
-      mix_T(i,2) = ((dt * Kd_T(i,j,2)) * GV%Z_to_H**2) * I_h_int
-      mix_S(i,2) = ((dt * Kd_S(i,j,2)) * GV%Z_to_H**2) * I_h_int
+      mix_T(i,2) = ((dt * Kd_T(i,j,2)) * GV%Z_to_H) * I_h_int
+      mix_S(i,2) = ((dt * Kd_S(i,j,2)) * GV%Z_to_H) * I_h_int
 
       h_tr = h(i,j,1) + h_neglect
       b1_T(i) = 1.0 / (h_tr + mix_T(i,2))
@@ -286,8 +286,8 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, tv, dt, G, GV)
     do k=2,nz-1 ; do i=is,ie
       ! Calculate the mixing across the interface below this layer.
       I_h_int = 1.0 / (0.5 * (h(i,j,k) + h(i,j,k+1)) + h_neglect)
-      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1)) * GV%Z_to_H**2) * I_h_int
-      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1)) * GV%Z_to_H**2) * I_h_int
+      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1)) * GV%Z_to_H) * I_h_int
+      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1)) * GV%Z_to_H) * I_h_int
 
       c1_T(i,k) = mix_T(i,K) * b1_T(i)
       c1_S(i,k) = mix_S(i,K) * b1_S(i)

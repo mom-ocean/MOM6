@@ -536,7 +536,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
       'Heat diffusivity due to KPP, as calculated by [CVMix] KPP', &
       'm2/s', conversion=US%Z2_T_to_m2_s)
   CS%id_Kd_in = register_diag_field('ocean_model', 'KPP_Kd_in', diag%axesTi, Time, &
-      'Diffusivity passed to KPP', 'm2/s', conversion=US%Z2_T_to_m2_s)
+      'Diffusivity passed to KPP', 'm2/s', conversion=GV%HZ_T_to_m2_s)
   CS%id_Ks_KPP = register_diag_field('ocean_model', 'KPP_Ksalt', diag%axesTi, Time, &
       'Salt diffusivity due to KPP, as calculated by [CVMix] KPP', &
       'm2/s', conversion=US%Z2_T_to_m2_s)
@@ -610,10 +610,10 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kt  !< (in)  Vertical diffusivity of heat w/o KPP
                                                                     !! (out) Vertical diffusivity including KPP
-                                                                    !!       [Z2 T-1 ~> m2 s-1]
+                                                                    !!       [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Ks  !< (in)  Vertical diffusivity of salt w/o KPP
                                                                     !! (out) Vertical diffusivity including KPP
-                                                                    !!       [Z2 T-1 ~> m2 s-1]
+                                                                    !!       [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kv  !< (in)  Vertical viscosity w/o KPP
                                                                     !! (out) Vertical viscosity including KPP
                                                                     !!       [H Z T-1 ~> m2 s-1 or Pa s]
@@ -650,8 +650,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
     call hchksum(h, "KPP in: h",G%HI,haloshift=0, scale=GV%H_to_m)
     call hchksum(uStar, "KPP in: uStar",G%HI,haloshift=0, scale=US%Z_to_m*US%s_to_T)
     call hchksum(buoyFlux, "KPP in: buoyFlux",G%HI,haloshift=0, scale=US%L_to_m**2*US%s_to_T**3)
-    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kt, "KPP in: Kt",G%HI,haloshift=0, scale=GV%HZ_T_to_m2_s)
+    call hchksum(Ks, "KPP in: Ks",G%HI,haloshift=0, scale=GV%HZ_T_to_m2_s)
   endif
 
   nonLocalTrans(:,:) = 0.0
@@ -711,8 +711,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
          Kdiffusivity(:,:) = 0. ! Diffusivities for heat and salt [m2 s-1]
          Kviscosity(:)     = 0. ! Viscosity [m2 s-1]
       else
-         Kdiffusivity(:,1) = US%Z2_T_to_m2_s * Kt(i,j,:)
-         Kdiffusivity(:,2) = US%Z2_T_to_m2_s * Ks(i,j,:)
+         Kdiffusivity(:,1) = GV%HZ_T_to_m2_s * Kt(i,j,:)
+         Kdiffusivity(:,2) = GV%HZ_T_to_m2_s * Ks(i,j,:)
          Kviscosity(:) = GV%HZ_T_to_m2_s * Kv(i,j,:)
       endif
 
@@ -860,15 +860,15 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
       if (.not. CS%passiveMode) then
         if (CS%KPPisAdditive) then
           do k=1, GV%ke+1
-            Kt(i,j,k) = Kt(i,j,k) + US%m2_s_to_Z2_T * Kdiffusivity(k,1)
-            Ks(i,j,k) = Ks(i,j,k) + US%m2_s_to_Z2_T * Kdiffusivity(k,2)
+            Kt(i,j,k) = Kt(i,j,k) + GV%m2_s_to_HZ_T * Kdiffusivity(k,1)
+            Ks(i,j,k) = Ks(i,j,k) + GV%m2_s_to_HZ_T * Kdiffusivity(k,2)
             Kv(i,j,k) = Kv(i,j,k) + GV%m2_s_to_HZ_T * Kviscosity(k)
             if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%H_to_Z*Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, GV%ke+1
-            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = US%m2_s_to_Z2_T * Kdiffusivity(k,1)
-            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = US%m2_s_to_Z2_T * Kdiffusivity(k,2)
+            if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = GV%m2_s_to_HZ_T * Kdiffusivity(k,1)
+            if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = GV%m2_s_to_HZ_T * Kdiffusivity(k,2)
             if (Kviscosity(k) /= 0.) Kv(i,j,k) = GV%m2_s_to_HZ_T * Kviscosity(k)
             if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%H_to_Z*Kv(i,j,k)
           enddo
@@ -883,8 +883,8 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
   call cpu_clock_end(id_clock_KPP_calc)
 
   if (CS%debug) then
-    call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kt, "KPP out: Kt", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
+    call hchksum(Ks, "KPP out: Ks", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
   endif
 
   ! send diagnostics to post_data

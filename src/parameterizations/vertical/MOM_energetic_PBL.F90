@@ -277,7 +277,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real,                    intent(in)    :: dt     !< Time increment [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(out)   :: Kd_int !< The diagnosed diffusivities at interfaces
-                                                   !! [Z2 T-1 ~> m2 s-1].
+                                                   !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   type(energetic_PBL_CS),  intent(inout) :: CS     !< Energetic PBL control structure
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: buoy_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3].
@@ -467,7 +467,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       CS%ML_depth(i,j) = 0.0
     endif ; enddo ! Close of i-loop - Note unusual loop order!
 
-    do K=1,nz+1 ; do i=is,ie ; Kd_int(i,j,K) = Kd_2d(i,K) ; enddo ; enddo
+    do K=1,nz+1 ; do i=is,ie ; Kd_int(i,j,K) = GV%Z_to_H*Kd_2d(i,K) ; enddo ; enddo
 
   enddo ! j-loop
 

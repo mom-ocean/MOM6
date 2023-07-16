@@ -43,9 +43,11 @@ public tidal_mixing_end
 
 !> Containers for tidal mixing diagnostics
 type, public :: tidal_mixing_diags ; private
-  real, allocatable :: Kd_itidal(:,:,:)       !< internal tide diffusivity at interfaces [Z2 T-1 ~> m2 s-1].
-  real, allocatable :: Fl_itidal(:,:,:)       !< vertical flux of tidal turbulent dissipation [Z3 T-3 ~> m3 s-3]
-  real, allocatable :: Kd_Niku(:,:,:)         !< lee-wave diffusivity at interfaces [Z2 T-1 ~> m2 s-1].
+  real, allocatable :: Kd_itidal(:,:,:)       !< internal tide diffusivity at interfaces
+                                              !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+  real, allocatable :: Fl_itidal(:,:,:)       !< vertical flux of tidal turbulent dissipation
+                                              !! [Z3 T-3 ~> m3 s-3]
+  real, allocatable :: Kd_Niku(:,:,:)         !< lee-wave diffusivity at interfaces [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, allocatable :: Kd_Niku_work(:,:,:)    !< layer integrated work by lee-wave driven mixing [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_Itidal_Work(:,:,:)  !< layer integrated work by int tide driven mixing [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_Lowmode_Work(:,:,:) !< layer integrated work by low mode driven mixing [R Z3 T-3 ~> W m-2]
@@ -55,14 +57,14 @@ type, public :: tidal_mixing_diags ; private
   real, allocatable :: tidal_qe_md(:,:,:)     !< Input tidal energy dissipated locally,
                                               !! interpolated to model vertical coordinate [R Z3 T-3 ~> W m-2]
   real, allocatable :: Kd_lowmode(:,:,:)      !< internal tide diffusivity at interfaces
-                                              !! due to propagating low modes [Z2 T-1 ~> m2 s-1].
+                                              !! due to propagating low modes [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, allocatable :: Fl_lowmode(:,:,:)      !< vertical flux of tidal turbulent
                                               !! dissipation due to propagating low modes [Z3 T-3 ~> m3 s-3]
   real, allocatable :: TKE_itidal_used(:,:)   !< internal tide TKE input at ocean bottom [R Z3 T-3 ~> W m-2]
   real, allocatable :: N2_bot(:,:)            !< bottom squared buoyancy frequency [T-2 ~> s-2]
   real, allocatable :: N2_meanz(:,:)          !< vertically averaged buoyancy frequency [T-2 ~> s-2]
-  real, allocatable :: Polzin_decay_scale_scaled(:,:) !< vertical scale of decay for tidal dissipation [Z ~> m]
-  real, allocatable :: Polzin_decay_scale(:,:)  !< vertical decay scale for tidal dissipation with Polzin [Z ~> m]
+  real, allocatable :: Polzin_decay_scale_scaled(:,:) !< Vertical scale of decay for tidal dissipation [Z ~> m]
+  real, allocatable :: Polzin_decay_scale(:,:)  !< Vertical decay scale for tidal dissipation with Polzin [Z ~> m]
   real, allocatable :: Simmons_coeff_2d(:,:)  !< The Simmons et al mixing coefficient [nondim]
 end type
 
@@ -86,7 +88,7 @@ type, public :: tidal_mixing_cs ; private
                               !! for dissipation of the lee waves.  Schemes that are
                               !! currently encoded are St Laurent et al (2002) and
                               !! Polzin (2009).
-  real :: Int_tide_decay_scale !< decay scale for internal wave TKE [Z ~> m].
+  real :: Int_tide_decay_scale !< decay scale for internal wave TKE [Z ~> m]
 
   real :: Mu_itides           !< efficiency for conversion of dissipation
                               !! to potential energy [nondim]
@@ -117,7 +119,7 @@ type, public :: tidal_mixing_cs ; private
                               !! profile in Polzin formulation should not exceed
                               !! Polzin_decay_scale_max_factor * depth of the ocean [nondim].
   real :: Polzin_min_decay_scale !< minimum decay scale of the tidal dissipation
-                              !! profile in Polzin formulation [Z ~> m].
+                              !! profile in Polzin formulation [Z ~> m]
 
   real :: TKE_itide_max       !< maximum internal tide conversion [R Z3 T-3 ~> W m-2]
                               !! available to mix above the BBL
@@ -639,7 +641,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
       CS%Lowmode_itidal_dissipation) then
 
     CS%id_Kd_itidal = register_diag_field('ocean_model','Kd_itides',diag%axesTi,Time, &
-         'Internal Tide Driven Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+         'Internal Tide Driven Diffusivity', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
 
     if (CS%use_CVMix_tidal) then
       CS%id_N2_int = register_diag_field('ocean_model','N2_int',diag%axesTi,Time, &
@@ -666,7 +668,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
 
       CS%id_Kd_lowmode = register_diag_field('ocean_model','Kd_lowmode',diag%axesTi,Time, &
            'Internal Tide Driven Diffusivity (from propagating low modes)', &
-           'm2 s-1', conversion=US%Z2_T_to_m2_s)
+           'm2 s-1', conversion=GV%HZ_T_to_m2_s)
 
       CS%id_Fl_itidal = register_diag_field('ocean_model','Fl_itides',diag%axesTi,Time, &
           'Vertical flux of tidal turbulent dissipation', &
@@ -708,7 +710,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
             'Lee wave Driven Turbulent Kinetic Energy', &
             'W m-2', conversion=US%RZ3_T3_to_W_m2)
         CS%id_Kd_Niku = register_diag_field('ocean_model','Kd_Nikurashin',diag%axesTi,Time, &
-            'Lee Wave Driven Diffusivity', 'm2 s-1', conversion=US%Z2_T_to_m2_s)
+            'Lee Wave Driven Diffusivity', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
       endif
     endif ! S%use_CVMix_tidal
   endif
@@ -737,21 +739,22 @@ subroutine calculate_tidal_mixing(h, j, N2_bot, N2_lay, N2_int, TKE_to_Kd, max_T
                                                             !! dissipated within a layer and the
                                                             !! diapycnal diffusivity within that layer,
                                                             !! usually (~Rho_0 / (G_Earth * dRho_lay))
-                                                            !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
+                                                            !! [H Z T-1 / H Z2 T-3 = T2 Z-1 ~> s2 m-1]
   real, dimension(SZI_(G),SZK_(GV)), intent(in)   :: max_TKE !< The energy required to for a layer to entrain
                                                             !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   type(tidal_mixing_cs),            intent(inout) :: CS     !< The control structure for this module
   real,                             intent(in)    :: Kd_max !< The maximum increment for diapycnal
                                                             !! diffusivity due to TKE-based processes,
-                                                            !! [Z2 T-1 ~> m2 s-1].
+                                                            !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
                                                             !! Set this to a negative value to have no limit.
   real, dimension(:,:,:),           pointer       :: Kv     !< The "slow" vertical viscosity at each interface
                                                             !! (not layer!) [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZI_(G),SZK_(GV)), &
-                          optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1].
+                          optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers
+                                                            !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G),SZK_(GV)+1), &
-                          optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces,
-                                                            !! [Z2 T-1 ~> m2 s-1].
+                          optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
+                                                            !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
@@ -779,9 +782,11 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
   real, dimension(:,:,:),  pointer       :: Kv    !< The "slow" vertical viscosity at each interface
                                                   !! (not layer!) [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZI_(G),SZK_(GV)), &
-                 optional, intent(inout) :: Kd_lay!< The diapycnal diffusivity in the layers [Z2 T-1 ~> m2 s-1].
+                 optional, intent(inout) :: Kd_lay!< The diapycnal diffusivity in the layers
+                                                  !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   real, dimension(SZI_(G),SZK_(GV)+1), &
-                 optional, intent(inout) :: Kd_int!< The diapycnal diffusivity at interfaces [Z2 T-1 ~> m2 s-1].
+                 optional, intent(inout) :: Kd_int!< The diapycnal diffusivity at interfaces
+                                                  !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   ! Local variables
   real, dimension(SZK_(GV)+1) :: Kd_tidal    ! tidal diffusivity [m2 s-1]
   real, dimension(SZK_(GV)+1) :: Kv_tidal    ! tidal viscosity [m2 s-1]
@@ -801,7 +806,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
                          ! related to the distribution of tidal mixing energy, with unusual array
                          ! extents that are not explained, that is set and used by the CVMix
                          ! tidal mixing schemes, perhaps in [m3 kg-1]?
-  real :: dh, hcorr ! Limited thicknesses and a cumulative correction [Z ~> m]
+  real :: dh, hcorr      ! Limited thicknesses and a cumulative correction [Z ~> m]
   real :: Simmons_coeff  ! A coefficient in the Simmons et al (2004) mixing parameterization [nondim]
 
   integer :: i, k, is, ie
@@ -862,12 +867,12 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
       ! Update diffusivity
       if (present(Kd_lay)) then
         do k=1,GV%ke
-          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
+          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * GV%m2_s_to_HZ_T * (Kd_tidal(k) + Kd_tidal(k+1))
         enddo
       endif
       if (present(Kd_int)) then
         do K=1,GV%ke+1
-          Kd_int(i,K) = Kd_int(i,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
+          Kd_int(i,K) = Kd_int(i,K) + GV%m2_s_to_HZ_T * Kd_tidal(K)
         enddo
       endif
       ! Update viscosity with the proper unit conversion.
@@ -879,7 +884,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
 
       ! diagnostics
       if (allocated(CS%dd%Kd_itidal)) then
-        CS%dd%Kd_itidal(i,j,:) = US%m2_s_to_Z2_T * Kd_tidal(:)
+        CS%dd%Kd_itidal(i,j,:) = GV%m2_s_to_HZ_T * Kd_tidal(:)
       endif
       if (allocated(CS%dd%N2_int)) then
         CS%dd%N2_int(i,j,:) = N2_int(i,:)
@@ -963,12 +968,12 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
       ! Update diffusivity
       if (present(Kd_lay)) then
         do k=1,GV%ke
-          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * US%m2_s_to_Z2_T * (Kd_tidal(k) + Kd_tidal(k+1))
+          Kd_lay(i,k) = Kd_lay(i,k) + 0.5 * GV%m2_s_to_HZ_T * (Kd_tidal(k) + Kd_tidal(k+1))
         enddo
       endif
       if (present(Kd_int)) then
         do K=1,GV%ke+1
-          Kd_int(i,K) = Kd_int(i,K) +  (US%m2_s_to_Z2_T * Kd_tidal(K))
+          Kd_int(i,K) = Kd_int(i,K) +  (GV%m2_s_to_HZ_T * Kd_tidal(K))
         enddo
       endif
 
@@ -981,7 +986,7 @@ subroutine calculate_CVMix_tidal(h, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int
 
       ! diagnostics
       if (allocated(CS%dd%Kd_itidal)) then
-        CS%dd%Kd_itidal(i,j,:) = US%m2_s_to_Z2_T*Kd_tidal(:)
+        CS%dd%Kd_itidal(i,j,:) = GV%m2_s_to_HZ_T*Kd_tidal(:)
       endif
       if (allocated(CS%dd%N2_int)) then
         CS%dd%N2_int(i,j,:) = N2_int(i,:)
@@ -1029,19 +1034,20 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
                                                              !! dissipated within a layer and the
                                                              !! diapycnal diffusivity within that layer,
                                                              !! usually (~Rho_0 / (G_Earth * dRho_lay))
-                                                             !! [Z2 T-1 / Z3 T-3 = T2 Z-1 ~> s2 m-1]
+                                                             !! [H Z T-1 / H Z2 T-3 = T2 Z-1 ~> s2 m-1]
   real, dimension(SZI_(G),SZK_(GV)), intent(in)    :: max_TKE !< The energy required to for a layer to entrain
                                                              !! to its maximum realizable thickness [Z3 T-3 ~> m3 s-3]
   type(tidal_mixing_cs),             intent(inout) :: CS     !< The control structure for this module
   real,                              intent(in)    :: Kd_max !< The maximum increment for diapycnal
                                                              !! diffusivity due to TKE-based processes
-                                                             !! [Z2 T-1 ~> m2 s-1].
+                                                             !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
                                                              !! Set this to a negative value to have no limit.
   real, dimension(SZI_(G),SZK_(GV)), &
-                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers [Z2 T-1 ~> m2 s-1]
+                           optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity in layers
+                                                             !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   real, dimension(SZI_(G),SZK_(GV)+1), &
                            optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
-                                                             !! [Z2 T-1 ~> m2 s-1].
+                                                             !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
 
   ! local
 
@@ -1054,7 +1060,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
     TKE_lowmode_bot,  & ! internal tide TKE at ocean bottom lost from all remote low modes [Z3 T-3 ~> m3 s-3] (BDM)
     Inv_int,          & ! inverse of TKE decay for int tide over the depth of the ocean [nondim]
     Inv_int_lee,      & ! inverse of TKE decay for lee waves over the depth of the ocean [nondim]
-    Inv_int_low,      & ! inverse of TKE decay for low modes over the depth of the ocean [nondim] (BDM)
+    Inv_int_low,      & ! inverse of TKE decay for low modes over the depth of the ocean [nondim]
     z0_Polzin,        & ! TKE decay scale in Polzin formulation [Z ~> m].
     z0_Polzin_scaled, & ! TKE decay scale in Polzin formulation [Z ~> m].
                         ! multiplied by N2_bot/N2_meanz to be coherent with the WKB scaled z
@@ -1067,15 +1073,15 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
     TKE_frac_top,     & ! fraction of bottom TKE that should appear at top of a layer [nondim]
     TKE_frac_top_lee, & ! fraction of bottom TKE that should appear at top of a layer [nondim]
     TKE_frac_top_lowmode, &
-                        ! fraction of bottom TKE that should appear at top of a layer [nondim] (BDM)
+                        ! fraction of bottom TKE that should appear at top of a layer [nondim]
     z_from_bot,       & ! distance from bottom [Z ~> m].
     z_from_bot_WKB      ! WKB scaled distance from bottom [Z ~> m].
 
   real :: I_rho0        ! Inverse of the Boussinesq reference density, i.e. 1 / RHO0 [R-1 ~> m3 kg-1]
-  real :: Kd_add        ! diffusivity to add in a layer [Z2 T-1 ~> m2 s-1].
+  real :: Kd_add        ! Diffusivity to add in a layer [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real :: TKE_itide_lay ! internal tide TKE imparted to a layer (from barotropic) [Z3 T-3 ~> m3 s-3]
   real :: TKE_Niku_lay  ! lee-wave TKE imparted to a layer [Z3 T-3 ~> m3 s-3]
-  real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) [Z3 T-3 ~> m3 s-3] (BDM)
+  real :: TKE_lowmode_lay ! internal tide TKE imparted to a layer (from low mode) [Z3 T-3 ~> m3 s-3]
   real :: frac_used     ! fraction of TKE that can be used in a layer [nondim]
   real :: Izeta         ! inverse of TKE decay scale [Z-1 ~> m-1].
   real :: Izeta_lee     ! inverse of TKE decay scale for lee waves [Z-1 ~> m-1].
@@ -1309,7 +1315,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay
 
       ! Convert power to diffusivity
-      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
+      Kd_add  = TKE_to_Kd(i,k) * GV%Z_to_H*(TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
       if (present(Kd_lay)) then
@@ -1325,7 +1331,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       if (allocated(CS%dd%Kd_itidal)) then
         ! If at layers, CS%dd%Kd_itidal is just TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
-        Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
+        Kd_add = TKE_to_Kd(i,k) * GV%Z_to_H*TKE_itide_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
         if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
         if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
@@ -1338,19 +1344,19 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       if (allocated(CS%dd%Kd_Niku)) then
         ! If at layers, CS%dd%Kd_Niku(i,j,K) is just TKE_to_Kd(i,k) * TKE_Niku_lay
         ! The following sets the interface diagnostics.
-        Kd_add = TKE_to_Kd(i,k) * TKE_Niku_lay
+        Kd_add = TKE_to_Kd(i,k) * GV%Z_to_H*TKE_Niku_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
         if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
         if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
       endif
-!     if (associated(CS%dd%Kd_Niku)) CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
+!     if (associated(CS%dd%Kd_Niku)) CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * GV%Z_to_H*TKE_Niku_lay
       if (allocated(CS%dd%Kd_Niku_work)) &
         CS%dd%Kd_Niku_work(i,j,k) = GV%Rho0 * TKE_Niku_lay
 
       if (allocated(CS%dd%Kd_lowmode)) then
         ! If at layers, CS%dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
-        Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
+        Kd_add = TKE_to_Kd(i,k) * GV%Z_to_H*TKE_lowmode_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
         if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
         if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
@@ -1407,7 +1413,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       TKE_lowmode_rem(i) = TKE_lowmode_rem(i) - TKE_lowmode_lay
 
       ! Convert power to diffusivity
-      Kd_add  = TKE_to_Kd(i,k) * (TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
+      Kd_add  = TKE_to_Kd(i,k) * GV%Z_to_H*(TKE_itide_lay + TKE_Niku_lay + TKE_lowmode_lay)
 
       if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
       if (present(Kd_lay)) then
@@ -1423,7 +1429,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       if (allocated(CS%dd%Kd_itidal)) then
         ! If at layers, this is just CS%dd%Kd_itidal(i,j,K) = TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
-        Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
+        Kd_add = TKE_to_Kd(i,k) * GV%Z_to_H*TKE_itide_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
         if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
         if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
@@ -1435,7 +1441,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       if (allocated(CS%dd%Kd_Niku)) then
         ! If at layers, this is just CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
         ! The following sets the interface diagnostics.
-        Kd_add = TKE_to_Kd(i,k) * TKE_Niku_lay
+        Kd_add = TKE_to_Kd(i,k) * GV%Z_to_H*TKE_Niku_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
         if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
         if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
@@ -1446,7 +1452,7 @@ subroutine add_int_tide_diffusivity(h, j, N2_bot, N2_lay, TKE_to_Kd, max_TKE, &
       if (allocated(CS%dd%Kd_lowmode)) then
         ! If at layers, CS%dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
-        Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
+        Kd_add = TKE_to_Kd(i,k) * GV%Z_to_H*TKE_lowmode_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
         if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
         if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
