@@ -2156,6 +2156,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
   character(len=40)  :: thickness_units
+  real :: Kv_mks ! KVML in MKS
 
   if (associated(CS)) then
     call MOM_error(WARNING, "vertvisc_init called with an associated "// &
@@ -2339,6 +2340,14 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   CS%Kvml_invZ2 = 0.0
   if (GV%nkml < 1) then
+    call get_param(param_file, mdl, "KVML", Kv_mks, &
+                 "The scale for an extra kinematic viscosity in the mixed layer", &
+                 units="m2 s-1", default=-1.0, do_not_log=.true.)
+    if (Kv_mks >= 0.0) then
+      call MOM_error(WARNING, "KVML is a deprecated parameter. Use KV_ML_INVZ2 instead.")
+    else
+      Kv_mks = 0.0
+    endif
     call get_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_invZ2, &
                  "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
                  "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
@@ -2346,23 +2355,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "transmitted through infinitesimally thin surface layers.  This is an "//&
                  "older option for numerical convenience without a strong physical basis, "//&
                  "and its use is now discouraged.", &
-                 units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
-    if (CS%Kvml_invZ2 < 0.0) then
-      call get_param(param_file, mdl, "KVML", CS%Kvml_invZ2, &
-                 "The scale for an extra kinematic viscosity in the mixed layer", &
-                 units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
-      if (CS%Kvml_invZ2 >= 0.0) &
-        call MOM_error(WARNING, "KVML is a deprecated parameter. Use KV_ML_INVZ2 instead.")
-    endif
-    if (CS%Kvml_invZ2 < 0.0) CS%Kvml_invZ2 = 0.0
-    call log_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_invZ2, &
-                 "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
-                 "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
-                 "distance from the surface, to allow for finite wind stresses to be "//&
-                 "transmitted through infinitesimally thin surface layers.  This is an "//&
-                 "older option for numerical convenience without a strong physical basis, "//&
-                 "and its use is now discouraged.", &
-                 units="m2 s-1", default=0.0, unscale=US%Z2_T_to_m2_s)
+                 units="m2 s-1", default=Kv_mks, scale=US%m2_s_to_Z2_T)
   endif
 
   if (.not.CS%bottomdraglaw) then
