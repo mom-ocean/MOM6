@@ -787,6 +787,22 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
       ! safety check, Kviscosity and Kdiffusivity must be >= 0
       do k=1, GV%ke+1
         if (Kviscosity(k) < 0. .or. Kdiffusivity(k,1) < 0.) then
+          write(*,'(a,3i3)')    'interface, i, j, k = ',j, j, k
+          write(*,'(a,2f12.5)') 'lon,lat=', G%geoLonT(i,j), G%geoLatT(i,j)
+          write(*,'(a,es12.4)') 'depth, z_inter(k) =',z_inter(k)
+          write(*,'(a,es12.4)') 'Kviscosity(k) =',Kviscosity(k)
+          write(*,'(a,es12.4)') 'Kdiffusivity(k,1) =',Kdiffusivity(k,1)
+          write(*,'(a,es12.4)') 'Kdiffusivity(k,2) =',Kdiffusivity(k,2)
+          write(*,'(a,es12.4)') 'OBLdepth =',US%Z_to_m*CS%OBLdepth(i,j)
+          write(*,'(a,f8.4)')   'kOBL =',CS%kOBL(i,j)
+          write(*,'(a,es12.4)') 'u* =',surfFricVel
+          write(*,'(a,es12.4)') 'bottom, z_inter(GV%ke+1) =',z_inter(GV%ke+1)
+          write(*,'(a,es12.4)') 'CS%La_SL(i,j) =',CS%La_SL(i,j)
+          write(*,'(a,es12.4)') 'LangEnhK =',LangEnhK
+          if (present(lamult)) write(*,'(a,es12.4)') 'lamult(i,j) =',lamult(i,j)
+          write(*,*) 'Kviscosity(:) =',Kviscosity(:)
+          write(*,*) 'Kdiffusivity(:,1) =',Kdiffusivity(:,1)
+
           call MOM_error(FATAL,"KPP_calculate, after CVMix_coeffs_kpp: "// &
                    "Negative vertical viscosity or diffusivity has been detected. " // &
                    "This is likely related to the choice of MATCH_TECHNIQUE and INTERP_TYPE2." //&
