@@ -8,7 +8,7 @@ use MOM_checksums,     only : is_NaN
 use MOM_coms,          only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs, field_chksum
 use MOM_coms,          only : reproducing_sum, reproducing_sum_EFP, EFP_to_real, real_to_EFP
 use MOM_coms,          only : EFP_type, operator(+), operator(-), assignment(=), EFP_sum_across_PEs
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing
 use MOM_grid,          only : ocean_grid_type
@@ -1077,7 +1077,7 @@ subroutine depth_list_setup(G, GV, US, DL, CS)
         valid_DL_read = .true. ! Otherwise there would have been a fatal error.
       endif
     else
-      if (is_root_pe()) call MOM_error(WARNING, "depth_list_setup: "// &
+      if (is_root_pe()) call MOM_error(NOTE, "depth_list_setup: "// &
         trim(CS%depth_list_file)//" does not exist.  Creating a new file.")
       valid_DL_read = .false.
     endif
