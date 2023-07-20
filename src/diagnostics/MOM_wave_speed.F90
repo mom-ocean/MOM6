@@ -39,6 +39,7 @@ type, public :: wave_speed_CS ; private
                                        !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
                                        !! calculating the equivalent barotropic wave speed [Z ~> m].
+                                       !! If this parameter is negative, this limiting does not occur.
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
   real :: min_speed2 = 0.              !< The minimum mode 1 internal wave speed squared [L2 T-2 ~> m2 s-2]
@@ -1465,7 +1466,8 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   call log_version(mdl, version)
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction, &
-                            better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol, &
+                            mono_N2_depth=mono_N2_depth, better_speed_est=better_speed_est, &
+                            min_speed=min_speed, wave_speed_tol=wave_speed_tol, &
                             remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date, &
                             c1_thresh=c1_thresh)
 
