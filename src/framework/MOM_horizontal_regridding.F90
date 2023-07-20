@@ -309,6 +309,9 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
                                                      !! native horizontal grid, with units that change
                                                      !! as the input data is interpreted [a] then [A ~> a]
+  real, dimension(:,:,:),  allocatable   :: tr_in_full  !< A 3-d array for holding input data on the
+                                                     !! model horizontal grid, with units that change
+                                                     !! as the input data is interpreted [a] then [A ~> a]
   real, dimension(:,:),  allocatable   :: tr_inp     !< Native horizontal grid data extended to the poles
                                                      !! with units that change as the input data is
                                                      !! interpreted [a] then [A ~> a]
@@ -448,6 +451,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
 
   if (is_ongrid) then
     allocate(tr_in(is:ie,js:je), source=0.0)
+    allocate(tr_in_full(is:ie,js:je,kd), source=0.0)
     allocate(mask_in(is:ie,js:je), source=0.0)
   else
     call horizontal_interp_init()
@@ -470,14 +474,19 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
 
   ! Loop through each data level and interpolate to model grid.
   ! After interpolating, fill in points which will be needed to define the layers.
+
+  if (is_ongrid) then
+    start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = 1
+    count(1) = ie-is+1 ; count(2) = je-js+1 ; count(3) = kd ; start(4) = 1 ; count(4) = 1
+    call MOM_read_data(trim(filename), trim(varnam), tr_in_full, start, count, G%Domain)
+  endif
+
   do k=1,kd
     mask_in(:,:)  = 0.0
     tr_out(:,:) = 0.0
 
     if (is_ongrid) then
-      start(1) = is+G%HI%idg_offset ; start(2) = js+G%HI%jdg_offset ; start(3) = k
-      count(1) = ie-is+1 ; count(2) = je-js+1 ; count(3) = 1 ; start(4) = 1 ; count(4) = 1
-      call MOM_read_data(trim(filename), trim(varnam), tr_in, start, count, G%Domain)
+      tr_in(is:ie,js:je) = tr_in_full(is:ie,js:je,k)
       do j=js,je
         do i=is,ie
           if (abs(tr_in(i,j)-missing_val_in) > abs(roundoff*missing_val_in)) then
@@ -594,7 +603,10 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
 
   enddo ! kd
 
-  deallocate(lon_in, lat_in)
+  if (allocated(lat_inp)) deallocate(lat_inp)
+  deallocate(tr_in)
+  if (allocated(tr_inp)) deallocate(tr_inp)
+  if (allocated(tr_in_full)) deallocate(tr_in_full)
 
 end subroutine horiz_interp_and_extrap_tracer_record
 
