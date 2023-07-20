@@ -387,7 +387,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                             CS%int_tide_input_CSp)
 
     call propagate_int_tide(h, tv, CS%int_tide_input%TKE_itidal_input, CS%int_tide_input%tideamp, &
-                            CS%int_tide_input%Nb, dt, G, GV, US, CS%int_tide)
+                            CS%int_tide_input%Nb, CS%int_tide_input%Rho_bot, dt, G, GV, US, CS%int_tide)
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif ! end CS%use_int_tides
 

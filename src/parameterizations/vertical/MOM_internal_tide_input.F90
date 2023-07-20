@@ -14,6 +14,7 @@ use MOM_file_parser,      only : get_param, log_param, log_version, param_file_t
 use MOM_forcing_type,     only : forcing
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : slasher, vardesc, MOM_read_data
+use MOM_interface_heights, only : thickness_to_dz, find_rho_bottom
 use MOM_isopycnal_slopes, only : vert_fill_TS
 use MOM_time_manager,     only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling,     only : unit_scale_type
@@ -44,7 +45,8 @@ type, public :: int_tide_input_CS ; private
                         !! of T & S into thin layers [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
-            !< The time-invariant field that enters the TKE_itidal input calculation [R Z3 T-2 ~> J m-2].
+            !< The time-invariant field that enters the TKE_itidal input calculation noting that the
+            !! stratification and perhaps density are time-varying [R Z4 H-1 T-2 ~> J m-2 or J m kg-1].
   character(len=200) :: inputdir !< The directory for input files.
 
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
@@ -70,7 +72,8 @@ type, public :: int_tide_input_type
     TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [R Z3 T-3 ~> W m-2].
     h2, &               !< The squared topographic roughness height [Z2 ~> m2].
     tideamp, &          !< The amplitude of the tidal velocities [Z T-1 ~> m s-1].
-    Nb                  !< The bottom stratification [T-1 ~> s-1].
+    Nb, &               !< The bottom stratification [T-1 ~> s-1].
+    Rho_bot             !< The bottom density or the Boussinesq reference density [R ~> kg m-3].
 end type int_tide_input_type
 
 contains
@@ -90,9 +93,12 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
                                                                   !! to the internal tide sources.
   real,                                       intent(in)    :: dt !< The time increment [T ~> s].
   type(int_tide_input_CS),                    pointer       :: CS !< This module's control structure.
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     N2_bot        ! The bottom squared buoyancy frequency [T-2 ~> s-2].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    Rho_bot       ! The average near-bottom density or the Boussinesq reference density [R ~> kg m-3].
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     T_f, S_f      ! The temperature and salinity in [C ~> degC] and [S ~> ppt] with the values in
@@ -121,15 +127,25 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
     call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill*dt, T_f, S_f, G, GV, US, larger_h_denom=.true.)
   endif
 
-  call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
+  call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot, Rho_bot)
 
   avg_enabled = query_averaging_enabled(CS%diag, time_end=time_end)
 
-  !$OMP parallel do default(shared)
-  do j=js,je ; do i=is,ie
-    itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
-    itide%TKE_itidal_input(i,j) = min(CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
-  enddo ; enddo
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
+      itide%TKE_itidal_input(i,j) = min(GV%Z_to_H*CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
+    enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
+      itide%Rho_bot(i,j) = G%mask2dT(i,j) * Rho_bot(i,j)
+      itide%TKE_itidal_input(i,j) = min((GV%RZ_to_H*Rho_bot(i,j)) * CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), &
+                                        CS%TKE_itide_max)
+    enddo ; enddo
+  endif
 
   if (CS%int_tide_source_test) then
     itide%TKE_itidal_input(:,:) = 0.0
@@ -171,7 +187,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 end subroutine set_int_tide_input
 
 !> Estimates the near-bottom buoyancy frequency (N^2).
-subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
+subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot, rho_bot)
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
@@ -186,55 +202,62 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
   type(forcing),                             intent(in)  :: fluxes !< A structure of thermodynamic surface fluxes
   real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: N2_bot !< The squared buoyancy frequency at the
                                                                  !! ocean bottom [T-2 ~> s-2].
+  real, dimension(SZI_(G),SZJ_(G)),          intent(out) :: rho_bot !< The average density near the ocean
+                                                                 !! bottom [R ~> kg m-3]
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
-    dRho_int      ! The unfiltered density differences across interfaces [R ~> kg m-3].
-  real, dimension(SZI_(G)) :: &
     pres, &       ! The pressure at each interface [R L2 T-2 ~> Pa].
+    dRho_int      ! The unfiltered density differences across interfaces [R ~> kg m-3].
+  real, dimension(SZI_(G),SZK_(GV)) :: dz ! Layer thicknesses in depth units [Z ~> m]
+  real, dimension(SZI_(G)) :: &
     Temp_int, &   ! The temperature at each interface [C ~> degC]
     Salin_int, &  ! The salinity at each interface [S ~> ppt]
     drho_bot, &   ! The density difference at the bottom of a layer [R ~> kg m-3]
     h_amp, &      ! The amplitude of topographic roughness [Z ~> m].
-    hb, &         ! The depth below a layer [Z ~> m].
-    z_from_bot, & ! The height of a layer center above the bottom [Z ~> m].
+    hb, &         ! The thickness of the water column below the midpoint of a layer [H ~> m or kg m-2]
+    z_from_bot, & ! The distance of a layer center from the bottom [Z ~> m]
     dRho_dT, &    ! The partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
     dRho_dS       ! The partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
 
-  real :: dz_int  ! The thickness associated with an interface [Z ~> m].
-  real :: G_Rho0  ! The gravitation acceleration divided by the Boussinesq
-                  ! density [Z T-2 R-1 ~> m4 s-2 kg-1].
+  real :: dz_int  ! The vertical extent of water associated with an interface [Z ~> m]
+  real :: G_Rho0  ! The gravitational acceleration, sometimes divided by the Boussinesq
+                  ! density [H T-2 R-1 ~> m4 s-2 kg-1 or m s-2].
   logical :: do_i(SZI_(G)), do_any
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%Rho0
+  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%H_to_RZ
   EOSdom(:) = EOS_domain(G%HI)
 
   ! Find the (limited) density jump across each interface.
   do i=is,ie
     dRho_int(i,1) = 0.0 ; dRho_int(i,nz+1) = 0.0
   enddo
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,GV,US,h,T_f,S_f, &
-!$OMP                                  h2,N2_bot,G_Rho0,EOSdom) &
-!$OMP                          private(pres,Temp_Int,Salin_Int,dRho_dT,dRho_dS, &
-!$OMP                                  hb,dRho_bot,z_from_bot,do_i,h_amp,       &
-!$OMP                                  do_any,dz_int) &
-!$OMP                     firstprivate(dRho_int)
+
+  !$OMP parallel do default(none) shared(is,ie,js,je,nz,tv,fluxes,G,GV,US,h,T_f,S_f, &
+  !$OMP                                  h2,N2_bot,rho_bot,G_Rho0,EOSdom) &
+  !$OMP                          private(pres,Temp_Int,Salin_Int,dRho_dT,dRho_dS, &
+  !$OMP                                  dz,hb,dRho_bot,z_from_bot,do_i,h_amp,do_any,dz_int) &
+  !$OMP                     firstprivate(dRho_int)
   do j=js,je
+
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
     if (associated(tv%eqn_of_state)) then
       if (associated(fluxes%p_surf)) then
-        do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
+        do i=is,ie ; pres(i,1) = fluxes%p_surf(i,j) ; enddo
       else
-        do i=is,ie ; pres(i) = 0.0 ; enddo
+        do i=is,ie ; pres(i,1) = 0.0 ; enddo
       endif
       do K=2,nz
         do i=is,ie
-          pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
+          pres(i,K) = pres(i,K-1) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
           Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
           Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
         enddo
-        call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:), dRho_dS(:), &
+        call calculate_density_derivs(Temp_int, Salin_int, pres(:,K), dRho_dT(:), dRho_dS(:), &
                                       tv%eqn_of_state, EOSdom)
         do i=is,ie
           dRho_int(i,K) = max(dRho_dT(i)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
@@ -250,7 +273,7 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
     ! Find the bottom boundary layer stratification.
     do i=is,ie
       hb(i) = 0.0 ; dRho_bot(i) = 0.0
-      z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
+      z_from_bot(i) = 0.5*dz(i,nz)
       do_i(i) = (G%mask2dT(i,j) > 0.0)
       h_amp(i) = sqrt(h2(i,j))
     enddo
@@ -258,16 +281,16 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
     do k=nz,2,-1
       do_any = .false.
       do i=is,ie ; if (do_i(i)) then
-        dz_int = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j,k-1))
+        dz_int = 0.5*(dz(i,k) + dz(i,k-1))
         z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
-        hb(i) = hb(i) + dz_int
+        hb(i) = hb(i) + 0.5*(h(i,j,k) + h(i,j,k-1))
         dRho_bot(i) = dRho_bot(i) + dRho_int(i,K)
 
         if (z_from_bot(i) > h_amp(i)) then
           if (k>2) then
             ! Always include at least one full layer.
-            hb(i) = hb(i) + 0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k-2))
+            hb(i) = hb(i) + 0.5*(h(i,j,k-1) + h(i,j,k-2))
             dRho_bot(i) = dRho_bot(i) + dRho_int(i,K-1)
           endif
           do_i(i) = .false.
@@ -283,6 +306,15 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot)
         N2_bot(i,j) = (G_Rho0 * dRho_bot(i)) / hb(i)
       else ;  N2_bot(i,j) = 0.0 ; endif
     enddo
+
+    if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+      do i=is,ie
+        rho_bot(i,j) = GV%Rho0
+      enddo
+    else
+      ! Average the density over the envelope of the topography.
+      call find_rho_bottom(h, dz, pres, h_amp, tv, j, G, GV, US, Rho_bot(:,j))
+    endif
   enddo
 
 end subroutine find_N2_bottom
@@ -359,6 +391,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                units="m s-1", default=0.0, scale=US%m_s_to_L_T)
 
   allocate(itide%Nb(isd:ied,jsd:jed), source=0.0)
+  allocate(itide%Rho_bot(isd:ied,jsd:jed), source=0.0)
   allocate(itide%h2(isd:ied,jsd:jed), source=0.0)
   allocate(itide%TKE_itidal_input(isd:ied,jsd:jed), source=0.0)
   allocate(itide%tideamp(isd:ied,jsd:jed), source=utide)
@@ -452,8 +485,8 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
     if (max_frac_rough >= 0.0) &
       itide%h2(i,j) = min((max_frac_rough*(G%bathyT(i,j)+G%Z_ref))**2, itide%h2(i,j))
 
-    ! Compute the fixed part of internal tidal forcing; units are [R Z3 T-2 ~> J m-2] here.
-    CS%TKE_itidal_coef(i,j) = 0.5*US%L_to_Z*kappa_h2_factor*GV%Rho0*&
+    ! Compute the fixed part of internal tidal forcing; units are [R Z4 H-1 T-2 ~> J m-2 or J m kg-1] here.
+    CS%TKE_itidal_coef(i,j) = 0.5*US%L_to_Z*kappa_h2_factor * GV%H_to_RZ * &
          kappa_itides * itide%h2(i,j) * itide%tideamp(i,j)**2
   enddo ; enddo
 
