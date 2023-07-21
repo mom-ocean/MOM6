@@ -11,7 +11,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : open_param_file, param_file_type
 use MOM_io, only : file_exists, close_file, slasher, ensembler
 use MOM_io, only : open_namelist_file, check_nml_error
-use posix, only : mkdir
+use posix, only : mkdir, stat, stat_buf
 
 implicit none ; private
 
@@ -55,6 +55,8 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
   character(len=240) :: output_dir
   integer :: unit, io, ierr, valid_param_files
 
+  type(stat_buf) :: buf
+
   namelist /MOM_input_nml/ output_directory, input_filename, parameter_filename, &
                            restart_input_dir, restart_output_dir
 
@@ -97,7 +99,7 @@ subroutine get_MOM_input(param_file, dirs, check_params, default_input_filename,
 
     ! Create the RESTART directory if absent
     if (is_root_PE()) then
-      if (.not. file_exists(dirs%restart_output_dir)) then
+      if (stat(trim(dirs%restart_output_dir), buf) == -1) then
         ierr = mkdir(trim(dirs%restart_output_dir), int(o'700'))
         if (ierr == -1) &
           call MOM_error(FATAL, 'Restart directory could not be created.')
