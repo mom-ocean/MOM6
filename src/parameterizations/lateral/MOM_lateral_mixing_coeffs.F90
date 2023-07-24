@@ -1103,7 +1103,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   real :: oneOrTwo ! A variable that may be 1 or 2, depending on which form
                    ! of the equatorial deformation radius us used [nondim]
   real :: N2_filter_depth  ! A depth below which stratification is treated as monotonic when
-                           ! calculating the first-mode wave speed [Z ~> m]
+                           ! calculating the first-mode wave speed [H ~> m or kg m-2]
   real :: KhTr_passivity_coeff ! Coefficient setting the ratio between along-isopycnal tracer
                                ! mixing and interface height mixing [nondim]
   real :: absurdly_small_freq  ! A miniscule frequency that is used to avoid division by 0 [T-1 ~> s-1].  The
@@ -1241,7 +1241,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.  "//&
                  "This monotonzization is disabled if this parameter is negative.", &
-                 units="m", default=-1.0, scale=US%m_to_Z)
+                 units="m", default=-1.0, scale=GV%m_to_H)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,GV%ke), source=0.0)
   endif
 
