@@ -162,7 +162,7 @@ use MOM_offline_main,          only : offline_fw_fluxes_into_ocean, offline_fw_f
 use MOM_offline_main,          only : offline_advection_layer, offline_transport_end
 use MOM_ice_shelf,             only : ice_shelf_CS, ice_shelf_query, initialize_ice_shelf
 use MOM_particles_mod,         only : particles, particles_init, particles_run, particles_save_restart, particles_end
-
+use MOM_particles_mod,         only : particles_to_k_space, particles_to_z_space
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -1541,6 +1541,10 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
       call preAle_tracer_diagnostics(CS%tracer_Reg, G, GV)
 
+      if (CS%use_particles) then
+        call particles_to_z_space(CS%particles, h)
+      endif
+
       if (CS%debug) then
         call MOM_state_chksum("Pre-ALE ", u, v, h, CS%uh, CS%vh, G, GV, US, omit_corners=.true.)
         call hchksum(tv%T,"Pre-ALE T", G%HI, haloshift=1, omit_corners=.true., scale=US%C_to_degC)
@@ -1587,6 +1591,11 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       if (showCallTree) call callTree_waypoint("finished ALE_regrid (step_MOM_thermo)")
       call cpu_clock_end(id_clock_ALE)
     endif   ! endif for the block "if ( CS%use_ALE_algorithm )"
+
+
+    if (CS%use_particles) then
+      call particles_to_k_space(CS%particles, h)
+    endif
 
     dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
     call create_group_pass(pass_uv_T_S_h, u, v, G%Domain, halo=dynamics_stencil)
@@ -3232,7 +3241,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS, restart_CSp)
   G => CS%G ; GV => CS%GV ; US => CS%US
 
   if (CS%use_particles) then
-    call particles_init(CS%particles, G, CS%Time, CS%dt_therm, CS%u, CS%v)
+    call particles_init(CS%particles, G, CS%Time, CS%dt_therm, CS%u, CS%v, CS%h)
   endif
 
   ! Write initial conditions
@@ -3935,7 +3944,7 @@ subroutine save_MOM6_internal_state(CS, dirs, time, stamp_time)
 
     ! Could call save_restart(CS%restart_CSp) here
 
-    if (CS%use_particles) call particles_save_restart(CS%particles)
+    if (CS%use_particles) call particles_save_restart(CS%particles, CS%h)
 
 end subroutine save_MOM6_internal_state
 
@@ -3978,7 +3987,7 @@ subroutine MOM_end(CS)
   endif
 
   if (CS%use_particles) then
-    call particles_end(CS%particles)
+    call particles_end(CS%particles, CS%h)
     deallocate(CS%particles)
   endif
 
