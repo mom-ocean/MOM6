@@ -1027,22 +1027,24 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         endif
       endif
 
-      if (CS%body_force_drag .and. (h_bbl_drag(i) > 0.0)) then
-        ! Increment the Rayleigh drag as a way introduce the bottom drag as a body force.
-        h_sum = 0.0
-        I_hwtot = 1.0 / h_bbl_drag(i)
-        do k=nz,1,-1
-          h_bbl_fr = min(h_bbl_drag(i) - h_sum, h_at_vel(i,k)) * I_hwtot
-          if (m==1) then
-            visc%Ray_u(I,j,k) = visc%Ray_u(I,j,k) + (CS%cdrag*US%L_to_Z*umag_avg(I)) * h_bbl_fr
-          else
-            visc%Ray_v(i,J,k) = visc%Ray_v(i,J,k) + (CS%cdrag*US%L_to_Z*umag_avg(i)) * h_bbl_fr
-          endif
-          h_sum = h_sum + h_at_vel(i,k)
-          if (h_sum >= h_bbl_drag(i)) exit ! The top of this layer is above the drag zone.
-        enddo
-        ! Do not enhance the near-bottom viscosity in this case.
-        Kv_bbl = CS%Kv_BBL_min
+      if (CS%body_force_drag) then
+        if (h_bbl_drag(i) > 0.0) then
+          ! Increment the Rayleigh drag as a way introduce the bottom drag as a body force.
+          h_sum = 0.0
+          I_hwtot = 1.0 / h_bbl_drag(i)
+          do k=nz,1,-1
+            h_bbl_fr = min(h_bbl_drag(i) - h_sum, h_at_vel(i,k)) * I_hwtot
+            if (m==1) then
+              visc%Ray_u(I,j,k) = visc%Ray_u(I,j,k) + (CS%cdrag*US%L_to_Z*umag_avg(I)) * h_bbl_fr
+            else
+              visc%Ray_v(i,J,k) = visc%Ray_v(i,J,k) + (CS%cdrag*US%L_to_Z*umag_avg(i)) * h_bbl_fr
+            endif
+            h_sum = h_sum + h_at_vel(i,k)
+            if (h_sum >= h_bbl_drag(i)) exit ! The top of this layer is above the drag zone.
+          enddo
+          ! Do not enhance the near-bottom viscosity in this case.
+          Kv_bbl = CS%Kv_BBL_min
+        endif
       endif
 
       kv_bbl = max(CS%Kv_BBL_min, kv_bbl)

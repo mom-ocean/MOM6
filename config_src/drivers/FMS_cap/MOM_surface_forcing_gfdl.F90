@@ -62,7 +62,7 @@ type, public :: surface_forcing_CS ; private
                                 !! from MOM_domains) to indicate the staggering of
                                 !! the winds that are being provided in calls to
                                 !! update_ocean_model.
-  logical :: use_temperature    !< If true, temp and saln used as state variables
+  logical :: use_temperature    !< If true, temp and saln used as state variables.
   real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress [nondim].
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
@@ -175,6 +175,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux [W m-2]
   real, pointer, dimension(:,:) :: q_flux          =>NULL() !< specific humidity flux [kg m-2 s-1]
   real, pointer, dimension(:,:) :: salt_flux       =>NULL() !< salt flux [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: excess_salt     =>NULL() !< salt left behind by brine rejection [kg m-2 s-1]
   real, pointer, dimension(:,:) :: lw_flux         =>NULL() !< long wave radiation [W m-2]
   real, pointer, dimension(:,:) :: sw_flux_vis_dir =>NULL() !< direct visible sw radiation [W m-2]
   real, pointer, dimension(:,:) :: sw_flux_vis_dif =>NULL() !< diffuse visible sw radiation [W m-2]
@@ -303,6 +304,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
+
+    if (associated(IOB%excess_salt)) call safe_alloc_ptr(fluxes%salt_left_behind,isd,ied,jsd,jed)
 
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
@@ -574,6 +577,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       fluxes%salt_flux_in(i,j) = G%mask2dT(i,j)*( -kg_m2_s_conversion*IOB%salt_flux(i-i0,j-j0) )
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%salt_flux(i-i0,j-j0), G%mask2dT(i,j), i, j, 'salt_flux', G)
+    enddo ; enddo
+  endif
+  if (associated(IOB%excess_salt)) then
+    do j=js,je ; do i=is,ie
+      fluxes%salt_left_behind(i,j) = G%mask2dT(i,j)*(kg_m2_s_conversion*IOB%excess_salt(i-i0,j-j0))
     enddo ; enddo
   endif
 
@@ -1728,6 +1736,9 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   endif
   if (associated(iobt%mass_berg)) then
     chks = field_chksum( iobt%mass_berg  ) ; if (root) write(outunit,100) 'iobt%mass_berg      ', chks
+  endif
+  if (associated(iobt%excess_salt)) then
+    chks = field_chksum( iobt%excess_salt    ) ; if (root) write(outunit,100) 'iobt%excess_salt    ', chks
   endif
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 

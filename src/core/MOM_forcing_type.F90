@@ -135,8 +135,10 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     salt_flux       => NULL(), & !< net salt flux into the ocean [R Z T-1 ~> kgSalt m-2 s-1]
     salt_flux_in    => NULL(), & !< salt flux provided to the ocean from coupler [R Z T-1 ~> kgSalt m-2 s-1]
-    salt_flux_added => NULL()    !< additional salt flux from restoring or flux adjustment before adjustment
+    salt_flux_added => NULL(), & !< additional salt flux from restoring or flux adjustment before adjustment
                                  !! to net zero [R Z T-1 ~> kgSalt m-2 s-1]
+    salt_left_behind => NULL()   !< salt left in ocean at the surface from brine rejection
+                                 !! [R Z T-1 ~> kgSalt m-2 s-1]
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
@@ -746,15 +748,15 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
     endif
 
     ! Salt fluxes
-    Net_salt(i) = 0.0
-    if (do_NSR) Net_salt_rate(i) = 0.0
+    net_salt(i) = 0.0
+    if (do_NSR) net_salt_rate(i) = 0.0
     ! Convert salt_flux from kg (salt)/(m^2 * s) to
     ! Boussinesq: (ppt * m)
     ! non-Bouss:  (g/m^2)
     if (associated(fluxes%salt_flux)) then
-      Net_salt(i) = (scale * dt * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
+      net_salt(i) = (scale * dt * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
       !Repeat above code for 'rate' term
-      if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
+      if (do_NSR) net_salt_rate(i) = (scale * 1. * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
     endif
 
     ! Diagnostics follow...
@@ -1945,6 +1947,10 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_flux_added', &
         diag%axesT1,Time,'Salt flux into ocean at surface due to restoring or flux adjustment', &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
+
+  handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_left_behind', &
+        diag%axesT1,Time,'Salt left in ocean at surface due to ice formation', &
         units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_saltFluxGlobalAdj = register_scalar_field('ocean_model',              &
