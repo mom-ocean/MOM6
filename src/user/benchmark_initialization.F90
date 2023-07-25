@@ -142,7 +142,7 @@ subroutine benchmark_initialize_thickness(h, depth_tot, G, GV, US, param_file, e
                  units="degC", default=29.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, &
                  "The uniform salinities used to initialize the benchmark test case.", &
-                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="PSU", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
 
   if (just_read) return ! This subroutine has no run-time parameters.
 
