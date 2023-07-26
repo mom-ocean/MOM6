@@ -529,6 +529,11 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, US, halo_here,
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 
   h_neglect = GV%H_subroundoff
+  ! The use of the fixed rescaling factor in the next line avoids an extra call to thickness_to_dz()
+  ! and the use of an extra 3-d array of vertical distnaces across layers (dz).  This would be more
+  ! physically consistent, but it would also be more expensive, and given that this routine applies
+  ! a small (but arbitrary) amount of mixing to clean up the properties of nearly massless layers,
+  ! the added expense is hard to justify.
   kap_dt_x2 = (2.0*kappa_dt) * (US%Z_to_m*GV%m_to_H) ! Usually the latter term is GV%Z_to_H.
   h0 = h_neglect
   if (present(larger_h_denom)) then
