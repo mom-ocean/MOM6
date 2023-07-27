@@ -58,6 +58,7 @@ type, public :: neutral_diffusion_CS ; private
                       !! interior_only=true.
   logical :: use_unmasked_transport_bug !< If true, use an older form for the accumulation of
                       !! neutral-diffusion transports that were unmasked, as used prior to Jan 2018.
+  real,    allocatable, dimension(:,:)  :: hbl    !< Boundary layer depth [H ~> m or kg m-2]
   ! Coefficients used to apply tapering from neutral to horizontal direction
   real,    allocatable, dimension(:) :: coeff_l   !< Non-dimensional coefficient in the left column,
                                                   !! at cell interfaces
@@ -335,7 +336,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   ! Variables used for reconstructions
   real, dimension(SZK_(GV),2) :: ppoly_r_S      ! Reconstruction slopes
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta [R L2 T-2 ~> Pa]
   real :: h_neglect, h_neglect_edge    ! Negligible thicknesses [H ~> m or kg m-2]
@@ -354,14 +354,14 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
-    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, &
+    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, CS%hbl, G, US, m_to_BLD_units=GV%m_to_H)
+    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, CS%hbl, G, US, &
                                                                      m_to_MLD_units=GV%m_to_H)
-    call pass_var(hbl,G%Domain)
+    call pass_var(CS%hbl,G%Domain)
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
       if (G%mask2dT(i,j) > 0.0) then
-        call boundary_k_range(SURFACE, G%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
+        call boundary_k_range(SURFACE, G%ke, h(i,j,:), CS%hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
       endif
     enddo; enddo
     ! TODO: add similar code for BOTTOM boundary layer
@@ -604,7 +604,6 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real, dimension(SZI_(G),SZJB_(G))            :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
   real, dimension(SZK_(GV))                    :: dTracer     ! change in tracer concentration due to ndiffusion
                                                               ! [H L2 conc ~> m3 conc or kg conc]
-  real, dimension(SZI_(G),SZJ_(G))             :: hbl         ! Boundary layer depth [H ~> m or kg m-2]
   type(tracer_type), pointer                   :: Tracer => NULL() ! Pointer to the current tracer
 
   integer :: i, j, k, m, ks, nk
@@ -612,14 +611,6 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
 
   h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-
-  ! Check if hbl needs to be extracted
-  if (CS%tapering) then
-    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, &
-                                                                     m_to_MLD_units=GV%m_to_H)
-    call pass_var(hbl,G%Domain)
-  endif
 
   if (.not. CS%continuous_reconstruction) then
     if (CS%remap_answer_date < 20190101) then
@@ -648,7 +639,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
       if (G%mask2dCu(I,j)>0.) then
         if (CS%tapering) then
           ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
-          call compute_tapering_coeffs(G%ke+1, hbl(I,j), hbl(I+1,j), CS%coeff_l(:), CS%coeff_r(:), &
+          call compute_tapering_coeffs(G%ke+1, CS%hbl(I,j), CS%hbl(I+1,j), CS%coeff_l(:), CS%coeff_r(:), &
                                        h(I,j,:), h(I+1,j,:))
 
           call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
@@ -674,7 +665,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
       if (G%mask2dCv(i,J)>0.) then
         if (CS%tapering) then
           ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
-          call compute_tapering_coeffs(G%ke+1, hbl(i,J), hbl(i,J+1), CS%coeff_l(:), CS%coeff_r(:), &
+          call compute_tapering_coeffs(G%ke+1, CS%hbl(i,J), CS%hbl(i,J+1), CS%coeff_l(:), CS%coeff_r(:), &
                                        h(i,J,:), h(i,J+1,:))
 
           call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
