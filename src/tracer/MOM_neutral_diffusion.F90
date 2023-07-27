@@ -267,6 +267,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   endif
 
   if (CS%interior_only) then
+    allocate(CS%hbl(SZI_(G),SZJ_(G)), source=0.)
     call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
     call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
     if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
