@@ -71,8 +71,8 @@ public register_barotropic_restarts, set_dtbt, barotropic_get_tav
 type, private :: BT_OBC_type
   real, allocatable :: Cg_u(:,:)  !< The external wave speed at u-points [L T-1 ~> m s-1].
   real, allocatable :: Cg_v(:,:)  !< The external wave speed at u-points [L T-1 ~> m s-1].
-  real, allocatable :: H_u(:,:)   !< The total thickness at the u-points [H ~> m or kg m-2].
-  real, allocatable :: H_v(:,:)   !< The total thickness at the v-points [H ~> m or kg m-2].
+  real, allocatable :: dZ_u(:,:)  !< The total vertical column extent at the u-points [Z ~> m].
+  real, allocatable :: dZ_v(:,:)  !< The total vertical column extent at the v-points [Z ~> m].
   real, allocatable :: uhbt(:,:)  !< The zonal barotropic thickness fluxes specified
                                   !! for open boundary conditions (if any) [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, allocatable :: vhbt(:,:)  !< The meridional barotropic thickness fluxes specified
@@ -81,10 +81,10 @@ type, private :: BT_OBC_type
                                   !! as set by the open boundary conditions [L T-1 ~> m s-1].
   real, allocatable :: vbt_outer(:,:) !< The meridional velocities just outside the domain,
                                   !! as set by the open boundary conditions [L T-1 ~> m s-1].
-  real, allocatable :: eta_outer_u(:,:) !< The surface height outside of the domain
-                                  !! at a u-point with an open boundary condition [H ~> m or kg m-2].
-  real, allocatable :: eta_outer_v(:,:) !< The surface height outside of the domain
-                                  !! at a v-point with an open boundary condition [H ~> m or kg m-2].
+  real, allocatable :: SSH_outer_u(:,:) !< The surface height outside of the domain
+                                  !! at a u-point with an open boundary condition [Z ~> m].
+  real, allocatable :: SSH_outer_v(:,:) !< The surface height outside of the domain
+                                  !! at a v-point with an open boundary condition [Z ~> m].
   logical :: apply_u_OBCs !< True if this PE has an open boundary at a u-point.
   logical :: apply_v_OBCs !< True if this PE has an open boundary at a v-point.
   !>@{ Index ranges for the open boundary conditions
@@ -2338,7 +2338,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       !$OMP single
       call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
              ubt_trans, vbt_trans, eta, ubt_old, vbt_old, CS%BT_OBC, &
-             G, MS, US, iev-ie, dtbt, bebt, use_BT_cont, integral_BT_cont, &
+             G, MS, GV, US, iev-ie, dtbt, bebt, use_BT_cont, integral_BT_cont, &
              n*dtbt, Datu, Datv, BTCL_u, BTCL_v, uhbt0, vhbt0, &
              ubt_int_prev, vbt_int_prev, uhbt_int_prev, vhbt_int_prev)
       !$OMP end single
@@ -2908,11 +2908,11 @@ end subroutine set_dtbt
 !! This subroutine applies the open boundary conditions on barotropic
 !! velocities and mass transports, as developed by Mehmet Ilicak.
 subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, eta, &
-                               ubt_old, vbt_old, BT_OBC, G, MS, US, halo, dtbt, bebt, &
+                               ubt_old, vbt_old, BT_OBC, G, MS, GV, US, halo, dtbt, bebt, &
                                use_BT_cont, integral_BT_cont, dt_elapsed, Datu, Datv, &
                                BTCL_u, BTCL_v, uhbt0, vhbt0, ubt_int, vbt_int, uhbt_int, vhbt_int)
   type(ocean_OBC_type),                  pointer       :: OBC     !< An associated pointer to an OBC type.
-  type(ocean_grid_type),                 intent(inout) :: G       !< The ocean's grid structure.
+  type(ocean_grid_type),                 intent(in)    :: G       !< The ocean's grid structure.
   type(memory_size_type),                intent(in)    :: MS      !< A type that describes the memory sizes of
                                                                   !! the argument arrays.
   real, dimension(SZIBW_(MS),SZJW_(MS)), intent(inout) :: ubt     !< the zonal barotropic velocity [L T-1 ~> m s-1].
@@ -2935,6 +2935,7 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   type(BT_OBC_type),                     intent(in)    :: BT_OBC  !< A structure with the private barotropic arrays
                                                                   !! related to the open boundary conditions,
                                                                   !! set by set_up_BT_OBC.
+  type(verticalGrid_type),               intent(in)    :: GV      !< The ocean's vertical grid structure.
   type(unit_scale_type),                 intent(in)    :: US      !< A dimensional unit scaling type
   integer,                               intent(in)    :: halo    !< The extra halo size to use here.
   real,                                  intent(in)    :: dtbt    !< The time step [T ~> s].
@@ -2978,14 +2979,14 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: vel_trans   ! The combination of the previous and current velocity
                       ! that does the mass transport [L T-1 ~> m s-1].
-  real :: H_u         ! The total thickness at the u-point [H ~> m or kg m-2].
-  real :: H_v         ! The total thickness at the v-point [H ~> m or kg m-2].
+  real :: dZ_u        ! The total vertical column extent at a u-point [Z ~> m]
+  real :: dZ_v        ! The total vertical column extent at a v-point [Z ~> m]
   real :: cfl         ! The CFL number at the point in question [nondim]
   real :: u_inlet     ! The zonal inflow velocity [L T-1 ~> m s-1]
   real :: v_inlet     ! The meridional inflow velocity [L T-1 ~> m s-1]
   real :: uhbt_int_new ! The updated time-integrated zonal transport [H L2 ~> m3]
   real :: vhbt_int_new ! The updated time-integrated meridional transport [H L2 ~> m3]
-  real :: h_in        ! The inflow thickness [H ~> m or kg m-2].
+  real :: ssh_in      ! The inflow sea surface height [Z ~> m]
   real :: Idtbt       ! The inverse of the barotropic time step [T-1 ~> s-1]
   integer :: i, j, is, ie, js, je
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
@@ -3004,11 +3005,11 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         if (OBC%segment(OBC%segnum_u(I,j))%Flather) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
           u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
-          h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j))      ! internal
-          H_u = BT_OBC%H_u(I,j)
+          ssh_in = GV%H_to_Z*(eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j)))      ! internal
+          dZ_u = BT_OBC%dZ_u(I,j)
           vel_prev = ubt(I,j)
           ubt(I,j) = 0.5*((u_inlet + BT_OBC%ubt_outer(I,j)) + &
-              (BT_OBC%Cg_u(I,j)/H_u) * (h_in-BT_OBC%eta_outer_u(I,j)))
+              (BT_OBC%Cg_u(I,j)/dZ_u) * (ssh_in-BT_OBC%SSH_outer_u(I,j)))
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
         elseif (OBC%segment(OBC%segnum_u(I,j))%gradient) then
           ubt(I,j) = ubt(I-1,j)
@@ -3018,12 +3019,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         if (OBC%segment(OBC%segnum_u(I,j))%Flather) then
           cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
           u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
-          h_in = eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j))  ! external
+          ssh_in = GV%H_to_Z*(eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j)))  ! internal
 
-          H_u = BT_OBC%H_u(I,j)
+          dZ_u = BT_OBC%dZ_u(I,j)
           vel_prev = ubt(I,j)
           ubt(I,j) = 0.5*((u_inlet + BT_OBC%ubt_outer(I,j)) + &
-              (BT_OBC%Cg_u(I,j)/H_u) * (BT_OBC%eta_outer_u(I,j)-h_in))
+              (BT_OBC%Cg_u(I,j)/dZ_u) * (BT_OBC%SSH_outer_u(I,j)-ssh_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
         elseif (OBC%segment(OBC%segnum_u(I,j))%gradient) then
@@ -3058,12 +3059,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         if (OBC%segment(OBC%segnum_v(i,J))%Flather) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J) ! CFL
           v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
-          h_in = eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1))      ! internal
+          ssh_in = GV%H_to_Z*(eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1)))      ! internal
 
-          H_v = BT_OBC%H_v(i,J)
+          dZ_v = BT_OBC%dZ_v(i,J)
           vel_prev = vbt(i,J)
           vbt(i,J) = 0.5*((v_inlet + BT_OBC%vbt_outer(i,J)) + &
-              (BT_OBC%Cg_v(i,J)/H_v) * (h_in-BT_OBC%eta_outer_v(i,J)))
+              (BT_OBC%Cg_v(i,J)/dZ_v) * (ssh_in-BT_OBC%SSH_outer_v(i,J)))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
         elseif (OBC%segment(OBC%segnum_v(i,J))%gradient) then
@@ -3074,12 +3075,12 @@ subroutine apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, ubt_trans, vbt_trans, 
         if (OBC%segment(OBC%segnum_v(i,J))%Flather) then
           cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J) ! CFL
           v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
-          h_in = eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2))  ! internal
+          ssh_in = GV%H_to_Z*(eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2)))  ! internal
 
-          H_v = BT_OBC%H_v(i,J)
+          dZ_v = BT_OBC%dZ_v(i,J)
           vel_prev = vbt(i,J)
           vbt(i,J) = 0.5*((v_inlet + BT_OBC%vbt_outer(i,J)) + &
-              (BT_OBC%Cg_v(i,J)/H_v) * (BT_OBC%eta_outer_v(i,J)-h_in))
+              (BT_OBC%Cg_v(i,J)/dZ_v) * (BT_OBC%SSH_outer_v(i,J)-ssh_in))
 
           vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
         elseif (OBC%segment(OBC%segnum_v(i,J))%gradient) then
@@ -3167,21 +3168,21 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
 
   if (.not. BT_OBC%is_alloced) then
     allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw), source=0.0)
-    allocate(BT_OBC%H_u(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%dZ_u(isdw-1:iedw,jsdw:jedw), source=0.0)
     allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw), source=0.0)
     allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw), source=0.0)
-    allocate(BT_OBC%eta_outer_u(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%SSH_outer_u(isdw-1:iedw,jsdw:jedw), source=0.0)
 
     allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw), source=0.0)
-    allocate(BT_OBC%H_v(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%dZ_v(isdw:iedw,jsdw-1:jedw), source=0.0)
     allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw), source=0.0)
     allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw), source=0.0)
-    allocate(BT_OBC%eta_outer_v(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%SSH_outer_v(isdw:iedw,jsdw-1:jedw), source=0.0)
     BT_OBC%is_alloced = .true.
     call create_group_pass(BT_OBC%pass_uv, BT_OBC%ubt_outer, BT_OBC%vbt_outer, BT_Domain)
     call create_group_pass(BT_OBC%pass_uhvh, BT_OBC%uhbt, BT_OBC%vhbt, BT_Domain)
-    call create_group_pass(BT_OBC%pass_eta_outer, BT_OBC%eta_outer_u, BT_OBC%eta_outer_v, BT_Domain,To_All+Scalar_Pair)
-    call create_group_pass(BT_OBC%pass_h, BT_OBC%H_u, BT_OBC%H_v, BT_Domain,To_All+Scalar_Pair)
+    call create_group_pass(BT_OBC%pass_eta_outer, BT_OBC%SSH_outer_u, BT_OBC%SSH_outer_v, BT_Domain,To_All+Scalar_Pair)
+    call create_group_pass(BT_OBC%pass_h, BT_OBC%dZ_u, BT_OBC%dZ_v, BT_Domain,To_All+Scalar_Pair)
     call create_group_pass(BT_OBC%pass_cg, BT_OBC%Cg_u, BT_OBC%Cg_v, BT_Domain,To_All+Scalar_Pair)
   endif
 
@@ -3212,18 +3213,18 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
       else  ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            BT_OBC%H_u(I,j) = G%bathyT(i,j)*GV%Z_to_H + eta(i,j)
+            BT_OBC%dZ_u(I,j) = G%bathyT(i,j) + GV%H_to_Z*eta(i,j)
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            BT_OBC%H_u(I,j) = G%bathyT(i+1,j)*GV%Z_to_H + eta(i+1,j)
+            BT_OBC%dZ_u(I,j) = G%bathyT(i+1,j) + GV%H_to_Z*eta(i+1,j)
           endif
         else
           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-            BT_OBC%H_u(I,j) = eta(i,j)
+            BT_OBC%dZ_u(I,j) = GV%H_to_Z*eta(i,j)
           elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-            BT_OBC%H_u(I,j) = eta(i+1,j)
+            BT_OBC%dZ_u(I,j) = GV%H_to_Z*eta(i+1,j)
           endif
         endif
-        BT_OBC%Cg_u(I,j) = SQRT(dgeo_de_in *  GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_u(i,j))
+        BT_OBC%Cg_u(I,j) = SQRT(dgeo_de_in *  GV%g_prime(1) * BT_OBC%dZ_u(i,j))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
@@ -3232,7 +3233,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
         if (segment%is_E_or_W .and. segment%Flather) then
           do j=segment%HI%jsd,segment%HI%jed ; do I=segment%HI%IsdB,segment%HI%IedB
             BT_OBC%ubt_outer(I,j) = segment%normal_vel_bt(I,j)
-            BT_OBC%eta_outer_u(I,j) = segment%eta(I,j) + G%Z_ref*GV%Z_to_H
+            BT_OBC%SSH_outer_u(I,j) = segment%SSH(I,j) + G%Z_ref
           enddo ; enddo
         endif
       enddo
@@ -3266,18 +3267,18 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
       else  ! This is assuming Flather as only other option
         if (GV%Boussinesq) then
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            BT_OBC%H_v(i,J) = G%bathyT(i,j)*GV%Z_to_H + eta(i,j)
+            BT_OBC%dZ_v(i,J) = G%bathyT(i,j) + GV%H_to_Z*eta(i,j)
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            BT_OBC%H_v(i,J) = G%bathyT(i,j+1)*GV%Z_to_H + eta(i,j+1)
+            BT_OBC%dZ_v(i,J) = G%bathyT(i,j+1) + GV%H_to_Z*eta(i,j+1)
           endif
         else
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            BT_OBC%H_v(i,J) = eta(i,j)
+            BT_OBC%dZ_v(i,J) = GV%H_to_Z*eta(i,j)
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            BT_OBC%H_v(i,J) = eta(i,j+1)
+            BT_OBC%dZ_v(i,J) = GV%H_to_Z*eta(i,j+1)
           endif
         endif
-        BT_OBC%Cg_v(i,J) = SQRT(dgeo_de_in * GV%g_prime(1) * GV%H_to_Z*BT_OBC%H_v(i,J))
+        BT_OBC%Cg_v(i,J) = SQRT(dgeo_de_in * GV%g_prime(1) * BT_OBC%dZ_v(i,J))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
@@ -3286,7 +3287,7 @@ subroutine set_up_BT_OBC(OBC, eta, BT_OBC, BT_Domain, G, GV, US, MS, halo, use_B
         if (segment%is_N_or_S .and. segment%Flather) then
           do J=segment%HI%JsdB,segment%HI%JedB ; do i=segment%HI%isd,segment%HI%ied
             BT_OBC%vbt_outer(i,J) = segment%normal_vel_bt(i,J)
-            BT_OBC%eta_outer_v(i,J) = segment%eta(i,J) + G%Z_ref*GV%Z_to_H
+            BT_OBC%SSH_outer_v(i,J) = segment%SSH(i,J) + G%Z_ref
           enddo ; enddo
         endif
       enddo
@@ -3309,16 +3310,16 @@ subroutine destroy_BT_OBC(BT_OBC)
 
   if (BT_OBC%is_alloced) then
     deallocate(BT_OBC%Cg_u)
-    deallocate(BT_OBC%H_u)
+    deallocate(BT_OBC%dZ_u)
     deallocate(BT_OBC%uhbt)
     deallocate(BT_OBC%ubt_outer)
-    deallocate(BT_OBC%eta_outer_u)
+    deallocate(BT_OBC%SSH_outer_u)
 
     deallocate(BT_OBC%Cg_v)
-    deallocate(BT_OBC%H_v)
+    deallocate(BT_OBC%dZ_v)
     deallocate(BT_OBC%vhbt)
     deallocate(BT_OBC%vbt_outer)
-    deallocate(BT_OBC%eta_outer_v)
+    deallocate(BT_OBC%SSH_outer_v)
     BT_OBC%is_alloced = .false.
   endif
 end subroutine destroy_BT_OBC

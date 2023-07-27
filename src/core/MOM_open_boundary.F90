@@ -200,8 +200,8 @@ type, public :: OBC_segment_type
                                               !! segment [H L2 T-1 ~> m3 s-1].
   real, allocatable :: normal_vel_bt(:,:)     !< The barotropic velocity normal to
                                               !! the OB segment [L T-1 ~> m s-1].
-  real, allocatable :: eta(:,:)               !< The sea-surface elevation along the
-                                              !! segment [H ~> m or kg m-2].
+  real, allocatable :: SSH(:,:)               !< The sea-surface elevation along the
+                                              !! segment [Z ~> m].
   real, allocatable :: grad_normal(:,:,:)     !< The gradient of the normal flow along the
                                               !! segment times the grid spacing [L T-1 ~> m s-1],
                                               !! with the first index being the corner-point index
@@ -3581,7 +3581,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Cg(IsdB:IedB,jsd:jed), source=0.0)
     allocate(segment%Htot(IsdB:IedB,jsd:jed), source=0.0)
     allocate(segment%h(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
-    allocate(segment%eta(IsdB:IedB,jsd:jed), source=0.0)
+    allocate(segment%SSH(IsdB:IedB,jsd:jed), source=0.0)
     if (segment%radiation) &
       allocate(segment%rx_norm_rad(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
     allocate(segment%normal_vel(IsdB:IedB,jsd:jed,OBC%ke), source=0.0)
@@ -3616,7 +3616,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Cg(isd:ied,JsdB:JedB), source=0.0)
     allocate(segment%Htot(isd:ied,JsdB:JedB), source=0.0)
     allocate(segment%h(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
-    allocate(segment%eta(isd:ied,JsdB:JedB), source=0.0)
+    allocate(segment%SSH(isd:ied,JsdB:JedB), source=0.0)
     if (segment%radiation) &
       allocate(segment%ry_norm_rad(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
     allocate(segment%normal_vel(isd:ied,JsdB:JedB,OBC%ke), source=0.0)
@@ -3657,7 +3657,7 @@ subroutine deallocate_OBC_segment_data(segment)
   if (allocated(segment%Cg)) deallocate(segment%Cg)
   if (allocated(segment%Htot)) deallocate(segment%Htot)
   if (allocated(segment%h)) deallocate(segment%h)
-  if (allocated(segment%eta)) deallocate(segment%eta)
+  if (allocated(segment%SSH)) deallocate(segment%SSH)
   if (allocated(segment%rx_norm_rad)) deallocate(segment%rx_norm_rad)
   if (allocated(segment%ry_norm_rad)) deallocate(segment%ry_norm_rad)
   if (allocated(segment%rx_norm_obl)) deallocate(segment%rx_norm_obl)
@@ -3797,7 +3797,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   real :: net_H_int   ! Total thickness of the incoming flow in the model [H ~> m or kg m-2]
   real :: scl_fac     ! A scaling factor to compensate for differences in total thicknesses [nondim]
   real :: tidal_vel   ! Interpolated tidal velocity at the OBC points [L T-1 ~> m s-1]
-  real :: tidal_elev  ! Interpolated tidal elevation at the OBC points [H ~> m or kg m-2]
+  real :: tidal_elev  ! Interpolated tidal elevation at the OBC points [Z ~> m]
   real, allocatable :: normal_trans_bt(:,:) ! barotropic transport [H L2 T-1 ~> m3 s-1]
   integer :: turns    ! Number of index quarter turns
   real :: time_delta  ! Time since tidal reference date [T ~> s]
@@ -4376,12 +4376,13 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               tidal_elev = 0.0
               if (OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
+                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * &
+                      GV%H_to_Z*segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
                       cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
                           + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
                 enddo
               endif
-              segment%eta(i,j) = OBC%ramp_value * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
+              segment%SSH(i,j) = OBC%ramp_value * (GV%H_to_Z*segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         else
@@ -4390,12 +4391,13 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               tidal_elev = 0.0
               if (OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
+                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * &
+                      GV%H_to_Z*segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
                       cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
                           + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
                 enddo
               endif
-              segment%eta(i,j) = (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
+              segment%SSH(i,j) = (GV%H_to_Z*segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         endif
