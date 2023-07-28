@@ -19,7 +19,7 @@ implicit none ; private
 
 public find_eta, dz_to_thickness, thickness_to_dz, dz_to_thickness_simple
 public calc_derived_thermo
-public find_rho_bottom
+public find_rho_bottom, find_col_avg_SpV
 
 !> Calculates the heights of the free surface or all interfaces from layer thicknesses.
 interface find_eta
@@ -321,6 +321,74 @@ subroutine calc_derived_thermo(tv, h, G, GV, US, halo, debug)
   endif
 
 end subroutine calc_derived_thermo
+
+
+!> Determine the column average specific volumes.
+subroutine find_col_avg_SpV(h, SpV_avg, tv, G, GV, US, halo_size)
+  type(ocean_grid_type),    intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),  intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                            intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                            intent(inout) :: SpV_avg !< Column average specific volume [R-1 ~> m3 kg-1]
+                                                  ! SpV_avg is intent inout to retain excess halo values.
+  type(thermo_var_ptrs),    intent(in)    :: tv   !< Structure containing pointers to any available
+                                                  !! thermodynamic fields.
+  integer,        optional, intent(in)    :: halo_size !< width of halo points on which to work
+
+  ! Local variables
+  real :: h_tot(SZI_(G))        ! Sum of the layer thicknesses [H ~> m or kg m-3]
+  real :: SpV_x_h_tot(SZI_(G))  ! Vertical sum of the layer average specific volume times
+                                ! the layer thicknesses [H R-1 ~> m4 kg-1 or m]
+  real :: I_rho                 ! The inverse of the Boussiensq reference density [R-1 ~> m3 kg-1]
+  real :: SpV_lay(SZK_(GV))     ! The inverse of the layer target potential densities [R-1 ~> m3 kg-1]
+  character(len=128) :: mesg    ! A string for error messages
+  integer i, j, k, is, ie, js, je, nz, halo
+
+  halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
+
+  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  nz = GV%ke
+
+  if (GV%Boussinesq) then
+    I_rho = 1.0 / GV%Rho0
+    do j=js,je ; do i=is,ie
+      SpV_avg(i,j) = I_rho
+    enddo ; enddo
+  elseif (.not.allocated(tv%SpV_avg)) then
+    do k=1,nz ; Spv_lay(k) = 1.0 / GV%Rlay(k) ; enddo
+    do j=js,je
+      do i=is,ie ; SpV_x_h_tot(i) = 0.0 ; h_tot(i) = 0.0 ; enddo
+      do k=1,nz ; do i=is,ie
+        h_tot(i) = h_tot(i) + max(h(i,j,k), GV%H_subroundoff)
+        SpV_x_h_tot(i) = SpV_x_h_tot(i) + Spv_lay(k)*max(h(i,j,k), GV%H_subroundoff)
+      enddo ; enddo
+      do i=is,ie ; SpV_avg(i,j) = SpV_x_h_tot(i) / h_tot(i) ; enddo
+    enddo
+  else
+    ! Check that SpV_avg has been set.
+    if ((allocated(tv%SpV_avg)) .and. (tv%valid_SpV_halo < halo)) then
+      if (tv%valid_SpV_halo < 0) then
+        mesg = "invalid values of SpV_avg."
+      else
+        write(mesg, '("insufficiently large SpV_avg halos of width ", i2, " but ", i2," is needed.")') &
+                     tv%valid_SpV_halo, halo
+      endif
+      call MOM_error(FATAL, "find_col_avg_SpV called in fully non-Boussinesq mode with "//trim(mesg))
+    endif
+
+    do j=js,je
+      do i=is,ie ; SpV_x_h_tot(i) = 0.0 ; h_tot(i) = 0.0 ; enddo
+      do k=1,nz ; do i=is,ie
+        h_tot(i) = h_tot(i) + max(h(i,j,k), GV%H_subroundoff)
+        SpV_x_h_tot(i) = SpV_x_h_tot(i) + tv%SpV_avg(i,j,k)*max(h(i,j,k), GV%H_subroundoff)
+      enddo ; enddo
+      do i=is,ie ; SpV_avg(i,j) = SpV_x_h_tot(i) / h_tot(i) ; enddo
+    enddo
+  endif
+
+end subroutine find_col_avg_SpV
 
 
 !> Determine the in situ density averaged over a specified distance from the bottom,
