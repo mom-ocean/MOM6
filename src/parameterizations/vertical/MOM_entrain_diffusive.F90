@@ -1888,7 +1888,7 @@ subroutine find_maxF_kb(h_bl, Sref, Ent_bl, I_dSkbp1, min_ent_in, max_ent_in, &
       ratio_select_end = 0.5*ratio_select_end
       do i=is1,ie1 ; if (do_i(i)) then
         if (need_bracket(i)) then
-          dF_dE_mean = (F_maxent(i) - F_minent(i)) / (maxent(i) - minent(i))
+          dF_dE_mean = (F_maxent(i) - F_minent(i)) / max(maxent(i) - minent(i),tolerance)
           maxslope = MAX(dF_dE_mean, dF_dE_min(i), dF_dE_max(i))
           minslope = MIN(dF_dE_mean, dF_dE_min(i), dF_dE_max(i))
           if (F_minent(i) >= F_maxent(i)) then
