@@ -938,7 +938,7 @@ end subroutine vertvisc_remnant
 !> Calculate the coupling coefficients (CS%a_u, CS%a_v, CS%a_u_gl90, CS%a_v_gl90)
 !! and effective layer thicknesses (CS%h_u and CS%h_v) for later use in the
 !! applying the implicit vertical viscosity via vertvisc().
-subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
+subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, VarMix)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -948,8 +948,12 @@ subroutine vertvisc_coef(u, v, h, forces, visc, dt, G, GV, US, CS, OBC, VarMix)
                            intent(in)    :: v      !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: dz     !< Vertical distance across layers [Z ~> m]
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(in)    :: visc   !< Viscosities and bottom drag
+  type(thermo_var_ptrs),   intent(in)    :: tv     !< A structure containing pointers to any available
+                                                   !! thermodynamic fields.
   real,                    intent(in)    :: dt     !< Time increment [T ~> s]
   type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
   type(ocean_OBC_type),    pointer       :: OBC    !< Open boundary condition structure
@@ -2152,6 +2156,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
   character(len=40)  :: thickness_units
+  real :: Kv_mks ! KVML in MKS
 
   if (associated(CS)) then
     call MOM_error(WARNING, "vertvisc_init called with an associated "// &
@@ -2335,6 +2340,14 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 
   CS%Kvml_invZ2 = 0.0
   if (GV%nkml < 1) then
+    call get_param(param_file, mdl, "KVML", Kv_mks, &
+                 "The scale for an extra kinematic viscosity in the mixed layer", &
+                 units="m2 s-1", default=-1.0, do_not_log=.true.)
+    if (Kv_mks >= 0.0) then
+      call MOM_error(WARNING, "KVML is a deprecated parameter. Use KV_ML_INVZ2 instead.")
+    else
+      Kv_mks = 0.0
+    endif
     call get_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_invZ2, &
                  "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
                  "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
@@ -2342,23 +2355,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
                  "transmitted through infinitesimally thin surface layers.  This is an "//&
                  "older option for numerical convenience without a strong physical basis, "//&
                  "and its use is now discouraged.", &
-                 units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
-    if (CS%Kvml_invZ2 < 0.0) then
-      call get_param(param_file, mdl, "KVML", CS%Kvml_invZ2, &
-                 "The scale for an extra kinematic viscosity in the mixed layer", &
-                 units="m2 s-1", default=0.0, scale=US%m2_s_to_Z2_T, do_not_log=.true.)
-      if (CS%Kvml_invZ2 >= 0.0) &
-        call MOM_error(WARNING, "KVML is a deprecated parameter. Use KV_ML_INVZ2 instead.")
-    endif
-    if (CS%Kvml_invZ2 < 0.0) CS%Kvml_invZ2 = 0.0
-    call log_param(param_file, mdl, "KV_ML_INVZ2", CS%Kvml_invZ2, &
-                 "An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, "//&
-                 "with the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the "//&
-                 "distance from the surface, to allow for finite wind stresses to be "//&
-                 "transmitted through infinitesimally thin surface layers.  This is an "//&
-                 "older option for numerical convenience without a strong physical basis, "//&
-                 "and its use is now discouraged.", &
-                 units="m2 s-1", default=0.0, unscale=US%Z2_T_to_m2_s)
+                 units="m2 s-1", default=Kv_mks, scale=US%m2_s_to_Z2_T)
   endif
 
   if (.not.CS%bottomdraglaw) then

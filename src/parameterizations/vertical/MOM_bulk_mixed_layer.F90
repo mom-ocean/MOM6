@@ -9,7 +9,7 @@ use MOM_diag_mediator, only : time_type, diag_ctrl, diag_update_remap_grids
 use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
-use MOM_forcing_type,  only : extractFluxes1d, forcing
+use MOM_forcing_type,  only : extractFluxes1d, forcing, find_ustar
 use MOM_grid,          only : ocean_grid_type
 use MOM_opacity,       only : absorbRemainingSW, optics_type, extract_optics_slice
 use MOM_unit_scaling,  only : unit_scale_type
@@ -235,6 +235,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
     ksort       !   The sorted k-index that each original layer goes to.
   real, dimension(SZI_(G),SZJ_(G)) :: &
     h_miss      !   The summed absolute mismatch [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    U_star_2d   ! The wind friction velocity, calculated using the Boussinesq reference density or
+                ! the time-evolving surface density in non-Boussinesq mode [Z T-1 ~> m s-1]
   real, dimension(SZI_(G)) :: &
     TKE, &      !   The turbulent kinetic energy available for mixing over a
                 ! time step [Z L2 T-2 ~> m3 s-2].
@@ -412,6 +415,9 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   max_BL_det(:) = -1
   EOSdom(:) = EOS_domain(G%HI)
 
+  ! Extract the friction velocity from the forcing type.
+  call find_ustar(fluxes, tv, U_star_2d, G, GV, US)
+
   !$OMP parallel default(shared) firstprivate(dKE_CA,cTKE,h_CA,max_BL_det,p_ref,p_ref_cv) &
   !$OMP                 private(h,u,v,h_orig,eps,T,S,opacity_band,d_ea,d_eb,R0,Rcv,ksort, &
   !$OMP                         dR0_dT,dR0_dS,dRcv_dT,dRcv_dS,htot,Ttot,Stot,TKE,Conv_en, &
@@ -513,7 +519,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
     !    First the TKE at the depth of free convection that is available
     !  to drive mixing is calculated.
-    call find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
+    call find_starting_TKE(htot, h_CA, fluxes, U_star_2d, Conv_En, cTKE, dKE_FC, dKE_CA, &
                            TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                            j, ksort, G, GV, US, CS)
 
@@ -1252,7 +1258,7 @@ end subroutine mixedlayer_convection
 
 !>   This subroutine determines the TKE available at the depth of free
 !! convection to drive mechanical entrainment.
-subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, &
+subroutine find_starting_TKE(htot, h_CA, fluxes, U_star_2d, Conv_En, cTKE, dKE_FC, dKE_CA, &
                              TKE, TKE_river, Idecay_len_TKE, cMKE, dt, Idt_diag, &
                              j, ksort, G, GV, US, CS)
   type(ocean_grid_type),      intent(in)    :: G       !< The ocean's grid structure.
@@ -1265,6 +1271,10 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
   type(forcing),              intent(in)    :: fluxes  !< A structure containing pointers to any
                                                        !! possible forcing fields.  Unused fields
                                                        !! have NULL pointers.
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) ::  U_star_2d !< The wind friction velocity, calculated
+                                                       !! using the Boussinesq reference density or
+                                                       !! the time-evolving surface density in
+                                                       !! non-Boussinesq mode [Z T-1 ~> m s-1]
   real, dimension(SZI_(G)),   intent(inout) :: Conv_En !< The buoyant turbulent kinetic energy source
                                                        !! due to free convection [Z L2 T-2 ~> m3 s-2].
   real, dimension(SZI_(G)),   intent(in)    :: dKE_FC  !< The vertically integrated change in
@@ -1325,7 +1335,8 @@ subroutine find_starting_TKE(htot, h_CA, fluxes, Conv_En, cTKE, dKE_FC, dKE_CA, 
 
   if (CS%omega_frac >= 1.0) absf = 2.0*CS%omega
   do i=is,ie
-    U_star = fluxes%ustar(i,j)
+    U_star = U_star_2d(i,j)
+
     if (associated(fluxes%ustar_shelf) .and. associated(fluxes%frac_shelf_h)) then
       if (fluxes%frac_shelf_h(i,j) > 0.0) &
         U_star = (1.0 - fluxes%frac_shelf_h(i,j)) * U_star + &

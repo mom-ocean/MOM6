@@ -41,7 +41,7 @@ type, public :: int_tide_input_CS ; private
   real :: TKE_itide_max !< Maximum Internal tide conversion
                         !! available to mix above the BBL [R Z3 T-3 ~> W m-2]
   real :: kappa_fill    !< Vertical diffusivity used to interpolate sensible values
-                        !! of T & S into thin layers [Z2 T-1 ~> m2 s-1].
+                        !! of T & S into thin layers [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   real, allocatable, dimension(:,:) :: TKE_itidal_coef
             !< The time-invariant field that enters the TKE_itidal input calculation [R Z3 T-2 ~> J m-2].
@@ -118,7 +118,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   ! Smooth the properties through massless layers.
   if (use_EOS) then
-    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill*dt, T_f, S_f, G, GV, larger_h_denom=.true.)
+    call vert_fill_TS(h, tv%T, tv%S, CS%kappa_fill*dt, T_f, S_f, G, GV, US, larger_h_denom=.true.)
   endif
 
   call find_N2_bottom(h, tv, T_f, S_f, itide%h2, fluxes, G, GV, US, N2_bot)
@@ -352,7 +352,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   call get_param(param_file, mdl, "KD_SMOOTH", CS%kappa_fill, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 units="m2 s-1", default=1.0e-6, scale=US%m2_s_to_Z2_T)
+                 units="m2 s-1", default=1.0e-6, scale=GV%m2_s_to_HZ_T)
 
   call get_param(param_file, mdl, "UTIDE", utide, &
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &

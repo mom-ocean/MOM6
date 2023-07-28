@@ -351,7 +351,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
     call diapyc_energy_req_test(h, dt, tv, G, GV, US, CS%diapyc_en_rec_CSp)
 
   call cpu_clock_begin(id_clock_set_diffusivity)
-  call set_BBL_TKE(u, v, h, fluxes, visc, G, GV, US, CS%set_diff_CSp, OBC=OBC)
+  call set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS%set_diff_CSp, OBC=OBC)
   call cpu_clock_end(id_clock_set_diffusivity)
 
   ! Frazil formation keeps the temperature above the freezing point.
@@ -679,13 +679,13 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
       call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
                             fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves, lamult=fluxes%lamult)
 
-      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, tv, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
                           Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves, lamult=fluxes%lamult)
     else
       call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
                             fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
-      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, tv, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
                           Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
     endif
 
@@ -751,7 +751,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   if (CS%double_diffuse .and. associated(tv%T)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, tv, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
 
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
@@ -815,7 +815,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
     skinbuoyflux(:,:) = 0.0
     call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
             optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit,                         &
-            CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux)
+            CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux, MLD=visc%MLD)
 
     if (CS%debug) then
       call hchksum(ent_t, "after applyBoundaryFluxes ent_t", G%HI, haloshift=0, scale=GV%H_to_m)
@@ -875,7 +875,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   else
     call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
                                   optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, &
-                                  CS%evap_CFL_limit, CS%minimum_forcing_depth)
+                                  CS%evap_CFL_limit, CS%minimum_forcing_depth, MLD=visc%MLD)
 
   endif   ! endif for CS%use_energetic_PBL
 
@@ -1281,13 +1281,13 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
       call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
                            fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves, lamult=fluxes%lamult)
 
-      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, tv, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves, lamult=fluxes%lamult)
     else
       call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
                            fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
-      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, tv, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
                        Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
     endif
 
@@ -1360,7 +1360,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
     skinbuoyflux(:,:) = 0.0
     call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
             optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, CS%evap_CFL_limit, &
-            CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux)
+            CS%minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, SkinBuoyFlux=SkinBuoyFlux, MLD=visc%MLD)
 
     if (CS%debug) then
       call hchksum(ent_t, "after applyBoundaryFluxes ent_t", G%HI, haloshift=0, scale=GV%H_to_m)
@@ -1414,7 +1414,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   else
     call applyBoundaryFluxesInOut(CS%diabatic_aux_CSp, G, GV, US, dt, fluxes, CS%optics, &
                                   optics_nbands(CS%optics), h, tv, CS%aggregate_FW_forcing, &
-                                  CS%evap_CFL_limit, CS%minimum_forcing_depth)
+                                  CS%evap_CFL_limit, CS%minimum_forcing_depth, MLD=visc%MLD)
 
   endif   ! endif for CS%use_energetic_PBL
 
@@ -1889,13 +1889,13 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
       call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
                            fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves, lamult=fluxes%lamult)
 
-      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, tv, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
                          Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves, lamult=fluxes%lamult)
     else
       call KPP_compute_BLD(CS%KPP_CSp, G, GV, US, h, tv%T, tv%S, u, v, tv, &
                            fluxes%ustar, CS%KPP_buoy_flux, Waves=Waves)
 
-      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
+      call KPP_calculate(CS%KPP_CSp, G, GV, US, h, tv, fluxes%ustar, CS%KPP_buoy_flux, Kd_heat, &
                          Kd_salt, visc%Kv_shear, CS%KPP_NLTheat, CS%KPP_NLTscalar, Waves=Waves)
     endif
 
@@ -1973,7 +1973,7 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
   if (CS%double_diffuse .and. associated(tv%T)) then
 
     call cpu_clock_begin(id_clock_differential_diff)
-    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, dt, G, GV)
+    call differential_diffuse_T_S(h, tv%T, tv%S, Kd_extra_T, Kd_extra_S, tv, dt, G, GV)
     call cpu_clock_end(id_clock_differential_diff)
     if (showCallTree) call callTree_waypoint("done with differential_diffuse_T_S (diabatic)")
     if (CS%debugConservation) call MOM_state_stats('differential_diffuse_T_S', u, v, h, tv%T, tv%S, G, GV, US)
@@ -2398,9 +2398,9 @@ subroutine layered_diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_e
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_ref_cv, Rcv_ml(:,j), &
                                tv%eqn_of_state, EOSdom)
       enddo
-      call apply_sponge(h, dt, G, GV, US, ea, eb, CS%sponge_CSp, Rcv_ml)
+      call apply_sponge(h, tv, dt, G, GV, US, ea, eb, CS%sponge_CSp, Rcv_ml)
     else
-      call apply_sponge(h, dt, G, GV, US, ea, eb, CS%sponge_CSp)
+      call apply_sponge(h, tv, dt, G, GV, US, ea, eb, CS%sponge_CSp)
     endif
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then

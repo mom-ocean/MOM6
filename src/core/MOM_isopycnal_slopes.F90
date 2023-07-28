@@ -36,8 +36,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: e    !< Interface heights [Z ~> m]
   type(thermo_var_ptrs),                       intent(in)    :: tv   !< A structure pointing to various
                                                                      !! thermodynamic variables
-  real,                                        intent(in)    :: dt_kappa_smooth !< A smoothing vertical diffusivity
-                                                                     !! times a smoothing timescale [Z2 ~> m2].
+  real,                                        intent(in)    :: dt_kappa_smooth !< A smoothing vertical
+                                                                     !! diffusivity times a smoothing
+                                                                     !! timescale [H Z ~> m2 or kg m-1]
   logical,                                     intent(in)    :: use_stanley !< turn on stanley param in slope
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: slope_x !< Isopycnal slope in i-dir [Z L-1 ~> nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(inout) :: slope_y !< Isopycnal slope in j-dir [Z L-1 ~> nondim]
@@ -142,7 +143,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
 
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2
-  dz_neglect = GV%H_subroundoff * GV%H_to_Z
+  dz_neglect = GV%dZ_subroundoff
 
   local_open_u_BC = .false.
   local_open_v_BC = .false.
@@ -195,9 +196,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
 
   if (use_EOS) then
     if (present(halo)) then
-      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, halo+1)
+      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, US, halo+1)
     else
-      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, 1)
+      call vert_fill_TS(h, tv%T, tv%S, dt_kappa_smooth, T, S, G, GV, US, 1)
     endif
   endif
 
@@ -341,9 +342,10 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
         slope = slope * max(g%mask2dT(i,j),g%mask2dT(i+1,j))
       endif
       slope_x(I,j,K) = slope
-      if (present(dzSxN)) dzSxN(I,j,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
-                                                              + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
-                                         * abs(slope) * G%mask2dCu(I,j) ! x-direction contribution to S^2
+      if (present(dzSxN)) &
+        dzSxN(I,j,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
+                                            + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+                       * abs(slope) * G%mask2dCu(I,j) ! x-direction contribution to S^2
 
     enddo ! I
   enddo ; enddo ! end of j-loop
@@ -477,9 +479,10 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
         slope = slope * max(g%mask2dT(i,j),g%mask2dT(i,j+1))
       endif
       slope_y(i,J,K) = slope
-      if (present(dzSyN)) dzSyN(i,J,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
-                                                              + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
-                                         * abs(slope) * G%mask2dCv(i,J) ! x-direction contribution to S^2
+      if (present(dzSyN)) &
+        dzSyN(i,J,K) = sqrt( G_Rho0 * max(0., wtL * ( dzaL * drdkL ) &
+                                             + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+                        * abs(slope) * G%mask2dCv(i,J) ! x-direction contribution to S^2
 
     enddo ! i
   enddo ; enddo ! end of j-loop
@@ -488,14 +491,15 @@ end subroutine calc_isoneutral_slopes
 
 !> Returns tracer arrays (nominally T and S) with massless layers filled with
 !! sensible values, by diffusing vertically with a small but constant diffusivity.
-subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here, larger_h_denom)
+subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, US, halo_here, larger_h_denom)
   type(ocean_grid_type),                     intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: T_in !< Input temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: S_in !< Input salinity [S ~> ppt]
   real,                                      intent(in)  :: kappa_dt !< A vertical diffusivity to use for smoothing
-                                                                 !! times a smoothing timescale [Z2 ~> m2].
+                                                                 !! times a smoothing timescale [H Z ~> m2 or kg m-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T_f  !< Filled temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S_f  !< Filled salinity [S ~> ppt]
   integer,                         optional, intent(in)  :: halo_here !< Number of halo points to work on,
@@ -525,10 +529,15 @@ subroutine vert_fill_TS(h, T_in, S_in, kappa_dt, T_f, S_f, G, GV, halo_here, lar
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
 
   h_neglect = GV%H_subroundoff
-  kap_dt_x2 = (2.0*kappa_dt)*GV%Z_to_H**2
+  ! The use of the fixed rescaling factor in the next line avoids an extra call to thickness_to_dz()
+  ! and the use of an extra 3-d array of vertical distnaces across layers (dz).  This would be more
+  ! physically consistent, but it would also be more expensive, and given that this routine applies
+  ! a small (but arbitrary) amount of mixing to clean up the properties of nearly massless layers,
+  ! the added expense is hard to justify.
+  kap_dt_x2 = (2.0*kappa_dt) * (US%Z_to_m*GV%m_to_H) ! Usually the latter term is GV%Z_to_H.
   h0 = h_neglect
   if (present(larger_h_denom)) then
-    if (larger_h_denom) h0 = 1.0e-16*sqrt(kappa_dt)*GV%Z_to_H
+    if (larger_h_denom) h0 = 1.0e-16*sqrt(0.5*kap_dt_x2)
   endif
 
   if (kap_dt_x2 <= 0.0) then

@@ -3,16 +3,17 @@ module MOM_sponge
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : sum_across_PEs
+use MOM_coms,          only : sum_across_PEs
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, NOTE, WARNING, is_root_pe
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_grid,          only : ocean_grid_type
 use MOM_spatial_means, only : global_i_mean
-use MOM_time_manager, only : time_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_time_manager,  only : time_type
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : thermo_var_ptrs
+use MOM_verticalGrid,  only : verticalGrid_type
 
 ! Planned extension:  Support for time varying sponge targets.
 
@@ -301,12 +302,14 @@ end subroutine set_up_sponge_ML_density
 
 !> This subroutine applies damping to the layers thicknesses, mixed layer buoyancy, and a variety of
 !! tracers for every column where there is damping.
-subroutine apply_sponge(h, dt, G, GV, US, ea, eb, CS, Rcv_ml)
+subroutine apply_sponge(h, tv, dt, G, GV, US, ea, eb, CS, Rcv_ml)
   type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV  !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),   intent(in)    :: tv  !< A structure pointing to various
+                                                !! thermodynamic variables
   real,                    intent(in)    :: dt  !< The amount of time covered by this call [T ~> s].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: ea  !< An array to which the amount of fluid entrained

@@ -519,7 +519,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
   h_neglect = GV%H_subroundoff
-  dz_neglect = GV%H_subroundoff * GV%H_to_Z
+  dz_neglect = GV%dZ_subroundoff
   I_Rho0 = 1.0 / GV%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
   rho_ref = CS%Rho0
@@ -827,12 +827,11 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
 
   mdl = "MOM_PressureForce_FV"
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to "//&
-                 "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
-                 "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
+  call get_param(param_file, mdl, "RHO_PGF_REF", CS%Rho0, &
+                 "The reference density that is subtracted off when calculating pressure "//&
+                 "gradient forces.  Its inverse is subtracted off of specific volumes when "//&
+                 "in non-Boussinesq mode.  The default is RHO_0.", &
+                 units="kg m-3", default=GV%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &

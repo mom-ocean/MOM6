@@ -79,7 +79,7 @@ use MOM_debugging, only : check_redundant
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_hor_visc, only : horizontal_viscosity, hor_visc_init, hor_visc_CS
-use MOM_interface_heights, only : find_eta
+use MOM_interface_heights, only : find_eta, thickness_to_dz
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types, only : MEKE_type
 use MOM_open_boundary, only : ocean_OBC_type
@@ -223,6 +223,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_av, hp ! Predicted or averaged layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: dz       ! Distance between the interfaces around a layer [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: up, upp ! Predicted zonal velocities [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vp, vpp ! Predicted meridional velocities [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: ueffA   ! Effective Area of U-Faces [H L ~> m2]
@@ -345,7 +346,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
   call disable_averaging(CS%diag)
 
   dt_visc = 0.5*dt ; if (CS%use_correct_dt_visc) dt_visc = dt_pred
-  call vertvisc_coef(up, vp, h_av, forces, visc, dt_visc, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
+  call thickness_to_dz(h_av, tv, dz, G, GV, US, halo_size=1)
+  call vertvisc_coef(up, vp, h_av, dz, forces, visc, tv, dt_visc, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc(up, vp, h_av, forces, visc, dt_visc, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
@@ -405,7 +407,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 
 ! upp <- upp + dt/2 d/dz visc d/dz upp
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(upp, vpp, hp, forces, visc, dt*0.5, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
+  call thickness_to_dz(hp, tv, dz, G, GV, US, halo_size=1)
+  call vertvisc_coef(upp, vpp, hp, dz, forces, visc, tv, dt*0.5, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc(upp, vpp, hp, forces, visc, dt*0.5, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)
@@ -489,7 +492,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 
 ! u <- u + dt d/dz visc d/dz u
   call cpu_clock_begin(id_clock_vertvisc)
-  call vertvisc_coef(u, v, h_av, forces, visc, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
+  call thickness_to_dz(h_av, tv, dz, G, GV, US, halo_size=1)
+  call vertvisc_coef(u, v, h_av, dz, forces, visc, tv, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
   call vertvisc(u, v, h_av, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, &
                 G, GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, Waves=Waves)
   call cpu_clock_end(id_clock_vertvisc)

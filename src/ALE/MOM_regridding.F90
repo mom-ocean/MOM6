@@ -263,7 +263,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       param_name = create_coord_param(param_prefix, "INTERP_SCHEME", param_suffix)
       string2 = 'PPM_H4' ! Default for diagnostics
     endif
-    call get_param(param_file, mdl, "INTERPOLATION_SCHEME", string, &
+    call get_param(param_file, mdl, param_name, string, &
                  "This sets the interpolation scheme to use to "//&
                  "determine the new grid. These parameters are "//&
                  "only relevant when REGRIDDING_COORDINATE_MODE is "//&

@@ -596,7 +596,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
 end function KPP_init
 
 !> KPP vertical diffusivity/viscosity and non-local tracer transport
-subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
+subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
                          nonLocalTransHeat, nonLocalTransScalar, Waves, lamult)
 
   ! Arguments
@@ -605,6 +605,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, uStar, buoyFlux, Kt, Ks, Kv, &
   type(verticalGrid_type),                     intent(in)    :: GV    !< Ocean vertical grid
   type(unit_scale_type),                       intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                       intent(in)    :: tv    !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G)),            intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: Kt  !< (in)  Vertical diffusivity of heat w/o KPP

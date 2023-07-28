@@ -95,6 +95,8 @@ type, public :: thermo_var_ptrs
   real :: min_salinity   !< The minimum value of salinity when BOUND_SALINITY=True [S ~> ppt].
   real, allocatable, dimension(:,:,:) :: SpV_avg
                          !< The layer averaged in situ specific volume [R-1 ~> m3 kg-1].
+  integer :: valid_SpV_halo = -1 !< If positive, the valid halo size for SpV_avg, or if negative
+                         !! SpV_avg is not currently set.
 
   ! These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()

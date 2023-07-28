@@ -38,7 +38,8 @@ type, public :: wave_speed_CS ; private
                                        !! wave speed [nondim]. This parameter controls the default behavior of
                                        !! wave_speed() which can be overridden by optional arguments.
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
-                                       !! calculating the equivalent barotropic wave speed [Z ~> m].
+                                       !! calculating the equivalent barotropic wave speed [H ~> m or kg m-2].
+                                       !! If this parameter is negative, this limiting does not occur.
                                        !! This parameter controls the default behavior of wave_speed() which
                                        !! can be overridden by optional arguments.
   real :: min_speed2 = 0.              !< The minimum mode 1 internal wave speed squared [L2 T-2 ~> m2 s-2]
@@ -80,7 +81,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
                                           !! for the purposes of calculating vertical modal structure [nondim].
   real,                   optional, intent(in)  :: mono_N2_depth !< A depth below which N2 is limited as
                                           !! monotonic for the purposes of calculating vertical
-                                          !! modal structure [Z ~> m].
+                                          !! modal structure [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                           optional, intent(out) :: modal_structure !< Normalized model structure [nondim]
 
@@ -156,9 +157,11 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: sum_hc  ! The sum of the layer thicknesses [Z ~> m]
   real :: gp      ! A limited local copy of gprime [L2 Z-1 T-2 ~> m s-2]
   real :: N2min   ! A minimum buoyancy frequency, including a slope rescaling factor [L2 Z-2 T-2 ~> s-2]
+  logical :: below_mono_N2_frac  ! True if an interface is below the fractional depth where N2 should not increase.
+  logical :: below_mono_N2_depth ! True if an interface is below the absolute depth where N2 should not increase.
   logical :: l_use_ebt_mode, calc_modal_structure
   real :: l_mono_N2_column_fraction ! A local value of mono_N2_column_fraction [nondim]
-  real :: l_mono_N2_depth ! A local value of mono_N2_column_depth [Z ~> m]
+  real :: l_mono_N2_depth ! A local value of mono_N2_column_depth [H ~> m or kg m-2]
   real :: mode_struct(SZK_(GV)) ! The mode structure [nondim], but it is also temporarily
                          ! in units of [L2 T-2 ~> m2 s-2] after it is modified inside of tdma6.
   real :: ms_min, ms_max ! The minimum and maximum mode structure values returned from tdma6 [L2 T-2 ~> m2 s-2]
@@ -213,18 +216,11 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   c2_scale = US%m_s_to_L_T**2 / 4096.0**2 ! Other powers of 2 give identical results.
 
   min_h_frac = tol_Hfrac / real(nz)
-!$OMP parallel do default(none) shared(is,ie,js,je,nz,h,G,GV,US,min_h_frac,use_EOS,tv,&
-!$OMP                                  calc_modal_structure,l_use_ebt_mode,modal_structure, &
-!$OMP                                  l_mono_N2_column_fraction,l_mono_N2_depth,CS,   &
-!$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale, &
-!$OMP                                  better_est,cg1_min2,tol_merge,tol_solve,c2_scale) &
-!$OMP                          private(htot,hmin,kf,H_here,HxT_here,HxS_here,HxR_here, &
-!$OMP                                  Hf,Tf,Sf,Rf,pres,T_int,S_int,drho_dT,drho_dS,   &
-!$OMP                                  drxh_sum,kc,Hc,Hc_H,Tc,Sc,I_Hnew,gprime,&
-!$OMP                                  Rc,speed2_tot,Igl,Igu,lam0,lam,lam_it,dlam, &
-!$OMP                                  mode_struct,sum_hc,N2min,gp,hw,                 &
-!$OMP                                  ms_min,ms_max,ms_sq,H_top,H_bot,I_Htot,merge,   &
-!$OMP                                  det,ddet,det_it,ddet_it)
+  !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,tv,use_EOS, &
+  !$OMP                                  CS,min_h_frac,calc_modal_structure,l_use_ebt_mode, &
+  !$OMP                                  modal_structure,l_mono_N2_column_fraction,l_mono_N2_depth, &
+  !$OMP                                  Z_to_pres,cg1,g_Rho0,rescale,I_rescale,cg1_min2, &
+  !$OMP                                  better_est,tol_solve,tol_merge,c2_scale)
   do j=js,je
     !   First merge very thin layers with the one above (or below if they are
     ! at the top).  This also transposes the row order so that columns can
@@ -334,7 +330,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
             drxh_sum = drxh_sum + 0.5*(Hf(k-1,i)+Hf(k,i)) * max(0.0,Rf(k,i)-Rf(k-1,i))
           enddo
         endif
-      endif
+      endif ! use_EOS
 
       !   Find gprime across each internal interface, taking care of convective instabilities by
       ! merging layers.  If the estimated wave speed is too small, simply return zero.
@@ -451,24 +447,34 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
             Igu(1) = 0. ! Neumann condition for pressure modes
             sum_hc = Hc(1)
             N2min = gprime(2)/Hc(1)
+
+            below_mono_N2_frac = .false.
+            below_mono_N2_depth = .false.
             do k=2,kc
               hw = 0.5*(Hc(k-1)+Hc(k))
               gp = gprime(K)
               if (l_mono_N2_column_fraction>0. .or. l_mono_N2_depth>=0.) then
-                !### Change to: if ( ((htot(i) - sum_hc < l_mono_N2_column_fraction*htot(i)) .or. & ) )
-                if ( (((G%bathyT(i,j)+G%Z_ref) - sum_hc < l_mono_N2_column_fraction*(G%bathyT(i,j)+G%Z_ref)) .or. &
-                      ((l_mono_N2_depth >= 0.) .and. (sum_hc > l_mono_N2_depth))) .and. &
-                     (gp > N2min*hw) ) then
-                  ! Filters out regions where N2 increases with depth but only in a lower fraction
+               ! Determine whether N2 estimates should not be allowed to increase with depth.
+                if (l_mono_N2_column_fraction>0.) then
+                  !### Change to:  (htot(i) - sum_hc < l_mono_N2_column_fraction*htot(i))
+                  below_mono_N2_frac = ((G%bathyT(i,j)+G%Z_ref) - GV%H_to_Z*sum_hc < &
+                                        l_mono_N2_column_fraction*(G%bathyT(i,j)+G%Z_ref))
+                endif
+                if (l_mono_N2_depth >= 0.) below_mono_N2_depth = (sum_hc > GV%H_to_Z*l_mono_N2_depth)
+
+                if ( (gp > N2min*hw) .and. (below_mono_N2_frac .or. below_mono_N2_depth) ) then
+                  ! Filters out regions where N2 increases with depth, but only in a lower fraction
                   ! of the water column or below a certain depth.
                   gp = N2min * hw
                 else
                   N2min = gp / hw
                 endif
               endif
+
               Igu(k) = 1.0/(gp*Hc(k))
               Igl(k-1) = 1.0/(gp*Hc(k-1))
               sum_hc = sum_hc + Hc(k)
+
               if (better_est) then
                 ! Estimate that the ebt_mode is sqrt(2) times the speed of the flat bottom modes.
                 speed2_tot = speed2_tot + 2.0 * gprime(K)*((H_top(K) * H_bot(K)) * I_Htot)
@@ -689,7 +695,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
     H_top, &      ! The distance of each filtered interface from the ocean surface [Z ~> m]
     H_bot, &      ! The distance of each filtered interface from the bottom [Z ~> m]
     gprime, &     ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
-    N2            ! The Brunt Vaissalla freqency squared [T-2 ~> s-2]
+    N2            ! The buoyancy freqency squared [T-2 ~> s-2]
   real, dimension(SZK_(GV),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [C ~> degC]
@@ -703,7 +709,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
     Sc, &         ! A column of layer salinities after convective instabilities are removed [S ~> ppt]
     Rc, &         ! A column of layer densities after convective instabilities are removed [R ~> kg m-3]
     Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
-  real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
+  real :: I_Htot  ! The inverse of the total filtered thicknesses [Z-1 ~> m-1]
   real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant and its
                    ! derivative with lam between rows of the Thomas algorithm solver [L2 s2 T-2 m-2 ~> nondim].
                    ! The exact value should not matter for the final result if it is an even power of 2.
@@ -796,6 +802,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
   ! Simplifying the following could change answers at roundoff.
   Z_to_pres = GV%Z_to_H * (GV%H_to_RZ * GV%g_Earth)
   use_EOS = associated(tv%eqn_of_state)
+
   if (CS%c1_thresh < 0.0) &
     call MOM_error(FATAL, "INTERNAL_WAVE_CG1_THRESH must be set to a non-negative "//&
                           "value via wave_speed_init for wave_speeds to be used.")
@@ -977,7 +984,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
                     I_Hnew = 1.0 / (Hc(kc) + Hc(kc-1))
                     Tc(kc-1) = (Hc(kc)*Tc(kc) + Hc(kc-1)*Tc(kc-1)) * I_Hnew
                     Sc(kc-1) = (Hc(kc)*Sc(kc) + Hc(kc-1)*Sc(kc-1)) * I_Hnew
-                    Hc(kc-1) = (Hc(kc) + Hc(kc-1))
+                    Hc(kc-1) = Hc(kc) + Hc(kc-1)
                     kc = kc - 1
                   else ; exit ; endif
                 enddo
@@ -1005,7 +1012,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
               if (merge) then
                 ! Merge this layer with the one above and backtrack.
                 Rc(kc) = (Hc(kc)*Rc(kc) + Hf(k,i)*Rf(k,i)) / (Hc(kc) + Hf(k,i))
-                Hc(kc) = (Hc(kc) + Hf(k,i))
+                Hc(kc) = Hc(kc) + Hf(k,i)
                 ! Backtrack to remove any convective instabilities above...  Note
                 ! that the tolerance is a factor of two larger, to avoid limit how
                 ! far back we go.
@@ -1018,7 +1025,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
                   if (merge) then
                     ! Merge the two bottommost layers.  At this point kc = k2.
                     Rc(kc-1) = (Hc(kc)*Rc(kc) + Hc(kc-1)*Rc(kc-1)) / (Hc(kc) + Hc(kc-1))
-                    Hc(kc-1) = (Hc(kc) + Hc(kc-1))
+                    Hc(kc-1) = Hc(kc) + Hc(kc-1)
                     kc = kc - 1
                   else ; exit ; endif
                 enddo
@@ -1108,7 +1115,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
               do k=1,kc
                 w2avg = w2avg + 0.5*(mode_struct(K)**2+mode_struct(K+1)**2)*Hc(k) ![Z L4 T-4]
               enddo
-              renorm = sqrt(htot(i)*a_int/w2avg) ![L-2 T-2]
+              renorm = sqrt(htot(i)*a_int/w2avg) ! [T2 L-2]
               do K=1,kc+1 ; mode_struct(K) = renorm * mode_struct(K) ; enddo
               ! after renorm, mode_struct is again [nondim]
 
@@ -1436,7 +1443,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                      !! calculating the vertical modal structure [nondim].
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                      !! as monotonic for the purposes of calculating the
-                                     !! vertical modal structure [Z ~> m].
+                                     !! vertical modal structure [H ~> m or kg m-2].
   logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
                                      !! that recover the remapping answers from 2018.  Otherwise
                                      !! use more robust but mathematically equivalent expressions.
@@ -1465,7 +1472,8 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
   call log_version(mdl, version)
 
   call wave_speed_set_param(CS, use_ebt_mode=use_ebt_mode, mono_N2_column_fraction=mono_N2_column_fraction, &
-                            better_speed_est=better_speed_est, min_speed=min_speed, wave_speed_tol=wave_speed_tol, &
+                            mono_N2_depth=mono_N2_depth, better_speed_est=better_speed_est, &
+                            min_speed=min_speed, wave_speed_tol=wave_speed_tol, &
                             remap_answers_2018=remap_answers_2018, remap_answer_date=remap_answer_date, &
                             c1_thresh=c1_thresh)
 
@@ -1487,7 +1495,7 @@ subroutine wave_speed_set_param(CS, use_ebt_mode, mono_N2_column_fraction, mono_
                                       !! calculating the vertical modal structure [nondim].
   real,    optional, intent(in) :: mono_N2_depth !< The depth below which N2 is limited
                                       !! as monotonic for the purposes of calculating the
-                                      !! vertical modal structure [Z ~> m].
+                                      !! vertical modal structure [H ~> m or kg m-2].
   logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
                                       !! that recover the remapping answers from 2018.  Otherwise
                                       !! use more robust but mathematically equivalent expressions.

@@ -15,6 +15,7 @@ use MOM_EOS,           only : calculate_density_derivs, EOS_domain
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_opacity,       only : sumSWoverBands, optics_type, extract_optics_slice, optics_nbands
 use MOM_spatial_means, only : global_area_integral, global_area_mean
 use MOM_spatial_means, only : global_area_mean_u, global_area_mean_v
@@ -28,7 +29,7 @@ implicit none ; private
 
 public extractFluxes1d, extractFluxes2d, optics_type
 public MOM_forcing_chksum, MOM_mech_forcing_chksum
-public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d
+public calculateBuoyancyFlux1d, calculateBuoyancyFlux2d, find_ustar
 public forcing_accumulate, fluxes_accumulate
 public forcing_SinglePointPrint, mech_forcing_diags, forcing_diagnostics
 public register_forcing_type_diags, allocate_forcing_type, deallocate_forcing_type
@@ -51,6 +52,12 @@ interface allocate_mech_forcing
   module procedure allocate_mech_forcing_by_group
   module procedure allocate_mech_forcing_from_ref
 end interface allocate_mech_forcing
+
+!> Determine the friction velocity from a forcing type or a mechanical forcing type.
+interface find_ustar
+  module procedure find_ustar_fluxes
+  module procedure find_ustar_mech_forcing
+end interface find_ustar
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -134,8 +141,10 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     salt_flux       => NULL(), & !< net salt flux into the ocean [R Z T-1 ~> kgSalt m-2 s-1]
     salt_flux_in    => NULL(), & !< salt flux provided to the ocean from coupler [R Z T-1 ~> kgSalt m-2 s-1]
-    salt_flux_added => NULL()    !< additional salt flux from restoring or flux adjustment before adjustment
+    salt_flux_added => NULL(), & !< additional salt flux from restoring or flux adjustment before adjustment
                                  !! to net zero [R Z T-1 ~> kgSalt m-2 s-1]
+    salt_left_behind => NULL()   !< salt left in ocean at the surface from brine rejection
+                                 !! [R Z T-1 ~> kgSalt m-2 s-1]
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
@@ -745,15 +754,15 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
     endif
 
     ! Salt fluxes
-    Net_salt(i) = 0.0
-    if (do_NSR) Net_salt_rate(i) = 0.0
+    net_salt(i) = 0.0
+    if (do_NSR) net_salt_rate(i) = 0.0
     ! Convert salt_flux from kg (salt)/(m^2 * s) to
     ! Boussinesq: (ppt * m)
     ! non-Bouss:  (g/m^2)
     if (associated(fluxes%salt_flux)) then
-      Net_salt(i) = (scale * dt * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
+      net_salt(i) = (scale * dt * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
       !Repeat above code for 'rate' term
-      if (do_NSR) Net_salt_rate(i) = (scale * 1. * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
+      if (do_NSR) net_salt_rate(i) = (scale * 1. * (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j))) * GV%RZ_to_H
     endif
 
     ! Diagnostics follow...
@@ -974,6 +983,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real, dimension(SZI_(G))              :: netEvap    ! net FW flux leaving ocean via evaporation
                                                       ! [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G))              :: netHeat    ! net temp flux [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
+  real, dimension(SZI_(G), SZK_(GV))    :: dz         ! Layer thicknesses in depth units [Z ~> m]
   real, dimension(max(nsw,1), SZI_(G))  :: penSWbnd   ! penetrating SW radiation by band
                                                       ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
   real, dimension(SZI_(G))              :: pressure   ! pressure at the surface [R L2 T-2 ~> Pa]
@@ -1013,7 +1023,8 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
-  call sumSWoverBands(G, GV, US, h(:,j,:), optics_nbands(optics), optics, j, 1.0, &
+  call thickness_to_dz(h, tv, dz, j, G, GV)
+  call sumSWoverBands(G, GV, US, h(:,j,:), dz, optics_nbands(optics), optics, j, 1.0, &
                       H_limit_fluxes, .true., penSWbnd, netPen)
 
   ! Density derivatives
@@ -1070,6 +1081,139 @@ subroutine calculateBuoyancyFlux2d(G, GV, US, fluxes, optics, h, Temp, Salt, tv,
   enddo
 
 end subroutine calculateBuoyancyFlux2d
+
+
+!> Determine the friction velocity from the contenxts of a forcing type, perhaps
+!! using the evolving surface density.
+subroutine find_ustar_fluxes(fluxes, tv, U_star, G, GV, US, halo, H_T_units)
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
+  type(forcing),           intent(in)  :: fluxes !< Surface fluxes container
+  type(thermo_var_ptrs),   intent(in)  :: tv   !< Structure containing pointers to any
+                                               !! available thermodynamic fields.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(out) :: U_star !< The surface friction velocity [Z T-1 ~> m s-1] or
+                                               !! [H T-1 ~> m s-1 or kg m-2 s-1], depending on H_T_units.
+  integer,       optional, intent(in)  :: halo !< The extra halo size to fill in, 0 by default
+  logical,       optional, intent(in)  :: H_T_units !< If present and true, return U_star in units
+                                               !! of [H T-1 ~> m s-1 or kg m-2 s-1]
+
+  ! Local variables
+  real :: I_rho        ! The inverse of the reference density times a ratio of scaling
+                       ! factors [Z L-1 R-1 ~> m3 kg-1] or in some semi-Boussinesq cases
+                       ! the rescaled reference density [H2 Z-1 L-1 R-1 ~> m3 kg-1 or kg m-3]
+  logical :: Z_T_units ! If true, U_star is returned in units of [Z T-1 ~> m s-1], otherwise it is
+                       ! returned in [H T-1 ~> m s-1 or kg m-2 s-1]
+  integer :: i, j, k, is, ie, js, je, hs
+
+  hs = 0 ; if (present(halo)) hs = max(halo, 0)
+  is = G%isc - hs ; ie = G%iec + hs ; js = G%jsc - hs ; je = G%jec + hs
+
+  Z_T_units = .true. ; if (present(H_T_units)) Z_T_units = .not.H_T_units
+
+  if (.not.(associated(fluxes%ustar) .or. associated(fluxes%tau_mag))) &
+    call MOM_error(FATAL, "find_ustar_fluxes requires that either ustar or tau_mag be associated.")
+
+  if (associated(fluxes%ustar) .and. (GV%Boussinesq .or. .not.associated(fluxes%tau_mag))) then
+    if (Z_T_units) then
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = fluxes%ustar(i,j)
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = GV%Z_to_H * fluxes%ustar(i,j)
+      enddo ; enddo
+    endif
+  elseif (allocated(tv%SpV_avg)) then
+    if (tv%valid_SpV_halo < 0) call MOM_error(FATAL, &
+        "find_ustar_fluxes called in non-Boussinesq mode with invalid values of SpV_avg.")
+    if (tv%valid_SpV_halo < hs) call MOM_error(FATAL, &
+        "find_ustar_fluxes called in non-Boussinesq mode with insufficient valid values of SpV_avg.")
+    if (Z_T_units) then
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = sqrt(US%L_to_Z*fluxes%tau_mag(i,j) * tv%SpV_avg(i,j,1))
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = GV%RZ_to_H * sqrt(US%L_to_Z*fluxes%tau_mag(i,j) / tv%SpV_avg(i,j,1))
+      enddo ; enddo
+    endif
+  else
+    I_rho = US%L_to_Z * GV%Z_to_H * GV%RZ_to_H
+    if (Z_T_units) I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0
+    do j=js,je ; do i=is,ie
+      U_star(i,j) = sqrt(fluxes%tau_mag(i,j) * I_rho)
+    enddo ; enddo
+  endif
+
+end subroutine find_ustar_fluxes
+
+
+!> Determine the friction velocity from the contenxts of a forcing type, perhaps
+!! using the evolving surface density.
+subroutine find_ustar_mech_forcing(forces, tv, U_star, G, GV, US, halo, H_T_units)
+  type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
+  type(mech_forcing),      intent(in)  :: forces !< Surface forces container
+  type(thermo_var_ptrs),   intent(in)  :: tv   !< Structure containing pointers to any
+                                               !! available thermodynamic fields.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(out) :: U_star !< The surface friction velocity [Z T-1 ~> m s-1]
+  integer,       optional, intent(in)  :: halo !< The extra halo size to fill in, 0 by default
+  logical,       optional, intent(in)  :: H_T_units !< If present and true, return U_star in units
+                                               !! of [H T-1 ~> m s-1 or kg m-2 s-1]
+
+  ! Local variables
+  real :: I_rho        ! The inverse of the reference density times a ratio of scaling
+                       ! factors [Z L-1 R-1 ~> m3 kg-1] or in some semi-Boussinesq cases
+                       ! the rescaled reference density [H2 Z-1 L-1 R-1 ~> m3 kg-1 or kg m-3]
+  logical :: Z_T_units ! If true, U_star is returned in units of [Z T-1 ~> m s-1], otherwise it is
+                       ! returned in [H T-1 ~> m s-1 or kg m-2 s-1]
+  integer :: i, j, k, is, ie, js, je, hs
+
+  hs = 0 ; if (present(halo)) hs = max(halo, 0)
+  is = G%isc - hs ; ie = G%iec + hs ; js = G%jsc - hs ; je = G%jec + hs
+
+  Z_T_units = .true. ; if (present(H_T_units)) Z_T_units = .not.H_T_units
+
+  if (.not.(associated(forces%ustar) .or. associated(forces%tau_mag))) &
+    call MOM_error(FATAL, "find_ustar_mech requires that either ustar or tau_mag be associated.")
+
+  if (associated(forces%ustar) .and. (GV%Boussinesq .or. .not.associated(forces%tau_mag))) then
+    if (Z_T_units) then
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = forces%ustar(i,j)
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = GV%Z_to_H * forces%ustar(i,j)
+      enddo ; enddo
+    endif
+  elseif (allocated(tv%SpV_avg)) then
+    if (tv%valid_SpV_halo < 0) call MOM_error(FATAL, &
+        "find_ustar_mech called in non-Boussinesq mode with invalid values of SpV_avg.")
+    if (tv%valid_SpV_halo < hs) call MOM_error(FATAL, &
+        "find_ustar_mech called in non-Boussinesq mode with insufficient valid values of SpV_avg.")
+    if (Z_T_units) then
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = sqrt(US%L_to_Z*forces%tau_mag(i,j) * tv%SpV_avg(i,j,1))
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        U_star(i,j) = GV%RZ_to_H * sqrt(US%L_to_Z*forces%tau_mag(i,j) / tv%SpV_avg(i,j,1))
+      enddo ; enddo
+    endif
+  else
+    I_rho = US%L_to_Z * GV%Z_to_H * GV%RZ_to_H
+    if (Z_T_units) I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0
+    do j=js,je ; do i=is,ie
+      U_star(i,j) = sqrt(forces%tau_mag(i,j) * I_rho)
+    enddo ; enddo
+  endif
+
+end subroutine find_ustar_mech_forcing
 
 
 !> Write out chksums for thermodynamic fluxes.
@@ -1942,6 +2086,10 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_flux_added', &
         diag%axesT1,Time,'Salt flux into ocean at surface due to restoring or flux adjustment', &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
+
+  handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_left_behind', &
+        diag%axesT1,Time,'Salt left in ocean at surface due to ice formation', &
         units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_saltFluxGlobalAdj = register_scalar_field('ocean_model',              &

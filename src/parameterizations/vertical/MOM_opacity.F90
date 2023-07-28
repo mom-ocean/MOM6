@@ -128,13 +128,13 @@ subroutine set_opacity(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir, sw_
 
     ! Make sure there is no division by 0.
     inv_sw_pen_scale = 1.0 / max(CS%pen_sw_scale, 0.1*GV%Angstrom_Z, &
-                                 GV%H_to_Z*GV%H_subroundoff)
+                                 GV%dZ_subroundoff)
     if ( CS%Opacity_scheme == DOUBLE_EXP ) then
       !$OMP parallel do default(shared)
       do k=1,nz ; do j=js,je ; do i=is,ie
         optics%opacity_band(1,i,j,k) = inv_sw_pen_scale
         optics%opacity_band(2,i,j,k) = 1.0 / max(CS%pen_sw_scale_2nd, &
-             0.1*GV%Angstrom_Z, GV%H_to_Z*GV%H_subroundoff)
+             0.1*GV%Angstrom_Z, GV%dZ_subroundoff)
       enddo ; enddo ; enddo
       if (.not.associated(sw_total) .or. (CS%pen_SW_scale <= 0.0)) then
         !$OMP parallel do default(shared)
@@ -793,13 +793,15 @@ end subroutine absorbRemainingSW
 !> This subroutine calculates the total shortwave heat flux integrated over
 !! bands as a function of depth.  This routine is only called for computing
 !! buoyancy fluxes for use in KPP. This routine does not update the state.
-subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
+subroutine sumSWoverBands(G, GV, US, h, dz, nsw, optics, j, dt, &
                           H_limit_fluxes, absorbAllSW, iPen_SW_bnd, netPen)
   type(ocean_grid_type),    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US    !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZK_(GV)), &
                             intent(in)    :: h   !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZK_(GV)), &
+                            intent(in)    :: dz  !< Layer vertical extent [Z ~> m].
   integer,                  intent(in)    :: nsw !< The number of bands of penetrating shortwave
                                                  !! radiation, perhaps from optics_nbands(optics),
   type(optics_type),        intent(in)    :: optics !< An optics structure that has values
@@ -877,7 +879,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
       if (h(i,k) > 0.0) then
         do n=1,nsw ; if (Pen_SW_bnd(n,i) > 0.0) then
           ! SW_trans is the SW that is transmitted THROUGH the layer
-          opt_depth = h(i,k)*GV%H_to_Z * optics%opacity_band(n,i,j,k)
+          opt_depth = dz(i,k) * optics%opacity_band(n,i,j,k)
           exp_OD = exp(-opt_depth)
           SW_trans = exp_OD
 

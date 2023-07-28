@@ -56,7 +56,7 @@ type, public :: diagnostics_CS ; private
                                        !! monotonic for the purposes of calculating the equivalent
                                        !! barotropic wave speed [nondim].
   real :: mono_N2_depth = -1.          !< The depth below which N2 is limited as monotonic for the purposes of
-                                       !! calculating the equivalent barotropic wave speed [Z ~> m].
+                                       !! calculating the equivalent barotropic wave speed [H ~> m or kg m-2].
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                        !! regulate the timing of diagnostic output.
@@ -984,7 +984,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_dKEdt > 0) then
-    ! Calculate the time derivative of the layer KE [H L2 T-3 ~> m3 s-3].
+    ! Calculate the time derivative of the layer KE [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * CS%du_dt(I,j,k)
@@ -1006,7 +1006,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_PE_to_KE > 0) then
-    ! Calculate the potential energy to KE term [H L2 T-3 ~> m3 s-3].
+    ! Calculate the potential energy to KE term [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%PFu(I,j,k)
@@ -1025,7 +1025,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_BT > 0) then
-    ! Calculate the barotropic contribution to KE term [H L2 T-3 ~> m3 s-3].
+    ! Calculate the barotropic contribution to KE term [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%u_accel_bt(I,j,k)
@@ -1044,7 +1044,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_Coradv > 0) then
-    ! Calculate the KE source from the combined Coriolis and advection terms [H L2 T-3 ~> m3 s-3].
+    ! Calculate the KE source from the combined Coriolis and advection terms [H L2 T-3 ~> m3 s-3 or W m-2].
     ! The Coriolis source should be zero, but is not due to truncation errors.  There should be
     ! near-cancellation of the global integral of this spurious Coriolis source.
     do k=1,nz
@@ -1069,7 +1069,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_adv > 0) then
-    ! Calculate the KE source from along-layer advection [H L2 T-3 ~> m3 s-3].
+    ! Calculate the KE source from along-layer advection [H L2 T-3 ~> m3 s-3 or W m-2].
     ! NOTE: All terms in KE_adv are multiplied by -1, which can easily produce
     ! negative zeros and may signal a reproducibility issue over land.
     ! We resolve this by re-initializing and only evaluating over water points.
@@ -1098,7 +1098,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_visc > 0) then
-    ! Calculate the KE source from vertical viscosity [H L2 T-3 ~> m3 s-3].
+    ! Calculate the KE source from vertical viscosity [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%du_dt_visc(I,j,k)
@@ -1117,7 +1117,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_visc_gl90 > 0) then
-    ! Calculate the KE source from GL90 vertical viscosity [H L2 T-3 ~> m3 s-3].
+    ! Calculate the KE source from GL90 vertical viscosity [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%du_dt_visc_gl90(I,j,k)
@@ -1136,7 +1136,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_stress > 0) then
-    ! Calculate the KE source from surface stress (included in KE_visc) [H L2 T-3 ~> m3 s-3].
+    ! Calculate the KE source from surface stress (included in KE_visc) [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%du_dt_str(I,j,k)
@@ -1155,7 +1155,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_horvisc > 0) then
-    ! Calculate the KE source from horizontal viscosity [H L2 T-3 ~> m3 s-3].
+    ! Calculate the KE source from horizontal viscosity [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%diffu(I,j,k)
@@ -1174,7 +1174,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   endif
 
   if (CS%id_KE_dia > 0) then
-    ! Calculate the KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3].
+    ! Calculate the KE source from diapycnal diffusion [H L2 T-3 ~> m3 s-3 or W m-2].
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%du_dt_dia(I,j,k)
@@ -1594,7 +1594,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   call get_param(param_file, mdl, "DIAG_EBT_MONO_N2_DEPTH", CS%mono_N2_depth, &
                  "The depth below which N2 is limited as monotonic for the "// &
                  "purposes of calculating the equivalent barotropic wave speed.", &
-                 units='m', scale=US%m_to_Z, default=-1.)
+                 units='m', scale=GV%m_to_H, default=-1.)
   call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_TOL", wave_speed_tol, &
                  "The fractional tolerance for finding the wave speeds.", &
                  units="nondim", default=0.001)
