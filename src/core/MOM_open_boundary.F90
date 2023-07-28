@@ -1064,8 +1064,8 @@ real function scale_factor_from_name(name, GV, US, Tr_Reg)
     case ('Vamp') ; scale_factor_from_name = US%m_s_to_L_T
     case ('DVDX') ; scale_factor_from_name = US%T_to_s
     case ('DUDY') ; scale_factor_from_name = US%T_to_s
-    case ('SSH') ; scale_factor_from_name = GV%m_to_H
-    case ('SSHamp') ; scale_factor_from_name = GV%m_to_H
+    case ('SSH') ; scale_factor_from_name = US%m_to_Z
+    case ('SSHamp') ; scale_factor_from_name = US%m_to_Z
     case default ; scale_factor_from_name = 1.0
   end select
 
@@ -4376,13 +4376,12 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               tidal_elev = 0.0
               if (OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * &
-                      GV%H_to_Z*segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
+                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
                       cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
                           + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
                 enddo
               endif
-              segment%SSH(i,j) = OBC%ramp_value * (GV%H_to_Z*segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
+              segment%SSH(i,j) = OBC%ramp_value * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         else
@@ -4391,13 +4390,12 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               tidal_elev = 0.0
               if (OBC%add_tide_constituents) then
                 do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * &
-                      GV%H_to_Z*segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
+                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
                       cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
                           + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
                 enddo
               endif
-              segment%SSH(i,j) = (GV%H_to_Z*segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
+              segment%SSH(i,j) = (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
             enddo
           enddo
         endif
