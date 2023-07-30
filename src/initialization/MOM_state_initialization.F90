@@ -379,7 +379,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 !            " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
 
       ! Check for incompatible THICKNESS_CONFIG and TS_CONFIG settings
-      if (.not.convert) then ; select case (trim(config))
+      if (new_sim .and. (.not.convert)) then ; select case (trim(config))
         case ("DOME2D", "ISOMIP", "adjustment2d", "baroclinic_zone", "sloshing", &
               "seamount", "dumbbell", "SCM_CVMix_tests", "dense")
           call MOM_error(FATAL, "TS_CONFIG = "//trim(config)//" does not work with thicknesses "//&
