@@ -22,7 +22,7 @@ use MOM_error_handler,        only : callTree_enter, callTree_leave
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
 use MOM_forcing_type,         only : forcing
 use MOM_grid,                 only : ocean_grid_type
-use MOM_interface_heights,    only : calc_derived_thermo
+use MOM_interface_heights,    only : calc_derived_thermo, thickness_to_dz
 use MOM_io,                   only : MOM_read_data, MOM_read_vector, CENTER
 use MOM_offline_aux,          only : update_offline_from_arrays, update_offline_from_files
 use MOM_offline_aux,          only : next_modulo_time, offline_add_diurnal_sw
@@ -121,7 +121,8 @@ type, public :: offline_transport_CS ; private
   real :: minimum_forcing_depth !< The smallest depth over which fluxes can be applied [H ~> m or kg m-2].
                             !! This is copied from diabatic_CS controlling how tracers follow freshwater fluxes
 
-  real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity [Z2 T-1 ~> m2 s-1]
+  real :: Kd_max        !< Runtime parameter specifying the maximum value of vertical diffusivity
+                        !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real :: min_residual  !< The minimum amount of total mass flux before exiting the main advection
                         !! routine [H L2 ~> m3 or kg]
   !>@{ Diagnostic manager IDs for some fields that may be of interest when doing offline transport
@@ -169,7 +170,7 @@ type, public :: offline_transport_CS ; private
                    !< Amount of fluid entrained from the layer below within
                    !! one time step [H ~> m or kg m-2]
   ! Fields at T-points on interfaces
-  real, allocatable, dimension(:,:,:) :: Kd     !< Vertical diffusivity [Z2 T-1 ~> m2 s-1]
+  real, allocatable, dimension(:,:,:) :: Kd     !< Vertical diffusivity [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, allocatable, dimension(:,:,:) :: h_end  !< Thicknesses at the end of offline timestep [H ~> m or kg m-2]
 
   real, allocatable, dimension(:,:) :: mld        !< Mixed layer depths at thickness points [Z ~> m]
@@ -651,7 +652,7 @@ end function remaining_transport_sum
 !> The vertical/diabatic driver for offline tracers. First the eatr/ebtr associated with the interpolated
 !! vertical diffusivities are calculated and then any tracer column functions are done which can include
 !! vertical diffuvities and source/sink terms.
-subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_pre, eatr, ebtr)
+subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_pre, tv, eatr, ebtr)
 
   type(forcing),           intent(inout) :: fluxes     !< pointers to forcing fields
   type(time_type),         intent(in)    :: Time_start !< starting time of a segment, as a time type
@@ -662,17 +663,20 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_p
   type(offline_transport_CS), pointer    :: CS         !< control structure from initialize_MOM
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: h_pre      !< layer thicknesses before advection [H ~> m or kg m-2]
+  type(thermo_var_ptrs),   intent(in   ) :: tv         !< A structure pointing to various thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: eatr       !< Entrainment from layer above [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: ebtr       !< Entrainment from layer below [H ~> m or kg m-2]
 
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     sw, sw_vis, sw_nir !< Save old values of shortwave radiation [Q R Z T-1 ~> W m-2]
-  real :: I_hval  ! An inverse thickness [H-1 ~> m2 kg-1]
+  real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Vertical distance across layers [Z ~> m]
+  real :: I_dZval  ! An inverse distance between layer centers [Z-1 ~> m]
   integer :: i, j, k, is, ie, js, je, nz
   integer :: k_nonzero
-  real :: Kd_bot  ! Near-bottom diffusivity [Z2 T-1 ~> m2 s-1]
+  real :: Kd_bot  ! Near-bottom diffusivity [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   nz = GV%ke
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -686,6 +690,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_p
     call hchksum(ebtr, "ebtr before offline_diabatic_ale", G%HI, scale=GV%H_to_MKS)
     call MOM_tracer_chkinv("Before offline_diabatic_ale", G, GV, h_pre, CS%tracer_reg)
   endif
+
+  call thickness_to_dz(h_pre, tv, dz, G, GV, US)
 
   eatr(:,:,:) = 0.
   ebtr(:,:,:) = 0.
@@ -713,8 +719,8 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_p
     eatr(i,j,1) = 0.
   enddo ; enddo
   do k=2,nz ; do j=js,je ; do i=is,ie
-    I_hval = 1.0 / (GV%H_subroundoff + 0.5*(h_pre(i,j,k-1) + h_pre(i,j,k)))
-    eatr(i,j,k) = GV%Z_to_H**2 * CS%dt_offline_vertical * I_hval * CS%Kd(i,j,k)
+    I_dZval = 1.0 / (GV%dZ_subroundoff + 0.5*(dz(i,j,k-1) + dz(i,j,k)))
+    eatr(i,j,k) = CS%dt_offline_vertical * I_dZval * CS%Kd(i,j,k)
     ebtr(i,j,k-1) = eatr(i,j,k)
   enddo ; enddo ; enddo
   do j=js,je ; do i=is,ie
@@ -1418,7 +1424,7 @@ subroutine offline_transport_init(param_file, CS, diabatic_CSp, G, GV, US)
   call get_param(param_file, mdl, "KD_MAX", CS%Kd_max, &
     "The maximum permitted increment for the diapycnal "//&
     "diffusivity from TKE-based parameterizations, or a "//&
-    "negative value for no limit.", units="m2 s-1", default=-1.0, scale=US%m2_s_to_Z2_T)
+    "negative value for no limit.", units="m2 s-1", default=-1.0, scale=GV%m2_s_to_HZ_T)
   call get_param(param_file, mdl, "MIN_RESIDUAL_TRANSPORT", CS%min_residual, &
     "How much remaining transport before the main offline advection is exited. "//&
     "The default value corresponds to about 1 meter of difference in a grid cell", &
