@@ -52,6 +52,8 @@ type, public :: tracer_hor_diff_CS ; private
   real    :: max_diff_CFL         !< If positive, locally limit the along-isopycnal
                                   !! tracer diffusivity to keep the diffusive CFL
                                   !! locally at or below this value [nondim].
+  logical :: KhTh_use_ebt_struct  !< If true, uses the equivalent barotropic structure
+                                  !! as the vertical structure of tracer diffusivity.
   logical :: Diffuse_ML_interior  !< If true, diffuse along isopycnals between
                                   !! the mixed layer and the interior.
   logical :: check_diffusive_CFL  !< If true, automatically iterate the diffusion
@@ -135,19 +137,22 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   real, dimension(SZI_(G),SZJ_(G)) :: &
     Ihdxdy, &     ! The inverse of the volume or mass of fluid in a layer in a
                   ! grid cell [H-1 L-2 ~> m-3 or kg-1].
-    Kh_h, &       ! The tracer diffusivity averaged to tracer points [L2 T-1 ~> m2 s-1].
     CFL, &        ! A diffusive CFL number for each cell [nondim].
     dTr           ! The change in a tracer's concentration, in units of concentration [Conc].
 
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1)  :: Kh_h
+                  ! The tracer diffusivity averaged to tracer points [L2 T-1 ~> m2 s-1].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    khdt_x, &     ! The value of Khtr*dt times the open face width divided by
+    khdt_x        ! The value of Khtr*dt times the open face width divided by
                   ! the distance between adjacent tracer points [L2 ~> m2].
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    khdt_y        ! The value of Khtr*dt times the open face width divided by
+                  ! the distance between adjacent tracer points [L2 ~> m2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: &
     Coef_x, &     ! The coefficients relating zonal tracer differences to time-integrated
                   ! fluxes, in [L2 ~> m2] for some schemes and [H L2 ~> m3 or kg] for others.
     Kh_u          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    khdt_y, &     ! The value of Khtr*dt times the open face width divided by
-                  ! the distance between adjacent tracer points [L2 ~> m2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: &
     Coef_y, &     ! The coefficients relating meridional tracer differences to time-integrated
                   ! fluxes, in [L2 ~> m2] for some schemes and [H L2 ~> m3 or kg] for others.
     Kh_v          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
@@ -224,12 +229,12 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &
           Kh_loc = Kh_loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
-        Kh_u(I,j) = max(Kh_loc, CS%KhTr_min)
+        Kh_u(I,j,1) = max(Kh_loc, CS%KhTr_min)
         if (CS%KhTr_passivity_coeff>0.) then ! Apply passivity
           Rd_dx=0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i+1,j) ) ! Rd/dx at u-points
-          Kh_loc = Kh_u(I,j)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
+          Kh_loc = Kh_u(I,j,1)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
           if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
-          Kh_u(I,j) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
+          Kh_u(I,j,1) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
         endif
       enddo ; enddo
       !$OMP parallel do default(shared) private(Kh_loc,Rd_dx)
@@ -241,41 +246,41 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &
           Kh_loc = Kh_loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
-        Kh_v(i,J) = max(Kh_loc, CS%KhTr_min)
+        Kh_v(i,J,1) = max(Kh_loc, CS%KhTr_min)
         if (CS%KhTr_passivity_coeff>0.) then ! Apply passivity
           Rd_dx = 0.5*( VarMix%Rd_dx_h(i,j)+VarMix%Rd_dx_h(i,j+1) ) ! Rd/dx at v-points
-          Kh_loc = Kh_v(i,J)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
+          Kh_loc = Kh_v(i,J,1)*max( CS%KhTr_passivity_min, CS%KhTr_passivity_coeff*Rd_dx )
           if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
-          Kh_v(i,J) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
+          Kh_v(i,J,1) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
         endif
       enddo ; enddo
 
       !$OMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
-        khdt_x(I,j) = dt*(Kh_u(I,j)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+        khdt_x(I,j) = dt*(Kh_u(I,j,1)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
       enddo ; enddo
       !$OMP parallel do default(shared)
       do J=js-1,je ; do i=is,ie
-        khdt_y(i,J) = dt*(Kh_v(i,J)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+        khdt_y(i,J) = dt*(Kh_v(i,J,1)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
       enddo ; enddo
     elseif (Resoln_scaled) then
       !$OMP parallel do default(shared) private(Res_fn)
       do j=js,je ; do I=is-1,ie
         Res_fn = 0.5 * (VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
-        Kh_u(I,j) = max(CS%KhTr * Res_fn, CS%KhTr_min)
+        Kh_u(I,j,1) = max(CS%KhTr * Res_fn, CS%KhTr_min)
         khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j))) * Res_fn
       enddo ; enddo
       !$OMP parallel do default(shared) private(Res_fn)
       do J=js-1,je ;  do i=is,ie
         Res_fn = 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
-        Kh_v(i,J) = max(CS%KhTr * Res_fn, CS%KhTr_min)
+        Kh_v(i,J,1) = max(CS%KhTr * Res_fn, CS%KhTr_min)
         khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
       enddo ; enddo
     else  ! Use a simple constant diffusivity.
       if (CS%id_KhTr_u > 0) then
         !$OMP parallel do default(shared)
         do j=js,je ; do I=is-1,ie
-          Kh_u(I,j) = CS%KhTr
+          Kh_u(I,j,1) = CS%KhTr
           khdt_x(I,j) = dt*(CS%KhTr*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
         enddo ; enddo
       else
@@ -287,7 +292,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       if (CS%id_KhTr_v > 0) then
         !$OMP parallel do default(shared)
         do J=js-1,je ;  do i=is,ie
-          Kh_v(i,J) = CS%KhTr
+          Kh_v(i,J,1) = CS%KhTr
           khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
         enddo ; enddo
       else
@@ -306,7 +311,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
           if (khdt_x(I,j) > khdt_max) then
             khdt_x(I,j) = khdt_max
             if (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)) > 0.0) &
-              Kh_u(I,j) = khdt_x(I,j) / (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+              Kh_u(I,j,1) = khdt_x(I,j) / (dt*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
           endif
         enddo ; enddo
       else
@@ -323,7 +328,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
           if (khdt_y(i,J) > khdt_max) then
             khdt_y(i,J) = khdt_max
             if (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)) > 0.0) &
-              Kh_v(i,J) = khdt_y(i,J) / (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+              Kh_v(i,J,1) = khdt_y(i,J) / (dt*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
           endif
         enddo ; enddo
       else
@@ -393,14 +398,36 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
 
     call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
 
-    do J=js-1,je ; do i=is,ie
-      Coef_y(i,J) = I_numitts * khdt_y(i,J)
-    enddo ; enddo
-    do j=js,je
-      do I=is-1,ie
-        Coef_x(I,j) = I_numitts * khdt_x(I,j)
+    do k=1,nz+1
+      do J=js-1,je
+        do i=is,ie
+          Coef_y(i,J,K) = I_numitts * khdt_y(i,J)
+        enddo
       enddo
     enddo
+    do k=1,nz+1
+      do j=js,je
+        do I=is-1,ie
+          Coef_x(I,j,K) = I_numitts * khdt_x(I,j)
+        enddo
+      enddo
+    enddo
+    if (CS%KhTh_use_ebt_struct) then
+      do K=2,nz+1
+        do J=js-1,je
+          do i=is,ie
+            Coef_y(i,J,K) = Coef_y(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+          enddo
+        enddo
+      enddo
+      do k=2,nz+1
+        do j=js,je
+          do I=is-1,ie
+            Coef_x(I,j,K) = Coef_x(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+          enddo
+        enddo
+      enddo
+    endif
 
     do itt=1,num_itts
       if (CS%show_call_tree) call callTree_waypoint("Calling horizontal boundary diffusion (tracer_hordiff)",itt)
@@ -426,14 +453,37 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     else
       call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
     endif
-    do J=js-1,je ; do i=is,ie
-      Coef_y(i,J) = I_numitts * khdt_y(i,J)
-    enddo ; enddo
-    do j=js,je
-      do I=is-1,ie
-        Coef_x(I,j) = I_numitts * khdt_x(I,j)
+
+    do k=1,nz+1
+      do J=js-1,je
+        do i=is,ie
+          Coef_y(i,J,K) = I_numitts * khdt_y(i,J)
+        enddo
       enddo
     enddo
+    do k=1,nz+1
+      do j=js,je
+        do I=is-1,ie
+          Coef_x(I,j,K) = I_numitts * khdt_x(I,j)
+        enddo
+      enddo
+    enddo
+    if (CS%KhTh_use_ebt_struct) then
+      do K=2,nz+1
+        do J=js-1,je
+          do i=is,ie
+            Coef_y(i,J,K) = Coef_y(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+          enddo
+        enddo
+      enddo
+      do k=2,nz+1
+        do j=js,je
+          do I=is-1,ie
+            Coef_x(I,j,K) = Coef_x(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+          enddo
+        enddo
+      enddo
+    endif
 
     do itt=1,num_itts
       if (CS%show_call_tree) call callTree_waypoint("Calling neutral diffusion (tracer_hordiff)",itt)
@@ -467,13 +517,13 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
         endif
 
         do J=js-1,je ; do i=is,ie
-          Coef_y(i,J) = ((scale * khdt_y(i,J))*2.0*(h(i,j,k)*h(i,j+1,k))) / &
+          Coef_y(i,J,1) = ((scale * khdt_y(i,J))*2.0*(h(i,j,k)*h(i,j+1,k))) / &
                                                    (h(i,j,k)+h(i,j+1,k)+h_neglect)
         enddo ; enddo
 
         do j=js,je
           do I=is-1,ie
-            Coef_x(I,j) = ((scale * khdt_x(I,j))*2.0*(h(i,j,k)*h(i+1,j,k))) / &
+            Coef_x(I,j,1) = ((scale * khdt_x(I,j))*2.0*(h(i,j,k)*h(i+1,j,k))) / &
                                                      (h(i,j,k)+h(i+1,j,k)+h_neglect)
           enddo
 
@@ -485,25 +535,25 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
         do m=1,ntr
           do j=js,je ; do i=is,ie
             dTr(i,j) = Ihdxdy(i,j) * &
-              ((Coef_x(I-1,j) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k)) - &
-                Coef_x(I,j) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))) + &
-               (Coef_y(i,J-1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k)) - &
-                Coef_y(i,J) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
+              ((Coef_x(I-1,j,1) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k)) - &
+                Coef_x(I,j,1) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k))) + &
+               (Coef_y(i,J-1,1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k)) - &
+                Coef_y(i,J,1) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k))))
           enddo ; enddo
           if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-            Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j) &
+            Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j,1) &
                 * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k)) * Idt
           enddo ; enddo ; endif
           if (associated(Reg%Tr(m)%df_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-            Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J) &
+            Reg%Tr(m)%df_y(i,J,k) = Reg%Tr(m)%df_y(i,J,k) + Coef_y(i,J,1) &
                 * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k)) * Idt
           enddo ; enddo ; endif
           if (associated(Reg%Tr(m)%df2d_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
-            Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j) &
+            Reg%Tr(m)%df2d_x(I,j) = Reg%Tr(m)%df2d_x(I,j) + Coef_x(I,j,1) &
                 * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k)) * Idt
           enddo ; enddo ; endif
           if (associated(Reg%Tr(m)%df2d_y)) then ; do J=G%JscB,G%JecB ; do i=is,ie
-            Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J) &
+            Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J,1) &
                 * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k)) * Idt
           enddo ; enddo ; endif
           do j=js,je ; do i=is,ie
@@ -542,43 +592,65 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   ! post diagnostics for 2d tracer diffusivity
   if (CS%id_KhTr_u > 0) then
     do j=js,je ; do I=is-1,ie
-      Kh_u(I,j) = G%mask2dCu(I,j)*Kh_u(I,j)
+      Kh_u(I,j,:) = G%mask2dCu(I,j)*Kh_u(I,j,1)
     enddo ; enddo
-    call post_data(CS%id_KhTr_u, Kh_u, CS%diag, mask=G%mask2dCu)
+    if (CS%KhTh_use_ebt_struct) then
+      do K=2,nz+1
+        do j=js,je
+          do I=is-1,ie
+            Kh_u(I,j,K) = Kh_u(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+          enddo
+        enddo
+      enddo
+    endif
+    !call post_data(CS%id_KhTr_u, Kh_u, CS%diag, is_static=.false., mask=G%mask2dCu)
+    call post_data(CS%id_KhTr_u, Kh_u, CS%diag)
   endif
   if (CS%id_KhTr_v > 0) then
     do J=js-1,je ; do i=is,ie
-      Kh_v(i,J) = G%mask2dCv(i,J)*Kh_v(i,J)
+      Kh_v(i,J,:) = G%mask2dCv(i,J)*Kh_v(i,J,1)
     enddo ; enddo
-    call post_data(CS%id_KhTr_v, Kh_v, CS%diag, mask=G%mask2dCv)
+    if (CS%KhTh_use_ebt_struct) then
+      do K=2,nz+1
+        do J=js-1,je
+          do i=is,ie
+            Kh_v(i,J,K) = Kh_v(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+          enddo
+        enddo
+      enddo
+    endif
+    !call post_data(CS%id_KhTr_v, Kh_v, CS%diag, is_static=.false., mask=G%mask2dCv)
+    call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
   endif
   if (CS%id_KhTr_h > 0) then
-    Kh_h(:,:) = 0.0
+    Kh_h(:,:,:) = 0.0
     do j=js,je ; do I=is-1,ie
-      Kh_u(I,j) = G%mask2dCu(I,j)*Kh_u(I,j)
+      Kh_u(I,j,1) = G%mask2dCu(I,j)*Kh_u(I,j,1)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      Kh_v(i,J) = G%mask2dCv(i,J)*Kh_v(i,J)
+      Kh_v(i,J,1) = G%mask2dCv(i,J)*Kh_v(i,J,1)
     enddo ; enddo
+
     do j=js,je ; do i=is,ie
       normalize = 1.0 / ((G%mask2dCu(I-1,j)+G%mask2dCu(I,j)) + &
                          (G%mask2dCv(i,J-1)+G%mask2dCv(i,J)) + 1.0e-37)
-      Kh_h(i,j) = normalize*G%mask2dT(i,j)*((Kh_u(I-1,j)+Kh_u(I,j)) + &
-                                            (Kh_v(i,J-1)+Kh_v(i,J)))
+      Kh_h(i,j,:) = normalize*G%mask2dT(i,j)*((Kh_u(I-1,j,1)+Kh_u(I,j,1)) + &
+                                             (Kh_v(i,J-1,1)+Kh_v(i,J,1)))
+      if (CS%KhTh_use_ebt_struct) then
+        do K=2,nz+1
+          Kh_h(i,j,K) = normalize*G%mask2dT(i,j)*VarMix%ebt_struct(i,j,k-1)*((Kh_u(I-1,j,1)+Kh_u(I,j,1)) + &
+                                                                            (Kh_v(i,J-1,1)+Kh_v(i,J,1)))
+        enddo
+      endif
     enddo ; enddo
-    call post_data(CS%id_KhTr_h, Kh_h, CS%diag, mask=G%mask2dT)
+    !call post_data(CS%id_KhTr_h, Kh_h, CS%diag, is_static=.false., mask=G%mask2dT)
+    call post_data(CS%id_KhTr_h, Kh_h, CS%diag)
   endif
-
 
   if (CS%debug) then
     call uvchksum("After tracer diffusion khdt_[xy]", khdt_x, khdt_y, &
                   G%HI, haloshift=0, symmetric=.true., scale=US%L_to_m**2, &
                   scalar_pair=.true.)
-    if (CS%use_neutral_diffusion) then
-      call uvchksum("After tracer diffusion Coef_[xy]", Coef_x, Coef_y, &
-                    G%HI, haloshift=0, symmetric=.true., scale=US%L_to_m**2, &
-                    scalar_pair=.true.)
-    endif
   endif
 
   if (CS%id_khdt_x > 0) call post_data(CS%id_khdt_x, khdt_x, CS%diag)
@@ -1489,6 +1561,10 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   call get_param(param_file, mdl, "KHTR", CS%KhTr, &
                  "The background along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0, scale=US%m_to_L**2*US%T_to_s)
+  call get_param(param_file, mdl, "KHTR_USE_EBT_STRUCT", CS%KhTh_use_ebt_struct, &
+                 "If true, uses the equivalent barotropic structure "//&
+                 "as the vertical structure of the tracer diffusivity.",&
+                 default=.false.)
   call get_param(param_file, mdl, "KHTR_SLOPE_CFF", CS%KhTr_Slope_Cff, &
                  "The scaling coefficient for along-isopycnal tracer "//&
                  "diffusivity using a shear-based (Visbeck-like) "//&
@@ -1558,11 +1634,11 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   CS%id_KhTr_h = -1
   CS%id_CFL    = -1
 
-  CS%id_KhTr_u = register_diag_field('ocean_model', 'KHTR_u', diag%axesCu1, Time, &
+  CS%id_KhTr_u = register_diag_field('ocean_model', 'KHTR_u', diag%axesCui, Time, &
       'Epipycnal tracer diffusivity at zonal faces of tracer cell', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-  CS%id_KhTr_v = register_diag_field('ocean_model', 'KHTR_v', diag%axesCv1, Time, &
+  CS%id_KhTr_v = register_diag_field('ocean_model', 'KHTR_v', diag%axesCvi, Time, &
       'Epipycnal tracer diffusivity at meridional faces of tracer cell', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T)
-  CS%id_KhTr_h = register_diag_field('ocean_model', 'KHTR_h', diag%axesT1, Time, &
+  CS%id_KhTr_h = register_diag_field('ocean_model', 'KHTR_h', diag%axesTi, Time, &
       'Epipycnal tracer diffusivity at tracer cell center', 'm2 s-1', conversion=US%L_to_m**2*US%s_to_T, &
       cmor_field_name='diftrelo',                                                &
       cmor_standard_name= 'ocean_tracer_epineutral_laplacian_diffusivity',       &
