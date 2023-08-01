@@ -16,6 +16,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : init_external_field, time_interp_external, time_interp_external_init
+use MOM_interpolate,   only : external_field
 use MOM_io,            only : slasher
 use MOM_opacity,       only : set_opacity, opacity_CS, extract_optics_slice, extract_optics_fields
 use MOM_opacity,       only : optics_type, optics_nbands, absorbRemainingSW, sumSWoverBands
@@ -64,7 +65,7 @@ type, public :: diabatic_aux_CS ; private
                              !! is added with a temperature of the local SST.
   logical :: var_pen_sw      !<   If true, use one of the CHL_A schemes to determine the
                              !! e-folding depth of incoming shortwave radiation.
-  integer :: sbc_chl         !< An integer handle used in time interpolation of
+  type(external_field) :: sbc_chl   !< A handle used in time interpolation of
                              !! chlorophyll read from a file.
   logical ::  chl_from_file  !< If true, chl_a is read from a file.
 
@@ -827,7 +828,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
-  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 3 MLDs [R Z L2 T-2 ~> J m-2]
+  real, dimension(3),      intent(in) :: Mixing_Energy !< Energy values for up to 3 MLDs [R Z3 T-2 ~> J m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h           !< Layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
@@ -884,7 +885,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   PE_Threshold_fraction = 1.e-4 !Fixed threshold of 0.01%, could be runtime.
 
   do iM=1,3
-    PE_threshold(iM) = Mixing_Energy(iM)/GV%g_earth
+    PE_threshold(iM) = Mixing_Energy(iM) / (US%L_to_Z**2*GV%g_Earth)
   enddo
 
   do j=js,je ; do i=is,ie

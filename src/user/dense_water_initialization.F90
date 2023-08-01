@@ -9,6 +9,7 @@ use MOM_dyn_horgrid,   only : dyn_horgrid_type
 use MOM_EOS,           only : EOS_type
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser,   only : get_param, param_file_type
+use MOM_interface_heights, only : dz_to_thickness, dz_to_thickness_simple
 use MOM_grid,          only : ocean_grid_type
 use MOM_sponge,        only : sponge_CS
 use MOM_unit_scaling,  only : unit_scale_type
@@ -105,7 +106,7 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Output temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Output salinity [S ~> ppt]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thicknesses [Z ~> m]
   logical,                                   intent(in)  :: just_read !< If true, this call will
                                                       !! only read parameters without changing T & S.
   ! Local variables
@@ -137,7 +138,7 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
       zi = 0.
       do k = 1,nz
         ! nondimensional middle of layer
-        zmid = zi + 0.5 * h(i,j,k) / (GV%Z_to_H * G%max_depth)
+        zmid = zi + 0.5 * h(i,j,k) / G%max_depth
 
         if (zmid < mld) then
           ! use reference salinity in the mixed layer
@@ -147,7 +148,7 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
           S(i,j,k) = S_ref + S_range * (zmid - mld) / (1.0 - mld)
         endif
 
-        zi = zi + h(i,j,k) / (GV%Z_to_H * G%max_depth)
+        zi = zi + h(i,j,k) / G%max_depth
       enddo
     enddo
   enddo
@@ -172,7 +173,8 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
   real :: east_sponge_width ! The fraction of the domain in which the eastern (outflow) sponge is active [nondim]
 
   real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h  ! sponge thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: dz ! sponge layer thicknesses in height units [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h  ! sponge layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: T  ! sponge temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S  ! sponge salinity [S ~> ppt]
   real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge [Z ~> m]
@@ -256,15 +258,13 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
           if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
             ! is this layer vanished?
             eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-            h(i,j,k) = GV%Angstrom_H
+            dz(i,j,k) = GV%Angstrom_Z
           else
-            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+            dz(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
         enddo
       enddo
     enddo
-
-    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
 
     ! construct temperature and salinity for the sponge
     ! start with initial condition
@@ -277,7 +277,7 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
         x = (G%geoLonT(i,j) - G%west_lon) / G%len_lon
         do k = 1,nz
           ! nondimensional middle of layer
-          zmid = zi + 0.5 * h(i,j,k) / (GV%Z_to_H * G%max_depth)
+          zmid = zi + 0.5 * dz(i,j,k) / G%max_depth
 
           if (x > (1. - east_sponge_width)) then
             !if (zmid >= 0.9 * sill_frac) &
@@ -288,10 +288,20 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
               S(i,j,k) = S_ref + S_range * (zmid - mld) / (1.0 - mld)
           endif
 
-          zi = zi + h(i,j,k) / (GV%Z_to_H * G%max_depth)
+          zi = zi + dz(i,j,k) / G%max_depth
         enddo
       enddo
     enddo
+
+    ! Convert thicknesses from height units to thickness units
+    if (associated(tv%eqn_of_state)) then
+      call dz_to_thickness(dz, T, S, tv%eqn_of_state, h, G, GV, US)
+    else
+      call dz_to_thickness_simple(dz, h, G, GV, US, layer_mode=.true.)
+    endif
+
+    ! This call sets up the damping rates and interface heights in the sponges.
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
 
     if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp, 'temp', &
         sp_long_name='temperature', sp_unit='degC s-1')

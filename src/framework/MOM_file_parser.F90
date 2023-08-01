@@ -1419,7 +1419,7 @@ subroutine log_param_real(CS, modulename, varname, value, desc, units, &
   real,                       intent(in) :: value   !< The value of the parameter to log
   character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
                                          !! present, this parameter is not written to a doc file
-  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  character(len=*),           intent(in) :: units   !< The units of this parameter
   real,             optional, intent(in) :: default !< The default value of the parameter
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
@@ -1457,7 +1457,7 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
   real, dimension(:),         intent(in) :: value   !< The value of the parameter to log
   character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
                                              !! present, this parameter is not written to a doc file
-  character(len=*), optional, intent(in) :: units   !< The units of this parameter
+  character(len=*),           intent(in) :: units   !< The units of this parameter
   real,             optional, intent(in) :: default !< The default value of the parameter
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
@@ -1782,7 +1782,7 @@ subroutine get_param_real(CS, modulename, varname, value, desc, units, &
                                          !! read from the parameter file and logged
   character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
                                          !! present, this parameter is not written to a doc file
-  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  character(len=*),           intent(in)    :: units   !< The units of this parameter
   real,             optional, intent(in)    :: default !< The default value of the parameter
   logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
                                          !! if this variable is not found in the parameter file
@@ -1830,7 +1830,7 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
                                          !! read from the parameter file and logged
   character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
                                          !! present, this parameter is not written to a doc file
-  character(len=*), optional, intent(in)    :: units   !< The units of this parameter
+  character(len=*),           intent(in)    :: units   !< The units of this parameter
   real,             optional, intent(in)    :: default !< The default value of the parameter
   logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
                                          !! if this variable is not found in the parameter file

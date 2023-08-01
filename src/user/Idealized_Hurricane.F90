@@ -102,7 +102,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
 
   ! Local variables
   real :: dP  ! The pressure difference across the hurricane [R L2 T-2 ~> Pa]
-  real :: C
+  real :: C   ! A temporary variable [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   logical :: answers_2018         ! If true, use expressions driving the idealized hurricane test
@@ -132,10 +132,10 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  units='kg/m3', default=1.2, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "IDL_HURR_AMBIENT_PRESSURE", CS%pressure_ambient, &
                  "Ambient pressure used in the idealized hurricane wind profile.", &
-                 units='Pa', default=101200., scale=US%m_s_to_L_T**2*US%kg_m3_to_R)
+                 units='Pa', default=101200., scale=US%Pa_to_RL2_T2)
   call get_param(param_file, mdl, "IDL_HURR_CENTRAL_PRESSURE", CS%pressure_central, &
                  "Central pressure used in the idealized hurricane wind profile.", &
-                 units='Pa', default=96800., scale=US%m_s_to_L_T**2*US%kg_m3_to_R)
+                 units='Pa', default=96800., scale=US%Pa_to_RL2_T2)
   call get_param(param_file, mdl, "IDL_HURR_RAD_MAX_WIND", &
                  CS%rad_max_wind, "Radius of maximum winds used in the "//&
                  "idealized hurricane wind profile.", &

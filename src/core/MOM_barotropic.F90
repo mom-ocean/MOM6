@@ -1661,15 +1661,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     call uvchksum("BT [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=0, &
                   scale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
     call uvchksum("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0, scale=US%L_T_to_m_s)
-    call hchksum(eta, "BT Initial eta", CS%debug_BT_HI, haloshift=0, scale=GV%H_to_m)
+    call hchksum(eta, "BT Initial eta", CS%debug_BT_HI, haloshift=0, scale=GV%H_to_MKS)
     call uvchksum("BT BT_force_[uv]", BT_force_u, BT_force_v, &
                   CS%debug_BT_HI, haloshift=0, scale=US%L_T2_to_m_s2)
     if (interp_eta_PF) then
-      call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
+      call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_MKS)
+      call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_MKS)
     else
-      call hchksum(eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_m)
-      call hchksum(eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0, scale=GV%H_to_m)
+      call hchksum(eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_MKS)
+      call hchksum(eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0, scale=GV%H_to_MKS)
     endif
     call uvchksum("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, CS%debug_BT_HI, haloshift=0, scale=US%L_T2_to_m_s2)
     call uvchksum("BT [uv]hbt0", uhbt0, vhbt0, CS%debug_BT_HI, haloshift=0, &
@@ -2396,7 +2396,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       write(mesg,'("BT step ",I4)') n
       call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie, &
                     scale=US%L_T_to_m_s)
-      call hchksum(eta, trim(mesg)//" eta", CS%debug_BT_HI, haloshift=iev-ie, scale=GV%H_to_m)
+      call hchksum(eta, trim(mesg)//" eta", CS%debug_BT_HI, haloshift=iev-ie, scale=GV%H_to_MKS)
     endif
 
     if (GV%Boussinesq) then
@@ -3573,9 +3573,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
                   scalar_pair=.true.)
     if (present(h_u) .and. present(h_v)) &
       call uvchksum("btcalc h_[uv]", h_u, h_v, G%HI, haloshift=0, &
-                    symmetric=.true., omit_corners=.true., scale=GV%H_to_m, &
+                    symmetric=.true., omit_corners=.true., scale=GV%H_to_MKS, &
                     scalar_pair=.true.)
-    call hchksum(h, "btcalc h",G%HI, haloshift=1, scale=GV%H_to_m)
+    call hchksum(h, "btcalc h",G%HI, haloshift=1, scale=GV%H_to_MKS)
   endif
 
 end subroutine btcalc
@@ -4318,8 +4318,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                                        ! drag piston velocity.
   character(len=80)  :: wave_drag_var  ! The wave drag piston velocity variable
                                        ! name in wave_drag_file.
-  real :: vel_rescale ! A rescaling factor for horizontal velocity from the representation in
-                      ! a restart file to the internal representation in this run.
   real :: mean_SL     ! The mean sea level that is used along with the bathymetry to estimate the
                       ! geometry when LINEARIZED_BT_CORIOLIS is true or BT_NONLIN_STRESS is false [Z ~> m].
   real :: det_de      ! The partial derivative due to self-attraction and loading of the reference
@@ -4788,8 +4786,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   dtbt_tmp = -1.0
   if (query_initialized(CS%dtbt, "DTBT", restart_CS)) then
     dtbt_tmp = CS%dtbt
-    if ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0)) &
-      dtbt_tmp = (1.0 / US%s_to_T_restart) * CS%dtbt
   endif
 
   ! Estimate the maximum stable barotropic time step.
@@ -4948,11 +4944,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       CS%vbtav(i,J) = CS%vbtav(i,J) + CS%frhatv(i,J,k) * v(i,J,k)
     enddo ; enddo ; enddo
-  elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-          (US%s_to_T_restart /= US%m_to_L_restart)) then
-    vel_rescale = US%s_to_T_restart / US%m_to_L_restart
-    do j=js,je ; do I=is-1,ie ; CS%ubtav(I,j) = vel_rescale * CS%ubtav(I,j) ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie ; CS%vbtav(i,J) = vel_rescale * CS%vbtav(i,J) ; enddo ; enddo
   endif
 
   if (CS%gradual_BT_ICs) then
@@ -4960,11 +4951,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
         .NOT.query_initialized(CS%vbt_IC,"vbt_IC",restart_CS)) then
       do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = CS%ubtav(I,j) ; enddo ; enddo
       do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = CS%vbtav(i,J) ; enddo ; enddo
-    elseif ((US%s_to_T_restart*US%m_to_L_restart /= 0.0) .and. &
-            (US%s_to_T_restart /= US%m_to_L_restart)) then
-      vel_rescale = US%s_to_T_restart / US%m_to_L_restart
-      do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = vel_rescale * CS%ubt_IC(I,j) ; enddo ; enddo
-      do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = vel_rescale * CS%vbt_IC(i,J) ; enddo ; enddo
     endif
   endif
 !   Calculate other constants which are used for btstep.

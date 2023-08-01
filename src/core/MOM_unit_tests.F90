@@ -11,6 +11,8 @@ use MOM_neutral_diffusion,          only : neutral_diffusion_unit_tests
 use MOM_random,                     only : random_unit_tests
 use MOM_lateral_boundary_diffusion, only : near_boundary_unit_tests
 use MOM_CFC_cap,                    only : CFC_cap_unit_tests
+use MOM_EOS,                        only : EOS_unit_tests
+use MOM_mixed_layer_restrat,        only : mixedlayer_restrat_unit_tests
 implicit none ; private
 
 public unit_tests
@@ -30,6 +32,8 @@ subroutine unit_tests(verbosity)
   if (is_root_pe()) then ! The following need only be tested on 1 PE
     if (string_functions_unit_tests(verbose)) call MOM_error(FATAL, &
        "MOM_unit_tests: string_functions_unit_tests FAILED")
+    if (EOS_unit_tests(verbose)) call MOM_error(FATAL, &
+       "MOM_unit_tests: EOS_unit_tests FAILED")
     if (remapping_unit_tests(verbose)) call MOM_error(FATAL, &
        "MOM_unit_tests: remapping_unit_tests FAILED")
     if (neutral_diffusion_unit_tests(verbose)) call MOM_error(FATAL, &
@@ -40,6 +44,8 @@ subroutine unit_tests(verbosity)
        "MOM_unit_tests: near_boundary_unit_tests FAILED")
     if (CFC_cap_unit_tests(verbose)) call MOM_error(FATAL, &
        "MOM_unit_tests: CFC_cap_unit_tests FAILED")
+    if (mixedlayer_restrat_unit_tests(verbose)) call MOM_error(FATAL, &
+       "MOM_unit_tests: mixedlayer_restrat_unit_tests FAILED")
   endif
 
 end subroutine unit_tests

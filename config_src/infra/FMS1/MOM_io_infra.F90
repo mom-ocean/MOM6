@@ -57,7 +57,7 @@ end interface open_file
 !> Read a data field from a file
 interface read_field
   module procedure read_field_4d
-  module procedure read_field_3d
+  module procedure read_field_3d, read_field_3d_region
   module procedure read_field_2d, read_field_2d_region
   module procedure read_field_1d, read_field_1d_int
   module procedure read_field_0d, read_field_0d_int
@@ -695,6 +695,45 @@ subroutine read_field_3d(filename, fieldname, data, MOM_Domain, &
     call rescale_comp_data(MOM_Domain, data, scale)
   endif ; endif
 end subroutine read_field_3d
+
+!> This routine uses the fms_io subroutine read_data to read a region from a distributed or
+!! global 3-D data field named "fieldname" from file "filename".
+subroutine read_field_3d_region(filename, fieldname, data, start, nread, MOM_domain, &
+                                no_domain, scale)
+  character(len=*),       intent(in)    :: filename  !< The name of the file to read
+  character(len=*),       intent(in)    :: fieldname !< The variable name of the data in the file
+  real, dimension(:,:,:),   intent(inout) :: data    !< The 3-dimensional array into which the data
+                                                     !! should be read
+  integer, dimension(:),  intent(in)    :: start     !< The starting index to read in each of 4
+                                                     !! dimensions.  For this 3-d read, the
+                                                     !! 4th values are always 1.
+  integer, dimension(:),  intent(in)    :: nread     !< The number of points to read in each of 4
+                                                     !! dimensions.  For this 3-d read, the
+                                                     !! 4th values are always 1.
+  type(MOM_domain_type), &
+                optional, intent(in)    :: MOM_Domain !< The MOM_Domain that describes the decomposition
+  logical,      optional, intent(in)    :: no_domain !< If present and true, this variable does not
+                                                     !! use domain decomposion.
+  real,         optional, intent(in)    :: scale     !< A scaling factor that the field is multiplied
+                                                     !! by before it is returned.
+
+  if (present(MOM_Domain)) then
+    call read_data(filename, fieldname, data, start, nread, domain=MOM_Domain%mpp_domain, &
+                   no_domain=no_domain)
+  else
+    call read_data(filename, fieldname, data, start, nread, no_domain=no_domain)
+  endif
+
+  if (present(scale)) then ; if (scale /= 1.0) then
+    if (present(MOM_Domain)) then
+      call rescale_comp_data(MOM_Domain, data, scale)
+    else
+      ! Dangerously rescale the whole array
+      data(:,:,:) = scale*data(:,:,:)
+    endif
+  endif ; endif
+end subroutine read_field_3d_region
+
 
 !> This routine uses the fms_io subroutine read_data to read a distributed
 !! 4-D data field named "fieldname" from file "filename".  Valid values for
