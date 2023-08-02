@@ -451,7 +451,7 @@ end function
 
 !> This subroutine returns a 2-d slice at constant j of fields from an optics_type, with the potential
 !! for rescaling these fields.
-subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_top, penSW_scale)
+subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_top, penSW_scale, SpV_avg)
   type(optics_type),       intent(in)  :: optics !< An optics structure that has values of opacities
                                                  !! and shortwave fluxes.
   integer,                 intent(in)  :: j      !< j-index to extract
@@ -459,33 +459,47 @@ subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_
   type(verticalGrid_type), intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(GV)), &
                  optional, intent(out) :: opacity   !< The opacity in each band, i-point, and layer [Z-1 ~> m-1],
-                                                    !! but with units that can be altered by opacity_scale.
+                                                    !! but with units that can be altered by opacity_scale
+                                                    !! and the presence of SpV_avg to change this to other
+                                                    !! units like [H-1 ~> m-1 or m2 kg-1]
   real,          optional, intent(in)  :: opacity_scale !< A factor by which to rescale the opacity [nondim] or
                                                     !! [Z H-1 ~> 1 or m3 kg-1]
   real, dimension(max(optics%nbands,1),SZI_(G)), &
                  optional, intent(out) :: penSW_top !< The shortwave radiation [Q R Z T-1 ~> W m-2]
                                                     !! at the surface in each of the nbands bands
                                                     !! that penetrates beyond the surface skin layer.
-  real,          optional, intent(in)  :: penSW_scale !< A factor by which to rescale the shortwave flux [nondim]?
+  real,          optional, intent(in)  :: penSW_scale !< A factor by which to rescale the shortwave flux [nondim]
+                                                    !! or other units.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(in)  :: SpV_avg   !< The layer-averaged specific volume [R-1 ~> m3 kg-1]
+                                                    !! that is used along with opacity_scale in non-Boussinesq
+                                                    !! cases to change the opacity from distance based units to
+                                                    !! mass-based units
 
   ! Local variables
-  real :: scale_opacity, scale_penSW ! Rescaling factors [nondim]?
+  real :: scale_opacity ! A rescaling factor for opacity [nondim], or the same units as opacity_scale.
+  real :: scale_penSW   ! A rescaling factor for the penetrating shortwave radiation [nondim] or the
+                        ! same units as penSW_scale
   integer :: i, is, ie, k, nz, n
   is = G%isc ; ie = G%iec ; nz = GV%ke
 
   scale_opacity = 1.0 ; if (present(opacity_scale)) scale_opacity = opacity_scale
   scale_penSW = 1.0 ; if (present(penSW_scale)) scale_penSW = penSW_scale
 
-  if (present(opacity)) then ; do k=1,nz ; do i=is,ie
-    do n=1,optics%nbands
-      opacity(n,i,k) = scale_opacity * optics%opacity_band(n,i,j,k)
-    enddo
-  enddo ; enddo ; endif
+  if (present(opacity)) then
+    if (present(SpV_avg)) then
+      do k=1,nz ; do i=is,ie ; do n=1,optics%nbands
+        opacity(n,i,k) = (scale_opacity * SpV_avg(i,j,k)) * optics%opacity_band(n,i,j,k)
+      enddo ; enddo ; enddo
+    else
+      do k=1,nz ; do i=is,ie ; do n=1,optics%nbands
+        opacity(n,i,k) = scale_opacity * optics%opacity_band(n,i,j,k)
+      enddo ; enddo ; enddo
+    endif
+  endif
 
-  if (present(penSW_top)) then ; do k=1,nz ; do i=is,ie
-    do n=1,optics%nbands
-      penSW_top(n,i) = scale_penSW * optics%sw_pen_band(n,i,j)
-    enddo
+  if (present(penSW_top)) then ; do i=is,ie ; do n=1,optics%nbands
+    penSW_top(n,i) = scale_penSW * optics%sw_pen_band(n,i,j)
   enddo ; enddo ; endif
 
 end subroutine extract_optics_slice
