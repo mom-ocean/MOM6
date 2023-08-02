@@ -110,11 +110,11 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:,:,:) :: u_struct_bot !< Bottom value of u_struct,
                         !! for each mode [Z-1 ~> m-1]
   real, allocatable, dimension(:,:,:) :: int_w2 !< Vertical integral of w_struct squared,
-                        !! for each mode [Z ~> m]
+                        !! for each mode [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: int_U2 !< Vertical integral of u_struct squared,
-                        !! for each mode [Z-1 ~> m-1]
+                        !! for each mode [H Z-2 ~> m-1 or kg m-4]
   real, allocatable, dimension(:,:,:) :: int_N2w2 !< Depth-integrated Brunt Vaissalla freqency times
-                        !! vertical profile squared, for each mode [Z T-2 ~> m s-2]
+                        !! vertical profile squared, for each mode [H T-2 ~> m s-2 or kg m-2 s-2]
   real :: q_itides      !< fraction of local dissipation [nondim]
   real :: En_sum        !< global sum of energy for use in debugging, in MKS units [J]
   type(time_type), pointer :: Time => NULL() !< A pointer to the model's clock.
@@ -529,9 +529,9 @@ subroutine propagate_int_tide(h, tv, TKE_itidal_input, vel_btTide, Nb, Rho_bot, 
         ! Back-calculate amplitude from energy equation
         if ( (G%mask2dT(i,j) > 0.5) .and. (freq2*Kmag2 > 0.0)) then
           ! Units here are [R Z ~> kg m-2]
-          KE_term = 0.25*GV%Rho0*( ((freq2 + f2) / (freq2*Kmag2))*US%L_to_Z**2*CS%int_U2(i,j,m) + &
+          KE_term = 0.25*GV%H_to_RZ*( ((freq2 + f2) / (freq2*Kmag2))*US%L_to_Z**2*CS%int_U2(i,j,m) + &
                                    CS%int_w2(i,j,m) )
-          PE_term = 0.25*GV%Rho0*( CS%int_N2w2(i,j,m) / freq2 )
+          PE_term = 0.25*GV%H_to_RZ*( CS%int_N2w2(i,j,m) / freq2 )
 
           if (KE_term + PE_term > 0.0) then
             W0 = sqrt( tot_En_mode(i,j,fr,m) / (KE_term + PE_term) )
@@ -2820,7 +2820,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
   enddo
 
-
   ! Register maps of reflection parameters
   CS%id_refl_ang = register_diag_field('ocean_model', 'refl_angle', diag%axesT1, &
                  Time, 'Local angle of coastline/ridge/shelf with respect to equator', 'rad')
@@ -2971,19 +2970,19 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_int_w2","_mode",i1)') m
     write(var_descript, '("integral of w2 for mode ",i1)') m
     CS%id_int_w2_mode(m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'm', conversion=US%Z_to_m)
+                 diag%axesT1, Time, var_descript, 'm', conversion=GV%H_to_m)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     write(var_name, '("Itide_int_U2","_mode",i1)') m
     write(var_descript, '("integral of U2 for mode ",i1)') m
     CS%id_int_U2_mode(m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'm-1', conversion=US%m_to_L)
+                 diag%axesT1, Time, var_descript, 'm-1', conversion=US%m_to_Z*GV%H_to_Z)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     write(var_name, '("Itide_int_N2w2","_mode",i1)') m
     write(var_descript, '("integral of N2w2 for mode ",i1)') m
     CS%id_int_N2w2_mode(m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesT1, Time, var_descript, 'm s-2', conversion=US%Z_to_m*US%s_to_T**2)
+                 diag%axesT1, Time, var_descript, 'm s-2', conversion=GV%H_to_m*US%s_to_T**2)
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
   enddo
