@@ -12,6 +12,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -309,6 +310,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
     h_2d, &         ! A 2-d slice of the layer thickness [H ~> m or kg m-2].
+    dz_2d, &        ! A 2-d slice of the vertical distance across layers [Z ~> m].
     T_2d, &         ! A 2-d slice of the layer temperatures [C ~> degC].
     S_2d, &         ! A 2-d slice of the layer salinities [S ~> ppt].
     TKE_forced_2d, & ! A 2-d slice of TKE_forced [R Z3 T-2 ~> J m-2].
@@ -320,6 +322,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     Kd_2d           ! A 2-d version of the diapycnal diffusivity [Z2 T-1 ~> m2 s-1].
   real, dimension(SZK_(GV)) :: &
     h, &            ! The layer thickness [H ~> m or kg m-2].
+    dz, &           ! The vertical distance across layers [Z ~> m].
     T0, &           ! The initial layer temperatures [C ~> degC].
     S0, &           ! The initial layer salinities [S ~> ppt].
     dSV_dT_1d, &    ! The partial derivatives of specific volume with temperature [R-1 C-1 ~> m3 kg-1 degC-1].
@@ -362,7 +365,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
   ! Zero out diagnostics before accumulation.
   if (CS%TKE_diagnostics) then
-!!OMP parallel do default(none) shared(is,ie,js,je,CS)
+    !!OMP parallel do default(none) shared(is,ie,js,je,CS)
     do j=js,je ; do i=is,ie
       CS%diag_TKE_wind(i,j) = 0.0 ; CS%diag_TKE_MKE(i,j) = 0.0
       CS%diag_TKE_conv(i,j) = 0.0 ; CS%diag_TKE_forcing(i,j) = 0.0
@@ -373,8 +376,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   ! if (CS%id_Mixing_Length>0) CS%Mixing_Length(:,:,:) = 0.0
   ! if (CS%id_Velocity_Scale>0) CS%Velocity_Scale(:,:,:) = 0.0
 
-!!OMP parallel do default(private) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt, &
-!!OMP                                  CS,G,GV,US,fluxes,TKE_forced,dSV_dT,dSV_dS,Kd_int)
+  !!OMP parallel do default(private) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt, &
+  !!OMP                                  CS,G,GV,US,fluxes,TKE_forced,dSV_dT,dSV_dS,Kd_int)
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
     do k=1,nz ; do i=is,ie
@@ -383,6 +386,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       TKE_forced_2d(i,k) = TKE_forced(i,j,k)
       dSV_dT_2d(i,k) = dSV_dT(i,j,k) ; dSV_dS_2d(i,k) = dSV_dS(i,j,k)
     enddo ; enddo
+    call thickness_to_dz(h_3d, tv, dz_2d, j, G, GV)
 
     !   Determine the initial mech_TKE and conv_PErel, including the energy required
     ! to mix surface heating through the topmost cell, the energy released by mixing
@@ -394,7 +398,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
       ! Copy the thicknesses and other fields to 1-d arrays.
       do k=1,nz
-        h(k) = h_2d(i,k) + GV%H_subroundoff ; u(k) = u_2d(i,k) ; v(k) = v_2d(i,k)
+        h(k) = h_2d(i,k) + GV%H_subroundoff ; dz(k) = dz_2d(i,k) + GV%dZ_subroundoff
+        u(k) = u_2d(i,k) ; v(k) = v_2d(i,k)
         T0(k) = T_2d(i,k) ; S0(k) = S_2d(i,k) ; TKE_forcing(k) =  TKE_forced_2d(i,k)
         dSV_dT_1d(k) = dSV_dT_2d(i,k) ; dSV_dS_1d(k) = dSV_dS_2d(i,k)
       enddo
@@ -421,15 +426,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
 
       ! Perhaps provide a first guess for MLD based on a stored previous value.
       MLD_io = -1.0
-      if (CS%MLD_iteration_guess .and. (CS%ML_Depth(i,j) > 0.0))  MLD_io = CS%ML_Depth(i,j)
+      if (CS%MLD_iteration_guess .and. (CS%ML_depth(i,j) > 0.0))  MLD_io = CS%ML_depth(i,j)
 
       if (stoch_CS%pert_epbl) then ! stochastics are active
-        call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
+        call ePBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
                          u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
                          US, CS, eCD, Waves, G, i, j, &
                          TKE_gen_stoch=stoch_CS%epbl1_wts(i,j), TKE_diss_stoch=stoch_CS%epbl2_wts(i,j))
       else
-        call ePBL_column(h, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
+        call ePBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, TKE_forcing, B_flux, absf, &
                          u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, &
                          US, CS, eCD, Waves, G, i, j)
       endif
@@ -499,12 +504,13 @@ end subroutine energetic_PBL
 
 !> This subroutine determines the diffusivities from the integrated energetics
 !!  mixed layer model for a single column of water.
-subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, absf, &
+subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, absf, &
                        u_star, u_star_mean, dt, MLD_io, Kd, mixvel, mixlen, GV, US, CS, eCD, &
                        Waves, G, i, j, TKE_gen_stoch, TKE_diss_stoch)
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
   real, dimension(SZK_(GV)), intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(SZK_(GV)), intent(in)  :: dz     !< The vertical distance across layers [Z ~> m].
   real, dimension(SZK_(GV)), intent(in)  :: u      !< Zonal velocities interpolated to h points
                                                    !! [L T-1 ~> m s-1].
   real, dimension(SZK_(GV)), intent(in)  :: v      !< Zonal velocities interpolated to h points
@@ -828,7 +834,7 @@ subroutine ePBL_column(h, u, v, T0, S0, dSV_dT, dSV_dS, TKE_forcing, B_flux, abs
       !/ Here we get MStar, which is the ratio of convective TKE driven mixing to UStar**3
       MLD_guess_z = GV%H_to_Z*MLD_guess  ! Convert MLD from thickness to height coordinates for these calls
       if (CS%Use_LT) then
-        call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess_z), u_star_mean, i, j, h, Waves, &
+        call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess_z), u_star_mean, i, j, dz, Waves, &
                                  U_H=u, V_H=v)
         call find_mstar(CS, US, B_flux, u_star, u_star_Mean, MLD_guess_z, absf, &
                         MStar_total, Langmuir_Number=La, Convect_Langmuir_Number=LAmod,&
@@ -1931,7 +1937,7 @@ subroutine energetic_PBL_get_MLD(CS, MLD, G, US, m_to_MLD_units)
   scale = 1.0 ; if (present(m_to_MLD_units)) scale = US%Z_to_m * m_to_MLD_units
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    MLD(i,j) = scale*CS%ML_Depth(i,j)
+    MLD(i,j) = scale*CS%ML_depth(i,j)
   enddo ; enddo
 
 end subroutine energetic_PBL_get_MLD

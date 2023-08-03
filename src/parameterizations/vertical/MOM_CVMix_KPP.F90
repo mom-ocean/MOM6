@@ -12,6 +12,7 @@ use MOM_EOS,            only : EOS_type, calculate_density
 use MOM_file_parser,    only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type, isPointInCell
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -604,7 +605,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
   type(ocean_grid_type),                       intent(in)    :: G     !< Ocean grid
   type(verticalGrid_type),                     intent(in)    :: GV    !< Ocean vertical grid
   type(unit_scale_type),                       intent(in)    :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),                       intent(in)    :: tv    !< Thermodynamics structure.
   real, dimension(SZI_(G),SZJ_(G)),            intent(in)    :: uStar !< Surface friction velocity [Z T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: buoyFlux !< Surface buoyancy flux [L2 T-3 ~> m2 s-3]
@@ -863,14 +864,14 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
             Kt(i,j,k) = Kt(i,j,k) + GV%m2_s_to_HZ_T * Kdiffusivity(k,1)
             Ks(i,j,k) = Ks(i,j,k) + GV%m2_s_to_HZ_T * Kdiffusivity(k,2)
             Kv(i,j,k) = Kv(i,j,k) + GV%m2_s_to_HZ_T * Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%H_to_Z*Kv(i,j,k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = Kv(i,j,k)
           enddo
         else ! KPP replaces prior diffusivity when former is non-zero
           do k=1, GV%ke+1
             if (Kdiffusivity(k,1) /= 0.) Kt(i,j,k) = GV%m2_s_to_HZ_T * Kdiffusivity(k,1)
             if (Kdiffusivity(k,2) /= 0.) Ks(i,j,k) = GV%m2_s_to_HZ_T * Kdiffusivity(k,2)
             if (Kviscosity(k) /= 0.) Kv(i,j,k) = GV%m2_s_to_HZ_T * Kviscosity(k)
-            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = GV%H_to_Z*Kv(i,j,k)
+            if (CS%Stokes_Mixing) Waves%KvS(i,j,k) = Kv(i,j,k)
           enddo
         endif
       endif
@@ -912,7 +913,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   type(ocean_grid_type),                      intent(inout) :: G     !< Ocean grid
   type(verticalGrid_type),                    intent(in)    :: GV    !< Ocean vertical grid
   type(unit_scale_type),                      intent(in)    :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h     !< Layer/level thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h     !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Temp  !< potential/cons temp [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: Salt  !< Salinity [S ~> ppt]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u     !< Velocity i-component [L T-1 ~> m s-1]
@@ -924,6 +925,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)    :: lamult !< Langmuir enhancement factor [nondim]
 
   ! Local variables
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) ::  dz  ! Height change across layers [Z ~> m]
+
   ! Variables for passing to CVMix routines, often in MKS units
   real, dimension( GV%ke )   :: Ws_1d          ! Profile of vertical velocity scale for scalars in MKS units [m s-1]
   real, dimension( GV%ke )   :: deltaRho       ! delta Rho in numerator of Bulk Ri number [R ~> kg m-3]
@@ -939,7 +942,6 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real :: surfBuoyFlux          ! Surface buoyancy flux in MKS units [m2 s-3]
   real :: Coriolis              ! Coriolis parameter at tracer points in MKS units [s-1]
   real :: KPP_OBL_depth         ! Boundary layer depth calculated by CVMix_kpp_compute_OBL_depth in MKS units [m]
-
 
   ! Variables for EOS calculations
   real, dimension( 3*GV%ke )   :: rho_1D   ! A column of densities [R ~> kg m-3]
@@ -996,6 +998,9 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   GoRho = US%Z_to_m*US%s_to_T**2 * GoRho_Z_L2
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
+  ! Find the vertical distances across layers.
+  call thickness_to_dz(h, tv, dz, G, GV, US)
+
   ! loop over horizontal points on processor
   !$OMP parallel do default(none) private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
   !$OMP                           surfBuoyFlux, U_H, V_H, Coriolis, pRef, SLdepth_0d, vt2_1d, &
@@ -1005,7 +1010,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_guess, LA, rho_1D,   &
   !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2,KPP_OBL_depth, z_cell, &
   !$OMP                           z_inter, OBL_depth, BulkRi_1d, zBottomMinusOffset)        &
-  !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux,     &
+  !$OMP                           shared(G, GV, CS, US, uStar, h, dz, buoy_scale, buoyFlux, &
   !$OMP                           Temp, Salt, waves, tv, GoRho, GoRho_Z_L2, u, v, lamult)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
@@ -1127,7 +1132,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       if ( (CS%LT_K_ENHANCEMENT .or. CS%LT_VT2_ENHANCEMENT) .and. .not. present(lamult)) then
         MLD_guess = max( CS%MLD_guess_min, abs(CS%OBLdepthprev(i,j) ) )
         call get_Langmuir_Number(LA, G, GV, US, MLD_guess, uStar(i,j), i, j, &
-                                 H=H(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
+                                 dz=dz(i,j,:), U_H=U_H, V_H=V_H, WAVES=WAVES)
         CS%La_SL(i,j) = LA
       endif
 

@@ -34,7 +34,7 @@ use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING, is_roo
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
-use MOM_forcing_type,         only : forcing, mech_forcing
+use MOM_forcing_type,         only : forcing, mech_forcing, find_ustar
 use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
 use MOM_io,                   only : MOM_io_init, vardesc, var_desc
@@ -91,7 +91,7 @@ use MOM_grid,                  only : ocean_grid_type, MOM_grid_init, MOM_grid_e
 use MOM_grid,                  only : set_first_direction, rescale_grid_bathymetry
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_index,             only : rotate_hor_index
-use MOM_interface_heights,     only : find_eta, calc_derived_thermo
+use MOM_interface_heights,     only : find_eta, calc_derived_thermo, thickness_to_dz
 use MOM_interface_filter,      only : interface_filter, interface_filter_init, interface_filter_end
 use MOM_interface_filter,      only : interface_filter_CS
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init, VarMix_end
@@ -545,7 +545,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   logical :: therm_reset ! If true, reset running sums of thermodynamic quantities.
   real :: cycle_time    ! The length of the coupled time-stepping cycle [T ~> s].
   real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
+    U_star      ! The wind friction velocity, calculated using the Boussinesq reference density or
+                ! the time-evolving surface density in non-Boussinesq mode [Z T-1 ~> m s-1]
+  real, dimension(SZI_(CS%G),SZJ_(CS%G)) :: &
     ssh         ! sea surface height, which may be based on eta_av [Z ~> m]
+  real, dimension(SZI_(CS%G),SZJ_(CS%G),SZK_(CS%GV)) :: &
+    dz          ! Vertical distance across layers [Z ~> m]
 
   real, dimension(:,:,:), pointer :: &
     u => NULL(), & ! u : zonal velocity component [L T-1 ~> m s-1]
@@ -672,13 +677,18 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     dt = time_interval / real(n_max)
     dt_therm = dt ; ntstep = 1
+
+    if (CS%UseWaves .and. associated(fluxes%ustar)) &
+      call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass, halo=1)
+    if (CS%UseWaves .and. associated(fluxes%tau_mag)) &
+      call pass_var(fluxes%tau_mag, G%Domain, clock=id_clock_pass, halo=1)
+
     if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
     CS%tv%p_surf => NULL()
     if (CS%use_p_surf_in_EOS .and. associated(fluxes%p_surf)) then
       CS%tv%p_surf => fluxes%p_surf
       if (allocated(CS%tv%SpV_avg)) call pass_var(fluxes%p_surf, G%Domain, clock=id_clock_pass)
     endif
-    if (CS%UseWaves) call pass_var(fluxes%ustar, G%Domain, clock=id_clock_pass)
   endif
 
   if (therm_reset) then
@@ -722,12 +732,16 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     if (CS%UseWaves) then
       ! Update wave information, which is presently kept static over each call to step_mom
       call enable_averages(time_interval, Time_start + real_to_time(US%T_to_s*time_interval), CS%diag)
-      call Update_Stokes_Drift(G, GV, US, Waves, h, forces%ustar, time_interval, do_dyn)
+      call find_ustar(forces, CS%tv, U_star, G, GV, US, halo=1)
+      call thickness_to_dz(h, CS%tv, dz, G, GV, US, halo_size=1)
+      call Update_Stokes_Drift(G, GV, US, Waves, dz, U_star, time_interval, do_dyn)
       call disable_averaging(CS%diag)
     endif
   else ! not do_dyn.
     if (CS%UseWaves) then ! Diagnostics are not enabled in this call.
-      call Update_Stokes_Drift(G, GV, US, Waves, h, fluxes%ustar, time_interval, do_dyn)
+      call find_ustar(fluxes, CS%tv, U_star, G, GV, US, halo=1)
+      call thickness_to_dz(h, CS%tv, dz, G, GV, US, halo_size=1)
+      call Update_Stokes_Drift(G, GV, US, Waves, dz, U_star, time_interval, do_dyn)
     endif
   endif
 
@@ -3261,7 +3275,7 @@ subroutine finish_MOM_initialization(Time, dirs, CS)
   ! Write initial conditions
   if (CS%write_IC) then
     allocate(restart_CSp_tmp)
-    restart_CSP_tmp = CS%restart_CS
+    restart_CSp_tmp = CS%restart_CS
     call restart_registry_lock(restart_CSp_tmp, unlocked=.true.)
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, dZref=G%Z_ref)

@@ -481,7 +481,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     Use_Stokes_PGF = associated(Waves)
     if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
     if (Use_Stokes_PGF) then
-      call Stokes_PGF(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+      call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
+      call Stokes_PGF(G, GV, US, dz, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
 
       ! We are adding Stokes_PGF to hydrostatic PGF here.  The diag PFu/PFv
       ! will therefore report the sum total PGF and we avoid other
@@ -748,7 +749,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
       Use_Stokes_PGF = associated(Waves)
       if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
       if (Use_Stokes_PGF) then
-        call Stokes_PGF(G, GV, h, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+        call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
+        call Stokes_PGF(G, GV, US, dz, u, v, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
         if (.not.Waves%Passive_Stokes_PGF) then
           do k=1,nz
             do j=js,je ; do I=Isq,Ieq
