@@ -71,6 +71,7 @@ type, public :: diabatic_aux_CS ; private
   logical :: do_brine_plume  !< If true, insert salt flux below the surface according to
                              !! a parameterization by \cite Nguyen2009.
   integer :: brine_plume_n   !< The exponent in the brine plume parameterization.
+  real :: plume_strength     !< Fraction of the available brine to take to the bottom of the mixed layer.
 
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
@@ -1425,7 +1426,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
               ! Place forcing into this layer by depth for brine plume parameterization.
               if (k == 1) then
                 dK(i) = 0.5 * h(i,j,k) * GV%H_to_Z          ! Depth of center of layer K
-                plume_flux = - (1000.0*US%ppt_to_S * fluxes%salt_left_behind(i,j)) * GV%RZ_to_H
+                plume_flux = - (1000.0*US%ppt_to_S * (CS%plume_strength * fluxes%salt_left_behind(i,j))) * GV%RZ_to_H
                 plume_fraction = 1.0
               else
                 dK(i) = dK(i) + 0.5 * ( h(i,j,k) + h(i,j,k-1) ) * GV%H_to_Z ! Depth of center of layer K
@@ -1440,8 +1441,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                 plume_fraction = min(fraction_left_brine, h2d(i,k)*IforcingDepthScale)
               endif
               fraction_left_brine = fraction_left_brine - plume_fraction
-              plume_flux = plume_flux + plume_fraction * (1000.0*US%ppt_to_S * fluxes%salt_left_behind(i,j)) &
-                               * GV%RZ_to_H
+              plume_flux = plume_flux + plume_fraction * (1000.0*US%ppt_to_S * (CS%plume_strength * &
+                           fluxes%salt_left_behind(i,j))) * GV%RZ_to_H
             else
               plume_flux = 0.0
             endif
@@ -1767,6 +1768,9 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
   call get_param(param_file, mdl, "BRINE_PLUME_EXPONENT", CS%brine_plume_n, &
                  "If using the brine plume parameterization, set the integer exponent.", &
                  default=5, do_not_log=.not.CS%do_brine_plume)
+  call get_param(param_file, mdl, "BRINE_PLUME_FRACTION", CS%plume_strength, &
+                 "Fraction of the available brine to mix down using the brine plume parameterization.", &
+                 units="nondim", default=1.0, do_not_log=.not.CS%do_brine_plume)
 
   if (useALEalgorithm) then
     CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &
