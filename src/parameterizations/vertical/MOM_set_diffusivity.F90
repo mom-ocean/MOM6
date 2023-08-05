@@ -22,6 +22,7 @@ use MOM_file_parser,         only : get_param, log_param, log_version, param_fil
 use MOM_forcing_type,        only : forcing, optics_type
 use MOM_full_convection,     only : full_convection
 use MOM_grid,                only : ocean_grid_type
+use MOM_interface_heights,   only : thickness_to_dz, find_rho_bottom
 use MOM_internal_tides,      only : int_tide_CS, get_lowmode_loss
 use MOM_intrinsic_functions, only : invcosh
 use MOM_io,                  only : slasher, MOM_read_data
@@ -77,6 +78,8 @@ type, public :: set_diffusivity_CS ; private
   real    :: BBL_effic       !< efficiency with which the energy extracted
                              !! by bottom drag drives BBL diffusion [nondim]
   real    :: cdrag           !< quadratic drag coefficient [nondim]
+  real    :: dz_BBL_avg_min  !< A minimal distance over which to average to determine the average
+                             !! bottom boundary layer density [Z ~> m]
   real    :: IMax_decay      !< inverse of a maximum decay scale for
                              !! bottom-drag driven turbulence [Z-1 ~> m-1].
   real    :: Kv              !< The interior vertical viscosity [H Z T-1 ~> m2 s-1 or Pa s]
@@ -242,8 +245,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
                                                    !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   ! local variables
-  real, dimension(SZI_(G)) :: &
-    N2_bot        ! bottom squared buoyancy frequency [T-2 ~> s-2]
+  real :: N2_bot(SZI_(G))  ! Bottom squared buoyancy frequency [T-2 ~> s-2]
+  real :: rho_bot(SZI_(G)) ! In situ near-bottom density [T-2 ~> s-2]
 
   type(diffusivity_diags)  :: dd ! structure with arrays of available diags
 
@@ -254,6 +257,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   real, dimension(SZI_(G),SZK_(GV)) :: &
     N2_lay, &     !< Squared buoyancy frequency associated with layers [T-2 ~> s-2]
     Kd_lay_2d, &  !< The layer diffusivities [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+    dz, &         !< Height change across layers [Z ~> m]
     maxTKE, &     !< Energy required to entrain to h_max [H Z2 T-3 ~> m3 s-3 or W m-2]
     TKE_to_Kd     !< Conversion rate (~1.0 / (G_Earth + dRho_lay)) between
                   !< TKE dissipated within a layer and Kd in that layer
@@ -396,13 +400,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   ! be an appropriate place to add a depth-dependent parameterization or another explicit
   ! parameterization of Kd.
 
-  !$OMP parallel do default(shared) private(dRho_int,N2_lay,Kd_lay_2d,Kd_int_2d,Kv_bkgnd,N2_int,&
-  !$OMP                                     N2_bot,KT_extra,KS_extra,TKE_to_Kd,maxTKE,dissip,kb)&
+  !$OMP parallel do default(shared) private(dRho_int,N2_lay,Kd_lay_2d,Kd_int_2d,Kv_bkgnd,N2_int,dz, &
+  !$OMP                                     N2_bot,rho_bot,KT_extra,KS_extra,TKE_to_Kd,maxTKE,dissip,kb) &
   !$OMP                             if(.not. CS%use_CVMix_ddiff)
   do j=js,je
 
     ! Set up variables related to the stratification.
-    call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, N2_lay, N2_int, N2_bot)
+    call find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, N2_lay, N2_int, N2_bot, rho_bot)
 
     if (associated(dd%N2_3d)) then
       do K=1,nz+1 ; do i=is,ie ; dd%N2_3d(i,j,K) = N2_int(i,K) ; enddo ; enddo
@@ -496,13 +500,17 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
       enddo ; enddo
     endif
 
+    if (CS%ML_radiation .or. CS%use_tidal_mixing .or. associated(dd%Kd_work)) then
+      call thickness_to_dz(h, tv, dz, j, G, GV)
+    endif
+
     ! Add the ML_Rad diffusivity.
     if (CS%ML_radiation) &
       call add_MLrad_diffusivity(h, fluxes, j, Kd_int_2d, G, GV, US, CS, TKE_to_Kd, Kd_lay_2d)
 
     ! Add the Nikurashin and / or tidal bottom-driven mixing
     if (CS%use_tidal_mixing) &
-      call calculate_tidal_mixing(h, j, N2_bot, N2_lay, N2_int, TKE_to_Kd, &
+      call calculate_tidal_mixing(dz, j, N2_bot, rho_bot, N2_lay, N2_int, TKE_to_Kd, &
                                   maxTKE, G, GV, US, CS%tidal_mixing, &
                                   CS%Kd_max, visc%Kv_slow, Kd_lay_2d, Kd_int_2d)
 
@@ -869,7 +877,7 @@ end subroutine find_TKE_to_Kd
 
 !> Calculate Brunt-Vaisala frequency, N^2.
 subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
-                   N2_lay, N2_int, N2_bot)
+                   N2_lay, N2_int, N2_bot, Rho_bot)
   type(ocean_grid_type),    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)  :: US   !< A dimensional unit scaling type
@@ -894,24 +902,28 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   real, dimension(SZI_(G),SZK_(GV)), &
                             intent(out) :: N2_lay !< The squared buoyancy frequency of the layers [T-2 ~> s-2].
   real, dimension(SZI_(G)), intent(out) :: N2_bot !< The near-bottom squared buoyancy frequency [T-2 ~> s-2].
+  real, dimension(SZI_(G)), intent(out) :: Rho_bot !< Near-bottom density [R ~> kg m-3].
+
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
+    pres, &            ! pressure at each interface [R L2 T-2 ~> Pa]
     dRho_int_unfilt, & ! unfiltered density differences across interfaces [R ~> kg m-3]
     dRho_dT,         & ! partial derivative of density wrt temp [R C-1 ~> kg m-3 degC-1]
     dRho_dS            ! partial derivative of density wrt saln [R S-1 ~> kg m-3 ppt-1]
-
+  real, dimension(SZI_(G),SZK_(GV)) :: &
+    dz            ! Height change across layers [Z ~> m]
   real, dimension(SZI_(G)) :: &
-    pres,      &  ! pressure at each interface [R L2 T-2 ~> Pa]
     Temp_int,  &  ! temperature at each interface [C ~> degC]
     Salin_int, &  ! salinity at each interface [S ~> ppt]
     drho_bot,  &  ! A density difference [R ~> kg m-3]
     h_amp,     &  ! The topographic roughness amplitude [Z ~> m].
-    hb,        &  ! The thickness of the bottom layer [Z ~> m].
-    z_from_bot    ! The hieght above the bottom [Z ~> m].
+    dz_BBL_avg, & ! The distance over which to average to find the near-bottom density [Z ~> m]
+    hb,        &  ! The thickness of the bottom layer [H ~> m or kg m-2]
+    z_from_bot    ! The height above the bottom [Z ~> m]
 
-  real :: dz_int    ! thickness associated with an interface [Z ~> m].
-  real :: G_Rho0    ! Gravitational acceleration divided by Boussinesq reference density
-                    ! times some unit conversion factors [Z T-2 R-1 ~> m4 s-2 kg-1].
+  real :: dz_int    ! Vertical distance associated with an interface [Z ~> m]
+  real :: G_Rho0    ! Gravitational acceleration, perhaps divided by Boussinesq reference density,
+                    ! times some unit conversion factors [H T-2 R-1 ~> m4 s-2 kg-1 or m s-2].
   real :: H_neglect ! A negligibly small thickness [H ~> m or kg m-2]
 
   logical :: do_i(SZI_(G)), do_any
@@ -919,7 +931,7 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   integer :: i, k, is, ie, nz
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
-  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
+  G_Rho0    = (US%L_to_Z**2 * GV%g_Earth) / GV%H_to_RZ
   H_neglect = GV%H_subroundoff
 
   ! Find the (limited) density jump across each interface.
@@ -929,24 +941,24 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   enddo
   if (associated(tv%eqn_of_state)) then
     if (associated(fluxes%p_surf)) then
-      do i=is,ie ; pres(i) = fluxes%p_surf(i,j) ; enddo
+      do i=is,ie ; pres(i,1) = fluxes%p_surf(i,j) ; enddo
     else
-      do i=is,ie ; pres(i) = 0.0 ; enddo
+      do i=is,ie ; pres(i,1) = 0.0 ; enddo
     endif
     EOSdom(:) = EOS_domain(G%HI)
     do K=2,nz
       do i=is,ie
-        pres(i) = pres(i) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
+        pres(i,K) = pres(i,K-1) + (GV%g_Earth*GV%H_to_RZ)*h(i,j,k-1)
         Temp_Int(i) = 0.5 * (T_f(i,j,k) + T_f(i,j,k-1))
         Salin_Int(i) = 0.5 * (S_f(i,j,k) + S_f(i,j,k-1))
       enddo
-      call calculate_density_derivs(Temp_int, Salin_int, pres, dRho_dT(:,K), dRho_dS(:,K), &
+      call calculate_density_derivs(Temp_int, Salin_int, pres(:,K), dRho_dT(:,K), dRho_dS(:,K), &
                                     tv%eqn_of_state, EOSdom)
       do i=is,ie
         dRho_int(i,K) = max(dRho_dT(i,K)*(T_f(i,j,k) - T_f(i,j,k-1)) + &
                             dRho_dS(i,K)*(S_f(i,j,k) - S_f(i,j,k-1)), 0.0)
         dRho_int_unfilt(i,K) = max(dRho_dT(i,K)*(tv%T(i,j,k) - tv%T(i,j,k-1)) + &
-                            dRho_dS(i,K)*(tv%S(i,j,k) - tv%S(i,j,k-1)), 0.0)
+                                   dRho_dS(i,K)*(tv%S(i,j,k) - tv%S(i,j,k-1)), 0.0)
       enddo
     enddo
   else
@@ -955,21 +967,24 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     enddo ; enddo
   endif
 
+  ! Find the vertical distances across layers.
+  call thickness_to_dz(h, tv, dz, j, G, GV)
+
   ! Set the buoyancy frequencies.
   do k=1,nz ; do i=is,ie
     N2_lay(i,k) = G_Rho0 * 0.5*(dRho_int(i,K) + dRho_int(i,K+1)) / &
-                  (GV%H_to_Z*(h(i,j,k) + H_neglect))
+                  (h(i,j,k) + H_neglect)
   enddo ; enddo
   do i=is,ie ; N2_int(i,1) = 0.0 ; N2_int(i,nz+1) = 0.0 ; enddo
   do K=2,nz ; do i=is,ie
     N2_int(i,K) = G_Rho0 * dRho_int(i,K) / &
-                  (0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k) + H_neglect))
+                  (0.5*(h(i,j,k-1) + h(i,j,k) + H_neglect))
   enddo ; enddo
 
   ! Find the bottom boundary layer stratification, and use this in the deepest layers.
   do i=is,ie
     hb(i) = 0.0 ; dRho_bot(i) = 0.0 ; h_amp(i) = 0.0
-    z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
+    z_from_bot(i) = 0.5*dz(i,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.0)
   enddo
   if (CS%use_tidal_mixing) call tidal_mixing_h_amp(h_amp, G, j, CS%tidal_mixing)
@@ -977,16 +992,16 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
   do k=nz,2,-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j,k-1))
+      dz_int = 0.5*(dz(i,k) + dz(i,k-1))
       z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
-      hb(i) = hb(i) + dz_int
+      hb(i) = hb(i) + 0.5*(h(i,j,k) + h(i,j,k-1))
       drho_bot(i) = drho_bot(i) + dRho_int(i,K)
 
       if (z_from_bot(i) > h_amp(i)) then
         if (k>2) then
           ! Always include at least one full layer.
-          hb(i) = hb(i) + 0.5*GV%H_to_Z*(h(i,j,k-1) + h(i,j,k-2))
+          hb(i) = hb(i) + 0.5*(h(i,j,k-1) + h(i,j,k-2))
           drho_bot(i) = drho_bot(i) + dRho_int(i,K-1)
         endif
         do_i(i) = .false.
@@ -1001,14 +1016,14 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
     if (hb(i) > 0.0) then
       N2_bot(i) = (G_Rho0 * drho_bot(i)) / hb(i)
     else ;  N2_bot(i) = 0.0 ; endif
-    z_from_bot(i) = 0.5*GV%H_to_Z*h(i,j,nz)
+    z_from_bot(i) = 0.5*dz(i,nz)
     do_i(i) = (G%mask2dT(i,j) > 0.0)
   enddo
 
   do k=nz,2,-1
     do_any = .false.
     do i=is,ie ; if (do_i(i)) then
-      dz_int = 0.5*GV%H_to_Z*(h(i,j,k) + h(i,j,k-1))
+      dz_int = 0.5*(dz(i,k) + dz(i,k-1))
       z_from_bot(i) = z_from_bot(i) + dz_int ! middle of the layer above
 
       N2_int(i,K) = N2_bot(i)
@@ -1029,6 +1044,10 @@ subroutine find_N2(h, tv, T_f, S_f, fluxes, j, G, GV, US, CS, dRho_int, &
       dRho_int(i,K) = dRho_int_unfilt(i,K)
     enddo ; enddo
   endif
+
+  ! Average over the larger of the envelope of the topography or a minimal distance.
+  do i=is,ie ; dz_BBL_avg(i) = max(h_amp(i), CS%dz_BBL_avg_min) ; enddo
+  call find_rho_bottom(h, dz, pres, dz_BBL_avg, tv, j, G, GV, US, Rho_bot)
 
 end subroutine find_N2
 
@@ -2171,6 +2190,10 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   endif
   CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &
                  'Bottom Boundary Layer Diffusivity', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
+
+  call get_param(param_file, mdl, "DZ_BBL_AVG_MIN", CS%dz_BBL_avg_min, &
+                 "A minimal distance over which to average to determine the average bottom "//&
+                 "boundary layer density.", units="m", default=0.0, scale=US%m_to_Z)
 
   TKE_to_Kd_used = (CS%use_tidal_mixing .or. CS%ML_radiation .or. &
                    (CS%bottomdraglaw .and. .not.CS%use_LOTW_BBL_diffusivity))
