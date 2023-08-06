@@ -35,7 +35,7 @@ type, public :: CVMix_ddiff_cs ; private
   real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime [nondim]
   real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime [nondim]
   real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime [nondim]
-  real    :: min_thickness      !< Minimum thickness allowed [Z ~> m]
+  real    :: min_thickness      !< Minimum thickness allowed [H ~> m or kg-2]
   character(len=4) :: diff_conv_type !< type of diffusive convection to use. Options are Marmorino &
                                 !! Caldwell 1976 ("MC76"; default) and Kelley 1988, 1990 ("K90")
   logical :: debug              !< If true, turn on debugging
@@ -83,7 +83,7 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
   call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, &
-                 units="m", scale=US%m_to_Z, default=0.001, do_not_log=.True.)
+                 units="m", scale=GV%m_to_H, default=0.001, do_not_log=.True.)
 
   call openParameterBlock(param_file,'CVMIX_DDIFF')
 
@@ -162,7 +162,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
 
   ! Local variables
   real, dimension(SZK_(GV)) :: &
-    cellHeight, &  !< Height of cell centers [m]
+    cellHeight, &  !< Height of cell centers relative to the sea surface [H ~> m or kg m-2]
     dRho_dT,    &  !< partial derivatives of density with temperature [R C-1 ~> kg m-3 degC-1]
     dRho_dS,    &  !< partial derivatives of density with salinity [R S-1 ~> kg m-3 ppt-1]
     pres_int,   &  !< pressure at each interface [R L2 T-2 ~> Pa]
@@ -176,8 +176,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     Kd1_T,      &  !< Diapycanal diffusivity of temperature [m2 s-1].
     Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
-  real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [m]
-  real :: dh, hcorr ! Limited thicknesses and a cumulative correction [Z ~> m]
+  real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces relative to the sea surface [H ~> m or kg m-2]
+  real :: dh, hcorr ! Limited thicknesses and a cumulative correction [H ~> m or kg m-2]
   integer :: i, k
 
   ! initialize dummy variables
@@ -237,16 +237,16 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     hcorr = 0.0
     ! compute heights at cell center and interfaces
     do k=1,GV%ke
-      dh = h(i,j,k) * GV%H_to_Z ! Nominal thickness to use for increment, in height units
+      dh = h(i,j,k) ! Nominal thickness to use for increment, in height units
       dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
       hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
       dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
-      cellHeight(k)    = iFaceHeight(k) - 0.5 * US%Z_to_m*dh
-      iFaceHeight(k+1) = iFaceHeight(k) - US%Z_to_m*dh
+      cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+      iFaceHeight(k+1) = iFaceHeight(k) - dh
     enddo
 
     ! gets index of the level and interface above hbl
-    !kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, hbl(i,j))
+    !kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, GV%Z_to_H*hbl(i,j))
 
     Kd1_T(:) = 0.0 ; Kd1_S(:) = 0.0
     call CVMix_coeffs_ddiff(Tdiff_out=Kd1_T(:), &

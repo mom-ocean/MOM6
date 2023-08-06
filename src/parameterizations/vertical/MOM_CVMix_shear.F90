@@ -10,6 +10,7 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -76,11 +77,12 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   real :: GoRho  ! Gravitational acceleration divided by density [Z T-2 R-1 ~> m4 s-2 kg-1]
   real :: pref   ! Interface pressures [R L2 T-2 ~> Pa]
   real :: DU, DV ! Velocity differences [L T-1 ~> m s-1]
-  real :: DZ     ! Grid spacing around an interface [Z ~> m]
+  real :: dz_int ! Grid spacing around an interface [Z ~> m]
   real :: N2     ! Buoyancy frequency at an interface [T-2 ~> s-2]
   real :: S2     ! Shear squared at an interface [T-2 ~> s-2]
   real :: dummy  ! A dummy variable [nondim]
   real :: dRho   ! Buoyancy differences [Z T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZK_(GV)) :: dz ! Height change across layers [Z ~> m]
   real, dimension(2*(GV%ke)) :: pres_1d ! A column of interface pressures [R L2 T-2 ~> Pa]
   real, dimension(2*(GV%ke)) :: temp_1d ! A column of temperatures [C ~> degC]
   real, dimension(2*(GV%ke)) :: salt_1d ! A column of salinities [S ~> ppt]
@@ -96,6 +98,10 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
   epsln = 1.e-10 * GV%m_to_H
 
   do j = G%jsc, G%jec
+
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
     do i = G%isc, G%iec
 
       ! skip calling for land points
@@ -132,10 +138,14 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
         kk = 2*(k-1)
         DU = u_h(i,j,k) - u_h(i,j,km1)
         DV = v_h(i,j,k) - v_h(i,j,km1)
-        DRHO = GoRho * (rho_1D(kk+1) - rho_1D(kk+2))
-        DZ = (0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_Z
-        N2 = DRHO / DZ
-        S2 = US%L_to_Z**2*(DU*DU+DV*DV)/(DZ*DZ)
+        if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+          dRho = GoRho * (rho_1D(kk+1) - rho_1D(kk+2))
+        else
+          dRho = (US%L_to_Z**2 * GV%g_Earth) * (rho_1D(kk+1) - rho_1D(kk+2)) / (0.5*(rho_1D(kk+1) + rho_1D(kk+2)))
+        endif
+        dz_int = 0.5*(dz(i,km1) + dz(i,k)) + GV%dZ_subroundoff
+        N2 = DRHO / dz_int
+        S2 = US%L_to_Z**2*(DU*DU + DV*DV) / (dz_int*dz_int)
         Ri_Grad(k) = max(0., N2) / max(S2, 1.e-10*US%T_to_s**2)
 
         ! fill 3d arrays, if user asks for diagnostics
