@@ -625,6 +625,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
 
   ! Local variables
   integer :: i, j, k                            ! Loop indices
+  real, dimension(SZI_(G),SZK_(GV)) :: dz       ! Height change across layers [Z ~> m]
   real, dimension( GV%ke )     :: cellHeight    ! Cell center heights referenced to surface [Z ~> m] (negative in ocean)
   real, dimension( GV%ke+1 )   :: iFaceHeight   ! Interface heights referenced to surface [Z ~> m] (negative in ocean)
   real, dimension( GV%ke )     :: z_cell        ! Cell center heights referenced to surface [m] (negative in ocean)
@@ -663,13 +664,17 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   !$OMP parallel do default(none) firstprivate(nonLocalTrans)                               &
-  !$OMP                           private(surfFricVel, iFaceHeight, hcorr, dh, cellHeight,  &
+  !$OMP                           private(surfFricVel, iFaceHeight, hcorr, dh, dz, cellHeight,  &
   !$OMP                           surfBuoyFlux, Kdiffusivity, Kviscosity, LangEnhK, sigma,  &
   !$OMP                           sigmaRatio, z_inter, z_cell)                              &
-  !$OMP                           shared(G, GV, CS, US, uStar, h, buoy_scale, buoyFlux, Kt, &
+  !$OMP                           shared(G, GV, CS, US, tv, uStar, h, buoy_scale, buoyFlux, Kt, &
   !$OMP                           Ks, Kv, nonLocalTransHeat, nonLocalTransScalar, Waves, lamult)
   ! loop over horizontal points on processor
   do j = G%jsc, G%jec
+
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
     do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
 
       ! things independent of position within the column
@@ -680,7 +685,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
       do k=1,GV%ke
 
         ! cell center and cell bottom in meters (negative values in the ocean)
-        dh = h(i,j,k) * GV%H_to_Z ! Nominal thickness to use for increment
+        dh = dz(i,k)    ! Nominal thickness to use for increment
         dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
         hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
         dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
@@ -930,6 +935,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   ! Variables for passing to CVMix routines, often in MKS units
   real, dimension( GV%ke )   :: Ws_1d          ! Profile of vertical velocity scale for scalars in MKS units [m s-1]
   real, dimension( GV%ke )   :: deltaRho       ! delta Rho in numerator of Bulk Ri number [R ~> kg m-3]
+  real, dimension( GV%ke )   :: deltaBuoy      ! Change in Buoyancy based on deltaRho [m s-2]
   real, dimension( GV%ke )   :: deltaU2        ! square of delta U (shear) in denominator of Bulk Ri [m2 s-2]
   real, dimension( GV%ke )   :: surfBuoyFlux2  ! Surface buoyancy flux in MKS units [m2 s-3]
   real, dimension( GV%ke )   :: BulkRi_1d      ! Bulk Richardson number for each layer [nondim]
@@ -954,8 +960,8 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real, dimension( GV%ke+1 )   :: N2_1d        ! Brunt-Vaisala frequency squared, at interfaces [T-2 ~> s-2]
   real :: zBottomMinusOffset    ! Height of bottom plus a little bit [Z ~> m]
   real :: GoRho         ! Gravitational acceleration in MKS units divided by density [m s-2 R-1 ~> m4 kg-1 s-2]
-  real :: GoRho_Z_L2    ! Gravitational acceleration divided by density times aspect ratio
-                        ! rescaling [Z T-2 R-1 ~> m4 kg-1 s-2]
+  real :: GoRho_Z_L2    ! Gravitational acceleration, perhaps divided by density, times aspect ratio
+                        ! rescaling [H T-2 R-1 ~> m4 kg-1 s-2 or m s-2]
   real :: pRef          ! The interface pressure [R L2 T-2 ~> Pa]
   real :: Uk, Vk        ! Layer velocities relative to their averages in the surface layer [L T-1 ~> m s-1]
   real :: SLdepth_0d    ! Surface layer depth = surf_layer_ext*OBLdepth [Z ~> m]
@@ -994,8 +1000,12 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   call cpu_clock_begin(id_clock_KPP_compute_BLD)
 
   ! some constants
-  GoRho_Z_L2 = US%L_to_Z**2 * GV%g_Earth / GV%Rho0
-  GoRho = US%Z_to_m*US%s_to_T**2 * GoRho_Z_L2
+  GoRho = US%Z_to_m*US%s_to_T**2 * (US%L_to_Z**2 * GV%g_Earth / GV%Rho0)
+  if (GV%Boussinesq) then
+    GoRho_Z_L2 = US%L_to_Z**2 * GV%Z_to_H * GV%g_Earth / GV%Rho0
+  else
+    GoRho_Z_L2 = US%L_to_Z**2 * GV%g_Earth * GV%RZ_to_H
+  endif
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
   ! Find the vertical distances across layers.
@@ -1008,7 +1018,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           surfHvS, hTot, delH, surftemp, surfsalt, surfu, surfv,    &
   !$OMP                           surfUs, surfVs, Uk, Vk, deltaU2, km1, kk, pres_1D, N_col, &
   !$OMP                           Temp_1D, salt_1D, surfBuoyFlux2, MLD_guess, LA, rho_1D,   &
-  !$OMP                           deltarho, N2_1d, ws_1d, LangEnhVT2,KPP_OBL_depth, z_cell, &
+  !$OMP                           deltarho, deltaBuoy, N2_1d, ws_1d, LangEnhVT2,KPP_OBL_depth, z_cell, &
   !$OMP                           z_inter, OBL_depth, BulkRi_1d, zBottomMinusOffset)        &
   !$OMP                           shared(G, GV, CS, US, uStar, h, dz, buoy_scale, buoyFlux, &
   !$OMP                           Temp, Salt, waves, tv, GoRho, GoRho_Z_L2, u, v, lamult)
@@ -1037,7 +1047,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       do k=1,GV%ke
 
         ! cell center and cell bottom in meters (negative values in the ocean)
-        dh = h(i,j,k) * GV%H_to_Z ! Nominal thickness to use for increment
+        dh = dz(i,j,k) ! Nominal thickness to use for increment
         dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
         hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
         dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
@@ -1066,7 +1076,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
         do ktmp = 1,ksfc
 
           ! SLdepth_0d can be between cell interfaces
-          delH = min( max(0.0, SLdepth_0d - hTot), h(i,j,ktmp)*GV%H_to_Z )
+          delH = min( max(0.0, SLdepth_0d - hTot), dz(i,j,ktmp) )
 
           ! surface layer thickness
           hTot = hTot + delH
@@ -1147,8 +1157,14 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
         km1 = max(1, k-1)
         kk = 3*(k-1)
         deltaRho(k) = rho_1D(kk+2) - rho_1D(kk+1)
+        if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+          deltaBuoy(k) = GoRho*(rho_1D(kk+2) - rho_1D(kk+1))
+        else
+          deltaBuoy(k) = (US%Z_to_m*US%s_to_T**2) * (US%L_to_Z**2 * GV%g_Earth) * &
+              ( (rho_1D(kk+2) - rho_1D(kk+1)) / (0.5 * (rho_1D(kk+2) + rho_1D(kk+1))) )
+        endif
         N2_1d(k)    = (GoRho_Z_L2 * (rho_1D(kk+2) - rho_1D(kk+3)) ) / &
-                      ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_Z)
+                      ((0.5*(h(i,j,km1) + h(i,j,k))+GV%H_subroundoff))
         CS%N(i,j,k)     = sqrt( max( N2_1d(k), 0.) )
       enddo
       N2_1d(GV%ke+1 ) = 0.0
@@ -1202,7 +1218,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       ! Calculate Bulk Richardson number from eq (21) of LMD94
       BulkRi_1d = CVmix_kpp_compute_bulk_Richardson( &
                   zt_cntr=z_cell,                    & ! Depth of cell center [m]
-                  delta_buoy_cntr=GoRho*deltaRho,    & ! Bulk buoyancy difference, Br-B(z) [m s-2]
+                  delta_buoy_cntr=deltaBuoy,         & ! Bulk buoyancy difference, Br-B(z) [m s-2]
                   delta_Vsqr_cntr=deltaU2,           & ! Square of resolved velocity difference [m2 s-2]
                   ws_cntr=Ws_1d,                     & ! Turbulent velocity scale profile [m s-1]
                   N_iface=N_col,                     & ! Buoyancy frequency [s-1]
@@ -1256,7 +1272,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       !BGR consider if LTEnhancement is wanted for diagnostics
       if (CS%id_Ws > 0) then
         call CVMix_kpp_compute_turbulent_scales( &
-            -cellHeight(:)/CS%OBLdepth(i,j),       & ! (in)  Normalized boundary layer coordinate
+            -cellHeight(:)/CS%OBLdepth(i,j),       & ! (in)  Normalized boundary layer coordinate [nondim]
             US%Z_to_m*CS%OBLdepth(i,j),            & ! (in)  OBL depth [m]
             surfBuoyFlux,                          & ! (in)  Buoyancy flux at surface [m2 s-3]
             surfFricVel,                           & ! (in)  Turbulent friction velocity at surface [m s-1]
@@ -1296,19 +1312,19 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   if (CS%id_Vt2      > 0) call post_data(CS%id_Vt2,      CS%Vt2,             CS%diag)
 
   ! BLD smoothing:
-  if (CS%n_smooth > 0) call KPP_smooth_BLD(CS, G, GV, US, h)
+  if (CS%n_smooth > 0) call KPP_smooth_BLD(CS, G, GV, US, dz)
 
 end subroutine KPP_compute_BLD
 
 
 !> Apply a 1-1-4-1-1 Laplacian filter one time on BLD to reduce any horizontal two-grid-point noise
-subroutine KPP_smooth_BLD(CS, G, GV, US, h)
+subroutine KPP_smooth_BLD(CS, G, GV, US, dz)
   ! Arguments
   type(KPP_CS),                           pointer       :: CS   !< Control structure
   type(ocean_grid_type),                  intent(inout) :: G    !< Ocean grid
   type(verticalGrid_type),                intent(in)    :: GV   !< Ocean vertical grid
-  type(unit_scale_type),                  intent(in)    :: US    !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer/level thicknesses [H ~> m or kg m-2]
+  type(unit_scale_type),                  intent(in)    :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: dz   !< Layer thicknesses [Z ~> m]
 
   ! local
   real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_prev     ! OBLdepth before s.th smoothing iteration [Z ~> m]
@@ -1333,7 +1349,7 @@ subroutine KPP_smooth_BLD(CS, G, GV, US, h)
     OBLdepth_prev = CS%OBLdepth
 
     ! apply smoothing on OBL depth
-    !$OMP parallel do default(none) shared(G, GV, US, CS, h, OBLdepth_prev) &
+    !$OMP parallel do default(none) shared(G, GV, US, CS, dz, OBLdepth_prev) &
     !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, cellHeight, iFaceHeight)
     do j = G%jsc, G%jec
       do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
@@ -1343,7 +1359,7 @@ subroutine KPP_smooth_BLD(CS, G, GV, US, h)
         do k=1,GV%ke
 
           ! cell center and cell bottom in meters (negative values in the ocean)
-          dh = h(i,j,k) * GV%H_to_Z ! Nominal thickness to use for increment
+          dh = dz(i,j,k)   ! Nominal thickness to use for increment
           dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
           hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
           dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
