@@ -170,10 +170,6 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   character(len=80) :: string, vel_string ! Temporary strings
   real              :: filter_shallow_depth, filter_deep_depth ! Depth ranges of filtering [H ~> m or kg m-2]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018   ! If true, use the order of arithmetic and expressions for remapping
-                            ! that recover the answers from the end of 2018.  Otherwise, use more
-                            ! robust and accurate forms of mathematically equivalent expressions.
   logical           :: check_reconstruction
   logical           :: check_remapping
   logical           :: force_bounds_in_subcell
@@ -231,25 +227,12 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=.not.GV%Boussinesq)
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers, do_not_log=.not.GV%Boussinesq)
-  ! Revise inconsistent default answer dates for remapping.
-  if (GV%Boussinesq) then
-    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
-  endif
   call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
-                 "robust and accurate forms of mathematically equivalent expressions.  "//&
-                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+                 "robust and accurate forms of mathematically equivalent expressions.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call initialize_remapping( CS%remapCS, string, &

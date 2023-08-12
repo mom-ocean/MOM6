@@ -1284,10 +1284,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                                   ! or other equivalent files.
   logical :: iceberg_flux_diags   ! If true, diagnostics of fluxes from icebergs are available.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018         ! If true, use the order of arithmetic and expressions that recover
-                                  ! the answers from the end of 2018.  Otherwise, use a simpler
-                                  ! expression to calculate gustiness.
   type(time_type)    :: Time_frc
   type(directories)  :: dirs      ! A structure containing relevant directory paths and input filenames.
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
@@ -1586,22 +1582,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
-  call get_param(param_file, mdl, "SURFACE_FORCING_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the answers "//&
-                 "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
-                 default=default_2018_answers)
-                 ! Revise inconsistent default answer dates.
-  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
   call get_param(param_file, mdl, "SURFACE_FORCING_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the gustiness "//&
                  "calculations.  Values below 20190101 recover the answers from the end "//&
-                 "of 2018, while higher values use a simpler expression to calculate gustiness.  "//&
-                 "If both SURFACE_FORCING_2018_ANSWERS and SURFACE_FORCING_ANSWER_DATE are "//&
-                 "specified, the latter takes precedence.", default=default_answer_date)
+                 "of 2018, while higher values use a simpler expression to calculate gustiness.", &
+                 default=default_answer_date)
 
   call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
                  "If true correct a bug in the time-averaging of the gustless wind friction velocity", &

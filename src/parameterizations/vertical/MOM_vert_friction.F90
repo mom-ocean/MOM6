@@ -2247,11 +2247,6 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   real :: Kv_BBL  ! A viscosity in the bottom boundary layer with a simple scheme [H Z T-1 ~> m2 s-1 or Pa s]
   real :: Kv_back_z  ! A background kinematic viscosity [Z2 T-1 ~> m2 s-1]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018   !< If true, use the order of arithmetic and expressions that recover the
-                            !! answers from the end of 2018.  Otherwise, use expressions that do not
-                            !! use an arbitrary and hard-coded maximum viscous coupling coefficient
-                            !! between layers.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   character(len=200) :: kappa_gl90_file, inputdir, kdgl90_varname
   ! This include declares and sets the variable "version".
@@ -2282,28 +2277,13 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=.not.GV%Boussinesq)
-  call get_param(param_file, mdl, "VERT_FRICTION_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the answers "//&
-                 "from the end of 2018.  Otherwise, use expressions that do not use an arbitrary "//&
-                 "hard-coded maximum viscous coupling coefficient between layers.", &
-                 default=default_2018_answers, do_not_log=.not.GV%Boussinesq)
-  ! Revise inconsistent default answer dates.
-  if (GV%Boussinesq) then
-    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
-  endif
   call get_param(param_file, mdl, "VERT_FRICTION_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the viscous "//&
                  "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
                  "while higher values use expressions that do not use an arbitrary hard-coded "//&
                  "maximum viscous coupling coefficient between layers.  Values below 20230601 "//&
                  "recover a form of the viscosity within the mixed layer that breaks up the "//&
-                 "magnitude of the wind stress in some non-Boussinesq cases.  "//&
-                 "If both VERT_FRICTION_2018_ANSWERS and VERT_FRICTION_ANSWER_DATE are "//&
-                 "specified, the latter takes precedence.", &
+                 "magnitude of the wind stress in some non-Boussinesq cases.", &
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 

@@ -2233,10 +2233,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   integer :: i, j, k, is, ie, js, je
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
-                           ! answers from the end of 2018.  Otherwise, use updated and more robust
-                           ! forms of the same expressions.
   logical :: adiabatic, use_omega, MLE_use_PBL_MLD
   logical :: use_KPP
   logical :: use_regridding  ! If true, use the ALE algorithm rather than layered
@@ -2266,24 +2262,11 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=.not.GV%Boussinesq)
-  call get_param(param_file, mdl, "SET_VISC_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers, do_not_log=.not.GV%Boussinesq)
-  ! Revise inconsistent default answer dates.
-  if (GV%Boussinesq) then
-    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
-  endif
   call get_param(param_file, mdl, "SET_VISC_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the set viscosity "//&
                  "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
-                 "while higher values use updated and more robust forms of the same expressions.  "//&
-                 "If both SET_VISC_2018_ANSWERS and SET_VISC_ANSWER_DATE are specified, "//&
-                 "the latter takes precedence.", default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+                 "while higher values use updated and more robust forms of the same expressions.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
   call get_param(param_file, mdl, "BOTTOMDRAGLAW", CS%bottomdraglaw, &
                  "If true, the bottom stress is calculated with a drag "//&

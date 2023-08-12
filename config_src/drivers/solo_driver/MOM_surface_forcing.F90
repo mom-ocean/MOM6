@@ -1529,11 +1529,6 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
 # include "version_variable.h"
   real :: flux_const_default ! The unscaled value of FLUXCONST [m day-1]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018    ! If true, use the order of arithmetic and expressions that recover
-                             ! the answers from the end of 2018.  Otherwise, use a form of the gyre
-                             ! wind stresses that are rotationally invariant and more likely to be
-                             ! the same between compilers.
   character(len=40)  :: mdl = "MOM_surface_forcing" ! This module's name.
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.
 
@@ -1769,24 +1764,12 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
-    call get_param(param_file, mdl, "WIND_GYRES_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the answers "//&
-                 "from the end of 2018.  Otherwise, use expressions for the gyre friction velocities "//&
-                 "that are rotationally invariant and more likely to be the same between compilers.", &
-                 default=default_2018_answers)
-    ! Revise inconsistent default answer dates.
-    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
     call get_param(param_file, mdl, "WIND_GYRES_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the expressions used to set gyre wind stresses. "//&
                  "Values below 20190101 recover the answers from the end of 2018, "//&
                  "while higher values use a form of the gyre wind stresses that are "//&
-                 "rotationally invariant and more likely to be the same between compilers.  "//&
-                 "If both WIND_GYRES_2018_ANSWERS and WIND_GYRES_ANSWER_DATE are specified, "//&
-                 "the latter takes precedence.", default=default_answer_date)
+                 "rotationally invariant and more likely to be the same between compilers.", &
+                 default=default_answer_date)
   else
     CS%answer_date = 20190101
   endif

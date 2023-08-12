@@ -1110,8 +1110,6 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
              ! default value is roughly (pi / (the age of the universe)).
   logical :: Gill_equatorial_Ld, use_FGNV_streamfn, use_MEKE, in_use
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: remap_answers_2018
   integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
                                   ! for remapping.  Values below 20190101 recover the remapping
                                   ! answers from 2018, while higher values use more robust
@@ -1505,25 +1503,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=.not.GV%Boussinesq)
-    call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers, do_not_log=.not.GV%Boussinesq)
-    ! Revise inconsistent default answer dates for remapping.
-    if (GV%Boussinesq) then
-      if (remap_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-      if (.not.remap_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
-    endif
     call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
-                 "robust and accurate forms of mathematically equivalent expressions.  "//&
-                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+                 "robust and accurate forms of mathematically equivalent expressions.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
 
     call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_TOL", wave_speed_tol, &

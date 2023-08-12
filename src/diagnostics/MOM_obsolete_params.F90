@@ -115,6 +115,39 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "TIDAL_SAL_SHT", hint="Use SAL_HARMONICS instead.")
   call obsolete_int(param_file, "TIDAL_SAL_SHT_DEGREE", hint="Use SAL_HARMONICS_DEGREE instead.")
   call obsolete_real(param_file, "RHO_E", hint="Use RHO_SOLID_EARTH instead.")
+  call obsolete_logical(param_file, "DEFAULT_2018_ANSWERS", hint="Instead use DEFAULT_ANSWER_DATE.")
+
+  call obsolete_logical(param_file, "SURFACE_FORCING_2018_ANSWERS", &
+                        hint="Instead use SURFACE_FORCING_ANSWER_DATE.")
+  call obsolete_logical(param_file, "WIND_GYRES_2018_ANSWERS", &
+                        hint="Instead use WIND_GYRES_ANSWER_DATE.")
+
+  call obsolete_logical(param_file, "BAROTROPIC_2018_ANSWERS", &
+                        hint="Instead use BAROTROPIC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "EPBL_2018_ANSWERS", hint="Instead use EPBL_ANSWER_DATE.")
+  call obsolete_logical(param_file, "HOR_REGRID_2018_ANSWERS", &
+                        hint="Instead use HOR_REGRID_ANSWER_DATE.")
+  call obsolete_logical(param_file, "HOR_VISC_2018_ANSWERS", &
+                        hint="Instead use HOR_VISC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "IDL_HURR_2018_ANSWERS", &
+                        hint="Instead use IDL_HURR_ANSWER_DATE.")
+  call obsolete_logical(param_file, "MEKE_GEOMETRIC_2018_ANSWERS", &
+                        hint="Instead use MEKE_GEOMETRIC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "ODA_2018_ANSWERS", hint="Instead use ODA_ANSWER_DATE.")
+  call obsolete_logical(param_file, "OPTICS_2018_ANSWERS", hint="Instead use OPTICS_ANSWER_DATE.")
+  call obsolete_logical(param_file, "REGULARIZE_LAYERS_2018_ANSWERS", &
+                        hint="Instead use REGULARIZE_LAYERS_ANSWER_DATE.")
+  call obsolete_logical(param_file, "REMAPPING_2018_ANSWERS", &
+                        hint="Instead use REMAPPING_ANSWER_DATE.")
+  call obsolete_logical(param_file, "SET_DIFF_2018_ANSWERS", &
+                        hint="Instead use SET_DIFF_ANSWER_DATE.")
+  call obsolete_logical(param_file, "SET_VISC_2018_ANSWERS", &
+                        hint="Instead use SET_VISC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "SURFACE_2018_ANSWERS", hint="Instead use SURFACE_ANSWER_DATE.")
+  call obsolete_logical(param_file, "TIDAL_MIXING_2018_ANSWERS", &
+                        hint="Instead use TIDAL_MIXING_ANSWER_DATE.")
+  call obsolete_logical(param_file, "VERT_FRICTION_2018_ANSWERS", &
+                        hint="Instead use VERT_FRICTION_ANSWER_DATE.")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)

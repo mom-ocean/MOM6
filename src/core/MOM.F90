@@ -2028,10 +2028,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   logical :: bound_salinity    ! If true, salt is added to keep salinity above
                                ! a minimum value, and the deficit is reported.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018      ! If true, use expressions for the surface properties that recover
-                               ! the answers from the end of 2018. Otherwise, use more appropriate
-                               ! expressions that differ at roundoff for non-Boussinesq cases.
   logical :: use_conT_absS     ! If true, the prognostics T & S are conservative temperature
                                ! and absolute salinity. Care should be taken to convert them
                                ! to potential temperature and practical salinity before
@@ -2383,24 +2379,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, "MOM", "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, "MOM", "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=non_Bous)
-  call get_param(param_file, "MOM", "SURFACE_2018_ANSWERS", answers_2018, &
-                 "If true, use expressions for the surface properties that recover the answers "//&
-                 "from the end of 2018. Otherwise, use more appropriate expressions that differ "//&
-                 "at roundoff for non-Boussinesq cases.", default=default_2018_answers, do_not_log=non_Bous)
-  ! Revise inconsistent default answer dates.
-  if (.not.non_Bous) then
-    if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-    if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
-  endif
   call get_param(param_file, "MOM", "SURFACE_ANSWER_DATE", CS%answer_date, &
                "The vintage of the expressions for the surface properties.  Values below "//&
                "20190101 recover the answers from the end of 2018, while higher values "//&
-               "use updated and more robust forms of the same expressions.  "//&
-               "If both SURFACE_2018_ANSWERS and SURFACE_ANSWER_DATE are specified, the "//&
-               "latter takes precedence.", default=default_answer_date, do_not_log=non_Bous)
+               "use updated and more robust forms of the same expressions.", &
+               default=default_answer_date, do_not_log=non_Bous)
   if (non_Bous) CS%answer_date = 99991231
 
   call get_param(param_file, "MOM", "USE_DIABATIC_TIME_BUG", CS%use_diabatic_time_bug, &

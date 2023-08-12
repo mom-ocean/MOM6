@@ -2090,10 +2090,6 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   real :: Stanley_coeff ! Coefficient relating the temperature gradient and sub-gridscale
                         ! temperature variance [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: MEKE_GEOM_answers_2018  ! If true, use expressions in the MEKE_GEOMETRIC calculation
-                                  ! that recover the answers from the original implementation.
-                                  ! Otherwise, use expressions that satisfy rotational symmetry.
   integer :: i, j
 
   CS%initialized = .true.
@@ -2246,24 +2242,10 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
     call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-    call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=.not.GV%Boussinesq)
-    call get_param(param_file, mdl, "MEKE_GEOMETRIC_2018_ANSWERS", MEKE_GEOM_answers_2018, &
-                 "If true, use expressions in the MEKE_GEOMETRIC calculation that recover the "//&
-                 "answers from the original implementation.  Otherwise, use expressions that "//&
-                 "satisfy rotational symmetry.", default=default_2018_answers, do_not_log=.not.GV%Boussinesq)
-    ! Revise inconsistent default answer dates for MEKE_geometric.
-    if (GV%Boussinesq) then
-      if (MEKE_GEOM_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-      if (.not.MEKE_GEOM_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
-    endif
     call get_param(param_file, mdl, "MEKE_GEOMETRIC_ANSWER_DATE", CS%MEKE_GEOM_answer_date, &
                  "The vintage of the expressions in the MEKE_GEOMETRIC calculation.  "//&
                  "Values below 20190101 recover the answers from the original implementation, "//&
-                 "while higher values use expressions that satisfy rotational symmetry.  "//&
-                 "If both MEKE_GEOMETRIC_2018_ANSWERS and MEKE_GEOMETRIC_ANSWER_DATE are "//&
-                 "specified, the latter takes precedence.", &
+                 "while higher values use expressions that satisfy rotational symmetry.", &
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
     if (.not.GV%Boussinesq) CS%MEKE_GEOM_answer_date = max(CS%MEKE_GEOM_answer_date, 20230701)
   endif

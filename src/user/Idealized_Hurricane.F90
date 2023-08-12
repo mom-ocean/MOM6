@@ -104,10 +104,6 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   real :: dP  ! The pressure difference across the hurricane [R L2 T-2 ~> Pa]
   real :: C   ! A temporary variable [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018         ! If true, use expressions driving the idealized hurricane test
-                                  ! case that recover the answers from the end of 2018.  Otherwise use
-                                  ! expressions that are rescalable and respect rotational symmetry.
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -174,23 +170,11 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
-  call get_param(param_file, mdl, "IDL_HURR_2018_ANSWERS", answers_2018, &
-                 "If true, use expressions driving the idealized hurricane test case that recover "//&
-                 "the answers from the end of 2018.  Otherwise use expressions that are rescalable "//&
-                 "and respect rotational symmetry.", default=default_2018_answers)
-
-  ! Revise inconsistent default answer dates.
-  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
   call get_param(param_file, mdl, "IDL_HURR_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the expressions in the idealized hurricane test case.  "//&
                  "Values below 20190101 recover the answers from the end of 2018, while higher "//&
-                 "values use expressions that are rescalable and respect rotational symmetry.  "//&
-                 "If both IDL_HURR_2018_ANSWERS and IDL_HURR_ANSWER_DATE are specified, "//&
-                 "the latter takes precedence.", default=default_answer_date)
+                 "values use expressions that are rescalable and respect rotational symmetry.", &
+                 default=default_answer_date)
 
   ! The following parameters are model run-time parameters which are used
   ! and logged elsewhere and so should not be logged here. The default
