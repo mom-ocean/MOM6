@@ -3331,7 +3331,7 @@ subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes)
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
 
   call allocate_forcing_type(G, fluxes, do_water, do_heat, do_ustar, &
-      do_press, do_shelf, do_iceberg, do_salt, do_taumag)
+      do_press, do_shelf, do_iceberg, do_salt, tau_mag=do_taumag)
 
   ! The following fluxes would typically be allocated by the driver
   call myAlloc(fluxes%sw_vis_dir, G%isd, G%ied, G%jsd, G%jed, &
