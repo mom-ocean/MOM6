@@ -105,7 +105,7 @@ subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -141,9 +141,9 @@ subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
         eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
-        h(i,j,k) = GV%Angstrom_H
+        h(i,j,k) = GV%Angstrom_Z
       else
-        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
     enddo
   enddo ; enddo

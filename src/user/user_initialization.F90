@@ -76,12 +76,12 @@ subroutine USER_initialize_topography(D, G, param_file, max_depth, US)
 
 end subroutine USER_initialize_topography
 
-!> initialize thicknesses.
+!> Initialize thicknesses in depth units.  These will be converted to thickness units later.
 subroutine USER_initialize_thickness(h, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h  !< The thicknesses being initialized [H ~> m or kg m-2].
+                           intent(out) :: h  !< The thicknesses being initialized [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open
                                              !! file to parse for model parameter values.
   logical,                 intent(in)  :: just_read !< If true, this call will
@@ -93,7 +93,8 @@ subroutine USER_initialize_thickness(h, G, GV, param_file, just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  h(:,:,1) = 0.0 ! h should be set [H ~> m or kg m-2].
+  h(:,:,1:GV%ke) = 0.0 ! h should be set in [Z ~> m].  It will be converted to thickness units
+                       ! [H ~> m or kg m-2] once the temperatures and salinities are known.
 
   if (first_call) call write_user_log(param_file)
 

@@ -2,7 +2,7 @@
 
 # Environment variables set by gitlab (the CI environment)
 if [ -z $JOB_DIR ]; then
-  echo Environment variable "$"JOB_DIR should be defined to point to a unique directory for these scripts to use. 
+  echo Environment variable "$"JOB_DIR should be defined to point to a unique directory for these scripts to use.
   echo '$JOB_DIR is derived from $CI_PIPELINE_ID in MOM6/.gitlab-ci.yml'
   echo 'To use interactively try:'
   echo '  JOB_DIR=tmp' $0 $@
@@ -138,7 +138,7 @@ nolibs-ocean-only-compile () {
     make -f ../tools/MRS/Makefile.build ./$1/env BUILD=. ENVIRON=../../environ -s
     ../src/mkmf/bin/list_paths -l ../src/MOM6/config_src/{drivers/solo_driver,memory/dynamic_symmetric,infra/FMS1,ext*} ../src/MOM6/src ../src/FMS1
     sed -i '/FMS1\/.*\/test_/d' path_names
-    ../src/mkmf/bin/mkmf -t ../src/mkmf/templates/ncrc-$1.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF" path_names
+    ../src/mkmf/bin/mkmf -t ../src/mkmf/templates/ncrc5-$1.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF" path_names
     (source $1/env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
   fi
   section-end nolibs-ocean-only-compile-$1
@@ -154,9 +154,9 @@ nolibs-ocean-ice-compile () {
     mkdir -p build-ocean-ice-nolibs-$1
     cd build-ocean-ice-nolibs-$1
     make -f ../tools/MRS/Makefile.build ./$1/env BUILD=. ENVIRON=../../environ -s
-    ../src/mkmf/bin/list_paths -l ../src/MOM6/config_src/{drivers/FMS_cap,memory/dynamic_symmetric,infra/FMS1,ext*} ../src/MOM6/src ../src/SIS2/*src ../src/{FMS1,coupler,icebergs,ice_param,land_null,atmos_null}
+    ../src/mkmf/bin/list_paths -l ../src/MOM6/config_src/{drivers/FMS_cap,memory/dynamic_symmetric,infra/FMS1,ext*} ../src/MOM6/src ../src/SIS2/*src ../src/icebergs/src ../src/{FMS1,coupler,ice_param,land_null,atmos_null}
     sed -i '/FMS1\/.*\/test_/d' path_names
-    ../src/mkmf/bin/mkmf -t ../src/mkmf/templates/ncrc-$1.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF -D_USE_LEGACY_LAND_ -Duse_AM3_physics" path_names
+    ../src/mkmf/bin/mkmf -t ../src/mkmf/templates/ncrc5-$1.mk -p MOM6 -c"-Duse_libMPI -Duse_netCDF -D_USE_LEGACY_LAND_ -Duse_AM3_physics" path_names
     (source $1/env ; make NETCDF=3 REPRO=1 MOM6 -s -j)
   fi
   section-end nolibs-ocean-ice-compile-$1
@@ -208,8 +208,10 @@ mrs-run-sub-suite () {
   clean-params $EXP_GROUPS
   clean-core-files $EXP_GROUPS
   if [[ "$3" == *"_nonsym"* ]]; then
+    set -e
     time make -f tools/MRS/Makefile.run ocean_only/circle_obcs/ocean.stats.$1 MEMORY=${3/_nonsym/_sym} MODE=$4 LAYOUT=$5 -s -j
   fi
+  set -e
   time make -f tools/MRS/Makefile.run $1_$2 MEMORY=$3 MODE=$4 LAYOUT=$5 -s -j
   tar cf - `find $EXP_GROUPS -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/$1-$2-$3-$4-$5-stats -xf -
   tar cf - `find $EXP_GROUPS -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --one-top-level=results/$1-$2-$3-$4-$5-params -xf -
@@ -291,7 +293,7 @@ run-suite () {
 #   $2 is path of correct results to test against (relative to $STATS_REPO_DIR)
 compare-stats () {
   if [ "$#" -ne 2 ]; then echo "compare-stats needs 2 arguments" ; exit 911 ; fi
-  section-start-open compare-stats-$1-$2-$3-$4-$5 "Checking stats for '$1' against '$2'" 
+  section-start-open compare-stats-$1-$2-$3-$4-$5 "Checking stats for '$1' against '$2'"
   # This checks that any file in the results directory is exactly the same as in regressions/
   ( cd $JOB_DIR/$STATS_REPO_DIR/$1 ; md5sum `find * -type f` ) | ( cd $JOB_DIR/$STATS_REPO_DIR/$2 ; md5sum -c ) 2>&1 | sed "s/ OK/$GRN&$OFF/;s/ FAILED/$RED&$OFF/;s/WARNING/$RED&$OFF/"
   FAIL=${PIPESTATUS[1]}
@@ -409,7 +411,7 @@ while [[ $# -gt 0 ]]; do # Loop through arguments
   cd $START_DIR
   arg=$1
   shift
-  case "$arg" in 
+  case "$arg" in
     -n | --norun)
       DRYRUN=1; echo Dry-run enabled; continue ;;
     +n | ++norun)

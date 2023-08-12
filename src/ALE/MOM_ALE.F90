@@ -1456,24 +1456,30 @@ subroutine ALE_writeCoordinateFile( CS, GV, directory )
 
   character(len=240) :: filepath
 
-  filepath = trim(directory) // trim("Vertical_coordinate")
+  filepath = trim(directory) // trim("Vertical_coordinate.nc")
 
   call write_regrid_file(CS%regridCS, GV, filepath)
 
 end subroutine ALE_writeCoordinateFile
 
 !> Set h to coordinate values for fixed coordinate systems
-subroutine ALE_initThicknessToCoord( CS, G, GV, h )
+subroutine ALE_initThicknessToCoord( CS, G, GV, h, height_units )
   type(ALE_CS), intent(inout)                            :: CS  !< module control structure
   type(ocean_grid_type), intent(in)                      :: G   !< module grid structure
   type(verticalGrid_type), intent(in)                    :: GV  !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h   !< layer thickness in thickness units
+                                                                !! [H ~> m or kg m-2] or height units [Z ~> m]
+  logical,                          optional, intent(in) :: height_units !< If present and true, the
+                                                                !! thicknesses are in height units
 
   ! Local variables
+  real :: scale ! A scaling value for the thicknesses [nondim] or [H Z-1 ~> nondim or kg m-3]
   integer :: i, j
 
+  scale = GV%Z_to_H
+  if (present(height_units)) then ; if (height_units) scale = 1.0 ; endif
   do j = G%jsd,G%jed ; do i = G%isd,G%ied
-    h(i,j,:) = GV%Z_to_H * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j)+G%Z_ref )
+    h(i,j,:) = scale * getStaticThickness( CS%regridCS, 0., G%bathyT(i,j)+G%Z_ref )
   enddo ; enddo
 
 end subroutine ALE_initThicknessToCoord
