@@ -655,7 +655,7 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       enddo
 
       ! diagnostics
-      if (associated(Tr(m)%ad_x)) then ; do i=is,ie ; if (do_i(i,j)) then
+      if (associated(Tr(m)%ad_x)) then ; do I=is-1,ie ; if (do_i(i,j)) then
         Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + flux_x(I,j,m)*Idt
       endif ; enddo ; endif
 
@@ -682,13 +682,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
   ! compute ad2d_x diagnostic outside above j-loop so as to make the summation ordered when OMP is active.
 
   !$OMP ordered
-  do j=js,je ; if (domore_u_initial(j,k)) then
-    do m=1,ntr
-      if (associated(Tr(m)%ad2d_x)) then ; do i=is,ie ; if (do_i(i,j)) then
+  do m=1,ntr ; if (associated(Tr(m)%ad2d_x)) then
+    do j=js,je ; if (domore_u_initial(j,k)) then
+      do I=is-1,ie ; if (do_i(i,j)) then
         Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + flux_x(I,j,m)*Idt
-      endif ; enddo ; endif
-    enddo
-  endif ; enddo ! End of j-loop.
+      endif ; enddo
+    endif ; enddo
+  endif ; enddo ! End of m-loop.
   !$OMP end ordered
 
 end subroutine advect_x
@@ -756,6 +756,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   logical :: usePLMslope
   integer :: i, j, j2, m, n, j_up, stencil
   type(OBC_segment_type), pointer :: segment=>NULL()
+  logical :: domore_v_initial(SZJB_(G)) ! Initial state of domore_v
 
   usePLMslope = .not. (usePPM .and. useHuynh)
   ! stencil for calculating slope values
@@ -778,6 +779,7 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
   ! this would require an additional loop, etc.
   do_j_tr(:) = .false.
   do J=js-1,je ; if (domore_v(J,k)) then ; do j2=1-stencil,stencil ; do_j_tr(j+j2) = .true. ; enddo ; endif ; enddo
+  domore_v_initial(:) = domore_v(:,k)
 
   ! Calculate the j-direction profiles (slopes) of each tracer that
   ! is being advected.
@@ -1034,11 +1036,6 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                           (flux_y(i,m,J) - flux_y(i,m,J-1))) * Ihnew(i)
       endif ; enddo
 
-      ! diagnostics
-      if (associated(Tr(m)%ad_y)) then ; do i=is,ie ; if (do_i(i,j)) then
-        Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
-      endif ; enddo ; endif
-
       ! diagnose convergence of flux_y and add to convergence of flux_x.
       ! division by areaT to get into W/m2 for heat and kg/(s*m2) for salt.
       if (associated(Tr(m)%advection_xy)) then
@@ -1058,16 +1055,24 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     enddo ; enddo
   endif ; enddo
 
-  ! compute ad2d_y diagnostic outside above j-loop so as to make the summation ordered when OMP is active.
-
+  ! compute ad_y and ad2d_y diagnostic outside above j-loop so as to make the summation ordered when OMP is active.
   !$OMP ordered
-  do j=js,je ; if (do_j_tr(j)) then
-    do m=1,ntr
-      if (associated(Tr(m)%ad2d_y)) then ; do i=is,ie ; if (do_i(i,j)) then
+  do m=1,ntr ; if (associated(Tr(m)%ad_y)) then
+    do J=js-1,je ; if (domore_v_initial(J)) then
+      ! (The logical test could be "do_i(i,j) .or. do_i(i+1,j)" to be clearer, but not needed)
+      do i=is,ie ; if (do_i(i,j)) then
+        Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
+      endif ; enddo
+    endif ; enddo
+  endif ; enddo ! End of m-loop.
+
+  do m=1,ntr ; if (associated(Tr(m)%ad2d_y)) then
+    do J=js-1,je ; if (domore_v_initial(J)) then
+      do i=is,ie ; if (do_i(i,j)) then
         Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
-      endif ; enddo ; endif
-    enddo
-  endif ; enddo ! End of j-loop.
+      endif ; enddo
+    endif ; enddo
+  endif ; enddo ! End of m-loop.
   !$OMP end ordered
 
 end subroutine advect_y
