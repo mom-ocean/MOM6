@@ -428,7 +428,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
   real :: G_Rho0             ! G_Earth / Rho0 [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   real :: PFu_bc, PFv_bc     ! The pressure gradient force due to along-layer
                              ! compensated density gradients [L T-2 ~> m s-2]
-  real :: h_neglect          ! A thickness that is so small it is usually lost
+  real :: dz_neglect         ! A vertical distance that is so small it is usually lost
                              ! in roundoff and can be neglected [Z ~> m].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_EOS         ! If true, density is calculated from T & S using
@@ -459,7 +459,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
       "can no longer be used with a compressible EOS. Use #define ANALYTIC_FV_PGF.")
   endif
 
-  h_neglect = GV%H_subroundoff * GV%H_to_Z
+  dz_neglect = GV%dZ_subroundoff
   I_Rho0 = 1.0/CS%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
 
@@ -582,7 +582,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     !$OMP parallel do default(shared) private(h_star,PFu_bc,PFv_bc)
     do k=1,nz
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        h_star(i,j) = (e(i,j,K) - e(i,j,K+1)) + h_neglect
+        h_star(i,j) = (e(i,j,K) - e(i,j,K+1)) + dz_neglect
       enddo ; enddo
       do j=js,je ; do I=Isq,Ieq
         PFu_bc = -1.0*(rho_star(i+1,j,k) - rho_star(i,j,k)) * (G%IdxCu(I,j) * &
@@ -676,7 +676,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   real :: Rho0xG             ! g_Earth * Rho0 [R L2 Z-1 T-2 ~> kg s-2 m-2]
   logical :: use_EOS         ! If true, density is calculated from T & S using
                              ! an equation of state.
-  real :: z_neglect          ! A thickness that is so small it is usually lost
+  real :: dz_neglect          ! A vertical distance that is so small it is usually lost
                              ! in roundoff and can be neglected [Z ~> m].
   integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
@@ -687,14 +687,14 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   Rho0xG = Rho0 * GV%g_Earth
   G_Rho0 = GV%g_Earth / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
-  z_neglect = GV%H_subroundoff*GV%H_to_Z
+  dz_neglect = GV%dZ_subroundoff
 
   if (use_EOS) then
     if (present(rho_star)) then
      !$OMP parallel do default(shared) private(Ihtot)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
+          Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + dz_neglect)
           pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_Z
         enddo
         do k=2,nz ; do i=Isq,Ieq+1
@@ -706,7 +706,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       !$OMP parallel do default(shared) private(Ihtot,press,rho_in_situ,T_int,S_int,dR_dT,dR_dS)
       do j=Jsq,Jeq+1
         do i=Isq,Ieq+1
-          Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
+          Ihtot(i) = GV%H_to_Z / ((e(i,j,1)-e(i,j,nz+1)) + dz_neglect)
           press(i) = -Rho0xG*(e(i,j,1) - G%Z_ref)
         enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), press, rho_in_situ, &
@@ -735,7 +735,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
     !$OMP parallel do default(shared) private(Ihtot)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + z_neglect)
+        Ihtot(i) = 1.0 / ((e(i,j,1)-e(i,j,nz+1)) + dz_neglect)
         pbce(i,j,1) = GV%g_prime(1) * GV%H_to_Z
       enddo
       do k=2,nz ; do i=Isq,Ieq+1

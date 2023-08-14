@@ -80,7 +80,7 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
   logical, dimension(SZIB_(G),SZJB_(G)) :: do_I ! Booleans for calculation at u or v points
                                                 ! updated while moving up layers
   real :: A_layer ! Integral of fractional open width from bottom to current layer [Z ~> m]
-  real :: h_min ! ! The minimum layer thickness [Z ~> m]
+  real :: dz_min  ! The minimum layer thickness [Z ~> m]
   real :: dmask ! The depth below which porous barrier is not applied [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
@@ -100,7 +100,7 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
 
   call calc_eta_at_uv(eta_u, eta_v, CS%eta_interp, dmask, h, tv, G, GV, US)
 
-  h_min = GV%Angstrom_H * GV%H_to_Z
+  dz_min = GV%Angstrom_Z
 
   ! u-points
   do j=js,je ; do I=Isq,Ieq ; do_I(I,j) = .False. ; enddo ; enddo
@@ -125,7 +125,7 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
     do k=nk,1,-1 ; do j=js,je ; do I=Isq,Ieq ; if (do_I(I,j)) then
       call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
                           eta_u(I,j,K), A_layer, do_I(I,j))
-      if (eta_u(I,j,K) - (eta_u(I,j,K+1)+h_min) > 0.0) then
+      if (eta_u(I,j,K) - (eta_u(I,j,K+1)+dz_min) > 0.0) then
         pbv%por_face_areaU(I,j,k) = min(1.0, (A_layer - A_layer_prev(I,j)) / (eta_u(I,j,K) - eta_u(I,j,K+1)))
       else
         pbv%por_face_areaU(I,j,k) = 0.0 ! use calc_por_interface() might be a better choice
@@ -157,7 +157,7 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
     do k=nk,1,-1 ; do J=Jsq,Jeq ; do i=is,ie ; if (do_I(i,J)) then
       call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
                           eta_v(i,J,K), A_layer, do_I(i,J))
-      if (eta_v(i,J,K) - (eta_v(i,J,K+1)+h_min) > 0.0) then
+      if (eta_v(i,J,K) - (eta_v(i,J,K+1)+dz_min) > 0.0) then
         pbv%por_face_areaV(i,J,k) = min(1.0, (A_layer - A_layer_prev(i,J)) / (eta_v(i,J,K) - eta_v(i,J,K+1)))
       else
         pbv%por_face_areaV(i,J,k) = 0.0 ! use calc_por_interface() might be a better choice
@@ -286,7 +286,7 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
 
   ! local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Layer interface heights [Z ~> m].
-  real :: h_neglect ! Negligible thicknesses [Z ~> m]
+  real :: dz_neglect ! A negligible height difference [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
   is = G%isc; ie = G%iec; js = G%jsc; je = G%jec; nk = GV%ke
@@ -295,7 +295,7 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   ! currently no treatment for using optional find_eta arguments if present
   call find_eta(h, tv, G, GV, US, eta, halo_size=1)
 
-  h_neglect = GV%H_subroundoff * GV%H_to_Z
+  dz_neglect = GV%dZ_subroundoff
 
   do K=1,nk+1
     do j=js,je ; do I=Isq,Ieq ; eta_u(I,j,K) = dmask ; enddo ; enddo
@@ -333,10 +333,10 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
     case (ETA_INTERP_HARM)  ! Harmonic mean
       do K=1,nk+1
         do j=js,je ; do I=Isq,Ieq ; if (G%porous_DavgU(I,j) < dmask) then
-          eta_u(I,j,K) = 2.0 * (eta(i,j,K) * eta(i+1,j,K)) / (eta(i,j,K) + eta(i+1,j,K) + h_neglect)
+          eta_u(I,j,K) = 2.0 * (eta(i,j,K) * eta(i+1,j,K)) / (eta(i,j,K) + eta(i+1,j,K) + dz_neglect)
         endif ; enddo ; enddo
         do J=Jsq,Jeq ; do i=is,ie ; if (G%porous_DavgV(i,J) < dmask) then
-          eta_v(i,J,K) = 2.0 * (eta(i,j,K) * eta(i,j+1,K)) / (eta(i,j,K) + eta(i,j+1,K) + h_neglect)
+          eta_v(i,J,K) = 2.0 * (eta(i,j,K) * eta(i,j+1,K)) / (eta(i,j,K) + eta(i,j+1,K) + dz_neglect)
         endif ; enddo ; enddo
       enddo
     case default

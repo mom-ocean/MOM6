@@ -957,9 +957,9 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
   real :: KE_term(SZI_(G),SZJ_(G),SZK_(GV)) ! A term in the kinetic energy budget
                                  ! [H L2 T-3 ~> m3 s-3 or W m-2]
   real :: KE_u(SZIB_(G),SZJ_(G)) ! The area integral of a KE term in a layer at u-points
-                                 ! [H L4 T-3 ~> m5 s-3 or kg m2 s-3]
+                                 ! [H L4 T-3 ~> m5 s-3 or W]
   real :: KE_v(SZI_(G),SZJB_(G)) ! The area integral of a KE term in a layer at v-points
-                                 ! [H L4 T-3 ~> m5 s-3 or kg m2 s-3]
+                                 ! [H L4 T-3 ~> m5 s-3 or W]
   real :: KE_h(SZI_(G),SZJ_(G))  ! A KE term contribution at tracer points
                                  ! [H L2 T-3 ~> m3 s-3 or W m-2]
 
