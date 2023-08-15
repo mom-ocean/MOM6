@@ -637,19 +637,33 @@ function real_string(val)
   elseif (val == 0.) then
     real_string = "0.0"
   else
-    if ((abs(val) <= 1.0e-100) .or. (abs(val) >= 1.0e100)) then
-      write(real_string(1:32), '(ES24.14E3)') val
-      if (.not.testFormattedFloatIsReal(real_string,val)) &
-        write(real_string(1:32), '(ES24.15E3)') val
+    if ((abs(val) < 1.0e-99) .or. (abs(val) >= 1.0e100)) then
+      write(real_string(1:32), '(ES24.14E4)') val
+      if (scan(real_string, "eE") == 0) then  ! Fix a bug with a missing E in PGI formatting
+        ind = scan(real_string, "-+", back=.true.)
+        if (ind > index(real_string, ".") ) &  ! Avoid changing a leading sign.
+          real_string = real_string(1:ind-1)//"E"//real_string(ind:)
+      endif
+      if (.not.testFormattedFloatIsReal(real_string, val)) then
+        write(real_string(1:32), '(ES25.15E4)') val
+        if (scan(real_string, "eE") == 0) then  ! Fix a bug with a missing E in PGI formatting
+          ind = scan(real_string, "-+", back=.true.)
+          if (ind > index(real_string, ".") ) &  ! Avoid changing a leading sign.
+            real_string = real_string(1:ind-1)//"E"//real_string(ind:)
+        endif
+      endif
+      ! Remove a leading 0 from the exponent, if it is there.
+      ind = max(index(real_string, "E+0"), index(real_string, "E-0"))
+      if (ind > 0) real_string = real_string(1:ind+1)//real_string(ind+3:)
     else
       write(real_string(1:32), '(ES23.14)') val
-      if (.not.testFormattedFloatIsReal(real_string,val)) &
+      if (.not.testFormattedFloatIsReal(real_string, val)) &
         write(real_string(1:32), '(ES23.15)') val
     endif
-    do
-      ind = index(real_string,"0E")
+    do  ! Remove extra trailing 0s before the exponent.
+      ind = index(real_string, "0E")
       if (ind == 0) exit
-      if (real_string(ind-1:ind-1) == ".") exit
+      if (real_string(ind-1:ind-1) == ".") exit ! Leave at least one digit after the decimal point.
       real_string = real_string(1:ind-1)//real_string(ind+1:)
     enddo
   endif

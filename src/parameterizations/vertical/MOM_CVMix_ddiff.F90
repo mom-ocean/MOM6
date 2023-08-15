@@ -28,14 +28,14 @@ type, public :: CVMix_ddiff_cs ; private
   ! Parameters
   real    :: strat_param_max !< maximum value for the stratification parameter [nondim]
   real    :: kappa_ddiff_s   !< leading coefficient in formula for salt-fingering regime
-                             !! for salinity diffusion [m2 s-1]
+                             !! for salinity diffusion [Z2 T-1 ~> m2 s-1]
   real    :: ddiff_exp1      !< interior exponent in salt-fingering regime formula [nondim]
   real    :: ddiff_exp2      !< exterior exponent in salt-fingering regime formula [nondim]
-  real    :: mol_diff        !< molecular diffusivity [m2 s-1]
+  real    :: mol_diff        !< molecular diffusivity [Z2 T-1 ~> m2 s-1]
   real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime [nondim]
   real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime [nondim]
   real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime [nondim]
-  real    :: min_thickness      !< Minimum thickness allowed [m]
+  real    :: min_thickness      !< Minimum thickness allowed [Z ~> m]
   character(len=4) :: diff_conv_type !< type of diffusive convection to use. Options are Marmorino &
                                 !! Caldwell 1976 ("MC76"; default) and Kelley 1988, 1990 ("K90")
   logical :: debug              !< If true, turn on debugging
@@ -57,8 +57,8 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   type(diag_ctrl), target, intent(inout) :: diag       !< Diagnostics control structure.
   type(CVMix_ddiff_cs),    pointer       :: CS         !< This module's control structure.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
 
   if (associated(CS)) then
     call MOM_error(WARNING, "CVMix_ddiff_init called with an associated "// &
@@ -82,7 +82,8 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, 'DEBUG', CS%debug, default=.False., do_not_log=.True.)
 
-  call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, default=0.001, do_not_log=.True.)
+  call get_param(param_file, mdl, 'MIN_THICKNESS', CS%min_thickness, &
+                 units="m", scale=US%m_to_Z, default=0.001, do_not_log=.True.)
 
   call openParameterBlock(param_file,'CVMIX_DDIFF')
 
@@ -91,8 +92,8 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
                  units="nondim", default=2.55)
 
   call get_param(param_file, mdl, "KAPPA_DDIFF_S", CS%kappa_ddiff_s, &
-                 "Leading coefficient in formula for salt-fingering regime "//&
-                 "for salinity diffusion.", units="m2 s-1", default=1.0e-4)
+                 "Leading coefficient in formula for salt-fingering regime for salinity diffusion.", &
+                 units="m2 s-1", default=1.0e-4, scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "DDIFF_EXP1", CS%ddiff_exp1, &
                  "Interior exponent in salt-fingering regime formula.", &
@@ -116,7 +117,7 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "MOL_DIFF", CS%mol_diff, &
                  "Molecular diffusivity used in CVMix double diffusion.", &
-                 units="m2 s-1", default=1.5e-6)
+                 units="m2 s-1", default=1.5e-6,  scale=US%m2_s_to_Z2_T)
 
   call get_param(param_file, mdl, "DIFF_CONV_TYPE", CS%diff_conv_type, &
                  "type of diffusive convection to use. Options are Marmorino \n" //&
@@ -126,10 +127,10 @@ logical function CVMix_ddiff_init(Time, G, GV, US, param_file, diag, CS)
   call closeParameterBlock(param_file)
 
   call cvmix_init_ddiff(strat_param_max=CS%strat_param_max,          &
-                        kappa_ddiff_s=CS%kappa_ddiff_s,           &
+                        kappa_ddiff_s=US%Z2_T_to_m2_s*CS%kappa_ddiff_s, &
                         ddiff_exp1=CS%ddiff_exp1,                 &
                         ddiff_exp2=CS%ddiff_exp2,                 &
-                        mol_diff=CS%mol_diff,                     &
+                        mol_diff=US%Z2_T_to_m2_s*CS%mol_diff,     &
                         kappa_ddiff_param1=CS%kappa_ddiff_param1, &
                         kappa_ddiff_param2=CS%kappa_ddiff_param2, &
                         kappa_ddiff_param3=CS%kappa_ddiff_param3, &
@@ -160,21 +161,21 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
   ! Local variables
   real, dimension(SZK_(GV)) :: &
     cellHeight, &  !< Height of cell centers [m]
-    dRho_dT,    &  !< partial derivatives of density wrt temp [R C-1 ~> kg m-3 degC-1]
-    dRho_dS,    &  !< partial derivatives of density wrt saln [R S-1 ~> kg m-3 ppt-1]
+    dRho_dT,    &  !< partial derivatives of density with temperature [R C-1 ~> kg m-3 degC-1]
+    dRho_dS,    &  !< partial derivatives of density with salinity [R S-1 ~> kg m-3 ppt-1]
     pres_int,   &  !< pressure at each interface [R L2 T-2 ~> Pa]
     temp_int,   &  !< temp and at interfaces [C ~> degC]
     salt_int,   &  !< salt at at interfaces [S ~> ppt]
     alpha_dT,   &  !< alpha*dT across interfaces [kg m-3]
     beta_dS,    &  !< beta*dS across interfaces [kg m-3]
-    dT,         &  !< temp. difference between adjacent layers [C ~> degC]
-    dS             !< salt difference between adjacent layers [S ~> ppt]
+    dT,         &  !< temperature difference between adjacent layers [C ~> degC]
+    dS             !< salinity difference between adjacent layers [S ~> ppt]
   real, dimension(SZK_(GV)+1) :: &
     Kd1_T,      &  !< Diapycanal diffusivity of temperature [m2 s-1].
     Kd1_S          !< Diapycanal diffusivity of salinity [m2 s-1].
 
   real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [m]
-  real :: dh, hcorr
+  real :: dh, hcorr ! Limited thicknesses and a cumulative correction [Z ~> m]
   integer :: i, k
 
   ! initialize dummy variables
@@ -184,7 +185,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
 
 
   ! GMM, I am leaving some code commented below. We need to pass BLD to
-  ! this soubroutine to avoid adding diffusivity above that. This needs
+  ! this subroutine to avoid adding diffusivity above that. This needs
   ! to be done once we re-structure the order of the calls.
   !if (.not. associated(hbl)) then
   !  allocate(hbl(SZI_(G), SZJ_(G)));
@@ -234,16 +235,16 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
     hcorr = 0.0
     ! compute heights at cell center and interfaces
     do k=1,GV%ke
-      dh = h(i,j,k) * GV%H_to_m ! Nominal thickness to use for increment
+      dh = h(i,j,k) * GV%H_to_Z ! Nominal thickness to use for increment, in height units
       dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
       hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
       dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
-      cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
-      iFaceHeight(k+1) = iFaceHeight(k) - dh
+      cellHeight(k)    = iFaceHeight(k) - 0.5 * US%Z_to_m*dh
+      iFaceHeight(k+1) = iFaceHeight(k) - US%Z_to_m*dh
     enddo
 
     ! gets index of the level and interface above hbl
-    !kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight,hbl(i,j))
+    !kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, hbl(i,j))
 
     Kd1_T(:) = 0.0 ; Kd1_S(:) = 0.0
     call CVMix_coeffs_ddiff(Tdiff_out=Kd1_T(:), &
@@ -277,7 +278,7 @@ logical function CVMix_ddiff_is_used(param_file)
 
 end function CVMix_ddiff_is_used
 
-!> Clear pointers and dealocate memory
+!> Clear pointers and deallocate memory
 ! NOTE: Placeholder destructor
 subroutine CVMix_ddiff_end(CS)
   type(CVMix_ddiff_cs), pointer :: CS !< Control structure for this module that

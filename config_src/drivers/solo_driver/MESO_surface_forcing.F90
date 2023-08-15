@@ -31,7 +31,7 @@ type, public :: MESO_surface_forcing_CS ; private
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
   real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar [R L Z T-1 ~> Pa]
+                             !! that contributes to ustar [R L Z T-2 ~> Pa]
   real, dimension(:,:), pointer :: &
     T_Restore(:,:) => NULL(), & !< The temperature to restore the SST toward [C ~> degC].
     S_Restore(:,:) => NULL(), & !< The salinity to restore the sea surface salnity toward [S ~> ppt]

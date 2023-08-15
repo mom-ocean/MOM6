@@ -51,7 +51,7 @@ program MOM_sum_driver
   logical :: unit_in_use
 
   real, allocatable, dimension(:) :: &
-    depth_tot_R, depth_tot_std, depth_tot_fastR
+    depth_tot_R, depth_tot_std, depth_tot_fastR ! Various sums of the depths [m]
   integer :: reproClock, fastreproClock, stdClock, initClock
 
   !-----------------------------------------------------------------------
@@ -175,16 +175,17 @@ contains
 subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
   type(dyn_horgrid_type),           intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                    intent(out) :: D !< Ocean bottom depth in m or [Z ~> m] if US is present
+                                    intent(out) :: D !< Ocean bottom depth in [m]
   type(param_file_type),            intent(in)  :: param_file !< A structure to parse for run-time parameters
   real,                             intent(in)  :: max_depth !< The maximum ocean depth [m]
 
-  real :: min_depth            ! The minimum ocean depth in m.
-  real :: PI                   ! 3.1415926... calculated as 4*atan(1)
-  real :: D0                   ! A constant to make the maximum     !
-                               ! basin depth MAXIMUM_DEPTH.         !
-  real :: m_to_Z  ! A dimensional rescaling factor.
-  real :: x, y
+  real :: min_depth            ! The minimum ocean depth in [m].
+  real :: PI                   ! 3.1415926... calculated as 4*atan(1) [nondim]
+  real :: D0                   ! A constant to make the maximum
+                               ! basin depth MAXIMUM_DEPTH [m]
+  real :: m_to_Z  ! A dimensional rescaling factor [Z m-1 ~> 1]
+  real :: x ! A fractional position in the x-direction [nondim]
+  real :: y ! A fractional position in the y-direction [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "benchmark_init_topog_local" ! This subroutine's name.
@@ -203,8 +204,8 @@ subroutine benchmark_init_topog_local(D, G, param_file, max_depth)
 
 !  Calculate the depth of the bottom.
   do i=is,ie ; do j=js,je
-    x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
-    y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
+    x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
+    y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
 !  This sets topography that has a reentrant channel to the south.
     D(i,j) = -D0 * ( y*(1.0 + 0.6*cos(4.0*PI*x)) &
                    + 0.75*exp(-6.0*y) &

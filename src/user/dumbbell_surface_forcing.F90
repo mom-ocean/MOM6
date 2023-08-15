@@ -34,7 +34,7 @@ type, public :: dumbbell_surface_forcing_CS ; private
                              !! to the reservoirs
   real :: slp_period         !< Period of sinusoidal pressure wave [days]
   real, dimension(:,:), allocatable :: &
-    forcing_mask             !< A mask regulating where forcing occurs
+    forcing_mask             !< A mask regulating where forcing occurs [nondim]
   real, dimension(:,:), allocatable :: &
     S_restore                !< The surface salinity field toward which to restore [S ~> ppt].
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to regulate the
@@ -201,7 +201,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
 
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
-                 units="m s-2", default = 9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
+                 units="m s-2", default=9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
@@ -210,13 +210,13 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "DUMBBELL_SLP_AMP", CS%slp_amplitude, &
                  "Amplitude of SLP forcing in reservoirs.", &
-                 units="Pa", default = 10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+                 units="Pa", default=10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default=1.0)
   call get_param(param_file, mdl, "DUMBBELL_ROTATION", dbrotate, &
                 'Logical for rotation of dumbbell domain.',&
-                 units='nondim', default=.false., do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", &
                  units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)

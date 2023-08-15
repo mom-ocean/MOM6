@@ -40,12 +40,13 @@ subroutine Neverworld_initialize_topography(D, G, param_file, max_depth)
 
   ! Local variables
   real :: PI                   ! 3.1415926... calculated as 4*atan(1)
-  real :: x, y
+  real :: x, y ! Lateral positions normalized by the domain size [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "Neverworld_initialize_topography" ! This subroutine's name.
+  real :: nl_top_amp       ! Amplitude of large-scale topographic features as a fraction of the maximum depth [nondim]
+  real :: nl_roughness_amp ! Amplitude of topographic roughness as a fraction of the maximum depth [nondim]
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
-  real :: nl_roughness_amp, nl_top_amp
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -53,16 +54,16 @@ subroutine Neverworld_initialize_topography(D, G, param_file, max_depth)
 
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NL_ROUGHNESS_AMP", nl_roughness_amp, &
-                 "Amplitude of wavy signal in bathymetry.", default=0.05)
+                 "Amplitude of wavy signal in bathymetry.", units="nondim", default=0.05)
   call get_param(param_file, mdl, "NL_CONTINENT_AMP", nl_top_amp, &
-                 "Scale factor for topography - 0.0 for no continents.", default=1.0)
+                 "Scale factor for topography - 0.0 for no continents.", units="nondim", default=1.0)
 
   PI = 4.0*atan(1.0)
 
 !  Calculate the depth of the bottom.
   do j=js,je ; do i=is,ie
     x = (G%geoLonT(i,j)-G%west_lon) / G%len_lon
-    y =( G%geoLatT(i,j)-G%south_lat) / G%len_lat
+    y = (G%geoLatT(i,j)-G%south_lat) / G%len_lat
 !  This sets topography that has a reentrant channel to the south.
     D(i,j) = 1.0 - 1.1 * spike(y-1,0.12) - 1.1 * spike(y,0.12) - & !< The great northern wall and Antarctica
               nl_top_amp*( &
@@ -83,8 +84,8 @@ end subroutine Neverworld_initialize_topography
 
 !> Returns the value of a cosine-bell function evaluated at x/L
 real function cosbell(x, L)
-  real , intent(in) :: x       !< non-dimensional position
-  real , intent(in) :: L       !< non-dimensional width
+  real , intent(in) :: x       !< non-dimensional position [nondim]
+  real , intent(in) :: L       !< non-dimensional width [nondim]
   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
   PI      = 4.0*atan(1.0)
@@ -94,8 +95,8 @@ end function cosbell
 !> Returns the value of a sin-spike function evaluated at x/L
 real function spike(x, L)
 
-  real , intent(in) :: x       !< non-dimensional position
-  real , intent(in) :: L       !< non-dimensional width
+  real , intent(in) :: x       !< non-dimensional position [nondim]
+  real , intent(in) :: L       !< non-dimensional width [nondim]
   real              :: PI      !< 3.1415926... calculated as 4*atan(1)
 
   PI    = 4.0*atan(1.0)
@@ -126,6 +127,8 @@ real function scurve(x, x0, L)
   s = max( 0., min( 1.,( x - x0 ) / L ) )
   scurve = ( 3. - 2.*s ) * ( s * s )
 end function scurve
+
+! None of the following 7 functions appear to be used.
 
 !> Returns a "coastal" profile.
 real function cstprof(x, x0, L, lf, bf, sf, sh)
@@ -228,7 +231,7 @@ real function circ_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridg
   r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
   r = abs( r - ring_radius) ! Pseudo-distance from a circle
   r = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
-  circ_ridge = 1. - r ! nondim depths (1-frac_ridge_height) .. 1
+  circ_ridge = 1. - r ! Fractional depths (1-frac_ridge_height) .. 1
 end function circ_ridge
 
 !> This subroutine initializes layer thicknesses for the Neverworld test case,
@@ -253,10 +256,13 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
                             ! usually negative because it is positive upward.
   real, dimension(SZK_(GV)) :: h_profile ! Vector of initial thickness profile [Z ~> m].
   real :: e_interface ! Current interface position [Z ~> m].
-  real :: x,y,r1,r2 ! x,y and radial coordinates for computation of initial pert.
-  real :: pert_amp ! Amplitude of perturbations measured in Angstrom_H
-  real :: h_noise ! Amplitude of noise to scale h by
-  real :: noise ! Noise
+  real :: x, y    ! horizontal coordinates for computation of the initial perturbation normalized
+                  ! by the domain sizes [nondim]
+  real :: r1, r2  ! radial coordinates for computation of initial perturbation, normalized
+                  ! by the domain sizes [nondim]
+  real :: pert_amp ! Amplitude of perturbations as a fraction of layer thicknesses [nondim]
+  real :: h_noise ! Amplitude of noise to scale h by [nondim]
+  real :: noise   ! Fractional noise in the layer thicknesses [nondim]
   type(randomNumberStream) :: rns ! Random numbers for stochastic tidal parameterization
   character(len=40)  :: mdl = "Neverworld_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
@@ -283,10 +289,10 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
     e_interface = -depth_tot(i,j)
     do k=nz,2,-1
       h(i,j,k) = GV%Z_to_H * (e0(k) - e_interface) ! Nominal thickness
-      x=(G%geoLonT(i,j)-G%west_lon)/G%len_lon
-      y=(G%geoLatT(i,j)-G%south_lat)/G%len_lat
-      r1=sqrt((x-0.7)**2+(y-0.2)**2)
-      r2=sqrt((x-0.3)**2+(y-0.25)**2)
+      x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
+      y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
+      r1 = sqrt((x-0.7)**2+(y-0.2)**2)
+      r2 = sqrt((x-0.3)**2+(y-0.25)**2)
       h(i,j,k) = h(i,j,k) + pert_amp * (e0(k) - e0(nz+1)) * GV%Z_to_H * &
                             (spike(r1,0.15)-spike(r2,0.15)) ! Prescribed perturbation
       if (h_noise /= 0.) then

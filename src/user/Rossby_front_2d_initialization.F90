@@ -47,9 +47,13 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
                                                       !! parameters without changing h.
 
   integer :: i, j, k, is, ie, js, je, nz
-  real    :: Tz, Dml, eta, stretch, h0
-  real    :: min_thickness, T_range
-  real    :: dRho_dT      ! The partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
+  real    :: Tz         ! Vertical temperature gradient [C Z-1 ~> degC m-1]
+  real    :: Dml        ! Mixed layer depth [Z ~> m]
+  real    :: eta        ! An interface height depth [Z ~> m]
+  real    :: stretch    ! A nondimensional stretching factor [nondim]
+  real    :: h0         ! The stretched thickness per layer [Z ~> m]
+  real    :: T_range    ! Range of temperatures over the vertical [C ~> degC]
+  real    :: dRho_dT    ! The partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -59,13 +63,12 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
 
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   ! Read parameters needed to set thickness
-  call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, &
-                 'Minimum layer thickness',units='m',default=1.e-3, do_not_log=just_read)
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
-                 units='C', default=0.0, do_not_log=just_read)
-  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, scale=US%kg_m3_to_R, do_not_log=.true.)
+                 units='C', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, &
+                 units="kg m-3 degC-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -76,7 +79,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
     case (REGRIDDING_LAYER, REGRIDDING_RHO)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_dT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -87,7 +90,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
     case (REGRIDDING_ZSTAR, REGRIDDING_SIGMA)
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         Dml = Hml( G, G%geoLatT(i,j) )
-        eta = -( -dRho_DT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
+        eta = -( -dRho_dT / GV%Rho0 ) * Tz * 0.5 * ( Dml * Dml )
         stretch = ( ( G%max_depth + eta ) / G%max_depth )
         h0 = ( G%max_depth / real(nz) ) * stretch
         do k = 1, nz
@@ -118,15 +121,18 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, US, &
                                                       !! only read parameters without changing T & S.
 
   integer   :: i, j, k, is, ie, js, je, nz
-  real      :: T_ref, S_ref ! Reference salinity and temerature within surface layer
-  real      :: T_range      ! Range of salinities and temperatures over the vertical
-  real      :: zc, zi, dTdz
+  real      :: T_ref        ! Reference temperature within the surface layer [C ~> degC]
+  real      :: S_ref        ! Reference salinity within the surface layer [S ~> ppt]
+  real      :: T_range      ! Range of temperatures over the vertical [C ~> degC]
+  real      :: zc           ! Position of the middle of the cell [Z ~> m]
+  real      :: zi           ! Bottom interface position relative to the sea surface [H ~> m or kg m-2]
+  real      :: dTdz         ! Vertical temperature gradient [C Z-1 ~> degC m-1]
   character(len=40) :: verticalCoordinate
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
-            default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
+                 default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
                  default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl,"T_REF",T_ref,'Reference temperature', &
@@ -169,12 +175,13 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   logical,                    intent(in)  :: just_read !< If present and true, this call will only
                                                 !! read parameters without setting u & v.
 
-  real    :: T_range      ! Range of salinities and temperatures over the vertical
-  real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f [L2 Z-1 T-1 degC-1 ~> m s-1 degC-1]
-  real    :: dRho_dT      ! The partial derivative of density with temperature [R degC-1 ~> kg m-3 degC-1]
-  real    :: Dml, zi, zc, zm ! Depths [Z ~> m].
+  real    :: T_range      ! Range of temperatures over the vertical [C ~> degC]
+  real    :: dUdT         ! Factor to convert dT/dy into dU/dz, g*alpha/f [L2 Z-1 T-1 C-1 ~> m s-1 degC-1]
+  real    :: dRho_dT      ! The partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+  real    :: Dml          ! Mixed layer depth [Z ~> m]
+  real    :: zi, zc, zm   ! Depths [Z ~> m].
   real    :: f            ! The local Coriolis parameter [T-1 ~> s-1]
-  real    :: Ty           ! The meridional temperature gradient [degC L-1 ~> degC m-1]
+  real    :: Ty           ! The meridional temperature gradient [C L-1 ~> degC m-1]
   real    :: hAtU         ! Interpolated layer thickness [Z ~> m].
   integer :: i, j, k, is, ie, js, je, nz
   character(len=40) :: verticalCoordinate
@@ -184,8 +191,9 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
-                 units='C', default=0.0, do_not_log=just_read)
-  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, default=-0.2, scale=US%kg_m3_to_R, do_not_log=.true.)
+                 units='C', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
+  call get_param(param_file, mdl, "DRHO_DT", dRho_dT, &
+                 units='kg m-3 degC-1', default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC, do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -197,7 +205,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
     dUdT = 0.0 ; if (abs(f) > 0.0) &
       dUdT = ( GV%g_Earth*dRho_dT ) / ( f * GV%Rho0 )
     Dml = Hml( G, G%geoLatT(i,j) )
-    Ty = US%L_to_m*dTdy( G, T_range, G%geoLatT(i,j) )
+    Ty = dTdy( G, T_range, G%geoLatT(i,j), US )
     zi = 0.
     do k = 1, nz
       hAtU = 0.5*(h(i,j,k)+h(i+1,j,k)) * GV%H_to_Z
@@ -212,12 +220,12 @@ end subroutine Rossby_front_initialize_velocity
 
 !> Pseudo coordinate across domain used by Hml() and dTdy()
 !! returns a coordinate from -PI/2 .. PI/2 squashed towards the
-!! center of the domain.
+!! center of the domain [radians].
 real function yPseudo( G, lat )
   type(ocean_grid_type), intent(in) :: G   !< Grid structure
-  real,                  intent(in) :: lat !< Latitude
+  real,                  intent(in) :: lat !< Latitude in arbitrary units, often [km]
   ! Local
-  real :: PI
+  real :: PI   ! The ratio of the circumference of a circle to its diameter [nondim]
 
   PI = 4.0 * atan(1.0)
   yPseudo = ( ( lat - G%south_lat ) / G%len_lat ) - 0.5 ! -1/2 .. 1/.2
@@ -226,12 +234,12 @@ end function yPseudo
 
 
 !> Analytic prescription of mixed layer depth in 2d Rossby front test,
-!! in the same units as G%max_depth
+!! in the same units as G%max_depth (usually [Z ~> m])
 real function Hml( G, lat )
   type(ocean_grid_type), intent(in) :: G   !< Grid structure
-  real,                  intent(in) :: lat !< Latitude
+  real,                  intent(in) :: lat !< Latitude in arbitrary units, often [km]
   ! Local
-  real :: dHML, HMLmean
+  real :: dHML, HMLmean ! The range and mean of the mixed layer depths [Z ~> m]
 
   dHML = 0.5 * ( HMLmax - HMLmin ) * G%max_depth
   HMLmean = 0.5 * ( HMLmin + HMLmax ) * G%max_depth
@@ -239,18 +247,22 @@ real function Hml( G, lat )
 end function Hml
 
 
-!> Analytic prescription of mixed layer temperature gradient in 2d Rossby front test
-real function dTdy( G, dT, lat )
+!> Analytic prescription of mixed layer temperature gradient in [C L-1 ~> degC m-1] in 2d Rossby front test
+real function dTdy( G, dT, lat, US )
   type(ocean_grid_type), intent(in) :: G     !< Grid structure
-  real,                  intent(in) :: dT    !< Top to bottom temperature difference
-  real,                  intent(in) :: lat   !< Latitude
+  real,                  intent(in) :: dT    !< Top to bottom temperature difference [C ~> degC]
+  real,                  intent(in) :: lat   !< Latitude in [km]
+  type(unit_scale_type), intent(in) :: US    !< A dimensional unit scaling type
   ! Local
-  real :: PI, dHML, dHdy
-  real :: km = 1.e3 ! AXIS_UNITS = 'k' (1000 m)
+  real :: PI   ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: dHML ! The range of the mixed layer depths [Z ~> m]
+  real :: dHdy ! The mixed layer depth gradient [Z L-1 ~> m m-1]
+  real :: km_to_L ! Horizontal axis unit conversion factor when AXIS_UNITS = 'k' (1000 m) [L km-1 ~> 1000]
 
   PI = 4.0 * atan(1.0)
+  km_to_L = 1.0e3*US%m_to_L
   dHML = 0.5 * ( HMLmax - HMLmin ) * G%max_depth
-  dHdy = dHML * ( PI / ( frontFractionalWidth * G%len_lat * km ) ) * cos( yPseudo(G, lat) )
+  dHdy = dHML * ( PI / ( frontFractionalWidth * G%len_lat * km_to_L ) ) * cos( yPseudo(G, lat) )
   dTdy = -( dT / G%max_depth ) * dHdy
 
 end function dTdy

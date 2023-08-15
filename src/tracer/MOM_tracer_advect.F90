@@ -157,7 +157,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
     !   This loop reconstructs the thickness field the last time that the
     ! tracers were updated, probably just after the diabatic forcing.  A useful
     ! diagnostic could be to compare this reconstruction with that older value.
-      do i=is,ie ; do j=js,je
+      do j=js,je ; do i=is,ie
         hprev(i,j,k) = max(0.0, G%areaT(i,j)*h_end(i,j,k) + &
              ((uhr(I,j,k) - uhr(I-1,j,k)) + (vhr(i,J,k) - vhr(i,J-1,k))))
     ! In the case that the layer is now dramatically thinner than it was previously,
@@ -167,7 +167,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
                        max(0.0, 1.0e-13*hprev(i,j,k) - G%areaT(i,j)*h_end(i,j,k))
       enddo ; enddo
     else
-      do i=is,ie ; do j=js,je
+      do j=js,je ; do i=is,ie
         hprev(i,j,k) = vol_prev(i,j,k)
       enddo ; enddo
     endif

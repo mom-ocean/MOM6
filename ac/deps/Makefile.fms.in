@@ -8,6 +8,7 @@ CC = @CC@
 FC = @FC@
 LD = @FC@
 AR = @AR@
+PYTHON = @PYTHON@
 MAKEDEP = @MAKEDEP@
 
 DEFS = @DEFS@
@@ -22,4 +23,4 @@ ARFLAGS = @ARFLAGS@
 .PHONY: depend
 depend: Makefile.dep
 Makefile.dep:
-	$(MAKEDEP) -o Makefile.dep -e -x libFMS.a @srcdir@
+	$(PYTHON) $(MAKEDEP) -o Makefile.dep -e -x libFMS.a @srcdir@

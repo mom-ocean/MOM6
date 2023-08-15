@@ -38,7 +38,7 @@ type, public :: optics_type
       !< The maximum wavelength in each band of penetrating shortwave radiation [nm]
 
   real :: PenSW_flux_absorb !< A heat flux that is small enough to be completely absorbed in the next
-                        !! sufficiently thick layer [H degC T-1 ~> degC m s-1 or degC kg m-2 s-1].
+                        !! sufficiently thick layer [C H T-1 ~> degC m s-1 or degC kg m-2 s-1].
   real :: PenSW_absorb_Invlen !< The inverse of the thickness that is used to absorb the remaining
                         !! shortwave heat flux when it drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2].
   integer :: answer_date  !< The vintage of the order of arithmetic and expressions in the optics
@@ -68,7 +68,7 @@ type, public :: opacity_CS ; private
                              !! The default is 10 m-1 - a value for muddy water.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
-  logical :: warning_issued  !< A flag that is used to avoid repetative warnings.
+  logical :: warning_issued  !< A flag that is used to avoid repetitive warnings.
 
   !>@{ Diagnostic IDs
   integer :: id_sw_pen = -1, id_sw_vis_pen = -1
@@ -402,7 +402,7 @@ end subroutine opacity_from_chl
 !> This sets the blue-wavelength opacity according to the scheme proposed by
 !! Morel and Antoine (1994).
 function opacity_morel(chl_data)
-  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in [mg m-3]
   real :: opacity_morel !< The returned opacity [m-1]
 
   !   The following are coefficients for the optical model taken from Morel and
@@ -411,8 +411,8 @@ function opacity_morel(chl_data)
   ! appropriate when using an interactive ecosystem model that predicts
   ! three-dimensional chl-a values.
   real, dimension(6), parameter :: &
-    Z2_coef = (/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/)
-  real :: Chl, Chl2 ! The log10 of chl_data (in mg m-3), and Chl^2.
+    Z2_coef = (/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/) ! Extinction length coefficients [m]
+  real :: Chl, Chl2 ! The log10 of chl_data (in mg m-3), and Chl^2 [nondim]
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
   opacity_morel = 1.0 / ( (Z2_coef(1) + Z2_coef(2)*Chl) + Chl2 * &
@@ -430,9 +430,9 @@ function SW_pen_frac_morel(chl_data)
   ! chlorophyll-a through the water column.  Other approaches may be more
   ! appropriate when using an interactive ecosystem model that predicts
   ! three-dimensional chl-a values.
-  real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2.
+  real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2 [nondim]
   real, dimension(6), parameter :: &
-    V1_coef = (/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/)
+    V1_coef = (/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/) ! Penetrating fraction coefficients [nondim]
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
   SW_pen_frac_morel = 1.0 - ( (V1_coef(1) + V1_coef(2)*Chl) + Chl2 * &
@@ -442,7 +442,7 @@ end function SW_pen_frac_morel
 !>   This sets the blue-wavelength opacity according to the scheme proposed by
 !! Manizza, M. et al, 2005.
 function opacity_manizza(chl_data)
-  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration [mg m-3]
   real :: opacity_manizza !< The returned opacity [m-1]
 !   This sets the blue-wavelength opacity according to the scheme proposed by Manizza, M. et al, 2005.
 
@@ -460,15 +460,16 @@ subroutine extract_optics_slice(optics, j, G, GV, opacity, opacity_scale, penSW_
   real, dimension(max(optics%nbands,1),SZI_(G),SZK_(GV)), &
                  optional, intent(out) :: opacity   !< The opacity in each band, i-point, and layer [Z-1 ~> m-1],
                                                     !! but with units that can be altered by opacity_scale.
-  real,          optional, intent(in)  :: opacity_scale !< A factor by which to rescale the opacity.
+  real,          optional, intent(in)  :: opacity_scale !< A factor by which to rescale the opacity [nondim] or
+                                                    !! [Z H-1 ~> 1 or m3 kg-1]
   real, dimension(max(optics%nbands,1),SZI_(G)), &
                  optional, intent(out) :: penSW_top !< The shortwave radiation [Q R Z T-1 ~> W m-2]
                                                     !! at the surface in each of the nbands bands
                                                     !! that penetrates beyond the surface skin layer.
-  real,          optional, intent(in)  :: penSW_scale !< A factor by which to rescale the shortwave flux.
+  real,          optional, intent(in)  :: penSW_scale !< A factor by which to rescale the shortwave flux [nondim]?
 
   ! Local variables
-  real :: scale_opacity, scale_penSW ! Rescaling factors
+  real :: scale_opacity, scale_penSW ! Rescaling factors [nondim]?
   integer :: i, is, ie, k, nz, n
   is = G%isc ; ie = G%iec ; nz = GV%ke
 
@@ -604,7 +605,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
                             ! is moved upward [C H ~> degC m or degC kg m-2]
   real :: SWa               ! fraction of the absorbed shortwave that is
                             ! moved to layers above with adjustAbsorptionProfile [nondim]
-  real :: coSWa_frac        ! The fraction of SWa that is actually moved upward.
+  real :: coSWa_frac        ! The fraction of SWa that is actually moved upward [nondim]
   real :: min_SW_heat       ! A minimum remaining shortwave heating within a timestep that will be simply
                             ! absorbed in the next layer for computational efficiency, instead of
                             ! continuing to penetrate [C H ~> degC m or degC kg m-2].
@@ -617,7 +618,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
                             ! was not entirely absorbed.
   logical :: TKE_calc       ! If true, calculate the implications to the
                             ! TKE budget of the shortwave heating.
-  real :: C1_6, C1_60
+  real :: C1_6, C1_60       ! Rational fractions [nondim]
   integer :: is, ie, nz, i, k, ks, n
 
   if (nsw < 1) return
@@ -830,7 +831,7 @@ subroutine sumSWoverBands(G, GV, US, h, nsw, optics, j, dt, &
   real :: SW_trans        ! fraction of shortwave radiation not
                           ! absorbed in a layer [nondim]
   real :: unabsorbed      ! fraction of the shortwave radiation
-                          ! not absorbed because the layers are too thin.
+                          ! not absorbed because the layers are too thin [nondim].
   real :: Ih_limit        ! inverse of the total depth at which the
                           ! surface fluxes start to be limited [H-1 ~> m-1 or m2 kg-1]
   real :: min_SW_heat     ! A minimum remaining shortwave heating within a timestep that will be simply

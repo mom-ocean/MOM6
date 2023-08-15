@@ -13,7 +13,7 @@ use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs
+use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_domain
 use MOM_density_integrals, only : int_density_dz, int_specific_vol_dp
 use MOM_density_integrals, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
 use MOM_density_integrals, only : int_spec_vol_dp_generic_plm
@@ -477,12 +477,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     T_t, T_b    ! Top and bottom edge values for linear reconstructions
                 ! of temperature within each layer [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    rho_pgf, rho_stanley_pgf ! Density [kg m-3] from EOS with and without SGS T variance
-                                        ! in Stanley parameterization.
+    rho_pgf, rho_stanley_pgf ! Density [R ~> kg m-3] from EOS with and without SGS T variance
+                             ! in Stanley parameterization.
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
-    p_stanley ! Pressure [Pa] estimated with Rho_0
-  real :: rho_stanley_scalar ! Scalar quantity to hold density [kg m-3] in Stanley diagnostics.
-  real :: p_stanley_scalar ! Scalar quantity to hold pressure [Pa] in Stanley diagnostics.
+    p_stanley   ! Pressure [R L2 T-2 ~> Pa] estimated with Rho_0
+  real :: zeros(SZI_(G))     ! An array of zero values that can be used as an argument [various]
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
@@ -493,12 +492,15 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   real :: G_Rho0             ! G_Earth / Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
   real :: rho_ref            ! The reference density [R ~> kg m-3].
   real :: dz_neglect         ! A minimal thickness [Z ~> m], like e.
+  real :: H_to_RL2_T2        ! A factor to convert from thickness units (H) to pressure
+                             ! units [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
   real, parameter :: C1_6 = 1.0/6.0 ! [nondim]
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer, dimension(2) :: EOSdom_h ! The i-computational domain for the equation of state at tracer points
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
 
@@ -759,25 +761,43 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   endif
 
   if (CS%use_stanley_pgf) then
-    do j=js,je ; do i=is,ie ;
-      p_stanley_scalar=0.0
-      do k=1, nz
-        p_stanley_scalar = p_stanley_scalar + 0.5 * h(i,j,k) * GV%H_to_Pa !Pressure at mid-point of layer
-        call calculate_density(tv%T(i,j,k), tv%S(i,j,k), p_stanley_scalar, 0.0, 0.0, 0.0, &
-          rho_stanley_scalar, tv%eqn_of_state)
-        rho_pgf(i,j,k) = rho_stanley_scalar
-        call calculate_density(tv%T(i,j,k), tv%S(i,j,k), p_stanley_scalar, tv%varT(i,j,k), 0.0, 0.0, &
-          rho_stanley_scalar, tv%eqn_of_state)
-        rho_stanley_pgf(i,j,k) = rho_stanley_scalar
-        p_stanley(i,j,k) = p_stanley_scalar
-        p_stanley_scalar = p_stanley_scalar + 0.5 * h(i,j,k) * GV%H_to_Pa !Pressure at bottom of layer
-     enddo; enddo; enddo
-   endif
+    ! Calculated diagnostics related to the Stanley parameterization
+    zeros(:) = 0.0
+    EOSdom_h(:) = EOS_domain(G%HI)
+    if ((CS%id_p_stanley>0) .or. (CS%id_rho_pgf>0) .or. (CS%id_rho_stanley_pgf>0)) then
+      ! Find the pressure at the mid-point of each layer.
+      H_to_RL2_T2 = GV%g_Earth*GV%H_to_RZ
+      if (use_p_atm) then
+        do j=js,je ; do i=is,ie
+          p_stanley(i,j,1) = 0.5*h(i,j,1) * H_to_RL2_T2 + p_atm(i,j)
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
+          p_stanley(i,j,1) = 0.5*h(i,j,1) * H_to_RL2_T2
+        enddo ; enddo
+      endif
+      do k=2,nz ; do j=js,je ; do i=is,ie
+        p_stanley(i,j,k) = p_stanley(i,j,k-1) + 0.5*(h(i,j,k-1) + h(i,j,k)) * H_to_RL2_T2
+      enddo ; enddo ; enddo
+    endif
+    if (CS%id_p_stanley>0) call post_data(CS%id_p_stanley, p_stanley, CS%diag)
+    if (CS%id_rho_pgf>0) then
+      do k=1,nz ; do j=js,je
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_stanley(:,j,k), zeros, &
+                               zeros, zeros, rho_pgf(:,j,k), tv%eqn_of_state, EOSdom_h)
+      enddo ; enddo
+      call post_data(CS%id_rho_pgf, rho_pgf, CS%diag)
+    endif
+    if (CS%id_rho_stanley_pgf>0) then
+      do k=1,nz ; do j=js,je
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_stanley(:,j,k), tv%varT(:,j,k), &
+                               zeros, zeros, rho_stanley_pgf(:,j,k), tv%eqn_of_state, EOSdom_h)
+      enddo ; enddo
+      call post_data(CS%id_rho_stanley_pgf, rho_stanley_pgf, CS%diag)
+    endif
+  endif
 
   if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
-  if (CS%id_rho_pgf>0) call post_data(CS%id_rho_pgf, rho_pgf, CS%diag)
-  if (CS%id_rho_stanley_pgf>0) call post_data(CS%id_rho_stanley_pgf, rho_stanley_pgf, CS%diag)
-  if (CS%id_p_stanley>0) call post_data(CS%id_p_stanley, p_stanley, CS%diag)
 
 end subroutine PressureForce_FV_Bouss
 
@@ -791,10 +811,14 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_FV_CS),  intent(inout) :: CS !< Finite volume PGF control structure
   type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
+
+  ! Local variables
+  real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
+                           ! temperature variance [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
-  logical :: use_ALE
+  logical :: use_ALE       ! If true, use the Vertical Lagrangian Remap algorithm
 
   CS%initialized = .true.
   CS%diag => diag ; CS%Time => Time
@@ -842,12 +866,18 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
                  "If true, turn on Stanley SGS T variance parameterization "// &
                  "in PGF code.", default=.false.)
   if (CS%use_stanley_pgf) then
+    call get_param(param_file, mdl, "STANLEY_COEFF", Stanley_coeff, &
+                 "Coefficient correlating the temperature gradient and SGS T variance.", &
+                 units="nondim", default=-1.0, do_not_log=.true.)
+    if (Stanley_coeff < 0.0) call MOM_error(FATAL, &
+                 "STANLEY_COEFF must be set >= 0 if USE_STANLEY_PGF is true.")
+
     CS%id_rho_pgf = register_diag_field('ocean_model', 'rho_pgf', diag%axesTL, &
-        Time, 'rho in PGF', 'kg m3')
+        Time, 'rho in PGF', 'kg m-3', conversion=US%R_to_kg_m3)
     CS%id_rho_stanley_pgf = register_diag_field('ocean_model', 'rho_stanley_pgf', diag%axesTL, &
-        Time, 'rho in PGF with Stanley correction', 'kg m3')
+        Time, 'rho in PGF with Stanley correction', 'kg m-3', conversion=US%R_to_kg_m3)
     CS%id_p_stanley = register_diag_field('ocean_model', 'p_stanley', diag%axesTL, &
-        Time, 'p in PGF with Stanley correction', 'Pa')
+        Time, 'p in PGF with Stanley correction', 'Pa', conversion=US%RL2_T2_to_Pa)
   endif
   if (CS%tides) then
     CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
@@ -857,7 +887,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   CS%GFS_scale = 1.0
   if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
 
-  call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale)
+  call log_param(param_file, mdl, "GFS / G_EARTH", CS%GFS_scale, units="nondim")
 
 end subroutine PressureForce_FV_init
 

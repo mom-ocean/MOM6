@@ -7,7 +7,8 @@ module MOM_hybgen_regrid
 use MOM_EOS,              only : EOS_type, calculate_density
 use MOM_error_handler,    only : MOM_mesg, MOM_error, FATAL, WARNING, assert
 use MOM_file_parser,      only : get_param, param_file_type, log_param
-use MOM_io,               only : close_file, create_file, file_type, fieldtype, file_exists
+use MOM_io,               only : create_MOM_file, file_exists
+use MOM_io,               only : MOM_infra_file, MOM_field
 use MOM_io,               only : MOM_read_data, MOM_write_field, vardesc, var_desc, SINGLE_FILE
 use MOM_string_functions, only : slasher
 use MOM_unit_scaling,     only : unit_scale_type
@@ -172,11 +173,11 @@ subroutine init_hybgen_regrid(CS, GV, US, param_file)
   call get_param(param_file, mdl, "HYBGEN_REMAP_MIN_ZSTAR_DILATE", CS%min_dilate, &
                  "The maximum amount of dilation that is permitted when converting target "//&
                  "coordinates from z to z* [nondim].  This limit applies when drying occurs.", &
-                 default=0.5)
+                 units="nondim", default=0.5)
   call get_param(param_file, mdl, "HYBGEN_REMAP_MAX_ZSTAR_DILATE", CS%max_dilate, &
                  "The maximum amount of dilation that is permitted when converting target "//&
                  "coordinates from z to z* [nondim].  This limit applies when drying occurs.", &
-                 default=2.0)
+                 units="nondim", default=2.0)
 
   CS%onem = 1.0 * GV%m_to_H
 
@@ -210,20 +211,20 @@ subroutine write_Hybgen_coord_file(GV, CS, filepath)
   character(len=*),        intent(in)  :: filepath  !< The full path to the file to write
   ! Local variables
   type(vardesc) :: vars(3)
-  type(fieldtype) :: fields(3)
-  type(file_type) :: IO_handle ! The I/O handle of the fileset
+  type(MOM_field) :: fields(3)
+  type(MOM_infra_file) :: IO_handle ! The I/O handle of the fileset
 
   vars(1) = var_desc("dp0", "meter", "Deep z-level minimum thicknesses for Hybgen", '1', 'L', '1')
   vars(2) = var_desc("ds0", "meter", "Shallow z-level minimum thicknesses for Hybgen", '1', 'L', '1')
   vars(3) = var_desc("Rho_tgt", "kg m-3", "Target coordinate potential densities for Hybgen", '1', 'L', '1')
-  call create_file(IO_handle, trim(filepath), vars, 3, fields, SINGLE_FILE, GV=GV)
+  call create_MOM_file(IO_handle, trim(filepath), vars, 3, fields, &
+      SINGLE_FILE, GV=GV)
 
   call MOM_write_field(IO_handle, fields(1), CS%dp0k, scale=CS%coord_scale)
   call MOM_write_field(IO_handle, fields(2), CS%ds0k, scale=CS%coord_scale)
   call MOM_write_field(IO_handle, fields(3), CS%target_density, scale=CS%Rho_coord_scale)
 
-  call close_file(IO_handle)
-
+  call IO_handle%close()
 end subroutine write_Hybgen_coord_file
 
 !> This subroutine deallocates memory in the control structure for the hybgen module

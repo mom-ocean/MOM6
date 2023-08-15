@@ -76,11 +76,11 @@ logical :: debug_redundant = .true. !< Check redundant values on PE boundaries
 contains
 
 !> MOM_debugging_init initializes the MOM_debugging module, and sets
-!! the parameterts that control which checks are active for MOM6.
+!! the parameters that control which checks are active for MOM6.
 subroutine MOM_debugging_init(param_file)
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_debugging" ! This module's name.
 
   call log_version(param_file, mdl, version, debugging=.true.)
@@ -102,19 +102,24 @@ end subroutine MOM_debugging_init
 
 !> Check for consistency between the duplicated points of a 3-D C-grid vector
 subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
-                                direction)
+                                direction, unscale)
   character(len=*),                    intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),               intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%jsd:,:),   intent(in)    :: u_comp !< The u-component of the vector
-                                                               !! to be checked for consistency
-  real, dimension(G%isd:,G%JsdB:,:),   intent(in)    :: v_comp !< The u-component of the vector
-                                                               !! to be checked for consistency
+  real, dimension(G%IsdB:,G%jsd:,:),   intent(in)    :: u_comp !< The u-component of the vector to be
+                                                               !! checked for consistency in arbitrary,
+                                                               !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%JsdB:,:),   intent(in)    :: v_comp !< The u-component of the vector to be
+                                                               !! checked for consistency in arbitrary,
+                                                               !! possibly rescaled units [A ~> a]
   integer,                   optional, intent(in)    :: is     !< The starting i-index to check
   integer,                   optional, intent(in)    :: ie     !< The ending i-index to check
   integer,                   optional, intent(in)    :: js     !< The starting j-index to check
   integer,                   optional, intent(in)    :: je     !< The ending j-index to check
   integer,                   optional, intent(in)    :: direction !< the direction flag to be
                                                                !! passed to pass_vector
+  real,                      optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                               !! arrays to give consistent output [a A-1 ~> 1]
+
   ! Local variables
   character(len=24) :: mesg_k
   integer :: k
@@ -126,30 +131,37 @@ subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
 
     call check_redundant_vC2d(trim(mesg)//trim(mesg_k), u_comp(:,:,k), &
-             v_comp(:,:,k), G, is, ie, js, je, direction)
+             v_comp(:,:,k), G, is, ie, js, je, direction, unscale)
   enddo
 end subroutine  check_redundant_vC3d
 
 !> Check for consistency between the duplicated points of a 2-D C-grid vector
 subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
-                                direction)
+                                direction, unscale)
   character(len=*),                intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),           intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector
-                                                           !! to be checked for consistency
-  real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp !< The u-component of the vector
-                                                           !! to be checked for consistency
+  real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                           !! checked for consistency in arbitrary,
+                                                           !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp !< The u-component of the vector to be
+                                                           !! checked for consistency in arbitrary,
+                                                           !! possibly rescaled units [A ~> a]
   integer,               optional, intent(in)    :: is     !< The starting i-index to check
   integer,               optional, intent(in)    :: ie     !< The ending i-index to check
   integer,               optional, intent(in)    :: js     !< The starting j-index to check
   integer,               optional, intent(in)    :: je     !< The ending j-index to check
   integer,               optional, intent(in)    :: direction !< the direction flag to be
                                                            !! passed to pass_vector
+  real,                  optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                           !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
-  real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed)
-  real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed)
-  real :: u_resym(G%IsdB:G%IedB,G%jsd:G%jed)
-  real :: v_resym(G%isd:G%ied,G%JsdB:G%JedB)
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input vector while [a] indicates the unscaled (e.g., mks) units to used for output.
+  real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed)  ! A nonsymmetric version of u_comp [A ~> a]
+  real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed)  ! A nonsymmetric version of v_comp [A ~> a]
+  real :: u_resym(G%IsdB:G%IedB,G%jsd:G%jed) ! A reconstructed symmetric version of u_comp [A ~> a]
+  real :: v_resym(G%isd:G%ied,G%JsdB:G%JedB) ! A reconstructed symmetric version of v_comp [A ~> a]
+  real :: sc  ! A factor that undoes the scaling for the arrays to give consistent output [a A-1 ~> 1]
   character(len=128) :: mesg2
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -162,6 +174,8 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     ! This only works with symmetric memory, so otherwise return.
     if ((isd == IsdB) .and. (jsd == JsdB)) return
   endif
+
+  sc  = 1.0 ; if (present(unscale)) sc = unscale
 
   do i=isd,ied ; do j=jsd,jed
     u_nonsym(i,j) = u_comp(i,j) ; v_nonsym(i,j) = v_comp(i,j)
@@ -187,7 +201,7 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
         redundant_prints(3) < max_redundant_prints) then
       write(mesg2,'(" redundant u-components",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
-           u_comp(i,j), u_resym(i,j),u_comp(i,j)-u_resym(i,j),i,j,pe_here()
+           sc*u_comp(i,j), sc*u_resym(i,j), sc*(u_comp(i,j)-u_resym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(3) = redundant_prints(3) + 1
     endif
@@ -197,7 +211,7 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
         redundant_prints(3) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
-           v_comp(i,j), v_resym(i,j),v_comp(i,j)-v_resym(i,j),i,j, &
+           sc*v_comp(i,j), sc*v_resym(i,j), sc*(v_comp(i,j)-v_resym(i,j)), i, j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)
       redundant_prints(3) = redundant_prints(3) + 1
@@ -207,14 +221,17 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 end subroutine  check_redundant_vC2d
 
 !> Check for consistency between the duplicated points of a 3-D scalar at corner points
-subroutine check_redundant_sB3d(mesg, array, G, is, ie, js, je)
+subroutine check_redundant_sB3d(mesg, array, G, is, ie, js, je, unscale)
   character(len=*),                     intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),                intent(inout) :: G     !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:,:),   intent(in)    :: array !< The array to be checked for consistency
+  real, dimension(G%IsdB:,G%JsdB:,:),   intent(in)    :: array !< The array to be checked for consistency in
+                                                               !! arbitrary, possibly rescaled units [A ~> a]
   integer,                    optional, intent(in)    :: is    !< The starting i-index to check
   integer,                    optional, intent(in)    :: ie    !< The ending i-index to check
   integer,                    optional, intent(in)    :: js    !< The starting j-index to check
   integer,                    optional, intent(in)    :: je    !< The ending j-index to check
+  real,                       optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                               !! arrays to give consistent output [a A-1 ~> 1]
 
   ! Local variables
   character(len=24) :: mesg_k
@@ -227,22 +244,28 @@ subroutine check_redundant_sB3d(mesg, array, G, is, ie, js, je)
     else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
 
     call check_redundant_sB2d(trim(mesg)//trim(mesg_k), array(:,:,k), &
-                              G, is, ie, js, je)
+                              G, is, ie, js, je, unscale)
   enddo
 end subroutine  check_redundant_sB3d
 
 !> Check for consistency between the duplicated points of a 2-D scalar at corner points
-subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je)
+subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je, unscale)
   character(len=*),                 intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G     !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: array !< The array to be checked for consistency
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: array !< The array to be checked for consistency in
+                                                           !! arbitrary, possibly rescaled units [A ~> a]
   integer,                optional, intent(in)    :: is    !< The starting i-index to check
   integer,                optional, intent(in)    :: ie    !< The ending i-index to check
   integer,                optional, intent(in)    :: js    !< The starting j-index to check
   integer,                optional, intent(in)    :: je    !< The ending j-index to check
+  real,                   optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                           !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
-  real :: a_nonsym(G%isd:G%ied,G%jsd:G%jed)
-  real :: a_resym(G%IsdB:G%IedB,G%JsdB:G%JedB)
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units to used for output.
+  real :: a_nonsym(G%isd:G%ied,G%jsd:G%jed)    ! A nonsymmetric version of array [A ~> a]
+  real :: a_resym(G%IsdB:G%IedB,G%JsdB:G%JedB) ! A reconstructed symmetric version of array [A ~> a]
+  real :: sc  ! A factor that undoes the scaling for the arrays to give consistent output [a A-1 ~> 1]
   character(len=128) :: mesg2
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -255,6 +278,8 @@ subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je)
     ! This only works with symmetric memory, so otherwise return.
     if ((isd == IsdB) .and. (jsd == JsdB)) return
   endif
+
+  sc = 1.0 ; if (present(unscale)) sc = unscale
 
   do i=isd,ied ; do j=jsd,jed
     a_nonsym(i,j) = array(i,j)
@@ -281,7 +306,7 @@ subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je)
         redundant_prints(2) < max_redundant_prints) then
       write(mesg2,'(" Redundant points",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
-           array(i,j), a_resym(i,j),array(i,j)-a_resym(i,j),i,j,pe_here()
+           sc*array(i,j), sc*a_resym(i,j), sc*(array(i,j)-a_resym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(2) = redundant_prints(2) + 1
     endif
@@ -291,19 +316,23 @@ end subroutine  check_redundant_sB2d
 
 !> Check for consistency between the duplicated points of a 3-D B-grid vector
 subroutine check_redundant_vB3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
-                                direction)
+                                direction, unscale)
   character(len=*),                    intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),               intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: u_comp !< The u-component of the vector
-                                                           !! to be checked for consistency
-  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: v_comp !< The v-component of the vector
-                                                           !! to be checked for consistency
+  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: u_comp !< The u-component of the vector to be
+                                                               !! checked for consistency in arbitrary,
+                                                               !! possibly rescaled units [A ~> a]
+  real, dimension(G%IsdB:,G%JsdB:,:),  intent(in)    :: v_comp !< The v-component of the vector to be
+                                                               !! checked for consistency in arbitrary,
+                                                               !! possibly rescaled units [A ~> a]
   integer,                   optional, intent(in)    :: is     !< The starting i-index to check
   integer,                   optional, intent(in)    :: ie     !< The ending i-index to check
   integer,                   optional, intent(in)    :: js     !< The starting j-index to check
   integer,                   optional, intent(in)    :: je     !< The ending j-index to check
   integer,                   optional, intent(in)    :: direction !< the direction flag to be
                                                                !! passed to pass_vector
+  real,                      optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                               !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   character(len=24) :: mesg_k
   integer :: k
@@ -315,30 +344,37 @@ subroutine check_redundant_vB3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
 
     call check_redundant_vB2d(trim(mesg)//trim(mesg_k), u_comp(:,:,k), &
-             v_comp(:,:,k), G, is, ie, js, je, direction)
+             v_comp(:,:,k), G, is, ie, js, je, direction, unscale)
   enddo
 end subroutine  check_redundant_vB3d
 
 !> Check for consistency between the duplicated points of a 2-D B-grid vector
 subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
-                                direction)
+                                direction, unscale)
   character(len=*),                 intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: u_comp !< The u-component of the vector
-                                                            !! to be checked for consistency
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector
-                                                            !! to be checked for consistency
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                            !! checked for consistency in arbitrary,
+                                                            !! possibly rescaled units [A ~> a]
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector to be
+                                                            !! checked for consistency in arbitrary,
+                                                            !! possibly rescaled units [A ~> a]
   integer,                optional, intent(in)    :: is     !< The starting i-index to check
   integer,                optional, intent(in)    :: ie     !< The ending i-index to check
   integer,                optional, intent(in)    :: js     !< The starting j-index to check
   integer,                optional, intent(in)    :: je     !< The ending j-index to check
   integer,                optional, intent(in)    :: direction !< the direction flag to be
                                                             !! passed to pass_vector
+  real,                   optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                            !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
-  real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed)
-  real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed)
-  real :: u_resym(G%IsdB:G%IedB,G%JsdB:G%JedB)
-  real :: v_resym(G%IsdB:G%IedB,G%JsdB:G%JedB)
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input vector while [a] indicates the unscaled (e.g., mks) units to used for output.
+  real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed)    ! A nonsymmetric version of u_comp [A ~> a]
+  real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed)    ! A nonsymmetric version of v_comp [A ~> a]
+  real :: u_resym(G%IsdB:G%IedB,G%JsdB:G%JedB) ! A reconstructed symmetric version of u_comp [A ~> a]
+  real :: v_resym(G%IsdB:G%IedB,G%JsdB:G%JedB) ! A reconstructed symmetric version of v_comp [A ~> a]
+  real :: sc  ! A factor that undoes the scaling for the arrays to give consistent output [a A-1 ~> 1]
   character(len=128) :: mesg2
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
   integer :: Isq, Ieq, Jsq, Jeq, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -351,6 +387,8 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     ! This only works with symmetric memory, so otherwise return.
     if ((isd == IsdB) .and. (jsd == JsdB)) return
   endif
+
+  sc = 1.0 ; if (present(unscale)) sc = unscale
 
   do i=isd,ied ; do j=jsd,jed
     u_nonsym(i,j) = u_comp(i,j) ; v_nonsym(i,j) = v_comp(i,j)
@@ -377,7 +415,7 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
         redundant_prints(2) < max_redundant_prints) then
       write(mesg2,'(" redundant u-components",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
-           u_comp(i,j), u_resym(i,j),u_comp(i,j)-u_resym(i,j),i,j,pe_here()
+           sc*u_comp(i,j), sc*u_resym(i,j), sc*(u_comp(i,j)-u_resym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(2) = redundant_prints(2) + 1
     endif
@@ -387,7 +425,7 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
         redundant_prints(2) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
-           v_comp(i,j), v_resym(i,j),v_comp(i,j)-v_resym(i,j),i,j, &
+           sc*v_comp(i,j), sc*v_resym(i,j), sc*(v_comp(i,j)-v_resym(i,j)), i, j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)
       redundant_prints(2) = redundant_prints(2) + 1
@@ -397,14 +435,17 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 end subroutine  check_redundant_vB2d
 
 !> Check for consistency between the duplicated points of a 3-D scalar at tracer points
-subroutine check_redundant_sT3d(mesg, array, G, is, ie, js, je)
+subroutine check_redundant_sT3d(mesg, array, G, is, ie, js, je, unscale)
   character(len=*),                     intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),                intent(inout) :: G     !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:,:),     intent(in)    :: array !< The array to be checked for consistency
+  real, dimension(G%isd:,G%jsd:,:),     intent(in)    :: array !< The array to be checked for consistency in
+                                                               !! arbitrary, possibly rescaled units [A ~> a]
   integer,                    optional, intent(in)    :: is    !< The starting i-index to check
   integer,                    optional, intent(in)    :: ie    !< The ending i-index to check
   integer,                    optional, intent(in)    :: js    !< The starting j-index to check
   integer,                    optional, intent(in)    :: je    !< The ending j-index to check
+  real,                       optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                               !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   character(len=24) :: mesg_k
   integer :: k
@@ -416,22 +457,28 @@ subroutine check_redundant_sT3d(mesg, array, G, is, ie, js, je)
     else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
 
     call check_redundant_sT2d(trim(mesg)//trim(mesg_k), array(:,:,k), &
-                              G, is, ie, js, je)
+                              G, is, ie, js, je, unscale)
   enddo
 end subroutine  check_redundant_sT3d
 
 
 !> Check for consistency between the duplicated points of a 2-D scalar at tracer points
-subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
+subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je, unscale)
   character(len=*),                 intent(in)    :: mesg  !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G     !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:),   intent(in)    :: array !< The array to be checked for consistency
+  real, dimension(G%isd:,G%jsd:),   intent(in)    :: array !< The array to be checked for consistency in
+                                                           !! arbitrary, possibly rescaled units [A ~> a]
   integer,                optional, intent(in)    :: is    !< The starting i-index to check
   integer,                optional, intent(in)    :: ie    !< The ending i-index to check
   integer,                optional, intent(in)    :: js    !< The starting j-index to check
   integer,                optional, intent(in)    :: je    !< The ending j-index to check
+  real,                   optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                           !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
-  real :: a_nonsym(G%isd:G%ied,G%jsd:G%jed)
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input array while [a] indicates the unscaled (e.g., mks) units to used for output.
+  real :: a_nonsym(G%isd:G%ied,G%jsd:G%jed)  ! A version of array with halo points updated by message passing [A ~> a]
+  real :: sc ! A factor that undoes the scaling for the arrays to give consistent output [a A-1 ~> 1]
   character(len=128) :: mesg2
 
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
@@ -441,6 +488,8 @@ subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
   is_ch = G%isc ; ie_ch = G%iec ; js_ch = G%jsc ; je_ch = G%jec
   if (present(is)) is_ch = is ; if (present(ie)) ie_ch = ie
   if (present(js)) js_ch = js ; if (present(js)) je_ch = je
+
+  sc = 1.0 ; if (present(unscale)) sc = unscale
 
   ! This only works on points outside of the standard computational domain.
   if ((is_ch == G%isc) .and. (ie_ch == G%iec) .and. &
@@ -457,7 +506,7 @@ subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je)
         redundant_prints(1) < max_redundant_prints) then
       write(mesg2,'(" Redundant points",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
-           array(i,j), a_nonsym(i,j),array(i,j)-a_nonsym(i,j),i,j,pe_here()
+           sc*array(i,j), sc*a_nonsym(i,j), sc*(array(i,j)-a_nonsym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(1) = redundant_prints(1) + 1
     endif
@@ -467,19 +516,23 @@ end subroutine  check_redundant_sT2d
 
 !> Check for consistency between the duplicated points of a 3-D A-grid vector
 subroutine check_redundant_vT3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
-                               direction)
+                               direction, unscale)
   character(len=*),                    intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),               intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: u_comp !< The u-component of the vector
-                                                           !! to be checked for consistency
-  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: v_comp !< The v-component of the vector
-                                                           !! to be checked for consistency
+  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: u_comp !< The u-component of the vector to be
+                                                               !! checked for consistency in arbitrary,
+                                                               !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%jsd:,:),    intent(in)    :: v_comp !< The v-component of the vector to be
+                                                               !! checked for consistency in arbitrary,
+                                                               !! possibly rescaled units [A ~> a]
   integer,                   optional, intent(in)    :: is     !< The starting i-index to check
   integer,                   optional, intent(in)    :: ie     !< The ending i-index to check
   integer,                   optional, intent(in)    :: js     !< The starting j-index to check
   integer,                   optional, intent(in)    :: je     !< The ending j-index to check
   integer,                   optional, intent(in)    :: direction !< the direction flag to be
                                                            !! passed to pass_vector
+  real,                      optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                           !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   character(len=24) :: mesg_k
   integer :: k
@@ -491,28 +544,35 @@ subroutine check_redundant_vT3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
 
     call check_redundant_vT2d(trim(mesg)//trim(mesg_k), u_comp(:,:,k), &
-             v_comp(:,:,k), G, is, ie, js, je, direction)
+             v_comp(:,:,k), G, is, ie, js, je, direction, unscale)
   enddo
 end subroutine  check_redundant_vT3d
 
 !> Check for consistency between the duplicated points of a 2-D A-grid vector
 subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
-                               direction)
+                               direction, unscale)
   character(len=*),                intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),           intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:),  intent(in)    :: u_comp !< The u-component of the vector
-                                                           !! to be checked for consistency
-  real, dimension(G%isd:,G%jsd:),  intent(in)    :: v_comp !< The v-component of the vector
-                                                           !! to be checked for consistency
+  real, dimension(G%isd:,G%jsd:),  intent(in)    :: u_comp !< The u-component of the vector to be
+                                                           !! checked for consistency in arbitrary,
+                                                           !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%jsd:),  intent(in)    :: v_comp !< The v-component of the vector to be
+                                                           !! checked for consistency in arbitrary,
+                                                           !! possibly rescaled units [A ~> a]
   integer,               optional, intent(in)    :: is     !< The starting i-index to check
   integer,               optional, intent(in)    :: ie     !< The ending i-index to check
   integer,               optional, intent(in)    :: js     !< The starting j-index to check
   integer,               optional, intent(in)    :: je     !< The ending j-index to check
   integer,               optional, intent(in)    :: direction !< the direction flag to be
                                                            !! passed to pass_vector
+  real,                  optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                           !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
-  real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed)
-  real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed)
+  ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
+  ! of the input vector while [a] indicates the unscaled (e.g., mks) units to used for output.
+  real :: u_nonsym(G%isd:G%ied,G%jsd:G%jed) ! A version of u_comp with halo points updated by message passing [A ~> a]
+  real :: v_nonsym(G%isd:G%ied,G%jsd:G%jed) ! A version of v_comp with halo points updated by message passing [A ~> a]
+  real :: sc ! A factor that undoes the scaling for the arrays to give consistent output [a A-1 ~> 1]
   character(len=128) :: mesg2
 
   integer :: i, j, is_ch, ie_ch, js_ch, je_ch
@@ -524,6 +584,8 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   is_ch = G%isc ; ie_ch = G%iec ; js_ch = G%jsc ; je_ch = G%jec
   if (present(is)) is_ch = is ; if (present(ie)) ie_ch = ie
   if (present(js)) js_ch = js ; if (present(js)) je_ch = je
+
+  sc = 1.0 ; if (present(unscale)) sc = unscale
 
   ! This only works on points outside of the standard computational domain.
   if ((is_ch == G%isc) .and. (ie_ch == G%iec) .and. &
@@ -540,7 +602,7 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
         redundant_prints(1) < max_redundant_prints) then
       write(mesg2,'(" redundant u-components",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
-           u_comp(i,j), u_nonsym(i,j),u_comp(i,j)-u_nonsym(i,j),i,j,pe_here()
+           sc*u_comp(i,j), sc*u_nonsym(i,j), sc*(u_comp(i,j)-u_nonsym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(1) = redundant_prints(1) + 1
     endif
@@ -550,7 +612,7 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
         redundant_prints(1) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
                     & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
-           v_comp(i,j), v_nonsym(i,j),v_comp(i,j)-v_nonsym(i,j),i,j, &
+           sc*v_comp(i,j), sc*v_nonsym(i,j), sc*(v_comp(i,j)-v_nonsym(i,j)), i, j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)
       redundant_prints(1) = redundant_prints(1) + 1
@@ -559,163 +621,202 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
 
 end subroutine  check_redundant_vT2d
 
+
+! It appears that none of the other routines in this file are ever called.
+
 !> Do a checksum and redundant point check on a 3d C-grid vector.
-subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars)
+subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   character(len=*),                  intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),             intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%jsd:,:), intent(in)    :: u_comp !< The u-component of the vector
-  real, dimension(G%isd:,G%JsdB:,:), intent(in)    :: v_comp !< The v-component of the vector
+  real, dimension(G%IsdB:,G%jsd:,:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                             !! checked for consistency in arbitrary,
+                                                             !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%JsdB:,:), intent(in)    :: v_comp !< The v-component of the vector to be
+                                                             !! checked for consistency in arbitrary,
+                                                             !! possibly rescaled units [A ~> a]
   integer,                 optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,                 optional, intent(in)    :: scalars !< If true this is a pair of
                                                              !! scalars that are being checked.
+  real,                    optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                             !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uvchksum(mesg, u_comp, v_comp, G%HI, halos)
+    call uvchksum(mesg, u_comp, v_comp, G%HI, halos, scale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
-      call check_redundant_C(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+      call check_redundant_C(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair, unscale=unscale)
     else
-      call check_redundant_C(mesg, u_comp, v_comp, G)
+      call check_redundant_C(mesg, u_comp, v_comp, G, unscale=unscale)
     endif
   endif
 
 end subroutine chksum_vec_C3d
 
 !> Do a checksum and redundant point check on a 2d C-grid vector.
-subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, halos, scalars)
+subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   character(len=*),                intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),           intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector
-  real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector
+  real, dimension(G%IsdB:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                           !! checked for consistency in arbitrary,
+                                                           !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector to be
+                                                           !! checked for consistency in arbitrary,
+                                                           !! possibly rescaled units [A ~> a]
   integer,               optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,               optional, intent(in)    :: scalars !< If true this is a pair of
                                                            !! scalars that are being checked.
+  real,                  optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                           !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uvchksum(mesg, u_comp, v_comp, G%HI, halos)
+    call uvchksum(mesg, u_comp, v_comp, G%HI, halos, scale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
-      call check_redundant_C(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+      call check_redundant_C(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair, unscale=unscale)
     else
-      call check_redundant_C(mesg, u_comp, v_comp, G)
+      call check_redundant_C(mesg, u_comp, v_comp, G, unscale=unscale)
     endif
   endif
 
 end subroutine chksum_vec_C2d
 
 !> Do a checksum and redundant point check on a 3d B-grid vector.
-subroutine chksum_vec_B3d(mesg, u_comp, v_comp, G, halos, scalars)
+subroutine chksum_vec_B3d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   character(len=*),                   intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),              intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:,:), intent(in)    :: u_comp !< The u-component of the vector
-  real, dimension(G%IsdB:,G%JsdB:,:), intent(in)    :: v_comp !< The v-component of the vector
+  real, dimension(G%IsdB:,G%JsdB:,:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                              !! checked for consistency in arbitrary,
+                                                              !! possibly rescaled units [A ~> a]
+  real, dimension(G%IsdB:,G%JsdB:,:), intent(in)    :: v_comp !< The v-component of the vector to be
+                                                              !! checked for consistency in arbitrary,
+                                                              !! possibly rescaled units [A ~> a]
   integer,                  optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,                  optional, intent(in)    :: scalars !< If true this is a pair of
                                                               !! scalars that are being checked.
+  real,                     optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                              !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call Bchksum(u_comp, mesg//"(u)", G%HI, halos)
-    call Bchksum(v_comp, mesg//"(v)", G%HI, halos)
+    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, scale=unscale)
+    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, scale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
-      call check_redundant_B(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+      call check_redundant_B(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair, unscale=unscale)
     else
-      call check_redundant_B(mesg, u_comp, v_comp, G)
+      call check_redundant_B(mesg, u_comp, v_comp, G, unscale=unscale)
     endif
   endif
 
 end subroutine chksum_vec_B3d
 
 ! Do a checksum and redundant point check on a 2d B-grid vector.
-subroutine chksum_vec_B2d(mesg, u_comp, v_comp, G, halos, scalars, symmetric)
+subroutine chksum_vec_B2d(mesg, u_comp, v_comp, G, halos, scalars, symmetric, unscale)
   character(len=*),                 intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: u_comp !< The u-component of the vector
-  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                            !! checked for consistency in arbitrary,
+                                                            !! possibly rescaled units [A ~> a]
+  real, dimension(G%IsdB:,G%JsdB:), intent(in)    :: v_comp !< The v-component of the vector to be
+                                                            !! checked for consistency in arbitrary,
+                                                            !! possibly rescaled units [A ~> a]
   integer,                optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,                optional, intent(in)    :: scalars !< If true this is a pair of
                                                             !! scalars that are being checked.
   logical,                optional, intent(in)    :: symmetric !< If true, do the checksums on the
                                                             !! full symmetric computational domain.
+  real,                   optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                            !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, symmetric=symmetric)
-    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, symmetric=symmetric)
+    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, symmetric=symmetric, scale=unscale)
+    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, symmetric=symmetric, scale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
-      call check_redundant_B(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+      call check_redundant_B(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair, unscale=unscale)
     else
-      call check_redundant_B(mesg, u_comp, v_comp, G)
+      call check_redundant_B(mesg, u_comp, v_comp, G, unscale=unscale)
     endif
   endif
 
 end subroutine chksum_vec_B2d
 
 !> Do a checksum and redundant point check on a 3d C-grid vector.
-subroutine chksum_vec_A3d(mesg, u_comp, v_comp, G, halos, scalars)
+subroutine chksum_vec_A3d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   character(len=*),                 intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),            intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:,:), intent(in)    :: u_comp !< The u-component of the vector
-  real, dimension(G%isd:,G%jsd:,:), intent(in)    :: v_comp !< The v-component of the vector
+  real, dimension(G%isd:,G%jsd:,:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                            !! checked for consistency in arbitrary,
+                                                            !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%jsd:,:), intent(in)    :: v_comp !< The v-component of the vector to be
+                                                            !! checked for consistency in arbitrary,
+                                                            !! possibly rescaled units [A ~> a]
   integer,                optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,                optional, intent(in)    :: scalars !< If true this is a pair of
                                                             !! scalars that are being checked.
+  real,                   optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                            !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call hchksum(u_comp, mesg//"(u)", G%HI, halos)
-    call hchksum(v_comp, mesg//"(v)", G%HI, halos)
+    call hchksum(u_comp, mesg//"(u)", G%HI, halos, scale=unscale)
+    call hchksum(v_comp, mesg//"(v)", G%HI, halos, scale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
-      call check_redundant_T(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+      call check_redundant_T(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair, unscale=unscale)
     else
-      call check_redundant_T(mesg, u_comp, v_comp, G)
+      call check_redundant_T(mesg, u_comp, v_comp, G, unscale=unscale)
     endif
   endif
 
 end subroutine chksum_vec_A3d
 
 !> Do a checksum and redundant point check on a 2d C-grid vector.
-subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, halos, scalars)
+subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   character(len=*),               intent(in)    :: mesg   !< An identifying message
   type(ocean_grid_type),          intent(inout) :: G      !< The ocean's grid structure
-  real, dimension(G%isd:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector
-  real, dimension(G%isd:,G%jsd:), intent(in)    :: v_comp !< The v-component of the vector
+  real, dimension(G%isd:,G%jsd:), intent(in)    :: u_comp !< The u-component of the vector to be
+                                                          !! checked for consistency in arbitrary,
+                                                          !! possibly rescaled units [A ~> a]
+  real, dimension(G%isd:,G%jsd:), intent(in)    :: v_comp !< The v-component of the vector to be
+                                                          !! checked for consistency in arbitrary,
+                                                          !! possibly rescaled units [A ~> a]
   integer,              optional, intent(in)    :: halos  !< The width of halos to check (default 0)
   logical,              optional, intent(in)    :: scalars !< If true this is a pair of
                                                           !! scalars that are being checked.
+  real,                 optional, intent(in)    :: unscale !< A factor that undoes the scaling for the
+                                                          !! arrays to give consistent output [a A-1 ~> 1]
   ! Local variables
   logical :: are_scalars
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call hchksum(u_comp, mesg//"(u)", G%HI, halos)
-    call hchksum(v_comp, mesg//"(v)", G%HI, halos)
+    call hchksum(u_comp, mesg//"(u)", G%HI, halos, scale=unscale)
+    call hchksum(v_comp, mesg//"(v)", G%HI, halos, scale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
-      call check_redundant_T(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair)
+      call check_redundant_T(mesg, u_comp, v_comp, G, direction=To_All+Scalar_Pair, unscale=unscale)
     else
-      call check_redundant_T(mesg, u_comp, v_comp, G)
+      call check_redundant_T(mesg, u_comp, v_comp, G, unscale=unscale)
     endif
   endif
 
@@ -725,12 +826,12 @@ end subroutine chksum_vec_A2d
 !! processors of hThick*stuff, where stuff is a 3-d array at tracer points.
 function totalStuff(HI, hThick, areaT, stuff)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights [m]
   real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas [m2]
-  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed
-  real                                         :: totalStuff !< the globally integrated amoutn of stuff
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: stuff  !< The array of stuff to be summed in arbitrary units [a]
+  real                                         :: totalStuff !< the globally integrated amount of stuff [a m3]
   ! Local variables
-  real, dimension(HI%isc:HI%iec, HI%jsc:HI%jec) :: tmp_for_sum
+  real, dimension(HI%isc:HI%iec, HI%jsc:HI%jec) :: tmp_for_sum ! The column integrated amount of stuff in a cell [a m3]
   integer :: i, j, k, nz
 
   nz = size(hThick,3)
@@ -746,18 +847,22 @@ end function totalStuff
 !! as well as the change since the last call.
 subroutine totalTandS(HI, hThick, areaT, temperature, salinity, mesg)
   type(hor_index_type),               intent(in) :: HI     !< A horizontal index type
-  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: hThick !< The array of thicknesses to use as weights [m]
   real, dimension(HI%isd:,HI%jsd:),   intent(in) :: areaT  !< The array of cell areas [m2]
-  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: temperature !< The temperature field to sum
-  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: salinity    !< The salinity field to sum
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: temperature !< The temperature field to sum [degC]
+  real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: salinity    !< The salinity field to sum [ppt]
   character(len=*),                   intent(in) :: mesg        !< An identifying message
   ! NOTE: This subroutine uses "save" data which is not thread safe and is purely for
   ! extreme debugging without a proper debugger.
-  real, save :: totalH = 0., totalT = 0., totalS = 0.
+  real, save :: totalH = 0.   ! The total ocean volume, saved for the next call [m3]
+  real, save :: totalT = 0.   ! The total volume integrated ocean temperature, saved for the next call [degC m3]
+  real, save :: totalS = 0.   ! The total volume integrated ocean salinity, saved for the next call [ppt m3]
   ! Local variables
   logical, save :: firstCall = .true.
-  real, dimension(HI%isc:HI%iec, HI%jsc:HI%jec) :: tmp_for_sum
-  real :: thisH, thisT, thisS, delH, delT, delS
+  real, dimension(HI%isc:HI%iec, HI%jsc:HI%jec) :: tmp_for_sum ! The volume of each column [m3]
+  real :: thisH, delH  ! The total ocean volume and the change from the last call [m3]
+  real :: thisT, delT  ! The current total volume integrated temperature and the change from the last call [degC m3]
+  real :: thisS, delS  ! The current total volume integrated salinity and the change from the last call [ppt m3]
   integer :: i, j, k, nz
 
   nz = size(hThick,3)
@@ -788,11 +893,13 @@ end subroutine totalTandS
 !> Returns false if the column integral of a given quantity is within roundoff
 logical function check_column_integral(nk, field, known_answer)
   integer,             intent(in) :: nk           !< Number of levels in column
-  real, dimension(nk), intent(in) :: field        !< Field to be summed
-  real, optional,      intent(in) :: known_answer !< If present is the expected sum,
+  real, dimension(nk), intent(in) :: field        !< Field to be summed [arbitrary]
+  real, optional,      intent(in) :: known_answer !< If present is the expected sum [arbitrary],
                                                   !! If missing, assumed zero
   ! Local variables
-  real    :: u_sum, error, expected
+  real    :: u_sum    ! The vertical sum of the field [arbitrary]
+  real    :: error    ! An estimate of the roundoff error in the sum [arbitrary]
+  real    :: expected ! The expected vertical sum [arbitrary]
   integer :: k
 
   u_sum = field(1)
@@ -824,12 +931,15 @@ end function check_column_integral
 logical function check_column_integrals(nk_1, field_1, nk_2, field_2, missing_value)
   integer,               intent(in) :: nk_1           !< Number of levels in field 1
   integer,               intent(in) :: nk_2           !< Number of levels in field 2
-  real, dimension(nk_1), intent(in) :: field_1        !< First field to be summed
-  real, dimension(nk_2), intent(in) :: field_2        !< Second field to be summed
+  real, dimension(nk_1), intent(in) :: field_1        !< First field to be summed [arbitrary]
+  real, dimension(nk_2), intent(in) :: field_2        !< Second field to be summed [arbitrary]
   real, optional,        intent(in) :: missing_value  !< If column contains missing values,
-                                                      !! mask them from the sum
+                                                      !! mask them from the sum [arbitrary]
   ! Local variables
-  real    :: u1_sum, error1, u2_sum, error2, misval
+  real    :: u1_sum, u2_sum ! The vertical sums of the two fields [arbitrary]
+  real    :: error1, error2 ! Estimates of the roundoff errors in the sums [arbitrary]
+  real    :: misval         ! The missing value flag, indicating elements that are to be omitted
+                            ! from the sums [arbitrary]
   integer :: k
 
   ! Assign missing value
@@ -844,7 +954,7 @@ logical function check_column_integrals(nk_1, field_1, nk_2, field_2, missing_va
 
   ! Reintegrate and sum roundoff errors
   do k=2,nk_1
-    if (field_1(k)/=misval) then
+    if (field_1(k) /= misval) then
       u1_sum = u1_sum + field_1(k)
       error1 = error1 + EPSILON(u1_sum)*MAX(ABS(u1_sum),ABS(field_1(k)))
     endif
@@ -855,7 +965,7 @@ logical function check_column_integrals(nk_1, field_1, nk_2, field_2, missing_va
 
   ! Reintegrate and sum roundoff errors
   do k=2,nk_2
-    if (field_2(k)/=misval) then
+    if (field_2(k) /= misval) then
       u2_sum = u2_sum + field_2(k)
       error2 = error2 + EPSILON(u2_sum)*MAX(ABS(u2_sum),ABS(field_2(k)))
     endif

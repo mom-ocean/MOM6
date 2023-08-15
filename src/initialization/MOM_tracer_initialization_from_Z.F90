@@ -41,11 +41,12 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
-  real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
+  real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized [CU ~> conc]
   type(param_file_type),      intent(in)    :: PF  !< parameter file
   character(len=*),           intent(in)    :: src_file !< source filename
   character(len=*),           intent(in)    :: src_var_nam !< variable name in file
-  real,             optional, intent(in)    :: src_var_unit_conversion !< optional multiplicative unit conversion
+  real,             optional, intent(in)    :: src_var_unit_conversion !< optional multiplicative unit conversion,
+                                                   !! often used for rescaling into model units [CU conc-1 ~> 1]
   integer,          optional, intent(in)    :: src_var_record  !< record to read for multiple time-level files
   logical,          optional, intent(in)    :: homogenize !< optionally homogenize to mean value
   logical,          optional, intent(in)    :: useALEremapping !< to remap or not (optional)
@@ -53,11 +54,11 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   character(len=*), optional, intent(in)    :: src_var_gridspec !< Source variable name in a gridspec file.
                                                                 !! This is not implemented yet.
   ! Local variables
-  real :: land_fill = 0.0
-  real               :: convert
+  real :: land_fill = 0.0  ! A value to use to replace missing values [CU ~> conc]
+  real :: convert ! A conversion factor into the model's internal units [CU conc-1 ~> 1]
   integer            :: recnum
   character(len=64)  :: remapScheme
-  logical            :: homog,useALE
+  logical            :: homog, useALE
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -66,8 +67,12 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: i, j, k, kd
-  real, allocatable, dimension(:,:,:), target :: tr_z, mask_z
-  real, allocatable, dimension(:), target :: z_edges_in, z_in
+  real, allocatable, dimension(:,:,:), target :: tr_z   ! Tracer array on the horizontal model grid
+                                                        ! and input-file vertical levels [CU ~> conc]
+  real, allocatable, dimension(:,:,:), target :: mask_z ! Missing value mask on the horizontal model grid
+                                                        ! and input-file vertical levels [nondim]
+  real, allocatable, dimension(:), target :: z_edges_in ! Cell edge depths for input data [Z ~> m]
+  real, allocatable, dimension(:), target :: z_in       ! Cell center depths for input data [Z ~> m]
 
   ! Local variables for ALE remapping
   real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses [H ~> m or kg m-2].
@@ -75,8 +80,8 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights [Z ~> m].
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
 
-  real :: missing_value
-  integer :: nPoints
+  real :: missing_value ! A value indicating that there is no valid input data at this point [CU ~> conc]
+  integer :: nPoints    ! The number of valid input data points in a column
   integer :: id_clock_routine, id_clock_ALE
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
@@ -94,7 +99,6 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
                                   ! for horizontal regridding.  Values below 20190101 recover the
                                   ! answers from 2018, while higher values use expressions that have
                                   ! been rearranged for rotational invariance.
-  logical :: reentrant_x, tripolar_n
 
   id_clock_routine = cpu_clock_id('(Initialize tracer from Z)', grain=CLOCK_ROUTINE)
   id_clock_ALE = cpu_clock_id('(Initialize tracer from Z) ALE', grain=CLOCK_LOOP)
@@ -150,25 +154,21 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
                  "The vintage of the order of arithmetic for horizontal regridding.  "//&
                  "Dates before 20190101 give the same answers as the code did in late 2018, "//&
                  "while later versions add parentheses for rotational symmetry.  "//&
+                 "Dates after 20230101 use reproducing sums for global averages.  "//&
                  "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
                  "latter takes precedence.", default=default_hor_reg_ans_date)
-
-  ! These are model grid properties, but being applied to the data grid for now.
-  ! need to revisit this (mjh)
-  reentrant_x = .false. ;  call get_param(PF, mdl, "REENTRANT_X", reentrant_x,default=.true.)
-  tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
 
   if (PRESENT(homogenize)) homog=homogenize
   if (PRESENT(useALEremapping)) useALE=useALEremapping
   if (PRESENT(remappingScheme)) remapScheme=remappingScheme
-  recnum=1
+  recnum = 1
   if (PRESENT(src_var_record)) recnum = src_var_record
-  convert=1.0
+  convert = 1.0
   if (PRESENT(src_var_unit_conversion)) convert = src_var_unit_conversion
 
-  call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
-       G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
-       homog, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date)
+  call horiz_interp_and_extrap_tracer(src_file, src_var_nam, recnum, &
+            G, tr_z, mask_z, z_in, z_edges_in, missing_value, &
+            scale=convert, homogenize=homog, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date)
 
   kd = size(z_edges_in,1)-1
   call pass_var(tr_z,G%Domain)
@@ -221,7 +221,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
 ! Fill land values
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (tr(i,j,k) == missing_value) then
-      tr(i,j,k)=land_fill
+      tr(i,j,k) = land_fill
     endif
   enddo ; enddo ; enddo
 
