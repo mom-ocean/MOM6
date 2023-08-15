@@ -337,14 +337,14 @@ type, public :: MOM_control_struct ; private
   ! These elements are used to control the calculation and error checking of the surface state
   real :: Hmix                  !< Diagnostic mixed layer thickness over which to
                                 !! average surface tracer properties when a bulk
-                                !! mixed layer is not used [Z ~> m], or a negative value
+                                !! mixed layer is not used [H ~> m or kg m-2], or a negative value
                                 !! if a bulk mixed layer is being used.
-  real :: HFrz                  !< If HFrz > 0, the nominal depth over which melt potential is
-                                !! computed [Z ~> m]. The actual depth over which melt potential is
+  real :: HFrz                  !< If HFrz > 0, the nominal depth over which melt potential is computed
+                                !! [H ~> m or kg m-2].  The actual depth over which melt potential is
                                 !! computed is min(HFrz, OBLD), where OBLD is the boundary layer depth.
                                 !! If HFrz <= 0 (default), melt potential will not be computed.
   real :: Hmix_UV               !< Depth scale over which to average surface flow to
-                                !! feedback to the coupler/driver [Z ~> m] when
+                                !! feedback to the coupler/driver [H ~> m or kg m-2] when
                                 !! bulk mixed layer is not used, or a negative value
                                 !! if a bulk mixed layer is being used.
   logical :: check_bad_sfc_vals !< If true, scan surface state for ridiculous values.
@@ -516,6 +516,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
                                                    ! various unit conversion factors
   integer       :: ntstep ! time steps between tracer updates or diabatic forcing
   integer       :: n_max  ! number of steps to take in this call
+  integer :: halo_sz, dynamics_stencil
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
@@ -538,6 +539,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
                                        ! multiple dynamic timesteps.
   logical :: do_dyn     ! If true, dynamics are updated with this call.
   logical :: do_thermo  ! If true, thermodynamics and remapping may be applied with this call.
+  logical :: nonblocking_p_surf_update ! A flag to indicate whether surface properties
+                        ! can use nonblocking halo updates
   logical :: cycle_start ! If true, do calculations that are only done at the start of
                         ! a stepping cycle (whatever that may mean).
   logical :: cycle_end  ! If true, do calculations and diagnostics that are only done at
@@ -647,13 +650,11 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       dt_therm = dt*ntstep
     endif
 
-    if (associated(forces%p_surf)) p_surf => forces%p_surf
-    if (.not.associated(forces%p_surf)) CS%interp_p_surf = .false.
-    CS%tv%p_surf => NULL()
-    if (CS%use_p_surf_in_EOS .and. associated(forces%p_surf)) CS%tv%p_surf => forces%p_surf
-
     !---------- Initiate group halo pass of the forcing fields
     call cpu_clock_begin(id_clock_pass)
+    nonblocking_p_surf_update = G%nonblocking_updates .and. &
+        .not.(CS%use_p_surf_in_EOS .and. associated(forces%p_surf) .and. &
+              allocated(CS%tv%SpV_avg) .and. associated(CS%tv%T))
     if (.not.associated(forces%taux) .or. .not.associated(forces%tauy)) &
          call MOM_error(FATAL,'step_MOM:forces%taux,tauy not associated')
     call create_group_pass(pass_tau_ustar_psurf, forces%taux, forces%tauy, G%Domain)
@@ -663,12 +664,26 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call create_group_pass(pass_tau_ustar_psurf, forces%tau_mag, G%Domain)
     if (associated(forces%p_surf)) &
       call create_group_pass(pass_tau_ustar_psurf, forces%p_surf, G%Domain)
-    if (G%nonblocking_updates) then
+    if (nonblocking_p_surf_update) then
       call start_group_pass(pass_tau_ustar_psurf, G%Domain)
     else
       call do_group_pass(pass_tau_ustar_psurf, G%Domain)
     endif
     call cpu_clock_end(id_clock_pass)
+
+    if (associated(forces%p_surf)) p_surf => forces%p_surf
+    if (.not.associated(forces%p_surf)) CS%interp_p_surf = .false.
+    CS%tv%p_surf => NULL()
+    if (CS%use_p_surf_in_EOS .and. associated(forces%p_surf)) then
+      CS%tv%p_surf => forces%p_surf
+
+      if (allocated(CS%tv%SpV_avg) .and. associated(CS%tv%T)) then
+        ! The internal ocean state depends on the surface pressues, so update SpV_avg.
+        dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
+        call calc_derived_thermo(CS%tv, h, G, GV, US, halo=dynamics_stencil, debug=CS%debug)
+      endif
+    endif
+
   else
     ! This step only updates the thermodynamics so setting timesteps is simpler.
     n_max = 1
@@ -687,7 +702,13 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     CS%tv%p_surf => NULL()
     if (CS%use_p_surf_in_EOS .and. associated(fluxes%p_surf)) then
       CS%tv%p_surf => fluxes%p_surf
-      if (allocated(CS%tv%SpV_avg)) call pass_var(fluxes%p_surf, G%Domain, clock=id_clock_pass)
+      if (allocated(CS%tv%SpV_avg)) then
+        call pass_var(fluxes%p_surf, G%Domain, clock=id_clock_pass)
+        ! The internal ocean state depends on the surface pressues, so update SpV_avg.
+        call extract_diabatic_member(CS%diabatic_CSp, diabatic_halo=halo_sz)
+        halo_sz = max(halo_sz, 1)
+        call calc_derived_thermo(CS%tv, h, G, GV, US, halo=halo_sz, debug=CS%debug)
+      endif
     endif
   endif
 
@@ -714,7 +735,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   if (CS%stoch_CS%do_sppt .OR. CS%stoch_CS%pert_epbl) call update_stochastics(CS%stoch_CS)
 
   if (do_dyn) then
-    if (G%nonblocking_updates) &
+    if (nonblocking_p_surf_update) &
       call complete_group_pass(pass_tau_ustar_psurf, G%Domain, clock=id_clock_pass)
 
     if (CS%interp_p_surf) then
@@ -1987,6 +2008,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   logical, allocatable, dimension(:,:,:) :: PCM_cell ! If true, PCM remapping should be used in a cell.
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
 
+  real    :: Hmix_z, Hmix_UV_z ! Temporary variables with averaging depths [Z ~> m]
+  real    :: HFrz_z            ! Temporary variable with the melt potential depth [Z ~> m]
   real    :: default_val       ! default value for a parameter
   logical :: write_geom_files  ! If true, write out the grid geometry files.
   logical :: new_sim           ! If true, this has been determined to be a new simulation
@@ -2223,22 +2246,23 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   if (bulkmixedlayer) then
     CS%Hmix = -1.0 ; CS%Hmix_UV = -1.0
   else
-    call get_param(param_file, "MOM", "HMIX_SFC_PROP", CS%Hmix, &
+    call get_param(param_file, "MOM", "HMIX_SFC_PROP", Hmix_z, &
                  "If BULKMIXEDLAYER is false, HMIX_SFC_PROP is the depth "//&
                  "over which to average to find surface properties like "//&
                  "SST and SSS or density (but not surface velocities).", &
                  units="m", default=1.0, scale=US%m_to_Z)
-    call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", CS%Hmix_UV, &
+    call get_param(param_file, "MOM", "HMIX_UV_SFC_PROP", Hmix_UV_z, &
                  "If BULKMIXEDLAYER is false, HMIX_UV_SFC_PROP is the depth "//&
                  "over which to average to find surface flow properties, "//&
                  "SSU, SSV. A non-positive value indicates no averaging.", &
                  units="m", default=0.0, scale=US%m_to_Z)
   endif
-  call get_param(param_file, "MOM", "HFREEZE", CS%HFrz, &
+  call get_param(param_file, "MOM", "HFREEZE", HFrz_z, &
                  "If HFREEZE > 0, melt potential will be computed. The actual depth "//&
                  "over which melt potential is computed will be min(HFREEZE, OBLD), "//&
                  "where OBLD is the boundary layer depth. If HFREEZE <= 0 (default), "//&
-                 "melt potential will not be computed.", units="m", default=-1.0, scale=US%m_to_Z)
+                 "melt potential will not be computed.", &
+                 units="m", default=-1.0, scale=US%m_to_Z)
   call get_param(param_file, "MOM", "INTERPOLATE_P_SURF", CS%interp_p_surf, &
                  "If true, linearly interpolate the surface pressure "//&
                  "over the coupling time step, using the specified value "//&
@@ -2524,6 +2548,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
+
+  ! Now that the vertical grid has been initialized, rescale parameters that depend on factors
+  ! that are set with the vertical grid to their desired units.  This added rescaling step would
+  ! be unnecessary if the vertical grid were initialized earlier in this routine.
+  if (.not.bulkmixedlayer) then
+    CS%Hmix = (US%Z_to_m * GV%m_to_H) * Hmix_z
+    CS%Hmix_UV = (US%Z_to_m * GV%m_to_H) * Hmix_UV_z
+  endif
+  CS%HFrz = (US%Z_to_m * GV%m_to_H) * HFrz_z
 
   !   Shift from using the temporary dynamic grid type to using the final (potentially static)
   ! and properly rotated ocean-specific grid type and horizontal index type.
@@ -3168,6 +3201,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   ! Update derived thermodynamic quantities.
   if (allocated(CS%tv%SpV_avg)) then
+    !### There may be a restart issue here with the surface pressure not being updated?
     call calc_derived_thermo(CS%tv, CS%h, G, GV, US, halo=dynamics_stencil, debug=CS%debug)
   endif
 
@@ -3415,7 +3449,7 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
                  do_not_log=.true.)
   if (use_ice_shelf .and. associated(CS%Hml)) then
     call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
-                                "Mixed layer thickness", "meter", conversion=US%Z_to_m)
+                                "Mixed layer thickness", "m", conversion=US%Z_to_m)
   endif
 
   ! Register scalar unit conversion factors.
@@ -3497,7 +3531,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
                              !  After the ANSWERS_2018 flag has been obsoleted, H_rescale will be 1.
   real :: T_freeze(SZI_(CS%G)) !< freezing temperature [C ~> degC]
   real :: pres(SZI_(CS%G))   !< Pressure to use for the freezing temperature calculation [R L2 T-2 ~> Pa]
-  real :: delT(SZI_(CS%G))   !< Depth integral of T-T_freeze [Z C ~> m degC]
+  real :: delT(SZI_(CS%G))   !< Depth integral of T-T_freeze [H C ~> m degC or degC kg m-2]
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   integer :: i, j, k, is, ie, js, je, nz, numberOfErrors, ig, jg
   integer :: isd, ied, jsd, jed
@@ -3572,9 +3606,12 @@ subroutine extract_surface_state(CS, sfc_state_in)
     enddo ; enddo
 
   else  ! (CS%Hmix >= 0.0)
-    H_rescale = 1.0 ; if (CS%answer_date < 20190101) H_rescale = GV%H_to_Z
+    H_rescale = 1.0
     depth_ml = CS%Hmix
-    if (CS%answer_date >= 20190101) depth_ml = CS%Hmix*GV%Z_to_H
+    if (CS%answer_date < 20190101) then
+      H_rescale = GV%H_to_Z
+      depth_ml = GV%H_to_Z*CS%Hmix
+    endif
     ! Determine the mean tracer properties of the uppermost depth_ml fluid.
 
     !$OMP parallel do default(shared) private(depth,dh)
@@ -3645,7 +3682,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
     !       This assumes that u and v halos have already been updated.
     if (CS%Hmix_UV>0.) then
       depth_ml = CS%Hmix_UV
-      if (CS%answer_date >= 20190101) depth_ml = CS%Hmix_UV*GV%Z_to_H
+      if (CS%answer_date < 20190101) depth_ml = GV%H_to_Z*CS%Hmix_UV
       !$OMP parallel do default(shared) private(depth,dh,hv)
       do J=js-1,ie
         do i=is,ie
@@ -3719,9 +3756,9 @@ subroutine extract_surface_state(CS, sfc_state_in)
       do k=1,nz
         call calculate_TFreeze(CS%tv%S(is:ie,j,k), pres(is:ie), T_freeze(is:ie), CS%tv%eqn_of_state)
         do i=is,ie
-          depth_ml = min(CS%HFrz, CS%visc%MLD(i,j))
-          if (depth(i) + h(i,j,k)*GV%H_to_Z < depth_ml) then
-            dh = h(i,j,k)*GV%H_to_Z
+          depth_ml = min(CS%HFrz, (US%Z_to_m*GV%m_to_H)*CS%visc%MLD(i,j))
+          if (depth(i) + h(i,j,k) < depth_ml) then
+            dh = h(i,j,k)
           elseif (depth(i) < depth_ml) then
             dh = depth_ml - depth(i)
           else
@@ -3743,7 +3780,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
 
         if (G%mask2dT(i,j)>0.) then
           ! instantaneous melt_potential [Q R Z ~> J m-2]
-          sfc_state%melt_potential(i,j) = CS%tv%C_p * GV%Rho0 * delT(i)
+          sfc_state%melt_potential(i,j) = CS%tv%C_p * GV%H_to_RZ * delT(i)
         endif
       enddo
     enddo ! end of j loop
