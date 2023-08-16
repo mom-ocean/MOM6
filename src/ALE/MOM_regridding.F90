@@ -855,9 +855,6 @@ subroutine regridding_main( remapCS, CS, G, GV, US, h, tv, h_new, dzInterface, &
     case ( REGRIDDING_RHO )
       call build_rho_grid( G, GV, G%US, h, nom_depth_H, tv, dzInterface, remapCS, CS, frac_shelf_h )
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
-    case ( REGRIDDING_ARBITRARY )
-      call build_grid_arbitrary( G, GV, h, nom_depth_H, dzInterface, trickGnuCompiler, CS )
-      call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
     case ( REGRIDDING_HYCOM1 )
       call build_grid_HyCOM1( G, GV, G%US, h, nom_depth_H, tv, h_new, dzInterface, remapCS, CS, &
                               frac_shelf_h, zScale=Z_to_H )
@@ -868,6 +865,9 @@ subroutine regridding_main( remapCS, CS, G, GV, US, h, tv, h_new, dzInterface, &
       call build_grid_adaptive(G, GV, G%US, h, nom_depth_H, tv, dzInterface, remapCS, CS)
       call calc_h_new_by_dz(CS, G, GV, h, dzInterface, h_new)
 
+    case ( REGRIDDING_ARBITRARY )
+      call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
+                     'Regridding mode "ARB" is not implemented.')
     case default
       call MOM_error(FATAL,'MOM_regridding, regridding_main: '//&
                      'Unknown regridding scheme selected!')
@@ -1761,111 +1761,6 @@ subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
  !if (dz_int(1)/=0.) stop 'MOM_regridding: adjust_interface_motion() surface moved'
 
 end subroutine adjust_interface_motion
-
-!------------------------------------------------------------------------------
-! Build arbitrary grid
-!------------------------------------------------------------------------------
-subroutine build_grid_arbitrary( G, GV, h, nom_depth_H, dzInterface, h_new, CS )
-!------------------------------------------------------------------------------
-! This routine builds a grid based on arbitrary rules
-!------------------------------------------------------------------------------
-
-  ! Arguments
-  type(ocean_grid_type),                     intent(in)    :: G  !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Original layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G)),          intent(in)    :: nom_depth_H !< The bathymetric depth of this column
-                                                                 !! relative to mean sea level or another locally
-                                                                 !! valid reference height, converted to thickness
-                                                                 !! units [H ~> m or kg m-2]
-  type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
-  real, dimension(SZI_(G),SZJ_(G),CS%nk+1),  intent(inout) :: dzInterface !< The change in interface
-                                                                 !! depth [H ~> m or kg m-2]
-  real,                                      intent(inout) :: h_new !< New layer thicknesses [H ~> m or kg m-2]
-
-  ! Local variables
-  integer   :: i, j, k
-  integer   :: nz
-  real      :: z_inter(SZK_(GV)+1)
-  real      :: total_height
-  real      :: delta_h
-  real      :: max_depth
-  real      :: eta              ! local elevation [H ~> m or kg m-2]
-  real      :: local_depth      ! The local ocean depth relative to mean sea level in thickness units [H ~> m or kg m-2]
-  real      :: x1, y1, x2, y2
-  real      :: x, t
-
-  nz = GV%ke
-  max_depth = G%max_depth*GV%Z_to_H
-
-  do j = G%jsc-1,G%jec+1
-    do i = G%isc-1,G%iec+1
-
-      ! Local depth
-      local_depth = nom_depth_H(i,j)
-
-      ! Determine water column height
-      total_height = 0.0
-      do k = 1,nz
-        total_height = total_height + h(i,j,k)
-      enddo
-
-      eta = total_height - local_depth
-
-      ! Compute new thicknesses based on stretched water column
-      delta_h = (max_depth + eta) / nz
-
-      ! Define interfaces
-      z_inter(1) = eta
-      do k = 1,nz
-        z_inter(k+1) = z_inter(k) - delta_h
-      enddo
-
-      ! Refine grid in the middle
-      do k = 1,nz+1
-        x1 = 0.35; y1 = 0.45; x2 = 0.65; y2 = 0.55
-
-        x = - ( z_inter(k) - eta ) / max_depth
-
-        if ( x <= x1 ) then
-          t = y1*x/x1
-        elseif ( (x > x1 ) .and. ( x < x2 )) then
-          t = y1 + (y2-y1) * (x-x1) / (x2-x1)
-        else
-          t = y2 + (1.0-y2) * (x-x2) / (1.0-x2)
-        endif
-
-        z_inter(k) = -t * max_depth + eta
-
-      enddo
-
-      ! Modify interface heights to account for topography
-      z_inter(nz+1) = - local_depth
-
-      ! Modify interface heights to avoid layers of zero thicknesses
-      do k = nz,1,-1
-        if ( z_inter(k) < (z_inter(k+1) + CS%min_thickness) ) then
-          z_inter(k) = z_inter(k+1) + CS%min_thickness
-        endif
-      enddo
-
-      ! Change in interface position
-      x = 0. ! Left boundary at x=0
-      dzInterface(i,j,1) = 0.
-      do k = 2,nz
-        x = x + h(i,j,k)
-        dzInterface(i,j,k) = z_inter(k) - x
-      enddo
-      dzInterface(i,j,nz+1) = 0.
-
-    enddo
-  enddo
-
-stop 'OOOOOOPS' ! For some reason the gnu compiler will not let me delete this
-                ! routine????
-
-end subroutine build_grid_arbitrary
-
 
 
 !------------------------------------------------------------------------------
