@@ -122,11 +122,11 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
        "Depth of unstratified mixed layer as a fraction of the water column.", &
        units="nondim", default=default_mld, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+                 default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl,"T_REF", T_ref, 'Reference temperature', &
                 units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"S_RANGE", S_range, 'Initial salinity range', &
-                units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
+                units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -204,7 +204,7 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
                  units="nondim", default=0.1)
   call get_param(param_file, mdl, "DENSE_WATER_EAST_SPONGE_SALT", S_dense, &
                  "Salt anomaly of the dense water being formed in the overflow region.", &
-                 units="1e-3", default=4.0, scale=US%ppt_to_S)
+                 units="ppt", default=4.0, scale=US%ppt_to_S)
 
   call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, &
                  units="nondim", default=default_mld, do_not_log=.true.)
@@ -212,9 +212,9 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
                  units="nondim", default=default_sill, do_not_log=.true.)
 
   call get_param(param_file, mdl, "S_REF", S_ref, &
-                 units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl, "S_RANGE", S_range, &
-                 units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl, "T_REF", T_ref, &
                  units='degC', scale=US%degC_to_C, fail_if_missing=.true., do_not_log=.true.)
 

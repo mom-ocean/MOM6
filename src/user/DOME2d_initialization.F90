@@ -261,15 +261,15 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  units="nondim", default=0.2, do_not_log=.true.)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
                  units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "S_RANGE", S_range,' Initial salinity range', &
-                 units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='degC', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "INITIAL_SSS", S_surf, "Initial surface salinity", &
-                 units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=34.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DOME2D_T_BAY", T_bay, &
                  "Temperature in the inflow embayment in the DOME2d test case", &
                  units="degC", default=1.0, scale=US%degC_to_C, do_not_log=just_read)
@@ -440,10 +440,10 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   call get_param(param_file, mdl, "S_RANGE", S_range, units="ppt", default=2.0, scale=US%ppt_to_S)
   call get_param(param_file, mdl, "T_RANGE", T_range, units="degC", default=0.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "INITIAL_SSS", S_surf, "Initial surface salinity", &
-                 units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_EAST_SPONGE_S_RANGE", S_range_sponge, &
                  "Range of salinities in the eastern sponge region in the DOME2D configuration", &
-                 units="1e-3", default=1.0, scale=US%ppt_to_S)
+                 units="ppt", default=1.0, scale=US%ppt_to_S)
 
   ! Set the sponge damping rate as a function of position
   Idamp(:,:) = 0.0

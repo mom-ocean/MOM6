@@ -1745,7 +1745,7 @@ subroutine initialize_temp_salt_fit(T, S, G, GV, US, param_file, eqn_of_state, P
                  units="degC", scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_Ref, &
                  "A reference salinity used in initialization.", &
-                 units="PSU", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "FIT_SALINITY", fit_salin, &
                  "If true, accept the prescribed temperature and fit the "//&
                  "salinity; otherwise take salinity and fit temperature.", &
@@ -1829,10 +1829,10 @@ subroutine initialize_temp_salt_linear(T, S, G, GV, US, param_file, just_read)
                  units="degC", scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "S_TOP", S_top, &
                  "Initial salinity of the top surface.", &
-                 units="PSU", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="ppt", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "S_RANGE", S_range, &
                  "Initial salinity difference (top-bottom).", &
-                 units="PSU", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="ppt", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -2645,7 +2645,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  units="degC", default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(PF, mdl, "LAND_FILL_SALIN", salt_land_fill, &
                  "A value to use to fill in ocean salinities on land points.", &
-                 units="1e-3", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(PF, mdl, "HORIZ_INTERP_TOL_TEMP", tol_temp, &
                  "The tolerance in temperature changes between iterations when interpolating "//&
                  "from an input dataset using horiz_interp_and_extrap_tracer.  This routine "//&
@@ -2655,7 +2655,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "The tolerance in salinity changes between iterations when interpolating "//&
                  "from an input dataset using horiz_interp_and_extrap_tracer.  This routine "//&
                  "converges slowly, so an overly small tolerance can get expensive.", &
-                 units="1e-3", default=1.0e-3, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=1.0e-3, scale=US%ppt_to_S, do_not_log=just_read)
 
   if (just_read) then
     if ((.not.useALEremapping) .and. adjust_temperature) &

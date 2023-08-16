@@ -4026,14 +4026,14 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "during detrainment.", units="K", default=0.5, scale=US%degC_to_C)
   call get_param(param_file, mdl, "ALLOWED_DETRAIN_SALT_CHG", CS%Allowed_S_chg, &
                  "The amount by which salinity is allowed to exceed previous values "//&
-                 "during detrainment.", units="PSU", default=0.1, scale=US%ppt_to_S)
+                 "during detrainment.", units="ppt", default=0.1, scale=US%ppt_to_S)
   call get_param(param_file, mdl, "ML_DT_DS_WEIGHT", CS%dT_dS_wt, &
                  "When forced to extrapolate T & S to match the layer "//&
                  "densities, this factor (in deg C / PSU) is combined "//&
                  "with the derivatives of density with T & S to determine "//&
                  "what direction is orthogonal to density contours. It "//&
                  "should be a typical value of (dR/dS) / (dR/dT) in oceanic profiles.", &
-                 units="degC PSU-1", default=6.0, scale=US%degC_to_C*US%S_to_ppt)
+                 units="degC ppt-1", default=6.0, scale=US%degC_to_C*US%S_to_ppt)
   call get_param(param_file, mdl, "BUFFER_LAYER_EXTRAP_LIMIT", CS%BL_extrap_lim, &
                  "A limit on the density range over which extrapolation "//&
                  "can occur when detraining from the buffer layers, "//&

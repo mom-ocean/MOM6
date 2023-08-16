@@ -59,7 +59,7 @@ contains
 real elemental function density_elem_linear(this, T, S, pressure)
   class(linear_EOS), intent(in) :: this     !< This EOS
   real, intent(in) :: T        !< Potential temperature relative to the surface [degC]
-  real, intent(in) :: S        !< Salinity [PSU]
+  real, intent(in) :: S        !< Salinity [ppt]
   real, intent(in) :: pressure !< Pressure [Pa]
 
   density_elem_linear = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S
@@ -73,7 +73,7 @@ end function density_elem_linear
 real elemental function density_anomaly_elem_linear(this, T, S, pressure, rho_ref)
   class(linear_EOS), intent(in) :: this     !< This EOS
   real, intent(in) :: T        !< Potential temperature relative to the surface [degC]
-  real, intent(in) :: S        !< Salinity [PSU]
+  real, intent(in) :: S        !< Salinity [ppt]
   real, intent(in) :: pressure !< Pressure [Pa]
   real, intent(in) :: rho_ref  !< A reference density [kg m-3]
 
@@ -87,9 +87,8 @@ end function density_anomaly_elem_linear
 !! scalar and array inputs.
 real elemental function spec_vol_elem_linear(this, T, S, pressure)
   class(linear_EOS), intent(in) :: this     !< This EOS
-  real,              intent(in) :: T        !< potential temperature relative to the surface
-                                            !! [degC].
-  real,              intent(in) :: S        !< Salinity [PSU].
+  real,              intent(in) :: T        !< Potential temperature relative to the surface [degC].
+  real,              intent(in) :: S        !< Salinity [ppt].
   real,              intent(in) :: pressure !< Pressure [Pa].
 
   spec_vol_elem_linear = 1.0 / ( this%Rho_T0_S0 + (this%dRho_dT*T + this%dRho_dS*S))
@@ -102,9 +101,8 @@ end function spec_vol_elem_linear
 !! scalar and array inputs.
 real elemental function spec_vol_anomaly_elem_linear(this, T, S, pressure, spv_ref)
   class(linear_EOS), intent(in) :: this     !< This EOS
-  real,              intent(in) :: T        !< potential temperature relative to the surface
-                                            !! [degC].
-  real,              intent(in) :: S        !< Salinity [PSU].
+  real,              intent(in) :: T        !< Potential temperature relative to the surface [degC].
+  real,              intent(in) :: S        !< Salinity [ppt].
   real,              intent(in) :: pressure !< Pressure [Pa].
   real,              intent(in) :: spv_ref  !< A reference specific volume [m3 kg-1].
 
@@ -118,9 +116,8 @@ end function spec_vol_anomaly_elem_linear
 !! with potential temperature and salinity.
 elemental subroutine calculate_density_derivs_elem_linear(this,T, S, pressure, dRho_dT, dRho_dS)
   class(linear_EOS),    intent(in)   :: this     !< This EOS
-  real,    intent(in)  :: T        !< Potential temperature relative to the surface
-                                   !! [degC].
-  real,    intent(in)  :: S        !< Salinity [PSU].
+  real,    intent(in)  :: T        !< Potential temperature relative to the surface [degC].
+  real,    intent(in)  :: S        !< Salinity [ppt].
   real,    intent(in)  :: pressure !< Pressure [Pa].
   real,    intent(out) :: drho_dT  !< The partial derivative of density with
                                    !! potential temperature [kg m-3 degC-1].
@@ -138,16 +135,16 @@ elemental subroutine calculate_density_second_derivs_elem_linear(this, T, S, pre
                                   drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP)
   class(linear_EOS), intent(in) :: this !< This EOS
   real, intent(in)    :: T           !< Potential temperature relative to the surface [degC].
-  real, intent(in)    :: S           !< Salinity [PSU].
+  real, intent(in)    :: S           !< Salinity [ppt].
   real, intent(in)    :: pressure    !< pressure [Pa].
   real, intent(inout) :: drho_dS_dS  !< The second derivative of density with
-                                     !! salinity [kg m-3 PSU-2].
+                                     !! salinity [kg m-3 ppt-2].
   real, intent(inout) :: drho_dS_dT  !< The second derivative of density with
                                      !! temperature and salinity [kg m-3 ppt-1 degC-1].
   real, intent(inout) :: drho_dT_dT  !< The second derivative of density with
                                      !! temperature [kg m-3 degC-2].
   real, intent(inout) :: drho_dS_dP  !< The second derivative of density with
-                                     !! salinity and pressure [kg m-3 PSU-1 Pa-1].
+                                     !! salinity and pressure [kg m-3 ppt-1 Pa-1].
   real, intent(inout) :: drho_dT_dP  !< The second derivative of density with
                                      !! temperature and pressure [kg m-3 degC-1 Pa-1].
 
@@ -163,10 +160,10 @@ end subroutine calculate_density_second_derivs_elem_linear
 elemental subroutine calculate_specvol_derivs_elem_linear(this, T, S, pressure, dSV_dT, dSV_dS)
   class(linear_EOS),  intent(in)    :: this     !< This EOS
   real,               intent(in)    :: T        !< Potential temperature [degC]
-  real,               intent(in)    :: S        !< Salinity [PSU]
+  real,               intent(in)    :: S        !< Salinity [ppt]
   real,               intent(in)    :: pressure !< pressure [Pa]
   real,               intent(inout) :: dSV_dS   !< The partial derivative of specific volume with
-                                                !! salinity [m3 kg-1 PSU-1]
+                                                !! salinity [m3 kg-1 ppt-1]
   real,               intent(inout) :: dSV_dT   !< The partial derivative of specific volume with
                                                 !! potential temperature [m3 kg-1 degC-1]
   ! Local variables
@@ -184,9 +181,8 @@ end subroutine calculate_specvol_derivs_elem_linear
 !! salinity, potential temperature, and pressure.
 elemental subroutine calculate_compress_elem_linear(this, T, S, pressure, rho, drho_dp)
   class(linear_EOS), intent(in)  :: this      !< This EOS
-  real,              intent(in)  :: T         !< Potential temperature relative to the surface
-                                              !! [degC].
-  real,              intent(in)  :: S         !< Salinity [PSU].
+  real,              intent(in)  :: T         !< Potential temperature relative to the surface [degC].
+  real,              intent(in)  :: S         !< Salinity [ppt].
   real,              intent(in)  :: pressure  !< pressure [Pa].
   real,              intent(out) :: rho       !< In situ density [kg m-3].
   real,              intent(out) :: drho_dp   !< The partial derivative of density with pressure
@@ -201,7 +197,7 @@ end subroutine calculate_compress_elem_linear
 !> Calculates the layer average specific volumes.
 subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
   real, dimension(:), intent(in)    :: T         !< Potential temperature [degC]
-  real, dimension(:), intent(in)    :: S         !< Salinity [PSU]
+  real, dimension(:), intent(in)    :: S         !< Salinity [ppt]
   real, dimension(:), intent(in)    :: p_t       !< Pressure at the top of the layer [Pa]
   real, dimension(:), intent(in)    :: dp        !< Pressure change in the layer [Pa]
   real, dimension(:), intent(inout) :: SpV_avg   !< The vertical average specific volume
@@ -268,7 +264,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! [C ~> degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
-                        intent(in)  :: S         !< Salinity [S ~> PSU].
+                        intent(in)  :: S         !< Salinity [S ~> ppt].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: z_t       !< Height at the top of the layer in depth units [Z ~> m].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -439,7 +435,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                         intent(in)  :: T         !< Potential temperature relative to the surface
                                                  !! [C ~> degC].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
-                        intent(in)  :: S         !< Salinity [S ~> PSU].
+                        intent(in)  :: S         !< Salinity [S ~> ppt].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
                         intent(in)  :: p_t       !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
@@ -614,7 +610,7 @@ end subroutine int_spec_vol_dp_linear
 subroutine calculate_density_array_linear(this, T, S, pressure, rho, start, npts, rho_ref)
   class(linear_EOS),  intent(in) :: this      !< This EOS
   real, dimension(:), intent(in)  :: T        !< Potential temperature relative to the surface [degC]
-  real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
+  real, dimension(:), intent(in)  :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
   real, dimension(:), intent(out) :: rho      !< In situ density [kg m-3]
   integer,            intent(in)  :: start    !< The starting index for calculations
@@ -640,7 +636,7 @@ end subroutine calculate_density_array_linear
 subroutine calculate_spec_vol_array_linear(this, T, S, pressure, specvol, start, npts, spv_ref)
   class(linear_EOS),  intent(in) :: this      !< This EOS
   real, dimension(:), intent(in)  :: T        !< Potential temperature relative to the surface [degC]
-  real, dimension(:), intent(in)  :: S        !< Salinity [PSU]
+  real, dimension(:), intent(in)  :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
   real, dimension(:), intent(out) :: specvol  !< In situ specific volume [m3 kg-1]
   integer,            intent(in)  :: start    !< The starting index for calculations

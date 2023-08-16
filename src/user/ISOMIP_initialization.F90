@@ -348,7 +348,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
                   default=.false., do_not_log=just_read)
       call get_param(param_file, mdl, "DRHO_DS", drho_dS1, &
                   "Partial derivative of density with salinity.", &
-                  units="kg m-3 PSU-1", scale=US%kg_m3_to_R*US%S_to_ppt, &
+                  units="kg m-3 ppt-1", scale=US%kg_m3_to_R*US%S_to_ppt, &
                   fail_if_missing=.not.just_read, do_not_log=just_read)
       call get_param(param_file, mdl, "DRHO_DT", drho_dT1, &
                   "Partial derivative of density with temperature.", &
@@ -359,7 +359,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
                   units="degC", scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
       call get_param(param_file, mdl, "S_REF", S_Ref, &
                   "A reference salinity used in initialization.", &
-                  units="PSU", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                  units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
       if (just_read) return ! All run-time parameters have been read, so return.
 
       ! write(mesg,*) 'read drho_dS, drho_dT', drho_dS1, drho_dT1

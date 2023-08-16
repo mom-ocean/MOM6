@@ -76,12 +76,12 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   ! Parameters used by main model initialization
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+                 default=35.0, units='ppt', scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "MIN_THICKNESS", min_thickness, 'Minimum layer thickness', &
                  default=1.0e-3, units='m', scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl, "DRHO_DS", dRho_dS, &
                  "The partial derivative of density with salinity with a linear equation of state.", &
-                 units="kg m-3 PSU-1", default=0.8, scale=US%kg_m3_to_R*US%S_to_ppt)
+                 units="kg m-3 ppt-1", default=0.8, scale=US%kg_m3_to_R*US%S_to_ppt)
 
   ! Parameters specific to this experiment configuration
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
@@ -91,10 +91,10 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
                  units=G%x_ax_unit_short, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "DELTA_S_STRAT", delta_S_strat,           &
                  "Top-to-bottom salinity difference of stratification",  &
-                 units="1e-3", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="ppt", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "ADJUSTMENT_DELTAS", adjustment_deltaS,   &
                  "Salinity difference across front",                     &
-                 units="1e-3", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="ppt", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "FRONT_WAVE_AMP", front_wave_amp,         &
                  "Amplitude of trans-frontal wave perturbation",         &
                  units=G%x_ax_unit_short, default=0., do_not_log=just_read)
@@ -239,11 +239,11 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
 
   ! Parameters used by main model initialization
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+                 default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
-                 units='C', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="degC", scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "S_RANGE", S_range, 'Initial salinity range',  &
-                 default=2.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+                 default=2.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  default=1.0, units='degC', scale=US%degC_to_C, do_not_log=just_read)
   ! Parameters specific to this experiment configuration BUT logged in previous s/r
@@ -252,9 +252,9 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
   call get_param(param_file, mdl, "ADJUSTMENT_WIDTH", adjustment_width, &
                  units=G%x_ax_unit_short, fail_if_missing=.not.just_read, do_not_log=.true.)
   call get_param(param_file, mdl, "ADJUSTMENT_DELTAS", adjustment_deltaS, &
-                 units='1e-3', scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=.true.)
+                 units="ppt", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=.true.)
   call get_param(param_file, mdl, "DELTA_S_STRAT", delta_S_strat, &
-                 units='1e-3', scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=.true.)
+                 units="ppt", scale=US%ppt_to_S, fail_if_missing=.not.just_read, do_not_log=.true.)
   call get_param(param_file, mdl, "FRONT_WAVE_AMP", front_wave_amp, &
                  units=G%x_ax_unit_short, default=0., do_not_log=.true.)
   call get_param(param_file, mdl, "FRONT_WAVE_LENGTH", front_wave_length, &

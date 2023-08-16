@@ -1517,8 +1517,8 @@ subroutine EOS_init(param_file, EOS, US)
                  "temperature.", units="kg m-3 K-1", default=-0.2)
     call get_param(param_file, mdl, "DRHO_DS", EOS%dRho_dS, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the partial derivative of density with "//&
-                 "salinity.", units="kg m-3 PSU-1", default=0.8)
+                 "this is the partial derivative of density with salinity.", &
+                 units="kg m-3 ppt-1", default=0.8)
     call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=EOS%Rho_T0_S0, dRho_dT=EOS%dRho_dT, dRho_dS=EOS%dRho_dS)
   endif
   if (EOS%form_of_EOS == EOS_WRIGHT) then
@@ -1563,17 +1563,17 @@ subroutine EOS_init(param_file, EOS, US)
     call get_param(param_file, mdl, "TFREEZE_S0_P0",EOS%TFr_S0_P0, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
                  "this is the freezing potential temperature at "//&
-                 "S=0, P=0.", units="deg C", default=0.0)
+                 "S=0, P=0.", units="degC", default=0.0)
     call get_param(param_file, mdl, "DTFREEZE_DS",EOS%dTFr_dS, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
                  "this is the derivative of the freezing potential "//&
                  "temperature with salinity.", &
-                 units="deg C PSU-1", default=-0.054)
+                 units="degC ppt-1", default=-0.054)
     call get_param(param_file, mdl, "DTFREEZE_DP",EOS%dTFr_dP, &
                  "When TFREEZE_FORM="//trim(TFREEZE_LINEAR_STRING)//", "//&
                  "this is the derivative of the freezing potential "//&
                  "temperature with pressure.", &
-                 units="deg C Pa-1", default=0.0)
+                 units="degC Pa-1", default=0.0)
   endif
 
   if ((EOS%form_of_EOS == EOS_TEOS10 .or. EOS%form_of_EOS == EOS_ROQUET_RHO .or. &
@@ -1694,7 +1694,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
   type(EOS_type),        intent(in)    :: EOS !< Equation of state structure
 
   real, parameter :: Sref_Sprac = (35.16504/35.0) ! The TEOS 10 conversion factor to go from
-                                    ! practical salinity to reference salinity [nondim]
+                                    ! practical salinity to reference salinity [PSU ppt-1]
   integer :: i, j, k
 
   if ((EOS%form_of_EOS /= EOS_TEOS10) .and. (EOS%form_of_EOS /= EOS_ROQUET_RHO) .and. &
@@ -1808,20 +1808,20 @@ end subroutine pot_temp_to_cons_temp
 !! temperature uses this same scaling, but this can be replaced by the factor given by scale.
 subroutine abs_saln_to_prac_saln(S, prSaln, EOS, dom, scale)
   real, dimension(:), intent(in)    :: S        !< Absolute salinity [S ~> ppt]
-  real, dimension(:), intent(inout) :: prSaln   !< Practical salinity [S ~> ppt]
+  real, dimension(:), intent(inout) :: prSaln   !< Practical salinity [S ~> PSU]
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom  !< The domain of indices to work on, taking
                                                 !! into account that arrays start at 1.
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale the output
-                                                !! practical in place of with scaling stored
+                                                !! practical salinities in place of with scaling stored
                                                 !! in EOS.  A value of 1.0 returns salinities in [PSU],
                                                 !! while the default is equivalent to EOS%ppt_to_S.
 
   ! Local variables
   real, dimension(size(S)) :: Sa    ! Salinity converted to [ppt]
-  real :: S_scale ! A factor to convert practical salinity from ppt to the desired units [S ppt-1 ~> 1]
+  real :: S_scale ! A factor to convert practical salinity from ppt to the desired units [S PSU-1 ~> 1]
   real, parameter :: Sprac_Sref = (35.0/35.16504) ! The TEOS 10 conversion factor to go from
-                                    ! reference salinity to practical salinity [nondim]
+                                    ! reference salinity to practical salinity [PSU ppt-1]
   integer :: i, is, ie
 
   if (present(dom)) then
@@ -1848,21 +1848,21 @@ end subroutine abs_saln_to_prac_saln
 !! use the dimensionally rescaling as specified within the EOS type.  The output potential
 !! temperature uses this same scaling, but this can be replaced by the factor given by scale.
 subroutine prac_saln_to_abs_saln(S, absSaln, EOS, dom, scale)
-  real, dimension(:), intent(in)    :: S        !< Practical salinity [S ~> ppt]
+  real, dimension(:), intent(in)    :: S        !< Practical salinity [S ~> PSU]
   real, dimension(:), intent(inout) :: absSaln  !< Absolute salinity [S ~> ppt]
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom  !< The domain of indices to work on, taking
                                                 !! into account that arrays start at 1.
   real,     optional, intent(in)    :: scale    !< A multiplicative factor by which to scale the output
-                                                !! practical in place of with scaling stored
-                                                !! in EOS.  A value of 1.0 returns salinities in [PSU],
+                                                !! absolute salnities in place of with scaling stored
+                                                !! in EOS.  A value of 1.0 returns salinities in [ppt],
                                                 !! while the default is equivalent to EOS%ppt_to_S.
 
   ! Local variables
   real, dimension(size(S)) :: Sp    ! Salinity converted to [ppt]
-  real :: S_scale ! A factor to convert practical salinity from ppt to the desired units [S ppt-1 ~> 1]
+  real :: S_scale ! A factor to convert absolute salinity from ppt to the desired units [S ppt-1 ~> 1]
   real, parameter :: Sref_Sprac = (35.16504/35.0) ! The TEOS 10 conversion factor to go from
-                                    ! practical salinity to reference salinity [nondim]
+                                    ! practical salinity to reference salinity [PSU ppt-1]
   integer :: i, is, ie
 
   if (present(dom)) then

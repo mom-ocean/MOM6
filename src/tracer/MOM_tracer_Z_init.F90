@@ -628,16 +628,16 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
                  units="degC", default=31.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(PF, mdl, "DETERMINE_TEMP_S_MIN", S_min, &
                  "The minimum salinity that can be found by determine_temperature.", &
-                 units="1e-3", default=0.5, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=0.5, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(PF, mdl, "DETERMINE_TEMP_S_MAX", S_max, &
                  "The maximum salinity that can be found by determine_temperature.", &
-                 units="1e-3", default=65.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=65.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(PF, mdl, "DETERMINE_TEMP_T_TOLERANCE", tol_T, &
                  "The convergence tolerance for temperature in determine_temperature.", &
                  units="degC", default=1.0e-4, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(PF, mdl, "DETERMINE_TEMP_S_TOLERANCE", tol_S, &
                  "The convergence tolerance for temperature in determine_temperature.", &
-                 units="1e-3", default=1.0e-4, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=1.0e-4, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(PF, mdl, "DETERMINE_TEMP_RHO_TOLERANCE", tol_rho, &
                  "The convergence tolerance for density in determine_temperature.", &
                  units="kg m-3", default=1.0e-4, scale=US%kg_m3_to_R, do_not_log=just_read)
@@ -645,10 +645,10 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
     ! By default 10 degC is weighted equivalently to 1 ppt when minimizing changes.
     call get_param(PF, mdl, "DETERMINE_TEMP_DT_DS_WEIGHT", dT_dS_gauge, &
                  "When extrapolating T & S to match the layer target densities, this "//&
-                 "factor (in deg C / PSU) is combined with the derivatives of density "//&
+                 "factor (in degC / ppt) is combined with the derivatives of density "//&
                  "with T & S to determine what direction is orthogonal to density contours.  "//&
                  "It could be based on a typical value of (dR/dS) / (dR/dT) in oceanic profiles.", &
-                 units="degC PSU-1", default=10.0, scale=US%degC_to_C*US%S_to_ppt)
+                 units="degC ppt-1", default=10.0, scale=US%degC_to_C*US%S_to_ppt)
   else
     call get_param(PF, mdl, "DETERMINE_TEMP_T_ADJ_RANGE", max_t_adj, &
                  "The maximum amount by which the initial layer temperatures can be "//&
@@ -657,7 +657,7 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
     call get_param(PF, mdl, "DETERMINE_TEMP_S_ADJ_RANGE", max_S_adj, &
                  "The maximum amount by which the initial layer salinities can be "//&
                  "modified in determine_temperature.", &
-                 units="1e-3", default=0.5, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=0.5, scale=US%ppt_to_S, do_not_log=just_read)
   endif
 
   if (just_read) return ! All run-time parameters have been read, so return.
