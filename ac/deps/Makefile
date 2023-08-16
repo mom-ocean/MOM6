@@ -41,33 +41,36 @@ lib/libFMS.a: fms/build/libFMS.a
 	cp fms/build/libFMS.a lib/libFMS.a
 	cp fms/build/*.mod include
 
-
 fms/build/libFMS.a: fms/build/Makefile
-	make -C fms/build libFMS.a
+	$(MAKE) -C fms/build libFMS.a
 
-
-fms/build/Makefile: Makefile.fms.in fms/src/configure
-	mkdir -p fms/build
-	cp Makefile.fms.in fms/src/Makefile.in
+fms/build/Makefile: fms/build/Makefile.in fms/build/configure
 	cd $(@D) && { \
-	  ../src/configure --srcdir=../src \
+	  ./configure --srcdir=../src \
 	  || { \
 	    if [ "${REPORT_ERROR_LOGS}" = true ]; then cat config.log ; fi ; \
 	    false; \
 	  } \
 	}
 
+fms/build/Makefile.in: Makefile.fms.in | fms/build
+	cp Makefile.fms.in fms/build/Makefile.in
 
-fms/src/configure: configure.fms.ac $(FMS_SOURCE) | fms/src
-	cp configure.fms.ac fms/src/configure.ac
-	cp -r m4 $(@D)
-	cd $(@D) && autoreconf -i
+fms/build/configure: fms/build/configure.ac $(FMS_SOURCE) | fms/src
+	autoreconf fms/build
 
+fms/build/configure.ac: configure.fms.ac m4 | fms/build
+	cp configure.fms.ac fms/build/configure.ac
+	cp -r m4 fms/build
+
+fms/build:
+	mkdir -p fms/build
 
 fms/src:
 	git clone $(FMS_URL) $@
 	git -C $@ checkout $(FMS_COMMIT)
 
+# Cleanup
 
 .PHONY: clean
 clean:

@@ -93,6 +93,9 @@ type, public :: thermo_var_ptrs
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
                          !! actually the absolute salinity in units of [gSalt kg-1].
   real :: min_salinity   !< The minimum value of salinity when BOUND_SALINITY=True [S ~> ppt].
+  real, allocatable, dimension(:,:,:) :: SpV_avg
+                         !< The layer averaged in situ specific volume [R-1 ~> m3 kg-1].
+
   ! These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
@@ -257,8 +260,8 @@ type, public :: vertvisc_type
     Ray_v       !< The Rayleigh drag velocity to be applied to each layer at v-points [Z T-1 ~> m s-1].
 
   ! The following elements are pointers so they can be used as targets for pointers in the restart registry.
-  real, pointer, dimension(:,:) :: &
-    MLD => NULL()  !< Instantaneous active mixing layer depth [Z ~> m].
+  real, pointer, dimension(:,:) :: MLD => NULL() !< Instantaneous active mixing layer depth [Z ~> m].
+  real, pointer, dimension(:,:) :: sfc_buoy_flx => NULL() !< Surface buoyancy flux (derived) [Z2 T-3 ~> m2 s-3].
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
                 !! in tracer columns [Z2 T-1 ~> m2 s-1].

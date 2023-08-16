@@ -86,7 +86,7 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, depth_tot, G, GV, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: S          !< Salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)  :: h          !< The model thicknesses [H ~> m or kg m-2]
+                           intent(in)  :: h          !< The model thicknesses [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open file
@@ -135,8 +135,8 @@ subroutine baroclinic_zone_init_temperature_salinity(T, S, h, depth_tot, G, GV, 
       fn = xs
     endif
     do k = nz, 1, -1
-      zc = zi + 0.5*h(i,j,k)*GV%H_to_Z ! Position of middle of cell
-      zi = zi + h(i,j,k)*GV%H_to_Z    ! Top interface position
+      zc = zi + 0.5*h(i,j,k)          ! Position of middle of cell
+      zi = zi + h(i,j,k)              ! Top interface position
       T(i,j,k) = T_ref + dTdz * zc  & ! Linear temperature stratification
                  + dTdx * x         & ! Linear gradient
                  + delta_T * fn       ! Smooth fn of width L_zone

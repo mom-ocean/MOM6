@@ -1,5 +1,5 @@
 !> The equation of state using the Wright 1997 expressions
-module MOM_EOS_Wright
+module MOM_EOS_Wright_red
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
@@ -7,46 +7,38 @@ use MOM_hor_index, only : hor_index_type
 
 implicit none ; private
 
-public calculate_compress_wright, calculate_density_wright, calculate_spec_vol_wright
-public calculate_density_derivs_wright, calculate_specvol_derivs_wright
-public calculate_density_second_derivs_wright, calc_density_second_derivs_wright_buggy
-public EoS_fit_range_Wright, avg_spec_vol_Wright
-public int_density_dz_wright, int_spec_vol_dp_wright
+public calculate_compress_wright_red, calculate_density_wright_red, calculate_spec_vol_wright_red
+public calculate_density_derivs_wright_red, calculate_specvol_derivs_wright_red
+public calculate_density_second_derivs_wright_red, EoS_fit_range_Wright_red
+public int_density_dz_wright_red, int_spec_vol_dp_wright_red
+public avg_spec_vol_Wright_red
 
 !> Compute the in situ density of sea water (in [kg m-3]), or its anomaly with respect to
 !! a reference density, from salinity in practical salinity units ([PSU]), potential
-!! temperature (in degrees Celsius [degC]) and pressure [Pa], using the expressions from
+!! temperature (in degrees Celsius [degC]), and pressure [Pa], using the expressions from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the reduced range fit coefficients.
-interface calculate_density_wright
+interface calculate_density_wright_red
   module procedure calculate_density_scalar_wright, calculate_density_array_wright
-end interface calculate_density_wright
+end interface calculate_density_wright_red
 
 !> Compute the in situ specific volume of sea water (in [m3 kg-1]), or an anomaly with respect
 !! to a reference specific volume, from salinity in practical salinity units ([PSU]), potential
-!! temperature (in degrees Celsius [degC]) and pressure [Pa], using the expressions from
+!! temperature (in degrees Celsius [degC]), and pressure [Pa], using the expressions from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the reduced range fit coefficients.
-interface calculate_spec_vol_wright
+interface calculate_spec_vol_wright_red
   module procedure calculate_spec_vol_scalar_wright, calculate_spec_vol_array_wright
-end interface calculate_spec_vol_wright
+end interface calculate_spec_vol_wright_red
 
 !> Compute the derivatives of density with temperature and salinity
-interface calculate_density_derivs_wright
+interface calculate_density_derivs_wright_red
   module procedure calculate_density_derivs_scalar_wright, calculate_density_derivs_array_wright
-end interface calculate_density_derivs_wright
+end interface calculate_density_derivs_wright_red
 
 !> Compute the second derivatives of density with various combinations
-!! of temperature, salinity and pressure, using the expressions from
-!! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the reduced range fit coefficients.
-interface calculate_density_second_derivs_wright
+!! of temperature, salinity, and pressure
+interface calculate_density_second_derivs_wright_red
   module procedure calculate_density_second_derivs_scalar_wright, calculate_density_second_derivs_array_wright
-end interface calculate_density_second_derivs_wright
-
-!> Compute the second derivatives of density with various combinations of temperature, salinity and
-!! pressure, but deliberately retaining a bug that reproduces older answers for the second
-!! derivative of density with temperature and the second derivative with temperature and pressure
-interface calc_density_second_derivs_wright_buggy
-  module procedure calc_dens_second_derivs_buggy_scalar_wright, calc_dens_second_derivs_buggy_array_wright
-end interface calc_density_second_derivs_wright_buggy
+end interface calculate_density_second_derivs_wright_red
 
 !>@{ Parameters in the Wright equation of state using the reduced range formula, which is a fit to the UNESCO
 !    equation of state for the restricted range: -2 < theta < 30 [degC], 28 < S < 38 [PSU], 0  < p < 5e7 [Pa].
@@ -76,7 +68,7 @@ contains
 !> Computes the in situ density of sea water for scalar inputs and outputs.
 !!
 !! Returns the in situ density of sea water (rho in [kg m-3]) from salinity (S [PSU]),
-!! potential temperature (T [degC]) and pressure [Pa].  It uses the expression from
+!! potential temperature (T [degC]), and pressure [Pa].  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the reduced range fit coefficients.
 subroutine calculate_density_scalar_wright(T, S, pressure, rho, rho_ref)
   real,           intent(in)  :: T        !< Potential temperature relative to the surface [degC].
@@ -103,7 +95,7 @@ end subroutine calculate_density_scalar_wright
 !> Computes the in situ density of sea water for 1-d array inputs and outputs.
 !!
 !! Returns the in situ density of sea water (rho in [kg m-3]) from salinity (S [PSU]),
-!! potential temperature (T [degC]) and pressure [Pa].  It uses the expression from
+!! potential temperature (T [degC]), and pressure [Pa].  It uses the expression from
 !! Wright, 1997, J. Atmos. Ocean. Tech., 14, 735-740 with the reduced range fit coefficients.
 subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_ref)
   real, dimension(:), intent(in)    :: T        !< potential temperature relative to the surface [degC].
@@ -124,9 +116,9 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
   real :: pa_000  ! A corrected offset to the pressure, including contributions from rho_ref [Pa]
   integer :: j
 
-  if (present(rho_ref)) pa_000 = (b0*(1.0 - a0*rho_ref) - rho_ref*c0)
+  if (present(rho_ref)) pa_000 = b0*(1.0 - a0*rho_ref) - rho_ref*c0
   if (present(rho_ref)) then ; do j=start,start+npts-1
-    al_TS = a1*T(j) +a2*S(j)
+    al_TS = a1*T(j) + a2*S(j)
     al0 = a0 + al_TS
     p_TSp = pressure(j) + (b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))))
     lam_TS = c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j)))
@@ -136,9 +128,9 @@ subroutine calculate_density_array_wright(T, S, pressure, rho, start, npts, rho_
     rho(j) = (pa_000 + (p_TSp - rho_ref*(p_TSp*al0 + (b0*al_TS + lam_TS)))) / &
              ( (c0 + lam_TS) + al0*(b0 + p_TSp) )
   enddo ; else ; do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) +a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*(b2 + b3*T(j)) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*(c2 + c3*T(j)) + c5*S(j))
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
   enddo ; endif
 
@@ -188,20 +180,30 @@ subroutine calculate_spec_vol_array_wright(T, S, pressure, specvol, start, npts,
   ! Local variables
   real :: al0     ! The specific volume at 0 lambda in the Wright EOS [m3 kg-1]
   real :: p0      ! The pressure offset in the Wright EOS [Pa]
-  real :: lambda  ! The sound speed squared at 0 alpha in the Wright EOS [m2 s-2]
+  real :: lambda  ! The sound speed squared at 0 alpha in the Wright EOS [m2 s-2], perhaps with
+                  ! an offset to account for spv_ref
+  real :: al_TS   ! The contributions of temperature and salinity to al0 [m3 kg-1]
+  real :: p_TSp   ! A combination of the pressure and the temperature and salinity contributions to p0 [Pa]
+  real :: lam_000 ! A corrected offset to lambda, including contributions from spv_ref [m2 s-2]
   integer :: j
 
-  do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) +a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
-
-    if (present(spv_ref)) then
-      specvol(j) = (lambda + (al0 - spv_ref)*(pressure(j) + p0)) / (pressure(j) + p0)
-    else
-      specvol(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
-    endif
-  enddo
+  if (present(spv_ref)) then
+    lam_000 = c0 + (a0 - spv_ref)*b0
+    do j=start,start+npts-1
+      al_TS = a1*T(j) + a2*S(j)
+      p_TSp = pressure(j) + (b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))))
+      lambda = lam_000 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
+      ! This is equivalent to the expression below minus spv_ref, but less sensitive to roundoff.
+      specvol(j) = al_TS + (lambda + (a0 - spv_ref)*p_TSp) / (b0 + p_TSp)
+    enddo
+  else
+    do j=start,start+npts-1
+      al0 = a0 + (a1*T(j) + a2*S(j))
+      p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+      lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
+      specvol(j) = al0 + lambda / (pressure(j) + p0)
+    enddo
+  endif
 end subroutine calculate_spec_vol_array_wright
 
 !> Return the thermal/haline expansion coefficients for 1-d array inputs and outputs
@@ -225,18 +227,15 @@ subroutine calculate_density_derivs_array_wright(T, S, pressure, drho_dT, drho_d
   integer :: j
 
   do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) + a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
 
-    I_denom2 = 1.0 / (lambda + al0*(pressure(j) + p0))
-    I_denom2 = I_denom2 *I_denom2
-    drho_dT(j) = I_denom2 * &
-      (lambda* (b1 + T(j)*(2.0*b2 + 3.0*b3*T(j)) + b5*S(j)) - &
-       (pressure(j)+p0) * ( (pressure(j)+p0)*a1 + &
-        (c1 + T(j)*(c2*2.0 + c3*3.0*T(j)) + c5*S(j)) ))
-    drho_dS(j) = I_denom2 * (lambda* (b4 + b5*T(j)) - &
-      (pressure(j)+p0) * ( (pressure(j)+p0)*a2 + (c4 + c5*T(j)) ))
+    I_denom2 = 1.0 / (lambda + al0*(pressure(j) + p0))**2
+    drho_dT(j) = I_denom2 * (lambda * (b1 + (T(j)*(2.0*b2 + 3.0*b3*T(j)) + b5*S(j))) - &
+       (pressure(j)+p0) * ( (pressure(j)+p0)*a1 + (c1 + (T(j)*(c2*2.0 + c3*3.0*T(j)) + c5*S(j))) ))
+    drho_dS(j) = I_denom2 * (lambda * (b4 + b5*T(j)) - &
+       (pressure(j)+p0) * ( (pressure(j)+p0)*a2 + (c4 + c5*T(j)) ))
   enddo
 
 end subroutine calculate_density_derivs_array_wright
@@ -270,7 +269,7 @@ subroutine calculate_density_derivs_scalar_wright(T, S, pressure, drho_dT, drho_
 
 end subroutine calculate_density_derivs_scalar_wright
 
-!> Second derivatives of density with respect to temperature, salinity and pressure for 1-d array inputs and outputs.
+!> Second derivatives of density with respect to temperature, salinity, and pressure for 1-d array inputs and outputs.
 subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
                                                          drho_ds_dp, drho_dt_dp, start, npts)
   real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar [degC]
@@ -290,47 +289,60 @@ subroutine calculate_density_second_derivs_array_wright(T, S, P, drho_ds_ds, drh
   integer,            intent(in   ) :: npts  !< Number of points to loop over
 
   ! Local variables
-  real :: z0, z1 ! Local work variables [Pa]
-  real :: z2, z4 ! Local work variables [m2 s-2]
-  real :: z3, z5 ! Local work variables [Pa degC-1]
-  real :: z6, z8 ! Local work variables [m2 s-2 degC-1]
-  real :: z7     ! A local work variable [m2 s-2 PSU-1]
-  real :: z9     ! A local work variable [m3 kg-1]
-  real :: z10    ! A local work variable [Pa PSU-1]
-  real :: z11    ! A local work variable [Pa m2 s-2 PSU-1] = [kg m s-4 PSU-1]
-  real :: z2_2   ! A local work variable [m4 s-4]
-  real :: z2_3   ! A local work variable [m6 s-6]
+  real :: al0     ! The specific volume at 0 lambda in the Wright EOS [m3 kg-1]
+  real :: lambda  ! The sound speed squared at 0 alpha in the Wright EOS [m2 s-2]
+  real :: p_p0    ! A local work variable combining the pressure and pressure
+                  ! offset (p0 elsewhere) in the Wright EOS [Pa]
+  real :: dp0_dT  ! The partial derivative of p0 with temperature [Pa degC-1]
+  real :: dp0_dS  ! The partial derivative of p0 with salinity [Pa PSU-1]
+  real :: dlam_dT ! The partial derivative of lambda with temperature [m2 s-2 degC-1]
+  real :: dlam_dS ! The partial derivative of lambda with salinity [m2 s-2 degC-1]
+  real :: dRdT_num  ! The numerator in the expression for drho_dT [Pa m2 s-2 degC-1] = [kg m s-4 degC-1]
+  real :: dRdS_num  ! The numerator in the expression for drho_ds [Pa m2 s-2 PSU-1] = [kg m s-4 PSU-1]
+  real :: ddenom_dT ! The derivative of the denominator of density in the Wright EOS with temperature [m2 s-2 deg-1]
+  real :: ddenom_dS ! The derivative of the denominator of density in the Wright EOS with salinity [m2 s-2 PSU-1]
+  real :: I_denom   ! The inverse of the denominator of density in the Wright EOS [s2 m-2]
+  real :: I_denom2  ! The inverse of the square of the denominator of density in the Wright EOS [s4 m-4]
+  real :: I_denom3  ! The inverse of the cube of the denominator of density in the Wright EOS [s6 m-6]
   integer :: j
-  ! See the counterpart in MOM_EOS_Wright_full.F90 for a more numerically stable
-  ! and/or efficient, but mathematically equivalent expression
 
   do j = start,start+npts-1
-    z0 = T(j)*(b1 + b5*S(j) + T(j)*(b2 + b3*T(j)))
-    z1 = (b0 + P(j) + b4*S(j) + z0)
-    z3 = (b1 + b5*S(j) + T(j)*(2.*b2 + 3.*b3*T(j)))
-    z4 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))))
-    z5 = (b1 + b5*S(j) + T(j)*(b2 + b3*T(j)) + T(j)*(b2 + 2.*b3*T(j)))
-    z6 = c1 + c5*S(j) + T(j)*(c2 + c3*T(j)) + T(j)*(c2 + 2.*c3*T(j))
-    z7 = (c4 + c5*T(j) + a2*z1)
-    z8 = (c1 + c5*S(j) + T(j)*(2.*c2 + 3.*c3*T(j)) + a1*z1)
-    z9 = (a0 + a2*S(j) + a1*T(j))
-    z10 = (b4 + b5*T(j))
-    z11 = (z10*z4 - z1*z7)
-    z2 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))) + z9*z1)
-    z2_2 = z2*z2
-    z2_3 = z2_2*z2
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p_p0 = P(j) + ( b0 + (b4*S(j) + T(j)*(b1 + (b5*S(j) + T(j)*(b2 + b3*T(j))))) ) ! P + p0
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
+    dp0_dT = b1 + (b5*S(j) + T(j)*(2.*b2 + 3.*b3*T(j)))
+    dp0_dS = b4 + b5*T(j)
+    dlam_dT = c1 + (c5*S(j) + T(j)*(2.*c2 + 3.*c3*T(j)))
+    dlam_dS = c4 + c5*T(j)
+    I_denom = 1.0 / (lambda + al0*p_p0)
+    I_denom2 = I_denom*I_denom
+    I_denom3 = I_denom*I_denom2
 
-    drho_ds_ds(j) = (z10*(c4 + c5*T(j)) - a2*z10*z1 - z10*z7)/z2_2 - (2.*(c4 + c5*T(j) + z9*z10 + a2*z1)*z11)/z2_3
-    drho_ds_dt(j) = (z10*z6 - z1*(c5 + a2*z5) + b5*z4 - z5*z7)/z2_2 - (2.*(z6 + z9*z5 + a1*z1)*z11)/z2_3
-    drho_dt_dt(j) = (z3*z6 - z1*(2.*c2 + 6.*c3*T(j) + a1*z5) + (2.*b2 + 6.*b3*T(j))*z4 - z5*z8)/z2_2 - &
-                    (2.*(z6 + z9*z5 + a1*z1)*(z3*z4 - z1*z8))/z2_3
-    drho_ds_dp(j) = (-c4 - c5*T(j) - 2.*a2*z1)/z2_2 - (2.*z9*z11)/z2_3
-    drho_dt_dp(j) = (-c1 - c5*S(j) - T(j)*(2.*c2 + 3.*c3*T(j)) - 2.*a1*z1)/z2_2 - (2.*z9*(z3*z4 - z1*z8))/z2_3
+    ddenom_dS = (dlam_dS + a2*p_p0) + al0*dp0_dS
+    ddenom_dT = (dlam_dT + a1*p_p0) + al0*dp0_dT
+    dRdS_num = dp0_dS*lambda - p_p0*(dlam_dS + a2*p_p0)
+    dRdT_num = dp0_dT*lambda - p_p0*(dlam_dT + a1*p_p0)
+
+    ! In deriving the following, it is useful to note that:
+    !   rho(j) = p_p0 / (lambda + al0*p_p0)
+    !   drho_dp(j) = lambda * I_denom2
+    !   drho_dT(j) = (dp0_dT*lambda - p_p0*(dlam_dT + a1*p_p0)) * I_denom2 = dRdT_num * I_denom2
+    !   drho_dS(j) = (dp0_dS*lambda - p_p0*(dlam_dS + a2*p_p0)) * I_denom2 = dRdS_num * I_denom2
+    drho_ds_ds(j) = -2.*(p_p0*(a2*dp0_dS)) * I_denom2 - 2.*(dRdS_num*ddenom_dS) * I_denom3
+    drho_ds_dt(j) = ((b5*lambda - p_p0*(c5 + 2.*a2*dp0_dT)) + (dp0_dS*dlam_dT - dp0_dT*dlam_dS))*I_denom2 - &
+                    2.*(ddenom_dT*dRdS_num) * I_denom3
+    drho_dt_dt(j) = 2.*((b2 + 3.*b3*T(j))*lambda - p_p0*((c2 + 3.*c3*T(j)) + a1*dp0_dT))*I_denom2 - &
+                    2.*(dRdT_num * ddenom_dT) * I_denom3
+
+    ! The following is a rearranged form that is equivalent to
+    ! drho_ds_dp(j) = dlam_dS * I_denom2 - 2.0 * lambda * (dlam_dS + a2*p_p0 + al0*dp0_ds) * Idenom3
+    drho_ds_dp(j) = (-dlam_dS - 2.*a2*p_p0) * I_denom2 - (2.*al0*dRdS_num) * I_denom3
+    drho_dt_dp(j) = (-dlam_dT - 2.*a1*p_p0) * I_denom2 - (2.*al0*dRdT_num) * I_denom3
   enddo
 
 end subroutine calculate_density_second_derivs_array_wright
 
-!> Second derivatives of density with respect to temperature, salinity and pressure for scalar inputs.
+!> Second derivatives of density with respect to temperature, salinity, and pressure for scalar inputs.
 !!
 !! The scalar version of calculate_density_second_derivs promotes scalar inputs to 1-element array
 !! and then demotes the output back to a scalar
@@ -374,117 +386,9 @@ subroutine calculate_density_second_derivs_scalar_wright(T, S, P, drho_ds_ds, dr
 
 end subroutine calculate_density_second_derivs_scalar_wright
 
-!> Second derivatives of density with respect to temperature, salinity and pressure for 1-d array
-!! inputs and outputs, but deliberately including a bug to reproduce previous answers, in which
-!! some terms in the expressions for drho_dt_dt and drho_dt_dp are 2/3 of what they should be.
-subroutine calc_dens_second_derivs_buggy_array_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
-                                                         drho_ds_dp, drho_dt_dp, start, npts)
-  real, dimension(:), intent(in   ) :: T !< Potential temperature referenced to 0 dbar [degC]
-  real, dimension(:), intent(in   ) :: S !< Salinity [PSU]
-  real, dimension(:), intent(in   ) :: P !< Pressure [Pa]
-  real, dimension(:), intent(inout) :: drho_ds_ds !< Partial derivative of beta with respect
-                                                  !! to S [kg m-3 PSU-2]
-  real, dimension(:), intent(inout) :: drho_ds_dt !< Partial derivative of beta with respect
-                                                  !! to T [kg m-3 PSU-1 degC-1]
-  real, dimension(:), intent(inout) :: drho_dt_dt !< Partial derivative of alpha with respect
-                                                  !! to T [kg m-3 degC-2]
-  real, dimension(:), intent(inout) :: drho_ds_dp !< Partial derivative of beta with respect
-                                                  !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
-  real, dimension(:), intent(inout) :: drho_dt_dp !< Partial derivative of alpha with respect
-                                                  !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
-  integer,            intent(in   ) :: start !< Starting index in T,S,P
-  integer,            intent(in   ) :: npts  !< Number of points to loop over
-
-  ! Local variables
-  real :: z0, z1 ! Local work variables [Pa]
-  real :: z2, z4 ! Local work variables [m2 s-2]
-  real :: z3, z5 ! Local work variables [Pa degC-1]
-  real :: z6, z8 ! Local work variables [m2 s-2 degC-1]
-  real :: z7     ! A local work variable [m2 s-2 PSU-1]
-  real :: z9     ! A local work variable [m3 kg-1]
-  real :: z10    ! A local work variable [Pa PSU-1]
-  real :: z11    ! A local work variable [Pa m2 s-2 PSU-1] = [kg m s-4 PSU-1]
-  real :: z2_2   ! A local work variable [m4 s-4]
-  real :: z2_3   ! A local work variable [m6 s-6]
-  integer :: j
-  ! Based on the above expression with common terms factored, there probably exists a more numerically stable
-  ! and/or efficient expression
-
-  do j = start,start+npts-1
-    z0 = T(j)*(b1 + b5*S(j) + T(j)*(b2 + b3*T(j)))
-    z1 = (b0 + P(j) + b4*S(j) + z0)
-    z3 = (b1 + b5*S(j) + T(j)*(2.*b2 + 2.*b3*T(j))) ! BUG: This should be z3 = b1 + b5*S(j) + T(j)*(2.*b2 + 3.*b3*T(j))
-    z4 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))))
-    z5 = (b1 + b5*S(j) + T(j)*(b2 + b3*T(j)) + T(j)*(b2 + 2.*b3*T(j)))
-    z6 = c1 + c5*S(j) + T(j)*(c2 + c3*T(j)) + T(j)*(c2 + 2.*c3*T(j))
-    z7 = (c4 + c5*T(j) + a2*z1)
-    z8 = (c1 + c5*S(j) + T(j)*(2.*c2 + 3.*c3*T(j)) + a1*z1)
-    z9 = (a0 + a2*S(j) + a1*T(j))
-    z10 = (b4 + b5*T(j))
-    z11 = (z10*z4 - z1*z7)
-    z2 = (c0 + c4*S(j) + T(j)*(c1 + c5*S(j) + T(j)*(c2 + c3*T(j))) + z9*z1)
-    z2_2 = z2*z2
-    z2_3 = z2_2*z2
-
-    drho_ds_ds(j) = (z10*(c4 + c5*T(j)) - a2*z10*z1 - z10*z7)/z2_2 - (2.*(c4 + c5*T(j) + z9*z10 + a2*z1)*z11)/z2_3
-    drho_ds_dt(j) = (z10*z6 - z1*(c5 + a2*z5) + b5*z4 - z5*z7)/z2_2 - (2.*(z6 + z9*z5 + a1*z1)*z11)/z2_3
-    ! BUG: In the following line: (2.*b2 + 4.*b3*T(j)) should be (2.*b2 + 6.*b3*T(j))
-    drho_dt_dt(j) = (z3*z6 - z1*(2.*c2 + 6.*c3*T(j) + a1*z5) + (2.*b2 + 4.*b3*T(j))*z4 - z5*z8)/z2_2 - &
-                    (2.*(z6 + z9*z5 + a1*z1)*(z3*z4 - z1*z8))/z2_3
-    drho_ds_dp(j) = (-c4 - c5*T(j) - 2.*a2*z1)/z2_2 - (2.*z9*z11)/z2_3
-    drho_dt_dp(j) = (-c1 - c5*S(j) - T(j)*(2.*c2 + 3.*c3*T(j)) - 2.*a1*z1)/z2_2 - (2.*z9*(z3*z4 - z1*z8))/z2_3
-  enddo
-
-end subroutine calc_dens_second_derivs_buggy_array_wright
-
-!> Second derivatives of density with respect to temperature, salinity and pressure for scalar
-!! inputs, but deliberately including a bug to reproduce previous answers.
-!!
-!! The scalar version of calculate_density_second_derivs promotes scalar inputs to 1-element array
-!! and then demotes the output back to a scalar
-subroutine calc_dens_second_derivs_buggy_scalar_wright(T, S, P, drho_ds_ds, drho_ds_dt, drho_dt_dt, &
-                                                         drho_ds_dp, drho_dt_dp)
-  real, intent(in   ) :: T          !< Potential temperature referenced to 0 dbar
-  real, intent(in   ) :: S          !< Salinity [PSU]
-  real, intent(in   ) :: P          !< pressure [Pa]
-  real, intent(  out) :: drho_ds_ds !< Partial derivative of beta with respect
-                                    !! to S [kg m-3 PSU-2]
-  real, intent(  out) :: drho_ds_dt !< Partial derivative of beta with respect
-                                    !! to T [kg m-3 PSU-1 degC-1]
-  real, intent(  out) :: drho_dt_dt !< Partial derivative of alpha with respect
-                                    !! to T [kg m-3 degC-2]
-  real, intent(  out) :: drho_ds_dp !< Partial derivative of beta with respect
-                                    !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
-  real, intent(  out) :: drho_dt_dp !< Partial derivative of alpha with respect
-                                    !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
-  ! Local variables
-  real, dimension(1) :: T0    ! A 1-d array with a copy of the temperature [degC]
-  real, dimension(1) :: S0    ! A 1-d array with a copy of the salinity [PSU]
-  real, dimension(1) :: p0    ! A 1-d array with a copy of the pressure [Pa]
-  real, dimension(1) :: drdsds ! The second derivative of density with salinity [kg m-3 PSU-2]
-  real, dimension(1) :: drdsdt ! The second derivative of density with salinity and
-                               ! temperature [kg m-3 PSU-1 degC-1]
-  real, dimension(1) :: drdtdt ! The second derivative of density with temperature [kg m-3 degC-2]
-  real, dimension(1) :: drdsdp ! The second derivative of density with salinity and
-                               ! pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
-  real, dimension(1) :: drdtdp ! The second derivative of density with temperature and
-                               ! pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
-
-  T0(1) = T
-  S0(1) = S
-  P0(1) = P
-  call calculate_density_second_derivs_array_wright(T0, S0, P0, drdsds, drdsdt, drdtdt, drdsdp, drdtdp, 1, 1)
-  drho_ds_ds = drdsds(1)
-  drho_ds_dt = drdsdt(1)
-  drho_dt_dt = drdtdt(1)
-  drho_ds_dp = drdsdp(1)
-  drho_dt_dp = drdtdp(1)
-
-end subroutine calc_dens_second_derivs_buggy_scalar_wright
-
 !> Return the partial derivatives of specific volume with temperature and salinity
 !! for 1-d array inputs and outputs
-subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start, npts)
+subroutine calculate_specvol_derivs_wright_red(T, S, pressure, dSV_dT, dSV_dS, start, npts)
   real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
   real,    intent(in),    dimension(:) :: pressure !< pressure [Pa].
@@ -502,23 +406,23 @@ subroutine calculate_specvol_derivs_wright(T, S, pressure, dSV_dT, dSV_dS, start
   integer :: j
 
   do j=start,start+npts-1
-!    al0 = (a0 + a1*T(j)) + a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+!    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
 
     ! SV = al0 + lambda / (pressure(j) + p0)
 
     I_denom = 1.0 / (pressure(j) + p0)
-    dSV_dT(j) = (a1 + I_denom * (c1 + T(j)*((2.0*c2 + 3.0*c3*T(j))) + c5*S(j))) - &
-                (I_denom**2 * lambda) *  (b1 + T(j)*((2.0*b2 + 3.0*b3*T(j))) + b5*S(j))
-    dSV_dS(j) = (a2 + I_denom * (c4 + c5*T(j))) - &
-                (I_denom**2 * lambda) *  (b4 + b5*T(j))
+    dSV_dT(j) = a1 + I_denom * ((c1 + (T(j)*(2.0*c2 + 3.0*c3*T(j)) + c5*S(j))) - &
+                                (I_denom * lambda) * (b1 + (T(j)*(2.0*b2 + 3.0*b3*T(j)) + b5*S(j))))
+    dSV_dS(j) = a2 + I_denom * ((c4 + c5*T(j)) - &
+                                (I_denom * lambda) * (b4 + b5*T(j)))
   enddo
 
-end subroutine calculate_specvol_derivs_wright
+end subroutine calculate_specvol_derivs_wright_red
 
 !> Computes the compressibility of seawater for 1-d array inputs and outputs
-subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
+subroutine calculate_compress_wright_red(T, S, pressure, rho, drho_dp, start, npts)
   real,    intent(in),    dimension(:) :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in),    dimension(:) :: S        !< Salinity [PSU].
   real,    intent(in),    dimension(:) :: pressure !< pressure [Pa].
@@ -537,20 +441,20 @@ subroutine calculate_compress_wright(T, S, pressure, rho, drho_dp, start, npts)
   integer :: j
 
   do j=start,start+npts-1
-    al0 = (a0 + a1*T(j)) +a2*S(j)
-    p0 = (b0 + b4*S(j)) + T(j) * (b1 + T(j)*((b2 + b3*T(j))) + b5*S(j))
-    lambda = (c0 +c4*S(j)) + T(j) * (c1 + T(j)*((c2 + c3*T(j))) + c5*S(j))
+    al0 = a0 + (a1*T(j) + a2*S(j))
+    p0 = b0 + ( b4*S(j) + T(j) * (b1 + (T(j)*(b2 + b3*T(j)) + b5*S(j))) )
+    lambda = c0 + ( c4*S(j) + T(j) * (c1 + (T(j)*(c2 + c3*T(j)) + c5*S(j))) )
 
     I_denom = 1.0 / (lambda + al0*(pressure(j) + p0))
     rho(j) = (pressure(j) + p0) * I_denom
-    drho_dp(j) = lambda * I_denom * I_denom
+    drho_dp(j) = lambda * I_denom**2
   enddo
-end subroutine calculate_compress_wright
+end subroutine calculate_compress_wright_red
 
 !> Calculates analytical and nearly-analytical integrals, in pressure across layers, to determine
 !! the layer-average specific volumes.  There are essentially no free assumptions, apart from a
 !! truncation in the series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
-subroutine avg_spec_vol_Wright(T, S, p_t, dp, SpV_avg, start, npts)
+subroutine avg_spec_vol_Wright_red(T, S, p_t, dp, SpV_avg, start, npts)
   real, dimension(:), intent(in)    :: T         !< Potential temperature relative to the surface
                                                  !! [degC].
   real, dimension(:), intent(in)    :: S         !< Salinity [PSU].
@@ -581,12 +485,12 @@ subroutine avg_spec_vol_Wright(T, S, p_t, dp, SpV_avg, start, npts)
     SpV_avg(j) = al0 + (lambda * I_pterm) * &
                          (1.0 + eps2*(C1_3 + eps2*(0.2 + eps2*(C1_7 + eps2*C1_9))))
   enddo
-end subroutine avg_spec_vol_Wright
+end subroutine avg_spec_vol_Wright_red
 
 !> Return the range of temperatures, salinities and pressures for which the reduced-range equation
 !! of state from Wright (1997) has been fitted to observations.  Care should be taken when applying
 !! this equation of state outside of its fit range.
-subroutine EoS_fit_range_Wright(T_min, T_max, S_min, S_max, p_min, p_max)
+subroutine EoS_fit_range_Wright_red(T_min, T_max, S_min, S_max, p_min, p_max)
   real, optional, intent(out) :: T_min !< The minimum potential temperature over which this EoS is fitted [degC]
   real, optional, intent(out) :: T_max !< The maximum potential temperature over which this EoS is fitted [degC]
   real, optional, intent(out) :: S_min !< The minimum practical salinity over which this EoS is fitted [PSU]
@@ -601,14 +505,14 @@ subroutine EoS_fit_range_Wright(T_min, T_max, S_min, S_max, p_min, p_max)
   if (present(p_min)) p_min = 0.0
   if (present(p_max)) p_max = 5.0e7
 
-end subroutine EoS_fit_range_Wright
+end subroutine EoS_fit_range_Wright_red
 
 !> Calculates analytical and nearly-analytical integrals, in geopotential across layers, of pressure
 !! anomalies, which are required for calculating the finite-volume form pressure accelerations in a
 !! Boussinesq model.  There are essentially no free assumptions, apart from the use of Boole's rule
 !! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
 !! that assumes that |eps| < 0.34.
-subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+subroutine int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                  dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, &
                                  useMassWghtInterp, rho_scale, pres_scale, temp_scale, saln_scale, Z_0p)
   type(hor_index_type), intent(in)  :: HI       !< The horizontal index type for the arrays.
@@ -756,9 +660,9 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   endif ; endif
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    al0_2d(i,j) = (a0 + a1s*T(i,j)) + a2s*S(i,j)
-    p0_2d(i,j) = (b0 + b4s*S(i,j)) + T(i,j) * (b1s + T(i,j)*((b2s + b3s*T(i,j))) + b5s*S(i,j))
-    lambda_2d(i,j) = (c0 +c4s*S(i,j)) + T(i,j) * (c1s + T(i,j)*((c2s + c3s*T(i,j))) + c5s*S(i,j))
+    al0_2d(i,j) = a0 + (a1s*T(i,j) + a2s*S(i,j))
+    p0_2d(i,j) = b0 + ( b4s*S(i,j) + T(i,j) * (b1s + (T(i,j)*(b2s + b3s*T(i,j)) + b5s*S(i,j))) )
+    lambda_2d(i,j) = c0 + ( c4s*S(i,j) + T(i,j) * (c1s + (T(i,j)*(c2s + c3s*T(i,j)) + c5s*S(i,j))) )
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
 
@@ -766,17 +670,16 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     p_ave = -GxRho*(0.5*(z_t(i,j)+z_b(i,j)) - z0pres)
 
     I_al0 = 1.0 / al0
-    I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
-    eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
+    I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
+    eps = 0.5*(GxRho*dz)*I_Lzz ; eps2 = eps*eps
 
 !     rho(j) = (pressure(j) + p0) / (lambda + al0*(pressure(j) + p0))
 
     rho_anom = (p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks
-    rem = I_Rho * (lambda * I_al0**2) * eps2 * &
-          (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
-    dpa(i,j) = Pa_to_RL2_T2 * (g_Earth*rho_anom*dz - 2.0*eps*rem)
+    rem = (I_Rho * (lambda * I_al0**2)) * (eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))))
+    dpa(i,j) = Pa_to_RL2_T2 * ((g_Earth*rho_anom)*dz - 2.0*eps*rem)
     if (present(intz_dpa)) &
-      intz_dpa(i,j) = Pa_to_RL2_T2 * (0.5*g_Earth*rho_anom*dz**2 - dz*(1.0+eps)*rem)
+      intz_dpa(i,j) = Pa_to_RL2_T2 * (0.5*(g_Earth*rho_anom)*dz**2 - dz*((1.0+eps)*rem))
   enddo ; enddo
 
   if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
@@ -810,11 +713,11 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       p_ave = -GxRho*(0.5*(wt_L*(z_t(i,j)+z_b(i,j)) + wt_R*(z_t(i+1,j)+z_b(i+1,j))) - z0pres)
 
       I_al0 = 1.0 / al0
-      I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
-      eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
+      I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
+      eps = 0.5*(GxRho*dz)*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
-                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
+      intz(m) = Pa_to_RL2_T2 * ( (g_Earth*dz) * ((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                  (I_Rho * (lambda * I_al0**2)) * (eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))) )
     enddo
     ! Use Boole's rule to integrate the values.
     intx_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
@@ -851,24 +754,24 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       p_ave = -GxRho*(0.5*(wt_L*(z_t(i,j)+z_b(i,j)) + wt_R*(z_t(i,j+1)+z_b(i,j+1))) - z0pres)
 
       I_al0 = 1.0 / al0
-      I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
-      eps = 0.5*GxRho*dz*I_Lzz ; eps2 = eps*eps
+      I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
+      eps = 0.5*(GxRho*dz)*I_Lzz ; eps2 = eps*eps
 
-      intz(m) = Pa_to_RL2_T2 * ( g_Earth*dz*((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
-                I_Rho * (lambda * I_al0**2) * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2))) )
+      intz(m) = Pa_to_RL2_T2 * ( (g_Earth*dz) * ((p0 + p_ave)*(I_Lzz*I_al0) - rho_ref_mks) - 2.0*eps * &
+                  (I_Rho * (lambda * I_al0**2)) * (eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))) )
     enddo
     ! Use Boole's rule to integrate the values.
     inty_dpa(i,j) = C1_90*(7.0*(intz(1)+intz(5)) + 32.0*(intz(2)+intz(4)) + 12.0*intz(3))
   enddo ; enddo ; endif
 
-end subroutine int_density_dz_wright
+end subroutine int_density_dz_wright_red
 
 !> Calculates analytical and nearly-analytical integrals, in pressure across layers, of geopotential
 !! anomalies, which are required for calculating the finite-volume form pressure accelerations in a
 !! non-Boussinesq model.  There are essentially no free assumptions, apart from the use of Boole's
 !! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
 !! that assumes that |eps| < 0.34.
-subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
+subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
                                   intp_dza, intx_dza, inty_dza, halo_size, bathyP, dP_neglect, &
                                   useMassWghtInterp, SV_scale, pres_scale, temp_scale, saln_scale)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
@@ -937,6 +840,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [R L2 T-2 ~> Pa].
   real :: iDenom     ! The inverse of the denominator in the weights [T4 R-2 L-4 ~> Pa-2].
+  real :: I_pterm    ! The inverse of p0 plus p_ave [T2 R-1 L-2 ~> Pa-1].
   real :: hWt_LL, hWt_LR ! hWt_LA is the weighted influence of A on the left column [nondim].
   real :: hWt_RL, hWt_RR ! hWt_RA is the weighted influence of A on the right column [nondim].
   real :: wt_L, wt_R ! The linear weights of the left and right columns [nondim].
@@ -1003,20 +907,21 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
 
   !  alpha(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
   do j=jsh,jeh ; do i=ish,ieh
-    al0_2d(i,j) = al0_scale * ( (a0 + a1s*T(i,j)) + a2s*S(i,j) )
-    p0_2d(i,j) = p0_scale * ( (b0 + b4s*S(i,j)) + T(i,j) * (b1s + T(i,j)*((b2s + b3s*T(i,j))) + b5s*S(i,j)) )
-    lambda_2d(i,j) = lam_scale * ( (c0 + c4s*S(i,j)) + T(i,j) * (c1s + T(i,j)*((c2s + c3s*T(i,j))) + c5s*S(i,j)) )
+    al0_2d(i,j) = al0_scale * ( a0 + (a1s*T(i,j) + a2s*S(i,j)) )
+    p0_2d(i,j) = p0_scale * ( b0 + ( b4s*S(i,j) + T(i,j) * (b1s + (T(i,j)*(b2s + b3s*T(i,j)) + b5s*S(i,j))) ) )
+    lambda_2d(i,j) = lam_scale * ( c0 + ( c4s*S(i,j) + T(i,j) * (c1s + (T(i,j)*(c2s + c3s*T(i,j)) + c5s*S(i,j))) ) )
 
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
     dp = p_b(i,j) - p_t(i,j)
     p_ave = 0.5*(p_t(i,j)+p_b(i,j))
+    I_pterm = 1.0 / (p0 + p_ave)
 
-    eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-    alpha_anom = al0 + lambda / (p0 + p_ave) - spv_ref
-    rem = lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
+    eps = 0.5 * dp * I_pterm ; eps2 = eps*eps
+    alpha_anom = (al0 - spv_ref) + lambda * I_pterm
+    rem = (lambda * eps2) * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     dza(i,j) = alpha_anom*dp + 2.0*eps*rem
     if (present(intp_dza)) &
-      intp_dza(i,j) = 0.5*alpha_anom*dp**2 - dp*(1.0-eps)*rem
+      intp_dza(i,j) = 0.5*alpha_anom*dp**2 - dp*((1.0-eps)*rem)
   enddo ; enddo
 
   if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
@@ -1042,7 +947,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
       wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
       wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
-      ! T, S and p are interpolated in the horizontal.  The p interpolation
+      ! T, S, and p are interpolated in the horizontal.  The p interpolation
       ! is linear, but for T and S it may be thickness weighted.
       al0 = wtT_L*al0_2d(i,j) + wtT_R*al0_2d(i+1,j)
       p0 = wtT_L*p0_2d(i,j) + wtT_R*p0_2d(i+1,j)
@@ -1050,9 +955,10 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
 
       dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
       p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i+1,j)+p_b(i+1,j)))
+      I_pterm = 1.0 / (p0 + p_ave)
 
-      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
+      eps = 0.5 * dp * I_pterm ; eps2 = eps*eps
+      intp(m) = ((al0 - spv_ref) + lambda * I_pterm)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Boole's rule to integrate the values.
@@ -1083,7 +989,7 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
       wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
       wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
 
-      ! T, S and p are interpolated in the horizontal.  The p interpolation
+      ! T, S, and p are interpolated in the horizontal.  The p interpolation
       ! is linear, but for T and S it may be thickness weighted.
       al0 = wt_L*al0_2d(i,j) + wt_R*al0_2d(i,j+1)
       p0 = wt_L*p0_2d(i,j) + wt_R*p0_2d(i,j+1)
@@ -1091,24 +997,25 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
 
       dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
       p_ave = 0.5*(wt_L*(p_t(i,j)+p_b(i,j)) + wt_R*(p_t(i,j+1)+p_b(i,j+1)))
+      I_pterm = 1.0 / (p0 + p_ave)
 
-      eps = 0.5 * dp / (p0 + p_ave) ; eps2 = eps*eps
-      intp(m) = (al0 + lambda / (p0 + p_ave) - spv_ref)*dp + 2.0*eps* &
+      eps = 0.5 * dp * I_pterm ; eps2 = eps*eps
+      intp(m) = ((al0 - spv_ref) + lambda * I_pterm)*dp + 2.0*eps* &
                lambda * eps2 * (C1_3 + eps2*(0.2 + eps2*(C1_7 + C1_9*eps2)))
     enddo
     ! Use Boole's rule to integrate the values.
     inty_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
                            12.0*intp(3))
   enddo ; enddo ; endif
-end subroutine int_spec_vol_dp_wright
+end subroutine int_spec_vol_dp_wright_red
 
 
-!> \namespace mom_eos_wright
+!> \namespace mom_eos_wright_red
 !!
-!! \section section_EOS_Wright Wright equation of state
+!! \section section_EOS_Wright_red Wright equation of state
 !!
 !! Wright, 1997, provide an approximation for the in situ density as a function of
-!! potential temperature, salinity and pressure. The formula follow the Tumlirz
+!! potential temperature, salinity, and pressure. The formula follow the Tumlirz
 !! equation of state which are easier to evaluate and make efficient.
 !!
 !! Two ranges are provided by Wright: a "full" range and "reduced" range. The version in this
@@ -1117,10 +1024,10 @@ end subroutine int_spec_vol_dp_wright
 !! Originally coded in 2000 by R. Hallberg.
 !! Anomaly form coded in 3/18.
 !!
-!! \subsection section_EOS_Wright_references References
+!! \subsection section_EOS_Wright_red_references References
 !!
 !! Wright, D., 1997: An Equation of State for Use in Ocean Models: Eckart's Formula Revisited.
 !! J. Ocean. Atmosph. Tech., 14 (3), 735-740.
 !! https://journals.ametsoc.org/doi/abs/10.1175/1520-0426%281997%29014%3C0735%3AAEOSFU%3E2.0.CO%3B2
 
-end module MOM_EOS_Wright
+end module MOM_EOS_Wright_red

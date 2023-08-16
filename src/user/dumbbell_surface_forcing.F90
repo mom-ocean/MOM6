@@ -210,7 +210,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "DUMBBELL_SLP_AMP", CS%slp_amplitude, &
                  "Amplitude of SLP forcing in reservoirs.", &
-                 units="Pa", default=10000.0, scale=US%kg_m3_to_R*US%m_s_to_L_T**2)
+                 units="Pa", default=10000.0, scale=US%Pa_to_RL2_T2)
   call get_param(param_file, mdl, "DUMBBELL_SLP_PERIOD", CS%slp_period, &
                  "Periodicity of SLP forcing in reservoirs.", &
                  units="days", default=1.0)

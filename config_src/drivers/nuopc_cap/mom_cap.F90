@@ -8,12 +8,12 @@ use mpp_domains_mod,          only: mpp_get_compute_domains
 use mpp_domains_mod,          only: mpp_get_ntile_count, mpp_get_pelist, mpp_get_global_domain
 use mpp_domains_mod,          only: mpp_get_domain_npes
 
-use MOM_time_manager,         only: set_calendar_type, time_type, set_time, set_date, month_name
+use MOM_time_manager,         only: set_calendar_type, time_type, set_time, set_date
 use MOM_time_manager,         only: GREGORIAN, JULIAN, NOLEAP
 use MOM_time_manager,         only: operator( <= ), operator( < ), operator( >= )
 use MOM_time_manager,         only: operator( + ),  operator( - ), operator( / )
 use MOM_time_manager,         only: operator( * ), operator( /= ), operator( > )
-use MOM_domains,              only: MOM_infra_init, MOM_infra_end, num_pes, root_pe, pe_here
+use MOM_domains,              only: MOM_infra_init, MOM_infra_end
 use MOM_file_parser,          only: get_param, log_version, param_file_type, close_param_file
 use MOM_get_input,            only: get_MOM_input, directories
 use MOM_domains,              only: pass_var

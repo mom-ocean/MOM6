@@ -243,7 +243,7 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
   type(verticalGrid_type), intent(in) :: GV                   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in) :: US                   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: h !< The thickness that is being
-                                                              !! initialized [H ~> m or kg m-2].
+                                                              !! initialized [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in) :: param_file           !< A structure indicating the open
@@ -288,12 +288,12 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
   do j=js,je ; do i=is,ie
     e_interface = -depth_tot(i,j)
     do k=nz,2,-1
-      h(i,j,k) = GV%Z_to_H * (e0(k) - e_interface) ! Nominal thickness
+      h(i,j,k) = e0(k) - e_interface ! Nominal thickness
       x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
       y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
       r1 = sqrt((x-0.7)**2+(y-0.2)**2)
       r2 = sqrt((x-0.3)**2+(y-0.25)**2)
-      h(i,j,k) = h(i,j,k) + pert_amp * (e0(k) - e0(nz+1)) * GV%Z_to_H * &
+      h(i,j,k) = h(i,j,k) + pert_amp * (e0(k) - e0(nz+1)) * &
                             (spike(r1,0.15)-spike(r2,0.15)) ! Prescribed perturbation
       if (h_noise /= 0.) then
         rns = initializeRandomNumberStream( int( 4096*(x + (y+1.)) ) )
@@ -301,11 +301,11 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
         noise = h_noise * 2. * ( noise - 0.5 ) ! range -h_noise to h_noise
         h(i,j,k) = ( 1. + noise ) * h(i,j,k)
       endif
-      h(i,j,k) = max( GV%Angstrom_H, h(i,j,k) ) ! Limit to non-negative
-      e_interface = e_interface + GV%H_to_Z * h(i,j,k) ! Actual position of upper interface
+      h(i,j,k) = max( GV%Angstrom_Z, h(i,j,k) ) ! Limit to non-negative
+      e_interface = e_interface + h(i,j,k) ! Actual position of upper interface
     enddo
-    h(i,j,1) = GV%Z_to_H * (e0(1) - e_interface) ! Nominal thickness
-    h(i,j,1) = max( GV%Angstrom_H, h(i,j,1) ) ! Limit to non-negative
+    h(i,j,1) = e0(1) - e_interface ! Nominal thickness
+    h(i,j,1) = max( GV%Angstrom_Z, h(i,j,1) ) ! Limit to non-negative
   enddo ; enddo
 
 end subroutine Neverworld_initialize_thickness

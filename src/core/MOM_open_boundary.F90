@@ -24,6 +24,7 @@ use MOM_tidal_forcing,        only : astro_longitudes, astro_longitudes_init, eq
 use MOM_time_manager,         only : set_date, time_type, time_type_to_real, operator(-)
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
 use MOM_interpolate,          only : init_external_field, time_interp_external, time_interp_external_init
+use MOM_interpolate,          only : external_field
 use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
 use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_regridding,           only : regridding_CS
@@ -81,8 +82,9 @@ integer, parameter         :: MAX_OBC_FIELDS = 100  !< Maximum number of data fi
 
 !> Open boundary segment data from files (mostly).
 type, public :: OBC_segment_data_type
-  integer :: fid                            !< handle from FMS associated with segment data on disk
-  integer :: fid_dz                         !< handle from FMS associated with segment thicknesses on disk
+  type(external_field) :: handle            !< handle from FMS associated with segment data on disk
+  type(external_field) :: dz_handle         !< handle from FMS associated with segment thicknesses on disk
+  logical           :: use_IO = .false.     !< True if segment data is based on file input
   character(len=32) :: name                 !< a name identifier for the segment data
   character(len=8)  :: genre                !< an identifier for the segment data
   real              :: scale                !< A scaling factor for converting input data to
@@ -96,7 +98,7 @@ type, public :: OBC_segment_data_type
   real, allocatable :: buffer_dst(:,:,:)    !< buffer src data remapped to the target vertical grid.
                                             !! The values for tracers should have the same units as the field
                                             !! they are being applied to?
-  real              :: value                !< constant value if fid is equal to -1
+  real              :: value                !< constant value if not read from file
   real              :: resrv_lfac_in = 1.   !< reservoir inverse length scale factor for IN direction per field
                                             !< the general 1/Lscale_IN is multiplied by this factor for each tracer
   real              :: resrv_lfac_out= 1.   !< reservoir inverse length scale factor for OUT direction per field
@@ -842,6 +844,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
         ! The scale factor for tracers may also be set in register_segment_tracer, and a constant input
         ! value is rescaled there.
         segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US, segment%tr_Reg)
+        segment%field(m)%use_IO = .true.
         if (segment%field(m)%name == 'TEMP') then
           segment%temp_segment_data_exists = .true.
           segment%t_values_needed = .false.
@@ -957,7 +960,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
             endif
           endif
           segment%field(m)%buffer_src(:,:,:) = 0.0
-          segment%field(m)%fid = init_external_field(trim(filename), trim(fieldname), &
+          segment%field(m)%handle = init_external_field(trim(filename), trim(fieldname), &
                     ignore_axis_atts=.true., threading=SINGLE_FILE)
           if (siz(3) > 1) then
             if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
@@ -988,7 +991,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
               endif
               segment%field(m)%dz_src(:,:,:)=0.0
               segment%field(m)%nk_src=siz(3)
-              segment%field(m)%fid_dz = init_external_field(trim(filename), trim(fieldname), &
+              segment%field(m)%dz_handle = init_external_field(trim(filename), trim(fieldname), &
                         ignore_axis_atts=.true., threading=SINGLE_FILE)
             endif
           else
@@ -996,12 +999,12 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
           endif
         endif
       else
-        segment%field(m)%fid = -1
         segment%field(m)%name = trim(fields(m))
         ! The scale factor for tracers may also be set in register_segment_tracer, and a constant input
         ! value is rescaled there.
         segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US, segment%tr_Reg)
         segment%field(m)%value = segment%field(m)%scale * value
+        segment%field(m)%use_IO = .false.
 
         ! Check if this is a tidal field. If so, the number
         ! of expected constituents must be 1.
@@ -3892,7 +3895,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
       !a less frequent update as set by the parameter update_OBC_period_max in MOM.F90.
       !Cycle if it is not the time to update OBC segment data for this field.
       if (trim(segment%field(m)%genre) == 'obgc' .and. (.not. OBC%update_OBC_seg_data)) cycle
-      if (segment%field(m)%fid > 0) then
+      if (segment%field(m)%use_IO) then
         siz(1)=size(segment%field(m)%buffer_src,1)
         siz(2)=size(segment%field(m)%buffer_src,2)
         siz(3)=size(segment%field(m)%buffer_src,3)
@@ -3972,7 +3975,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         endif
 
         ! This is where the data values are actually read in.
-        call time_interp_external(segment%field(m)%fid, Time, tmp_buffer_in, scale=segment%field(m)%scale)
+        call time_interp_external(segment%field(m)%handle, Time, tmp_buffer_in, scale=segment%field(m)%scale)
 
         ! NOTE: Rotation of face-points require that we skip the final value
         if (turns /= 0) then
@@ -4045,7 +4048,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         if (segment%field(m)%nk_src > 1 .and.&
             (index(segment%field(m)%name, 'phase') <= 0 .and. index(segment%field(m)%name, 'amp') <= 0)) then
           ! This is where the 2-d tidal data values are actually read in.
-          call time_interp_external(segment%field(m)%fid_dz, Time, tmp_buffer_in, scale=US%m_to_Z)
+          call time_interp_external(segment%field(m)%dz_handle, Time, tmp_buffer_in, scale=US%m_to_Z)
           if (turns /= 0) then
             ! TODO: This is hardcoded for 90 degrees, and needs to be generalized.
             if (segment%is_E_or_W &
@@ -4211,7 +4214,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         deallocate(tmp_buffer)
         if (turns /= 0) &
           deallocate(tmp_buffer_in)
-      else ! fid <= 0 (Uniform value)
+      else ! use_IO = .false. (Uniform value)
         if (.not. allocated(segment%field(m)%buffer_dst)) then
           if (segment%is_E_or_W) then
             if (segment%field(m)%name == 'V') then
@@ -4257,7 +4260,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
     do m = 1,segment%num_fields
       !cycle if it is not the time to update OBGC tracers from source
       if (trim(segment%field(m)%genre) == 'obgc' .and. (.not. OBC%update_OBC_seg_data)) cycle
-      ! if (segment%field(m)%fid>0) then
+      ! if (segment%field(m)%use_IO) then
       ! calculate external BT velocity and transport if needed
       if (trim(segment%field(m)%name) == 'U' .or. trim(segment%field(m)%name) == 'V') then
         if (trim(segment%field(m)%name) == 'U' .and. segment%is_E_or_W) then
@@ -4684,7 +4687,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
       ! rescale the previously stored input values.  Note that calls to register_segment_tracer
       ! can come before or after calls to initialize_segment_data.
       if (uppercase(segment%field(m)%name) == uppercase(segment%tr_Reg%Tr(ntseg)%name)) then
-        if (segment%field(m)%fid == -1) then
+        if (.not. segment%field(m)%use_IO) then
           rescale = scale
           if ((segment%field(m)%scale /= 0.0) .and. (segment%field(m)%scale /= 1.0)) &
             rescale = scale / segment%field(m)%scale
@@ -5948,8 +5951,8 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
 
   segment%num_fields = segment_in%num_fields
   do n = 1, num_fields
-    segment%field(n)%fid = segment_in%field(n)%fid
-    segment%field(n)%fid_dz = segment_in%field(n)%fid_dz
+    segment%field(n)%handle = segment_in%field(n)%handle
+    segment%field(n)%dz_handle = segment_in%field(n)%dz_handle
 
     if (modulo(turns, 2) /= 0) then
       select case (segment_in%field(n)%name)

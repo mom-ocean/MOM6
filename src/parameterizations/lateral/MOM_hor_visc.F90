@@ -23,6 +23,7 @@ use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_variables,             only : accel_diag_ptrs
+use MOM_Zanna_Bolton,          only : Zanna_Bolton_2020, ZB_2020_init, ZB2020_CS
 
 implicit none ; private
 
@@ -104,6 +105,9 @@ type, public :: hor_visc_CS ; private
                              !! limit the grid Reynolds number [L2 T-1 ~> m2 s-1]
   real    :: min_grid_Ah     !< Minimun horizontal biharmonic viscosity used to
                              !! limit grid Reynolds number [L4 T-1 ~> m4 s-1]
+
+  type(ZB2020_CS) :: ZB2020  !< Zanna-Bolton 2020 control structure.
+  logical :: use_ZB2020      !< If true, use Zanna-Bolton 2020 parameterization.
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
                       !< The background Laplacian viscosity at h points [L2 T-1 ~> m2 s-1].
@@ -329,6 +333,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grid_Re_Kh, &    ! Grid Reynolds number for Laplacian horizontal viscosity at h points [nondim]
     grid_Re_Ah, &    ! Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
     GME_coeff_h      ! GME coefficient at h-points [L2 T-1 ~> m2 s-1]
+
+  ! Zanna-Bolton fields
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+    ZB2020u           !< Zonal acceleration due to convergence of
+                      !! along-coordinate stress tensor for ZB model
+                      !! [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+    ZB2020v           !< Meridional acceleration due to convergence
+                      !! of along-coordinate stress tensor for ZB model
+                      !! [L T-2 ~> m s-2]
+
   real :: AhSm       ! Smagorinsky biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLth      ! 2D Leith biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: Shear_mag_bc  ! Shear_mag value in backscatter [T-1 ~> s-1]
@@ -1607,6 +1622,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   enddo ! end of k loop
 
+  if (CS%use_ZB2020) then
+    call Zanna_Bolton_2020(u, v, h, ZB2020u, ZB2020v, G, GV, CS%ZB2020)
+
+    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      diffu(I,j,k) = diffu(I,j,k) + ZB2020u(I,j,k)
+    enddo ; enddo ; enddo
+
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      diffv(i,J,k) = diffv(i,J,k) + ZB2020v(i,J,k)
+    enddo ; enddo ; enddo
+  endif
+
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
   if (CS%id_shearstress > 0) call post_data(CS%id_shearstress, ShSt, CS%diag)
@@ -1752,6 +1779,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  ! init control structure
+  call ZB_2020_init(Time, GV, US, param_file, diag, CS%ZB2020, CS%use_ZB2020)
 
   CS%initialized = .true.
 

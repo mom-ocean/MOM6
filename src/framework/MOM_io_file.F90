@@ -6,6 +6,8 @@ module MOM_io_file
 use, intrinsic :: iso_fortran_env, only : int64
 
 use MOM_domains, only : MOM_domain_type, domain1D
+use MOM_domains, only : clone_MOM_domain
+use MOM_domains, only : deallocate_MOM_domain
 use MOM_io_infra, only : file_type, get_file_info, get_file_fields
 use MOM_io_infra, only : open_file, close_file, flush_file
 use MOM_io_infra, only : fms2_file_is_open => file_is_open
@@ -14,6 +16,7 @@ use MOM_io_infra, only : get_file_times, axistype
 use MOM_io_infra, only : write_field, write_metadata
 use MOM_io_infra, only : get_field_atts
 use MOM_io_infra, only : read_field_chksum
+use MOM_io_infra, only : SINGLE_FILE
 
 use MOM_hor_index, only : hor_index_type
 use MOM_hor_index, only : hor_index_init
@@ -247,6 +250,9 @@ end type MOM_file
 !> MOM file from the supporting framework ("infra") layer
 type, extends(MOM_file) :: MOM_infra_file
   private
+
+  type(MOM_domain_type), public, pointer :: domain => null()
+    !< Internal domain used for single-file IO
 
   ! NOTE: This will be made private after the API transition
   type(file_type), public :: handle_infra
@@ -919,8 +925,23 @@ subroutine open_file_infra(handle, filename, action, MOM_domain, threading, file
   integer, intent(in), optional :: threading
   integer, intent(in), optional :: fileset
 
-  call open_file(handle%handle_infra, filename, action=action, &
-      MOM_domain=MOM_domain, threading=threading, fileset=fileset)
+  logical :: use_single_file_domain
+    ! True if the domain is replaced with a single-file IO layout.
+
+  use_single_file_domain = .false.
+  if (present(MOM_domain) .and. present(fileset)) then
+    if (fileset == SINGLE_FILE) &
+      use_single_file_domain = .true.
+  endif
+
+  if (use_single_file_domain) then
+    call clone_MOM_domain(MOM_domain, handle%domain, io_layout=[1,1])
+    call open_file(handle%handle_infra, filename, action=action, &
+        MOM_domain=handle%domain, threading=threading, fileset=fileset)
+  else
+    call open_file(handle%handle_infra, filename, action=action, &
+        MOM_domain=MOM_domain, threading=threading, fileset=fileset)
+  endif
 
   call handle%axes%init()
   call handle%fields%init()
@@ -929,6 +950,9 @@ end subroutine open_file_infra
 !> Close a MOM framework file
 subroutine close_file_infra(handle)
   class(MOM_infra_file), intent(inout) :: handle
+
+  if (associated(handle%domain)) &
+    call deallocate_MOM_domain(handle%domain)
 
   call close_file(handle%handle_infra)
   call handle%axes%finalize()

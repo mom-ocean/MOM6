@@ -17,9 +17,8 @@ use gsw_mod_toolbox, only : gsw_rho_second_derivatives
 implicit none ; private
 
 public calculate_compress_teos10, calculate_density_teos10, calculate_spec_vol_teos10
-public calculate_density_derivs_teos10
-public calculate_specvol_derivs_teos10
-public calculate_density_second_derivs_teos10
+public calculate_density_derivs_teos10, calculate_specvol_derivs_teos10
+public calculate_density_second_derivs_teos10, EoS_fit_range_teos10
 public gsw_sp_from_sr, gsw_pt_from_ct
 
 !> Compute the in situ density of sea water ([kg m-3]), or its anomaly with respect to
@@ -368,5 +367,26 @@ subroutine calculate_compress_teos10(T, S, pressure, rho, drho_dp, start, npts)
     endif
   enddo
 end subroutine calculate_compress_teos10
+
+
+!> Return the range of temperatures, salinities and pressures for which the TEOS-10
+!! equation of state has been fitted to observations.  Care should be taken when
+!! applying this equation of state outside of its fit range.
+subroutine EoS_fit_range_teos10(T_min, T_max, S_min, S_max, p_min, p_max)
+  real, optional, intent(out) :: T_min !< The minimum conservative temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: T_max !< The maximum conservative temperature over which this EoS is fitted [degC]
+  real, optional, intent(out) :: S_min !< The minimum absolute salinity over which this EoS is fitted [g kg-1]
+  real, optional, intent(out) :: S_max !< The maximum absolute salinity over which this EoS is fitted [g kg-1]
+  real, optional, intent(out) :: p_min !< The minimum pressure over which this EoS is fitted [Pa]
+  real, optional, intent(out) :: p_max !< The maximum pressure over which this EoS is fitted [Pa]
+
+  if (present(T_min)) T_min = -6.0
+  if (present(T_max)) T_max = 40.0
+  if (present(S_min)) S_min =  0.0
+  if (present(S_max)) S_max = 42.0
+  if (present(p_min)) p_min = 0.0
+  if (present(p_max)) p_max = 1.0e8
+
+end subroutine EoS_fit_range_teos10
 
 end module MOM_EOS_TEOS10
