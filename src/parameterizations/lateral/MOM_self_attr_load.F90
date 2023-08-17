@@ -181,38 +181,35 @@ subroutine SAL_init(G, US, param_file, CS)
   endif
 
   call get_param(param_file, mdl, "SAL_SCALAR_APPROX", CS%use_sal_scalar, &
-                 "If true, use the scalar approximation to calculate self-attraction and"//&
-                 " loading.", default=tides .and. (.not.use_tidal_sal_file))
+                 "If true, use the scalar approximation to calculate self-attraction and "//&
+                 "loading.", default=tides .and. (.not. use_tidal_sal_file))
+  call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", tide_sal_scalar_value, &
+                 units="m m-1", default=0.0, do_not_log=.True.)
+  if (tide_sal_scalar_value/=0.0) &
+    call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
+                   "Use SAL_SCALAR_VALUE instead." )
+  call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, &
+                 "The constant of proportionality between sea surface "//&
+                 "height (really it should be bottom pressure) anomalies "//&
+                 "and bottom geopotential anomalies. This is only used if "//&
+                 "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
+                 default=tide_sal_scalar_value, units="m m-1", &
+                 do_not_log=(.not. CS%use_sal_scalar) .and. (.not. CS%use_tidal_sal_prev))
   call get_param(param_file, mdl, "SAL_HARMONICS", CS%use_sal_sht, &
-                 "If true, use the online spherical harmonics method to calculate"//&
-                 " self-attraction and loading.", default=.false.)
-
-  if (CS%use_sal_scalar .or. CS%use_tidal_sal_prev) then
-    call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", tide_sal_scalar_value, &
-                   units="m m-1", default=0.0, do_not_log=.True.)
-    if (tide_sal_scalar_value/=0.0) &
-      call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
-                              "Use SAL_SCALAR_VALUE instead." )
-      call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, &
-                   "The constant of proportionality between sea surface "//&
-                   "height (really it should be bottom pressure) anomalies "//&
-                   "and bottom geopotential anomalies. This is only used if "//&
-                   "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
-                   default=tide_sal_scalar_value, units="m m-1", &
-                   do_not_log=(.not. CS%use_sal_scalar) .and. (.not. CS%use_tidal_sal_prev))
-  endif
+                 "If true, use the online spherical harmonics method to calculate "//&
+                 "self-attraction and loading.", default=.false.)
+  call get_param(param_file, mdl, "SAL_HARMONICS_DEGREE", CS%sal_sht_Nd, &
+                 "The maximum degree of the spherical harmonics transformation used for "// &
+                 "calculating the self-attraction and loading term.", &
+                 default=0, do_not_log=(.not. CS%use_sal_sht))
+  call get_param(param_file, '', "RHO_0", rhoW, default=1035.0, scale=US%kg_m3_to_R, &
+                 units="kg m-3", do_not_log=.True.)
+  call get_param(param_file, mdl, "RHO_SOLID_EARTH", rhoE, &
+                 "The mean solid earth density.  This is used for calculating the "// &
+                 "self-attraction and loading term.", units="kg m-3", &
+                 default=5517.0, scale=US%kg_m3_to_R, do_not_log=(.not. CS%use_sal_sht))
 
   if (CS%use_sal_sht) then
-    call get_param(param_file, mdl, "SAL_HARMONICS_DEGREE", CS%sal_sht_Nd, &
-                   "The maximum degree of the spherical harmonics transformation used for "// &
-                   "calculating the self-attraction and loading term.", &
-                   default=0, do_not_log=.not.CS%use_sal_sht)
-    call get_param(param_file, '', "RHO_0", rhoW, default=1035.0, scale=US%kg_m3_to_R, &
-                   units="kg m-3", do_not_log=.True.)
-    call get_param(param_file, mdl, "RHO_SOLID_EARTH", rhoE, &
-                   "The mean solid earth density.  This is used for calculating the "// &
-                   "self-attraction and loading term.", units="kg m-3", &
-                   default=5517.0, scale=US%kg_m3_to_R, do_not_log=.not. CS%use_sal_sht)
     lmax = calc_lmax(CS%sal_sht_Nd)
     allocate(CS%Snm_Re(lmax)); CS%Snm_Re(:) = 0.0
     allocate(CS%Snm_Im(lmax)); CS%Snm_Im(:) = 0.0

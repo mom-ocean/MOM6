@@ -256,10 +256,8 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
   character(len=200) :: tidal_input_files(4*MAX_CONSTITUENTS)
+  real :: tide_sal_scalar_value
   integer :: i, j, c, is, ie, js, je, isd, ied, jsd, jed, nc
-  integer :: lmax ! Total modes of the real spherical harmonics [nondim]
-  real :: rhoW    ! The average density of sea water [R ~> kg m-3].
-  real :: rhoE    ! The average density of Earth [R ~> kg m-3].
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd; jed = G%jed
@@ -353,10 +351,18 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
                  "If true, use the SAL from the previous iteration of the "//&
                  "tides to facilitate convergent iteration. "//&
                  "This is only used if TIDES is true.", default=.false.)
-  ! If it is being used, sal_scalar MUST be specified in param_file.
-  if (CS%use_tidal_sal_prev) &
-    call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, fail_if_missing=.true., &
-                   units="m m-1", do_not_log=.True.)
+  call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", tide_sal_scalar_value, &
+                 units="m m-1", default=0.0, do_not_log=.True.)
+  if (tide_sal_scalar_value/=0.0) &
+    call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
+                   "Use SAL_SCALAR_VALUE instead." )
+  call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, &
+                 "The constant of proportionality between sea surface "//&
+                 "height (really it should be bottom pressure) anomalies "//&
+                 "and bottom geopotential anomalies. This is only used if "//&
+                 "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
+                 default=tide_sal_scalar_value, units="m m-1", &
+                 do_not_log=(.not. CS%use_tidal_sal_prev))
 
   if (nc > MAX_CONSTITUENTS) then
     write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
