@@ -217,7 +217,7 @@ subroutine spherical_harmonics_init(G, param_file, CS)
   integer :: is, ie, js, je
   integer :: i, j, k
   integer :: m, n
-  integer :: Nd_tidal_SAL ! Maximum degree for tidal SAL
+  integer :: Nd_SAL ! Maximum degree for SAL
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40) :: mdl = "MOM_spherical_harmonics" ! This module's name.
@@ -228,11 +228,8 @@ subroutine spherical_harmonics_init(G, param_file, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "TIDAL_SAL_SHT_DEGREE", Nd_tidal_SAL, &
-                 "The maximum degree of the spherical harmonics transformation used for "// &
-                 "calculating the self-attraction and loading term for tides.", &
-                 default=0, do_not_log=.true.)
-  CS%ndegree = Nd_tidal_SAL
+  call get_param(param_file, mdl, "SAL_HARMONICS_DEGREE", Nd_SAL, "", default=0, do_not_log=.true.)
+  CS%ndegree = Nd_SAL
   CS%lmax = calc_lmax(CS%ndegree)
   call get_param(param_file, mdl, "SHT_REPRODUCING_SUM", CS%reprod_sum, &
                  "If true, use reproducing sums (invariant to PE layout) in inverse transform "// &
@@ -361,7 +358,7 @@ end function order2index
 !! array vectorization.
 !!
 !! The maximum degree of the spherical harmonics is a runtime parameter and the maximum used by all SHT applications.
-!! At the moment, it is only decided by TIDAL_SAL_SHT_DEGREE.
+!! At the moment, it is only decided by SAL_HARMONICS_DEGREE.
 !!
 !! The forward transforms involve a global summation. Runtime flag SHT_REPRODUCING_SUM controls whether this is done
 !! in a bit-wise reproducing way or not.

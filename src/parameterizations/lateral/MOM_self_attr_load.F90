@@ -3,7 +3,7 @@ module MOM_self_attr_load
 use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
 use MOM_domains,         only : pass_var
 use MOM_error_handler,   only : MOM_error, FATAL, WARNING
-use MOM_file_parser,     only : get_param, log_param, log_version, param_file_type
+use MOM_file_parser,     only : read_param, get_param, log_version, param_file_type
 use MOM_obsolete_params, only : obsolete_logical, obsolete_int
 use MOM_grid,            only : ocean_grid_type
 use MOM_unit_scaling,    only : unit_scale_type
@@ -169,6 +169,10 @@ subroutine SAL_init(G, US, param_file, CS)
   call log_version(param_file, mdl, version, "")
 
   call get_param(param_file, '', "TIDES", tides, default=.false., do_not_log=.True.)
+  call get_param(param_file, mdl, "CALCULATE_SAL", calculate_sal, "If true, calculate "//&
+                 " self-attraction and loading.", default=tides, do_not_log=.True.)
+  if (.not. calculate_sal) return
+
   if (tides) then
     call get_param(param_file, '', "USE_PREVIOUS_TIDES", CS%use_tidal_sal_prev, &
                    default=.false., do_not_log=.True.)
@@ -176,73 +180,39 @@ subroutine SAL_init(G, US, param_file, CS)
                    default=.false., do_not_log=.True.)
   endif
 
-  ! TIDE_USE_SAL_SCALAR is going to be replaced by USE_SAL_SCALAR. During the transition, the default of
-  ! USE_SAL_SCALAR is set to be consistent with TIDE_USE_SAL_SCALAR before the implementation of spherical
-  ! harmonics SAL.
-  ! A FATAL error is only issued when the user specified TIDE_USE_SAL_SCALAR contradicts USE_SAL_SCALAR.
-  call get_param(param_file, mdl, "USE_SAL_SCALAR", CS%use_sal_scalar, &
+  call get_param(param_file, mdl, "SAL_SCALAR_APPROX", CS%use_sal_scalar, &
                  "If true, use the scalar approximation to calculate self-attraction and"//&
-                 " loading.  This parameter is to replace TIDE_USE_SAL_SCALAR, as SAL applies"//&
-                 " to all motions.  When both USE_SAL_SCALAR and TIDE_USE_SAL_SCALAR are"//&
-                 " specified, USE_SAL_SCALAR overrides TIDE_USE_SAL_SCALAR.", &
-                 default=tides .and. (.not.use_tidal_sal_file))
-  if (tides) then
-    call obsolete_logical(param_file, "TIDE_USE_SAL_SCALAR", warning_val=CS%use_sal_scalar, &
-                          hint="Use USE_SAL_SCALAR instead.")
-  endif
-
-  call get_param(param_file, mdl, "USE_SAL_HARMONICS", CS%use_sal_sht, &
+                 " loading.", default=tides .and. (.not.use_tidal_sal_file))
+  call get_param(param_file, mdl, "SAL_HARMONICS", CS%use_sal_sht, &
                  "If true, use the online spherical harmonics method to calculate"//&
                  " self-attraction and loading.", default=.false.)
-  ! This is a more of a hard obsolete but should only impact a handful of users.
-  call obsolete_logical(param_file, "TIDAL_SAL_SHT", warning_val=CS%use_sal_sht, &
-                        hint="Use USE_SAL_HARMONICS instead.")
 
-  call get_param(param_file, mdl, "CALCULATE_SAL", calculate_sal, &
-                 "If true, calculate self-attraction and loading.", default=tides)
-  if ((.not. calculate_sal) .and. (CS%use_tidal_sal_prev .or. CS%use_sal_scalar .or. CS%use_sal_sht)) &
-    call MOM_error(FATAL, trim(mdl)//": CALCULATE_SAL is False but one of the options is True.")
-
-  ! TIDE_SAL_SCALAR_VALUE is going to be replaced by SAL_SCALAR_VALUE. The following segment of codes
-  ! should eventually be replaced by the commented code below.
-  ! if (CS%use_sal_scalar .or. CS%use_tidal_sal_prev) &
-  !   call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, &
-  !                  "The constant of proportionality between sea surface "//&
-  !                  "height (really it should be bottom pressure) anomalies "//&
-  !                  "and bottom geopotential anomalies. This is only used if "//&
-  !                  "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
-  !                  fail_if_missing=.true., units="m m-1")
-  ! endif
   if (CS%use_sal_scalar .or. CS%use_tidal_sal_prev) then
-    CS%sal_scalar_value = -9e35
-    call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, "", do_not_log=.True.)
-    if (CS%sal_scalar_value == -9e35) then
-      call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", CS%sal_scalar_value, do_not_log=.True.)
-      if (CS%sal_scalar_value /= -9e35) &
-        call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
-                      "Use SAL_SCALAR_VALUE instead.")
-    endif
-    if (CS%sal_scalar_value == -9e35) &
-      call MOM_error(FATAL, trim(mdl)//": USE_SAL_SCALAR is true but SAL_SCALAR_VALUE is not set.")
-    call log_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, &
+    call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", tide_sal_scalar_value, &
+                   units="m m-1", default=0.0, do_not_log=.True.)
+    if (tide_sal_scalar_value/=0.0) &
+      call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
+                              "Use SAL_SCALAR_VALUE instead." )
+      call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar_value, &
                    "The constant of proportionality between sea surface "//&
                    "height (really it should be bottom pressure) anomalies "//&
                    "and bottom geopotential anomalies. This is only used if "//&
-                   "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", units="m m-1")
+                   "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
+                   default=tide_sal_scalar_value, units="m m-1", &
+                   do_not_log=(.not. CS%use_sal_scalar) .and. (.not. CS%use_tidal_sal_prev))
   endif
 
   if (CS%use_sal_sht) then
     call get_param(param_file, mdl, "SAL_HARMONICS_DEGREE", CS%sal_sht_Nd, &
                    "The maximum degree of the spherical harmonics transformation used for "// &
                    "calculating the self-attraction and loading term.", &
-                   default=0)
-    call obsolete_int(param_file, "TIDAL_SAL_SHT_DEGREE", warning_val=CS%sal_sht_Nd, &
-                      hint="Use SAL_HARMONICS_DEGREE instead.")
-    call get_param(param_file, '', "RHO_0", rhoW, default=1035.0, scale=US%kg_m3_to_R, do_not_log=.True.)
-    call get_param(param_file, mdl, "RHO_E", rhoE, &
+                   default=0, do_not_log=.not.CS%use_sal_sht)
+    call get_param(param_file, '', "RHO_0", rhoW, default=1035.0, scale=US%kg_m3_to_R, &
+                   units="kg m-3", do_not_log=.True.)
+    call get_param(param_file, mdl, "RHO_SOLID_EARTH", rhoE, &
                    "The mean solid earth density.  This is used for calculating the "// &
                    "self-attraction and loading term.", units="kg m-3", &
-                   default=5517.0, scale=US%kg_m3_to_R)
+                   default=5517.0, scale=US%kg_m3_to_R, do_not_log=.not. CS%use_sal_sht)
     lmax = calc_lmax(CS%sal_sht_Nd)
     allocate(CS%Snm_Re(lmax)); CS%Snm_Re(:) = 0.0
     allocate(CS%Snm_Im(lmax)); CS%Snm_Im(:) = 0.0
@@ -274,14 +244,14 @@ end subroutine SAL_end
 !! (rather, it should be bottom pressure anomaly). SAL is primarily used for fast evolving processes like tides or
 !! storm surges, but the effect applies to all motions.
 !!
-!!     If TIDE_USE_SAL_SCALAR is true, a scalar approximation is applied (Accad and Pekeris 1978) and the SAL is simply
-!! a fraction (set by TIDE_SAL_SCALAR_VALUE, usually around 10% for global tides) of local SSH . For the tides, the
-!! scalar approximation can also be used to iterate the SAL to convergence [see USE_PREVIOUS_TIDES in MOM_tidal_forcing,
+!!     If SAL_SCALAR_APPROX is true, a scalar approximation is applied (Accad and Pekeris 1978) and the SAL is simply
+!! a fraction (set by SAL_SCALAR_VALUE, usually around 10% for global tides) of local SSH . For tides, the scalar
+!! approximation can also be used to iterate the SAL to convergence [see USE_PREVIOUS_TIDES in MOM_tidal_forcing,
 !! Arbic et al. (2004)].
 !!
-!!    If TIDAL_SAL_SHT is true, a more accurate online spherical harmonic transforms are used to calculate SAL.
+!!    If SAL_HARMONICS is true, a more accurate online spherical harmonic transforms are used to calculate SAL.
 !! Subroutines in module MOM_spherical_harmonics are called and the degree of spherical harmonic transforms is set by
-!! TIDAL_SAL_SHT_DEGREE. The algorithm is based on SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean
+!! SAL_HARMONICS_DEGREE. The algorithm is based on SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean
 !! developed by Los Alamos National Laboratory and University of Michigan [Barton et al. (2022) and Brus et al. (2023)].
 !!
 !! References:

@@ -356,7 +356,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   ! If it is being used, sal_scalar MUST be specified in param_file.
   if (CS%use_tidal_sal_prev) &
     call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, fail_if_missing=.true., &
-                   do_not_log=.True.)
+                   units="m m-1", do_not_log=.True.)
 
   if (nc > MAX_CONSTITUENTS) then
     write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
