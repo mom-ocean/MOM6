@@ -1870,7 +1870,7 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
-  logical :: use_CVMix_shear, MLE_use_PBL_MLD, use_CVMix_conv
+  logical :: use_CVMix_shear, MLE_use_PBL_MLD, MLE_use_Bodner, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   real :: hfreeze !< If hfreeze > 0 [Z ~> m], melt potential will be computed.
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
@@ -1942,6 +1942,15 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
   endif
 
+  ! visc%sfc_buoy_flx is used to communicate the state of the (e)PBL or KPP to the rest of the model
+  call get_param(param_file, mdl, "MLE%USE_BODNER23", MLE_use_Bodner, &
+                 default=.false., do_not_log=.true.)
+  if (MLE_use_PBL_MLD .or. MLE_use_Bodner) then
+    call safe_alloc_ptr(visc%sfc_buoy_flx, isd, ied, jsd, jed)
+    call register_restart_field(visc%sfc_buoy_flx, "SFC_BFLX", .false., restart_CS, &
+                                "Instantaneous surface buoyancy flux", "m2 s-3", &
+                                conversion=US%Z_to_m**2*US%s_to_T**3)
+  endif
 
 end subroutine set_visc_register_restarts
 
@@ -2003,12 +2012,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   real    :: Hbbl            ! The static bottom boundary layer thickness [Z ~> m].
   real    :: BBL_thick_min   ! The minimum bottom boundary layer thickness [Z ~> m].
 
-  real    :: Z_rescale     ! A rescaling factor for heights from the representation in
-                           ! a restart file to the internal representation in this run [nondim]?
-  real    :: I_T_rescale   ! A rescaling factor for time from the internal representation in this run
-                           ! to the representation in a restart file [nondim]?
-  real    :: Z2_T_rescale  ! A rescaling factor for vertical diffusivities and viscosities from the
-                           ! representation in a restart file to the internal representation in this run [nondim]?
   integer :: i, j, k, is, ie, js, je
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
@@ -2316,42 +2319,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
 
   call register_restart_field_as_obsolete('Kd_turb','Kd_shear', restart_CS)
   call register_restart_field_as_obsolete('Kv_turb','Kv_shear', restart_CS)
-
-  ! Account for possible changes in dimensional scaling for variables that have been
-  ! read from a restart file.
-  Z_rescale = 1.0
-  if (US%m_to_Z_restart /= 0.0) Z_rescale = 1.0 / US%m_to_Z_restart
-  I_T_rescale = 1.0
-  if (US%s_to_T_restart /= 0.0) I_T_rescale = US%s_to_T_restart
-  Z2_T_rescale = Z_rescale**2*I_T_rescale
-
-  if (Z2_T_rescale /= 1.0) then
-    if (associated(visc%Kd_shear)) then ; if (query_initialized(visc%Kd_shear, "Kd_shear", restart_CS)) then
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        visc%Kd_shear(i,j,k) = Z2_T_rescale * visc%Kd_shear(i,j,k)
-      enddo ; enddo ; enddo
-    endif ; endif
-
-    if (associated(visc%Kv_shear)) then ; if (query_initialized(visc%Kv_shear, "Kv_shear", restart_CS)) then
-      do k=1,nz+1 ; do j=js,je ; do i=is,ie
-        visc%Kv_shear(i,j,k) = Z2_T_rescale * visc%Kv_shear(i,j,k)
-      enddo ; enddo ; enddo
-    endif ; endif
-
-    if (associated(visc%Kv_shear_Bu)) then ; if (query_initialized(visc%Kv_shear_Bu, "Kv_shear_Bu", restart_CS)) then
-      do k=1,nz+1 ; do J=js-1,je ; do I=is-1,ie
-        visc%Kv_shear_Bu(I,J,k) = Z2_T_rescale * visc%Kv_shear_Bu(I,J,k)
-      enddo ; enddo ; enddo
-    endif ; endif
-  endif
-
-  if (MLE_use_PBL_MLD .and. (Z_rescale /= 1.0)) then
-    if (associated(visc%MLD)) then ; if (query_initialized(visc%MLD, "MLD", restart_CS)) then
-      do j=js,je ; do i=is,ie
-        visc%MLD(i,j) = Z_rescale * visc%MLD(i,j)
-      enddo ; enddo
-    endif ; endif
-  endif
 
 end subroutine set_visc_init
 

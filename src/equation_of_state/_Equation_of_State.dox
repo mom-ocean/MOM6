@@ -2,9 +2,10 @@
 
 Within MOM6, there is a wrapper for the equation of state, so that all calls look
 the same from the rest of the model. The equation of state code has to calculate
-not just in situ density, but also the compressibility and various derivatives of
-the density. There is also code for computing specific volume and the
-freezing temperature.
+not just in situ or potential density, but also the compressibility and various
+derivatives of the density. There is also code for computing specific volume and the
+freezing temperature, and for converting between potential and conservative
+temperatures and between practical and reference (or absolute) salinity.
 
 \section Linear_EOS Linear Equation of State
 
@@ -12,51 +13,96 @@ Compute the required quantities with uniform values for \f$\alpha = \frac{\parti
 \rho}{\partial T}\f$ and \f$\beta = \frac{\partial \rho}{\partial S}\f$, (DRHO_DT,
 DRHO_DS in MOM_input, also uses RHO_T0_S0).
 
-\section Wright_EOS Wright Equation of State
+\section Wright_EOS Wright reduced range Equation of State
 
-Compute the required quantities using the equation of state from \cite wright1997.
-This equation of state is in the form:
+Compute the required quantities using the equation of state from \cite wright1997
+as a function of potential temperature and practical salinity, with
+coefficients based on the reduced-range (salinity from 28 to 38 PSU, temperature
+from -2 to 30 degC and pressure up to 5000 dbar) fit to the UNESCO 1981 data. This
+equation of state is in the form:
 \f[
    \alpha(s, \theta, p) = A(s, \theta) + \frac{\lambda(s, \theta)}{P(s, \theta) + p}
 \f]
 where \f$A, \lambda\f$ and \f$P\f$ are functions only of \f$s\f$ and \f$\theta\f$
 and \f$\alpha = 1/ \rho\f$ is the specific volume. This form is useful for the
-pressure gradient computation as discussed in \ref section_PG.
+pressure gradient computation as discussed in \ref section_PG.  This EoS is selected
+by setting EQN_OF_STATE = WRIGHT or WRIGHT_RED, which are mathematically equivalent,
+but the latter is refactored for consistent answers between compiler settings.
 
-\section NEMO_EOS NEMO Equation of State
+\section Wright_full_EOS Wright full range Equation of State
 
-Compute the required quantities using the equation of state from \cite roquet2015.
+Compute the required quantities using the equation of state from \cite wright1997
+as a function of potential temperature and practical salinity, with
+coefficients based on a fit to the UNESCO 1981 data over the full range of
+validity of that data (salinity from 0 to 40 PSU, temperatures from -2 to 40
+degC, and pressures up to 10000 dbar).  The functional form of the WRIGHT_FULL
+equation of state is the same as for WRIGHT or WRIGHT_RED, but with different
+coefficients.
+
+\section Jackett06_EOS Jackett et al. (2006) Equation of State
+
+Compute the required quantities using the equation of state from Jackett et al.
+(2006) as a function of potential temperature and practical salinity, with
+coefficients based on a fit to the updated data that were later used to define
+the TEOS-10 equation of state over the full range of validity of that data
+(salinity from 0 to 42 PSU, temperatures from the freezing point to 40 degC, and
+pressures up to 8500 dbar), but focused on the "oceanographic funnel" of
+thermodynamic properties observed in the ocean.  This equation of state is
+commonly used in realistic Hycom simulations.
 
 \section UNESCO_EOS UNESCO Equation of State
 
-Compute the required quantities using the equation of state from \cite jackett1995.
+Compute the required quantities using the equation of state from \cite jackett1995,
+which uses potential temperature and practical salinity as state variables and is
+a fit to the 1981 UNESCO equation of state with the same functional form but a
+replacement of the temperature variable (the original uses <em>in situ</em> temperature).
+
+\section ROQUET_RHO_EOS ROQUET_RHO Equation of State
+
+Compute the required quantities using the equation of state from \cite roquet2015,
+which uses a 75-member polynomial for density as a function of conservative temperature
+and absolute salinity, in a fit to the output from the full TEOS-10 equation of state.
+
+\section ROQUET_SPV_EOS ROQUET_SPV Equation of State
+
+Compute the required quantities using the specific volume oriented equation of state from
+\cite roquet2015, which uses a 75-member polynomial for specific volume as a function of
+conservative temperature and absolute salinity, in a fit to the output from the full
+TEOS-10 equation of state.
 
 \section TEOS-10_EOS TEOS-10 Equation of State
 
 Compute the required quantities using the equation of state from
-[TEOS-10](http://www.teos-10.org/).
+[TEOS-10](http://www.teos-10.org/), with calls directly to the subroutines
+in that code package.
 
 \section section_TFREEZE Freezing Temperature of Sea Water
 
-There are three choices for computing the freezing point of sea water:
+There are four choices for computing the freezing point of sea water:
 
 \li Linear The freezing temperature is a linear function of the salinity and
 pressure:
 \f[
    T_{Fr} = (T_{Fr0} + a\,S) + b\,P
 \f]
-where \f$T_{Fr0},a,b\f$ are contants which can be set in MOM_input (TFREEZE_S0_P0,
+where \f$T_{Fr0},a,b\f$ are constants which can be set in MOM_input (TFREEZE_S0_P0,
 DTFREEZE_DS, DTFREEZE_DP).
 
-\li Millero The \cite millero1978 equation is used, but modified so that it is a function
-of potential temperature rather than <em>in situ</em> temperature:
+\li Millero The \cite millero1978 equation is used to calculate the freezing
+point from practical salinity and pressure, but modified so that returns a
+potential temperature rather than an <em>in situ</em> temperature:
 \f[
    T_{Fr} = S(a + (b \sqrt{\max(S,0.0)} + c\, S)) + d\,P
 \f]
-where \f$a,b, c, d\f$ are fixed contants.
+where \f$a,b, c, d\f$ are fixed constants.
 
-\li TEOS-10 The TEOS-10 package is used to compute the freezing conservative temperature
-[degC] from absolute salinity [g/kg], and pressure [Pa]. This one must be used
-if you are using the NEMO or TEOS-10 equation of state.
+\li TEOS-10 The TEOS-10 package is used to compute the freezing conservative
+temperature [degC] from absolute salinity [g/kg], and pressure [Pa]. This one or
+TEOS_poly must be used if you are using the ROQUET_RHO, ROQUET_SPV or TEOS-10
+equation of state.
+
+\li TEOS_poly A 23-term polynomial fit refactored from the TEOS-10 package is
+used to compute the freezing conservative temperature [degC] from absolute
+salinity [g/kg], and pressure [Pa].
 
 */

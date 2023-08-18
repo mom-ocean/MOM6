@@ -4,12 +4,13 @@ module MOM_density_integrals
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_EOS,              only : EOS_type
-use MOM_EOS,              only : EOS_quadrature
+use MOM_EOS,              only : EOS_quadrature, EOS_domain
 use MOM_EOS,              only : analytic_int_density_dz
 use MOM_EOS,              only : analytic_int_specific_vol_dp
 use MOM_EOS,              only : calculate_density
 use MOM_EOS,              only : calculate_spec_vol
 use MOM_EOS,              only : calculate_specific_vol_derivs
+use MOM_EOS,              only : average_specific_vol
 use MOM_error_handler,    only : MOM_error, FATAL, WARNING, MOM_mesg
 use MOM_hor_index,        only : hor_index_type
 use MOM_string_functions, only : uppercase
@@ -28,6 +29,7 @@ public int_density_dz_generic_ppm
 public int_specific_vol_dp
 public int_spec_vol_dp_generic_pcm
 public int_spec_vol_dp_generic_plm
+public avg_specific_vol
 public find_depth_of_pressure_in_cell
 
 contains
@@ -1613,6 +1615,36 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
 
 end subroutine find_depth_of_pressure_in_cell
 
+!> Calculate the average in situ specific volume across layers
+subroutine avg_specific_vol(T, S, p_t, dp, HI, EOS, SpV_avg, halo_size)
+  type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
+  real, dimension(SZI_(HI),SZJ_(HI)), &
+                        intent(in)  :: T   !< Potential temperature of the layer [C ~> degC]
+  real, dimension(SZI_(HI),SZJ_(HI)), &
+                        intent(in)  :: S   !< Salinity of the layer [S ~> ppt]
+  real, dimension(SZI_(HI),SZJ_(HI)), &
+                        intent(in)  :: p_t !< Pressure at the top of the layer [R L2 T-2 ~> Pa]
+  real, dimension(SZI_(HI),SZJ_(HI)), &
+                        intent(in)  :: dp  !< Pressure change in the layer [R L2 T-2 ~> Pa]
+  type(EOS_type),       intent(in)  :: EOS !< Equation of state structure
+  real, dimension(SZI_(HI),SZJ_(HI)), &
+                        intent(inout) :: SpV_avg !< The vertical average specific volume
+                                           !! in the layer [R-1 ~> m3 kg-1]
+  integer,    optional, intent(in)  :: halo_size !< The number of halo points in which to work.
+
+  ! Local variables
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
+  integer :: jsh, jeh, j, halo
+
+  halo = 0 ; if (present(halo_size)) halo = MAX(halo_size,0)
+  jsh = HI%jsc-halo ; jeh = HI%jec+halo
+
+  EOSdom(:) = EOS_domain(HI, halo_size)
+  do j=jsh,jeh
+    call average_specific_vol(T(:,j), S(:,j), p_t(:,j), dp(:,j), SpV_avg(:,j), EOS, EOSdom)
+  enddo
+
+end subroutine avg_specific_vol
 
 !> Returns change in anomalous pressure change from top to non-dimensional
 !! position pos between z_t and z_b [R L2 T-2 ~> Pa]

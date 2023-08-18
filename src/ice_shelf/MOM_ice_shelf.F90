@@ -61,6 +61,7 @@ use MOM_coms, only : reproducing_sum
 use MOM_spatial_means, only : global_area_integral
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use MOM_interpolate, only : init_external_field, time_interp_external, time_interp_external_init
+use MOM_interpolate, only : external_field
 
 implicit none ; private
 
@@ -196,10 +197,10 @@ type, public :: ice_shelf_CS ; private
              id_shelf_sfc_mass_flux = -1
   !>@}
 
-  integer :: id_read_mass !< An integer handle used in time interpolation of
-                          !! the ice shelf mass read from a file
-  integer :: id_read_area !< An integer handle used in time interpolation of
-                          !! the ice shelf mass read from a file
+  type(external_field) :: mass_handle
+    !< Handle for reading the time interpolated ice shelf mass from a file
+  type(external_field) :: area_handle
+    !< Handle for reading the time interpolated ice shelf area from a file
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to control diagnostic output.
   type(user_ice_shelf_CS), pointer :: user_CS => NULL() !< A pointer to the control structure for
@@ -1118,7 +1119,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes)
         do j=js,je ; do i=is,ie
           last_hmask(i,j) = ISS%hmask(i,j) ; last_area_shelf_h(i,j) = ISS%area_shelf_h(i,j)
         enddo ; enddo
-        call time_interp_external(CS%id_read_mass, Time0, last_mass_shelf)
+        call time_interp_external(CS%mass_handle, Time0, last_mass_shelf)
         do j=js,je ; do i=is,ie
         ! This should only be done if time_interp_extern did an update.
           last_mass_shelf(i,j) = US%kg_m3_to_R*US%m_to_Z * last_mass_shelf(i,j) ! Rescale after time_interp
@@ -1222,12 +1223,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
                                           !! the ice-shelf state
   type(directories)  :: dirs
   type(dyn_horgrid_type), pointer :: dG => NULL()
-  real    :: Z_rescale  ! A rescaling factor for heights from the representation in
-                        ! a restart file to the internal representation in this run.
-  real    :: RZ_rescale ! A rescaling factor for mass loads from the representation in
-                        ! a restart file to the internal representation in this run.
-  real    :: L_rescale  ! A rescaling factor for horizontal lengths from the representation in
-                        ! a restart file to the internal representation in this run.
   real :: meltrate_conversion ! The conversion factor to use for in the melt rate diagnostic.
   real :: dz_ocean_min_float ! The minimum ocean thickness above which the ice shelf is considered
                         ! to be floating when CONST_SEA_LEVEL = True [Z ~> m].
@@ -1675,12 +1670,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     endif
   endif
 
-  call register_restart_field(US%m_to_Z_restart, "m_to_Z", .false., CS%restart_CSp, &
-                              "Height unit conversion factor", "Z meter-1")
-  call register_restart_field(US%m_to_L_restart, "m_to_L", .false., CS%restart_CSp, &
-                              "Length unit conversion factor", "L meter-1")
-  call register_restart_field(US%kg_m3_to_R_restart, "kg_m3_to_R", .false., CS%restart_CSp, &
-                              "Density unit conversion factor", "R m3 kg-1")
   if (CS%active_shelf_dynamics) then
     call register_restart_field(ISS%hmask, "h_mask", .true., CS%restart_CSp, &
                                 "ice sheet/shelf thickness mask" ,"none")
@@ -1722,28 +1711,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     ! This line calls a subroutine that reads the initial conditions from a restart file.
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: Restoring ice shelf from file.")
     call restore_state(dirs%input_filename, dirs%restart_input_dir, Time, G, CS%restart_CSp)
-
-    if ((US%m_to_Z_restart /= 0.0) .and. (US%m_to_Z_restart /= 1.0)) then
-      Z_rescale = 1.0 / US%m_to_Z_restart
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        ISS%h_shelf(i,j) = Z_rescale * ISS%h_shelf(i,j)
-      enddo ; enddo
-    endif
-
-    if ((US%m_to_Z_restart*US%kg_m3_to_R_restart /= 0.0) .and. &
-        (US%m_to_Z_restart*US%kg_m3_to_R_restart /= 1.0)) then
-      RZ_rescale = 1.0 / (US%m_to_Z_restart * US%kg_m3_to_R_restart)
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        ISS%mass_shelf(i,j) = RZ_rescale * ISS%mass_shelf(i,j)
-      enddo ; enddo
-    endif
-
-    if ((US%m_to_L_restart /= 0.0) .and. (US%m_to_L_restart /= 1.0)) then
-      L_rescale = 1.0 / US%m_to_L_restart
-      do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        ISS%area_shelf_h(i,j) = L_rescale**2 * ISS%area_shelf_h(i,j)
-      enddo ; enddo
-    endif
 
   endif ! .not. new_sim
 
@@ -1971,7 +1938,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
       filename = trim(slasher(inputdir))//trim(shelf_file)
       call log_param(param_file, mdl, "INPUTDIR/SHELF_FILE", filename)
 
-      CS%id_read_mass = init_external_field(filename, shelf_mass_var, &
+      CS%mass_handle = init_external_field(filename, shelf_mass_var, &
                             MOM_domain=CS%Grid_in%Domain, verbose=CS%debug)
 
       if (read_shelf_area) then
@@ -1979,7 +1946,7 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
                   "The variable in SHELF_FILE with the shelf area.", &
                   default="shelf_area")
 
-         CS%id_read_area = init_external_field(filename, shelf_area_var, &
+         CS%area_handle = init_external_field(filename, shelf_area_var, &
                                MOM_domain=CS%Grid_in%Domain)
       endif
 
@@ -2074,7 +2041,7 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
     allocate(tmp2d(is:ie,js:je), source=0.0)
   endif
 
-  call time_interp_external(CS%id_read_mass, Time, tmp2d)
+  call time_interp_external(CS%mass_handle, Time, tmp2d)
   call rotate_array(tmp2d, CS%turns, ISS%mass_shelf)
   deallocate(tmp2d)
 

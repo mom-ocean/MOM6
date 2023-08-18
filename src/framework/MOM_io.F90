@@ -100,6 +100,7 @@ interface MOM_read_data
   module procedure MOM_read_data_2d
   module procedure MOM_read_data_2d_region
   module procedure MOM_read_data_3d
+  module procedure MOM_read_data_3d_region
   module procedure MOM_read_data_4d
 end interface MOM_read_data
 
@@ -137,7 +138,7 @@ end interface MOM_write_field
 interface read_variable
   module procedure read_variable_0d, read_variable_0d_int
   module procedure read_variable_1d, read_variable_1d_int
-  module procedure read_variable_2d
+  module procedure read_variable_2d, read_variable_3d
 end interface read_variable
 
 !> Read a global or variable attribute from a named netCDF file using netCDF calls
@@ -332,15 +333,20 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
     IsgB = dG%IsgB ; IegB = dG%IegB ; JsgB = dG%JsgB ; JegB = dG%JegB
   endif
 
-  if (domain_set .and. (num_PEs() == 1)) thread = SINGLE_FILE
-
   one_file = .true.
   if (domain_set) one_file = (thread == SINGLE_FILE)
 
   if (one_file) then
-    call IO_handle%open(filename, action=OVERWRITE_FILE, threading=thread)
+    if (domain_set) then
+      call IO_handle%open(filename, action=OVERWRITE_FILE, &
+          MOM_domain=domain, threading=thread, fileset=SINGLE_FILE)
+    else
+      call IO_handle%open(filename, action=OVERWRITE_FILE, threading=thread, &
+          fileset=SINGLE_FILE)
+    endif
   else
-    call IO_handle%open(filename, action=OVERWRITE_FILE, MOM_domain=Domain)
+    call IO_handle%open(filename, action=OVERWRITE_FILE, MOM_domain=Domain, &
+        threading=thread, fileset=thread)
   endif
 
 ! Define the coordinates.
@@ -765,13 +771,13 @@ function num_timelevels(filename, varname, min_dims) result(n_time)
 
   call get_var_sizes(filename, varname, ndims, sizes, match_case=.false., caller="num_timelevels")
 
-  n_time = sizes(ndims)
+  if (ndims > 0) n_time = sizes(ndims)
 
   if (present(min_dims)) then
     if (ndims < min_dims-1) then
       write(msg, '(I3)') min_dims
       call MOM_error(WARNING, "num_timelevels: variable "//trim(varname)//" in file "//&
-        trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
+          trim(filename)//" has fewer than min_dims = "//trim(msg)//" dimensions.")
       n_time = -1
     elseif (ndims == min_dims - 1) then
       n_time = 0
@@ -861,12 +867,18 @@ subroutine read_var_sizes(filename, varname, ndims, sizes, match_case, caller, d
     ncid = ncid_in
   else
     call open_file_to_read(filename, ncid, success=success)
-    if (.not.success) return
+    if (.not.success) then
+      call MOM_error(WARNING, "Unsuccessfully attempted to open file "//trim(filename))
+      return
+    endif
   endif
 
   ! Get the dimension sizes of the variable varname.
   call get_varid(varname, ncid, filename, varid, match_case=match_case, found=found)
-  if (.not.found) return
+  if (.not.found) then
+    call MOM_error(WARNING, "Could not find variable "//trim(varname)//" in file "//trim(filename))
+    return
+  endif
 
   status = NF90_inquire_variable(ncid, varid, ndims=ndims)
   if (status /= NF90_NOERR) then
@@ -1150,7 +1162,7 @@ subroutine read_variable_2d(filename, varname, var, start, nread, ncid_in)
       allocate(field_nread(field_ndims))
       field_nread(:2) = field_shape(:2)
       field_nread(3:) = 1
-      if (present(nread)) field_shape(:2) = nread(:2)
+      if (present(nread)) field_nread(:2) = nread(:2)
 
       rc = nf90_get_var(ncid, varid, var, field_start, field_nread)
 
@@ -1170,6 +1182,119 @@ subroutine read_variable_2d(filename, varname, var, start, nread, ncid_in)
 
   call broadcast(var, size(var), blocking=.true.)
 end subroutine read_variable_2d
+
+
+subroutine read_variable_3d(filename, varname, var, start, nread, ncid_in)
+  character(len=*), intent(in) :: filename  !< Name of file to be read
+  character(len=*), intent(in) :: varname   !< Name of variable to be read
+  real, intent(out)            :: var(:,:,:)  !< Output array of variable [arbitrary]
+  integer, optional, intent(in) :: start(:) !< Starting index on each axis.
+  integer, optional, intent(in) :: nread(:) !< Number of values to be read along each axis
+  integer, optional, intent(in) :: ncid_in  !< netCDF ID of an opened file.
+              !! If absent, the file is opened and closed within this routine.
+
+  integer :: ncid, varid
+  integer :: field_ndims, dim_len
+  integer, allocatable :: field_dimids(:), field_shape(:)
+  integer, allocatable :: field_start(:), field_nread(:)
+  integer :: i, rc
+  character(len=*), parameter :: hdr = "read_variable_3d: "
+
+  ! Validate shape of start and nread
+  if (present(start)) then
+    if (size(start) < 2) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " start must have at least two dimensions.")
+  endif
+
+  if (present(nread)) then
+    if (size(nread) < 2) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " nread must have at least two dimensions.")
+
+    if (any(nread(3:) > 1)) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " nread may only read a single level in higher dimensions.")
+  endif
+
+  ! Since start and nread may be reshaped, we cannot rely on netCDF to ensure
+  ! that their lengths are equivalent, and must do it here.
+  if (present(start) .and. present(nread)) then
+    if (size(start) /= size(nread)) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+        // " start and nread must have the same length.")
+  endif
+
+  ! Open and read `varname` from `filename`
+  if (is_root_pe()) then
+    if (present(ncid_in)) then
+      ncid = ncid_in
+    else
+      call open_file_to_Read(filename, ncid)
+    endif
+
+    call get_varid(varname, ncid, filename, varid, match_case=.false.)
+    if (varid < 0) call MOM_error(FATAL, "Unable to get netCDF varid for "//trim(varname)//&
+                                         " in "//trim(filename))
+
+    ! Query for the dimensionality of the input field
+    rc = nf90_inquire_variable(ncid, varid, ndims=field_ndims)
+    if (rc /= NF90_NOERR) call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) //&
+          ": Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+    ! Confirm that field is at least 2d
+    if (field_ndims < 2) &
+      call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) // " " // &
+          trim(varname) // " from " // trim(filename) // " is not a 2D field.")
+
+    ! If start and nread are present, then reshape them to match field dims
+    if (present(start) .or. present(nread)) then
+      allocate(field_shape(field_ndims))
+      allocate(field_dimids(field_ndims))
+
+      rc = nf90_inquire_variable(ncid, varid, dimids=field_dimids)
+      if (rc /= NF90_NOERR) call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) //&
+            ": Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+      do i = 1, field_ndims
+        rc = nf90_inquire_dimension(ncid, field_dimids(i), len=dim_len)
+        if (rc /= NF90_NOERR) &
+          call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) &
+              // ": Difficulties reading dimensions from " // trim(filename))
+        field_shape(i) = dim_len
+      enddo
+
+      ! Reshape start(:) and nreads(:) in case ranks differ
+      allocate(field_start(field_ndims))
+      field_start(:) = 1
+      if (present(start)) then
+        dim_len = min(size(start), size(field_start))
+        field_start(:dim_len) = start(:dim_len)
+      endif
+
+      allocate(field_nread(field_ndims))
+      field_nread(:3) = field_shape(:3)
+      !field_nread(3:) = 1
+      if (present(nread)) field_nread(:3) = nread(:3)
+
+      rc = nf90_get_var(ncid, varid, var, field_start, field_nread)
+
+      deallocate(field_start)
+      deallocate(field_nread)
+      deallocate(field_shape)
+      deallocate(field_dimids)
+    else
+      rc = nf90_get_var(ncid, varid, var)
+    endif
+
+    if (rc /= NF90_NOERR) call MOM_error(FATAL, hdr // trim(nf90_strerror(rc)) //&
+          " Difficulties reading "//trim(varname)//" from "//trim(filename))
+
+    if (.not.present(ncid_in)) call close_file_to_read(ncid, filename)
+  endif
+
+  call broadcast(var, size(var), blocking=.true.)
+end subroutine read_variable_3d
 
 !> Read a character-string global or variable attribute
 subroutine read_attribute_str(filename, attname, att_val, varname, found, all_read, ncid_in)
@@ -2187,6 +2312,42 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   endif
 end subroutine MOM_read_data_3d
 
+!> Read a 3d region array from file using infrastructure I/O.
+subroutine MOM_read_data_3d_region(filename, fieldname, data, start, nread, MOM_domain, &
+                                   no_domain, scale, turns)
+  character(len=*), intent(in)  :: filename   !< Input filename
+  character(len=*), intent(in)  :: fieldname  !< Field variable name
+  real, dimension(:,:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
+  integer, dimension(:), intent(in) :: start  !< Starting index for each axis.
+  integer, dimension(:), intent(in) :: nread  !< Number of values to read along each axis.
+  type(MOM_domain_type), optional, intent(in) :: MOM_Domain !< Model domain decomposition
+  logical, optional, intent(in) :: no_domain  !< If true, field does not use
+                                              !! domain decomposion.
+  real, optional, intent(in)    :: scale      !< A scaling factor that the variable is multiplied by
+                                              !! before it is returned to convert from the units in the file
+                                              !! to the internal units for this variable [A a-1 ~> 1]
+  integer, optional, intent(in) :: turns      !< Number of quarter turns from
+                                              !! input to model grid
+
+  integer :: qturns                   ! Number of quarter turns
+  real, allocatable :: data_in(:,:,:)   ! Field array on the input grid in arbitrary units [A ~> a]
+
+  qturns = 0
+  if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
+    call read_field(filename, fieldname, data, start, nread, &
+      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
+    )
+  else
+    call allocate_rotated_array(data, [1,1,1], -qturns, data_in)
+    call read_field(filename, fieldname, data_in, start, nread, &
+      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale &
+    )
+    call rotate_array(data_in, qturns, data)
+    deallocate(data_in)
+  endif
+end subroutine MOM_read_data_3d_region
 
 !> Read a 4d array from file using infrastructure I/O.
 subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &

@@ -56,6 +56,7 @@ subroutine find_obsolete_params(param_file)
          hint="Instead use OBC_SEGMENT_xxx_VELOCITY_NUDGING_TIMESCALES.")
   enddo
 
+  call obsolete_logical(param_file, "CONVERT_THICKNESS_UNITS", .true.)
   call obsolete_logical(param_file, "MASK_MASSLESS_TRACERS", .false.)
 
   call obsolete_logical(param_file, "SALT_REJECT_BELOW_ML", .false.)
