@@ -63,6 +63,7 @@ type, public :: surface_forcing_CS ; private
                                 !! the winds that are being provided in calls to
                                 !! update_ocean_model.
   logical :: use_temperature    !< If true, temp and saln used as state variables.
+  logical :: nonBous            !< If true, this run is fully non-Boussinesq
   real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress [nondim].
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
@@ -282,8 +283,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! allocation and initialization if this is the first time that this
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
-    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.true., press=.true., &
-                               fix_accum_bug=CS%fix_ustar_gustless_bug, tau_mag=.true.)
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.not.CS%nonBous, press=.true., &
+                               fix_accum_bug=CS%fix_ustar_gustless_bug, tau_mag=CS%nonBous)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -718,8 +719,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   ! allocation and initialization if this is the first time that this
   ! mechanical forcing type has been used.
   if (.not.forces%initialized) then
-    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., &
-                               press=.true., tau_mag=.true.)
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.not.CS%nonBous, &
+                               press=.true., tau_mag=CS%nonBous)
 
     call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
     call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
@@ -792,14 +793,26 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   ! Set the wind stresses and ustar.
   if (wt1 <= 0.0) then
     call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux=forces%taux, tauy=forces%tauy, &
-                              ustar=forces%ustar, mag_tau=forces%tau_mag, tau_halo=1)
+                              tau_halo=1)
+    if (associated(forces%ustar)) &
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=forces%ustar)
+    if (associated(forces%tau_mag)) &
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, mag_tau=forces%tau_mag)
   else
     call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux=forces%taux, tauy=forces%tauy, &
-                              ustar=ustar_tmp, mag_tau=tau_mag_tmp, tau_halo=1)
-    do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = wt1*forces%ustar(i,j) + wt2*ustar_tmp(i,j)
-      forces%tau_mag(i,j) = wt1*forces%tau_mag(i,j) + wt2*tau_mag_tmp(i,j)
-    enddo ; enddo
+                              tau_halo=1)
+    if (associated(forces%ustar)) then
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=ustar_tmp)
+      do j=js,je ; do i=is,ie
+        forces%ustar(i,j) = wt1*forces%ustar(i,j) + wt2*ustar_tmp(i,j)
+      enddo ; enddo
+    endif
+    if (associated(forces%tau_mag)) then
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, mag_tau=tau_mag_tmp)
+      do j=js,je ; do i=is,ie
+        forces%tau_mag(i,j) = wt1*forces%tau_mag(i,j) + wt2*tau_mag_tmp(i,j)
+      enddo ; enddo
+    endif
   endif
 
   ! Find the net mass source in the input forcing without other adjustments.
@@ -960,7 +973,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
 
   ! Set surface momentum stress related fields as a function of staggering.
   if (present(taux) .or. present(tauy) .or. &
-      ((do_ustar.or.do_gustless) .and. .not.associated(IOB%stress_mag)) ) then
+      ((do_ustar .or. do_tau_mag .or. do_gustless) .and. .not.associated(IOB%stress_mag)) ) then
 
     if (wind_stagger == BGRID_NE) then
       taux_in_B(:,:) = 0.0 ; tauy_in_B(:,:) = 0.0
@@ -1278,6 +1291,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   ! Local variables
   real :: utide             ! The RMS tidal velocity [Z T-1 ~> m s-1].
   real :: Flux_const_dflt   ! A default piston velocity for restoring surface properties [m day-1]
+  logical :: Boussinesq       ! If true, this run is fully Boussinesq
+  logical :: semi_Boussinesq  ! If true, this run is partially non-Boussinesq
   real :: rho_TKE_tidal     ! The constant bottom density used to translate tidal amplitudes into the
                             ! tidal bottom TKE input used with INT_TIDE_DISSIPATION [R ~> kg m-3]
   logical :: new_sim              ! False if this simulation was started from a restart file
@@ -1320,12 +1335,20 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
+  call get_param(param_file, mdl, "BOUSSINESQ", Boussinesq, &
+                 "If true, make the Boussinesq approximation.", default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "SEMI_BOUSSINESQ", semi_Boussinesq, &
+                 "If true, do non-Boussinesq pressure force calculations and use mass-based "//&
+                 "thicknesses, but use RHO_0 to convert layer thicknesses into certain "//&
+                 "height changes.  This only applies if BOUSSINESQ is false.", &
+                 default=.true., do_not_log=.true.)
+  CS%nonBous = .not.(Boussinesq .or. semi_Boussinesq)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R) ! (, do_not_log=CS%nonBous)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf, scale=US%J_kg_to_Q)
   call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
