@@ -1584,6 +1584,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   ! If MLD_filtered is being used, we need to update halo regions after a restart
   if (allocated(CS%MLD_filtered)) call pass_var(CS%MLD_filtered, G%domain)
   if (allocated(CS%MLD_filtered_slow)) call pass_var(CS%MLD_filtered_slow, G%domain)
+  if (allocated(CS%wpup_filtered)) call pass_var(CS%wpup_filtered, G%domain)
 
 end function mixedlayer_restrat_init
 
