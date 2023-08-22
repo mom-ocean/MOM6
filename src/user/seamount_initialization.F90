@@ -84,7 +84,7 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
@@ -105,7 +105,7 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.just_read) &
-    call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
+    call MOM_mesg("seamount_initialization.F90, seamount_initialize_thickness: setting thickness")
 
   call get_param(param_file, mdl,"MIN_THICKNESS",min_thickness, &
                 'Minimum thickness for layer', &
@@ -164,9 +164,9 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
           eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-          h(i,j,k) = GV%Angstrom_H
+          h(i,j,k) = GV%Angstrom_Z
         else
-          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
     enddo ; enddo
@@ -179,9 +179,9 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
         eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = GV%Z_to_H * min_thickness
+          h(i,j,k) = min_thickness
         else
-          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
     enddo ; enddo
@@ -189,7 +189,7 @@ subroutine seamount_initialize_thickness (h, depth_tot, G, GV, US, param_file, j
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / real(nz)
+      h(i,j,:) = depth_tot(i,j) / real(nz)
     enddo ; enddo
 
 end select
@@ -202,7 +202,7 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [S ~> ppt]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h !< Layer thickness [Z ~> m]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
   logical,                                   intent(in)  :: just_read !< If true, this call will
@@ -282,7 +282,7 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          xi1 = xi0 + GV%H_to_Z * h(i,j,k) / G%max_depth
+          xi1 = xi0 + h(i,j,k) / G%max_depth
           select case ( trim(density_profile) )
             case ('linear')
              !S(i,j,k) = S_surf + S_range * 0.5 * (xi0 + xi1)

@@ -12,7 +12,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public verticalGridInit, verticalGridEnd
-public setVerticalGridAxes, fix_restart_scaling
+public setVerticalGridAxes
 public get_flux_units, get_thickness_units, get_tr_flux_units
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -41,12 +41,18 @@ type, public :: verticalGrid_type
 
   ! The following variables give information about the vertical grid.
   logical :: Boussinesq !< If true, make the Boussinesq approximation.
+  logical :: semi_Boussinesq !< If true, do non-Boussinesq pressure force calculations and
+                        !! use mass-based "thicknesses, but use Rho0 to convert layer thicknesses
+                        !! into certain height changes.  This only applies if BOUSSINESQ is false.
   real :: Angstrom_H    !< A one-Angstrom thickness in the model thickness units [H ~> m or kg m-2].
   real :: Angstrom_Z    !< A one-Angstrom thickness in the model depth units [Z ~> m].
   real :: Angstrom_m    !< A one-Angstrom thickness [m].
   real :: H_subroundoff !< A thickness that is so small that it can be added to a thickness of
                         !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
                         !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
+  real :: dZ_subroundoff !< A thickness in height units that is so small that it can be added to a
+                        !! vertical distance of Angstrom_Z or 1e-17 m without changing it at the bit
+                        !! level [Z ~> m].  This is the height equivalent of H_subroundoff.
   real, allocatable, dimension(:) :: &
     g_prime, &          !< The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
     Rlay                !< The target coordinate value (potential density) in each layer [R ~> kg m-3].
@@ -74,8 +80,17 @@ type, public :: verticalGrid_type
                         !! thickness units [H R-1 Z-1 ~> m3 kg-2 or 1].
   real :: H_to_MKS      !< A constant that translates thickness units to its MKS unit
                         !! (m or kg m-2) based on GV%Boussinesq [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
+  real :: m2_s_to_HZ_T  !< The combination of conversion factors that converts kinematic viscosities
+                        !! in m2 s-1 to the internal units of the kinematic (in Boussinesq mode)
+                        !! or dynamic viscosity [H Z s T-1 m-2 ~> 1 or kg m-3]
+  real :: HZ_T_to_m2_s  !< The combination of conversion factors that converts the viscosities from
+                        !! their internal representation into a kinematic viscosity in m2 s-1
+                        !! [T m2 H-1 Z-1 s-1 ~> 1 or m3 kg-1]
+  real :: HZ_T_to_MKS   !< The combination of conversion factors that converts the viscosities from
+                        !! their internal representation into their unnscaled MKS units
+                        !! (m2 s-1 or Pa s), depending on whether the model is Boussinesq
+                        !! [T m2 H-1 Z-1 s-1 ~> 1] or [T Pa s H-1 Z-1 ~> 1]
 
-  real :: m_to_H_restart = 0.0 !< A copy of the m_to_H that is used in restart files.
 end type verticalGrid_type
 
 contains
@@ -91,6 +106,8 @@ subroutine verticalGridInit( param_file, GV, US )
   ! Local variables
   integer :: nk, H_power
   real    :: H_rescale_factor ! The integer power of 2 by which thicknesses are rescaled [nondim]
+  real    :: rho_Kv  ! The density used convert input kinematic viscosities into dynamic viscosities
+                     ! when in non-Boussinesq mode [R ~> kg m-3]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=16) :: mdl = 'MOM_verticalGrid'
@@ -114,6 +131,17 @@ subroutine verticalGridInit( param_file, GV, US )
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "BOUSSINESQ", GV%Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true.)
+  call get_param(param_file, mdl, "SEMI_BOUSSINESQ", GV%semi_Boussinesq, &
+                 "If true, do non-Boussinesq pressure force calculations and use mass-based "//&
+                 "thicknesses, but use RHO_0 to convert layer thicknesses into certain "//&
+                 "height changes.  This only applies if BOUSSINESQ is false.", &
+                 default=.true., do_not_log=GV%Boussinesq)
+  if (GV%Boussinesq) GV%semi_Boussinesq = .true.
+  call get_param(param_file, mdl, "RHO_KV_CONVERT", Rho_Kv, &
+                 "The density used to convert input kinematic viscosities into dynamic "//&
+                 "viscosities in non-BOUSSINESQ mode, and similarly for vertical diffusivities.", &
+                 units="kg m-3", default=GV%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 do_not_log=GV%Boussinesq)
   call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_Z, &
                  "The minimum layer thickness, usually one-Angstrom.", &
                  units="m", default=1.0e-10, scale=US%m_to_Z)
@@ -156,26 +184,41 @@ subroutine verticalGridInit( param_file, GV, US )
     GV%H_to_kg_m2 = US%R_to_kg_m3*GV%Rho0 * GV%H_to_m
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = 1.0 / GV%H_to_m
-    GV%Angstrom_H = GV%m_to_H * US%Z_to_m*GV%Angstrom_Z
     GV%H_to_MKS = GV%H_to_m
+    GV%m2_s_to_HZ_T = GV%m_to_H * US%m_to_Z * US%T_to_s
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
     GV%m_to_H = US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H
     GV%H_to_m = GV%H_to_kg_m2 / (US%R_to_kg_m3*GV%Rho0)
-    GV%Angstrom_H = US%Z_to_m*GV%Angstrom_Z * 1000.0*GV%kg_m2_to_H
     GV%H_to_MKS = GV%H_to_kg_m2
+    GV%m2_s_to_HZ_T = US%R_to_kg_m3*rho_Kv * GV%kg_m2_to_H * US%m_to_Z * US%T_to_s
   endif
-  GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H,GV%m_to_H*1e-17)
-  GV%H_to_Pa = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth * GV%H_to_kg_m2
 
   GV%H_to_Z = GV%H_to_m * US%m_to_Z
   GV%Z_to_H = US%Z_to_m * GV%m_to_H
+
+  GV%Angstrom_H = GV%Z_to_H * GV%Angstrom_Z
   GV%Angstrom_m = US%Z_to_m * GV%Angstrom_Z
+
+  GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H, GV%m_to_H*1e-17)
+  GV%dZ_subroundoff = 1e-20 * max(GV%Angstrom_Z, US%m_to_Z*1e-17)
+
+  GV%H_to_Pa = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth * GV%H_to_kg_m2
 
   GV%H_to_RZ = GV%H_to_kg_m2 * US%kg_m3_to_R * US%m_to_Z
   GV%RZ_to_H = GV%kg_m2_to_H * US%R_to_kg_m3 * US%Z_to_m
 
-! Log derivative values.
+  GV%HZ_T_to_m2_s = 1.0 / GV%m2_s_to_HZ_T
+  GV%HZ_T_to_MKS = GV%H_to_MKS * US%Z_to_m * US%s_to_T
+
+  ! Note based on the above that for both Boussinsq and non-Boussinesq cases that:
+  !     GV%Rho0 = GV%Z_to_H * GV%H_to_RZ
+  !     1.0/GV%Rho0 = GV%H_to_Z * GV%RZ_to_H
+  ! This is exact for power-of-2 scaling of the units, regardless of the value of Rho0, but
+  ! the first term on the right hand side is invertable in Boussinesq mode, but the second
+  ! is invertable when non-Boussinesq.
+
+  ! Log derivative values.
   call log_param(param_file, mdl, "M to THICKNESS", GV%m_to_H*H_rescale_factor, units="H m-1")
   call log_param(param_file, mdl, "M to THICKNESS rescaled by 2^-n", GV%m_to_H, units="2^n H m-1")
   call log_param(param_file, mdl, "THICKNESS to M rescaled by 2^n", GV%H_to_m, units="2^-n m H-1")
@@ -186,20 +229,6 @@ subroutine verticalGridInit( param_file, GV, US )
   allocate( GV%Rlay(nk), source=0.0 )
 
 end subroutine verticalGridInit
-
-!> Set the scaling factors for restart files to the scaling factors for this run.
-subroutine fix_restart_scaling(GV, unscaled)
-  type(verticalGrid_type), intent(inout) :: GV   !< The ocean's vertical grid structure
-  logical,       optional, intent(in)    :: unscaled !< If true, set the restart factors as though the
-                                             !! model would be unscaled, which is appropriate if the
-                                             !! scaling is undone when writing a restart file.
-
-  GV%m_to_H_restart = GV%m_to_H
-  if (present(unscaled)) then ; if (unscaled) then
-    GV%m_to_H_restart = 1.0
-  endif ; endif
-
-end subroutine fix_restart_scaling
 
 !> Returns the model's thickness units, usually m or kg/m^2.
 function get_thickness_units(GV)

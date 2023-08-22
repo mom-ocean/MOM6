@@ -12,6 +12,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, param_file_type, log_version
 use MOM_grid, only : ocean_grid_type
 use MOM_horizontal_regridding, only : myStats, horiz_interp_and_extrap_tracer
+use MOM_interface_heights, only : dz_to_thickness_simple
 use MOM_remapping, only : remapping_CS, initialize_remapping
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -75,10 +76,12 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   real, allocatable, dimension(:), target :: z_in       ! Cell center depths for input data [Z ~> m]
 
   ! Local variables for ALE remapping
-  real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses [H ~> m or kg m-2].
+  real, dimension(:,:,:), allocatable :: dzSrc ! Source thicknesses in height units [Z ~> m]
+  real, dimension(:,:,:), allocatable :: hSrc  ! Source thicknesses [H ~> m or kg m-2]
   real, dimension(:), allocatable :: h1 ! A 1-d column of source thicknesses [Z ~> m].
   real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights [Z ~> m].
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
+  type(verticalGrid_type) :: GV_loc ! A temporary vertical grid structure
 
   real :: missing_value ! A value indicating that there is no valid input data at this point [CU ~> conc]
   integer :: nPoints    ! The number of valid input data points in a column
@@ -180,6 +183,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
     call cpu_clock_begin(id_clock_ALE)
     ! First we reserve a work space for reconstructions of the source data
     allocate( h1(kd) )
+    allocate( dzSrc(isd:ied,jsd:jed,kd) )
     allocate( hSrc(isd:ied,jsd:jed,kd) )
     ! Set parameters for reconstructions
     call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false., answer_date=remap_answer_date )
@@ -204,12 +208,18 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
       else
         tr(i,j,:) = 0.
       endif ! mask2dT
-      hSrc(i,j,:) = GV%Z_to_H * h1(:)
+      dzSrc(i,j,:) = h1(:)
     enddo ; enddo
+
+    ! Equation of state data is not available, so a simpler rescaling will have to suffice,
+    ! but it might be problematic in non-Boussinesq mode.
+    GV_loc = GV ; GV_loc%ke = kd
+    call dz_to_thickness_simple(dzSrc, hSrc, G, GV_loc, US)
 
     call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false., answer_date=remap_answer_date )
 
     deallocate( hSrc )
+    deallocate( dzSrc )
     deallocate( h1 )
 
     do k=1,nz

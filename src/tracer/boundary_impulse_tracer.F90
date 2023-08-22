@@ -189,10 +189,6 @@ subroutine initialize_boundary_impulse_tracer(restart, day, G, GV, US, h, diag, 
     endif
   enddo ! Tracer loop
 
-  if (restart .and. (US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0) ) then
-    CS%remaining_source_time = (1.0 / US%s_to_T_restart) * CS%remaining_source_time
-  endif
-
   if (associated(OBC)) then
   ! Steal from updated DOME in the fullness of time.
   endif

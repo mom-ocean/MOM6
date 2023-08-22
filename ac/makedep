@@ -4,9 +4,10 @@ from __future__ import print_function
 
 import argparse
 import glob
+import io
 import os
 import re
-import sys  # used only to get path to current script
+import sys
 
 
 # Pre-compile re searches
@@ -255,7 +256,7 @@ def scan_fortran_file(src_file):
     """Scan the Fortran file "src_file" and return lists of module defined,
     module used, and files included."""
     module_decl, used_modules, cpp_includes, f90_includes, programs = [], [], [], [], []
-    with open(src_file, 'r') as file:
+    with io.open(src_file, 'r', errors='replace') as file:
         lines = file.readlines()
         for line in lines:
             match = re_module.match(line.lower())

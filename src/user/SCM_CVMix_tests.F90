@@ -57,7 +57,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
   type(verticalGrid_type),                   intent(in)  :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [S ~> ppt]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [Z ~> m]
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                     intent(in)  :: param_file !< Input parameter structure
   logical,                                   intent(in)  :: just_read !< If present and true, this call
@@ -108,7 +108,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
     top = 0. ! Reference to surface
     bottom = 0.
     do k=1,nz
-      bottom = bottom - h(i,j,k)*GV%H_to_Z ! Interface below layer [Z ~> m]
+      bottom = bottom - h(i,j,k)       ! Interface below layer [Z ~> m]
       zC = 0.5*( top + bottom )        ! Z of middle of layer [Z ~> m]
       DZ = min(0., zC + UpperLayerTempMLD)
       T(i,j,k) = max(LowerLayerMinTemp,LowerLayerTemp + LowerLayerdTdZ * DZ)

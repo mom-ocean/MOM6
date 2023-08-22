@@ -188,7 +188,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
       p(i,j,1) = p_atm(i,j)
     enddo ; enddo
   else
-    ! oneatm = 101325.0 * US%kg_m3_to_R * US%m_s_to_L_T**2 ! 1 atm scaled to [R L2 T-2 ~> Pa]
+    ! oneatm = 101325.0 * US%Pa_to_RL2_T2 ! 1 atm scaled to [R L2 T-2 ~> Pa]
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       p(i,j,1) = 0.0 ! or oneatm

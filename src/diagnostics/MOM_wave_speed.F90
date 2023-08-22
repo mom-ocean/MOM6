@@ -7,7 +7,7 @@ use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser, only : log_version
 use MOM_grid, only : ocean_grid_type
-use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
+use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h, interpolate_column
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -651,17 +651,33 @@ subroutine tdma6(n, a, c, lam, y)
 end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
-subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
-  type(ocean_grid_type),                    intent(in)  :: G  !< Ocean grid structure
-  type(verticalGrid_type),                  intent(in)  :: GV !< Vertical grid structure
-  type(unit_scale_type),                    intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(in)  :: tv !< Thermodynamic variables
-  integer,                                  intent(in)  :: nmodes !< Number of modes
-  real, dimension(G%isd:G%ied,G%jsd:G%jed,nmodes), intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
-  type(wave_speed_CS),                      intent(in)  :: CS !< Wave speed control struct
-  logical,             optional,            intent(in)  :: full_halos !< If true, do the calculation
-                                                              !! over the entire data domain.
+subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_struct_max, u_struct_bot, Nb, int_w2, &
+                       int_U2, int_N2w2, full_halos)
+  type(ocean_grid_type),                           intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),                         intent(in)  :: GV !< Vertical grid structure
+  type(unit_scale_type),                           intent(in)  :: US !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),       intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
+  type(thermo_var_ptrs),                           intent(in)  :: tv !< Thermodynamic variables
+  integer,                                         intent(in)  :: nmodes !< Number of modes
+  type(wave_speed_CS),                             intent(in)  :: CS !< Wave speed control struct
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1,nmodes),intent(out) :: w_struct !< Wave Vertical profile [nondim]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV),nmodes),intent(out) :: u_struct !< Wave Horizontal profile [Z-1 ~> m-1]
+  real, dimension(SZI_(G),SZJ_(G),nmodes),         intent(out) :: cn !< Waves speeds [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),nmodes),         intent(out) :: u_struct_max !< Maximum of wave horizontal profile
+                                                                               !! [Z-1 ~> m-1]
+  real, dimension(SZI_(G),SZJ_(G),nmodes),         intent(out) :: u_struct_bot !< Bottom value of wave horizontal
+                                                                               !! profile [Z-1 ~> m-1]
+  real, dimension(SZI_(G),SZJ_(G)),                intent(out) :: Nb !< Bottom value of Brunt Vaissalla freqency
+                                                                     !! [T-1 ~> s-1]
+  real, dimension(SZI_(G),SZJ_(G),nmodes),         intent(out) :: int_w2 !< depth-integrated
+                                                                         !! vertical profile squared [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),nmodes),         intent(out) :: int_U2 !< depth-integrated
+                                                                         !! horizontal profile squared [Z-1 ~> m-1]
+  real, dimension(SZI_(G),SZJ_(G),nmodes),         intent(out) :: int_N2w2 !< depth-integrated Brunt Vaissalla
+                                                                           !! frequency times vertical
+                                                                           !! profile squared [Z T-2 ~> m s-2]
+  logical,             optional,                   intent(in)  :: full_halos !< If true, do the calculation
+                                                                             !! over the entire data domain.
 
   ! Local variables
   real, dimension(SZK_(GV)+1) :: &
@@ -672,7 +688,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     S_int, &      ! Salinity interpolated to interfaces [S ~> ppt]
     H_top, &      ! The distance of each filtered interface from the ocean surface [Z ~> m]
     H_bot, &      ! The distance of each filtered interface from the bottom [Z ~> m]
-    gprime        ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
+    gprime, &     ! The reduced gravity across each interface [L2 Z-1 T-2 ~> m s-2].
+    N2            ! The Brunt Vaissalla freqency squared [T-2 ~> s-2]
   real, dimension(SZK_(GV),SZI_(G)) :: &
     Hf, &         ! Layer thicknesses after very thin layers are combined [Z ~> m]
     Tf, &         ! Layer temperatures after very thin layers are combined [C ~> degC]
@@ -684,7 +701,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
     Hc, &         ! A column of layer thicknesses after convective instabilities are removed [Z ~> m]
     Tc, &         ! A column of layer temperatures after convective instabilities are removed [C ~> degC]
     Sc, &         ! A column of layer salinities after convective instabilities are removed [S ~> ppt]
-    Rc            ! A column of layer densities after convective instabilities are removed [R ~> kg m-3]
+    Rc, &         ! A column of layer densities after convective instabilities are removed [R ~> kg m-3]
+    Hc_H          ! Hc(:) rescaled from Z to thickness units [H ~> m or kg m-2]
   real :: I_Htot  ! The inverse of the total filtered thicknesses [Z ~> m]
   real :: c2_scale ! A scaling factor for wave speeds to help control the growth of the determinant and its
                    ! derivative with lam between rows of the Thomas algorithm solver [L2 s2 T-2 m-2 ~> nondim].
@@ -737,7 +755,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   real :: tol_merge  ! The fractional change in estimated wave speed that is allowed
                      ! when deciding to merge layers in the calculation [nondim]
   integer :: kf(SZI_(G)) ! The number of active layers after filtering.
-  integer, parameter :: max_itt = 10
+  integer, parameter :: max_itt = 30
   logical :: use_EOS    ! If true, density is calculated from T & S using the equation of state.
   logical :: better_est ! If true, use an improved estimate of the first mode internal wave speed.
   logical :: merge      ! If true, merge the current layer with the one above.
@@ -749,6 +767,21 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   integer :: kc         ! The number of layers in the column after merging
   integer :: sub, sub_it
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, iint, m
+  real, dimension(SZK_(GV)+1) ::  modal_structure !< Normalized model structure [nondim]
+  real, dimension(SZK_(GV)) ::  modal_structure_fder !< Normalized model structure [Z-1 ~> m-1]
+  real :: mode_struct(SZK_(GV)+1) ! The mode structure [nondim], but it is also temporarily
+                         ! in units of [L2 T-2 ~> m2 s-2] after it is modified inside of tdma6.
+  real :: mode_struct_fder(SZK_(GV)) ! The mode structure 1st derivative [nondim], but it is also temporarily
+                         ! in units of [L2 T-2 ~> m2 s-2] after it is modified inside of tdma6.
+  real :: mode_struct_sq(SZK_(GV)+1) ! The square of mode structure [nondim]
+  real :: mode_struct_fder_sq(SZK_(GV)) ! The square of mode structure 1st derivative [Z-2 ~> m-2]
+
+
+  real :: ms_min, ms_max ! The minimum and maximum mode structure values returned from tdma6 [L2 T-2 ~> m2 s-2]
+  real :: ms_sq          ! The sum of the square of the values returned from tdma6 [L4 T-4 ~> m4 s-4]
+  real :: w2avg          ! A total for renormalization
+  real, parameter :: a_int = 0.5 ! Integral total for normalization
+  real :: renorm         ! Normalization factor
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -777,9 +810,17 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
   endif
   cg1_min2 = CS%min_speed2
 
-  ! Zero out all wave speeds.  Values over land or for columns that are too weakly stratified
+  ! Zero out all local values.  Values over land or for columns that are too weakly stratified
   ! are not changed from this zero value.
   cn(:,:,:) = 0.0
+  u_struct_max(:,:,:) = 0.0
+  u_struct_bot(:,:,:) = 0.0
+  Nb(:,:) = 0.0
+  int_w2(:,:,:) = 0.0
+  int_N2w2(:,:,:) = 0.0
+  int_U2(:,:,:) = 0.0
+  u_struct(:,:,:,:) = 0.0
+  w_struct(:,:,:,:) = 0.0
 
   min_h_frac = tol_Hfrac / real(nz)
   !$OMP parallel do default(private) shared(is,ie,js,je,nz,h,G,GV,US,CS,min_h_frac,use_EOS, &
@@ -1010,8 +1051,13 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
 
             ! Calculate Igu, Igl, depth, and N2 at each interior interface
             ! [excludes surface (K=1) and bottom (K=kc+1)]
+            Igl(:) = 0.
+            Igu(:) = 0.
+            N2(:) = 0.
+
             do K=2,kc
               Igl(K) = 1.0/(gprime(K)*Hc(k)) ; Igu(K) = 1.0/(gprime(K)*Hc(k-1))
+              N2(K) = US%L_to_Z**2*gprime(K)/(0.5*(Hc(k)+Hc(k-1)))
               if (better_est) then
                 speed2_tot = speed2_tot + gprime(K)*((H_top(K) * H_bot(K)) * I_Htot)
               else
@@ -1019,8 +1065,20 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               endif
             enddo
 
+            ! Set stratification for surface and bottom (setting equal to nearest interface for now)
+            N2(1) = N2(2) ; N2(kc+1) = N2(kc)
+            ! set bottom stratification
+            Nb(i,j) = sqrt(N2(kc+1))
+
             ! Under estimate the first eigenvalue (overestimate the speed) to start with.
             lam_1 = 1.0 / speed2_tot
+
+            ! init and first guess for mode structure
+            mode_struct(:) = 0.
+            mode_struct_fder(:) = 0.
+            mode_struct(2:kc) = 1. ! Uniform flow, first guess
+            modal_structure(:) = 0.
+            modal_structure_fder(:) = 0.
 
             ! Find the first eigen value
             do itt=1,max_itt
@@ -1039,10 +1097,88 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
                 lam_1 = lam_1 + dlam
               endif
 
+              call tdma6(kc-1, Igu(2:kc), Igl(2:kc), lam_1, mode_struct(2:kc))
+              ! Note that tdma6 changes the units of mode_struct to [L2 T-2 ~> m2 s-2]
+              ! apply BC
+              mode_struct(1) = 0.
+              mode_struct(kc+1) = 0.
+
+              ! renormalization of the integral of the profile
+              w2avg = 0.0
+              do k=1,kc
+                w2avg = w2avg + 0.5*(mode_struct(K)**2+mode_struct(K+1)**2)*Hc(k) ![Z L4 T-4]
+              enddo
+              renorm = sqrt(htot(i)*a_int/w2avg) ![L-2 T-2]
+              do K=1,kc+1 ; mode_struct(K) = renorm * mode_struct(K) ; enddo
+              ! after renorm, mode_struct is again [nondim]
+
               if (abs(dlam) < tol_solve*lam_1) exit
             enddo
 
             if (lam_1 > 0.0) cn(i,j,1) = 1.0 / sqrt(lam_1)
+
+            ! sign of wave structure is irrelevant, flip to positive if needed
+            if (mode_struct(2)<0.) then
+              mode_struct(2:kc) = -1. * mode_struct(2:kc)
+            endif
+
+            ! vertical derivative of w at interfaces lives on the layer points
+            do k=1,kc
+              mode_struct_fder(k) = (mode_struct(k) - mode_struct(k+1)) / Hc(k)
+            enddo
+
+            ! boundary condition for derivative is no-gradient
+            do k=kc+1,nz
+              mode_struct_fder(k) = mode_struct_fder(kc)
+            enddo
+
+            ! now save maximum value and bottom value
+            u_struct_bot(i,j,1) = mode_struct_fder(kc)
+            u_struct_max(i,j,1) = maxval(abs(mode_struct_fder(1:kc)))
+
+            ! Calculate terms for vertically integrated energy equation
+            do k=1,kc
+              mode_struct_fder_sq(k) = mode_struct_fder(k)**2
+            enddo
+            do K=1,kc+1
+              mode_struct_sq(K) = mode_struct(K)**2
+            enddo
+
+            ! sum over layers for quantities defined on layer
+            do k=1,kc
+              int_U2(i,j,1) = int_U2(i,j,1) + mode_struct_fder_sq(k) * Hc(k)
+            enddo
+
+            ! vertical integration with Trapezoidal rule for values at interfaces
+            do K=1,kc
+              int_w2(i,j,1) = int_w2(i,j,1) + 0.5*(mode_struct_sq(K)+mode_struct_sq(K+1)) * Hc(k)
+              int_N2w2(i,j,1) = int_N2w2(i,j,1) + 0.5*(mode_struct_sq(K)*N2(K) + &
+                                                       mode_struct_sq(K+1)*N2(K+1)) * Hc(k)
+            enddo
+
+            ! Note that remapping_core_h requires that the same units be used
+            ! for both the source and target grid thicknesses, here [H ~> m or kg m-2].
+            do k = 1,kc
+              Hc_H(k) = GV%Z_to_H * Hc(k)
+            enddo
+
+            ! for w (diag) interpolate onto all interfaces
+            call interpolate_column(kc, Hc_H(1:kc), mode_struct(1:kc+1), &
+                                    nz, h(i,j,:), modal_structure(:), .false.)
+
+            ! for u (remap) onto all layers
+            call remapping_core_h(CS%remapping_CS, kc, Hc_H(1:kc), mode_struct_fder(1:kc), &
+                                  nz, h(i,j,:), modal_structure_fder(:), &
+                                  GV%H_subroundoff, GV%H_subroundoff)
+
+            ! write the wave structure
+            do k=1,nz+1
+              w_struct(i,j,k,1) = modal_structure(k)
+            enddo
+
+            do k=1,nz
+              u_struct(i,j,k,1) = modal_structure_fder(k)
+            enddo
 
             ! Find other eigen values if c1 is of significant magnitude, > cn_thresh
             nrootsfound = 0    ! number of extra roots found (not including 1st root)
@@ -1128,16 +1264,105 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, full_halos)
               ! Use Newton's method to find the roots within the identified windows
               do m=1,nrootsfound ! loop over the root-containing widows (excluding 1st mode)
                 lam_n = xbl(m) ! first guess is left edge of window
+
+                ! init and first guess for mode structure
+                mode_struct(:) = 0.
+                mode_struct_fder(:) = 0.
+                mode_struct(2:kc) = 1. ! Uniform flow, first guess
+                modal_structure(:) = 0.
+                modal_structure_fder(:) = 0.
+
                 do itt=1,max_itt
                   ! calculate the determinant of (A-lam_n*I)
                   call tridiag_det(Igu, Igl, 2, kc, lam_n, det, ddet, row_scale=c2_scale)
                   ! Use Newton's method to find a new estimate of lam_n
                   dlam = - det / ddet
                   lam_n = lam_n + dlam
+
+                  call tdma6(kc-1, Igu(2:kc), Igl(2:kc), lam_n, mode_struct(2:kc))
+                  ! Note that tdma6 changes the units of mode_struct to [L2 T-2 ~> m2 s-2]
+                  ! apply BC
+                  mode_struct(1) = 0.
+                  mode_struct(kc+1) = 0.
+
+                  ! renormalization of the integral of the profile
+                  w2avg = 0.0
+                  do k=1,kc
+                    w2avg = w2avg + 0.5*(mode_struct(K)**2+mode_struct(K+1)**2)*Hc(k)
+                  enddo
+                  renorm = sqrt(htot(i)*a_int/w2avg)
+                  do K=1,kc+1 ; mode_struct(K) = renorm * mode_struct(K) ; enddo
+
                   if (abs(dlam) < tol_solve*lam_1)  exit
                 enddo ! itt-loop
+
                 ! calculate nth mode speed
                 if (lam_n > 0.0) cn(i,j,m+1) = 1.0 / sqrt(lam_n)
+
+                ! sign is irrelevant, flip to positive if needed
+                if (mode_struct(2)<0.) then
+                   mode_struct(2:kc) = -1. * mode_struct(2:kc)
+                endif
+
+                ! derivative of vertical profile (i.e. dw/dz) is evaluated at the layer point
+                do k=1,kc
+                  mode_struct_fder(k) = (mode_struct(k) - mode_struct(k+1)) / Hc(k)
+                enddo
+
+                ! boundary condition for 1st derivative is no-gradient
+                do k=kc+1,nz
+                  mode_struct_fder(k) = mode_struct_fder(kc)
+                enddo
+
+                ! now save maximum value and bottom value
+                u_struct_bot(i,j,m) = mode_struct_fder(kc)
+                u_struct_max(i,j,m) = maxval(abs(mode_struct_fder(1:kc)))
+
+                ! Calculate terms for vertically integrated energy equation
+                do k=1,kc
+                  mode_struct_fder_sq(k) = mode_struct_fder(k)**2
+                enddo
+                do K=1,kc+1
+                  mode_struct_sq(K) = mode_struct(K)**2
+                enddo
+
+                ! sum over layers for integral of quantities defined at layer points
+                do k=1,kc
+                  int_U2(i,j,m) = int_U2(i,j,m) + mode_struct_fder_sq(k) * Hc(k)
+                enddo
+
+                ! vertical integration with Trapezoidal rule for quantities on interfaces
+                do K=1,kc
+                  int_w2(i,j,m) = int_w2(i,j,m) + 0.5*(mode_struct_sq(K)+mode_struct_sq(K+1)) * Hc(k)
+                  int_N2w2(i,j,m) = int_N2w2(i,j,m) + 0.5*(mode_struct_sq(K)*N2(K) + &
+                                                           mode_struct_sq(K+1)*N2(K+1)) * Hc(k)
+                enddo
+
+                ! Note that remapping_core_h requires that the same units be used
+                ! for both the source and target grid thicknesses, here [H ~> m or kg m-2].
+                do k = 1,kc
+                  Hc_H(k) = GV%Z_to_H * Hc(k)
+                enddo
+
+                ! for w (diag) interpolate onto all interfaces
+                call interpolate_column(kc, Hc_H(1:kc), mode_struct(1:kc+1), &
+                                        nz, h(i,j,:), modal_structure(:), .false.)
+
+                ! for u (remap) onto all layers
+                call remapping_core_h(CS%remapping_CS, kc, Hc_H(1:kc), mode_struct_fder(1:kc), &
+                                      nz, h(i,j,:), modal_structure_fder(:), &
+                                      GV%H_subroundoff, GV%H_subroundoff)
+
+                ! write the wave structure
+                ! note that m=1 solves for 2nd mode,...
+                do k=1,nz+1
+                  w_struct(i,j,k,m+1) = modal_structure(k)
+                enddo
+
+                do k=1,nz
+                  u_struct(i,j,k,m+1) = modal_structure_fder(k)
+                enddo
+
               enddo ! n-loop
             endif ! if nmodes>1 .and. kc>nmodes .and. c1>c1_thresh
           endif ! if more than 2 layers
