@@ -127,6 +127,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     e_tide_eq,  & ! The bottom geopotential anomaly due to tidal forces from astronomical sources [Z ~> m].
     e_tide_sal, & ! The bottom geopotential anomaly due to harmonic self-attraction and loading
                   ! specific to tides [Z ~> m].
+    e_sal_tide, & ! The summation of self-attraction and loading and tidal forcing [Z ~> m].
     dM, &       ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
@@ -320,19 +321,31 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     enddo ; enddo
     call calc_SAL(SSH, e_sal, G, CS%SAL_CSp)
 
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      za(i,j) = za(i,j) - GV%g_Earth * e_sal(i,j)
-    enddo ; enddo
+    if ((CS%tides_answer_date>20230630) .or. (.not.GV%semi_Boussinesq) .or. (.not.CS%tides)) then
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        za(i,j) = za(i,j) - GV%g_Earth * e_sal(i,j)
+      enddo ; enddo
+    endif
   endif
 
   ! Calculate and add the tidal geopotential anomaly.
   if (CS%tides) then
-    call calc_tidal_forcing(CS%Time, e_tide_eq, e_tide_sal, G, US, CS%tides_CSp)
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      za(i,j) = za(i,j) - GV%g_Earth * (e_tide_eq(i,j) + e_tide_sal(i,j))
-    enddo ; enddo
+    if ((CS%tides_answer_date>20230630) .or. (.not.GV%semi_Boussinesq)) then
+      call calc_tidal_forcing(CS%Time, e_tide_eq, e_tide_sal, G, US, CS%tides_CSp)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        za(i,j) = za(i,j) - GV%g_Earth * (e_tide_eq(i,j) + e_tide_sal(i,j))
+      enddo ; enddo
+    else  ! This block recreates older answers with tides.
+      if (.not.CS%calculate_SAL) e_sal(:,:) = 0.0
+      call calc_tidal_forcing_legacy(CS%Time, e_sal, e_sal_tide, e_tide_eq, e_tide_sal, &
+                                     G, US, CS%tides_CSp)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        za(i,j) = za(i,j) - GV%g_Earth * e_sal_tide(i,j)
+      enddo ; enddo
+    endif
   endif
 
   if (CS%GFS_scale < 1.0) then
@@ -942,7 +955,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
                  units="kg m-3", default=GV%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
-  if (CS%tides .and. GV%Boussinesq) then
+  if (CS%tides) then
     call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
       "This sets the default value for the various _ANSWER_DATE parameters.", &
       default=99991231)
