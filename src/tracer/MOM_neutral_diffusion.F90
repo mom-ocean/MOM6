@@ -669,9 +669,9 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
 
     ! x-flux
     if (CS%KhTh_use_ebt_struct) then
-      do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-        if (G%mask2dCu(I,j)>0.) then
-          if (CS%tapering) then
+      if (CS%tapering) then
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
             ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
             call compute_tapering_coeffs(G%ke+1, CS%hbl(I,j), CS%hbl(I+1,j), CS%coeff_l(:), CS%coeff_r(:), &
                                          h(I,j,:), h(I+1,j,:))
@@ -683,7 +683,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%continuous_reconstruction, h_neglect, &
                                       CS%remap_CS, h_neglect_edge, CS%coeff_l(:)*CS%Coef_h(i,j,:), &
                                       CS%coeff_r(:)*CS%Coef_h(i+1,j,:))
-          else
+          endif
+        enddo ; enddo
+      else
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
             call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
                                       tracer%t(i,j,:), tracer%t(i+1,j,:), &
                                       CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
@@ -693,12 +697,12 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%remap_CS, h_neglect_edge, CS%Coef_h(i,j,:), &
                                       CS%Coef_h(i+1,j,:))
           endif
-        endif
-      enddo ; enddo
+        enddo ; enddo
+      endif
     else
-      do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-        if (G%mask2dCu(I,j)>0.) then
-          if (CS%tapering) then
+      if (CS%tapering) then
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
             ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
             call compute_tapering_coeffs(G%ke+1, CS%hbl(I,j), CS%hbl(I+1,j), CS%coeff_l(:), CS%coeff_r(:), &
                                          h(I,j,:), h(I+1,j,:))
@@ -710,7 +714,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%continuous_reconstruction, h_neglect, &
                                       CS%remap_CS, h_neglect_edge, CS%coeff_l(:), &
                                       CS%coeff_r(:))
-          else
+          endif
+        enddo ; enddo
+      else
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
             call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
                                       tracer%t(i,j,:), tracer%t(i+1,j,:), &
                                       CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
@@ -719,15 +727,15 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%continuous_reconstruction, h_neglect, &
                                       CS%remap_CS, h_neglect_edge)
           endif
-        endif
-      enddo ; enddo
+        enddo ; enddo
+      endif
     endif
 
     ! y-flux
     if (CS%KhTh_use_ebt_struct) then
-      do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-        if (G%mask2dCv(i,J)>0.) then
-          if (CS%tapering) then
+      if (CS%tapering) then
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
             ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
             call compute_tapering_coeffs(G%ke+1, CS%hbl(i,J), CS%hbl(i,J+1), CS%coeff_l(:), CS%coeff_r(:), &
                                          h(i,J,:), h(i,J+1,:))
@@ -740,8 +748,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%continuous_reconstruction, h_neglect, &
                                       CS%remap_CS, h_neglect_edge, CS%coeff_l(:)*CS%Coef_h(i,j,:), &
                                       CS%coeff_r(:)*CS%Coef_h(i,j+1,:))
-          else
-
+          endif
+        enddo ; enddo
+      else
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
             call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
                                       tracer%t(i,j,:), tracer%t(i,j+1,:), &
                                       CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
@@ -751,12 +762,12 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%remap_CS, h_neglect_edge, CS%Coef_h(i,j,:), &
                                       CS%Coef_h(i,j+1,:))
           endif
-        endif
-      enddo ; enddo
+        enddo ; enddo
+      endif
     else
-      do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-        if (G%mask2dCv(i,J)>0.) then
-          if (CS%tapering) then
+      if (CS%tapering) then
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
             ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
             call compute_tapering_coeffs(G%ke+1, CS%hbl(i,J), CS%hbl(i,J+1), CS%coeff_l(:), CS%coeff_r(:), &
                                          h(i,J,:), h(i,J+1,:))
@@ -769,8 +780,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%continuous_reconstruction, h_neglect, &
                                       CS%remap_CS, h_neglect_edge, CS%coeff_l(:), &
                                       CS%coeff_r(:))
-          else
-
+          endif
+        enddo ; enddo
+      else
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
             call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
                                       tracer%t(i,j,:), tracer%t(i,j+1,:), &
                                       CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
@@ -779,8 +793,8 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
                                       CS%continuous_reconstruction, h_neglect, &
                                       CS%remap_CS, h_neglect_edge)
           endif
-        endif
-      enddo ; enddo
+        enddo ; enddo
+      endif
     endif
 
     ! Update the tracer concentration from divergence of neutral diffusive flux components
