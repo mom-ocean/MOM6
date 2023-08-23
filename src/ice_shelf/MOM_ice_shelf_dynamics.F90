@@ -265,23 +265,23 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
     call get_param(param_file, mdl, "MISSING_SHELF_TEMPERATURE", T_shelf_missing, &
                  "An ice shelf temperature to use where there is no ice shelf.",&
                  units="degC", default=-10.0, scale=US%degC_to_C, do_not_log=.true.)
-    allocate( CS%u_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%v_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%t_shelf(isd:ied,jsd:jed), source=T_shelf_missing ) ! [C ~> degC]
-    allocate( CS%ice_visc(isd:ied,jsd:jed), source=0.0 )
-    allocate( CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25 ) ! [Pa-3 s-1]
-    allocate( CS%basal_traction(isd:ied,jsd:jed), source=0.0 )   ! [R L2 T-2 ~> Pa]
-    allocate( CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10 ) ! [Pa (m-1 s)^n_sliding]
-    allocate( CS%OD_av(isd:ied,jsd:jed), source=0.0 )
-    allocate( CS%ground_frac(isd:ied,jsd:jed), source=0.0 )
-    allocate( CS%taudx_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%taudy_shelf(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%bed_elev(isd:ied,jsd:jed) ) ; CS%bed_elev(:,:) = G%bathyT(:,:) + G%Z_ref
-    allocate( CS%u_bdry_val(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%v_bdry_val(IsdB:IedB,JsdB:JedB), source=0.0 )
-    allocate( CS%u_face_mask_bdry(IsdB:IedB,JsdB:JedB), source=-2.0 )
-    allocate( CS%v_face_mask_bdry(IsdB:iedB,JsdB:JedB), source=-2.0 )
-    allocate( CS%h_bdry_val(isd:ied,jsd:jed), source=0.0 )
+    allocate(CS%u_shelf(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%v_shelf(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%t_shelf(isd:ied,jsd:jed), source=T_shelf_missing) ! [C ~> degC]
+    allocate(CS%ice_visc(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25) ! [Pa-3 s-1]
+    allocate(CS%basal_traction(isd:ied,jsd:jed), source=0.0)   ! [R L2 T-2 ~> Pa]
+    allocate(CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10) ! [Pa (m-1 s)^n_sliding]
+    allocate(CS%OD_av(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%ground_frac(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%taudx_shelf(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%taudy_shelf(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%bed_elev(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%u_bdry_val(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%v_bdry_val(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%u_face_mask_bdry(IsdB:IedB,JsdB:JedB), source=-2.0)
+    allocate(CS%v_face_mask_bdry(IsdB:iedB,JsdB:JedB), source=-2.0)
+    allocate(CS%h_bdry_val(isd:ied,jsd:jed), source=0.0)
    ! additional restarts for ice shelf state
     call register_restart_field(CS%u_shelf, "u_shelf", .false., restart_CS, &
                                 "ice sheet/shelf u-velocity", &
@@ -310,6 +310,8 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
                                 "ice-stiffness parameter", "Pa-3 s-1")
     call register_restart_field(CS%h_bdry_val, "h_bdry_val", .false., restart_CS, &
                                 "ice thickness at the boundary", "m", conversion=US%Z_to_m)
+    call register_restart_field(CS%bed_elev, "bed elevation", .true., restart_CS, &
+                                "bed elevation", "m", conversion=US%Z_to_m)
   endif
 
 end subroutine register_ice_shelf_dyn_restarts
@@ -509,7 +511,15 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     call pass_var(CS%ice_visc,G%domain)
     call pass_var(CS%basal_traction, G%domain)
     call pass_var(CS%AGlen_visc, G%domain)
+    call pass_var(CS%bed_elev, G%domain)
+    call pass_var(CS%C_basal_friction, G%domain)
+    call pass_var(CS%h_bdry_val, G%domain)
+    call pass_var(CS%thickness_bdry_val, G%domain)
+
     call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
+    call pass_vector(CS%u_bdry_val, CS%v_bdry_val, G%domain, TO_ALL, BGRID_NE)
+    call pass_vector(CS%u_face_mask_bdry, CS%v_face_mask_bdry, G%domain, TO_ALL, BGRID_NE)
+    call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
   endif
 
   if (active_shelf_dynamics) then
@@ -561,7 +571,8 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
       call initialize_ice_flow_from_file(CS%bed_elev,CS%u_shelf, CS%v_shelf, CS%ground_frac, &
                   G, US, param_file)
       call pass_vector(CS%u_shelf, CS%v_shelf, G%domain, TO_ALL, BGRID_NE)
-      call pass_var(CS%bed_elev, G%domain,CENTER)
+      call pass_var(CS%ground_frac, G%domain)
+      call pass_var(CS%bed_elev, G%domain)
       call update_velocity_masks(CS, G, ISS%hmask, CS%umask, CS%vmask, CS%u_face_mask, CS%v_face_mask)
     endif
   ! Register diagnostics.
@@ -590,8 +601,9 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
        'intermediate ocean column thickness passed to ice model', 'm', conversion=US%Z_to_m)
   endif
   call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: initialize ice velocity.")
-  call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf(:,:))
-  call ice_shelf_solve_outer(CS, ISS, G, US, CS%u_shelf, CS%v_shelf,CS%taudx_shelf,CS%taudy_shelf, iters, Time)
+  if (new_sim) then
+    call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf(:,:))
+  endif
 
 end subroutine initialize_ice_shelf_dyn
 
@@ -955,7 +967,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   call CG_action(Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
                  CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
                  G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
-  call pass_vector(Au,Av,G%domain,TO_ALL,BGRID_NE)
+  call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
 
   if (CS%nonlin_solve_err_mode == 1) then
     err_init = 0 ; err_tempu = 0 ; err_tempv = 0
@@ -1011,6 +1023,8 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     call CG_action(Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
                    CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
                    G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
+
+    call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
 
     err_max = 0
 
@@ -1225,7 +1239,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
     ! the computational domain - this is their state in the initial iteration
 
 
-    is = isc - cg_halo ; ie = iecq + cg_halo
+    is = iscq - cg_halo ; ie = iecq + cg_halo
     js = jscq - cg_halo ; je = jecq + cg_halo
 
     Au(:,:) = 0 ; Av(:,:) = 0
@@ -2595,10 +2609,9 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
   is = iscq - 1; js = jscq - 1
     i_off = G%idg_offset ; j_off = G%jdg_offset
 
-  allocate(Phi(1:8,1:4,isd:ied,jsd:jed), source=0.0)
+  allocate(Phi(1:8,1:4,isc:iec,jsc:jec), source=0.0)
 
-!  do j=jsc,jec ; do i=isc,iec
-  do j=jscq,jecq ; do i=iscq,iecq
+  do j=jsc,jec ; do i=isc,iec
     call bilinear_shape_fn_grid(G, i, j, Phi(:,:,i,j))
   enddo ; enddo
 

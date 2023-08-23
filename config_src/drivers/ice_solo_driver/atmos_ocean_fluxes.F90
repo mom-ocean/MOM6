@@ -13,7 +13,7 @@ contains
 !> This subroutine duplicates an interface used by the FMS coupler, but only
 !! returns a value of -1.  None of the arguments are used for anything.
 function aof_set_coupler_flux(name, flux_type, implementation, atm_tr_index,     &
-                              param, flag, ice_restart_file, ocean_restart_file, &
+                              param, flag, mol_wt, ice_restart_file, ocean_restart_file, &
                               units, caller, verbosity)  result (coupler_index)
 
   character(len=*),                intent(in) :: name !< An unused argument
@@ -22,6 +22,7 @@ function aof_set_coupler_flux(name, flux_type, implementation, atm_tr_index,    
   integer,               optional, intent(in) :: atm_tr_index !< An unused argument
   real,    dimension(:), optional, intent(in) :: param !< An unused argument
   logical, dimension(:), optional, intent(in) :: flag !< An unused argument
+  real,                  optional, intent(in) :: mol_wt !< An unused argument
   character(len=*),      optional, intent(in) :: ice_restart_file !< An unused argument
   character(len=*),      optional, intent(in) :: ocean_restart_file !< An unused argument
   character(len=*),      optional, intent(in) :: units !< An unused argument

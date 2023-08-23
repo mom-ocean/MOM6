@@ -429,31 +429,32 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
   filename = trim(inputdir)//trim(vel_file)
   call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", filename)
   call get_param(PF, mdl, "ICE_U_VEL_VARNAME", ushelf_varname, &
-                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 "The name of the u velocity variable in ICE_VELOCITY_FILE.", &
                  default="u_shelf")
   call get_param(PF, mdl, "ICE_V_VEL_VARNAME", vshelf_varname, &
-                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 "The name of the v velocity variable in ICE_VELOCITY_FILE.", &
                  default="v_shelf")
   call get_param(PF, mdl, "ICE_VISC_VARNAME", ice_visc_varname, &
-                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 "The name of the ice viscosity variable in ICE_VELOCITY_FILE.", &
                  default="viscosity")
+  call get_param(PF, mdl, "ICE_FLOAT_FRAC_VARNAME", floatfr_varname, &
+                 "The name of the ice float fraction (grounding fraction) variable in ICE_VELOCITY_FILE.", &
+                 default="float_frac")
   call get_param(PF, mdl, "BED_TOPO_FILE", bed_topo_file, &
                  "The file from which the bed elevation is read.", &
                  default="ice_shelf_vel.nc")
   call get_param(PF, mdl, "BED_TOPO_VARNAME", bed_varname, &
-                 "The name of the thickness variable in ICE_INPUT_FILE.", &
+                 "The name of the bed elevation variable in ICE_INPUT_FILE.", &
                  default="depth")
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
-
-  floatfr_varname = "float_frac"
 
   call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
   call MOM_read_data(filename, trim(vshelf_varname), v_shelf, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
   call MOM_read_data(filename, trim(floatfr_varname), float_cond, G%Domain, scale=1.)
 
   filename = trim(inputdir)//trim(bed_topo_file)
-  call MOM_read_data(filename,trim(bed_varname), bed_elev, G%Domain, scale=1.0)
+  call MOM_read_data(filename, trim(bed_varname), bed_elev, G%Domain, scale=US%m_to_Z)
 
 
 end subroutine initialize_ice_flow_from_file
