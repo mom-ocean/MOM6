@@ -858,9 +858,9 @@ subroutine change_thickness_using_melt(ISS, G, US, time_step, fluxes, density_ic
     endif
   enddo ; enddo
 
-  call pass_var(ISS%area_shelf_h, G%domain)
-  call pass_var(ISS%h_shelf, G%domain)
-  call pass_var(ISS%hmask, G%domain)
+  call pass_var(ISS%area_shelf_h, G%domain, complete=.false.)
+  call pass_var(ISS%h_shelf, G%domain, complete=.false.)
+  call pass_var(ISS%hmask, G%domain, complete=.false.)
   call pass_var(ISS%mass_shelf, G%domain)
 
 end subroutine change_thickness_using_melt
@@ -1753,10 +1753,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   id_clock_pass = cpu_clock_id(' Ice shelf halo updates', grain=CLOCK_ROUTINE)
 
   call cpu_clock_begin(id_clock_pass)
-  call pass_var(ISS%area_shelf_h, G%domain)
-  call pass_var(ISS%h_shelf, G%domain)
-  call pass_var(ISS%mass_shelf, G%domain)
-  call pass_var(ISS%hmask, G%domain)
+  call pass_var(ISS%area_shelf_h, G%domain, complete=.false.)
+  call pass_var(ISS%h_shelf, G%domain, complete=.false.)
+  call pass_var(ISS%mass_shelf, G%domain, complete=.false.)
+  call pass_var(ISS%hmask, G%domain, complete=.false.)
   call pass_var(G%bathyT, G%domain)
   call cpu_clock_end(id_clock_pass)
 
@@ -2032,7 +2032,7 @@ subroutine change_thickness_using_precip(CS, ISS, G, US, fluxes, time_step, Time
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2)) then
 
-      if (-fluxes%shelf_sfc_mass_flux(i,j) * time_step  < ISS%h_shelf(i,j)) then
+      if (-fluxes%shelf_sfc_mass_flux(i,j) * time_step * I_rho_ice  < ISS%h_shelf(i,j)) then
         ISS%h_shelf(i,j) = ISS%h_shelf(i,j) + fluxes%shelf_sfc_mass_flux(i,j) * time_step * I_rho_ice
       else
         ! the ice is about to ablate, so set thickness, area, and mask to zero
@@ -2101,10 +2101,10 @@ subroutine update_shelf_mass(G, US, CS, ISS, Time)
                                        CS%min_thickness_simple_calve, halo=0)
   endif
 
-  call pass_var(ISS%area_shelf_h, G%domain)
-  call pass_var(ISS%h_shelf, G%domain)
-  call pass_var(ISS%hmask, G%domain)
-  call pass_var(ISS%mass_shelf, G%domain)
+  call pass_var(ISS%area_shelf_h, G%domain, complete=.false.)
+  call pass_var(ISS%h_shelf, G%domain, complete=.false.)
+  call pass_var(ISS%hmask, G%domain, complete=.false.)
+  call pass_var(ISS%mass_shelf, G%domain, complete=.true.)
 
 end subroutine update_shelf_mass
 
