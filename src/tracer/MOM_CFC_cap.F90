@@ -1,4 +1,4 @@
-!> Simulates CFCs using atmospheric pressure, wind speed and sea ice cover
+  !> Simulates CFCs using atmospheric pressure, wind speed and sea ice cover
 !! provided via cap (only NUOPC cap is implemented so far).
 module MOM_CFC_cap
 
@@ -20,7 +20,7 @@ use MOM_open_boundary,   only : ocean_OBC_type
 use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_time_manager,    only : time_type, increment_date
-use time_interp_external_mod, only : init_external_field, time_interp_external
+use MOM_interpolate,     only : external_field, init_external_field, time_interp_external
 use MOM_tracer_registry, only : register_tracer
 use MOM_tracer_types,    only : tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
@@ -70,10 +70,10 @@ type, public :: CFC_cap_CS ; private
 
   type(CFC_tracer_data), dimension(NTR) :: CFC_data      !< per-tracer parameters / metadata
   integer :: CFC_BC_year_offset = 0 !< offset to add to model time to get time value used in CFC_BC_file
-  integer :: id_cfc11_atm_nh = -1   !< id number for time_interp_external.
-  integer :: id_cfc11_atm_sh = -1   !< id number for time_interp_external.
-  integer :: id_cfc12_atm_nh = -1   !< id number for time_interp_external.
-  integer :: id_cfc12_atm_sh = -1   !< id number for time_interp_external.
+  type(external_field) :: cfc11_atm_nh_handle !< Handle for time-interpolated CFC11 atm NH
+  type(external_field) :: cfc11_atm_sh_handle !< Handle for time-interpolated CFC11 atm SH
+  type(external_field) :: cfc12_atm_nh_handle !< Handle for time-interpolated CFC12 atm NH
+  type(external_field) :: cfc12_atm_sh_handle !< Handle for time-interpolated CFC12 atm SH
 end type CFC_cap_CS
 
 contains
@@ -168,22 +168,23 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call get_param(param_file, mdl, "CFC11_NH_VARIABLE", CFC_BC_var_name, &
                  "Variable name of NH CFC-11 atm mole fraction in CFC_BC_FILE.", &
                  default="cfc11_nh")
-  CS%id_cfc11_atm_nh = init_external_field(CFC_BC_file, CFC_BC_var_name)
+  CS%cfc11_atm_nh_handle = init_external_field(CFC_BC_file, CFC_BC_var_name)
 
   call get_param(param_file, mdl, "CFC11_SH_VARIABLE", CFC_BC_var_name, &
                  "Variable name of SH CFC-11 atm mole fraction in CFC_BC_FILE.", &
                  default="cfc11_sh")
-  CS%id_cfc11_atm_sh = init_external_field(CFC_BC_file, CFC_BC_var_name)
+  CS%cfc11_atm_sh_handle = init_external_field(CFC_BC_file, CFC_BC_var_name)
 
   call get_param(param_file, mdl, "CFC12_NH_VARIABLE", CFC_BC_var_name, &
                  "Variable name of NH CFC-12 atm mole fraction in CFC_BC_FILE.", &
                  default="cfc12_nh")
-  CS%id_cfc12_atm_nh = init_external_field(CFC_BC_file, CFC_BC_var_name)
+  CS%cfc12_atm_nh_handle = init_external_field(CFC_BC_file, CFC_BC_var_name)
 
   call get_param(param_file, mdl, "CFC12_SH_VARIABLE", CFC_BC_var_name, &
                  "Variable name of SH CFC-12 atm mole fraction in CFC_BC_FILE.", &
                  default="cfc12_sh")
-  CS%id_cfc12_atm_sh = init_external_field(CFC_BC_file, CFC_BC_var_name)
+  CS%cfc12_atm_sh_handle = init_external_field(CFC_BC_file, CFC_BC_var_name)
+!                                              domain=G%Domain%mpp_domain)
 
   ! The following vardesc types contain a package of metadata about each tracer,
   ! including, the name; units; longname; and grid information.
@@ -502,15 +503,15 @@ subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US
   Time_external = increment_date(day_start, years=CS%CFC_BC_year_offset)
 
   ! CFC11 atm mole fraction, convert from ppt (pico mol/mol) to mol/mol
-  call time_interp_external(CS%id_cfc11_atm_nh, Time_external, cfc11_atm_nh)
+  call time_interp_external(CS%cfc11_atm_nh_handle, Time_external, cfc11_atm_nh)
   cfc11_atm_nh = cfc11_atm_nh * 1.0e-12
-  call time_interp_external(CS%id_cfc11_atm_sh, Time_external, cfc11_atm_sh)
+  call time_interp_external(CS%cfc11_atm_sh_handle, Time_external, cfc11_atm_sh)
   cfc11_atm_sh = cfc11_atm_sh * 1.0e-12
 
   ! CFC12 atm mole fraction, convert from ppt (pico mol/mol) to mol/mol
-  call time_interp_external(CS%id_cfc12_atm_nh, Time_external, cfc12_atm_nh)
+  call time_interp_external(CS%cfc12_atm_nh_handle, Time_external, cfc12_atm_nh)
   cfc12_atm_nh = cfc12_atm_nh * 1.0e-12
-  call time_interp_external(CS%id_cfc12_atm_sh, Time_external, cfc12_atm_sh)
+  call time_interp_external(CS%cfc12_atm_sh_handle, Time_external, cfc12_atm_sh)
   cfc12_atm_sh = cfc12_atm_sh * 1.0e-12
 
   !---------------------------------------------------------------------

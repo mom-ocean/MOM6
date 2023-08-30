@@ -30,7 +30,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,                 intent(in)  :: just_read   !< If true, this call will only read
@@ -73,7 +73,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=1,nz
-      h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
+      h(i,j,k) = eta1D(K) - eta1D(K+1)
     enddo
   enddo ; enddo
 

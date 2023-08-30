@@ -525,8 +525,6 @@ subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
 
   ! Local variables
   real :: smooth_len    ! A smoothing lengthscale [L ~> m]
-  real :: RZ_T_rescale  ! Unit conversion factor for precipiation [T kg m-2 s-1 R-1 Z-1 ~> 1]
-  real :: QRZ_T_rescale ! Unit conversion factor for head fluxes [T W m-2 Q-1 R-1 Z-1 ~> 1]
   logical :: do_integrated
   integer :: num_cycle
   integer :: i, j, isc, iec, jsc, jec, m
@@ -600,53 +598,6 @@ subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
     CS%id_prec_0 = register_diag_field('ocean_model', 'Ctrl_prec', diag%axesT1, Time, &
          'Control Corrective Precipitation', 'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   endif
-
-  ! Rescale if there are differences between the dimensional scaling of variables in
-  ! restart files from those in use for this run.
-  if ((US%J_kg_to_Q_restart*US%kg_m3_to_R_restart*US%m_to_Z_restart*US%s_to_T_restart /= 0.0) .and. &
-      (US%s_to_T_restart /= US%J_kg_to_Q_restart * US%kg_m3_to_R_restart * US%m_to_Z_restart) ) then
-    ! Redo the scaling of the corrective heat fluxes to [Q R Z T-1 ~> W m-2]
-    QRZ_T_rescale = US%s_to_T_restart / (US%J_kg_to_Q_restart * US%kg_m3_to_R_restart * US%m_to_Z_restart)
-
-    if (associated(CS%heat_0)) then
-      do j=jsc,jec ; do i=isc,iec
-        CS%heat_0(i,j) = QRZ_T_rescale * CS%heat_0(i,j)
-      enddo ; enddo
-    endif
-
-    if ((CS%num_cycle > 0) .and. associated(CS%heat_cyc)) then
-      do m=1,CS%num_cycle ; do j=jsc,jec ; do i=isc,iec
-        CS%heat_cyc(i,j,m) = QRZ_T_rescale * CS%heat_cyc(i,j,m)
-      enddo ; enddo ; enddo
-    endif
-  endif
-
-  if ((US%kg_m3_to_R_restart * US%m_to_Z_restart * US%s_to_T_restart /= 0.0) .and. &
-      (US%s_to_T_restart /= US%kg_m3_to_R_restart * US%m_to_Z_restart) ) then
-    ! Redo the scaling of the corrective precipitation to [R Z T-1 ~> kg m-2 s-1]
-    RZ_T_rescale = US%s_to_T_restart / (US%kg_m3_to_R_restart * US%m_to_Z_restart)
-
-    if (associated(CS%precip_0)) then
-      do j=jsc,jec ; do i=isc,iec
-        CS%precip_0(i,j) = RZ_T_rescale * CS%precip_0(i,j)
-      enddo ; enddo
-    endif
-
-    if ((CS%num_cycle > 0) .and. associated(CS%precip_cyc)) then
-      do m=1,CS%num_cycle ; do j=jsc,jec ; do i=isc,iec
-        CS%precip_cyc(i,j,m) = RZ_T_rescale * CS%precip_cyc(i,j,m)
-      enddo ; enddo ; enddo
-    endif
-  endif
-
-  if ((CS%num_cycle > 0) .and. associated(CS%avg_time) .and. &
-      ((US%s_to_T_restart /= 0.0) .and. (US%s_to_T_restart /= 1.0)) ) then
-    ! Redo the scaling of the accumulated times to [T ~> s]
-    do m=1,CS%num_cycle
-      CS%avg_time(m) = (1.0 / US%s_to_T_restart) * CS%avg_time(m)
-    enddo
-  endif
-
 
 end subroutine controlled_forcing_init
 

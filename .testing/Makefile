@@ -246,7 +246,8 @@ COV_LDFLAGS := LDFLAGS="$(LDFLAGS_COVERAGE) $(LDFLAGS_DEPS) $(LDFLAGS_USER)"
 
 # Environment variable configuration
 build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
+  MOM_MEMORY=../../../config_src/memory/dynamic_nonsymmetric/MOM_memory.h
 build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
 build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
 build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
@@ -260,7 +261,7 @@ build/unit/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
 
 # Configure script flags
 build/symmetric/Makefile: MOM_ACFLAGS=
-build/asymmetric/Makefile: MOM_ACFLAGS=--enable-asymmetric
+build/asymmetric/Makefile: MOM_ACFLAGS=
 build/repro/Makefile: MOM_ACFLAGS=
 build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
 build/target/Makefile: MOM_ACFLAGS=
@@ -331,32 +332,23 @@ FMS_ENV = \
   FCFLAGS="$(FCFLAGS_FMS)" \
   REPORT_ERROR_LOGS="$(REPORT_ERROR_LOGS)"
 
-deps/lib/libFMS.a: deps/fms/build/libFMS.a
-	$(MAKE) -C deps lib/libFMS.a
+deps/lib/libFMS.a: deps/Makefile deps/Makefile.fms.in deps/configure.fms.ac deps/m4
+	$(FMS_ENV) $(MAKE) -C deps lib/libFMS.a
 
-deps/fms/build/libFMS.a: deps/fms/build/Makefile
-	$(MAKE) -C deps fms/build/libFMS.a
+deps/Makefile: ../ac/deps/Makefile | deps
+	cp ../ac/deps/Makefile deps/Makefile
 
-deps/fms/build/Makefile: deps/fms/src/configure deps/Makefile.fms.in
-	$(FMS_ENV) $(MAKE) -C deps fms/build/Makefile
+deps/Makefile.fms.in: ../ac/deps/Makefile.fms.in | deps
+	cp ../ac/deps/Makefile.fms.in deps/Makefile.fms.in
 
-deps/Makefile.fms.in: ../ac/deps/Makefile.fms.in deps/Makefile
-	cp $< deps
+deps/configure.fms.ac: ../ac/deps/configure.fms.ac | deps
+	cp ../ac/deps/configure.fms.ac deps/configure.fms.ac
 
-# TODO: m4 dependencies?
-deps/fms/src/configure: ../ac/deps/configure.fms.ac deps/Makefile $(FMS_SOURCE) | deps/fms/src
-	cp ../ac/deps/configure.fms.ac deps
-	cp -r ../ac/deps/m4 deps
-	$(MAKE) -C deps fms/src/configure
+deps/m4: ../ac/deps/m4 | deps
+	cp -r ../ac/deps/m4 deps/
 
-deps/fms/src: deps/Makefile
-	make -C deps fms/src
-
-# Dependency init
-deps/Makefile: ../ac/deps/Makefile
-	mkdir -p $(@D)
-	cp $< $@
-
+deps:
+	mkdir -p deps
 
 #---
 # The following block does a non-library build of a coupled driver interface to
@@ -741,7 +733,8 @@ prof.p0: $(WORKSPACE)/work/p0/opt/clocks.json $(WORKSPACE)/work/p0/opt_target/cl
 	python tools/compare_clocks.py $^
 
 $(WORKSPACE)/work/p0/%/clocks.json: $(WORKSPACE)/work/p0/%/std.out
-	python tools/parse_fms_clocks.py -d $(@D) $^ > $@
+	python tools/parse_fms_clocks.py -d $(@D) $^ > $@ \
+	  || !( rm $@ )
 
 $(WORKSPACE)/work/p0/opt/std.out: build/opt/MOM6
 $(WORKSPACE)/work/p0/opt_target/std.out: build/opt_target/MOM6

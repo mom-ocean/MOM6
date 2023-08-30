@@ -10,6 +10,7 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
+use MOM_interface_heights, only : dz_to_thickness
 use MOM_io, only : file_exists, MOM_read_data, slasher
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -143,11 +144,10 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
-  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
-                                                      !! to parse for model parameter values.
+  type(param_file_type),   intent(in)  :: param_file  !< A structure to parse for model parameter values
   type(thermo_var_ptrs),   intent(in)  :: tv          !< A structure containing pointers to any
                                                       !! available thermodynamic fields, including
                                                       !! the eqn. of state.
@@ -170,7 +170,7 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.just_read) &
-    call MOM_mesg("MOM_initialization.F90, initialize_thickness_uniform: setting thickness")
+    call MOM_mesg("ISOMIP_initialization.F90, ISOMIP_initialize_thickness: setting thickness")
 
   call get_param(param_file, mdl,"MIN_THICKNESS", min_thickness, &
                  'Minimum layer thickness', units='m', default=1.e-3, do_not_log=just_read, scale=US%m_to_Z)
@@ -225,9 +225,9 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
         eta1D(k) = e0(k)
         if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
           eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-          h(i,j,k) = GV%Angstrom_H
+          h(i,j,k) = GV%Angstrom_Z
         else
-          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
     enddo ; enddo
@@ -240,9 +240,9 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
         eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
         if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
           eta1D(k) = eta1D(k+1) + min_thickness
-          h(i,j,k) = GV%Z_to_H * min_thickness
+          h(i,j,k) = min_thickness
         else
-          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
         endif
       enddo
     enddo ; enddo
@@ -250,7 +250,7 @@ subroutine ISOMIP_initialize_thickness ( h, depth_tot, G, GV, US, param_file, tv
   case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
     if (just_read) return ! All run-time parameters have been read, so return.
     do j=js,je ; do i=is,ie
-      h(i,j,:) = GV%Z_to_H * depth_tot(i,j) / real(nz)
+      h(i,j,:) = depth_tot(i,j) / real(nz)
     enddo ; enddo
 
   case default
@@ -269,7 +269,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
   type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T  !< Potential temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S  !< Salinity [S ~> ppt]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h  !< Layer thickness [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: depth_tot  !< The nominal total bottom-to-top
                                                                !! depth of the ocean [Z ~> m]
   type(param_file_type),                     intent(in)  :: param_file !< Parameter file structure
@@ -334,10 +334,10 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
       do j=js,je ; do i=is,ie
         xi0 = -depth_tot(i,j)
         do k = nz,1,-1
-          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth in middle of layer
+          xi0 = xi0 + 0.5 * h(i,j,k)     ! Depth in middle of layer
           S(i,j,k) = S_sur + dS_dz * xi0
           T(i,j,k) = T_sur + dT_dz * xi0
-          xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth at top of layer
+          xi0 = xi0 + 0.5 * h(i,j,k)     ! Depth at top of layer
         enddo
       enddo ; enddo
 
@@ -372,10 +372,10 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
         xi0 = 0.0
         do k = 1,nz
           !T0(k) = T_Ref; S0(k) = S_Ref
-          xi1 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z
+          xi1 = xi0 + 0.5 * h(i,j,k)
           S0(k) = S_sur - dS_dz * xi1
           T0(k) = T_sur - dT_dz * xi1
-          xi0 = xi0 + h(i,j,k) * GV%H_to_Z
+          xi0 = xi0 + h(i,j,k)
           ! write(mesg,*) 'S,T,xi0,xi1,k',S0(k),T0(k),xi0,xi1,k
           ! call MOM_mesg(mesg,5)
         enddo
@@ -430,7 +430,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
   !i=G%iec; j=G%jec
   !do k = 1,nz
   !  call calculate_density(T(i,j,k), S(i,j,k),0.0,rho_tmp,eqn_of_state, scale=US%kg_m3_to_R)
-  !  write(mesg,*) 'k,h,T,S,rho,Rlay',k,h(i,j,k),US%C_to_degC*T(i,j,k),US%S_to_ppt*S(i,j,k),rho_tmp,GV%Rlay(k)
+  !  write(mesg,*) 'k,h,T,S,rho,Rlay',k,US%Z_to_m*h(i,j,k),US%C_to_degC*T(i,j,k),US%S_to_ppt*S(i,j,k),rho_tmp,GV%Rlay(k)
   !  call MOM_mesg(mesg,5)
   !enddo
 
@@ -440,27 +440,25 @@ end subroutine ISOMIP_initialize_temperature_salinity
 ! the values towards which the interface heights and an arbitrary
 ! number of tracers should be restored within each sponge.
 subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp, ACSp)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers
-                                            !! to any available thermodynamic
-                                            !! fields, potential temperature and
-                                            !! salinity or mixed layer density.
-                                            !! Absent fields have NULL ptrs.
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure containing pointers to any available
+                                              !! thermodynamic fields, potential temperature and
+                                              !! salinity or mixed layer density.
+                                              !! Absent fields have NULL ptrs.
   real, dimension(SZI_(G),SZJ_(G)), &
-                           intent(in)  :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
-  type(param_file_type), intent(in) :: PF   !< A structure indicating the
-                                            !! open file to parse for model
-                                            !! parameter values.
-  logical, intent(in) :: use_ALE            !< If true, indicates model is in ALE mode
-  type(sponge_CS),   pointer    :: CSp      !< Layer-mode sponge structure
-  type(ALE_sponge_CS),   pointer    :: ACSp !< ALE-mode sponge structure
+                           intent(in) :: depth_tot !< The nominal total depth of the ocean [Z ~> m]
+  type(param_file_type),   intent(in) :: PF   !< A structure to parse for model parameter values
+  logical,                 intent(in) :: use_ALE !< If true, indicates model is in ALE mode
+  type(sponge_CS),         pointer    :: CSp  !< Layer-mode sponge structure
+  type(ALE_sponge_CS),     pointer    :: ACSp !< ALE-mode sponge structure
   ! Local variables
   real :: T(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for temp [C ~> degC]
   real :: S(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for salt [S ~> ppt]
   ! real :: RHO(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for RHO [R ~> kg m-3]
-  real :: h(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness [H ~> m or kg m-2]
+  real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Sponge layer thicknesses in height units [Z ~> m]
+  real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! Sponge layer thicknesses [H ~> m or kg m-2]
   real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: S_sur, S_bot              ! Surface and bottom salinities in the sponge region [S ~> ppt]
@@ -582,9 +580,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
             eta1D(k) = e0(k)
             if (eta1D(k) < (eta1D(k+1) + GV%Angstrom_Z)) then
               eta1D(k) = eta1D(k+1) + GV%Angstrom_Z
-              h(i,j,k) = GV%Angstrom_H
+              dz(i,j,k) = GV%Angstrom_Z
             else
-              h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
+              dz(i,j,k) = eta1D(k) - eta1D(k+1)
             endif
           enddo
         enddo ; enddo
@@ -596,16 +594,16 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
             eta1D(k) =  -G%max_depth * real(k-1) / real(nz)
             if (eta1D(k) < (eta1D(k+1) + min_thickness)) then
               eta1D(k) = eta1D(k+1) + min_thickness
-              h(i,j,k) = min_thickness * GV%Z_to_H
+              dz(i,j,k) = min_thickness
             else
-              h(i,j,k) = GV%Z_to_H*(eta1D(k) - eta1D(k+1))
+              dz(i,j,k) = eta1D(k) - eta1D(k+1)
             endif
           enddo
         enddo ; enddo
 
       case ( REGRIDDING_SIGMA )             ! Initial thicknesses for sigma coordinates
         do j=js,je ; do i=is,ie
-          h(i,j,:) = GV%Z_to_H * (depth_tot(i,j) / real(nz))
+          dz(i,j,:) = depth_tot(i,j) / real(nz)
         enddo ; enddo
 
       case default
@@ -614,21 +612,25 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
 
     end select
 
-    !  This call sets up the damping rates and interface heights.
-    !  This sets the inverse damping timescale fields in the sponges.
-    call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, h, nz)
-
     dS_dz = (S_sur - S_bot) / G%max_depth
     dT_dz = (T_sur - T_bot) / G%max_depth
     do j=js,je ; do i=is,ie
       xi0 = -depth_tot(i,j)
       do k = nz,1,-1
-        xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth in middle of layer
+        xi0 = xi0 + 0.5 * dz(i,j,k)  ! Depth in middle of layer
         S(i,j,k) = S_sur + dS_dz * xi0
         T(i,j,k) = T_sur + dT_dz * xi0
-        xi0 = xi0 + 0.5 * h(i,j,k) * GV%H_to_Z ! Depth at top of layer
+        xi0 = xi0 + 0.5 * dz(i,j,k)  ! Depth at top of layer
       enddo
     enddo ; enddo
+
+    ! Convert thicknesses from height units to thickness units
+    if (associated(tv%eqn_of_state)) then
+      call dz_to_thickness(dz, T, S, tv%eqn_of_state, h, G, GV, US)
+    else
+      call MOM_error(FATAL, "The ISOMIP test case requires an equation of state.")
+    endif
+
     ! for debugging
     !i=G%iec; j=G%jec
     !do k = 1,nz
@@ -636,6 +638,9 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
     !  write(mesg,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
     !  call MOM_mesg(mesg,5)
     !enddo
+
+    ! This call sets up the damping rates and interface heights in the sponges.
+    call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, h, nz)
 
     !   Now register all of the fields which are damped in the sponge.   !
     ! By default, momentum is advected vertically within the sponge, but !

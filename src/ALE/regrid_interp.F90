@@ -33,14 +33,12 @@ type, public :: interp_CS_type ; private
   !! boundary cells
   logical :: boundary_extrapolation
 
-  !> The vintage of the expressions to use for remapping
-  integer :: answer_date = 20181231
-  !### Changing this to 99991231 changes answers in rho and Hycom1 configurations.
-  !### There is no point where the value of answer_date is reset.
+  !> The vintage of the expressions to use for regridding
+  integer :: answer_date = 99991231
 end type interp_CS_type
 
 public regridding_set_ppolys, build_and_interpolate_grid
-public set_interp_scheme, set_interp_extrap
+public set_interp_scheme, set_interp_extrap, set_interp_answer_date
 
 ! List of interpolation schemes
 integer, parameter :: INTERPOLATION_P1M_H2     = 0 !< O(h^2)
@@ -546,5 +544,14 @@ subroutine set_interp_extrap(CS, extrap)
 
   CS%boundary_extrapolation = extrap
 end subroutine set_interp_extrap
+
+!> Store the value of the answer_date in the interp_CS
+subroutine set_interp_answer_date(CS, answer_date)
+  type(interp_CS_type), intent(inout) :: CS  !< A control structure for regrid_interp
+  integer,              intent(in)    :: answer_date !< An integer encoding the vintage of
+                                             !! the expressions to use for regridding
+
+  CS%answer_date = answer_date
+end subroutine set_interp_answer_date
 
 end module regrid_interp

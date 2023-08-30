@@ -76,9 +76,9 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, sy
 
   call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym, &
                 omit_corners=omit_corners, scale=scale_vel)
-  call hchksum(h, mesg//" h", G%HI, haloshift=hs, omit_corners=omit_corners, scale=GV%H_to_m)
+  call hchksum(h, mesg//" h", G%HI, haloshift=hs, omit_corners=omit_corners, scale=GV%H_to_MKS)
   call uvchksum(mesg//" [uv]h", uh, vh, G%HI, haloshift=hs, symmetric=sym, &
-                omit_corners=omit_corners, scale=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+                omit_corners=omit_corners, scale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
@@ -111,7 +111,7 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, US, haloshift, symmetric,
   sym = .false. ; if (present(symmetric)) sym = symmetric
   call uvchksum(mesg//" u", u, v, G%HI, haloshift=hs, symmetric=sym, &
                 omit_corners=omit_corners, scale=US%L_T_to_m_s)
-  call hchksum(h, mesg//" h",G%HI, haloshift=hs, omit_corners=omit_corners, scale=GV%H_to_m)
+  call hchksum(h, mesg//" h",G%HI, haloshift=hs, omit_corners=omit_corners, scale=GV%H_to_MKS)
 end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================

@@ -30,10 +30,10 @@ type, public :: unit_scale_type
   real :: kg_m3_to_R !< A constant that translates kilograms per meter cubed to the units of density  [R m3 kg-1 ~> 1]
   real :: Q_to_J_kg  !< A constant that translates the units of enthalpy to Joules per kilogram      [J kg-1 Q-1 ~> 1]
   real :: J_kg_to_Q  !< A constant that translates Joules per kilogram to the units of enthalpy        [Q kg J-1 ~> 1]
-  real :: C_to_degC  !< A constant that translates the units of temperature to degrees Celsius    [degC C-1 ~> 1]
-  real :: degC_to_C  !< A constant that translates degrees Celsius to the units of temperature    [C degC-1 ~> 1]
-  real :: S_to_ppt   !< A constant that translates the units of salinity to parts per thousand     [ppt S-1 ~> 1]
-  real :: ppt_to_S   !< A constant that translates parts per thousand to the units of salinity     [S ppt-1 ~> 1]
+  real :: C_to_degC  !< A constant that translates the units of temperature to degrees Celsius         [degC C-1 ~> 1]
+  real :: degC_to_C  !< A constant that translates degrees Celsius to the units of temperature         [C degC-1 ~> 1]
+  real :: S_to_ppt   !< A constant that translates the units of salinity to parts per thousand          [ppt S-1 ~> 1]
+  real :: ppt_to_S   !< A constant that translates parts per thousand to the units of salinity          [S ppt-1 ~> 1]
 
   ! These are useful combinations of the fundamental scale conversion factors above.
   real :: Z_to_L          !< Convert vertical distances to lateral lengths                                [L Z-1 ~> 1]
@@ -52,14 +52,16 @@ type, public :: unit_scale_type
   real :: RZ3_T3_to_W_m2  !< Convert turbulent kinetic energy fluxes from R Z3 T-3 to W m-2    [W T3 R-1 Z-3 m-2 ~> 1]
   real :: W_m2_to_RZ3_T3  !< Convert turbulent kinetic energy fluxes from W m-2 to R Z3 T-3     [R Z3 m2 T-3 W-1 ~> 1]
   real :: RL2_T2_to_Pa    !< Convert pressures from R L2 T-2 to Pa                                [Pa T2 R-1 L-2 ~> 1]
-  ! Not used enough:  real :: Pa_to_RL2_T2    !< Convert pressures from Pa to R L2 T-2            [R L2 T-2 Pa-1 ~> 1]
+  real :: RLZ_T2_to_Pa    !< Convert wind stresses from R L Z T-2 to Pa                       [Pa T2 R-1 L-1 Z-1 ~> 1]
+  real :: Pa_to_RL2_T2    !< Convert pressures from Pa to R L2 T-2                                [R L2 T-2 Pa-1 ~> 1]
+  real :: Pa_to_RLZ_T2    !< Convert wind stresses from Pa to R L Z T-2                          [R L Z T-2 Pa-1 ~> 1]
 
-  ! These are used for changing scaling across restarts.
-  real :: m_to_Z_restart = 0.0 !< A copy of the m_to_Z that is used in restart files.
-  real :: m_to_L_restart = 0.0 !< A copy of the m_to_L that is used in restart files.
-  real :: s_to_T_restart = 0.0 !< A copy of the s_to_T that is used in restart files.
-  real :: kg_m3_to_R_restart = 0.0 !< A copy of the kg_m3_to_R that is used in restart files.
-  real :: J_kg_to_Q_restart = 0.0 !< A copy of the J_kg_to_Q that is used in restart files.
+  ! These are no longer used for changing scaling across restarts.
+  real :: m_to_Z_restart = 1.0 !< A copy of the m_to_Z that is used in restart files.
+  real :: m_to_L_restart = 1.0 !< A copy of the m_to_L that is used in restart files.
+  real :: s_to_T_restart = 1.0 !< A copy of the s_to_T that is used in restart files.
+  real :: kg_m3_to_R_restart = 1.0 !< A copy of the kg_m3_to_R that is used in restart files.
+  real :: J_kg_to_Q_restart = 1.0 !< A copy of the J_kg_to_Q that is used in restart files.
 end type unit_scale_type
 
 contains
@@ -218,8 +220,10 @@ subroutine set_unit_scaling_combos(US)
   US%QRZ_T_to_W_m2 = US%Q_to_J_kg * US%R_to_kg_m3 * US%Z_to_m * US%s_to_T
   ! Pressures:
   US%RL2_T2_to_Pa = US%R_to_kg_m3 * US%L_T_to_m_s**2
-    ! It does not seem like US%Pa_to_RL2_T2 would be used enough in MOM6 to justify its existence.
-  ! US%Pa_to_RL2_T2 = US%kg_m3_to_R * US%m_s_to_L_T**2
+  US%Pa_to_RL2_T2 = US%kg_m3_to_R * US%m_s_to_L_T**2
+  ! Wind stresses:
+  US%RLZ_T2_to_Pa = US%R_to_kg_m3 * US%L_T_to_m_s**2 * US%Z_to_L
+  US%Pa_to_RLZ_T2 = US%kg_m3_to_R * US%m_s_to_L_T**2 * US%L_to_Z
 
 end subroutine set_unit_scaling_combos
 
@@ -231,11 +235,11 @@ subroutine fix_restart_unit_scaling(US, unscaled)
                                              !! model would be unscaled, which is appropriate if the
                                              !! scaling is undone when writing a restart file.
 
-  US%m_to_Z_restart = US%m_to_Z
-  US%m_to_L_restart = US%m_to_L
-  US%s_to_T_restart = US%s_to_T
-  US%kg_m3_to_R_restart = US%kg_m3_to_R
-  US%J_kg_to_Q_restart = US%J_kg_to_Q
+  US%m_to_Z_restart = 1.0 ! US%m_to_Z
+  US%m_to_L_restart = 1.0 ! US%m_to_L
+  US%s_to_T_restart = 1.0 ! US%s_to_T
+  US%kg_m3_to_R_restart = 1.0 ! US%kg_m3_to_R
+  US%J_kg_to_Q_restart = 1.0 ! US%J_kg_to_Q
 
   if (present(unscaled)) then ; if (unscaled) then
     US%m_to_Z_restart = 1.0

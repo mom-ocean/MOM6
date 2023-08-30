@@ -36,7 +36,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
   logical,                 intent(in)  :: just_read   !< If true, this call will only read
@@ -71,7 +71,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.just_read) &
-    call MOM_mesg("initialize_thickness_uniform: setting thickness")
+    call MOM_mesg("adjustment_initialize_thickness: setting thickness")
 
   ! Parameters used by main model initialization
   if (.not.just_read) call log_version(param_file, mdl, version, "")
@@ -170,12 +170,12 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
         do k=nz,1,-1
           if (eta1D(k) > 0.) then
             eta1D(k) = max( eta1D(k+1) + min_thickness, 0. )
-            h(i,j,k) = GV%Z_to_H * max( eta1D(k) - eta1D(k+1), min_thickness )
+            h(i,j,k) = max( eta1D(k) - eta1D(k+1), min_thickness )
           elseif (eta1D(k) <= (eta1D(k+1) + min_thickness)) then
             eta1D(k) = eta1D(k+1) + min_thickness
-            h(i,j,k) = GV%Z_to_H * min_thickness
+            h(i,j,k) = min_thickness
           else
-            h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+            h(i,j,k) = eta1D(k) - eta1D(k+1)
           endif
         enddo
       enddo ; enddo
@@ -187,7 +187,7 @@ subroutine adjustment_initialize_thickness ( h, G, GV, US, param_file, just_read
       enddo
       do j=js,je ; do i=is,ie
         do k=nz,1,-1
-          h(i,j,k) = GV%Z_to_H * (eta1D(k) - eta1D(k+1))
+          h(i,j,k) = eta1D(k) - eta1D(k+1)
         enddo
       enddo ; enddo
 
@@ -209,7 +209,7 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out) :: S           !< The salinity that is being initialized [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in)  :: h           !< The model thicknesses [H ~> m or kg m-2].
+                           intent(in)  :: h           !< The model thicknesses [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file to
@@ -275,7 +275,7 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
       do j=js,je ; do i=is,ie
         eta1d(nz+1) = -depth_tot(i,j)
         do k=nz,1,-1
-          eta1d(k) = eta1d(k+1) + h(i,j,k)*GV%H_to_Z
+          eta1d(k) = eta1d(k+1) + h(i,j,k)
         enddo
         if (front_wave_length /= 0.) then
           y = ( 0.125 + G%geoLatT(i,j) / front_wave_length ) * ( 4. * acos(0.) )
@@ -296,7 +296,7 @@ subroutine adjustment_initialize_temperature_salinity(T, S, h, depth_tot, G, GV,
           x = 1. - min(1., x)
           T(i,j,k) = T_range * x
         enddo
-   !    x = GV%H_to_Z*sum(T(i,j,:)*h(i,j,:))
+   !    x = sum(T(i,j,:)*h(i,j,:))
    !    T(i,j,:) = (T(i,j,:) / x) * (G%max_depth*1.5/real(nz))
       enddo ; enddo
 
