@@ -191,26 +191,26 @@ end type vertvisc_CS
 contains
 
 !> Add nonlocal stress increments to u^n (uold) and v^n (vold) using ui and vi.
-subroutine vertFPmix(L_diag, ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OBC)
-  type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
-  type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
+subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OBC)
+
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                           intent(inout) :: ui      !< Zonal velocity after vertvisc [L T-1 ~> m s-1]
+                           intent(inout) :: ui     !< Zonal velocity after vertvisc [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vi      !< Meridional velocity after vertvisc [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: uold   !< Old Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vold   !< Old Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: hbl_h !<  boundary layer depth [H ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h      !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: hbl_h     !  boundary layer depth
-  logical, intent(in)                 :: L_diag !< controls if diagnostics should be posted
-  type(mech_forcing),    intent(in)   :: forces !< A structure with the driving mechanical forces
-  real,                  intent(in)   :: dt     !< Time increment [T ~> s]
-  type(ocean_OBC_type),  pointer      :: OBC    !< Open boundary condition structure
+  type(mech_forcing),      intent(in) :: forces !< A structure with the driving mechanical forces
+  real,                    intent(in) :: dt     !< Time increment [T ~> s]
+  type(ocean_grid_type),   intent(in) :: G      !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV     !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
   type(vertvisc_CS),     pointer      :: CS     !< Vertical viscosity control structure
+  type(ocean_OBC_type),  pointer      :: OBC    !< Open boundary condition structure
 
   ! local variables
   real, dimension(SZIB_(G),SZJ_(G))  :: hbl_u   !< boundary layer depth at u-pts [H ~> m]
@@ -241,6 +241,7 @@ subroutine vertFPmix(L_diag, ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US
   real :: omega_w2s, omega_tau2s, omega_s2x, omega_tau2x, omega_tau2w, omega_s2w !< intermediate angles
   integer :: kblmin, kbld, kp1, k, nz !< vertical indices
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq ! horizontal indices
+
   is = G%isc ; ie = G%iec; js = G%jsc; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
@@ -321,8 +322,8 @@ subroutine vertFPmix(L_diag, ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US
 
   if (CS%debug) then
     call uvchksum("surface tau[xy]_[uv] ", taux_u, tauy_v, G%HI, haloshift=1, scalar_pair=.true.)
-    call uvchksum("ustar2   ",ustar2_u, ustar2_v, G%HI, haloshift=0, scalar_pair=.true.)
-    call uvchksum(" hbl     ",  hbl_u ,   hbl_v , G%HI, haloshift=0, scalar_pair=.true.)
+    call uvchksum("ustar2", ustar2_u, ustar2_v, G%HI, haloshift=0, scalar_pair=.true.)
+    call uvchksum(" hbl", hbl_u ,   hbl_v , G%HI, haloshift=0, scalar_pair=.true.)
   endif
 
   !   Compute downgradient stresses
@@ -540,15 +541,13 @@ subroutine vertFPmix(L_diag, ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US
     call uvchksum("FP-tau_[uv]  ", tau_u, tau_v, G%HI, haloshift=0, scalar_pair=.true.)
   endif
 
-  if(L_diag) then
-    if (CS%id_tauFP_u > 0)   call post_data(CS%id_tauFP_u, tau_u, CS%diag)
-    if (CS%id_tauFP_v > 0)   call post_data(CS%id_tauFP_v, tau_v, CS%diag)
-    if (CS%id_FPtau2s_u > 0) call post_data(CS%id_FPtau2s_u, omega_tau2s_u, CS%diag)
-    if (CS%id_FPtau2s_v > 0) call post_data(CS%id_FPtau2s_v, omega_tau2s_v, CS%diag)
-    if (CS%id_FPtau2w_u > 0) call post_data(CS%id_FPtau2w_u, omega_tau2w_u, CS%diag)
-    if (CS%id_FPtau2w_v > 0) call post_data(CS%id_FPtau2w_v, omega_tau2w_v, CS%diag)
-    if (CS%id_FPw2x   > 0)   call post_data(CS%id_FPw2x, forces%omega_w2x , CS%diag)
-  endif
+  if (CS%id_tauFP_u > 0)   call post_data(CS%id_tauFP_u, tau_u, CS%diag)
+  if (CS%id_tauFP_v > 0)   call post_data(CS%id_tauFP_v, tau_v, CS%diag)
+  if (CS%id_FPtau2s_u > 0) call post_data(CS%id_FPtau2s_u, omega_tau2s_u, CS%diag)
+  if (CS%id_FPtau2s_v > 0) call post_data(CS%id_FPtau2s_v, omega_tau2s_v, CS%diag)
+  if (CS%id_FPtau2w_u > 0) call post_data(CS%id_FPtau2w_u, omega_tau2w_u, CS%diag)
+  if (CS%id_FPtau2w_v > 0) call post_data(CS%id_FPtau2w_v, omega_tau2w_v, CS%diag)
+  if (CS%id_FPw2x   > 0)   call post_data(CS%id_FPw2x, forces%omega_w2x , CS%diag)
 
 end subroutine vertFPmix
 
