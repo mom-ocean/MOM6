@@ -192,7 +192,8 @@ contains
 
 !> Add nonlocal stress increments to u^n (uold) and v^n (vold) using ui and vi.
 subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OBC)
-
+  type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: ui     !< Zonal velocity after vertvisc [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -206,11 +207,9 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
                            intent(in) :: h      !< Layer thicknesses [H ~> m or kg m-2]
   type(mech_forcing),      intent(in) :: forces !< A structure with the driving mechanical forces
   real,                    intent(in) :: dt     !< Time increment [T ~> s]
-  type(ocean_grid_type),   intent(in) :: G      !< Ocean grid structure
-  type(verticalGrid_type), intent(in) :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
-  type(vertvisc_CS),     pointer      :: CS     !< Vertical viscosity control structure
-  type(ocean_OBC_type),  pointer      :: OBC    !< Open boundary condition structure
+  type(vertvisc_CS),       pointer    :: CS     !< Vertical viscosity control structure
+  type(ocean_OBC_type),    pointer    :: OBC    !< Open boundary condition structure
 
   ! local variables
   real, dimension(SZIB_(G),SZJ_(G))  :: hbl_u   !< boundary layer depth at u-pts [H ~> m]
