@@ -45,7 +45,7 @@ use MOM_grid,                only : ocean_grid_type
 use MOM_int_tide_input,      only : set_int_tide_input, int_tide_input_init
 use MOM_int_tide_input,      only : int_tide_input_end, int_tide_input_CS, int_tide_input_type
 use MOM_interface_heights,   only : find_eta, calc_derived_thermo, thickness_to_dz
-use MOM_internal_tides,      only : propagate_int_tide
+use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restarts
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_CVMix_KPP,           only : KPP_CS, KPP_init, KPP_compute_BLD, KPP_calculate
@@ -56,6 +56,7 @@ use MOM_opacity,             only : opacity_init, opacity_end, opacity_CS
 use MOM_opacity,             only : absorbRemainingSW, optics_type, optics_nbands
 use MOM_open_boundary,       only : ocean_OBC_type
 use MOM_regularize_layers,   only : regularize_layers, regularize_layers_init, regularize_layers_CS
+use MOM_restart,             only : MOM_restart_CS
 use MOM_set_diffusivity,     only : set_diffusivity, set_BBL_TKE
 use MOM_set_diffusivity,     only : set_diffusivity_init, set_diffusivity_end
 use MOM_set_diffusivity,     only : set_diffusivity_CS
@@ -81,6 +82,7 @@ public diabatic_driver_end
 public extract_diabatic_member
 public adiabatic
 public adiabatic_driver_init
+public register_diabatic_restarts
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -226,12 +228,13 @@ type, public :: diabatic_CS ; private
   type(KPP_CS),                 pointer :: KPP_CSp               => NULL() !< Control structure for a child module
   type(diapyc_energy_req_CS),   pointer :: diapyc_en_rec_CSp     => NULL() !< Control structure for a child module
   type(oda_incupd_CS),          pointer :: oda_incupd_CSp        => NULL() !< Control structure for a child module
+  type(int_tide_CS),            pointer :: int_tide_CSp          => NULL() !< Control structure for a child module
+
   type(bulkmixedlayer_CS) :: bulkmixedlayer         !< Bulk mixed layer control structure
   type(CVMix_conv_CS) :: CVMix_conv                 !< CVMix convection control structure
   type(energetic_PBL_CS) :: ePBL                    !< Energetic PBL control structure
   type(entrain_diffusive_CS) :: entrain_diffusive   !< Diffusive entrainment control structure
   type(geothermal_CS) :: geothermal                 !< Geothermal control structure
-  type(int_tide_CS) :: int_tide                     !< Internal tide control structure
   type(opacity_CS) :: opacity                       !< Opacity control structure
   type(regularize_layers_CS) :: regularize_layers   !< Regularize layer control structure
 
@@ -386,7 +389,7 @@ subroutine diabatic(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, &
                             CS%int_tide_input_CSp)
 
     call propagate_int_tide(h, tv, CS%int_tide_input%TKE_itidal_input, CS%int_tide_input%tideamp, &
-                            CS%int_tide_input%Nb, CS%int_tide_input%Rho_bot, dt, G, GV, US, CS%int_tide)
+                            CS%int_tide_input%Nb, CS%int_tide_input%Rho_bot, dt, G, GV, US, CS%int_tide_CSp)
     if (showCallTree) call callTree_waypoint("done with propagate_int_tide (diabatic)")
   endif ! end CS%use_int_tides
 
@@ -2980,7 +2983,7 @@ end subroutine adiabatic_driver_init
 !> This routine initializes the diabatic driver module.
 subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, diag, &
                                 ADp, CDp, CS, tracer_flow_CSp, sponge_CSp, &
-                                ALE_sponge_CSp, oda_incupd_CSp)
+                                ALE_sponge_CSp, oda_incupd_CSp, int_tide_CSp)
   type(time_type), target                :: Time             !< model time
   type(ocean_grid_type),   intent(inout) :: G                !< model grid structure
   type(verticalGrid_type), intent(in)    :: GV               !< model vertical grid structure
@@ -2998,6 +3001,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   type(ALE_sponge_CS),     pointer       :: ALE_sponge_CSp   !< pointer to the ALE sponge module control structure
   type(oda_incupd_CS),     pointer       :: oda_incupd_CSp   !< pointer to the ocean data assimilation incremental
                                                              !! update module control structure
+  type(int_tide_CS),       pointer       :: int_tide_CSp     !< pointer to the internal tide structure
 
   ! Local variables
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities [Z2 T-1 ~> m2 s-1]
@@ -3032,6 +3036,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (associated(sponge_CSp))      CS%sponge_CSp      => sponge_CSp
   if (associated(ALE_sponge_CSp))  CS%ALE_sponge_CSp  => ALE_sponge_CSp
   if (associated(oda_incupd_CSp))  CS%oda_incupd_CSp  => oda_incupd_CSp
+  if (associated(int_tide_CSp))    CS%int_tide_CSp    => int_tide_CSp
 
   CS%useALEalgorithm = useALEalgorithm
   CS%use_bulkmixedlayer = (GV%nkml > 0)
@@ -3497,12 +3502,14 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   if (CS%use_int_tides) then
     call int_tide_input_init(Time, G, GV, US, param_file, diag, CS%int_tide_input_CSp, &
                              CS%int_tide_input)
-    call internal_tides_init(Time, G, GV, US, param_file, diag, CS%int_tide)
+    call internal_tides_init(Time, G, GV, US, param_file, diag, int_tide_CSp)
   endif
+
+  !if (associated(int_tide_CSp))    CS%int_tide_CSp    => int_tide_CSp
 
   physical_OBL_scheme = (CS%use_bulkmixedlayer .or. CS%use_KPP .or. CS%use_energetic_PBL)
   ! initialize module for setting diffusivities
-  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, CS%int_tide, &
+  call set_diffusivity_init(Time, G, GV, US, param_file, diag, CS%set_diff_CSp, CS%int_tide_CSp, &
                             halo_TS=CS%halo_TS_diff, double_diffuse=CS%double_diffuse, &
                             physical_OBL_scheme=physical_OBL_scheme)
 
@@ -3558,6 +3565,25 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
 end subroutine diabatic_driver_init
 
+!> Routine to register restarts, pass-through to children modules
+subroutine register_diabatic_restarts(G, US, param_file, int_tide_CSp, restart_CSp)
+  type(ocean_grid_type), intent(in)    :: G           !< The ocean's grid structure
+  type(unit_scale_type), intent(in)    :: US          !< A dimensional unit scaling type
+  type(param_file_type), intent(in)    :: param_file  !< A structure to parse for run-time parameters
+  type(int_tide_CS),     pointer       :: int_tide_CSp !< Internal tide control structure
+  type(MOM_restart_CS),  pointer       :: restart_CSp  !< MOM restart control structure
+
+  logical :: use_int_tides
+
+  use_int_tides=.false.
+
+  call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
+
+  if (use_int_tides) then
+    call register_int_tide_restarts(G, US, param_file, int_tide_CSp, restart_CSp)
+  endif
+
+end subroutine register_diabatic_restarts
 
 !> Routine to close the diabatic driver module
 subroutine diabatic_driver_end(CS)

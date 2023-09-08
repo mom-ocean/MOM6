@@ -62,6 +62,7 @@ use MOM_check_scaling,         only : check_MOM6_scaling_factors
 use MOM_coord_initialization,  only : MOM_initialize_coord, write_vertgrid_file
 use MOM_diabatic_driver,       only : diabatic, diabatic_driver_init, diabatic_CS, extract_diabatic_member
 use MOM_diabatic_driver,       only : adiabatic, adiabatic_driver_init, diabatic_driver_end
+use MOM_diabatic_driver,       only : register_diabatic_restarts
 use MOM_stochastics,           only : stochastics_init, update_stochastics, stochastic_CS
 use MOM_diagnostics,           only : calculate_diagnostic_fields, MOM_diagnostics_init
 use MOM_diagnostics,           only : register_transport_diags, post_transport_diagnostics
@@ -94,6 +95,7 @@ use MOM_hor_index,             only : rotate_hor_index
 use MOM_interface_heights,     only : find_eta, calc_derived_thermo, thickness_to_dz
 use MOM_interface_filter,      only : interface_filter, interface_filter_init, interface_filter_end
 use MOM_interface_filter,      only : interface_filter_CS
+use MOM_internal_tides,        only : int_tide_CS
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init, VarMix_end
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, calc_depth_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_alloc_register_restart, step_forward_MEKE
@@ -409,6 +411,8 @@ type, public :: MOM_control_struct ; private
   type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp => NULL()
     !< Pointer to the oda incremental update control structure
   type(oda_incupd_CS),           pointer :: oda_incupd_CSp => NULL()
+    !< Pointer to the internal tides control structure
+  type(int_tide_CS),             pointer :: int_tide_CSp => NULL()
     !< Pointer to the ALE-mode sponge control structure
   type(ALE_CS),                  pointer :: ALE_CSp => NULL()
     !< Pointer to the Arbitrary Lagrangian Eulerian (ALE) vertical coordinate control structure
@@ -1964,6 +1968,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   type(ice_shelf_CS), optional,     pointer :: ice_shelf_CSp !< A pointer to an ice shelf control structure
   type(Wave_parameters_CS), &
                    optional, pointer       :: Waves_CSp       !< An optional pointer to a wave property CS
+
   ! local variables
   type(ocean_grid_type),  pointer :: G => NULL()    ! A pointer to the metric grid use for the run
   type(ocean_grid_type),  pointer :: G_in => NULL() ! Pointer to the input grid
@@ -2774,6 +2779,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     call stoch_EOS_register_restarts(HI, param_file, CS%stoch_eos_CS, restart_CSp)
   endif
 
+  if (.not. CS%adiabatic) then
+    call register_diabatic_restarts(G, US, param_file, CS%int_tide_CSp, restart_CSp)
+  endif
+
   call callTree_waypoint("restart registration complete (initialize_MOM)")
   call restart_registry_lock(restart_CSp)
 
@@ -3139,7 +3148,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   else
     call diabatic_driver_init(Time, G, GV, US, param_file, CS%use_ALE_algorithm, diag, &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
-                              CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp)
+                              CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%int_tide_CSp)
   endif
 
   if (associated(CS%sponge_CSp)) &
