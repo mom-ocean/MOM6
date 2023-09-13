@@ -2170,7 +2170,6 @@ subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
       fluxes%ustar(i,j) = forces%ustar(i,j)
     enddo ; enddo
   endif
-
   if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
     do j=js,je ; do i=is,ie
       fluxes%omega_w2x(i,j) = forces%omega_w2x(i,j)
@@ -2312,7 +2311,6 @@ subroutine copy_back_forcing_fields(fluxes, forces, G)
       forces%ustar(i,j) = fluxes%ustar(i,j)
     enddo ; enddo
   endif
-
   if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
     do j=js,je ; do i=is,ie
       forces%omega_w2x(i,j) = fluxes%omega_w2x(i,j)

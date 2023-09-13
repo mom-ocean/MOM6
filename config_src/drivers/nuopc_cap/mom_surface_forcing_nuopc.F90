@@ -147,7 +147,6 @@ type, public :: surface_forcing_CS ; private
     !< Handle for time-interpolated salt restoration field
   type(external_field) :: trestore_handle
     !< Handle for time-interpolated temperature restoration field
-
   ! Diagnostics handles
   type(forcing_diags), public :: handles
 
