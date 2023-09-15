@@ -28,7 +28,6 @@ subroutine ensemble_manager_init(ensemble_suffix)
 
   if (present(ensemble_suffix)) then
     call fms2_io_set_filename_appendix(trim(ensemble_suffix))
-    call fms_io_set_filename_appendix(trim(ensemble_suffix))
   else
     call FMS_ensemble_manager_init()
   endif

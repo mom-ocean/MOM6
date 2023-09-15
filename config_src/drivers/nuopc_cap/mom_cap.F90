@@ -479,8 +479,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
       if (cesm_coupled) then
         ! Multiinstance logfile name needs a correction
-        if(logfile(4:4) == '_') then
-          logfile = logfile(1:3)//trim(inst_suffix)//logfile(9:)
+        if(len_trim(inst_suffix) > 0) then
+          n = index(logfile, '.')
+          logfile = logfile(1:n-1)//trim(inst_suffix)//logfile(n:)
         endif
       endif
 
