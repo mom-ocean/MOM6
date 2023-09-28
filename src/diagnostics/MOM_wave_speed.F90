@@ -63,7 +63,7 @@ end type wave_speed_CS
 contains
 
 !> Calculates the wave speed of the first baroclinic mode.
-subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_N2_column_fraction, &
+subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N2_column_fraction, &
                       mono_N2_depth, modal_structure)
   type(ocean_grid_type),            intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),          intent(in)  :: GV !< Vertical grid structure
@@ -73,8 +73,8 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   type(thermo_var_ptrs),            intent(in)  :: tv !< Thermodynamic variables
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: cg1 !< First mode internal wave speed [L T-1 ~> m s-1]
   type(wave_speed_CS),              intent(in)  :: CS !< Wave speed control struct
-  logical,                optional, intent(in)  :: full_halos !< If true, do the calculation
-                                          !! over the entire computational domain.
+  integer,                optional, intent(in)  :: halo_size !< Width of halo within which to
+                                                       !! calculate wave speeds
   logical,                optional, intent(in)  :: use_ebt_mode !< If true, use the equivalent
                                           !! barotropic mode instead of the first baroclinic mode.
   real,                   optional, intent(in)  :: mono_N2_column_fraction !< The lower fraction
@@ -158,7 +158,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   logical :: better_est ! If true, use an improved estimate of the first mode internal wave speed.
   logical :: merge      ! If true, merge the current layer with the one above.
   integer :: kc         ! The number of layers in the column after merging
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz
+  integer :: i, j, k, k2, itt, is, ie, js, je, nz, halo
   real :: hw      ! The mean of the adjacent layer thicknesses [H ~> m or kg m-2]
   real :: sum_hc  ! The sum of the layer thicknesses [H ~> m or kg m-2]
   real :: gp      ! A limited local copy of gprime [L2 H-1 T-2 ~> m s-2 or m4 s-1 kg-1]
@@ -173,14 +173,15 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, full_halos, use_ebt_mode, mono_
   real :: ms_min, ms_max ! The minimum and maximum mode structure values returned from tdma6 [L2 T-2 ~> m2 s-2]
   real :: ms_sq          ! The sum of the square of the values returned from tdma6 [L4 T-4 ~> m4 s-4]
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke ; halo = 0
 
   if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed / wave_speed: "// &
            "Module must be initialized before it is used.")
 
-  if (present(full_halos)) then ; if (full_halos) then
-    is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
-  endif ; endif
+  if (present(halo_size)) then
+    halo = halo_size
+    is = G%isc - halo ; ie = G%iec + halo ; js = G%jsc - halo ; je = G%jec + halo
+  endif
 
   l_use_ebt_mode = CS%use_ebt_mode
   if (present(use_ebt_mode)) l_use_ebt_mode = use_ebt_mode
@@ -747,7 +748,7 @@ end subroutine tdma6
 
 !> Calculates the wave speeds for the first few barolinic modes.
 subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_struct_max, u_struct_bot, Nb, int_w2, &
-                       int_U2, int_N2w2, full_halos)
+                       int_U2, int_N2w2, halo_size)
   type(ocean_grid_type),                           intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),                         intent(in)  :: GV !< Vertical grid structure
   type(unit_scale_type),                           intent(in)  :: US !< A dimensional unit scaling type
@@ -772,8 +773,8 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
   real, dimension(SZI_(G),SZJ_(G),nmodes),         intent(out) :: int_N2w2 !< depth-integrated buoyancy frequency
                                                                      !! times vertical velocity profile
                                                                      !! squared [H T-2 ~> m s-2 or kg m-2 s-2]
-  logical,             optional,                   intent(in)  :: full_halos !< If true, do the calculation
-                                                                             !! over the entire data domain.
+  integer,                               optional, intent(in)  :: halo_size !< Width of halo within which to
+                                                                     !! calculate wave speeds
 
   ! Local variables
   real, dimension(SZK_(GV)+1) :: &
@@ -872,7 +873,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
   logical :: sub_rootfound ! if true, subdivision has located root
   integer :: kc         ! The number of layers in the column after merging
   integer :: sub, sub_it
-  integer :: i, j, k, k2, itt, is, ie, js, je, nz, iint, m
+  integer :: i, j, k, k2, itt, is, ie, js, je, nz, iint, m, halo
   real, dimension(SZK_(GV)+1) ::  modal_structure !< Normalized model structure [nondim]
   real, dimension(SZK_(GV)) ::  modal_structure_fder !< Normalized model structure [Z-1 ~> m-1]
   real :: mode_struct(SZK_(GV)+1) ! The mode structure [nondim], but it is also temporarily
@@ -889,14 +890,15 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
   real, parameter :: a_int = 0.5 ! Integral total for normalization [nondim]
   real :: renorm         ! Normalization factor [T2 L-2 ~> s2 m-2]
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke ; halo = 0
 
   if (.not. CS%initialized) call MOM_error(FATAL, "MOM_wave_speed / wave_speeds: "// &
          "Module must be initialized before it is used.")
 
-  if (present(full_halos)) then ; if (full_halos) then
-    is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
-  endif ; endif
+  if (present(halo_size)) then
+    halo = halo_size
+    is = G%isc - halo ; ie = G%iec + halo ; js = G%jsc - halo ; je = G%jec + halo
+  endif
 
   g_Rho0 = GV%g_Earth * GV%H_to_Z / GV%Rho0
   H_to_pres = GV%H_to_RZ * GV%g_Earth
@@ -940,7 +942,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
     do i=is,ie ; htot(i) = 0.0 ; enddo
     do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
 
-    call thickness_to_dz(h, tv, dz_2d, j, G, GV)
+    call thickness_to_dz(h, tv, dz_2d, j, G, GV, halo_size=halo)
 
     do i=is,ie
       hmin(i) = htot(i)*min_h_frac ; kf(i) = 1 ; H_here(i) = 0.0 ; dz_here(i) = 0.0
@@ -1097,7 +1099,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
           ! Merge layers to eliminate convective instabilities or exceedingly
           ! small reduced gravities.  Merging layers reduces the estimated wave speed by
           ! (rho(2)-rho(1))*h(1)*h(2) / H_tot.
-          if (use_EOS .and. (.not.nonBous)) then
+          if (use_EOS) then
             kc = 1
             Hc(1) = Hf(1,i) ; dzc(1) = dzf(1,i) ; Tc(1) = Tf(1,i) ; Sc(1) = Sf(1,i)
             do k=2,kf(i)
