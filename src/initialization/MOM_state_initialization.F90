@@ -2558,7 +2558,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   call get_param(PF, mdl, "Z_INIT_REMAP_GENERAL", remap_general, &
                  "If false, only initializes to z* coordinates. "//&
                  "If true, allows initialization directly to general coordinates.", &
-                 default=.false., do_not_log=just_read)
+                 default=.not.(GV%Boussinesq.or.GV%semi_Boussinesq) , do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
                  "If false, only reconstructs profiles for valid data points. "//&
                  "If true, inserts vanished layers below the valid data.", &
