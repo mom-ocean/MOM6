@@ -150,7 +150,10 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
                 dep for pair in zip(found_mods, found_objs) for dep in pair
             ]
             missing_mods = [m for m in o2uses[o] if m not in all_modules]
-            incs = nested_inc(o2h[o] + o2inc[o], f2F)
+
+            incs, inc_used = nested_inc(o2h[o] + o2inc[o], f2F)
+            inc_mods = [u for u in inc_used if u not in found_mods and u in all_modules]
+
             incdeps = sorted(set([f2F[f] for f in incs if f in f2F]))
             incargs = sorted(set(['-I'+os.path.dirname(f) for f in incdeps]))
             if debug:
@@ -167,7 +170,7 @@ def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
                 print("#   program:", ' '.join(o2prg[o]), file=file)
             if o2mods[o]:
                 print(' '.join(o2mods[o])+':', o, file=file)
-            print(o + ':', o2F90[o], ' '.join(incdeps+found_deps), file=file)
+            print(o + ':', o2F90[o], ' '.join(inc_mods + incdeps + found_deps), file=file)
             print('\t'+fc_rule, ' '.join(incargs), file=file)
 
         # Write rule for each object from C
@@ -243,10 +246,18 @@ def link_obj(obj, o2uses, mod2o, all_modules):
 def nested_inc(inc_files, f2F):
     """List of all files included by "inc_files", either by #include or F90
     include."""
+    hlst = []
+    used_mods = set()
+
     def recur(hfile):
         if hfile not in f2F.keys():
             return
-        _, _, cpp, inc, _, _ = scan_fortran_file(f2F[hfile])
+
+        _, used, cpp, inc, _, _ = scan_fortran_file(f2F[hfile])
+
+        # Record any module updates inside of include files
+        used_mods.update(used)
+
         if len(cpp) + len(inc) > 0:
             for h in cpp+inc:
                 if h not in hlst and h in f2F.keys():
@@ -254,10 +265,11 @@ def nested_inc(inc_files, f2F):
                     hlst.append(h)
             return
         return
-    hlst = []
+
     for h in inc_files:
         recur(h)
-    return inc_files + sorted(set(hlst))
+
+    return inc_files + sorted(set(hlst)), used_mods
 
 
 def scan_fortran_file(src_file):
@@ -268,8 +280,10 @@ def scan_fortran_file(src_file):
         lines = file.readlines()
 
         external_namespace = True
+            # True if we are in the external (i.e. global) namespace
 
         file_has_externals = False
+            # True if the file contains any external objects
 
         for line in lines:
             match = re_module.match(line.lower())
@@ -321,17 +335,18 @@ def object_file(src_file):
 def find_files(src_dirs):
     """Return sorted list of all source files starting from each directory in
     the list "src_dirs"."""
+
+    # TODO: Make this a user-defined argument
+    extensions = ('.f90', '.f', '.c', '.inc', '.h',  '.fh')
+
     files = []
+
     for path in src_dirs:
         if not os.path.isdir(path):
             raise ValueError("Directory '{}' was not found".format(path))
         for p, d, f in os.walk(os.path.normpath(path), followlinks=True):
             for file in f:
-                # TODO: use any()
-                if (file.endswith('.F90') or file.endswith('.f90')
-                        or file.endswith('.f') or file.endswith('.F')
-                        or file.endswith('.h') or file.endswith('.inc')
-                        or file.endswith('.c') or file.endswith('.H')):
+                if any(file.lower().endswith(ext) for ext in extensions):
                     files.append(p+'/'+file)
     return sorted(set(files))
 
