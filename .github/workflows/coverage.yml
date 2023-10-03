@@ -42,7 +42,11 @@ jobs:
     - name: Report coverage to CI (PR)
       if: github.event_name == 'pull_request'
       run: make report.cov REQUIRE_COVERAGE_UPLOAD=true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Report coverage to CI (Push)
       if: github.event_name != 'pull_request'
       run: make report.cov
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
