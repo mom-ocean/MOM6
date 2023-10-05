@@ -1623,6 +1623,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
           call remap_OBC_fields(G, GV, h, h_new, CS%OBC, PCM_cell=PCM_cell)
 
         call remap_vertvisc_aux_vars(G, GV, CS%visc, h, h_new, CS%ALE_CSp, CS%OBC)
+        if (associated(CS%visc%Kv_shear)) &
+          call pass_var(CS%visc%Kv_shear, G%Domain, To_All+Omit_Corners, clock=id_clock_pass, halo=1)
       endif
 
       ! Replace the old grid with new one.  All remapping must be done by this point in the code.
