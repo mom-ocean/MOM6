@@ -278,7 +278,9 @@ type, public :: ocean_OBC_type
   logical :: update_OBC = .false.                     !< Is OBC data time-dependent
   logical :: update_OBC_seg_data = .false.            !< Is it the time for OBC segment data update for fields that
                                                       !! require less frequent update
-  logical :: needs_IO_for_data = .false.              !< Is any i/o needed for OBCs
+  logical :: needs_IO_for_data = .false.              !< Is any i/o needed for OBCs on the current PE
+  logical :: any_needs_IO_for_data = .false.          !< Is any i/o needed for OBCs globally
+  logical :: some_need_no_IO_for_data = .false.       !< Are there any PEs with OBCs that do not need i/o.
   logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
   logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the relative vorticity on open boundaries.
@@ -736,6 +738,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
   integer, dimension(1) :: single_pelist
   type(external_tracers_segments_props), pointer :: obgc_segments_props_list =>NULL()
   !will be able to dynamically switch between sub-sampling refined grid data or model grid
+  integer :: IO_needs(3) ! Sums to determine global OBC data use and update patterns.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -1044,6 +1047,15 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
   enddo
 
   call Set_PElist(saved_pelist)
+
+  ! Determine global IO data requirement patterns.
+  IO_needs(1) = 0 ; if (OBC%needs_IO_for_data) IO_needs(1) = 1
+  IO_needs(2) = 0 ; if (OBC%update_OBC) IO_needs(2) = 1
+  IO_needs(3) = 0 ; if (.not.OBC%needs_IO_for_data) IO_needs(3) = 1
+  call sum_across_PES(IO_needs, 3)
+  OBC%any_needs_IO_for_data = (IO_needs(1) > 0)
+  OBC%update_OBC = (IO_needs(2) > 0)
+  OBC%some_need_no_IO_for_data = (IO_needs(3) > 0)
 
 end subroutine initialize_segment_data
 
@@ -1909,7 +1921,7 @@ logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, a
                                                         OBC%Flather_v_BCs_exist_globally
   if (present(apply_nudged_OBC)) open_boundary_query = OBC%nudged_u_BCs_exist_globally .or. &
                                                        OBC%nudged_v_BCs_exist_globally
-  if (present(needs_ext_seg_data)) open_boundary_query = OBC%needs_IO_for_data
+  if (present(needs_ext_seg_data)) open_boundary_query = OBC%any_needs_IO_for_data
 
 end function open_boundary_query
 
@@ -5755,6 +5767,8 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
   OBC%brushcutter_mode = OBC_in%brushcutter_mode
   OBC%update_OBC = OBC_in%update_OBC
   OBC%needs_IO_for_data = OBC_in%needs_IO_for_data
+  OBC%any_needs_IO_for_data = OBC_in%any_needs_IO_for_data
+  OBC%some_need_no_IO_for_data = OBC_in%some_need_no_IO_for_data
 
   OBC%ntr = OBC_in%ntr
 

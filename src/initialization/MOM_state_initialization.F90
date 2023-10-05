@@ -18,6 +18,7 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta, dz_to_thickness, dz_to_thickness_simple
+use MOM_interface_heights, only : calc_derived_thermo
 use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init, set_tracer_data
 use MOM_open_boundary, only : OBC_NONE
@@ -607,8 +608,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call initialize_segment_data(G, GV, US, OBC, PF)
 !     call open_boundary_config(G, US, PF, OBC)
     ! Call this once to fill boundary arrays from fixed values
-    if (.not. OBC%needs_IO_for_data)  &
+    if (OBC%some_need_no_IO_for_data) then
+      call calc_derived_thermo(tv, h, G, GV, US)
       call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
+    endif
 
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
                  "A string that sets how the user code is invoked to set open boundary data: \n"//&
