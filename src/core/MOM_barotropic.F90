@@ -3335,9 +3335,9 @@ subroutine set_up_BT_OBC(OBC, eta, SpV_avg, BT_OBC, BT_Domain, G, GV, US, CS, MS
           endif
         else
           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-            BT_OBC%dZ_v(i,J) = GV%H_to_Z*eta(i,j)
+            BT_OBC%dZ_v(i,J) = GV%H_to_RZ * eta(i,j) * SpV_avg(i,j)
           elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-            BT_OBC%dZ_v(i,J) = GV%H_to_Z*eta(i,j+1)
+            BT_OBC%dZ_v(i,J) = GV%H_to_RZ * eta(i,j+1) * SpV_avg(i,j+1)
           endif
         endif
         BT_OBC%Cg_v(i,J) = SQRT(dgeo_de_in * GV%g_prime(1) * BT_OBC%dZ_v(i,J))
