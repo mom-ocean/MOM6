@@ -28,10 +28,14 @@ jobs:
     - name: Report unit test coverage to CI (PR)
       if: github.event_name == 'pull_request'
       run: make report.cov.unit REQUIRE_COVERAGE_UPLOAD=true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Report unit test coverage to CI (Push)
       if: github.event_name != 'pull_request'
       run: make report.cov.unit
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Compile ocean-only MOM6 with code coverage
       run: make -j build/cov/MOM6

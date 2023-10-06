@@ -698,7 +698,7 @@ build/unit/MOM_file_parser_tests.F90.gcov: $(WORKSPACE)/work/unit/std.out
 
 .PHONY: report.cov.unit
 report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
-	./codecov -R build/unit -f "*.gcov" -Z -n "Unit tests" \
+	./codecov $(CODECOV_TOKEN_ARG) -R build/unit -f "*.gcov" -Z -n "Unit tests" \
 	    > build/unit/codecov.out \
 	    2> build/unit/codecov.err \
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
