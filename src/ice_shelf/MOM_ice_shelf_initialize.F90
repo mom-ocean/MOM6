@@ -351,7 +351,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
         hmask(i+1,j) = 3.0
         h_bdry_val(i+1,j) = h_shelf(i+1,j)
         thickness_bdry_val(i+1,j) = h_bdry_val(i+0*1,j)
-        u_face_mask_bdry(i+1,j) = 3.0
+        u_face_mask_bdry(i+1,j) = 5.0
         u_bdry_val(i+1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !velocity distribution
       endif
 
