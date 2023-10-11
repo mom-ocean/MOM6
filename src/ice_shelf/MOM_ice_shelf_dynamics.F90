@@ -160,6 +160,7 @@ type, public :: ice_shelf_dyn_CS ; private
   integer :: cg_max_iterations !< The maximum number of iterations that can be used in the CG solver
   integer :: nonlin_solve_err_mode  !< 1: exit vel solve based on nonlin residual
                     !! 2: exit based on "fixed point" metric (|u - u_last| / |u| < tol) where | | is infty-norm
+                    !! 3: exit based on change of norm
 
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
   !integer :: id_h_after_uflux = -1, id_h_after_vflux = -1, id_h_after_adv = -1
@@ -436,7 +437,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                 units="m", default=1.e-3, scale=US%m_to_Z)
     call get_param(param_file, mdl, "NONLIN_SOLVE_ERR_MODE", CS%nonlin_solve_err_mode, &
                 "Choose whether nonlin error in vel solve is based on nonlinear "//&
-                "residual (1) or relative change since last iteration (2)", default=1)
+                "residual (1), relative change since last iteration (2), or change in norm (3)", default=1)
 
     call get_param(param_file, mdl, "SHELF_MOVING_FRONT", CS%moving_shelf_front, &
                  "Specify whether to advance shelf front (and calve).", &
@@ -904,15 +905,17 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thickness at corners [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! An array indicating where the ice
                                                 ! shelf is floating: 0 if floating, 1 if not.
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: Normvec  ! Used for convergence
   character(len=160) :: mesg  ! The text of an error message
   integer :: conv_flag, i, j, k,l, iter
   integer :: isdq, iedq, jsdq, jedq, isd, ied, jsd, jed, nodefloat, nsub
-  real    :: err_max, err_tempu, err_tempv, err_init, max_vel, tempu, tempv
+  real    :: err_max, err_tempu, err_tempv, err_init, max_vel, tempu, tempv, Norm, PrevNorm
   real    :: rhoi_rhow ! The density of ice divided by a typical water density [nondim]
   real, pointer, dimension(:,:,:,:) :: Phi => NULL() ! The gradients of bilinear basis elements at Gaussian
                                                 ! quadrature points surrounding the cell vertices [L-1 ~> m-1].
   real, pointer, dimension(:,:,:,:,:,:) :: Phisub => NULL() ! Quadrature structure weights at subgridscale
                                                 !  locations for finite element calculations [nondim]
+  integer :: Is_sum, Js_sum, Ie_sum, Je_sum ! Loop bounds for global sums or arrays starting at 1.
 
   ! for GL interpolation
   nsub = CS%n_sub_regularize
@@ -993,17 +996,17 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     CS%basal_traction(i,j) = CS%basal_traction(i,j) * float_cond(i,j)
   enddo ; enddo
 
+  if (CS%nonlin_solve_err_mode == 1) then
     ! call apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, CS%ice_visc, &
     !                        CS%basal_traction, float_cond, rhoi_rhow, u_bdry_cont, v_bdry_cont)
 
-  Au(:,:) = 0.0 ; Av(:,:) = 0.0
+    Au(:,:) = 0.0 ; Av(:,:) = 0.0
 
-  call CG_action(CS, Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-                 CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
-                 G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
-  call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
+    call CG_action(CS, Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
+                   CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
+                   G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
+    call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
 
-  if (CS%nonlin_solve_err_mode == 1) then
     err_init = 0 ; err_tempu = 0 ; err_tempv = 0
     do J=G%IscB,G%JecB ; do I=G%IscB,G%IecB
       if (CS%umask(I,J) == 1) then
@@ -1019,6 +1022,24 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     enddo ; enddo
 
     call max_across_PEs(err_init)
+  elseif (CS%nonlin_solve_err_mode == 3) then
+    Normvec=0.0
+    ! Determine the loop limits for sums, bearing in mind that the arrays will be starting at 1.
+    Is_sum = G%isc + (1-G%IsdB)
+    Ie_sum = G%iecB + (1-G%IsdB)
+    ! Include the edge if tile is at the western bdry;  Should add a test to avoid this if reentrant.
+    if (G%isc+G%idg_offset==G%isg) Is_sum = G%IscB + (1-G%IsdB)
+
+    Js_sum = G%jsc + (1-G%JsdB)
+    Je_sum = G%jecB + (1-G%JsdB)
+    ! Include the edge if tile is at the southern bdry;  Should add a test to avoid this if reentrant.
+    if (G%jsc+G%jdg_offset==G%jsg) Js_sum = G%JscB + (1-G%JsdB)
+    do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+      if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + u_shlf(I,J)*u_shlf(I,J)
+      if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + v_shlf(I,J)*v_shlf(I,J)
+    enddo; enddo
+    Norm = reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum )
+    Norm = sqrt(Norm)
   endif
 
   u_last(:,:) = u_shlf(:,:) ; v_last(:,:) = v_shlf(:,:)
@@ -1051,22 +1072,21 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
       CS%basal_traction(i,j) = CS%basal_traction(i,j) * float_cond(i,j)
     enddo ; enddo
 
-    !u_bdry_cont(:,:) = 0 ; v_bdry_cont(:,:) = 0
-
-    !call apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, CS%ice_visc, &
-    !                           CS%basal_traction, float_cond, rhoi_rhow, u_bdry_cont, v_bdry_cont)
-
-    Au(:,:) = 0 ; Av(:,:) = 0
-
-    call CG_action(CS, Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
-                   CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
-                   G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
-
-    call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
-
-    err_max = 0
-
     if (CS%nonlin_solve_err_mode == 1) then
+      !u_bdry_cont(:,:) = 0 ; v_bdry_cont(:,:) = 0
+
+      ! call apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, CS%ice_visc, &
+      !                        CS%basal_traction, float_cond, rhoi_rhow, u_bdry_cont, v_bdry_cont)
+
+      Au(:,:) = 0 ; Av(:,:) = 0
+
+      call CG_action(CS, Au, Av, u_shlf, v_shlf, Phi, Phisub, CS%umask, CS%vmask, ISS%hmask, H_node, &
+                     CS%ice_visc, float_cond, CS%bed_elev, CS%basal_traction, &
+                     G, US, G%isc-1, G%iec+1, G%jsc-1, G%jec+1, rhoi_rhow)
+
+      call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
+
+      err_max = 0
 
       do J=G%jscB,G%jecB ; do I=G%jscB,G%iecB
         if (CS%umask(I,J) == 1) then
@@ -1085,7 +1105,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
 
     elseif (CS%nonlin_solve_err_mode == 2) then
 
-      max_vel = 0 ; tempu = 0 ; tempv = 0
+      err_max=0. ;  max_vel = 0 ; tempu = 0 ; tempv = 0 ; err_tempu = 0
       do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
         if (CS%umask(I,J) == 1) then
           err_tempu = ABS(u_last(I,J)-u_shlf(I,J))
@@ -1108,6 +1128,16 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
       call max_across_PEs(max_vel)
       call max_across_PEs(err_max)
       err_init = max_vel
+
+    elseif (CS%nonlin_solve_err_mode == 3) then
+      PrevNorm=Norm; Norm=0.0; Normvec=0.0
+      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+        if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + u_shlf(I,J)*u_shlf(I,J)
+        if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + v_shlf(I,J)*v_shlf(I,J)
+      enddo; enddo
+      Norm = reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum )
+      Norm = sqrt(Norm)
+      err_max=2.*abs(Norm-PrevNorm); err_init=Norm+PrevNorm
     endif
 
     write(mesg,*) "ice_shelf_solve_outer: nonlinear fractional residual = ", err_max/err_init
