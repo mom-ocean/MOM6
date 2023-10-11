@@ -291,8 +291,6 @@ type, public :: MOM_control_struct ; private
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
   logical :: use_stochastic_EOS      !< If true, use the stochastic EOS parameterizations.
   logical :: useWaves                !< If true, update Stokes drift
-  logical :: use_p_surf_in_EOS       !< If true, always include the surface pressure contributions
-                                     !! in equation of state calculations.
   logical :: use_diabatic_time_bug   !< If true, uses the wrong calendar time for diabatic processes,
                                      !! as was done in MOM6 versions prior to February 2018.
   real :: dtbt_reset_period          !< The time interval between dynamic recalculation of the
@@ -410,11 +408,11 @@ type, public :: MOM_control_struct ; private
   type(sponge_CS),               pointer :: sponge_CSp => NULL()
     !< Pointer to the layered-mode sponge control structure
   type(ALE_sponge_CS),           pointer :: ALE_sponge_CSp => NULL()
-    !< Pointer to the oda incremental update control structure
-  type(oda_incupd_CS),           pointer :: oda_incupd_CSp => NULL()
-    !< Pointer to the internal tides control structure
-  type(int_tide_CS),             pointer :: int_tide_CSp => NULL()
     !< Pointer to the ALE-mode sponge control structure
+  type(oda_incupd_CS),           pointer :: oda_incupd_CSp => NULL()
+    !< Pointer to the oda incremental update control structure
+  type(int_tide_CS),             pointer :: int_tide_CSp => NULL()
+    !< Pointer to the internal tides control structure
   type(ALE_CS),                  pointer :: ALE_CSp => NULL()
     !< Pointer to the Arbitrary Lagrangian Eulerian (ALE) vertical coordinate control structure
 
@@ -634,6 +632,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
   endif
 
+  ! This will be replaced later with the pressures from forces or fluxes if they are available.
+  if (associated(CS%tv%p_surf)) CS%tv%p_surf(:,:) = 0.0
+
   ! First determine the time step that is consistent with this call and an
   ! integer fraction of time_interval.
   if (do_dyn) then
@@ -657,8 +658,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     !---------- Initiate group halo pass of the forcing fields
     call cpu_clock_begin(id_clock_pass)
+    ! Halo updates for surface pressure need to be completed before calling calc_resoln_function
+    ! among other routines if the surface pressure is used in the equation of state.
     nonblocking_p_surf_update = G%nonblocking_updates .and. &
-        .not.(CS%use_p_surf_in_EOS .and. associated(forces%p_surf) .and. &
+        .not.(associated(CS%tv%p_surf) .and. associated(forces%p_surf) .and. &
               allocated(CS%tv%SpV_avg) .and. associated(CS%tv%T))
     if (.not.associated(forces%taux) .or. .not.associated(forces%tauy)) &
          call MOM_error(FATAL,'step_MOM:forces%taux,tauy not associated')
@@ -678,9 +681,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     if (associated(forces%p_surf)) p_surf => forces%p_surf
     if (.not.associated(forces%p_surf)) CS%interp_p_surf = .false.
-    CS%tv%p_surf => NULL()
-    if (CS%use_p_surf_in_EOS .and. associated(forces%p_surf)) then
-      CS%tv%p_surf => forces%p_surf
+    if (associated(CS%tv%p_surf) .and. associated(forces%p_surf)) then
+      do j=jsd,jed ; do i=isd,ied ; CS%tv%p_surf(i,j) = forces%p_surf(i,j) ; enddo ; enddo
 
       if (allocated(CS%tv%SpV_avg) .and. associated(CS%tv%T)) then
         ! The internal ocean state depends on the surface pressues, so update SpV_avg.
@@ -704,11 +706,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call pass_var(fluxes%tau_mag, G%Domain, clock=id_clock_pass, halo=1)
 
     if (associated(fluxes%p_surf)) p_surf => fluxes%p_surf
-    CS%tv%p_surf => NULL()
-    if (CS%use_p_surf_in_EOS .and. associated(fluxes%p_surf)) then
-      CS%tv%p_surf => fluxes%p_surf
+    if (associated(CS%tv%p_surf) .and. associated(fluxes%p_surf)) then
+      do j=js,je ; do i=is,ie ; CS%tv%p_surf(i,j) = fluxes%p_surf(i,j) ; enddo ; enddo
       if (allocated(CS%tv%SpV_avg)) then
-        call pass_var(fluxes%p_surf, G%Domain, clock=id_clock_pass)
+        call pass_var(CS%tv%p_surf, G%Domain, clock=id_clock_pass)
         ! The internal ocean state depends on the surface pressues, so update SpV_avg.
         call extract_diabatic_member(CS%diabatic_CSp, diabatic_halo=halo_sz)
         halo_sz = max(halo_sz, 1)
@@ -2040,6 +2041,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   logical :: bulkmixedlayer    ! If true, a refined bulk mixed layer scheme is used
                                ! with nkml sublayers and nkbl buffer layer.
   logical :: use_temperature   ! If true, temperature and salinity used as state variables.
+  logical :: use_p_surf_in_EOS ! If true, always include the surface pressure contributions
+                               ! in equation of state calculations.
   logical :: use_frazil        ! If true, liquid seawater freezes if temp below freezing,
                                ! with accumulated heat deficit returned to surface ocean.
   logical :: bound_salinity    ! If true, salt is added to keep salinity above
@@ -2301,7 +2304,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                units="s", default=US%T_to_s*CS%dt, scale=US%s_to_T, do_not_log=.not.associated(CS%OBC))
 
   ! This is here in case these values are used inappropriately.
-  use_frazil = .false. ; bound_salinity = .false.
+  use_frazil = .false. ; bound_salinity = .false. ; use_p_surf_in_EOS = .false.
   CS%tv%P_Ref = 2.0e7*US%Pa_to_RL2_T2
   if (use_temperature) then
     call get_param(param_file, "MOM", "FRAZIL", use_frazil, &
@@ -2330,7 +2333,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                  "This is only used if ENABLE_THERMODYNAMICS is true. The default "//&
                  "value is from the TEOS-10 definition of conservative temperature.", &
                  units="J kg-1 K-1", default=3991.86795711963, scale=US%J_kg_to_Q*US%C_to_degC)
-    call get_param(param_file, "MOM", "USE_PSURF_IN_EOS", CS%use_p_surf_in_EOS, &
+    call get_param(param_file, "MOM", "USE_PSURF_IN_EOS", use_p_surf_in_EOS, &
                  "If true, always include the surface pressure contributions "//&
                  "in equation of state calculations.", default=.true.)
   endif
@@ -2656,6 +2659,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     endif
   endif
 
+  if (use_p_surf_in_EOS) allocate(CS%tv%p_surf(isd:ied,jsd:jed), source=0.0)
   if (use_frazil) allocate(CS%tv%frazil(isd:ied,jsd:jed), source=0.0)
   if (bound_salinity) allocate(CS%tv%salt_deficit(isd:ied,jsd:jed), source=0.0)
 
@@ -3205,8 +3209,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call do_group_pass(pass_uv_T_S_h, G%Domain)
 
   ! Update derived thermodynamic quantities.
+  if (associated(CS%tv%p_surf)) call pass_var(CS%tv%p_surf, G%Domain, halo=dynamics_stencil)
   if (allocated(CS%tv%SpV_avg)) then
-    !### There may be a restart issue here with the surface pressure not being updated?
     call calc_derived_thermo(CS%tv, CS%h, G, GV, US, halo=dynamics_stencil, debug=CS%debug)
   endif
 
@@ -3445,6 +3449,10 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
     call register_restart_field(CS%p_surf_prev, "p_surf_prev", .false., restart_CSp, &
                                 "Previous ocean surface pressure", "Pa", conversion=US%RL2_T2_to_Pa)
   endif
+
+  if (associated(CS%tv%p_surf)) &
+    call register_restart_field(CS%tv%p_surf, "p_surf_EOS", .false., restart_CSp, &
+                                "Ocean surface pressure used in EoS", "Pa", conversion=US%RL2_T2_to_Pa)
 
   call register_restart_field(CS%ave_ssh_ibc, "ave_ssh", .false., restart_CSp, &
                               "Time average sea surface height", "meter", conversion=US%Z_to_m)
