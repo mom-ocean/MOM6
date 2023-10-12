@@ -334,7 +334,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
                             ! region of the specified shear profile [nondim]
   character(len=32)  :: name ! The name of a tracer field.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, ntherm
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, ntherm, ntr_id
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
@@ -434,8 +434,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   if (associated(tv%S)) then
     ! In this example, all S inflows have values given by S_ref.
     name = 'salt'
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, PF, GV, segment, OBC_scalar=S_ref, scale=US%ppt_to_S)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, segment, OBC_scalar=S_ref, scale=US%ppt_to_S)
   endif
   if (associated(tv%T)) then
     ! In this example, the T values are set to be consistent with the layer
@@ -459,8 +459,8 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
       segment%field(1)%buffer_src(i,j,k) = T0(k)
     enddo ; enddo ; enddo
     name = 'temp'
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, PF, GV, segment, OBC_array=.true., scale=US%degC_to_C)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, segment, OBC_array=.true., scale=US%degC_to_C)
   endif
 
   ! Set up dye tracers
@@ -472,16 +472,16 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
     else ; segment%field(ntherm+1)%buffer_src(i,j,k) = 1.0 ; endif
   enddo ; enddo ; enddo
   name = 'tr_D1'
-  call tracer_name_lookup(tr_Reg, tr_ptr, name)
-  call register_segment_tracer(tr_ptr, PF, GV, OBC%segment(1), OBC_array=.true.)
+  call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+  call register_segment_tracer(tr_ptr, ntr_id, PF, GV, OBC%segment(1), OBC_array=.true.)
 
   ! All tracers but the first have 0 concentration in their inflows. As 0 is the
   ! default value for the inflow concentrations, the following calls are unnecessary.
   do m=2,tr_Reg%ntr
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, PF, GV, OBC%segment(1), OBC_scalar=0.0)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, OBC%segment(1), OBC_scalar=0.0)
   enddo
 
 end subroutine DOME_set_OBC_data

@@ -32,6 +32,7 @@ use MOM_regridding,           only : regridding_CS
 use MOM_unit_scaling,         only : unit_scale_type
 use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
+use MOM_string_functions,     only : lowercase
 
 implicit none ; private
 
@@ -118,6 +119,8 @@ type, public :: OBC_segment_tracer_type
   real                       :: scale                 !< A scaling factor for converting the units of input
                                                       !! data, like [S ppt-1 ~> 1] for salinity.
   logical                    :: is_initialized        !< reservoir values have been set when True
+  integer                    :: ntr_index = -1        !< index of segment tracer in the global tracer registry
+  integer                    :: fd_index = -1         !< index of segment tracer in the input fields
 end type OBC_segment_tracer_type
 
 !> Registry type for tracers on segments
@@ -4647,8 +4650,8 @@ end subroutine segment_tracer_registry_init
 
 !> Register a tracer array that is active on an OBC segment, potentially also specifying how the
 !! tracer inflow values are specified.
-subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
-                                   OBC_scalar, OBC_array, scale)
+subroutine register_segment_tracer(tr_ptr, ntr_index, param_file, GV, segment, &
+                                   OBC_scalar, OBC_array, scale, fd_index)
   type(verticalGrid_type), intent(in)   :: GV         !< ocean vertical grid structure
   type(tracer_type), target             :: tr_ptr     !< A target that can be used to set a pointer to the
                                                       !! stored value of tr. This target must be
@@ -4657,6 +4660,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
                                                       !! but it also means that any updates to this
                                                       !! structure in the calling module will be
                                                       !! available subsequently to the tracer registry.
+  integer, intent(in)                   :: ntr_index  !< index of segment tracer in the global tracer registry
   type(param_file_type),  intent(in)    :: param_file !< file to parse for model parameter values
   type(OBC_segment_type), intent(inout) :: segment    !< current segment data structure
   real,         optional, intent(in)    :: OBC_scalar !< If present, use scalar value for segment tracer
@@ -4667,6 +4671,7 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
   real,         optional, intent(in)    :: scale      !< A scaling factor that should be used with any
                                                       !! data that is read in, to convert it to the internal
                                                       !! units of this tracer.
+  integer,      optional, intent(in)    :: fd_index   !< index of segment tracer in the input field
 
 ! Local variables
   real :: rescale ! A multiplicative correction to the scaling factor.
@@ -4690,6 +4695,8 @@ subroutine register_segment_tracer(tr_ptr, param_file, GV, segment, &
 
   segment%tr_Reg%Tr(ntseg)%Tr => tr_ptr
   segment%tr_Reg%Tr(ntseg)%name = tr_ptr%name
+  segment%tr_Reg%Tr(ntseg)%ntr_index = ntr_index
+  if (present(fd_index)) segment%tr_Reg%Tr(ntseg)%fd_index = fd_index
 
   segment%tr_Reg%Tr(ntseg)%scale = 1.0
   if (present(scale)) then
@@ -4752,7 +4759,7 @@ subroutine register_temp_salt_segments(GV, US, OBC, tr_Reg, param_file)
   type(param_file_type),      intent(in)    :: param_file !< file to parse for  model parameter values
 
 ! Local variables
-  integer :: n
+  integer :: n, ntr_id
   character(len=32) :: name
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   type(tracer_type), pointer :: tr_ptr => NULL()
@@ -4767,12 +4774,12 @@ subroutine register_temp_salt_segments(GV, US, OBC, tr_Reg, param_file)
          call MOM_error(FATAL,"register_temp_salt_segments: tracer array was previously allocated")
 
     name = 'temp'
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, segment, &
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, param_file, GV, segment, &
                                  OBC_array=segment%temp_segment_data_exists, scale=US%degC_to_C)
     name = 'salt'
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, segment, &
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, param_file, GV, segment, &
                                  OBC_array=segment%salt_segment_data_exists, scale=US%ppt_to_S)
   enddo
 
@@ -4825,8 +4832,8 @@ subroutine register_obgc_segments(GV, OBC, tr_Reg, param_file, tr_name)
   type(param_file_type),      intent(in)    :: param_file !< file to parse for  model parameter values
   character(len=*),           intent(in)    :: tr_name!< Tracer name
 ! Local variables
-  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, nz, nf
-  integer :: i, j, k, n
+  integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, nz, nf, ntr_id, fd_id
+  integer :: i, j, k, n, m
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
@@ -4835,8 +4842,13 @@ subroutine register_obgc_segments(GV, OBC, tr_Reg, param_file, tr_name)
   do n=1, OBC%number_of_segments
     segment=>OBC%segment(n)
     if (.not. segment%on_pe) cycle
-    call tracer_name_lookup(tr_Reg, tr_ptr, tr_name)
-    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.True.)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, tr_name)
+    ! get the obgc field index
+    fd_id = -1
+    do m=1,segment%num_fields
+      if (lowercase(segment%field(m)%name) == lowercase(tr_name)) fd_id = m
+    enddo
+    call register_segment_tracer(tr_ptr, ntr_id, param_file, GV, segment, OBC_array=.True., fd_index=fd_id)
   enddo
 
 end subroutine register_obgc_segments
@@ -5336,8 +5348,9 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
   real :: fac1            ! The denominator of the expression for tracer updates [nondim]
   real :: I_scale         ! The inverse of the scaling factor for the tracers.
                           ! For salinity the units would be [ppt S-1 ~> 1]
-  integer :: i, j, k, m, n, ntr, nz
+  integer :: i, j, k, m, n, ntr, nz, ntr_id, fd_id
   integer :: ishift, idir, jshift, jdir
+  real :: resrv_lfac_out, resrv_lfac_in
   real :: b_in, b_out     ! The 0 and 1 switch for tracer reservoirs
                           ! 1 if the length scale of reservoir is zero [nondim]
   real :: a_in, a_out     ! The 0 and 1(-1) switch for reservoir source weights
@@ -5365,7 +5378,16 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         ! Can keep this or take it out, either way
         if (G%mask2dT(I+ishift,j) == 0.0) cycle
         ! Update the reservoir tracer concentration implicitly using a Backward-Euler timestep
-        do m=1,ntr
+        do m=1,segment%tr_Reg%ntseg
+          ntr_id = segment%tr_reg%Tr(m)%ntr_index
+          fd_id = segment%tr_reg%Tr(m)%fd_index
+          if(fd_id == -1) then
+            resrv_lfac_out = 1.0
+            resrv_lfac_in  = 1.0
+          else
+            resrv_lfac_out = segment%field(fd_id)%resrv_lfac_out
+            resrv_lfac_in  = segment%field(fd_id)%resrv_lfac_in
+          endif
           I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
           if (allocated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
             ! Calculate weights. Both a and u_L are nodim. Adding them together has no meaning.
@@ -5374,14 +5396,14 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
             ! When InvLscale_in is 0 and inflow, only nudged data is applied to reservoirs
             a_out = b_out * max(0.0, sign(1.0, idir*uhr(I,j,k)))
             a_in  = b_in  * min(0.0, sign(1.0, idir*uhr(I,j,k)))
-            u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out*segment%field(m)%resrv_lfac_out / &
+            u_L_out = max(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_out*resrv_lfac_out / &
                       ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
-            u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in*segment%field(m)%resrv_lfac_in  / &
+            u_L_in  = min(0.0, (idir*uhr(I,j,k))*segment%Tr_InvLscale_in*resrv_lfac_in  / &
                       ((h(i+ishift,j,k) + GV%H_subroundoff)*G%dyCu(I,j)))
             fac1 = (1.0 - (a_out - a_in)) + ((u_L_out + a_out) - (u_L_in + a_in))
             segment%tr_Reg%Tr(m)%tres(I,j,k) = (1.0/fac1) * &
                               ((1.0-a_out+a_in)*segment%tr_Reg%Tr(m)%tres(I,j,k)+ &
-                              ((u_L_out+a_out)*Reg%Tr(m)%t(I+ishift,j,k) - &
+                              ((u_L_out+a_out)*Reg%Tr(ntr_id)%t(I+ishift,j,k) - &
                                (u_L_in+a_in)*segment%tr_Reg%Tr(m)%t(I,j,k)))
             if (allocated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(I,j,k)
           enddo ; endif
@@ -5400,20 +5422,28 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
         ! Can keep this or take it out, either way
         if (G%mask2dT(i,j+jshift) == 0.0) cycle
         ! Update the reservoir tracer concentration implicitly using a Backward-Euler timestep
-        do m=1,ntr
+        do m=1,segment%tr_Reg%ntseg
+          ntr_id = segment%tr_reg%Tr(m)%ntr_index
+          fd_id = segment%tr_reg%Tr(m)%fd_index
+          if(fd_id == -1) then
+            resrv_lfac_out = 1.0
+            resrv_lfac_in  = 1.0
+          else
+            resrv_lfac_out = segment%field(fd_id)%resrv_lfac_out
+            resrv_lfac_in  = segment%field(fd_id)%resrv_lfac_in
+          endif
           I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
           if (allocated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
             a_out = b_out * max(0.0, sign(1.0, jdir*vhr(i,J,k)))
             a_in  = b_in  * min(0.0, sign(1.0, jdir*vhr(i,J,k)))
-            v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out*segment%field(m)%resrv_lfac_out / &
+            v_L_out = max(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_out*resrv_lfac_out / &
                       ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
-            v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in*segment%field(m)%resrv_lfac_in  / &
+            v_L_in  = min(0.0, (jdir*vhr(i,J,k))*segment%Tr_InvLscale_in*resrv_lfac_in  / &
                       ((h(i,j+jshift,k) + GV%H_subroundoff)*G%dxCv(i,J)))
-            fac1 = 1.0 + (v_L_out-v_L_in)
             fac1 = (1.0 - (a_out - a_in)) + ((v_L_out + a_out) - (v_L_in + a_in))
             segment%tr_Reg%Tr(m)%tres(i,J,k) = (1.0/fac1) * &
                               ((1.0-a_out+a_in)*segment%tr_Reg%Tr(m)%tres(i,J,k) + &
-                              ((v_L_out+a_out)*Reg%Tr(m)%t(i,J+jshift,k) - &
+                              ((v_L_out+a_out)*Reg%Tr(ntr_id)%t(i,J+jshift,k) - &
                                (v_L_in+a_in)*segment%tr_Reg%Tr(m)%t(i,J,k)))
             if (allocated(OBC%tres_y)) OBC%tres_y(i,J,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(i,J,k)
           enddo ; endif
