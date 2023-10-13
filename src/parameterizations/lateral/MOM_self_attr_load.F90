@@ -42,19 +42,21 @@ contains
 !! be changed into bottom pressure anomaly in the future. Note that the SAL calculation applies to all motions
 !! across the spectrum. Tidal-specific methods that assume periodicity, i.e. iterative and read-in SAL, are
 !! stored in MOM_tidal_forcing module.
-subroutine calc_SAL(eta, eta_sal, G, CS)
+subroutine calc_SAL(eta, eta_sal, G, CS, tmp_scale)
   type(ocean_grid_type), intent(in)  :: G  !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta     !< The sea surface height anomaly from
                                                            !! a time-mean geoid [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_sal !< The sea surface height anomaly from
                                                            !! self-attraction and loading [Z ~> m].
   type(SAL_CS), intent(inout) :: CS !< The control structure returned by a previous call to SAL_init.
+  real,                   optional, intent(in)  :: tmp_scale !< A rescaling factor to temporarily convert eta
+                                                            !! to MKS units in reproducing sumes [m Z-1 ~> 1]
 
   ! Local variables
   integer :: n, m, l
   integer :: Isq, Ieq, Jsq, Jeq
   integer :: i, j
-  real :: eta_prop
+  real :: eta_prop ! The scalar constant of proportionality between eta and eta_sal [nondim]
 
   call cpu_clock_begin(id_clock_SAL)
 
@@ -69,7 +71,7 @@ subroutine calc_SAL(eta, eta_sal, G, CS)
 
   ! use the spherical harmonics method
   elseif (CS%use_sal_sht) then
-    call spherical_harmonics_forward(G, CS%sht, eta, CS%Snm_Re, CS%Snm_Im, CS%sal_sht_Nd)
+    call spherical_harmonics_forward(G, CS%sht, eta, CS%Snm_Re, CS%Snm_Im, CS%sal_sht_Nd, tmp_scale=tmp_scale)
 
     ! Multiply scaling factors to each mode
     do m = 0,CS%sal_sht_Nd
@@ -119,8 +121,8 @@ subroutine calc_love_scaling(nlm, rhoW, rhoE, Love_Scaling)
   real, dimension(:), intent(out) :: Love_Scaling !< Scaling factors for inverse SHT [nondim]
 
   ! Local variables
-  real, dimension(:), allocatable :: HDat, LDat, KDat ! Love numbers converted in CF reference frames
-  real :: H1, L1, K1 ! Temporary variables to store degree 1 Love numbers
+  real, dimension(:), allocatable :: HDat, LDat, KDat ! Love numbers converted in CF reference frames [nondim]
+  real :: H1, L1, K1 ! Temporary variables to store degree 1 Love numbers [nondim]
   integer :: n_tot ! Size of the stored Love numbers
   integer :: n, m, l
 
@@ -163,7 +165,7 @@ subroutine SAL_init(G, US, param_file, CS)
 
   logical :: calculate_sal
   logical :: tides, use_tidal_sal_file
-  real :: tide_sal_scalar_value
+  real :: tide_sal_scalar_value ! Scaling SAL factor [nondim]
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")

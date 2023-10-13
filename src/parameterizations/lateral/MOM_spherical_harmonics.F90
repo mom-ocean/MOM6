@@ -42,7 +42,7 @@ integer :: id_clock_sht_global_sum=-1  !< CPU clock for global summation in forw
 contains
 
 !> Calculates forward spherical harmonics transforms
-subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd)
+subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd, tmp_scale)
   type(ocean_grid_type), intent(in)    :: G            !< The ocean's grid structure.
   type(sht_CS),          intent(inout) :: CS           !< Control structure for SHT
   real, dimension(SZI_(G),SZJ_(G)), &
@@ -51,13 +51,20 @@ subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd)
   real,                  intent(out)   :: Snm_Im(:)    !< SHT coefficients for the imaginary modes (sine) [A]
   integer,     optional, intent(in)    :: Nd           !< Maximum degree of the spherical harmonics
                                                        !! overriding ndegree in the CS [nondim]
+  real,        optional, intent(in)    :: tmp_scale    !< A temporary rescaling factor to convert
+                                                       !! var to MKS units during the reproducing
+                                                       !! sums [a A-1 ~> 1]
   ! local variables
-  integer :: Nmax ! Local copy of the maximum degree of the spherical harmonics [nondim]
-  integer :: Ltot ! Local copy of the number of spherical harmonics [nondim]
+  integer :: Nmax ! Local copy of the maximum degree of the spherical harmonics
+  integer :: Ltot ! Local copy of the number of spherical harmonics
   real, dimension(SZI_(G),SZJ_(G)) :: &
     pmn,   & ! Current associated Legendre polynomials of degree n and order m [nondim]
     pmnm1, & ! Associated Legendre polynomials of degree n-1 and order m [nondim]
     pmnm2    ! Associated Legendre polynomials of degree n-2 and order m [nondim]
+  real :: scale ! A rescaling factor to temporarily convert var to MKS units during the
+                ! reproducing sums [a A-1 ~> 1]
+  real :: I_scale ! The inverse of scale [A a-1 ~> 1]
+  real :: sum_tot ! The total of all components output by the reproducing sum in arbitrary units [a]
   integer :: i, j, k
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: m, n, l
@@ -81,12 +88,13 @@ subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd)
   do l=1,Ltot ; Snm_Re(l) = 0.0; Snm_Im(l) = 0.0 ; enddo
 
   if (CS%reprod_sum) then
+    scale = 1.0 ; if (present(tmp_scale)) scale = tmp_scale
     do m=0,Nmax
       l = order2index(m, Nmax)
 
       do j=js,je ; do i=is,ie
-        CS%Snm_Re_raw(i,j,l) = var(i,j) * CS%Pmm(i,j,m+1) * CS%cos_lonT_wtd(i,j,m+1)
-        CS%Snm_Im_raw(i,j,l) = var(i,j) * CS%Pmm(i,j,m+1) * CS%sin_lonT_wtd(i,j,m+1)
+        CS%Snm_Re_raw(i,j,l) = (scale*var(i,j)) * CS%Pmm(i,j,m+1) * CS%cos_lonT_wtd(i,j,m+1)
+        CS%Snm_Im_raw(i,j,l) = (scale*var(i,j)) * CS%Pmm(i,j,m+1) * CS%sin_lonT_wtd(i,j,m+1)
         pmnm2(i,j) = 0.0
         pmnm1(i,j) = CS%Pmm(i,j,m+1)
       enddo ; enddo
@@ -94,8 +102,8 @@ subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd)
       do n = m+1, Nmax ; do j=js,je ; do i=is,ie
         pmn(i,j) = &
           CS%a_recur(n+1,m+1) * CS%cos_clatT(i,j) * pmnm1(i,j) - CS%b_recur(n+1,m+1) * pmnm2(i,j)
-        CS%Snm_Re_raw(i,j,l+n-m) = var(i,j) * pmn(i,j) * CS%cos_lonT_wtd(i,j,m+1)
-        CS%Snm_Im_raw(i,j,l+n-m) = var(i,j) * pmn(i,j) * CS%sin_lonT_wtd(i,j,m+1)
+        CS%Snm_Re_raw(i,j,l+n-m) = (scale*var(i,j)) * pmn(i,j) * CS%cos_lonT_wtd(i,j,m+1)
+        CS%Snm_Im_raw(i,j,l+n-m) = (scale*var(i,j)) * pmn(i,j) * CS%sin_lonT_wtd(i,j,m+1)
         pmnm2(i,j) = pmnm1(i,j)
         pmnm1(i,j) = pmn(i,j)
       enddo ; enddo ; enddo
@@ -125,10 +133,15 @@ subroutine spherical_harmonics_forward(G, CS, var, Snm_Re, Snm_Im, Nd)
   if (id_clock_sht_global_sum>0) call cpu_clock_begin(id_clock_sht_global_sum)
 
   if (CS%reprod_sum) then
-    do l=1,Ltot
-      Snm_Re(l) = reproducing_sum(CS%Snm_Re_raw(:,:,l))
-      Snm_Im(l) = reproducing_sum(CS%Snm_Im_raw(:,:,l))
-    enddo
+    sum_tot = reproducing_sum(CS%Snm_Re_raw(:,:,1:Ltot), sums=Snm_Re(1:Ltot))
+    sum_tot = reproducing_sum(CS%Snm_Im_raw(:,:,1:Ltot), sums=Snm_Im(1:Ltot))
+    if (scale /= 1.0) then
+      I_scale = 1.0 / scale
+      do l=1,Ltot
+        Snm_Re(l) = I_scale * Snm_Re(l)
+        Snm_Im(l) = I_scale * Snm_Im(l)
+      enddo
+    endif
   else
     call sum_across_PEs(Snm_Re, Ltot)
     call sum_across_PEs(Snm_Im, Ltot)
@@ -240,8 +253,9 @@ subroutine spherical_harmonics_init(G, param_file, CS)
   allocate(CS%a_recur(CS%ndegree+1, CS%ndegree+1)); CS%a_recur(:,:) = 0.0
   allocate(CS%b_recur(CS%ndegree+1, CS%ndegree+1)); CS%b_recur(:,:) = 0.0
   do m=0,CS%ndegree ; do n=m+1,CS%ndegree
+    ! These expressione will give NaNs with 32-bit integers for n > 23170, but this is trapped elsewhere.
     CS%a_recur(n+1,m+1) = sqrt(real((2*n-1) * (2*n+1)) / real((n-m) * (n+m)))
-    CS%b_recur(n+1,m+1) = sqrt(real((2*n+1) * (n+m-1) * (n-m-1)) / real((n-m) * (n+m) * (2*n-3)))
+    CS%b_recur(n+1,m+1) = sqrt((real(2*n+1) * real((n+m-1) * (n-m-1))) / (real((n-m) * (n+m)) * real(2*n-3)))
   enddo ; enddo
 
   ! Calculate complex exponential factors
@@ -253,8 +267,8 @@ subroutine spherical_harmonics_init(G, param_file, CS)
     do j=js,je ; do i=is,ie
       CS%cos_lonT(i,j,m+1)     = cos(real(m) * (G%geolonT(i,j)*RADIAN))
       CS%sin_lonT(i,j,m+1)     = sin(real(m) * (G%geolonT(i,j)*RADIAN))
-      CS%cos_lonT_wtd(i,j,m+1) = CS%cos_lonT(i,j,m+1) * G%areaT(i,j) / G%Rad_Earth**2
-      CS%sin_lonT_wtd(i,j,m+1) = CS%sin_lonT(i,j,m+1) * G%areaT(i,j) / G%Rad_Earth**2
+      CS%cos_lonT_wtd(i,j,m+1) = CS%cos_lonT(i,j,m+1) * G%areaT(i,j) / G%Rad_Earth_L**2
+      CS%sin_lonT_wtd(i,j,m+1) = CS%sin_lonT(i,j,m+1) * G%areaT(i,j) / G%Rad_Earth_L**2
     enddo ; enddo
   enddo
 
