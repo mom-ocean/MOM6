@@ -360,6 +360,7 @@ type, public :: MOM_control_struct ; private
                                 !! higher values use more appropriate expressions that differ at
                                 !! roundoff for non-Boussinesq cases.
   logical :: use_particles      !< Turns on the particles package
+  logical :: use_uh_particles   !< particles are advected by uh/h
   logical :: use_dbclient       !< Turns on the database client used for ML inference/analysis
   character(len=10) :: particle_type !< Particle types include: surface(default), profiling and sail drone.
 
@@ -1266,10 +1267,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
     enddo; enddo
   endif
 
-  if (CS%use_particles .and. CS%do_dynamics) then ! Run particles whether or not stepping is split
-    call particles_run(CS%particles, Time_local, CS%u, CS%v, CS%h, CS%tv) ! Run the particles model
-  endif
-
 
   if ((CS%thickness_diffuse .or. CS%interface_filter) .and. &
       .not.CS%thickness_diffuse_first) then
@@ -1330,6 +1327,17 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                            CS%u, CS%v, CS%tv, Time_local)
   endif
   call disable_averaging(CS%diag)
+
+  if (CS%use_particles .and. CS%do_dynamics .and. CS%use_uh_particles) then
+    !Run particles using thickness-weighted velocity
+    call particles_run(CS%particles, Time_local, CS%uhtr, CS%vhtr, CS%h, &
+        CS%tv, CS%use_uh_particles)
+  elseif (CS%use_particles .and. CS%do_dynamics) then
+    !Run particles using unweighted velocity
+    call particles_run(CS%particles, Time_local, CS%u, CS%v, CS%h, &
+                       CS%tv, CS%use_uh_particles)
+  endif
+
 
   ! Advance the dynamics time by dt.
   CS%t_dyn_rel_adv = CS%t_dyn_rel_adv + dt
@@ -2440,7 +2448,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   call get_param(param_file, "MOM", "USE_PARTICLES", CS%use_particles, &
                  "If true, use the particles package.", default=.false.)
-
+  call get_param(param_file, "MOM", "USE_UH_PARTICLES", CS%use_uh_particles, &
+                 "If true, use the uh velocity in the particles package.",default=.false.)
   CS%ensemble_ocean=.false.
   call get_param(param_file, "MOM", "ENSEMBLE_OCEAN", CS%ensemble_ocean, &
                  "If False, The model is being run in serial mode as a single realization. "//&
