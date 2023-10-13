@@ -9,6 +9,7 @@ use MOM_coms,                 only : sum_across_PEs, Set_PElist, Get_PElist, PE_
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_diag_mediator,        only : diag_ctrl, time_type
 use MOM_domains,              only : pass_var, pass_vector
+use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,              only : To_All, EAST_FACE, NORTH_FACE, SCALAR_PAIR, CGRID_NE, CORNER
 use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
@@ -373,6 +374,7 @@ type, public :: ocean_OBC_type
                                 !! for remapping.  Values below 20190101 recover the remapping
                                 !! answers from 2018, while higher values use more robust
                                 !! forms of the same remapping expressions.
+  type(group_pass_type) :: pass_oblique  !< Structure for group halo pass
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -1886,9 +1888,13 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
   if (OBC%radiation_BCs_exist_globally) call pass_vector(OBC%rx_normal, OBC%ry_normal, G%Domain, &
                      To_All+Scalar_Pair)
   if (OBC%oblique_BCs_exist_globally) then
-    call pass_vector(OBC%rx_oblique_u, OBC%ry_oblique_v, G%Domain, To_All+Scalar_Pair)
-    call pass_vector(OBC%ry_oblique_u, OBC%rx_oblique_v, G%Domain, To_All+Scalar_Pair)
-    call pass_vector(OBC%cff_normal_u, OBC%cff_normal_v, G%Domain, To_All+Scalar_Pair)
+!   call pass_vector(OBC%rx_oblique_u, OBC%ry_oblique_v, G%Domain, To_All+Scalar_Pair)
+!   call pass_vector(OBC%ry_oblique_u, OBC%rx_oblique_v, G%Domain, To_All+Scalar_Pair)
+!   call pass_vector(OBC%cff_normal_u, OBC%cff_normal_v, G%Domain, To_All+Scalar_Pair)
+    call create_group_pass(OBC%pass_oblique, OBC%rx_oblique_u, OBC%ry_oblique_v, G%Domain, To_All+Scalar_Pair)
+    call create_group_pass(OBC%pass_oblique, OBC%ry_oblique_u, OBC%rx_oblique_v, G%Domain, To_All+Scalar_Pair)
+    call create_group_pass(OBC%pass_oblique, OBC%cff_normal_u, OBC%cff_normal_v, G%Domain, To_All+Scalar_Pair)
+    call do_group_pass(OBC%pass_oblique, G%Domain)
   endif
   if (allocated(OBC%tres_x) .and. allocated(OBC%tres_y)) then
     do m=1,OBC%ntr
@@ -5628,6 +5634,14 @@ subroutine remap_OBC_fields(G, GV, h_old, h_new, OBC, PCM_cell)
       enddo
     endif
   enddo ; endif ; endif
+  if (OBC%radiation_BCs_exist_globally) call pass_vector(OBC%rx_normal, OBC%ry_normal, G%Domain, &
+                     To_All+Scalar_Pair)
+  if (OBC%oblique_BCs_exist_globally) then
+    call do_group_pass(OBC%pass_oblique, G%Domain)
+!   call pass_vector(OBC%rx_oblique_u, OBC%ry_oblique_v, G%Domain, To_All+Scalar_Pair)
+!   call pass_vector(OBC%ry_oblique_u, OBC%rx_oblique_v, G%Domain, To_All+Scalar_Pair)
+!   call pass_vector(OBC%cff_normal_u, OBC%cff_normal_v, G%Domain, To_All+Scalar_Pair)
+  endif
 
 end subroutine remap_OBC_fields
 

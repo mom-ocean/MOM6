@@ -388,7 +388,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   logical :: showCallTree, sym
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: cont_stencil
+  integer :: cont_stencil, obc_stencil
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -451,19 +451,23 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   !--- begin set up for group halo pass
 
   cont_stencil = continuity_stencil(CS%continuity_CSp)
+  obc_stencil = 2
+  if (associated(CS%OBC)) then
+    if (CS%OBC%oblique_BCs_exist_globally) obc_stencil = 3
+  endif
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_hp_uv, hp, G%Domain, halo=2)
-  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=2)
-  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=2)
+  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
 
   call create_group_pass(CS%pass_uv, u, v, G%Domain, halo=max(2,cont_stencil))
   call create_group_pass(CS%pass_h, h, G%Domain, halo=max(2,cont_stencil))
-  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=2)
-  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=2)
+  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
   call cpu_clock_end(id_clock_pass)
   !--- end set up for group halo pass
 
@@ -1203,7 +1207,9 @@ subroutine remap_dyn_split_RK2_aux_vars(G, GV, CS, h_old, h_new, ALE_CSp, OBC, d
 
   if (CS%store_CAu) then
     call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%u_av, CS%v_av, OBC, dzRegrid)
+    call pass_vector(CS%u_av, CS%v_av, G%Domain, complete=.false.)
     call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%CAu_pred, CS%CAv_pred, OBC, dzRegrid)
+    call pass_vector(CS%CAu_pred, CS%CAv_pred, G%Domain, complete=.true.)
   endif
 
   call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%diffu, CS%diffv, OBC, dzRegrid)
