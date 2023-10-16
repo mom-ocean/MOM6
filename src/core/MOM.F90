@@ -4022,8 +4022,7 @@ subroutine save_MOM_restart(CS, directory, time, G, time_stamped, filename, &
       time_stamped=time_stamped, filename=filename, GV=GV, &
       num_rest_files=num_rest_files, write_IC=write_IC)
 
-  ! TODO: Update particles to use Time and directories
-  if (CS%use_particles) call particles_save_restart(CS%particles, CS%h)
+  if (CS%use_particles) call particles_save_restart(CS%particles, CS%h, directory, time, time_stamped)
 end subroutine save_MOM_restart
 
 

@@ -47,12 +47,13 @@ end subroutine particles_run
 
 
 !>Save particle locations (and sometimes other vars) to restart file
-subroutine particles_save_restart(parts, h, temp, salt)
+subroutine particles_save_restart(parts, h, directory, time, time_stamped)
   ! Arguments
   type(particles), pointer :: parts !< Container for all types and memory
   real, dimension(:,:,:),intent(in)      :: h !< Thickness of each layer [H ~> m or kg m-2]
-  real, dimension(:,:,:), optional, intent(in) :: temp !< Optional container for temperature [C ~> degC]
-  real, dimension(:,:,:), optional, intent(in) :: salt !< Optional container for salinity [S ~> ppt]
+  character(len=*), intent(in) :: directory !< The directory where the restart files are to be written
+  type(time_type), intent(in) :: time !< The current model time
+  logical, optional, intent(in) :: time_stamped !< If present and true, add time-stamp to the restart file names
 
 end subroutine particles_save_restart
 
