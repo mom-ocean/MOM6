@@ -23,7 +23,8 @@ use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_variables,             only : accel_diag_ptrs
-use MOM_Zanna_Bolton,          only : Zanna_Bolton_2020, ZB_2020_init, ZB2020_CS
+use MOM_Zanna_Bolton,          only : ZB2020_lateral_stress, ZB2020_init, ZB2020_end, &
+                                      ZB2020_CS, ZB2020_copy_gradient_and_thickness
 
 implicit none ; private
 
@@ -250,7 +251,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               intent(inout) :: VarMix !< Variable mixing control structure
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
-  type(hor_visc_CS),             intent(in)  :: CS     !< Horizontal viscosity control structure
+  type(hor_visc_CS),             intent(inout)  :: CS  !< Horizontal viscosity control structure
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
   type(barotropic_CS), intent(in), optional  :: BT     !< Barotropic control structure
   type(thickness_diffuse_CS), intent(in), optional :: TD  !< Thickness diffusion control structure
@@ -333,16 +334,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grid_Re_Kh, &    ! Grid Reynolds number for Laplacian horizontal viscosity at h points [nondim]
     grid_Re_Ah, &    ! Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
     GME_coeff_h      ! GME coefficient at h-points [L2 T-1 ~> m2 s-1]
-
-  ! Zanna-Bolton fields
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
-    ZB2020u           !< Zonal acceleration due to convergence of
-                      !! along-coordinate stress tensor for ZB model
-                      !! [L T-2 ~> m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
-    ZB2020v           !< Meridional acceleration due to convergence
-                      !! of along-coordinate stress tensor for ZB model
-                      !! [L T-2 ~> m s-2]
 
   real :: AhSm       ! Smagorinsky biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLth      ! 2D Leith biharmonic viscosity [L4 T-1 ~> m4 s-1]
@@ -1217,6 +1208,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
     endif
 
+    ! Pass the velocity gradients and thickness to ZB2020
+    if (CS%use_ZB2020) then
+      call ZB2020_copy_gradient_and_thickness( &
+           sh_xx, sh_xy, vort_xy,              &
+           hq,                                 &
+           G, GV, CS%ZB2020, k)
+    endif
+
     if (CS%Laplacian) then
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
         if (CS%use_QG_Leith_visc) then
@@ -1622,18 +1621,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   enddo ! end of k loop
 
-  if (CS%use_ZB2020) then
-    call Zanna_Bolton_2020(u, v, h, ZB2020u, ZB2020v, G, GV, CS%ZB2020)
-
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      diffu(I,j,k) = diffu(I,j,k) + ZB2020u(I,j,k)
-    enddo ; enddo ; enddo
-
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      diffv(i,J,k) = diffv(i,J,k) + ZB2020v(i,J,k)
-    enddo ; enddo ; enddo
-  endif
-
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
   if (CS%id_shearstress > 0) call post_data(CS%id_shearstress, ShSt, CS%diag)
@@ -1701,6 +1688,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     ! Diagnostics for momentum budget terms multiplied by visc_rem_[uv],
     if (CS%id_diffu_visc_rem > 0) call post_product_u(CS%id_diffu_visc_rem, diffu, ADp%visc_rem_u, G, nz, CS%diag)
     if (CS%id_diffv_visc_rem > 0) call post_product_v(CS%id_diffv_visc_rem, diffv, ADp%visc_rem_v, G, nz, CS%diag)
+  endif
+
+  if (CS%use_ZB2020) then
+    call ZB2020_lateral_stress(u, v, h, diffu, diffv, G, GV, CS%ZB2020, &
+                               CS%dx2h, CS%dy2h, CS%dx2q, CS%dy2q)
   endif
 
 end subroutine horizontal_viscosity
@@ -1777,7 +1769,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! init control structure
-  call ZB_2020_init(Time, GV, US, param_file, diag, CS%ZB2020, CS%use_ZB2020)
+  call ZB2020_init(Time, G, GV, US, param_file, diag, CS%ZB2020, CS%use_ZB2020)
 
   CS%initialized = .true.
 
@@ -2691,6 +2683,11 @@ subroutine hor_visc_end(CS)
     DEALLOC_(CS%n1n1_m_n2n2_h)
     DEALLOC_(CS%n1n1_m_n2n2_q)
   endif
+
+  if (CS%use_ZB2020) then
+    call ZB2020_end(CS%ZB2020)
+  endif
+
 end subroutine hor_visc_end
 !> \namespace mom_hor_visc
 !!

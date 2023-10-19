@@ -1,23 +1,26 @@
-! > Calculates Zanna and Bolton 2020 parameterization
+!> Calculates Zanna and Bolton 2020 parameterization
+!! Implemented by Perezhogin P.A. Contact: pperezhogin@gmail.com
 module MOM_Zanna_Bolton
 
+! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_grid,          only : ocean_grid_type
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_diag_mediator, only : post_data, register_diag_field
-use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type
+use MOM_domains,       only : create_group_pass, do_group_pass, group_pass_type, &
+                              start_group_pass, complete_group_pass
 use MOM_domains,       only : To_North, To_East
 use MOM_domains,       only : pass_var, CORNER
-use MOM_coms,          only : reproducing_sum, max_across_PEs, min_across_PEs
-use MOM_error_handler, only : MOM_error, WARNING
+use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
+use MOM_cpu_clock,     only : CLOCK_MODULE, CLOCK_ROUTINE
 
 implicit none ; private
 
 #include <MOM_memory.h>
 
-public Zanna_Bolton_2020, ZB_2020_init
+public ZB2020_lateral_stress, ZB2020_init, ZB2020_end, ZB2020_copy_gradient_and_thickness
 
 !> Control structure for Zanna-Bolton-2020 parameterization.
 type, public :: ZB2020_CS ; private
@@ -31,50 +34,86 @@ type, public :: ZB2020_CS ; private
   integer   :: ZB_cons        !< Select a discretization scheme for ZB model
                               !! 0 - non-conservative scheme
                               !! 1 - conservative scheme for deviatoric component
-  integer   :: LPF_iter       !< Number of smoothing passes for the Velocity Gradient (VG) components
-                              !! in ZB model.
-  integer   :: LPF_order      !< The scale selectivity of the smoothing filter
-                              !! 1 - Laplacian filter
-                              !! 2 - Bilaplacian filter
   integer   :: HPF_iter       !< Number of sharpening passes for the Velocity Gradient (VG) components
                               !! in ZB model.
-  integer   :: HPF_order      !< The scale selectivity of the sharpening filter
-                              !! 1 - Laplacian filter
-                              !! 2 - Bilaplacian filter
   integer   :: Stress_iter    !< Number of smoothing passes for the Stress tensor components
                               !! in ZB model.
-  integer   :: Stress_order   !< The scale selectivity of the smoothing filter
-                              !! 1 - Laplacian filter
-                              !! 2 - Bilaplacian filter
-  integer   :: ssd_iter       !< Hyperviscosity parameter. Defines the number of sharpening passes
-                              !! in Laplacian viscosity model:
-                              !! -1: hyperviscosity is off
-                              !!  0: Laplacian viscosity
-                              !!  9: (Laplacian)^10 viscosity, ...
-  real      :: ssd_bound_coef !< The non-dimensional damping coefficient of the grid harmonic
-                              !! by hyperviscous dissipation:
-                              !! 0.0: no damping
-                              !! 1.0: grid harmonic is removed after a step in time
-  real      :: DT             !< The (baroclinic) dynamics time step [T ~> s]
+  real      :: Klower_R_diss  !< Attenuation of
+                              !! the ZB parameterization in the regions of
+                              !! geostrophically-unbalanced flows (Klower 2018, Juricke2020,2019)
+                              !! Subgrid stress is multiplied by 1/(1+(shear/(f*R_diss)))
+                              !! R_diss=-1: attenuation is not used; typical value R_diss=1.0 [nondim]
+  integer   :: Klower_shear   !< Type of expression for shear in Klower formula
+                              !! 0: sqrt(sh_xx**2 + sh_xy**2)
+                              !! 1: sqrt(sh_xx**2 + sh_xy**2 + vort_xy**2)
+  integer   :: Marching_halo  !< The number of filter iterations per a single MPI
+                              !! exchange
+
+  real, dimension(:,:,:), allocatable :: &
+          sh_xx,   & !< Horizontal tension (du/dx - dv/dy) in h (CENTER)
+                     !! points including metric terms [T-1 ~> s-1]
+          sh_xy,   & !< Horizontal shearing strain (du/dy + dv/dx) in q (CORNER)
+                     !! points including metric terms [T-1 ~> s-1]
+          vort_xy, & !< Vertical vorticity (dv/dx - du/dy) in q (CORNER)
+                     !! points including metric terms [T-1 ~> s-1]
+          hq         !< Thickness in CORNER points [H ~> m or kg m-2]
+
+  real, dimension(:,:,:), allocatable :: &
+          Txx,     & !< Subgrid stress xx component in h [L2 T-2 ~> m2 s-2]
+          Tyy,     & !< Subgrid stress yy component in h [L2 T-2 ~> m2 s-2]
+          Txy        !< Subgrid stress xy component in q [L2 T-2 ~> m2 s-2]
+
+  real, dimension(:,:), allocatable :: &
+          kappa_h, & !< Scaling coefficient in h points [L2 ~> m2]
+          kappa_q    !< Scaling coefficient in q points [L2 ~> m2]
+
+  real, allocatable ::    &
+        ICoriolis_h(:,:), &  !< Inverse Coriolis parameter at h points [T ~> s]
+        c_diss(:,:,:)        !< Attenuation parameter at h points
+                             !! (Klower 2018, Juricke2019,2020) [nondim]
+
+  real, dimension(:,:), allocatable ::    &
+        maskw_h,  & !< Mask of land point at h points multiplied by filter weight [nondim]
+        maskw_q     !< Same mask but for q points [nondim]
 
   type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
   !>@{ Diagnostic handles
   integer :: id_ZB2020u = -1, id_ZB2020v = -1, id_KE_ZB2020 = -1
-  integer :: id_maskT = -1
-  integer :: id_maskq = -1
-  integer :: id_S_11 = -1
-  integer :: id_S_22 = -1
-  integer :: id_S_12 = -1
+  integer :: id_Txx = -1
+  integer :: id_Tyy = -1
+  integer :: id_Txy = -1
+  integer :: id_cdiss = -1
+  !>@}
+
+  !>@{ CPU time clock IDs
+  integer :: id_clock_module
+  integer :: id_clock_copy
+  integer :: id_clock_cdiss
+  integer :: id_clock_stress
+  integer :: id_clock_divergence
+  integer :: id_clock_mpi
+  integer :: id_clock_filter
+  integer :: id_clock_post
+  integer :: id_clock_source
+  !>@}
+
+  !>@{ MPI group passes
+  type(group_pass_type) :: &
+      pass_Tq, pass_Th, &        !< handles for halo passes of Txy and Txx, Tyy
+      pass_xx, pass_xy           !< handles for halo passes of sh_xx and sh_xy, vort_xy
+  integer :: Stress_halo = -1, & !< The halo size in filter of the stress tensor
+             HPF_halo = -1       !< The halo size in filter of the velocity gradient
   !>@}
 
 end type ZB2020_CS
 
 contains
 
-!> Read parameters and register output fields
-!! used in Zanna_Bolton_2020().
-subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS, use_ZB2020)
+!> Read parameters, allocate and precompute arrays,
+!! register diagnosicts used in Zanna_Bolton_2020().
+subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
   type(time_type),         intent(in)    :: Time       !< The current model time.
+  type(ocean_grid_type),   intent(in)    :: G          !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file parser structure.
@@ -82,9 +121,18 @@ subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS, use_ZB2020)
   type(ZB2020_CS),         intent(inout) :: CS         !< ZB2020 control structure.
   logical,                 intent(out)   :: use_ZB2020 !< If true, turns on ZB scheme.
 
+  real :: subroundoff_Cor     ! A negligible parameter which avoids division by zero
+                              ! but small compared to Coriolis parameter [T-1 ~> s-1]
+
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: i, j
+
   ! This include declares and sets the variable "version".
 #include "version_variable.h"
   character(len=40)  :: mdl = "MOM_Zanna_Bolton" ! This module's name.
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   call log_version(param_file, mdl, version, "")
 
@@ -95,7 +143,7 @@ subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS, use_ZB2020)
 
   call get_param(param_file, mdl, "ZB_SCALING", CS%amplitude, &
                  "The nondimensional scaling factor in ZB model, " //&
-                 "typically 0.1 - 10.", units="nondim", default=0.3)
+                 "typically 0.5-2.5", units="nondim", default=0.5)
 
   call get_param(param_file, mdl, "ZB_TRACE_MODE", CS%ZB_type, &
                  "Select how to compute the trace part of ZB model:\n" //&
@@ -108,59 +156,31 @@ subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS, use_ZB2020)
                  "\t 0 - non-conservative scheme\n" //&
                  "\t 1 - conservative scheme for deviatoric component", default=1)
 
-  call get_param(param_file, mdl, "VG_SMOOTH_PASS", CS%LPF_iter, &
-                 "Number of smoothing passes for the Velocity Gradient (VG) components " //&
-                 "in ZB model.", default=0)
-
-  call get_param(param_file, mdl, "VG_SMOOTH_SEL", CS%LPF_order, &
-                 "The scale selectivity of the smoothing filter " //&
-                 "for VG components:\n" //&
-                 "\t 1 - Laplacian filter\n" //&
-                 "\t 2 - Bilaplacian filter, ...", &
-                 default=1, do_not_log = CS%LPF_iter==0)
-
   call get_param(param_file, mdl, "VG_SHARP_PASS", CS%HPF_iter, &
                 "Number of sharpening passes for the Velocity Gradient (VG) components " //&
                 "in ZB model.", default=0)
-
-  call get_param(param_file, mdl, "VG_SHARP_SEL", CS%HPF_order, &
-                "The scale selectivity of the sharpening filter " //&
-                "for VG components:\n" //&
-                "\t 1 - Laplacian filter\n" //&
-                "\t 2 - Bilaplacian filter,...", &
-                default=1, do_not_log = CS%HPF_iter==0)
 
   call get_param(param_file, mdl, "STRESS_SMOOTH_PASS", CS%Stress_iter, &
                  "Number of smoothing passes for the Stress tensor components " //&
                  "in ZB model.", default=0)
 
-  call get_param(param_file, mdl, "STRESS_SMOOTH_SEL", CS%Stress_order, &
-                "The scale selectivity of the smoothing filter " //&
-                "for the Stress tensor components:\n" //&
-                "\t 1 - Laplacian filter\n" //&
-                "\t 2 - Bilaplacian filter,...", &
-                default=1, do_not_log = CS%Stress_iter==0)
+  call get_param(param_file, mdl, "ZB_KLOWER_R_DISS", CS%Klower_R_diss, &
+                 "Attenuation of " //&
+                 "the ZB parameterization in the regions of " //&
+                 "geostrophically-unbalanced flows (Klower 2018, Juricke2020,2019). " //&
+                 "Subgrid stress is multiplied by 1/(1+(shear/(f*R_diss))):\n" //&
+                 "\t R_diss=-1. - attenuation is not used\n\t R_diss= 1. - typical value", &
+                 units="nondim", default=-1.)
 
-  call get_param(param_file, mdl, "ZB_HYPERVISC", CS%ssd_iter, &
-                 "Select an additional hyperviscosity to stabilize the ZB model:\n" //&
-                 "\t 0  - off\n" //&
-                 "\t 1  - Laplacian viscosity\n" //&
-                 "\t 10 - (Laplacian)**10 viscosity, ...", &
-                 default=0)
-                 ! Convert to the number of sharpening passes
-                 ! applied to the Laplacian viscosity model
-                 CS%ssd_iter = CS%ssd_iter-1
+  call get_param(param_file, mdl, "ZB_KLOWER_SHEAR", CS%Klower_shear, &
+                 "Type of expression for shear in Klower formula:\n" //&
+                 "\t 0: sqrt(sh_xx**2 + sh_xy**2)\n" //&
+                 "\t 1: sqrt(sh_xx**2 + sh_xy**2 + vort_xy**2)", &
+                 default=1, do_not_log=.not.CS%Klower_R_diss>0)
 
-  call get_param(param_file, mdl, "HYPVISC_GRID_DAMP", CS%ssd_bound_coef, &
-                 "The non-dimensional damping coefficient of the grid harmonic " //&
-                 "by hyperviscous dissipation:\n" //&
-                 "\t 0.0 - no damping\n" //&
-                 "\t 1.0 - grid harmonic is removed after a step in time", &
-                 units="nondim", default=0.2, do_not_log = CS%ssd_iter==-1)
-
-  call get_param(param_file, mdl, "DT", CS%dt, &
-                 "The (baroclinic) dynamics time step.", units="s", scale=US%s_to_T, &
-                 fail_if_missing=.true.)
+  call get_param(param_file, mdl, "ZB_MARCHING_HALO", CS%Marching_halo, &
+                 "The number of filter iterations per single MPI " //&
+                 "exchange", default=4, do_not_log=(CS%Stress_iter==0).and.(CS%HPF_iter==0))
 
   ! Register fields for output from this module.
   CS%diag => diag
@@ -173,726 +193,832 @@ subroutine ZB_2020_init(Time, GV, US, param_file, diag, CS, use_ZB2020)
       'Kinetic Energy Source from Horizontal Viscosity', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
 
-  CS%id_maskT  = register_diag_field('ocean_model', 'maskT', diag%axesTL, Time, &
-      'Mask of wet points in T (CENTER) points', '1', conversion=1.)
+  CS%id_Txx = register_diag_field('ocean_model', 'Txx', diag%axesTL, Time, &
+      'Diagonal term (Txx) in the ZB stress tensor', 'm2 s-2', conversion=US%L_T_to_m_s**2)
 
-  CS%id_maskq  = register_diag_field('ocean_model', 'maskq', diag%axesBL, Time, &
-      'Mask of wet points in q (CORNER) points', '1', conversion=1.)
+  CS%id_Tyy = register_diag_field('ocean_model', 'Tyy', diag%axesTL, Time, &
+      'Diagonal term (Tyy) in the ZB stress tensor', 'm2 s-2', conversion=US%L_T_to_m_s**2)
 
-  ! action of filter on momentum flux
-  CS%id_S_11 = register_diag_field('ocean_model', 'S_11', diag%axesTL, Time, &
-      'Diagonal term (11) in the ZB stress tensor', 'm2s-2', conversion=US%L_T_to_m_s**2)
+  CS%id_Txy = register_diag_field('ocean_model', 'Txy', diag%axesBL, Time, &
+      'Off-diagonal term (Txy) in the ZB stress tensor', 'm2 s-2', conversion=US%L_T_to_m_s**2)
 
-  CS%id_S_22 = register_diag_field('ocean_model', 'S_22', diag%axesTL, Time, &
-      'Diagonal term (22) in the ZB stress tensor', 'm2s-2', conversion=US%L_T_to_m_s**2)
+  if (CS%Klower_R_diss > 0) then
+    CS%id_cdiss = register_diag_field('ocean_model', 'c_diss', diag%axesTL, Time, &
+        'Klower (2018) attenuation coefficient', 'nondim')
+  endif
 
-  CS%id_S_12 = register_diag_field('ocean_model', 'S_12', diag%axesBL, Time, &
-      'Off-diagonal term in the ZB stress tensor', 'm2s-2', conversion=US%L_T_to_m_s**2)
+  ! Clock IDs
+  ! Only module is measured with syncronization. While smaller
+  ! parts are measured without - because these are nested clocks.
+  CS%id_clock_module = cpu_clock_id('(Ocean Zanna-Bolton-2020)', grain=CLOCK_MODULE)
+  CS%id_clock_copy = cpu_clock_id('(ZB2020 copy fields)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_cdiss = cpu_clock_id('(ZB2020 compute c_diss)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_stress = cpu_clock_id('(ZB2020 compute stress)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_divergence = cpu_clock_id('(ZB2020 compute divergence)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_mpi = cpu_clock_id('(ZB2020 filter MPI exchanges)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_filter = cpu_clock_id('(ZB2020 filter no MPI)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_post = cpu_clock_id('(ZB2020 post data)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_source = cpu_clock_id('(ZB2020 compute energy source)', grain=CLOCK_ROUTINE, sync=.false.)
 
-end subroutine ZB_2020_init
+  ! Allocate memory
+  ! We set the stress tensor and velocity gradient tensor to zero
+  ! with full halo because they potentially may be filtered
+  ! with marching halo algorithm
+  allocate(CS%sh_xx(SZI_(G),SZJ_(G),SZK_(GV)), source=0.)
+  allocate(CS%sh_xy(SZIB_(G),SZJB_(G),SZK_(GV)), source=0.)
+  allocate(CS%vort_xy(SZIB_(G),SZJB_(G),SZK_(GV)), source=0.)
+  allocate(CS%hq(SZIB_(G),SZJB_(G),SZK_(GV)))
+
+  allocate(CS%Txx(SZI_(G),SZJ_(G),SZK_(GV)), source=0.)
+  allocate(CS%Tyy(SZI_(G),SZJ_(G),SZK_(GV)), source=0.)
+  allocate(CS%Txy(SZIB_(G),SZJB_(G),SZK_(GV)), source=0.)
+  allocate(CS%kappa_h(SZI_(G),SZJ_(G)))
+  allocate(CS%kappa_q(SZIB_(G),SZJB_(G)))
+
+  ! Precomputing the scaling coefficient
+  ! Mask is included to automatically satisfy B.C.
+  do j=js-1,je+1 ; do i=is-1,ie+1
+    CS%kappa_h(i,j) = -CS%amplitude * G%areaT(i,j) * G%mask2dT(i,j)
+  enddo; enddo
+
+  do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+    CS%kappa_q(I,J) = -CS%amplitude * G%areaBu(I,J) * G%mask2dBu(I,J)
+  enddo; enddo
+
+  if (CS%Klower_R_diss > 0) then
+    allocate(CS%ICoriolis_h(SZI_(G),SZJ_(G)))
+    allocate(CS%c_diss(SZI_(G),SZJ_(G),SZK_(GV)))
+
+    subroundoff_Cor = 1e-30 * US%T_to_s
+    ! Precomputing 1/(f * R_diss)
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      CS%ICoriolis_h(i,j) = 1. / ((abs(0.25 * ((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) &
+                          + (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1)))) + subroundoff_Cor) &
+                          * CS%Klower_R_diss)
+    enddo; enddo
+  endif
+
+  if (CS%Stress_iter > 0 .or. CS%HPF_iter > 0) then
+    ! Include 1/16. factor to the mask for filter implementation
+    allocate(CS%maskw_h(SZI_(G),SZJ_(G))); CS%maskw_h(:,:) = G%mask2dT(:,:) * 0.0625
+    allocate(CS%maskw_q(SZIB_(G),SZJB_(G))); CS%maskw_q(:,:) = G%mask2dBu(:,:) * 0.0625
+  endif
+
+  ! Initialize MPI group passes
+  if (CS%Stress_iter > 0) then
+    ! reduce size of halo exchange accordingly to
+    ! Marching halo, number of iterations and the array size
+    ! But let exchange width be at least 1
+    CS%Stress_halo = max(min(CS%Marching_halo, CS%Stress_iter, &
+                             G%Domain%nihalo, G%Domain%njhalo), 1)
+
+    call create_group_pass(CS%pass_Tq, CS%Txy, G%Domain, halo=CS%Stress_halo, &
+      position=CORNER)
+    call create_group_pass(CS%pass_Th, CS%Txx, G%Domain, halo=CS%Stress_halo)
+    call create_group_pass(CS%pass_Th, CS%Tyy, G%Domain, halo=CS%Stress_halo)
+  endif
+
+  if (CS%HPF_iter > 0) then
+    ! The minimum halo size is 2 because it is requirement for the
+    ! outputs of function filter_velocity_gradients
+    CS%HPF_halo = max(min(CS%Marching_halo, CS%HPF_iter, &
+                          G%Domain%nihalo, G%Domain%njhalo), 2)
+
+    call create_group_pass(CS%pass_xx, CS%sh_xx, G%Domain, halo=CS%HPF_halo)
+    call create_group_pass(CS%pass_xy, CS%sh_xy, G%Domain, halo=CS%HPF_halo, &
+      position=CORNER)
+    call create_group_pass(CS%pass_xy, CS%vort_xy, G%Domain, halo=CS%HPF_halo, &
+      position=CORNER)
+  endif
+
+end subroutine ZB2020_init
+
+!> Deallocate any variables allocated in ZB_2020_init
+subroutine ZB2020_end(CS)
+  type(ZB2020_CS), intent(inout) :: CS  !< ZB2020 control structure.
+
+  deallocate(CS%sh_xx)
+  deallocate(CS%sh_xy)
+  deallocate(CS%vort_xy)
+  deallocate(CS%hq)
+
+  deallocate(CS%Txx)
+  deallocate(CS%Tyy)
+  deallocate(CS%Txy)
+  deallocate(CS%kappa_h)
+  deallocate(CS%kappa_q)
+
+  if (CS%Klower_R_diss > 0) then
+    deallocate(CS%ICoriolis_h)
+    deallocate(CS%c_diss)
+  endif
+
+  if (CS%Stress_iter > 0 .or. CS%HPF_iter > 0) then
+    deallocate(CS%maskw_h)
+    deallocate(CS%maskw_q)
+  endif
+
+end subroutine ZB2020_end
+
+!> Save precomputed velocity gradients and thickness
+!! from the horizontal eddy viscosity module
+!! We save as much halo for velocity gradients as possible
+!! In symmetric (preferable) memory model: halo 2 for sh_xx
+!! and halo 1 for sh_xy and vort_xy
+!! We apply zero boundary conditions to velocity gradients
+!! which is required for filtering operations
+subroutine ZB2020_copy_gradient_and_thickness(sh_xx, sh_xy, vort_xy, hq, &
+                                       G, GV, CS, k)
+  type(ocean_grid_type),         intent(in)    :: G      !< The ocean's grid structure.
+  type(verticalGrid_type),       intent(in)    :: GV     !< The ocean's vertical grid structure.
+  type(ZB2020_CS),               intent(inout) :: CS     !< ZB2020 control structure.
+
+  real, dimension(SZIB_(G),SZJB_(G)), &
+    intent(in) :: sh_xy       !< horizontal shearing strain (du/dy + dv/dx)
+                              !! including metric terms [T-1 ~> s-1]
+  real, dimension(SZIB_(G),SZJB_(G)), &
+    intent(in) :: vort_xy     !< Vertical vorticity (dv/dx - du/dy)
+                              !! including metric terms [T-1 ~> s-1]
+  real, dimension(SZIB_(G),SZJB_(G)), &
+    intent(in) :: hq          !< harmonic mean of the harmonic means
+                              !! of the u- & v point thicknesses [H ~> m or kg m-2]
+
+  real, dimension(SZI_(G),SZJ_(G)), &
+    intent(in) :: sh_xx       !< horizontal tension (du/dx - dv/dy)
+                              !! including metric terms [T-1 ~> s-1]
+
+  integer, intent(in) :: k    !< The vertical index of the layer to be passed.
+
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  integer :: i, j
+
+  call cpu_clock_begin(CS%id_clock_copy)
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  do J=js-1,Jeq ; do I=is-1,Ieq
+    CS%hq(I,J,k) = hq(I,J)
+  enddo; enddo
+
+  ! No physical B.C. is required for
+  ! sh_xx in ZB2020. However, filtering
+  ! may require BC
+  do j=Jsq-1,je+2 ; do i=Isq-1,ie+2
+    CS%sh_xx(i,j,k) = sh_xx(i,j) * G%mask2dT(i,j)
+  enddo ; enddo
+
+  ! We multiply by mask to remove
+  ! implicit dependence on CS%no_slip
+  ! flag in hor_visc module
+  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+    CS%sh_xy(I,J,k) = sh_xy(I,J) * G%mask2dBu(I,J)
+  enddo; enddo
+
+  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+    CS%vort_xy(I,J,k) = vort_xy(I,J) * G%mask2dBu(I,J)
+  enddo; enddo
+
+  call cpu_clock_end(CS%id_clock_copy)
+
+end subroutine ZB2020_copy_gradient_and_thickness
 
 !> Baroclinic Zanna-Bolton-2020 parameterization, see
 !! eq. 6 in https://laurezanna.github.io/files/Zanna-Bolton-2020.pdf
-!! We collect all contributions to a tensor S, with components:
-!! (S_11, S_12;
-!!  S_12, S_22)
-!! Which consists of the deviatoric and trace components, respectively:
-!! S =   (-vort_xy * sh_xy, vort_xy * sh_xx;
-!!         vort_xy * sh_xx,  vort_xy * sh_xy) +
-!! 1/2 * (vort_xy^2 + sh_xy^2 + sh_xx^2, 0;
-!!        0, vort_xy^2 + sh_xy^2 + sh_xx^2)
-!! Where:
-!! vort_xy = dv/dx - du/dy - relative vorticity
-!! sh_xy   = dv/dx + du/dy - shearing deformation (or horizontal shear strain)
-!! sh_xx   = du/dx - dv/dy - stretching deformation (or horizontal tension)
-!! Update of the governing equations:
-!! (du/dt, dv/dt) = k_BC * div(S)
-!! Where:
-!! k_BC = - amplitude * grid_cell_area
-!! amplitude = 0.1..10 (approx)
-
-subroutine Zanna_Bolton_2020(u, v, h, fx, fy, G, GV, CS)
-  type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
-  type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
-  type(ZB2020_CS),               intent(in)  :: CS     !< ZB2020 control structure.
+!! We compute the lateral stress tensor according to ZB2020 model
+!! and update the acceleration due to eddy viscosity (diffu, diffv)
+!! as follows:
+!! diffu = diffu + ZB2020u
+!! diffv = diffv + ZB2020v
+subroutine ZB2020_lateral_stress(u, v, h, diffu, diffv, G, GV, CS, &
+                             dx2h, dy2h, dx2q, dy2q)
+  type(ocean_grid_type),         intent(in)    :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),       intent(in)    :: GV !< The ocean's vertical grid structure.
+  type(ZB2020_CS),               intent(inout) :: CS !< ZB2020 control structure.
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                                 intent(in)    :: u    !< The zonal velocity [L T-1 ~> m s-1].
+                                 intent(in)    :: u  !< The zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                                 intent(in)    :: v    !< The meridional velocity [L T-1 ~> m s-1].
+                                 intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
-                                 intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2].
+                                 intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                                 intent(out) :: fx     !< Zonal acceleration due to convergence of
-                                                       !! along-coordinate stress tensor [L T-2 ~> m s-2]
+                        intent(inout) :: diffu   !< Zonal acceleration due to eddy viscosity.
+                                                 !! It is updated with ZB closure [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                                 intent(out) :: fy     !< Meridional acceleration due to convergence
-                                                       !! of along-coordinate stress tensor [L T-2 ~> m s-2]
+                        intent(inout) :: diffv   !< Meridional acceleration due to eddy viscosity.
+                                                 !! It is updated with ZB closure [L T-2 ~> m s-2]
 
-  ! Arrays defined in h (CENTER) points
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    dx_dyT, &          ! dx/dy at h points [nondim]
-    dy_dxT, &          ! dy/dx at h points [nondim]
-    dx2h, &            ! dx^2 at h points [L2 ~> m2]
-    dy2h, &            ! dy^2 at h points [L2 ~> m2]
-    dudx, dvdy, &      ! Components in the horizontal tension [T-1 ~> s-1]
-    sh_xx, &           ! Horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
-    vort_xy_center, &  ! Vorticity interpolated to the center [T-1 ~> s-1]
-    sh_xy_center, &    ! Shearing strain interpolated to the center [T-1 ~> s-1]
-    S_11, S_22, &      ! Diagonal terms in the ZB stress tensor:
-                       ! Above Line 539 [L2 T-2 ~> m2 s-2]
-                       ! Below Line 539 it is layer-integrated [H L2 T-2 ~> m3 s-2 or kg s-2]
-    ssd_11, &          ! Diagonal component of hyperviscous stress [L2 T-2 ~> m2 s-2]
-    ssd_11_coef, &     ! Viscosity coefficient in hyperviscous stress in center points
-                       ! [L2 T-1 ~> m2 s-1]
-    mask_T             ! Mask of wet points in T (CENTER) points [nondim]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: dx2h    !< dx^2 at h points [L2 ~> m2]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in) :: dy2h    !< dy^2 at h points [L2 ~> m2]
 
-  ! Arrays defined in q (CORNER) points
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
-    dx_dyBu, &         ! dx/dy at q points [nondim]
-    dy_dxBu, &         ! dy/dx at q points [nondim]
-    dx2q, &            ! dx^2 at q points [L2 ~> m2]
-    dy2q, &            ! dy^2 at q points [L2 ~> m2]
-    dvdx, dudy, &      ! Components in the shearing strain [T-1 ~> s-1]
-    vort_xy, &         ! Vertical vorticity (dv/dx - du/dy) including metric terms [T-1 ~> s-1]
-    sh_xy, &           ! Horizontal shearing strain (du/dy + dv/dx) including metric terms [T-1 ~> s-1]
-    sh_xx_corner, &    ! Horizontal tension interpolated to the corner [T-1 ~> s-1]
-    S_12, &            ! Off-diagonal term in the ZB stress tensor:
-                       ! Above Line 539 [L2 T-2 ~> m2 s-2]
-                       ! Below Line 539 it is layer-integrated [H L2 T-2 ~> m3 s-2 or kg s-2]
-    ssd_12, &          ! Off-diagonal component of hyperviscous stress [L2 T-2 ~> m2 s-2]
-    ssd_12_coef, &     ! Viscosity coefficient in hyperviscous stress in corner points
-                       ! [L2 T-1 ~> m2 s-1]
-    mask_q             ! Mask of wet points in q (CORNER) points [nondim]
-
-  ! Thickness arrays for computing the horizontal divergence of the stress tensor
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
-    hq                 ! Thickness in CORNER points [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G))  :: &
-    h_u                ! Thickness interpolated to u points [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJB_(G))  :: &
-    h_v                ! Thickness interpolated to v points [H ~> m or kg m-2].
-
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    mask_T_3d, &       ! Mask of wet points in T (CENTER) points [nondim]
-    S_11_3d, S_22_3d   ! Diagonal terms in the ZB stress tensor [L2 T-2 ~> m2 s-2]
-
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
-    mask_q_3d, &       ! Mask of wet points in q (CORNER) points [nondim]
-    S_12_3d            ! Off-diagonal term in the ZB stress tensor [L2 T-2 ~> m2 s-2]
-
-  real :: h_neglect    ! Thickness so small it can be lost in roundoff and so neglected [H ~> m or kg m-2]
-  real :: h_neglect3   ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
-  real :: h2uq, h2vq   ! Temporary variables [H2 ~> m2 or kg2 m-4].
-
-  real :: sum_sq       ! 1/2*(vort_xy^2 + sh_xy^2 + sh_xx^2) [T-2 ~> s-2]
-  real :: vort_sh      ! vort_xy*sh_xy [T-2 ~> s-2]
-
-  real :: k_bc         ! Constant in from of the parameterization [L2 ~> m2]
-                       ! Related to the amplitude as follows:
-                       ! k_bc = - amplitude * grid_cell_area < 0
+  real, dimension(SZIB_(G),SZJB_(G)), intent(in) :: dx2q    !< dx^2 at q points [L2 ~> m2]
+  real, dimension(SZIB_(G),SZJB_(G)), intent(in) :: dy2q    !< dy^2 at q points [L2 ~> m2]
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k, n
 
-  ! Line 407 of MOM_hor_visc.F90
+  call cpu_clock_begin(CS%id_clock_module)
+
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  h_neglect  = GV%H_subroundoff ! Line 410 on MOM_hor_visc.F90
-  h_neglect3 = h_neglect**3
+  ! Compute attenuation if specified
+  call compute_c_diss(G, GV, CS)
 
-  fx(:,:,:) = 0.
-  fy(:,:,:) = 0.
+  ! Sharpen velocity gradients if specified
+  call filter_velocity_gradients(G, GV, CS)
 
-  ! Calculate metric terms (line 2119 of MOM_hor_visc.F90)
-  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
-    dx2q(I,J) = G%dxBu(I,J)*G%dxBu(I,J) ; dy2q(I,J) = G%dyBu(I,J)*G%dyBu(I,J)
-    DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
-  enddo ; enddo
+  ! Compute the stress tensor given the
+  ! (optionally sharpened) velocity gradients
+  call compute_stress(G, GV, CS)
 
-  ! Calculate metric terms (line 2122 of MOM_hor_visc.F90)
-  do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-    dx2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; dy2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
-    DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
-  enddo ; enddo
+  ! Smooth the stress tensor if specified
+  call filter_stress(G, GV, CS)
 
-  if (CS%ssd_iter > -1) then
-    ssd_11_coef(:,:) = 0.
-    ssd_12_coef(:,:) = 0.
-    do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      ssd_11_coef(i,j) = ((CS%ssd_bound_coef * 0.25) / CS%DT) &
-                       * ((dx2h(i,j) * dy2h(i,j)) / (dx2h(i,j) + dy2h(i,j)))
-    enddo; enddo
+  ! Update the acceleration due to eddy viscosity (diffu, diffv)
+  ! with the ZB2020 lateral parameterization
+  call compute_stress_divergence(u, v, h, diffu, diffv,    &
+                                 dx2h, dy2h, dx2q, dy2q, &
+                                 G, GV, CS)
 
-    do J=js-1,Jeq ; do I=is-1,Ieq
-      ssd_12_coef(I,J) = ((CS%ssd_bound_coef * 0.25) / CS%DT) &
-                       * ((dx2q(I,J) * dy2q(I,J)) / (dx2q(I,J) + dy2q(I,J)))
-    enddo; enddo
-  endif
+  call cpu_clock_begin(CS%id_clock_post)
+  if (CS%id_Txx>0)       call post_data(CS%id_Txx, CS%Txx, CS%diag)
+  if (CS%id_Tyy>0)       call post_data(CS%id_Tyy, CS%Tyy, CS%diag)
+  if (CS%id_Txy>0)       call post_data(CS%id_Txy, CS%Txy, CS%diag)
+
+  if (CS%id_cdiss>0)     call post_data(CS%id_cdiss, CS%c_diss, CS%diag)
+  call cpu_clock_end(CS%id_clock_post)
+
+  call cpu_clock_end(CS%id_clock_module)
+
+end subroutine ZB2020_lateral_stress
+
+!> Compute the attenuation parameter similarly
+!! to Klower2018, Juricke2019,2020: c_diss = 1/(1+(shear/(f*R_diss)))
+!! where shear = sqrt(sh_xx**2 + sh_xy**2) or shear = sqrt(sh_xx**2 + sh_xy**2 + vort_xy**2)
+!! In symmetric memory model, components of velocity gradient tensor
+!! should have halo 1 and zero boundary conditions. The result: c_diss having halo 1.
+subroutine compute_c_diss(G, GV, CS)
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
+
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, n
+
+  real :: shear ! Shear in Klower2018 formula at h points [T-1 ~> s-1]
+
+  if (.not. CS%Klower_R_diss > 0) &
+    return
+
+  call cpu_clock_begin(CS%id_clock_cdiss)
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   do k=1,nz
 
-    sh_xx(:,:) = 0.
-    sh_xy(:,:) = 0.
-    vort_xy(:,:) = 0.
-    S_12(:,:) = 0.
-    S_11(:,:) = 0.
-    S_22(:,:) = 0.
-    ssd_11(:,:) = 0.
-    ssd_12(:,:) = 0.
+    ! sqrt(sh_xx**2 + sh_xy**2)
+    if (CS%Klower_shear == 0) then
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        shear = sqrt(CS%sh_xx(i,j,k)**2 + 0.25 * (          &
+          (CS%sh_xy(I-1,J-1,k)**2 + CS%sh_xy(I,J  ,k)**2)   &
+        + (CS%sh_xy(I-1,J  ,k)**2 + CS%sh_xy(I,J-1,k)**2)   &
+        ))
+        CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
+      enddo; enddo
 
-    ! Calculate horizontal tension (line 590 of MOM_hor_visc.F90)
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      dudx(i,j) = DY_dxT(i,j)*(G%IdyCu(I,j) * u(I,j,k) - &
-                                  G%IdyCu(I-1,j) * u(I-1,j,k))
-      dvdy(i,j) = DX_dyT(i,j)*(G%IdxCv(i,J) * v(i,J,k) - &
-                                  G%IdxCv(i,J-1) * v(i,J-1,k))
-      sh_xx(i,j) = dudx(i,j) - dvdy(i,j) ! center of the cell
+    ! sqrt(sh_xx**2 + sh_xy**2 + vort_xy**2)
+    elseif (CS%Klower_shear == 1) then
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        shear = sqrt(CS%sh_xx(i,j,k)**2 + 0.25 * (             &
+          ((CS%sh_xy(I-1,J-1,k)**2 + CS%vort_xy(I-1,J-1,k)**2) &
+        +  (CS%sh_xy(I,J,k)**2     + CS%vort_xy(I,J,k)**2))    &
+        + ((CS%sh_xy(I-1,J,k)**2   + CS%vort_xy(I-1,J,k)**2)   &
+        +  (CS%sh_xy(I,J-1,k)**2   + CS%vort_xy(I,J-1,k)**2))  &
+        ))
+        CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
+      enddo; enddo
+    endif
+
+  enddo ! end of k loop
+
+  call cpu_clock_end(CS%id_clock_cdiss)
+
+end subroutine compute_c_diss
+
+!> Compute stress tensor T =
+!! (Txx, Txy;
+!!  Txy, Tyy)
+!! Which consists of the deviatoric and trace components, respectively:
+!! T =   (-vort_xy * sh_xy, vort_xy * sh_xx;
+!!         vort_xy * sh_xx,  vort_xy * sh_xy) +
+!! 1/2 * (vort_xy^2 + sh_xy^2 + sh_xx^2, 0;
+!!        0, vort_xy^2 + sh_xy^2 + sh_xx^2)
+!! This stress tensor is multiplied by precomputed kappa=-CS%amplitude * G%area:
+!! T -> T * kappa
+!! The sign of the stress tensor is such that (neglecting h):
+!! (du/dt, dv/dt) = div(T)
+!! In symmetric memory model: sh_xy and vort_xy should have halo 1
+!! and zero B.C.; sh_xx should have halo 2 and zero B.C.
+!! Result: Txx, Tyy, Txy with halo 1 and zero B.C.
+subroutine compute_stress(G, GV, CS)
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
+
+  real :: &
+    vort_xy_h, &  ! Vorticity interpolated to h point [T-1 ~> s-1]
+    sh_xy_h       ! Shearing strain interpolated to h point [T-1 ~> s-1]
+
+  real :: &
+    sh_xx_q       ! Horizontal tension interpolated to q point [T-1 ~> s-1]
+
+  ! Local variables
+  real :: sum_sq  ! 1/2*(vort_xy^2 + sh_xy^2 + sh_xx^2) in h point [T-2 ~> s-2]
+  real :: vort_sh ! vort_xy*sh_xy in h point [T-2 ~> s-2]
+
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, n
+
+  logical :: sum_sq_flag ! Flag to compute trace
+  logical :: vort_sh_scheme_0, vort_sh_scheme_1 ! Flags to compute diagonal trace-free part
+
+  call cpu_clock_begin(CS%id_clock_stress)
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  sum_sq = 0.
+  vort_sh = 0.
+
+  sum_sq_flag = CS%ZB_type /= 1
+  vort_sh_scheme_0 = CS%ZB_type /= 2 .and. CS%ZB_cons == 0
+  vort_sh_scheme_1 = CS%ZB_type /= 2 .and. CS%ZB_cons == 1
+
+  do k=1,nz
+
+    ! compute Txx, Tyy tensor
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      ! It is assumed that B.C. is applied to sh_xy and vort_xy
+      sh_xy_h = 0.25 * ( (CS%sh_xy(I-1,J-1,k) + CS%sh_xy(I,J,k)) &
+                       + (CS%sh_xy(I-1,J,k) + CS%sh_xy(I,J-1,k)) )
+
+      vort_xy_h = 0.25 * ( (CS%vort_xy(I-1,J-1,k) + CS%vort_xy(I,J,k)) &
+                         + (CS%vort_xy(I-1,J,k) + CS%vort_xy(I,J-1,k)) )
+
+      if (sum_sq_flag) then
+        sum_sq = 0.5 *                          &
+          ((vort_xy_h * vort_xy_h               &
+           + sh_xy_h * sh_xy_h)                 &
+           + CS%sh_xx(i,j,k) * CS%sh_xx(i,j,k)  &
+            )
+      endif
+
+      if (vort_sh_scheme_0) &
+        vort_sh = vort_xy_h * sh_xy_h
+
+      if (vort_sh_scheme_1) then
+        ! It is assumed that B.C. is applied to sh_xy and vort_xy
+        vort_sh = 0.25 * (                                                      &
+          ((G%areaBu(I-1,J-1) * CS%vort_xy(I-1,J-1,k)) * CS%sh_xy(I-1,J-1,k)  + &
+           (G%areaBu(I  ,J  ) * CS%vort_xy(I  ,J  ,k)) * CS%sh_xy(I  ,J  ,k)) + &
+          ((G%areaBu(I-1,J  ) * CS%vort_xy(I-1,J  ,k)) * CS%sh_xy(I-1,J  ,k)  + &
+           (G%areaBu(I  ,J-1) * CS%vort_xy(I  ,J-1,k)) * CS%sh_xy(I  ,J-1,k))   &
+          ) * G%IareaT(i,j)
+      endif
+
+      ! B.C. is already applied in kappa_h
+      CS%Txx(i,j,k) = CS%kappa_h(i,j) * (- vort_sh + sum_sq)
+      CS%Tyy(i,j,k) = CS%kappa_h(i,j) * (+ vort_sh + sum_sq)
+
     enddo ; enddo
 
-    ! Components for the shearing strain (line 599 of MOM_hor_visc.F90)
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-      dvdx(I,J) = DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
-      dudy(I,J) = DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
-    enddo ; enddo
-
-    ! Shearing strain with free-slip B.C. (line 751 of MOM_hor_visc.F90)
-    ! We use free-slip as cannot guarantee that non-diagonal stress
-    ! will accelerate or decelerate currents
-    ! Note that as there is no stencil operator, set of indices
-    ! is identical to the previous loop, compared to MOM_hor_visc.F90
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-      sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) ) ! corner of the cell
-    enddo ; enddo
-
-    ! Relative vorticity with free-slip B.C. (line 789 of MOM_hor_visc.F90)
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-      vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) ) ! corner of the cell
-    enddo ; enddo
-
-    call compute_masks(G, GV, h, mask_T, mask_q, k)
-    if (CS%id_maskT>0) then
+    ! Here we assume that Txy is initialized to zero
+    if (CS%ZB_type /= 2) then
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        mask_T_3d(i,j,k) = mask_T(i,j)
-      enddo; enddo
-    endif
+        sh_xx_q = 0.25 * ( (CS%sh_xx(i+1,j+1,k) + CS%sh_xx(i,j,k)) &
+                         + (CS%sh_xx(i+1,j,k) + CS%sh_xx(i,j+1,k)))
+        ! B.C. is already applied in kappa_q
+        CS%Txy(I,J,k) = CS%kappa_q(I,J) * (CS%vort_xy(I,J,k) * sh_xx_q)
 
-    if (CS%id_maskq>0) then
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        mask_q_3d(i,j,k) = mask_q(i,j)
-      enddo; enddo
-    endif
-
-    ! Numerical scheme for ZB2020 requires
-    ! interpolation center <-> corner
-    ! This interpolation requires B.C.,
-    ! and that is why B.C. for Velocity Gradients should be
-    ! well defined
-    ! The same B.C. will be used by all filtering operators
-    do J=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
-      sh_xx(i,j) = sh_xx(i,j) * mask_T(i,j)
-    enddo ; enddo
-
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-      sh_xy(i,j) = sh_xy(i,j) * mask_q(i,j)
-      vort_xy(i,j) = vort_xy(i,j) * mask_q(i,j)
-    enddo ; enddo
-
-    if (CS%ssd_iter > -1) then
-      do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        ssd_11(i,j) = sh_xx(i,j) * ssd_11_coef(i,j)
-      enddo; enddo
-
-      do J=js-1,Jeq ; do I=is-1,Ieq
-        ssd_12(I,J) = sh_xy(I,J) * ssd_12_coef(I,J)
-      enddo; enddo
-
-      if (CS%ssd_iter > 0) then
-        call filter(G, mask_T, mask_q, -1, CS%ssd_iter, T=ssd_11)
-        call filter(G, mask_T, mask_q, -1, CS%ssd_iter, q=ssd_12)
-      endif
-    endif
-
-    call filter(G, mask_T, mask_q, -CS%HPF_iter, CS%HPF_order, T=sh_xx)
-    call filter(G, mask_T, mask_q, +CS%LPF_iter, CS%LPF_order, T=sh_xx)
-
-    call filter(G, mask_T, mask_q, -CS%HPF_iter, CS%HPF_order, q=sh_xy)
-    call filter(G, mask_T, mask_q, +CS%LPF_iter, CS%LPF_order, q=sh_xy)
-
-    call filter(G, mask_T, mask_q, -CS%HPF_iter, CS%HPF_order, q=vort_xy)
-    call filter(G, mask_T, mask_q, +CS%LPF_iter, CS%LPF_order, q=vort_xy)
-
-    ! Corner to center interpolation (line 901 of MOM_hor_visc.F90)
-    ! lower index as in loop for sh_xy, but minus 1
-    ! upper index is identical
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      sh_xy_center(i,j) = 0.25 * ( (sh_xy(I-1,J-1) + sh_xy(I,J)) &
-                                 + (sh_xy(I-1,J) + sh_xy(I,J-1)) )
-      vort_xy_center(i,j) = 0.25 * ( (vort_xy(I-1,J-1) + vort_xy(I,J)) &
-                                   + (vort_xy(I-1,J) + vort_xy(I,J-1)) )
-    enddo ; enddo
-
-    ! Center to corner interpolation
-    ! lower index as in loop for sh_xx
-    ! upper index as in the same loop, but minus 1
-    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-      sh_xx_corner(I,J) = 0.25 * ( (sh_xx(i+1,j+1) + sh_xx(i,j)) &
-                                 + (sh_xx(i+1,j) + sh_xx(i,j+1)))
-    enddo ; enddo
-
-    ! WITH land mask (line 622 of MOM_hor_visc.F90)
-    ! Use of mask eliminates dependence on the
-    ! values on land
-    do j=js-2,je+2 ; do I=Isq-1,Ieq+1
-      h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
-    enddo ; enddo
-    do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
-      h_v(i,J) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k))
-    enddo ; enddo
-
-    ! Line 1187 of MOM_hor_visc.F90
-    do J=js-1,Jeq ; do I=is-1,Ieq
-      h2uq = 4.0 * (h_u(I,j) * h_u(I,j+1))
-      h2vq = 4.0 * (h_v(i,J) * h_v(i+1,J))
-      hq(I,J) = (2.0 * (h2uq * h2vq)) &
-          / (h_neglect3 + (h2uq + h2vq) * ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
-    enddo ; enddo
-
-    ! Form S_11 and S_22 tensors
-    ! Indices - intersection of loops for
-    ! sh_xy_center and sh_xx
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      if (CS%ZB_type == 1) then
-        sum_sq = 0.
-      else
-        sum_sq = 0.5 * &
-        (vort_xy_center(i,j)**2 + sh_xy_center(i,j)**2 + sh_xx(i,j)**2)
-      endif
-
-      if (CS%ZB_type == 2) then
-        vort_sh = 0.
-      else
-        if (CS%ZB_cons == 1) then
-          vort_sh = 0.25 * (                                          &
-            (G%areaBu(I-1,J-1) * vort_xy(I-1,J-1) * sh_xy(I-1,J-1)  + &
-             G%areaBu(I  ,J  ) * vort_xy(I  ,J  ) * sh_xy(I  ,J  )) + &
-            (G%areaBu(I-1,J  ) * vort_xy(I-1,J  ) * sh_xy(I-1,J  )  + &
-             G%areaBu(I  ,J-1) * vort_xy(I  ,J-1) * sh_xy(I  ,J-1))   &
-            ) * G%IareaT(i,j)
-        else if (CS%ZB_cons == 0) then
-          vort_sh = vort_xy_center(i,j) * sh_xy_center(i,j)
-        endif
-      endif
-      k_bc = - CS%amplitude * G%areaT(i,j)
-      S_11(i,j) = k_bc * (- vort_sh + sum_sq)
-      S_22(i,j) = k_bc * (+ vort_sh + sum_sq)
-    enddo ; enddo
-
-    ! Form S_12 tensor
-    ! indices correspond to sh_xx_corner loop
-    do J=Jsq-1,Jeq ; do I=Isq-1,Ieq
-      if (CS%ZB_type == 2) then
-        vort_sh = 0.
-      else
-        vort_sh = vort_xy(I,J) * sh_xx_corner(I,J)
-      endif
-      k_bc = - CS%amplitude * G%areaBu(i,j)
-      S_12(I,J) = k_bc * vort_sh
-    enddo ; enddo
-
-    call filter(G, mask_T, mask_q, CS%Stress_iter, CS%Stress_order, T=S_11)
-    call filter(G, mask_T, mask_q, CS%Stress_iter, CS%Stress_order, T=S_22)
-    call filter(G, mask_T, mask_q, CS%Stress_iter, CS%Stress_order, q=S_12)
-
-    if (CS%ssd_iter>-1) then
-      do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        S_11(i,j) = S_11(i,j) + ssd_11(i,j)
-        S_22(i,j) = S_22(i,j) - ssd_11(i,j)
-      enddo ; enddo
-      do J=js-1,Jeq ; do I=is-1,Ieq
-        S_12(I,J) = S_12(I,J) + ssd_12(I,J)
       enddo ; enddo
     endif
 
-    if (CS%id_S_11>0) then
-      do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        S_11_3d(i,j,k) = S_11(i,j)
-      enddo; enddo
-    endif
+  enddo ! end of k loop
 
-    if (CS%id_S_22>0) then
-      do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        S_22_3d(i,j,k) = S_22(i,j)
-      enddo; enddo
-    endif
+  call cpu_clock_end(CS%id_clock_stress)
 
-    if (CS%id_S_12>0) then
+end subroutine compute_stress
+
+!> Compute the divergence of subgrid stress
+!! weighted with thickness, i.e.
+!! (fx,fy) = 1/h Div(h * [Txx, Txy; Txy, Tyy])
+!! and update the acceleration due to eddy viscosity as
+!! diffu = diffu + dx; diffv = diffv + dy
+!! Optionally, before computing the divergence, we attenuate the stress
+!! according to the Klower formula.
+!! In symmetric memory model: Txx, Tyy, Txy, c_diss should have halo 1
+!! with applied zero B.C.
+subroutine compute_stress_divergence(u, v, h, diffu, diffv, dx2h, dy2h, dx2q, dy2q, G, GV, CS)
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(ZB2020_CS),         intent(in) :: CS   !< ZB2020 control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+        intent(in)    :: u  !< The zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+        intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
+        intent(in) :: h             !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+        intent(out) :: diffu           !< Zonal acceleration due to convergence of
+                                       !! along-coordinate stress tensor [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+        intent(out) :: diffv           !< Meridional acceleration due to convergence
+                                       !! of along-coordinate stress tensor [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJ_(G)),           &
+        intent(in) :: dx2h          !< dx^2 at h points [L2 ~> m2]
+  real, dimension(SZI_(G),SZJ_(G)),           &
+        intent(in) :: dy2h          !< dy^2 at h points [L2 ~> m2]
+  real, dimension(SZIB_(G),SZJB_(G)),         &
+        intent(in) :: dx2q          !< dx^2 at q points [L2 ~> m2]
+  real, dimension(SZIB_(G),SZJB_(G)),         &
+        intent(in) :: dy2q          !< dy^2 at q points [L2 ~> m2]
+
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+        Mxx, & ! Subgrid stress Txx multiplied by thickness and dy^2 [H L4 T-2 ~> m5 s-2]
+        Myy    ! Subgrid stress Tyy multiplied by thickness and dx^2 [H L4 T-2 ~> m5 s-2]
+
+  real, dimension(SZIB_(G),SZJB_(G)) :: &
+        Mxy    ! Subgrid stress Txy multiplied by thickness [H L2 T-2 ~> m3 s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+        ZB2020u           !< Zonal acceleration due to convergence of
+                          !! along-coordinate stress tensor for ZB model
+                          !! [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+        ZB2020v           !< Meridional acceleration due to convergence
+                          !! of along-coordinate stress tensor for ZB model
+                          !! [L T-2 ~> m s-2]
+
+  real :: h_u ! Thickness interpolated to u points [H ~> m or kg m-2].
+  real :: h_v ! Thickness interpolated to v points [H ~> m or kg m-2].
+  real :: fx  ! Zonal acceleration      [L T-2 ~> m s-2]
+  real :: fy  ! Meridional acceleration [L T-2 ~> m s-2]
+
+  real :: h_neglect    ! Thickness so small it can be lost in
+                       ! roundoff and so neglected [H ~> m or kg m-2]
+
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k
+  logical :: save_ZB2020u, save_ZB2020v ! Save the acceleration due to ZB2020 model
+
+  call cpu_clock_begin(CS%id_clock_divergence)
+
+  save_ZB2020u = (CS%id_ZB2020u > 0) .or. (CS%id_KE_ZB2020 > 0)
+  save_ZB2020v = (CS%id_ZB2020v > 0) .or. (CS%id_KE_ZB2020 > 0)
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  h_neglect  = GV%H_subroundoff
+
+  do k=1,nz
+    if (CS%Klower_R_diss > 0) then
       do J=js-1,Jeq ; do I=is-1,Ieq
-        S_12_3d(I,J,k) = S_12(I,J)
-      enddo; enddo
+          Mxy(I,J) = (CS%Txy(I,J,k) *                                         &
+                      (0.25 * ( (CS%c_diss(i,j  ,k) + CS%c_diss(i+1,j+1,k))   &
+                              + (CS%c_diss(i,j+1,k) + CS%c_diss(i+1,j  ,k)))  &
+                      )                                                       &
+                     ) * CS%hq(I,J,k)
+      enddo ; enddo
+    else
+      do J=js-1,Jeq ; do I=is-1,Ieq
+        Mxy(I,J) = CS%Txy(I,J,k) * CS%hq(I,J,k)
+      enddo ; enddo
     endif
 
-    ! Weight with interface height (Line 1478 of MOM_hor_visc.F90)
-    ! Note that reduction is removed
-    do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      S_11(i,j) = S_11(i,j) * h(i,j,k)
-      S_22(i,j) = S_22(i,j) * h(i,j,k)
-    enddo ; enddo
-
-    ! Free slip (Line 1487 of MOM_hor_visc.F90)
-    do J=js-1,Jeq ; do I=is-1,Ieq
-      S_12(I,J) = S_12(I,J) * (hq(I,J) * G%mask2dBu(I,J))
-    enddo ; enddo
+    if (CS%Klower_R_diss > 0) then
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        Mxx(i,j) = ((CS%Txx(i,j,k) * CS%c_diss(i,j,k)) * h(i,j,k)) * dy2h(i,j)
+        Myy(i,j) = ((CS%Tyy(i,j,k) * CS%c_diss(i,j,k)) * h(i,j,k)) * dx2h(i,j)
+      enddo ; enddo
+    else
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        Mxx(i,j) = ((CS%Txx(i,j,k)) * h(i,j,k)) * dy2h(i,j)
+        Myy(i,j) = ((CS%Tyy(i,j,k)) * h(i,j,k)) * dx2h(i,j)
+      enddo ; enddo
+    endif
 
     ! Evaluate 1/h x.Div(h S) (Line 1495 of MOM_hor_visc.F90)
     ! Minus occurs because in original file (du/dt) = - div(S),
     ! but here is the discretization of div(S)
     do j=js,je ; do I=Isq,Ieq
-      fx(I,j,k) = - ((G%IdyCu(I,j)*(dy2h(i,j)  *S_11(i,j) - &
-                                    dy2h(i+1,j)*S_11(i+1,j)) + &
-                      G%IdxCu(I,j)*(dx2q(I,J-1)*S_12(I,J-1) - &
-                                    dx2q(I,J)  *S_12(I,J))) * &
-                      G%IareaCu(I,j)) / (h_u(I,j) + h_neglect)
+      h_u = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k)) + h_neglect
+      fx = -((G%IdyCu(I,j)*(Mxx(i,j)                - &
+                            Mxx(i+1,j))             + &
+              G%IdxCu(I,j)*(dx2q(I,J-1)*Mxy(I,J-1)  - &
+                            dx2q(I,J)  *Mxy(I,J)))  * &
+              G%IareaCu(I,j)) / h_u
+      diffu(I,j,k) = diffu(I,j,k) + fx
+      if (save_ZB2020u) &
+        ZB2020u(I,j,k) = fx
     enddo ; enddo
 
     ! Evaluate 1/h y.Div(h S) (Line 1517 of MOM_hor_visc.F90)
     do J=Jsq,Jeq ; do i=is,ie
-      fy(i,J,k) = - ((G%IdyCv(i,J)*(dy2q(I-1,J)*S_12(I-1,J) - &
-                                    dy2q(I,J)  *S_12(I,J)) + & ! NOTE this plus
-                      G%IdxCv(i,J)*(dx2h(i,j)  *S_22(i,j) - &
-                                    dx2h(i,j+1)*S_22(i,j+1))) * &
-                      G%IareaCv(i,J)) / (h_v(i,J) + h_neglect)
+      h_v = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k)) + h_neglect
+      fy = -((G%IdyCv(i,J)*(dy2q(I-1,J)*Mxy(I-1,J)  - &
+                            dy2q(I,J)  *Mxy(I,J))   + & ! NOTE this plus
+              G%IdxCv(i,J)*(Myy(i,j)                - &
+                            Myy(i,j+1)))            * &
+              G%IareaCv(i,J)) / h_v
+      diffv(i,J,k) = diffv(i,J,k) + fy
+      if (save_ZB2020v) &
+        ZB2020v(i,J,k) = fy
     enddo ; enddo
 
   enddo ! end of k loop
 
-  if (CS%id_ZB2020u>0)   call post_data(CS%id_ZB2020u, fx, CS%diag)
-  if (CS%id_ZB2020v>0)   call post_data(CS%id_ZB2020v, fy, CS%diag)
+  call cpu_clock_end(CS%id_clock_divergence)
 
-  if (CS%id_maskT>0)     call post_data(CS%id_maskT, mask_T_3d, CS%diag)
-  if (CS%id_maskq>0)     call post_data(CS%id_maskq, mask_q_3d, CS%diag)
+  call cpu_clock_begin(CS%id_clock_post)
+  if (CS%id_ZB2020u>0)   call post_data(CS%id_ZB2020u, ZB2020u, CS%diag)
+  if (CS%id_ZB2020v>0)   call post_data(CS%id_ZB2020v, ZB2020v, CS%diag)
+  call cpu_clock_end(CS%id_clock_post)
 
-  if (CS%id_S_11>0)     call post_data(CS%id_S_11, S_11_3d, CS%diag)
+  call compute_energy_source(u, v, h, ZB2020u, ZB2020v, G, GV, CS)
 
-  if (CS%id_S_22>0)     call post_data(CS%id_S_22, S_22_3d, CS%diag)
+end subroutine compute_stress_divergence
 
-  if (CS%id_S_12>0)     call post_data(CS%id_S_12, S_12_3d, CS%diag)
+!> Filtering of the velocity gradients sh_xx, sh_xy, vort_xy.
+!! Here instead of smoothing we do sharpening, i.e.
+!! return (initial - smoothed) fields.
+!! The algorithm: marching halo with non-blocking grouped MPI
+!! exchanges. The input array sh_xx should have halo 2 with
+!! applied zero B.C. The arrays sh_xy and vort_xy should have
+!! halo 1 with applied B.C. The output have the same halo and B.C.
+subroutine filter_velocity_gradients(G, GV, CS)
+  type(ocean_grid_type),   intent(in) :: G       !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV      !< The ocean's vertical grid structure
+  type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
 
-  call compute_energy_source(u, v, h, fx, fy, G, GV, CS)
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
+        sh_xx          ! Copy of CS%sh_xx [T-1 ~> s-1]
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
+        sh_xy, vort_xy ! Copy of CS%sh_xy and CS%vort_xy [T-1 ~> s-1]
 
-end subroutine Zanna_Bolton_2020
+  integer :: xx_halo, xy_halo, vort_halo ! currently available halo for gradient components
+  integer :: xx_iter, xy_iter, vort_iter ! remaining number of iterations
+  integer :: niter                       ! required number of iterations
 
-!> Filter which is used to smooth velocity gradient tensor
-!! or the stress tensor.
-!! If n_lowpass and n_highpass are positive,
-!! the filter is given by:
-!! I - (I-G^n_lowpass)^n_highpass
-!! where I is the identity matrix and G is smooth_Tq().
-!! It is filter of order 2*n_highpass,
-!! where n_lowpass is the number of iterations
-!! which defines the filter scale.
-!! If n_lowpass is negative, returns residual
-!! for the same filter:
-!! (I-G^|n_lowpass|)^n_highpass
-!! Input does not require halo. Output has full halo.
-subroutine filter(G, mask_T, mask_q, n_lowpass, n_highpass, T, q)
-  type(ocean_grid_type), intent(in) :: G !< Ocean grid
-  integer, intent(in) :: n_lowpass  !< number of low-pass iterations
-  integer, intent(in) :: n_highpass !< number of high-pass iterations
-  real, dimension(SZI_(G),SZJ_(G)),   &
-                          intent(in) :: mask_T !< mask of wet points in T (CENTER) points [nondim]
-  real, dimension(SZIB_(G),SZJB_(G)), &
-                          intent(in) :: mask_q !< mask of wet points in q (CORNER) points [nondim]
-  real, dimension(SZI_(G),SZJ_(G)),   &
-             optional, intent(inout) :: T      !< any field at T (CENTER) points [arbitrary]
-  real, dimension(SZIB_(G),SZJB_(G)), &
-             optional, intent(inout) :: q      !< any field at q (CORNER) points [arbitrary]
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, n
 
-  real, dimension(SZIB_(G),SZJB_(G)) :: q1, q2          ! intermediate q-fields [arbitrary]
-  real, dimension(SZI_(G),SZJ_(G))   :: T1, T2          ! intermediate T-fields [arbitrary]
-  real :: max_before, min_before, max_after, min_after  ! minimum and maximum values of fields
-                                                        ! before and after filtering [arbitrary]
+  niter = CS%HPF_iter
 
-  integer :: i_highpass, i_lowpass
-  integer :: i, j
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+  if (niter == 0) return
 
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  if (n_lowpass==0) then
-    return
-  endif
+  if (.not. G%symmetric) &
+    call do_group_pass(CS%pass_xx, G%Domain, &
+      clock=CS%id_clock_mpi)
 
-  ! Total operator is I - (I-G^n_lowpass)^n_highpass
-  if (present(q)) then
-    call pass_var(q, G%Domain, position=CORNER, complete=.true.)
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-      q(I,J) = q(I,J) * mask_q(I,J)
-    enddo ; enddo
-
-    if (n_highpass==1 .AND. n_lowpass>0) then
-      call min_max(G, min_before, max_before, q=q)
-    endif
-
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-      q1(I,J) = q(I,J)
-    enddo ; enddo
-
-    ! q1 -> ((I-G^n_lowpass)^n_highpass)*q1
-    do i_highpass=1,n_highpass
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-        q2(I,J) = q1(I,J)
-      enddo ; enddo
-      ! q2 -> (G^n_lowpass)*q2
-      do i_lowpass=1,ABS(n_lowpass)
-        call smooth_Tq(G, mask_T, mask_q, q=q2)
-      enddo
-      ! q1 -> (I-G^n_lowpass)*q1
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-        q1(I,J) = q1(I,J) - q2(I,J)
-      enddo ; enddo
-    enddo
-
-    if (n_lowpass>0) then
-      ! q -> q - ((I-G^n_lowpass)^n_highpass)*q
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-        q(I,J) = q(I,J) - q1(I,J)
-      enddo ; enddo
-    else
-      ! q -> ((I-G^n_lowpass)^n_highpass)*q
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-        q(I,J) = q1(I,J)
-      enddo ; enddo
-    endif
-
-    if (n_highpass==1 .AND. n_lowpass>0) then
-      call min_max(G, min_after, max_after, q=q)
-      if (max_after > max_before .OR. min_after < min_before) then
-        call MOM_error(WARNING, "MOM_Zanna_Bolton.F90, filter applied in CORNER points "//&
-                                "does not preserve [min,max] values. There may be issues with "//&
-                                "boundary conditions")
-      endif
-    endif
-  endif
-
-  if (present(T)) then
-    call pass_var(T, G%Domain)
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      T(i,j) = T(i,j) * mask_T(i,j)
-    enddo ; enddo
-
-    if (n_highpass==1 .AND. n_lowpass>0) then
-      call min_max(G, min_before, max_before, T=T)
-    endif
-
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      T1(i,j) = T(i,j)
-    enddo ; enddo
-
-    do i_highpass=1,n_highpass
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        T2(i,j) = T1(i,j)
-      enddo ; enddo
-      do i_lowpass=1,ABS(n_lowpass)
-        call smooth_Tq(G, mask_T, mask_q, T=T2)
-      enddo
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        T1(i,j) = T1(i,j) - T2(i,j)
-      enddo ; enddo
-    enddo
-
-    if (n_lowpass>0) then
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        T(i,j) = T(i,j) - T1(i,j)
-      enddo ; enddo
-    else
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        T(i,j) = T1(i,j)
-      enddo ; enddo
-    endif
-
-    if (n_highpass==1 .AND. n_lowpass>0) then
-      call min_max(G, min_after, max_after, T=T)
-      if (max_after > max_before .OR. min_after < min_before) then
-        call MOM_error(WARNING, "MOM_Zanna_Bolton.F90, filter applied in CENTER points "//&
-                                " does not preserve [min,max] values. There may be issues with "//&
-                                " boundary conditions")
-      endif
-    endif
-  endif
-end subroutine filter
-
-!> One iteration of 3x3 filter
-!! [1 2 1;
-!!  2 4 2;
-!!  1 2 1]/16
-!! removing chess-harmonic.
-!! It is used as a buiding block in filter().
-!! Zero Dirichlet boundary conditions are applied
-!! with mask_T and mask_q.
-subroutine smooth_Tq(G, mask_T, mask_q, T, q)
-  type(ocean_grid_type), intent(in) :: G !< Ocean grid
-  real, dimension(SZI_(G),SZJ_(G)),   &
-                          intent(in) :: mask_T !< mask of wet points in T (CENTER) points [nondim]
-  real, dimension(SZIB_(G),SZJB_(G)), &
-                          intent(in) :: mask_q !< mask of wet points in q (CORNER) points [nondim]
-  real, dimension(SZI_(G),SZJ_(G)),   &
-             optional, intent(inout) :: T      !< any field at T (CENTER) points [arbitrary]
-  real, dimension(SZIB_(G),SZJB_(G)), &
-             optional, intent(inout) :: q      !< any field at q (CORNER) points [arbitrary]
-
-  real, dimension(SZI_(G),SZJ_(G))   :: Tim ! intermediate T-field [arbitrary]
-  real, dimension(SZIB_(G),SZJB_(G)) :: qim ! intermediate q-field [arbitrary]
-
-  real :: wside   ! weights for side points
-                  ! (i+1,j), (i-1,j), (i,j+1), (i,j-1)
-                  ! [nondim]
-  real :: wcorner ! weights for corner points
-                  ! (i+1,j+1), (i+1,j-1), (i-1,j-1), (i-1,j+1)
-                  ! [nondim]
-  real :: wcenter ! weight for the center point (i,j) [nondim]
-
-  integer :: i, j
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
-
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
-  wside = 1. / 8.
-  wcorner = 1. / 16.
-  wcenter = 1. - (wside*4. + wcorner*4.)
-
-  if (present(q)) then
-    call pass_var(q, G%Domain, position=CORNER, complete=.true.)
-    do J = Jsq-1, Jeq+1; do I = Isq-1, Ieq+1
-      qim(I,J) = q(I,J) * mask_q(I,J)
+  ! This is just copy of the array
+  call cpu_clock_begin(CS%id_clock_filter)
+  do k=1,nz
+    ! Halo of size 2 is valid
+    do j=js-2,je+2; do i=is-2,ie+2
+      sh_xx(i,j,k) = CS%sh_xx(i,j,k)
     enddo; enddo
-    do J = Jsq, Jeq
-      do I = Isq, Ieq
-        q(I,J) = wcenter * qim(i,j)                &
-               + wcorner * (                       &
-                  (qim(I-1,J-1)+qim(I+1,J+1))      &
-                + (qim(I-1,J+1)+qim(I+1,J-1))      &
-               )                                   &
-               + wside * (                         &
-                  (qim(I-1,J)+qim(I+1,J))          &
-                + (qim(I,J-1)+qim(I,J+1))          &
-               )
-        q(I,J) = q(I,J) * mask_q(I,J)
-      enddo
-    enddo
-    call pass_var(q, G%Domain, position=CORNER, complete=.true.)
-  endif
-
-  if (present(T)) then
-    call pass_var(T, G%Domain)
-    do j = js-1, je+1; do i = is-1, ie+1
-      Tim(i,j) = T(i,j) * mask_T(i,j)
+    ! Only halo of size 1 is valid
+    do J=Jsq-1,Jeq+1; do I=Isq-1,Ieq+1
+      sh_xy(I,J,k) = CS%sh_xy(I,J,k)
+      vort_xy(I,J,k) = CS%vort_xy(I,J,k)
     enddo; enddo
-    do j = js, je
-      do i = is, ie
-        T(i,j) = wcenter * Tim(i,j)                &
-               + wcorner * (                       &
-                  (Tim(i-1,j-1)+Tim(i+1,j+1))      &
-                + (Tim(i-1,j+1)+Tim(i+1,j-1))      &
-               )                                   &
-               + wside * (                         &
-                  (Tim(i-1,j)+Tim(i+1,j))          &
-                + (Tim(i,j-1)+Tim(i,j+1))          &
-               )
-        T(i,j) = T(i,j) * mask_T(i,j)
-      enddo
-    enddo
-    call pass_var(T, G%Domain)
-  endif
-
-end subroutine smooth_Tq
-
-!> Returns min and max values of array across all PEs.
-!! It is used in filter() to check its monotonicity.
-subroutine min_max(G, min_val, max_val, T, q)
-  type(ocean_grid_type), intent(in) :: G   !< Ocean grid
-  real, dimension(SZI_(G),SZJ_(G)),   &
-             optional, intent(inout) :: T  !< any field at T (CENTER) points [arbitrary]
-  real, dimension(SZIB_(G),SZJB_(G)), &
-             optional, intent(inout) :: q  !< any field at q (CORNER) points [arbitrary]
-  real, intent(out) :: min_val, max_val    !< min and max values of array accross PEs [arbitrary]
-
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
-
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
-  if (present(q)) then
-    min_val = minval(q(Isq:Ieq, Jsq:Jeq))
-    max_val = maxval(q(Isq:Ieq, Jsq:Jeq))
-  endif
-
-  if (present(T)) then
-    min_val = minval(T(is:ie, js:je))
-    max_val = maxval(T(is:ie, js:je))
-  endif
-
-  call min_across_PEs(min_val)
-  call max_across_PEs(max_val)
-
-end subroutine
-
-!> Computes mask of wet points in T (CENTER) and q (CORNER) points.
-!! Method: compare layer thicknesses with Angstrom_H.
-!! Mask is computed separately for every vertical layer and
-!! for every time step.
-subroutine compute_masks(G, GV, h, mask_T, mask_q, k)
-  type(ocean_grid_type),        intent(in)    :: G      !< Ocean grid
-  type(verticalGrid_type),      intent(in)    :: GV     !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                intent(in)    :: h      !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G)),          &
-                                intent(inout) :: mask_T !< mask of wet points in T (CENTER) points [nondim]
-  real, dimension(SZIB_(G),SZJB_(G)),        &
-                                intent(inout) :: mask_q !< mask of wet points in q (CORNER) points [nondim]
-  integer,                      intent(in)    :: k      !< index of vertical layer
-
-  real :: hmin       ! Minimum layer thickness
-                     ! beyond which we have boundary [H ~> m or kg m-2]
-  integer :: i, j
-
-  hmin = GV%Angstrom_H * 2.
-
-  mask_q(:,:) = 0.
-  do J = G%JscB, G%JecB
-    do I = G%IscB, G%IecB
-      if (h(i+1,j+1,k) < hmin .or. &
-          h(i  ,j  ,k) < hmin .or. &
-          h(i+1,j  ,k) < hmin .or. &
-          h(i  ,j+1,k) < hmin      &
-        ) then
-          mask_q(I,J) = 0.
-        else
-          mask_q(I,J) = 1.
-        endif
-        mask_q(I,J) = mask_q(I,J) * G%mask2dBu(I,J)
-    enddo
   enddo
-  call pass_var(mask_q, G%Domain, position=CORNER, complete=.true.)
+  call cpu_clock_end(CS%id_clock_filter)
 
-  mask_T(:,:) = 0.
-  do j = G%jsc, G%jec
-    do i = G%isc, G%iec
-      if (h(i,j,k) < hmin) then
-        mask_T(i,j) = 0.
+  xx_halo = 2; xy_halo = 1; vort_halo = 1;
+  xx_iter = niter; xy_iter = niter; vort_iter = niter;
+
+  do while &
+    (xx_iter >  0 .or. xy_iter >  0 .or. & ! filter iterations remain to be done
+    xx_halo < 2 .or. xy_halo < 1)        ! there is no halo for VG tensor
+
+    ! ---------- filtering sh_xx ---------
+    if (xx_halo < 2) then
+      call complete_group_pass(CS%pass_xx, G%Domain, clock=CS%id_clock_mpi)
+      xx_halo = CS%HPF_halo
+    endif
+
+    call filter_hq(G, GV, CS, xx_halo, xx_iter, h=CS%sh_xx)
+
+    if (xx_halo < 2) &
+      call start_group_pass(CS%pass_xx, G%Domain, clock=CS%id_clock_mpi)
+
+    ! ------ filtering sh_xy, vort_xy ----
+    if (xy_halo < 1) then
+      call complete_group_pass(CS%pass_xy, G%Domain, clock=CS%id_clock_mpi)
+      xy_halo = CS%HPF_halo; vort_halo = CS%HPF_halo
+    endif
+
+    call filter_hq(G, GV, CS, xy_halo, xy_iter, q=CS%sh_xy)
+    call filter_hq(G, GV, CS, vort_halo, vort_iter, q=CS%vort_xy)
+
+    if (xy_halo < 1) &
+      call start_group_pass(CS%pass_xy, G%Domain, clock=CS%id_clock_mpi)
+
+  enddo
+
+  ! We implement sharpening by computing residual
+  ! B.C. are already applied to all fields
+  call cpu_clock_begin(CS%id_clock_filter)
+  do k=1,nz
+    do j=js-2,je+2; do i=is-2,ie+2
+      CS%sh_xx(i,j,k) = sh_xx(i,j,k) - CS%sh_xx(i,j,k)
+    enddo; enddo
+    do J=Jsq-1,Jeq+1; do I=Isq-1,Ieq+1
+      CS%sh_xy(I,J,k) = sh_xy(I,J,k) - CS%sh_xy(I,J,k)
+      CS%vort_xy(I,J,k) = vort_xy(I,J,k) - CS%vort_xy(I,J,k)
+    enddo; enddo
+  enddo
+  call cpu_clock_end(CS%id_clock_filter)
+
+  if (.not. G%symmetric) &
+    call do_group_pass(CS%pass_xy, G%Domain, &
+      clock=CS%id_clock_mpi)
+
+end subroutine filter_velocity_gradients
+
+!> Filtering of the stress tensor Txx, Tyy, Txy.
+!! The algorithm: marching halo with non-blocking grouped MPI
+!! exchanges. The input arrays (Txx, Tyy, Txy) must have halo 1
+!! with zero B.C. applied. The output have the same halo and B.C.
+subroutine filter_stress(G, GV, CS)
+  type(ocean_grid_type),   intent(in) :: G       !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV      !< The ocean's vertical grid structure
+  type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
+
+  integer :: Txx_halo, Tyy_halo, Txy_halo ! currently available halo for stress components
+  integer :: Txx_iter, Tyy_iter, Txy_iter ! remaining number of iterations
+  integer :: niter                        ! required number of iterations
+
+  niter = CS%Stress_iter
+
+  if (niter == 0) return
+
+  Txx_halo = 1; Tyy_halo = 1; Txy_halo = 1; ! these are required halo for Txx, Tyy, Txy
+  Txx_iter = niter; Tyy_iter = niter; Txy_iter = niter;
+
+  do while &
+      (Txx_iter >  0 .or. Txy_iter >  0 .or. & ! filter iterations remain to be done
+       Txx_halo < 1 .or. Txy_halo < 1)         ! there is no halo for Txx or Txy
+
+    ! ---------- filtering Txy -----------
+    if (Txy_halo < 1) then
+      call complete_group_pass(CS%pass_Tq, G%Domain, clock=CS%id_clock_mpi)
+      Txy_halo = CS%Stress_halo
+    endif
+
+    call filter_hq(G, GV, CS, Txy_halo, Txy_iter, q=CS%Txy)
+
+    if (Txy_halo < 1) &
+       call start_group_pass(CS%pass_Tq, G%Domain, clock=CS%id_clock_mpi)
+
+    ! ------- filtering Txx, Tyy ---------
+    if (Txx_halo < 1) then
+      call complete_group_pass(CS%pass_Th, G%Domain, clock=CS%id_clock_mpi)
+      Txx_halo = CS%Stress_halo; Tyy_halo = CS%Stress_halo
+    endif
+
+    call filter_hq(G, GV, CS, Txx_halo, Txx_iter, h=CS%Txx)
+    call filter_hq(G, GV, CS, Tyy_halo, Tyy_iter, h=CS%Tyy)
+
+    if (Txx_halo < 1) &
+      call start_group_pass(CS%pass_Th, G%Domain, clock=CS%id_clock_mpi)
+
+  enddo
+
+end subroutine filter_stress
+
+!> Wrapper for filter_3D function. The border indices for q and h
+!! arrays are substituted.
+subroutine filter_hq(G, GV, CS, current_halo, remaining_iterations, q, h)
+  type(ocean_grid_type),   intent(in) :: G       !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV      !< The ocean's vertical grid structure
+  type(ZB2020_CS),         intent(in) :: CS      !< ZB2020 control structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional,   &
+           intent(inout) :: h !< Input/output array in h points [arbitrary]
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)), optional, &
+           intent(inout) :: q !< Input/output array in q points [arbitrary]
+  integer, intent(inout) :: current_halo         !< Currently available halo points
+  integer, intent(inout) :: remaining_iterations !< The number of iterations to perform
+
+  logical :: direction ! The direction of the first 1D filter
+
+  direction = (MOD(G%first_direction,2) == 0)
+
+  call cpu_clock_begin(CS%id_clock_filter)
+
+  if (present(h)) then
+    call filter_3D(h, CS%maskw_h,                  &
+              G%isd, G%ied, G%jsd, G%jed,          &
+              G%isc, G%iec, G%jsc, G%jec, GV%ke,   &
+              current_halo, remaining_iterations,  &
+              direction)
+  endif
+
+  if (present(q)) then
+    call filter_3D(q, CS%maskw_q,                  &
+            G%IsdB, G%IedB, G%JsdB, G%JedB,        &
+            G%IscB, G%IecB, G%JscB, G%JecB, GV%ke, &
+            current_halo, remaining_iterations,    &
+            direction)
+  endif
+
+  call cpu_clock_end(CS%id_clock_filter)
+end subroutine filter_hq
+
+!> Spatial lateral filter applied to 3D array. The lateral filter is given
+!! by the convolutional kernel:
+!!     [1 2 1]
+!! C = |2 4 2| * 1/16
+!!     [1 2 1]
+!! The fast algorithm decomposes the 2D filter into two 1D filters as follows:
+!!     [1]
+!! C = |2| * [1 2 1] * 1/16
+!!     [1]
+!! The input array must have zero B.C. applied. B.C. is applied for output array.
+!! Note that maskw contains both land mask and 1/16 factor.
+!! Filter implements marching halo. The available halo is specified and as many
+!! filter iterations as possible and as needed are performed.
+subroutine filter_3D(x, maskw, isd, ied, jsd, jed, is, ie, js, je, nz, &
+                     current_halo, remaining_iterations,               &
+                     direction)
+  integer, intent(in) :: isd !< Indices of array size
+  integer, intent(in) :: ied !< Indices of array size
+  integer, intent(in) :: jsd !< Indices of array size
+  integer, intent(in) :: jed !< Indices of array size
+  integer, intent(in) :: is  !< Indices of owned points
+  integer, intent(in) :: ie  !< Indices of owned points
+  integer, intent(in) :: js  !< Indices of owned points
+  integer, intent(in) :: je  !< Indices of owned points
+  integer, intent(in) :: nz  !< Vertical array size
+  real, dimension(isd:ied,jsd:jed,nz), &
+           intent(inout) :: x !< Input/output array [arbitrary]
+  real, dimension(isd:ied,jsd:jed), &
+           intent(in) :: maskw !< Mask array of land points divided by 16 [nondim]
+  integer, intent(inout) :: current_halo         !< Currently available halo points
+  integer, intent(inout) :: remaining_iterations !< The number of iterations to perform
+  logical, intent(in)    :: direction            !< The direction of the first 1D filter
+
+  real, parameter :: weight = 2. ! Filter weight [nondim]
+  integer :: i, j, k, iter, niter, halo
+
+  real :: tmp(isd:ied, jsd:jed) ! Array with temporary results [arbitrary]
+
+  ! Do as many iterations as needed and possible
+  niter = min(current_halo, remaining_iterations)
+  if (niter == 0) return ! nothing to do
+
+  ! Update remaining iterations
+  remaining_iterations = remaining_iterations - niter
+  ! Update halo information
+  current_halo = current_halo - niter
+
+  do k=1,Nz
+    halo = niter-1 + &
+      current_halo ! Save as many halo points as possible
+    do iter=1,niter
+
+      if (direction) then
+        do j = js-halo, je+halo; do i = is-halo-1, ie+halo+1
+          tmp(i,j) = weight * x(i,j,k) + (x(i,j-1,k) + x(i,j+1,k))
+        enddo; enddo
+
+        do j = js-halo, je+halo; do i = is-halo, ie+halo;
+          x(i,j,k) = (weight * tmp(i,j) + (tmp(i-1,j) + tmp(i+1,j))) * maskw(i,j)
+        enddo; enddo
       else
-        mask_T(i,j) = 1.
+        do j = js-halo-1, je+halo+1; do i = is-halo, ie+halo
+          tmp(i,j) = weight * x(i,j,k) + (x(i-1,j,k) + x(i+1,j,k))
+        enddo; enddo
+
+        do j = js-halo, je+halo; do i = is-halo, ie+halo;
+          x(i,j,k) = (weight * tmp(i,j) + (tmp(i,j-1) + tmp(i,j+1))) * maskw(i,j)
+        enddo; enddo
       endif
-        mask_T(i,j) = mask_T(i,j) * G%mask2dT(i,j)
+
+      halo = halo - 1
     enddo
   enddo
-  call pass_var(mask_T, G%Domain)
 
-end subroutine compute_masks
+end subroutine filter_3D
 
 !> Computes the 3D energy source term for the ZB2020 scheme
 !! similarly to MOM_diagnostics.F90, specifically 1125 line.
@@ -906,7 +1032,7 @@ subroutine compute_energy_source(u, v, h, fx, fy, G, GV, CS)
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                  intent(in)    :: v  !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
-                                 intent(inout) :: h  !< Layer thicknesses [H ~> m or kg m-2].
+                                 intent(in) :: h     !< Layer thicknesses [H ~> m or kg m-2].
 
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                  intent(in) :: fx    !< Zonal acceleration due to convergence of
@@ -922,11 +1048,6 @@ subroutine compute_energy_source(u, v, h, fx, fy, G, GV, CS)
   real :: KE_v(SZI_(G),SZJB_(G))            ! The area integral of a KE term in a layer at v-points
                                             ! [H L4 T-3 ~> m5 s-3 or kg m2 s-3]
 
-  !real :: tmp(SZI_(G),SZJ_(G),SZK_(GV))    ! temporary array for integration
-  !real :: global_integral                  ! Global integral of the energy effect of ZB2020
-                                            ! [H L4 T-3 ~> m5 s-3 or kg m2 s-3]
-
-
   real :: uh                                ! Transport through zonal faces = u*h*dy,
                                             ! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: vh                                ! Transport through meridional faces = v*h*dx,
@@ -937,14 +1058,14 @@ subroutine compute_energy_source(u, v, h, fx, fy, G, GV, CS)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
 
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
   if (CS%id_KE_ZB2020 > 0) then
+    call cpu_clock_begin(CS%id_clock_source)
     call create_group_pass(pass_KE_uv, KE_u, KE_v, G%Domain, To_North+To_East)
 
+    is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
+    Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
     KE_term(:,:,:) = 0.
-    !tmp(:,:,:) = 0.
     ! Calculate the KE source from Zanna-Bolton2020 [H L2 T-3 ~> m3 s-3].
     do k=1,nz
       KE_u(:,:) = 0.
@@ -963,14 +1084,14 @@ subroutine compute_energy_source(u, v, h, fx, fy, G, GV, CS)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
             * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
-        ! copy-paste from MOM_spatial_means.F90, line 42
-        !tmp(i,j,k) = KE_term(i,j,k) * G%areaT(i,j) * G%mask2dT(i,j)
       enddo ; enddo
     enddo
 
-    !global_integral = reproducing_sum(tmp)
+    call cpu_clock_end(CS%id_clock_source)
 
+    call cpu_clock_begin(CS%id_clock_post)
     call post_data(CS%id_KE_ZB2020, KE_term, CS%diag)
+    call cpu_clock_end(CS%id_clock_post)
   endif
 
 end subroutine compute_energy_source
