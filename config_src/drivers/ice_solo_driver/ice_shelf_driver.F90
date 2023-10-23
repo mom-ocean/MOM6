@@ -24,7 +24,7 @@ program Shelf_main
   use MOM_cpu_clock,       only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_debugging,       only : MOM_debugging_init
-  use MOM_diag_mediator,   only : diag_mediator_init, diag_mediator_infrastructure_init
+  use MOM_diag_mediator,   only : diag_mediator_init, diag_mediator_infrastructure_init, set_axes_info
   use MOM_diag_mediator,   only : diag_mediator_end, diag_ctrl, diag_mediator_close_registration
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end
   use MOM_domains,         only : MOM_domains_init, clone_MOM_domain, pass_var
@@ -54,6 +54,8 @@ program Shelf_main
   use MOM_verticalGrid,    only : verticalGrid_type, verticalGridInit, verticalGridEnd
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
+  use MOM_forcing_type,    only : forcing
+  use MOM_ice_shelf_initialize, only : initialize_ice_SMB
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
   use MOM_ice_shelf, only : ice_shelf_save_restart, solo_step_ice_shelf
@@ -75,7 +77,9 @@ program Shelf_main
   ! CPU time limit.  nmax is determined by evaluating the CPU time used between successive calls to
   ! write_cputime.  Initially it is set to be very large.
   integer :: nmax=2000000000
-
+  ! A structure containing pointers to the thermodynamic forcing fields
+  ! at the ocean surface.
+  type(forcing) :: fluxes
   ! A structure containing several relevant directory paths.
   type(directories) :: dirs
 
@@ -104,7 +108,7 @@ program Shelf_main
   real :: time_step               ! The time step [T ~> s]
 
   ! A pointer to a structure containing metrics and related information.
-  type(ocean_grid_type), pointer :: ocn_grid
+  type(ocean_grid_type), pointer :: ocn_grid => NULL()
 
   type(dyn_horgrid_type), pointer :: dG => NULL()   ! A dynamic version of the horizontal grid
   type(hor_index_type),   pointer :: HI => NULL()   ! A hor_index_type for array extents
@@ -114,7 +118,7 @@ program Shelf_main
   type(ocean_OBC_type),          pointer :: OBC => NULL()
 
   ! A pointer to a structure containing dimensional unit scaling factors.
-  type(unit_scale_type), pointer :: US
+  type(unit_scale_type), pointer :: US => NULL()
 
   type(diag_ctrl), pointer :: &
     diag => NULL()              ! A pointer to the diagnostic regulatory structure
@@ -138,8 +142,9 @@ program Shelf_main
   integer :: yr, mon, day, hr, mins, sec   ! Temp variables for writing the date.
   type(param_file_type) :: param_file      ! The structure indicating the file(s)
                                            ! containing all run-time parameters.
+  real :: smb !A constant surface mass balance that can be specified in the param_file
   character(len=9)  :: month
-  character(len=16) :: calendar = 'julian'
+  character(len=16) :: calendar = 'noleap'
   integer :: calendar_type=-1
 
   integer :: unit, io_status, ierr
@@ -184,6 +189,8 @@ program Shelf_main
     endif
   endif
 
+  ! Get the names of the I/O directories and initialization file.
+  ! Also calls the subroutine that opens run-time parameter files.
   call Get_MOM_Input(param_file, dirs)
 
   ! Read ocean_solo restart, which can override settings from the namelist.
@@ -252,8 +259,11 @@ program Shelf_main
   ! Set up the ocean model domain and grid; the ice model grid is set in initialize_ice_shelf,
   ! but the grids have strong commonalities in this configuration, and the ocean grid is required
   ! to set up the diag mediator control structure.
-  call MOM_domains_init(ocn_grid%domain, param_file)
+  allocate(ocn_grid)
+  call MOM_domains_init(ocn_grid%domain, param_file) !, domain_name='MOM')
+  allocate(HI)
   call hor_index_init(ocn_grid%Domain, HI, param_file)
+  allocate(dG)
   call create_dyn_horgrid(dG, HI)
   call clone_MOM_domain(ocn_grid%Domain, dG%Domain)
 
@@ -266,11 +276,16 @@ program Shelf_main
   ! Initialize the diag mediator.  The ocean's vertical grid is not really used here, but at
   ! present the interface to diag_mediator_init assumes the presence of ocean-specific information.
   call verticalGridInit(param_file, GV, US)
+  allocate(diag)
   call diag_mediator_init(ocn_grid, GV, US, GV%ke, param_file, diag, doc_file_dir=dirs%output_directory)
 
   call callTree_waypoint("returned from diag_mediator_init()")
 
-  call initialize_ice_shelf(param_file, ocn_grid, Time, ice_shelf_CSp, diag)
+  call set_axes_info(ocn_grid, GV, US, param_file, diag)
+
+  call initialize_ice_shelf(param_file, ocn_grid, Time, ice_shelf_CSp, diag, fluxes_in=fluxes, solo_ice_sheet_in=.true.)
+
+  call initialize_ice_SMB(fluxes%shelf_sfc_mass_flux, ocn_grid, US, param_file)
 
   ! This is the end of the code that is the counterpart of MOM_initialization.
   call callTree_waypoint("End of ice shelf initialization.")
@@ -378,7 +393,7 @@ program Shelf_main
 
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
-    call solo_step_ice_shelf(ice_shelf_CSp, Time_step_shelf, ns_ice, Time)
+    call solo_step_ice_shelf(ice_shelf_CSp, Time_step_shelf, ns_ice, Time, fluxes_in=fluxes)
 
 !   Time = Time + Time_step_shelf
 !   This is here to enable fractional-second time steps.
@@ -411,6 +426,20 @@ program Shelf_main
       endif
       if (BTEST(Restart_control,0)) then
         call ice_shelf_save_restart(ice_shelf_CSp, Time, dirs%restart_output_dir)
+      endif
+      ! Write ice shelf solo restart file.
+      if (is_root_pe())then
+        call open_ASCII_file(unit, trim(dirs%restart_output_dir)//'shelf.res')
+        write(unit, '(i6,8x,a)') calendar_type, &
+          '(Calendar: no_calendar=0, thirty_day_months=1, julian=2, gregorian=3, noleap=4)'
+
+        call get_date(Start_time, yr, mon, day, hr, mins, sec)
+        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+          'Model start time:   year, month, day, hour, minute, second'
+        call get_date(Time, yr, mon, day, hr, mins, sec)
+        write(unit, '(6i6,8x,a)') yr, mon, day, hr, mins, sec, &
+          'Current model time: year, month, day, hour, minute, second'
+        call close_file(unit)
       endif
       restart_time = restart_time + restint
     endif
@@ -456,12 +485,11 @@ program Shelf_main
   endif
 
   call callTree_waypoint("End Shelf_main")
+  call ice_shelf_end(ice_shelf_CSp)
   call diag_mediator_end(Time, diag, end_diag_manager=.true.)
   if (cpu_steps > 0) call write_cputime(Time, ns-1, write_CPU_CSp, call_end=.true.)
   call cpu_clock_end(termClock)
 
   call io_infra_end ; call MOM_infra_end
-
-  call ice_shelf_end(ice_shelf_CSp)
 
 end program Shelf_main

@@ -3539,37 +3539,45 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   enddo
 
   call diag_grid_storage_end(diag_cs%diag_grid_temp)
-  deallocate(diag_cs%mask3dTL)
-  deallocate(diag_cs%mask3dBL)
-  deallocate(diag_cs%mask3dCuL)
-  deallocate(diag_cs%mask3dCvL)
-  deallocate(diag_cs%mask3dTi)
-  deallocate(diag_cs%mask3dBi)
-  deallocate(diag_cs%mask3dCui)
-  deallocate(diag_cs%mask3dCvi)
+  if (associated(diag_cs%mask3dTL))  deallocate(diag_cs%mask3dTL)
+  if (associated(diag_cs%mask3dBL))  deallocate(diag_cs%mask3dBL)
+  if (associated(diag_cs%mask3dCuL)) deallocate(diag_cs%mask3dCuL)
+  if (associated(diag_cs%mask3dCvL)) deallocate(diag_cs%mask3dCvL)
+  if (associated(diag_cs%mask3dTi))  deallocate(diag_cs%mask3dTi)
+  if (associated(diag_cs%mask3dBi))  deallocate(diag_cs%mask3dBi)
+  if (associated(diag_cs%mask3dCui)) deallocate(diag_cs%mask3dCui)
+  if (associated(diag_cs%mask3dCvi)) deallocate(diag_cs%mask3dCvi)
   do dl=2,MAX_DSAMP_LEV
-    deallocate(diag_cs%dsamp(dl)%mask2dT)
-    deallocate(diag_cs%dsamp(dl)%mask2dBu)
-    deallocate(diag_cs%dsamp(dl)%mask2dCu)
-    deallocate(diag_cs%dsamp(dl)%mask2dCv)
-    deallocate(diag_cs%dsamp(dl)%mask3dTL)
-    deallocate(diag_cs%dsamp(dl)%mask3dBL)
-    deallocate(diag_cs%dsamp(dl)%mask3dCuL)
-    deallocate(diag_cs%dsamp(dl)%mask3dCvL)
-    deallocate(diag_cs%dsamp(dl)%mask3dTi)
-    deallocate(diag_cs%dsamp(dl)%mask3dBi)
-    deallocate(diag_cs%dsamp(dl)%mask3dCui)
-    deallocate(diag_cs%dsamp(dl)%mask3dCvi)
+    if (associated(diag_cs%dsamp(dl)%mask2dT))   deallocate(diag_cs%dsamp(dl)%mask2dT)
+    if (associated(diag_cs%dsamp(dl)%mask2dBu))  deallocate(diag_cs%dsamp(dl)%mask2dBu)
+    if (associated(diag_cs%dsamp(dl)%mask2dCu))  deallocate(diag_cs%dsamp(dl)%mask2dCu)
+    if (associated(diag_cs%dsamp(dl)%mask2dCv))  deallocate(diag_cs%dsamp(dl)%mask2dCv)
+    if (associated(diag_cs%dsamp(dl)%mask3dTL))  deallocate(diag_cs%dsamp(dl)%mask3dTL)
+    if (associated(diag_cs%dsamp(dl)%mask3dBL))  deallocate(diag_cs%dsamp(dl)%mask3dBL)
+    if (associated(diag_cs%dsamp(dl)%mask3dCuL)) deallocate(diag_cs%dsamp(dl)%mask3dCuL)
+    if (associated(diag_cs%dsamp(dl)%mask3dCvL)) deallocate(diag_cs%dsamp(dl)%mask3dCvL)
+    if (associated(diag_cs%dsamp(dl)%mask3dTi))  deallocate(diag_cs%dsamp(dl)%mask3dTi)
+    if (associated(diag_cs%dsamp(dl)%mask3dBi))  deallocate(diag_cs%dsamp(dl)%mask3dBi)
+    if (associated(diag_cs%dsamp(dl)%mask3dCui)) deallocate(diag_cs%dsamp(dl)%mask3dCui)
+    if (associated(diag_cs%dsamp(dl)%mask3dCvi)) deallocate(diag_cs%dsamp(dl)%mask3dCvi)
 
     do i=1,diag_cs%num_diag_coords
-      deallocate(diag_cs%dsamp(dl)%remap_axesTL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCuL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCvL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesBL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesTi(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCui(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCvi(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesBi(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesTL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesTL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCuL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCuL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCvL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCvL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesBL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesBL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesTi(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesTi(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCui(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCui(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCvi(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCvi(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesBi(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesBi(i)%dsamp(dl)%mask3d)
     enddo
   enddo
 

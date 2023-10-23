@@ -49,6 +49,7 @@ program MOM6
   use MOM_ice_shelf,       only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
   use MOM_ice_shelf,       only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
   use MOM_ice_shelf,       only : ice_shelf_query
+  use MOM_ice_shelf_initialize, only : initialize_ice_SMB
   use MOM_interpolate,     only : time_interp_external_init
   use MOM_io,              only : file_exists, open_ASCII_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
@@ -134,7 +135,7 @@ program MOM6
   real :: dtdia                   ! The diabatic timestep [T ~> s]
   real :: t_elapsed_seg           ! The elapsed time in this run segment [T ~> s]
   integer :: n, ns, n_max, nts, n_last_thermo
-  logical :: diabatic_first, single_step_call
+  logical :: diabatic_first, single_step_call, initialize_smb
   type(time_type) :: Time2, time_chg ! Temporary time variables
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
@@ -302,6 +303,9 @@ program MOM6
     call initialize_ice_shelf_forces(ice_shelf_CSp, grid, US, forces)
     call ice_shelf_query(ice_shelf_CSp, grid, data_override_shelf_fluxes=override_shelf_fluxes)
     if (override_shelf_fluxes) call data_override_init(Ocean_Domain_in=grid%domain%mpp_domain)
+    call get_param(param_file, mod_name, "INITIALIZE_ICE_SHEET_SMB", &
+                   initialize_smb, "Read in a constant SMB for the ice sheet", default=.false.)
+    if (initialize_smb) call initialize_ice_SMB(fluxes%shelf_sfc_mass_flux, grid, US, param_file)
   endif
 
 

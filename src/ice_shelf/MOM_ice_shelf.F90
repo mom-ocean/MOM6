@@ -1873,7 +1873,8 @@ subroutine initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
          tau_mag=.true.)
   else
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes in solo mode.")
-    call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., press=.true., tau_mag=.true.)
+    call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., &
+         press=.true., shelf_sfc_accumulation = CS%active_shelf_dynamics, tau_mag=.true.)
   endif
   if (CS%rotate_index) then
     allocate(fluxes)
@@ -2178,13 +2179,14 @@ subroutine ice_shelf_end(CS)
 end subroutine ice_shelf_end
 
 !> This routine is for stepping a stand-alone ice shelf model without an ocean.
-subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in)
+subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in, fluxes_in)
   type(ice_shelf_CS), pointer    :: CS      !< A pointer to the ice shelf control structure
   type(time_type), intent(in)    :: time_interval !< The time interval for this update [s].
   integer,         intent(inout) :: nsteps  !< The running number of ice shelf steps.
   type(time_type), intent(inout) :: Time    !< The current model time
   real,  optional, intent(in)    :: min_time_step_in !< The minimum permitted time step [T ~> s].
-
+  type(forcing),      optional, target, intent(inout) :: fluxes_in !< A structure containing pointers to any
+                                                         !!  possible thermodynamic or mass-flux forcing fields.
   type(ocean_grid_type), pointer :: G => NULL()  ! A pointer to the ocean's grid structure
   type(unit_scale_type), pointer :: US => NULL() ! Pointer to a structure containing
                                                  ! various unit conversion factors
@@ -2192,6 +2194,7 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
                                           !! the ice-shelf state
   real :: remaining_time    ! The remaining time in this call [T ~> s]
   real :: time_step         ! The internal time step during this call [T ~> s]
+  real :: full_time_step    ! The external time step (sum of internal time steps) during this call [T ~> s]
   real :: min_time_step     ! The minimal required timestep that would indicate a fatal problem [T ~> s]
   character(len=240) :: mesg
   logical :: update_ice_vel ! If true, it is time to update the ice shelf velocities.
@@ -2205,6 +2208,7 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
   is = G%isc ; iec = G%iec ; js = G%jsc ; jec = G%jec
 
   remaining_time = US%s_to_T*time_type_to_real(time_interval)
+  full_time_step = remaining_time
 
   if (present (min_time_step_in)) then
     min_time_step = min_time_step_in
@@ -2228,6 +2232,8 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
       call MOM_mesg("solo_step_ice_shelf: "//mesg, 5)
     endif
 
+    call change_thickness_using_precip(CS, ISS, G, US, fluxes_in, time_step, Time)
+
     remaining_time = remaining_time - time_step
 
     ! If the last mini-timestep is a day or less, we cannot expect velocities to change by much.
@@ -2237,13 +2243,13 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
 
     call update_ice_shelf(CS%dCS, ISS, G, US, time_step, Time, must_update_vel=update_ice_vel)
 
-    call enable_averages(time_step, Time, CS%diag)
+  enddo
+
+  call enable_averages(full_time_step, Time, CS%diag)
     if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
     if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf, ISS%h_shelf, CS%diag)
     if (CS%id_h_mask > 0) call post_data(CS%id_h_mask, ISS%hmask, CS%diag)
-    call disable_averaging(CS%diag)
-
-  enddo
+  call disable_averaging(CS%diag)
 
 end subroutine solo_step_ice_shelf
 
