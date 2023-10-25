@@ -98,6 +98,21 @@ type, public :: wave_parameters_CS ; private
                        !! Vertical -> Mid-points
   real, allocatable, dimension(:,:,:), public :: &
     KvS                !< Viscosity for Stokes Drift shear [H Z T-1 ~> m2 s-1 or Pa s]
+  real, allocatable, dimension(:), public :: &
+    WaveNum_Cen        !< Wavenumber bands for read/coupled [Z-1 ~> m-1]
+  real, allocatable, dimension(:,:,:), public :: &
+    UStk_Hb            !< Surface Stokes Drift spectrum (zonal) [L T-1 ~> m s-1]
+                       !! Horizontal -> H-points
+                       !! 3rd dimension -> Freq/Wavenumber
+  real, allocatable, dimension(:,:,:), public :: &
+    VStk_Hb            !< Surface Stokes Drift spectrum (meridional) [L T-1 ~> m s-1]
+                       !! Horizontal -> H-points
+                       !! 3rd dimension -> Freq/Wavenumber
+  real, allocatable, dimension(:,:), public :: &
+    Omega_w2x          !< wind direction ccw from model x- axis   [nondim radians]
+  integer, public :: NumBands = 0   !< Number of wavenumber/frequency partitions
+                                    !! Must match the number of bands provided
+                                    !! via either coupling or file.
 
   ! The remainder of this control structure is private
   integer :: WaveMethod = -99 !< Options for including wave information
@@ -149,18 +164,12 @@ type, public :: wave_parameters_CS ; private
   real :: LA_FracHBL         !< Fraction of OSBL for averaging Langmuir number [nondim]
   real :: LA_HBL_min         !< Minimum boundary layer depth for averaging Langmuir number [Z ~> m]
   logical :: LA_Misalignment = .false. !< Flag to use misalignment in Langmuir number
-
-  integer :: NumBands = 0      !< Number of wavenumber/frequency partitions to receive
-                               !! This needs to match the number of bands provided
-                               !! via either coupling or file.
   real :: g_Earth      !< The gravitational acceleration, equivalent to GV%g_Earth but with
                        !! different dimensional rescaling appropriate for deep-water gravity
                        !! waves [Z T-2 ~> m s-2]
   real :: I_g_Earth    !< The inverse of the gravitational acceleration, with dimensional rescaling
                        !! appropriate for deep-water gravity waves [T2 Z-1 ~> s2 m-1]
   ! Surface Wave Dependent 1d/2d/3d vars
-  real, allocatable, dimension(:) :: &
-    WaveNum_Cen        !< Wavenumber bands for read/coupled [Z-1 ~> m-1]
   real, allocatable, dimension(:) :: &
     Freq_Cen           !< Central frequency for wave bands, including a factor of 2*pi [T-1 ~> s-1]
   real, allocatable, dimension(:) :: &
@@ -451,6 +460,9 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
       allocate( CS%WaveNum_Cen(CS%NumBands), source=0.0 )
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,CS%NumBands), source=0.0 )
       allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,CS%NumBands), source=0.0 )
+      allocate( CS%UStk_Hb(G%isc:G%iec,G%jsc:G%jec,CS%NumBands), source=0.0 )
+      allocate( CS%VStk_Hb(G%isc:G%iec,G%jsc:G%jec,CS%NumBands), source=0.0 )
+      allocate( CS%Omega_w2x(G%isc:G%iec,G%jsc:G%jec)          , source=0.0 )
       CS%PartitionMode = 0
       call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
            "Central wavenumbers for surface Stokes drift bands.", &
@@ -466,6 +478,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
       allocate( CS%PrescribedSurfStkY(1:CS%NumBands), source=0.0 )
       allocate( CS%STKx0(G%isdB:G%iedB,G%jsd:G%jed,1:CS%NumBands), source=0.0 )
       allocate( CS%STKy0(G%isd:G%ied,G%jsdB:G%jedB,1:CS%NumBands), source=0.0 )
+
       CS%PartitionMode = 0
       call get_param(param_file, mdl, "SURFBAND_WAVENUMBERS", CS%WaveNum_Cen, &
            "Central wavenumbers for surface Stokes drift bands.", &
@@ -699,6 +712,15 @@ subroutine Update_Surface_Waves(G, GV, US, Time_present, dt, CS, forces)
           enddo
         enddo
         call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain)
+      enddo
+      do jj=G%jsc,G%jec
+        do ii=G%isc,G%iec
+          !CS%Omega_w2x(ii,jj)   = forces%omega_w2x(ii,jj)
+          do b=1,CS%NumBands
+            CS%UStk_Hb(ii,jj,b) = US%m_s_to_L_T*forces%UStkb(ii,jj,b)
+            CS%VStk_Hb(ii,jj,b) = US%m_s_to_L_T*forces%VStkb(ii,jj,b)
+          enddo
+        enddo
       enddo
     elseif (CS%DataSource == INPUT) then
       do b=1,CS%NumBands
@@ -2027,6 +2049,9 @@ subroutine Waves_end(CS)
   if (allocated(CS%La_turb))     deallocate( CS%La_turb )
   if (allocated(CS%STKx0))       deallocate( CS%STKx0 )
   if (allocated(CS%STKy0))       deallocate( CS%STKy0 )
+  if (allocated(CS%UStk_Hb))     deallocate( CS%UStk_Hb )
+  if (allocated(CS%VStk_Hb))     deallocate( CS%VStk_Hb )
+  if (allocated(CS%Omega_w2x))   deallocate( CS%Omega_w2x )
   if (allocated(CS%KvS))         deallocate( CS%KvS )
   if (allocated(CS%Us0_y))       deallocate( CS%Us0_y )
   if (allocated(CS%Us0_x))       deallocate( CS%Us0_x )

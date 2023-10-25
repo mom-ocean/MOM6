@@ -28,9 +28,11 @@ use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, mod2med_areacor
 use MOM_cap_methods,          only: med2mod_areacor, state_diagnose
 use MOM_cap_methods,          only: ChkErr
+use MOM_ensemble_manager,     only: ensemble_manager_init
 
 #ifdef CESMCOUPLED
 use shr_log_mod,             only: shr_log_setLogUnit
+use nuopc_shr_methods,       only: get_component_instance
 #endif
 use time_utils_mod,           only: esmf2fms_time
 
@@ -127,6 +129,7 @@ integer              :: export_slice = 1
 character(len=256)   :: tmpstr
 logical              :: write_diagnostics = .false.
 logical              :: overwrite_timeslice = .false.
+logical              :: write_runtimelog = .false.
 character(len=32)    :: runtype  !< run type
 logical              :: profile_memory = .true.
 logical              :: grid_attach_area = .false.
@@ -146,7 +149,9 @@ type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
 logical :: cesm_coupled = .false.
 type(ESMF_GeomType_Flag) :: geomtype
 #endif
-character(len=8) :: restart_mode = 'alarms'
+character(len=8)  :: restart_mode = 'alarms'
+character(len=16) :: inst_suffix = ''
+real(8) :: timere
 
 contains
 
@@ -230,6 +235,8 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   integer                     :: iostat
   character(len=64)           :: value, logmsg
   character(len=*),parameter  :: subname='(MOM_cap:InitializeP0)'
+  type(ESMF_VM)               :: vm
+  integer                     :: mype
 
   rc = ESMF_SUCCESS
 
@@ -246,6 +253,14 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
 
   write(logmsg,*) write_diagnostics
   call ESMF_LogWrite('MOM_cap:DumpFields = '//trim(logmsg), ESMF_LOGMSG_INFO)
+
+  write_runtimelog = .false.
+  call NUOPC_CompAttributeGet(gcomp, name="RunTimeLog", value=value, &
+       isPresent=isPresent, isSet=isSet, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (isPresent .and. isSet) write_runtimelog=(trim(value)=="true")
+  write(logmsg,*) write_runtimelog
+  call ESMF_LogWrite('MOM_cap:RunTimeLog = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
   overwrite_timeslice = .false.
   call NUOPC_CompAttributeGet(gcomp, name="OverwriteSlice", value=value, &
@@ -422,9 +437,13 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                                                                  ! (same as restartfile if single restart file)
   character(len=*), parameter            :: subname='(MOM_cap:InitializeAdvertise)'
   character(len=32)                      :: calendar
+  character(len=:), allocatable          :: rpointer_filename
+  integer                                :: inst_index
+  real(8)                                :: MPI_Wtime, timeiads
 !--------------------------------
 
   rc = ESMF_SUCCESS
+  if(write_runtimelog) timeiads = MPI_Wtime()
 
   call ESMF_LogWrite(subname//' enter', ESMF_LOGMSG_INFO)
 
@@ -451,6 +470,13 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   CALL ESMF_TimeIntervalGet(TINT, S=DT_OCEAN, RC=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+#ifdef CESMCOUPLED
+  call get_component_instance(gcomp, inst_suffix, inst_index, rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  call ensemble_manager_init(inst_suffix)
+  rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+#endif
+
   ! reset shr logging to my log file
   if (localPet==0) then
     call NUOPC_CompAttributeGet(gcomp, name="diro", &
@@ -460,11 +486,20 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
          isPresent=isPresentLogfile, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     if (isPresentDiro .and. isPresentLogfile) then
-         call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
-         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-         call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
-         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-         open(newunit=stdout,file=trim(diro)//"/"//trim(logfile))
+      call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+      if (cesm_coupled) then
+        ! Multiinstance logfile name needs a correction
+        if(len_trim(inst_suffix) > 0) then
+          n = index(logfile, '.')
+          logfile = logfile(1:n-1)//trim(inst_suffix)//logfile(n:)
+        endif
+      endif
+
+      open(newunit=stdout,file=trim(diro)//"/"//trim(logfile))
     else
       stdout = output_unit
     endif
@@ -521,12 +556,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
-
-  ! rsd need to figure out how to get this without share code
-  !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
-  !inst_name = "OCN"//trim(inst_suffix)
-
-
   if (is_root_pe()) then
     write(stdout,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
@@ -581,9 +610,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
       if (localPet == 0) then
         ! this hard coded for rpointer.ocn right now
-        open(newunit=readunit, file='rpointer.ocn', form='formatted', status='old', iostat=iostat)
+        open(newunit=readunit, file=rpointer_filename, form='formatted', status='old', iostat=iostat)
         if (iostat /= 0) then
-          call ESMF_LogSetError(ESMF_RC_FILE_OPEN, msg=subname//' ERROR opening rpointer.ocn', &
+          call ESMF_LogSetError(ESMF_RC_FILE_OPEN, msg=subname//' ERROR opening '//rpointer_filename, &
                  line=__LINE__, file=u_FILE_u, rcToReturn=rc)
           return
         endif
@@ -593,7 +622,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
             if (len(trim(restartfiles))>1 .and. iostat<0) then
               exit ! done reading restart files list.
             else
-              call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=subname//' ERROR reading rpointer.ocn', &
+              call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=subname//' ERROR reading '//rpointer_filename, &
                  line=__LINE__, file=u_FILE_u, rcToReturn=rc)
               return
             endif
@@ -616,7 +645,12 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(adjustl(restartfiles)))
+  if (cesm_coupled .and. len_trim(inst_suffix)>0) then
+    call ocean_model_init(ocean_public, ocean_state, time0, time_start, &
+      input_restart_file=trim(adjustl(restartfiles)), inst_index=inst_index)
+  else
+    call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(adjustl(restartfiles)))
+  endif
 
   ! GMM, this call is not needed in CESM. Check with EMC if it can be deleted.
   call ocean_model_flux_init(ocean_state)
@@ -774,7 +808,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
     call NUOPC_Advertise(exportState, standardName=fldsFrOcn(n)%stdname, name=fldsFrOcn(n)%shortname, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
   enddo
-  if(is_root_pe()) write(stdout,*) 'InitializeAdvertise complete'
+  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timeiads
+
 end subroutine InitializeAdvertise
 
 !> Called by NUOPC to realize import and export fields.  "Realizing" a field
@@ -856,9 +891,11 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   real(ESMF_KIND_R8)                         :: min_areacor_glob(2)
   real(ESMF_KIND_R8)                         :: max_areacor_glob(2)
   character(len=*), parameter                :: subname='(MOM_cap:InitializeRealize)'
+  real(8)                                    :: MPI_Wtime, timeirls
   !--------------------------------
 
   rc = ESMF_SUCCESS
+  if(write_runtimelog) timeirls = MPI_Wtime()
 
   call shr_log_setLogUnit (stdout)
 
@@ -1350,6 +1387,9 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
   !     timeslice=1, relaxedFlag=.true., rc=rc)
   !if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+  timere = 0.
+  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timeirls
+
 end subroutine InitializeRealize
 
 !> TODO
@@ -1378,7 +1418,10 @@ subroutine DataInitialize(gcomp, rc)
   type(ESMF_Field)                       :: field
   character(len=64),allocatable          :: fieldNameList(:)
   character(len=*),parameter  :: subname='(MOM_cap:DataInitialize)'
+  real(8)                                :: MPI_Wtime, timedis
   !--------------------------------
+
+  if(write_runtimelog) timedis = MPI_Wtime()
 
   ! query the Component for its clock, importState and exportState
   call ESMF_GridCompGet(gcomp, clock=clock, importState=importState, exportState=exportState, rc=rc)
@@ -1440,6 +1483,8 @@ subroutine DataInitialize(gcomp, rc)
     enddo
   endif
 
+  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timedis
+
 end subroutine DataInitialize
 
 !> Called by NUOPC to advance the model a single timestep.
@@ -1489,10 +1534,16 @@ subroutine ModelAdvance(gcomp, rc)
   character(len=128)                     :: fldname
   character(len=*),parameter             :: subname='(MOM_cap:ModelAdvance)'
   character(len=8)                       :: suffix
+  character(len=:), allocatable          :: rpointer_filename
   integer                                :: num_rest_files
+  real(8)                                :: MPI_Wtime, timers
 
   rc = ESMF_SUCCESS
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
+  if(write_runtimelog) then
+     timers = MPI_Wtime()
+     if(timere>0. .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time since last time step ',timers-timere
+  endif
 
   call shr_log_setLogUnit (stdout)
 
@@ -1658,6 +1709,8 @@ subroutine ModelAdvance(gcomp, rc)
         call ESMF_VMGet(vm, localPet=localPet, rc=rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+        rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+
         write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') &
              trim(casename), year, month, day, seconds
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
@@ -1665,13 +1718,17 @@ subroutine ModelAdvance(gcomp, rc)
         call ocean_model_restart(ocean_state, restartname=restartname, num_rest_files=num_rest_files)
         if (localPet == 0) then
            ! Write name of restart file in the rpointer file - this is currently hard-coded for the ocean
-          open(newunit=writeunit, file='rpointer.ocn', form='formatted', status='unknown', iostat=iostat)
+          open(newunit=writeunit, file=rpointer_filename, form='formatted', status='unknown', iostat=iostat)
           if (iostat /= 0) then
             call ESMF_LogSetError(ESMF_RC_FILE_OPEN, &
-                 msg=subname//' ERROR opening rpointer.ocn', line=__LINE__, file=u_FILE_u, rcToReturn=rc)
+                 msg=subname//' ERROR opening '//rpointer_filename, line=__LINE__, file=u_FILE_u, rcToReturn=rc)
             return
           endif
-          write(writeunit,'(a)') trim(restartname)//'.nc'
+          if (len_trim(inst_suffix) == 0) then
+            write(writeunit,'(a)') trim(restartname)//'.nc'
+          else
+            write(writeunit,'(a)') trim(restartname)//'.'//trim(inst_suffix)//'.nc'
+          endif
 
           if (num_rest_files > 1) then
             ! append i.th restart file name to rpointer
@@ -1724,6 +1781,11 @@ subroutine ModelAdvance(gcomp, rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
       endif
     enddo
+  endif
+
+  if(write_runtimelog) then
+    timere = MPI_Wtime()
+    if(is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', timere-timers
   endif
 
   if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM Model_ADVANCE: ")
@@ -1928,11 +1990,13 @@ subroutine ocean_model_finalize(gcomp, rc)
   character(len=64)                      :: timestamp
   logical                                :: write_restart
   character(len=*),parameter  :: subname='(MOM_cap:ocean_model_finalize)'
+  real(8)                                :: MPI_Wtime, timefs
 
   if (is_root_pe()) then
     write(stdout,*) 'MOM: --- finalize called ---'
   endif
   rc = ESMF_SUCCESS
+  if(write_runtimelog) timefs = MPI_Wtime()
 
   call ESMF_GridCompGetInternalState(gcomp, ocean_internalstate, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -1961,9 +2025,7 @@ subroutine ocean_model_finalize(gcomp, rc)
   call io_infra_end()
   call MOM_infra_end()
 
-  if (is_root_pe()) then
-    write(stdout,*) 'MOM: --- completed ---'
-  endif
+  if(write_runtimelog .and. is_root_pe()) write(stdout,*) 'In ',trim(subname),' time ', MPI_Wtime()-timefs
 
 end subroutine ocean_model_finalize
 

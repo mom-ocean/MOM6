@@ -28,7 +28,3 @@ jobs:
     - name: Compile MOM6 for the NUOPC driver
       shell: bash
       run: make check_mom6_api_nuopc -j
-
-    - name: Compile MOM6 for the MCT driver
-      shell: bash
-      run: make check_mom6_api_mct -j

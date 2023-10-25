@@ -358,14 +358,14 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
           diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux" , &
           trim(flux_units), v_extensive=.true., x_cell_method='sum', &
           conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
-      Tr%id_lbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx", &
-          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux from the lateral boundary diffusion "//&
-          "scheme", trim(flux_units), v_extensive=.true., y_cell_method='sum', &
-          conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
-      Tr%id_lbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy", &
-          diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional flux from the lateral boundary diffusion "//&
-          "scheme", trim(flux_units), v_extensive=.true., x_cell_method='sum', &
-          conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
+      Tr%id_hbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_hbd_diffx", &
+          diag%axesCuL, Time, trim(flux_longname)//" diffusive zonal flux " //&
+          "from the horizontal boundary diffusion scheme", trim(flux_units), v_extensive=.true., &
+          y_cell_method='sum', conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
+      Tr%id_hbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_hbd_diffy", &
+          diag%axesCvL, Time, trim(flux_longname)//" diffusive meridional " //&
+          "flux from the horizontal boundary diffusion scheme", trim(flux_units), v_extensive=.true., &
+          x_cell_method='sum', conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T)
     else
       Tr%id_adx = register_diag_field("ocean_model", trim(shortnm)//"_adx", &
           diag%axesCuL, Time, "Advective (by residual mean) Zonal Flux of "//trim(flux_longname), &
@@ -381,12 +381,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
           diag%axesCvL, Time, "Diffusive Meridional Flux of "//trim(flux_longname), &
           flux_units, v_extensive=.true., conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
           x_cell_method='sum')
-      Tr%id_lbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx", &
-          diag%axesCuL, Time, "Lateral Boundary Diffusive Zonal Flux of "//trim(flux_longname), &
+      Tr%id_hbd_dfx = register_diag_field("ocean_model", trim(shortnm)//"_hbd_diffx", &
+          diag%axesCuL, Time, "Horizontal Boundary Diffusive Zonal Flux of "//trim(flux_longname), &
           flux_units, v_extensive=.true., conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
           y_cell_method='sum')
-      Tr%id_lbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy", &
-          diag%axesCvL, Time, "Lateral Boundary Diffusive Meridional Flux of "//trim(flux_longname), &
+      Tr%id_hbd_dfy = register_diag_field("ocean_model", trim(shortnm)//"_hbd_diffy", &
+          diag%axesCvL, Time, "Horizontal Boundary Diffusive Meridional Flux of "//trim(flux_longname), &
           flux_units, v_extensive=.true., conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
           x_cell_method='sum')
     endif
@@ -394,8 +394,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
     if (Tr%id_ady > 0) call safe_alloc_ptr(Tr%ad_y,isd,ied,JsdB,JedB,nz)
     if (Tr%id_dfx > 0) call safe_alloc_ptr(Tr%df_x,IsdB,IedB,jsd,jed,nz)
     if (Tr%id_dfy > 0) call safe_alloc_ptr(Tr%df_y,isd,ied,JsdB,JedB,nz)
-    if (Tr%id_lbd_dfx > 0) call safe_alloc_ptr(Tr%lbd_dfx,IsdB,IedB,jsd,jed,nz)
-    if (Tr%id_lbd_dfy > 0) call safe_alloc_ptr(Tr%lbd_dfy,isd,ied,JsdB,JedB,nz)
+    if (Tr%id_hbd_dfx > 0) call safe_alloc_ptr(Tr%hbd_dfx,IsdB,IedB,jsd,jed,nz)
+    if (Tr%id_hbd_dfy > 0) call safe_alloc_ptr(Tr%hbd_dfy,isd,ied,JsdB,JedB,nz)
 
     Tr%id_adx_2d = register_diag_field("ocean_model", trim(shortnm)//"_adx_2d", &
         diag%axesCu1, Time, &
@@ -415,22 +415,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
         "Vertically Integrated Diffusive Meridional Flux of "//trim(flux_longname), &
         flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
         x_cell_method='sum')
-    Tr%id_lbd_bulk_dfx = register_diag_field("ocean_model", trim(shortnm)//"_lbd_bulk_diffx", &
-        diag%axesCu1, Time, &
-        "Total Bulk Diffusive Zonal Flux of "//trim(flux_longname), &
-        flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
-        y_cell_method='sum')
-    Tr%id_lbd_bulk_dfy = register_diag_field("ocean_model", trim(shortnm)//"_lbd_bulk_diffy", &
-        diag%axesCv1, Time, &
-        "Total Bulk Diffusive Meridional Flux of "//trim(flux_longname), &
-        flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
-        x_cell_method='sum')
-    Tr%id_lbd_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffx_2d", &
-        diag%axesCu1, Time, "Vertically-integrated zonal diffusive flux from the lateral boundary diffusion "//&
+    Tr%id_hbd_dfx_2d = register_diag_field("ocean_model", trim(shortnm)//"_hbd_diffx_2d", &
+        diag%axesCu1, Time, "Vertically-integrated zonal diffusive flux from the horizontal boundary diffusion "//&
         "scheme for "//trim(flux_longname), flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
         y_cell_method='sum')
-    Tr%id_lbd_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_lbd_diffy_2d", &
-        diag%axesCv1, Time, "Vertically-integrated meridional diffusive flux from the lateral boundary diffusion "//&
+    Tr%id_hbd_dfy_2d = register_diag_field("ocean_model", trim(shortnm)//"_hbd_diffy_2d", &
+        diag%axesCv1, Time, "Vertically-integrated meridional diffusive flux from the horizontal boundary diffusion "//&
         "scheme for "//trim(flux_longname), flux_units, conversion=(US%L_to_m**2)*Tr%flux_scale*US%s_to_T, &
          x_cell_method='sum')
 
@@ -438,10 +428,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
     if (Tr%id_ady_2d > 0) call safe_alloc_ptr(Tr%ad2d_y,isd,ied,JsdB,JedB)
     if (Tr%id_dfx_2d > 0) call safe_alloc_ptr(Tr%df2d_x,IsdB,IedB,jsd,jed)
     if (Tr%id_dfy_2d > 0) call safe_alloc_ptr(Tr%df2d_y,isd,ied,JsdB,JedB)
-    if (Tr%id_lbd_bulk_dfx > 0) call safe_alloc_ptr(Tr%lbd_bulk_df_x,IsdB,IedB,jsd,jed)
-    if (Tr%id_lbd_bulk_dfy > 0) call safe_alloc_ptr(Tr%lbd_bulk_df_y,isd,ied,JsdB,JedB)
-    if (Tr%id_lbd_dfx_2d > 0) call safe_alloc_ptr(Tr%lbd_dfx_2d,IsdB,IedB,jsd,jed)
-    if (Tr%id_lbd_dfy_2d > 0) call safe_alloc_ptr(Tr%lbd_dfy_2d,isd,ied,JsdB,JedB)
+    if (Tr%id_hbd_dfx_2d > 0) call safe_alloc_ptr(Tr%hbd_dfx_2d,IsdB,IedB,jsd,jed)
+    if (Tr%id_hbd_dfy_2d > 0) call safe_alloc_ptr(Tr%hbd_dfy_2d,isd,ied,JsdB,JedB)
 
     Tr%id_adv_xy = register_diag_field('ocean_model', trim(shortnm)//"_advection_xy", &
         diag%axesTL, Time, &
@@ -466,7 +454,7 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
       enddo ; enddo ; enddo
     endif
 
-    ! Neutral/Lateral diffusion convergence tendencies
+    ! Neutral/Horizontal diffusion convergence tendencies
     if (Tr%diag_form == 1) then
       Tr%id_dfxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_dfxy_cont_tendency', &
           diag%axesTL, Time, "Neutral diffusion tracer content tendency for "//trim(shortnm), &
@@ -477,12 +465,12 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
           "tendency for "//trim(shortnm), conv_units, conversion=Tr%conv_scale*US%s_to_T, &
           x_cell_method='sum', y_cell_method='sum')
 
-      Tr%id_lbdxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_lbdxy_cont_tendency', &
-          diag%axesTL, Time, "Lateral diffusion tracer content tendency for "//trim(shortnm), &
+      Tr%id_hbdxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_hbdxy_cont_tendency', &
+          diag%axesTL, Time, "Horizontal boundary diffusion tracer content tendency for "//trim(shortnm), &
           conv_units, conversion=Tr%conv_scale*US%s_to_T, x_cell_method='sum', y_cell_method='sum', v_extensive=.true.)
 
-      Tr%id_lbdxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_lbdxy_cont_tendency_2d', &
-          diag%axesT1, Time, "Depth integrated lateral diffusion tracer content "//&
+      Tr%id_hbdxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_hbdxy_cont_tendency_2d', &
+          diag%axesT1, Time, "Depth integrated horizontal boundary diffusion tracer content "//&
           "tendency for "//trim(shortnm), conv_units, conversion=Tr%conv_scale*US%s_to_T, &
           x_cell_method='sum', y_cell_method='sum')
     else
@@ -503,13 +491,13 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
           cmor_long_name=trim(cmor_var_lname), cmor_standard_name=trim(cmor_long_std(cmor_var_lname)), &
           x_cell_method='sum', y_cell_method='sum')
 
-      Tr%id_lbdxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_lbdxy_cont_tendency', &
-          diag%axesTL, Time, "Lateral diffusion tracer content tendency for "//trim(shortnm), &
+      Tr%id_hbdxy_cont = register_diag_field("ocean_model", trim(shortnm)//'_hbdxy_cont_tendency', &
+          diag%axesTL, Time, "Horizontal boundary diffusion tracer content tendency for "//trim(shortnm), &
           conv_units, conversion=Tr%conv_scale*US%s_to_T, &
           x_cell_method='sum', y_cell_method='sum', v_extensive=.true.)
 
-      Tr%id_lbdxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_lbdxy_cont_tendency_2d', &
-          diag%axesT1, Time, "Depth integrated lateral diffusion tracer "//&
+      Tr%id_hbdxy_cont_2d = register_diag_field("ocean_model", trim(shortnm)//'_hbdxy_cont_tendency_2d', &
+          diag%axesT1, Time, "Depth integrated horizontal boundary diffusion of tracer "//&
           "content tendency for "//trim(shortnm), conv_units, conversion=Tr%conv_scale*US%s_to_T, &
           x_cell_method='sum', y_cell_method='sum')
     endif
@@ -517,8 +505,8 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
         diag%axesTL, Time, "Neutral diffusion tracer concentration tendency for "//trim(shortnm), &
         trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
-    Tr%id_lbdxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_lbdxy_conc_tendency', &
-        diag%axesTL, Time, "Lateral diffusion tracer concentration tendency for "//trim(shortnm), &
+    Tr%id_hbdxy_conc = register_diag_field("ocean_model", trim(shortnm)//'_hbdxy_conc_tendency', &
+        diag%axesTL, Time, "Horizontal diffusion tracer concentration tendency for "//trim(shortnm), &
         trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
 
     var_lname = "Net time tendency for "//lowercase(flux_longname)

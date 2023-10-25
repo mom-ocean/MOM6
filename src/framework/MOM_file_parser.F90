@@ -124,7 +124,7 @@ end interface
 contains
 
 !> Make the contents of a parameter input file availalble in a param_file_type
-subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
+subroutine open_param_file(filename, CS, checkable, component, doc_file_dir, ensemble_num)
   character(len=*),           intent(in) :: filename !< An input file name, optionally with the full path
   type(param_file_type),   intent(inout) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
@@ -134,11 +134,13 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
                                          !! to generate parameter documentation file names; the default is"MOM"
   character(len=*), optional, intent(in) :: doc_file_dir !< An optional directory in which to write out
                                          !! the documentation files.  The default is effectively './'.
+  integer, optional, intent(in)          :: ensemble_num !< ensemble number to be appended to _doc filenames (optional)
 
   ! Local variables
   logical :: file_exists, Netcdf_file, may_check, reopened_file
   integer :: ios, iounit, strlen, i
   character(len=240) :: doc_path
+  character(len=5)  :: ensemble_suffix
   type(parameter_block), pointer :: block => NULL()
 
   may_check = .true. ; if (present(checkable)) may_check = checkable
@@ -217,6 +219,11 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir)
   call read_param(CS,"REPORT_UNUSED_PARAMS",CS%report_unused)
   call read_param(CS,"FATAL_UNUSED_PARAMS",CS%unused_params_fatal)
   CS%doc_file = "MOM_parameter_doc"
+  if (present(ensemble_num)) then
+    ! append instance suffix to doc_file
+    write(ensemble_suffix,'(A,I0.4)') '_', ensemble_num
+    CS%doc_file = trim(CS%doc_file)//ensemble_suffix
+  endif
   if (present(component)) CS%doc_file = trim(component)//"_parameter_doc"
   call read_param(CS,"DOCUMENT_FILE", CS%doc_file)
   if (.not.may_check) then

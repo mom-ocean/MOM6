@@ -95,6 +95,8 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "FIRST_GUESS_SURFACE_LAYER_DEPTH")
   call obsolete_logical(param_file, "CORRECT_SURFACE_LAYER_AVERAGE")
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
+  call obsolete_int(param_file, "USE_LATERAL_BOUNDARY_DIFFUSION", &
+                    hint="Use USE_HORIZONTAL_BOUNDARY_DIFFUSION instead.")
 
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
   call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)

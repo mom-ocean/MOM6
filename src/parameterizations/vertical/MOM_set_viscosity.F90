@@ -36,7 +36,8 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public set_viscous_BBL, set_viscous_ML, set_visc_init, set_visc_end
-public set_visc_register_restarts, remap_vertvisc_aux_vars
+public set_visc_register_restarts, set_u_at_v, set_v_at_u
+public remap_vertvisc_aux_vars
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
