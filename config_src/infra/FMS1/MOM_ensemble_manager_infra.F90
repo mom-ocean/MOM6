@@ -9,6 +9,7 @@ use ensemble_manager_mod, only : FMS_get_ensemble_id => get_ensemble_id
 use ensemble_manager_mod, only : FMS_get_ensemble_size => get_ensemble_size
 use ensemble_manager_mod, only : FMS_get_ensemble_pelist => get_ensemble_pelist
 use ensemble_manager_mod, only : FMS_get_ensemble_filter_pelist => get_ensemble_filter_pelist
+use fms_io_mod, only  : fms_io_set_filename_appendix=>set_filename_appendix
 
 implicit none ; private
 
@@ -20,9 +21,15 @@ contains
 
 !> Initializes the ensemble manager which divides available resources
 !! in order to concurrently execute an ensemble of model realizations.
-subroutine ensemble_manager_init()
+subroutine ensemble_manager_init(ensemble_suffix)
+  character(len=*), optional, intent(in) :: ensemble_suffix !> Ensemble suffix provided by the cap. This may be
+                                                            !! provided to bypass FMS ensemble manager.
 
-  call FMS_ensemble_manager_init()
+  if (present(ensemble_suffix)) then
+    call fms_io_set_filename_appendix(trim(ensemble_suffix))
+  else
+    call FMS_ensemble_manager_init()
+  endif
 
 end subroutine ensemble_manager_init
 

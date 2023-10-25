@@ -28,9 +28,11 @@ use MOM_cap_time,             only: AlarmInit
 use MOM_cap_methods,          only: mom_import, mom_export, mom_set_geomtype, mod2med_areacor
 use MOM_cap_methods,          only: med2mod_areacor, state_diagnose
 use MOM_cap_methods,          only: ChkErr
+use MOM_ensemble_manager,     only: ensemble_manager_init
 
 #ifdef CESMCOUPLED
 use shr_log_mod,             only: shr_log_setLogUnit
+use nuopc_shr_methods,       only: get_component_instance
 #endif
 use time_utils_mod,           only: esmf2fms_time
 
@@ -147,7 +149,8 @@ type(ESMF_GeomType_Flag) :: geomtype = ESMF_GEOMTYPE_MESH
 logical :: cesm_coupled = .false.
 type(ESMF_GeomType_Flag) :: geomtype
 #endif
-character(len=8) :: restart_mode = 'alarms'
+character(len=8)  :: restart_mode = 'alarms'
+character(len=16) :: inst_suffix = ''
 real(8) :: timere
 
 contains
@@ -434,6 +437,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                                                                  ! (same as restartfile if single restart file)
   character(len=*), parameter            :: subname='(MOM_cap:InitializeAdvertise)'
   character(len=32)                      :: calendar
+  character(len=:), allocatable          :: rpointer_filename
+  integer                                :: inst_index
   real(8)                                :: MPI_Wtime, timeiads
 !--------------------------------
 
@@ -465,6 +470,13 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   CALL ESMF_TimeIntervalGet(TINT, S=DT_OCEAN, RC=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+#ifdef CESMCOUPLED
+  call get_component_instance(gcomp, inst_suffix, inst_index, rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  call ensemble_manager_init(inst_suffix)
+  rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+#endif
+
   ! reset shr logging to my log file
   if (localPet==0) then
     call NUOPC_CompAttributeGet(gcomp, name="diro", &
@@ -474,11 +486,20 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
          isPresent=isPresentLogfile, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     if (isPresentDiro .and. isPresentLogfile) then
-         call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
-         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-         call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
-         if (ChkErr(rc,__LINE__,u_FILE_u)) return
-         open(newunit=stdout,file=trim(diro)//"/"//trim(logfile))
+      call NUOPC_CompAttributeGet(gcomp, name="diro", value=diro, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call NUOPC_CompAttributeGet(gcomp, name="logfile", value=logfile, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+      if (cesm_coupled) then
+        ! Multiinstance logfile name needs a correction
+        if(len_trim(inst_suffix) > 0) then
+          n = index(logfile, '.')
+          logfile = logfile(1:n-1)//trim(inst_suffix)//logfile(n:)
+        endif
+      endif
+
+      open(newunit=stdout,file=trim(diro)//"/"//trim(logfile))
     else
       stdout = output_unit
     endif
@@ -535,12 +556,6 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
-
-  ! rsd need to figure out how to get this without share code
-  !call shr_nuopc_get_component_instance(gcomp, inst_suffix, inst_index)
-  !inst_name = "OCN"//trim(inst_suffix)
-
-
   if (is_root_pe()) then
     write(stdout,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
@@ -595,9 +610,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
       if (localPet == 0) then
         ! this hard coded for rpointer.ocn right now
-        open(newunit=readunit, file='rpointer.ocn', form='formatted', status='old', iostat=iostat)
+        open(newunit=readunit, file=rpointer_filename, form='formatted', status='old', iostat=iostat)
         if (iostat /= 0) then
-          call ESMF_LogSetError(ESMF_RC_FILE_OPEN, msg=subname//' ERROR opening rpointer.ocn', &
+          call ESMF_LogSetError(ESMF_RC_FILE_OPEN, msg=subname//' ERROR opening '//rpointer_filename, &
                  line=__LINE__, file=u_FILE_u, rcToReturn=rc)
           return
         endif
@@ -607,7 +622,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
             if (len(trim(restartfiles))>1 .and. iostat<0) then
               exit ! done reading restart files list.
             else
-              call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=subname//' ERROR reading rpointer.ocn', &
+              call ESMF_LogSetError(ESMF_RC_FILE_READ, msg=subname//' ERROR reading '//rpointer_filename, &
                  line=__LINE__, file=u_FILE_u, rcToReturn=rc)
               return
             endif
@@ -630,7 +645,12 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   endif
 
   ocean_public%is_ocean_pe = .true.
-  call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(adjustl(restartfiles)))
+  if (cesm_coupled .and. len_trim(inst_suffix)>0) then
+    call ocean_model_init(ocean_public, ocean_state, time0, time_start, &
+      input_restart_file=trim(adjustl(restartfiles)), inst_index=inst_index)
+  else
+    call ocean_model_init(ocean_public, ocean_state, time0, time_start, input_restart_file=trim(adjustl(restartfiles)))
+  endif
 
   ! GMM, this call is not needed in CESM. Check with EMC if it can be deleted.
   call ocean_model_flux_init(ocean_state)
@@ -1514,6 +1534,7 @@ subroutine ModelAdvance(gcomp, rc)
   character(len=128)                     :: fldname
   character(len=*),parameter             :: subname='(MOM_cap:ModelAdvance)'
   character(len=8)                       :: suffix
+  character(len=:), allocatable          :: rpointer_filename
   integer                                :: num_rest_files
   real(8)                                :: MPI_Wtime, timers
 
@@ -1688,6 +1709,8 @@ subroutine ModelAdvance(gcomp, rc)
         call ESMF_VMGet(vm, localPet=localPet, rc=rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+        rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+
         write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') &
              trim(casename), year, month, day, seconds
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
@@ -1695,13 +1718,17 @@ subroutine ModelAdvance(gcomp, rc)
         call ocean_model_restart(ocean_state, restartname=restartname, num_rest_files=num_rest_files)
         if (localPet == 0) then
            ! Write name of restart file in the rpointer file - this is currently hard-coded for the ocean
-          open(newunit=writeunit, file='rpointer.ocn', form='formatted', status='unknown', iostat=iostat)
+          open(newunit=writeunit, file=rpointer_filename, form='formatted', status='unknown', iostat=iostat)
           if (iostat /= 0) then
             call ESMF_LogSetError(ESMF_RC_FILE_OPEN, &
-                 msg=subname//' ERROR opening rpointer.ocn', line=__LINE__, file=u_FILE_u, rcToReturn=rc)
+                 msg=subname//' ERROR opening '//rpointer_filename, line=__LINE__, file=u_FILE_u, rcToReturn=rc)
             return
           endif
-          write(writeunit,'(a)') trim(restartname)//'.nc'
+          if (len_trim(inst_suffix) == 0) then
+            write(writeunit,'(a)') trim(restartname)//'.nc'
+          else
+            write(writeunit,'(a)') trim(restartname)//'.'//trim(inst_suffix)//'.nc'
+          endif
 
           if (num_rest_files > 1) then
             ! append i.th restart file name to rpointer

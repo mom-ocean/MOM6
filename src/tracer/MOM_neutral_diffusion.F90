@@ -27,8 +27,8 @@ use regrid_edge_values,        only : edge_values_implicit_h4
 use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
-use MOM_lateral_boundary_diffusion, only : boundary_k_range, SURFACE, BOTTOM
 use MOM_io,                    only : stdout, stderr
+use MOM_hor_bnd_diffusion,     only : boundary_k_range, SURFACE, BOTTOM
 
 implicit none ; private
 
@@ -53,8 +53,21 @@ type, public :: neutral_diffusion_CS ; private
                       !! density [R L2 T-2 ~> Pa]
   logical :: interior_only !< If true, only applies neutral diffusion in the ocean interior.
                       !! That is, the algorithm will exclude the surface and bottom boundary layers.
+  logical :: tapering = .false. !< If true, neutral diffusion linearly decays towards zero within a
+                      !! transition zone defined using boundary layer depths. Only available when
+                      !! interior_only=true.
+  logical :: KhTh_use_ebt_struct !< If true, uses the equivalent barotropic structure
+                                 !! as the vertical structure of tracer diffusivity.
   logical :: use_unmasked_transport_bug !< If true, use an older form for the accumulation of
                       !! neutral-diffusion transports that were unmasked, as used prior to Jan 2018.
+  real,    allocatable, dimension(:,:)  :: hbl    !< Boundary layer depth [H ~> m or kg m-2]
+  ! Coefficients used to apply tapering from neutral to horizontal direction
+  real,    allocatable, dimension(:) :: coeff_l   !< Non-dimensional coefficient in the left column,
+                                                  !! at cell interfaces
+  real,    allocatable, dimension(:) :: coeff_r   !< Non-dimensional coefficient in the right column,
+                                                  !! at cell interfaces
+  ! Array used when KhTh_use_ebt_struct is true
+  real,    allocatable, dimension(:,:,:) :: Coef_h !< Coef_x and Coef_y averaged at t-points [L2 ~> m2]
   ! Positions of neutral surfaces in both the u, v directions
   real,    allocatable, dimension(:,:,:) :: uPoL  !< Non-dimensional position with left layer uKoL-1, u-point [nondim]
   real,    allocatable, dimension(:,:,:) :: uPoR  !< Non-dimensional position with right layer uKoR-1, u-point [nondim]
@@ -127,13 +140,15 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
 
   ! Local variables
-  character(len=80)  :: string  ! Temporary strings
+  character(len=80)  :: string    ! Temporary strings
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: remap_answers_2018    ! If true, use the order of arithmetic and expressions that
-                                   ! recover the answers for remapping from the end of 2018.
-                                   ! Otherwise, use more robust forms of the same expressions.
-  logical :: boundary_extrap
+  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
+                                  ! recover the answers for remapping from the end of 2018.
+                                  ! Otherwise, use more robust forms of the same expressions.
+  logical :: debug                ! If true, write verbose checksums for debugging purposes.
+  logical :: boundary_extrap      ! Indicate whether high-order boundary
+                                  !! extrapolation should be used within boundary cells.
 
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
@@ -172,6 +187,16 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                  "If true, only applies neutral diffusion in the ocean interior."//&
                  "That is, the algorithm will exclude the surface and bottom"//&
                  "boundary layers.", default=.false.)
+  if (CS%interior_only) then
+    call get_param(param_file, mdl, "NDIFF_TAPERING", CS%tapering, &
+                   "If true, neutral diffusion linearly decays to zero within "//&
+                   "a transition zone defined using boundary layer depths.    "//&
+                   "Only applicable when NDIFF_INTERIOR_ONLY=True", default=.false.)
+  endif
+  call get_param(param_file, mdl, "KHTR_USE_EBT_STRUCT", CS%KhTh_use_ebt_struct, &
+                 "If true, uses the equivalent barotropic structure "//&
+                 "as the vertical structure of the tracer diffusivity.",&
+                 default=.false.,do_not_log=.true.)
   call get_param(param_file, mdl, "NDIFF_USE_UNMASKED_TRANSPORT_BUG", CS%use_unmasked_transport_bug, &
                  "If true, use an older form for the accumulation of neutral-diffusion "//&
                  "transports that were unmasked, as used prior to Jan 2018. This is not "//&
@@ -242,22 +267,32 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                      "exiting the iterative loop to find the neutral surface",    &
                      default=10)
     endif
+    call get_param(param_file, mdl, "DEBUG", debug, default=.false., do_not_log=.true.)
     call get_param(param_file, mdl, "NDIFF_DEBUG", CS%debug,             &
                    "Turns on verbose output for discontinuous neutral "//&
-                   "diffusion routines.", &
-                   default=.false.)
+                   "diffusion routines.", default=debug)
     call get_param(param_file, mdl, "HARD_FAIL_HEFF", CS%hard_fail_heff, &
                   "Bring down the model if a problem with heff is detected",&
                    default=.true.)
   endif
 
   if (CS%interior_only) then
+    allocate(CS%hbl(SZI_(G),SZJ_(G)), source=0.)
     call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
     call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
     if ( .not. ASSOCIATED(CS%energetic_PBL_CSp) .and. .not. ASSOCIATED(CS%KPP_CSp) ) then
       call MOM_error(FATAL,"NDIFF_INTERIOR_ONLY is true, but no valid boundary layer scheme was found")
     endif
+
+    if (CS%tapering) then
+      allocate(CS%coeff_l(SZK_(GV)+1), source=1.)
+      allocate(CS%coeff_r(SZK_(GV)+1), source=1.)
+    endif
   endif
+
+  if (CS%KhTh_use_ebt_struct) &
+     allocate(CS%Coef_h(G%isd:G%ied,G%jsd:G%jed,SZK_(GV)+1), source=0.)
+
   ! Store a rescaling factor for use in diagnostic messages.
   CS%R_to_kg_m3 = US%R_to_kg_m3
 
@@ -316,7 +351,6 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   ! Variables used for reconstructions
   real, dimension(SZK_(GV),2) :: ppoly_r_S      ! Reconstruction slopes
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G))  :: hbl      ! Boundary layer depth [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta [R L2 T-2 ~> Pa]
   real :: h_neglect, h_neglect_edge    ! Negligible thicknesses [H ~> m or kg m-2]
@@ -335,14 +369,15 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
-    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, &
+    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, CS%hbl, G, US, m_to_BLD_units=GV%m_to_H)
+    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, CS%hbl, G, US, &
                                                                      m_to_MLD_units=GV%m_to_H)
-    call pass_var(hbl,G%Domain)
+    call pass_var(CS%hbl,G%Domain)
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
       if (G%mask2dT(i,j) > 0.0) then
-        call boundary_k_range(SURFACE, G%ke, h(i,j,:), hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), zeta_bot(i,j))
+        call boundary_k_range(SURFACE, G%ke, h(i,j,:), CS%hbl(i,j), k_top(i,j), zeta_top(i,j), k_bot(i,j), &
+                              zeta_bot(i,j))
       endif
     enddo; enddo
     ! TODO: add similar code for BOTTOM boundary layer
@@ -562,16 +597,16 @@ end subroutine neutral_diffusion_calc_coeffs
 
 !> Update tracer concentration due to neutral diffusion; layer thickness unchanged by this update.
 subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
-  type(ocean_grid_type),                     intent(in)    :: G      !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV     !< ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
-  real,                                      intent(in)    :: dt     !< Tracer time step * I_numitts [T ~> s]
+  type(ocean_grid_type),                        intent(in)    :: G      !< Ocean grid structure
+  type(verticalGrid_type),                      intent(in)    :: GV     !< ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h      !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
+  real,                                         intent(in)    :: dt     !< Tracer time step * I_numitts [T ~> s]
                                                                      !! (I_numitts in tracer_hordiff)
-  type(tracer_registry_type),                pointer       :: Reg    !< Tracer registry
-  type(unit_scale_type),                     intent(in)    :: US     !< A dimensional unit scaling type
-  type(neutral_diffusion_CS),                pointer       :: CS     !< Neutral diffusion control structure
+  type(tracer_registry_type),                   pointer       :: Reg    !< Tracer registry
+  type(unit_scale_type),                        intent(in)    :: US     !< A dimensional unit scaling type
+  type(neutral_diffusion_CS),                   pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G),CS%nsurf-1) :: uFlx        ! Zonal flux of tracer [H conc ~> m conc or conc kg m-2]
@@ -585,19 +620,35 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real, dimension(SZI_(G),SZJB_(G))            :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
   real, dimension(SZK_(GV))                    :: dTracer     ! change in tracer concentration due to ndiffusion
                                                               ! [H L2 conc ~> m3 conc or kg conc]
+  real :: normalize  ! normalization used for averaging Coef_x and Coef_y to t-points.
 
   type(tracer_type), pointer                   :: Tracer => NULL() ! Pointer to the current tracer
 
   integer :: i, j, k, m, ks, nk
   real :: Idt  ! The inverse of the time step [T-1 ~> s-1]
   real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
-
   h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
 
   if (.not. CS%continuous_reconstruction) then
     if (CS%remap_answer_date < 20190101) then
       h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
     endif
+  endif
+
+  if (CS%KhTh_use_ebt_struct) then
+    ! Compute Coef at h points
+    CS%Coef_h(:,:,:) = 0.
+    do j = G%jsc,G%jec ; do i = G%isc,G%iec
+      if (G%mask2dT(i,j)>0.) then
+        normalize = 1.0 / ((G%mask2dCu(I-1,j)+G%mask2dCu(I,j)) + &
+                         (G%mask2dCv(i,J-1)+G%mask2dCv(i,J)) + 1.0e-37)
+        do k = 1, GV%ke+1
+          CS%Coef_h(i,j,k) = normalize*G%mask2dT(i,j)*((Coef_x(I-1,j,k)+Coef_x(I,j,k)) + &
+                                            (Coef_y(i,J-1,k)+Coef_y(i,J,k)))
+        enddo
+      endif
+    enddo; enddo
+    call pass_var(CS%Coef_h,G%Domain)
   endif
 
   nk = GV%ke
@@ -617,58 +668,193 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     vFlx(:,:,:) = 0.
 
     ! x-flux
-    do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-      if (G%mask2dCu(I,j)>0.) then
-        call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
-                                  tracer%t(i,j,:), tracer%t(i+1,j,:), &
-                                  CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
-                                  CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
-                                  CS%uhEff(I,j,:), uFlx(I,j,:), &
-                                  CS%continuous_reconstruction, h_neglect, CS%remap_CS, h_neglect_edge)
+    if (CS%KhTh_use_ebt_struct) then
+      if (CS%tapering) then
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
+            ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
+            call compute_tapering_coeffs(G%ke+1, CS%hbl(I,j), CS%hbl(I+1,j), CS%coeff_l(:), CS%coeff_r(:), &
+                                         h(I,j,:), h(I+1,j,:))
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
+                                      tracer%t(i,j,:), tracer%t(i+1,j,:), &
+                                      CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
+                                      CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
+                                      CS%uhEff(I,j,:), uFlx(I,j,:), &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge, CS%coeff_l(:)*CS%Coef_h(i,j,:), &
+                                      CS%coeff_r(:)*CS%Coef_h(i+1,j,:))
+          endif
+        enddo ; enddo
+      else
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
+                                      tracer%t(i,j,:), tracer%t(i+1,j,:), &
+                                      CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
+                                      CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
+                                      CS%uhEff(I,j,:), uFlx(I,j,:), &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge, CS%Coef_h(i,j,:), &
+                                      CS%Coef_h(i+1,j,:))
+          endif
+        enddo ; enddo
       endif
-    enddo ; enddo
+    else
+      if (CS%tapering) then
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
+            ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
+            call compute_tapering_coeffs(G%ke+1, CS%hbl(I,j), CS%hbl(I+1,j), CS%coeff_l(:), CS%coeff_r(:), &
+                                         h(I,j,:), h(I+1,j,:))
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
+                                      tracer%t(i,j,:), tracer%t(i+1,j,:), &
+                                      CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
+                                      CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
+                                      CS%uhEff(I,j,:), uFlx(I,j,:), &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge, CS%coeff_l(:), &
+                                      CS%coeff_r(:))
+          endif
+        enddo ; enddo
+      else
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          if (G%mask2dCu(I,j)>0.) then
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i+1,j,:),       &
+                                      tracer%t(i,j,:), tracer%t(i+1,j,:), &
+                                      CS%uPoL(I,j,:), CS%uPoR(I,j,:), &
+                                      CS%uKoL(I,j,:), CS%uKoR(I,j,:), &
+                                      CS%uhEff(I,j,:), uFlx(I,j,:), &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge)
+          endif
+        enddo ; enddo
+      endif
+    endif
 
     ! y-flux
-    do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-      if (G%mask2dCv(i,J)>0.) then
-        call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
-                                  tracer%t(i,j,:), tracer%t(i,j+1,:), &
-                                  CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
-                                  CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
-                                  CS%vhEff(i,J,:), vFlx(i,J,:),   &
-                                  CS%continuous_reconstruction, h_neglect, CS%remap_CS, h_neglect_edge)
+    if (CS%KhTh_use_ebt_struct) then
+      if (CS%tapering) then
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
+            ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
+            call compute_tapering_coeffs(G%ke+1, CS%hbl(i,J), CS%hbl(i,J+1), CS%coeff_l(:), CS%coeff_r(:), &
+                                         h(i,J,:), h(i,J+1,:))
+
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
+                                      tracer%t(i,j,:), tracer%t(i,j+1,:), &
+                                      CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
+                                      CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
+                                      CS%vhEff(i,J,:), vFlx(i,J,:),   &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge, CS%coeff_l(:)*CS%Coef_h(i,j,:), &
+                                      CS%coeff_r(:)*CS%Coef_h(i,j+1,:))
+          endif
+        enddo ; enddo
+      else
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
+                                      tracer%t(i,j,:), tracer%t(i,j+1,:), &
+                                      CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
+                                      CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
+                                      CS%vhEff(i,J,:), vFlx(i,J,:),   &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge, CS%Coef_h(i,j,:), &
+                                      CS%Coef_h(i,j+1,:))
+          endif
+        enddo ; enddo
       endif
-    enddo ; enddo
+    else
+      if (CS%tapering) then
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
+            ! compute coeff_l and coeff_r and pass them to neutral_surface_flux
+            call compute_tapering_coeffs(G%ke+1, CS%hbl(i,J), CS%hbl(i,J+1), CS%coeff_l(:), CS%coeff_r(:), &
+                                         h(i,J,:), h(i,J+1,:))
+
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
+                                      tracer%t(i,j,:), tracer%t(i,j+1,:), &
+                                      CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
+                                      CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
+                                      CS%vhEff(i,J,:), vFlx(i,J,:),   &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge, CS%coeff_l(:), &
+                                      CS%coeff_r(:))
+          endif
+        enddo ; enddo
+      else
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          if (G%mask2dCv(i,J)>0.) then
+            call neutral_surface_flux(nk, CS%nsurf, CS%deg, h(i,j,:), h(i,j+1,:),       &
+                                      tracer%t(i,j,:), tracer%t(i,j+1,:), &
+                                      CS%vPoL(i,J,:), CS%vPoR(i,J,:), &
+                                      CS%vKoL(i,J,:), CS%vKoR(i,J,:), &
+                                      CS%vhEff(i,J,:), vFlx(i,J,:),   &
+                                      CS%continuous_reconstruction, h_neglect, &
+                                      CS%remap_CS, h_neglect_edge)
+          endif
+        enddo ; enddo
+      endif
+    endif
 
     ! Update the tracer concentration from divergence of neutral diffusive flux components
-    do j = G%jsc,G%jec ; do i = G%isc,G%iec
-      if (G%mask2dT(i,j)>0.) then
-
-        dTracer(:) = 0.
-        do ks = 1,CS%nsurf-1
-          k = CS%uKoL(I,j,ks)
-          dTracer(k) = dTracer(k) + Coef_x(I,j)   * uFlx(I,j,ks)
-          k = CS%uKoR(I-1,j,ks)
-          dTracer(k) = dTracer(k) - Coef_x(I-1,j) * uFlx(I-1,j,ks)
-          k = CS%vKoL(i,J,ks)
-          dTracer(k) = dTracer(k) + Coef_y(i,J)   * vFlx(i,J,ks)
-          k = CS%vKoR(i,J-1,ks)
-          dTracer(k) = dTracer(k) - Coef_y(i,J-1) * vFlx(i,J-1,ks)
-        enddo
-        do k = 1, GV%ke
-          tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
-                          ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
-          if (abs(tracer%t(i,j,k)) < tracer%conc_underflow) tracer%t(i,j,k) = 0.0
-        enddo
-
-        if (tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
-          do k = 1, GV%ke
-            tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
+    if (CS%KhTh_use_ebt_struct) then
+      do j = G%jsc,G%jec ; do i = G%isc,G%iec
+        if (G%mask2dT(i,j)>0.) then
+          dTracer(:) = 0.
+          do ks = 1,CS%nsurf-1
+            k = CS%uKoL(I,j,ks)
+            dTracer(k) = dTracer(k)   + uFlx(I,j,ks)
+            k = CS%uKoR(I-1,j,ks)
+            dTracer(k) =   dTracer(k) - uFlx(I-1,j,ks)
+            k = CS%vKoL(i,J,ks)
+            dTracer(k) = dTracer(k)   + vFlx(i,J,ks)
+            k = CS%vKoR(i,J-1,ks)
+            dTracer(k) =   dTracer(k) - vFlx(i,J-1,ks)
           enddo
-        endif
+          do k = 1, GV%ke
+            tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
+                            ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
+            if (abs(tracer%t(i,j,k)) < tracer%conc_underflow) tracer%t(i,j,k) = 0.0
+          enddo
 
-      endif
-    enddo ; enddo
+          if (tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
+            do k = 1, GV%ke
+              tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
+            enddo
+          endif
+
+        endif
+      enddo ; enddo
+    else
+      do j = G%jsc,G%jec ; do i = G%isc,G%iec
+        if (G%mask2dT(i,j)>0.) then
+          dTracer(:) = 0.
+          do ks = 1,CS%nsurf-1
+            k = CS%uKoL(I,j,ks)
+            dTracer(k) = dTracer(k) + Coef_x(I,j,1)   * uFlx(I,j,ks)
+            k = CS%uKoR(I-1,j,ks)
+            dTracer(k) = dTracer(k) - Coef_x(I-1,j,1) * uFlx(I-1,j,ks)
+            k = CS%vKoL(i,J,ks)
+            dTracer(k) = dTracer(k) + Coef_y(i,J,1)   * vFlx(i,J,ks)
+            k = CS%vKoR(i,J-1,ks)
+            dTracer(k) = dTracer(k) - Coef_y(i,J-1,1) * vFlx(i,J-1,ks)
+          enddo
+          do k = 1, GV%ke
+            tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
+                            ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
+            if (abs(tracer%t(i,j,k)) < tracer%conc_underflow) tracer%t(i,j,k) = 0.0
+          enddo
+
+          if (tracer%id_dfxy_conc > 0  .or. tracer%id_dfxy_cont > 0 .or. tracer%id_dfxy_cont_2d > 0 ) then
+            do k = 1, GV%ke
+              tendency(i,j,k) = dTracer(k) * G%IareaT(i,j) * Idt
+            enddo
+          endif
+
+        endif
+      enddo ; enddo
+    endif
 
     ! Do user controlled underflow of the tracer concentrations.
     if (tracer%conc_underflow > 0.0) then
@@ -680,30 +866,58 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     ! Diagnose vertically summed zonal flux, giving zonal tracer transport from ndiff.
     ! Note sign corresponds to downgradient flux convention.
     if (tracer%id_dfx_2d > 0) then
-      do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
-        trans_x_2d(I,j) = 0.
-        if (G%mask2dCu(I,j)>0.) then
-          do ks = 1,CS%nsurf-1
-            trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j) * uFlx(I,j,ks)
-          enddo
-          trans_x_2d(I,j) = trans_x_2d(I,j) * Idt
-        endif
-      enddo ; enddo
+
+      if (CS%KhTh_use_ebt_struct) then
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          trans_x_2d(I,j) = 0.
+          if (G%mask2dCu(I,j)>0.) then
+            do ks = 1,CS%nsurf-1
+              trans_x_2d(I,j) =  trans_x_2d(I,j) - uFlx(I,j,ks)
+            enddo
+            trans_x_2d(I,j) = trans_x_2d(I,j) * Idt
+          endif
+        enddo ; enddo
+      else
+        do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
+          trans_x_2d(I,j) = 0.
+          if (G%mask2dCu(I,j)>0.) then
+            do ks = 1,CS%nsurf-1
+              trans_x_2d(I,j) = trans_x_2d(I,j) - Coef_x(I,j,1) * uFlx(I,j,ks)
+            enddo
+            trans_x_2d(I,j) = trans_x_2d(I,j) * Idt
+          endif
+        enddo ; enddo
+      endif
+
       call post_data(tracer%id_dfx_2d, trans_x_2d(:,:), CS%diag)
     endif
 
     ! Diagnose vertically summed merid flux, giving meridional tracer transport from ndiff.
     ! Note sign corresponds to downgradient flux convention.
     if (tracer%id_dfy_2d > 0) then
-      do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
-        trans_y_2d(i,J) = 0.
-        if (G%mask2dCv(i,J)>0.) then
-          do ks = 1,CS%nsurf-1
-            trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J) * vFlx(i,J,ks)
-          enddo
-          trans_y_2d(i,J) = trans_y_2d(i,J) * Idt
-        endif
-      enddo ; enddo
+
+      if (CS%KhTh_use_ebt_struct) then
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          trans_y_2d(i,J) = 0.
+          if (G%mask2dCv(i,J)>0.) then
+            do ks = 1,CS%nsurf-1
+              trans_y_2d(i,J) = trans_y_2d(i,J) - vFlx(i,J,ks)
+            enddo
+            trans_y_2d(i,J) = trans_y_2d(i,J) * Idt
+          endif
+        enddo ; enddo
+      else
+        do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
+          trans_y_2d(i,J) = 0.
+          if (G%mask2dCv(i,J)>0.) then
+            do ks = 1,CS%nsurf-1
+              trans_y_2d(i,J) = trans_y_2d(i,J) - Coef_y(i,J,1) * vFlx(i,J,ks)
+            enddo
+            trans_y_2d(i,J) = trans_y_2d(i,J) * Idt
+          endif
+        enddo ; enddo
+      endif
+
       call post_data(tracer%id_dfy_2d, trans_y_2d(:,:), CS%diag)
     endif
 
@@ -735,6 +949,62 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   enddo ! Loop over tracer registry
 
 end subroutine neutral_diffusion
+
+!> Computes linear tapering coefficients at interfaces of the left and right columns
+!! within a region defined by the boundary layer depths in the two columns.
+subroutine compute_tapering_coeffs(ne, bld_l, bld_r, coeff_l, coeff_r, h_l, h_r)
+  integer,               intent(in)    :: ne       !< Number of interfaces
+  real,                  intent(in)    :: bld_l    !< Boundary layer depth, left column  [H ~> m or kg m-2]
+  real,                  intent(in)    :: bld_r    !< Boundary layer depth, right column [H ~> m or kg m-2]
+  real, dimension(ne-1), intent(in)    :: h_l      !< Layer thickness, left column       [H ~> m or kg m-2]
+  real, dimension(ne-1), intent(in)    :: h_r      !< Layer thickness, right column      [H ~> m or kg m-2]
+  real, dimension(ne),   intent(inout) :: coeff_l  !< Tapering coefficient, left column            [nondim]
+  real, dimension(ne),   intent(inout) :: coeff_r  !< Tapering coefficient, right column           [nondim]
+
+  ! Local variables
+  real :: min_bld, max_bld                       ! Min/Max boundary layer depth in two adjacent columns
+  integer :: dummy1                              ! dummy integer
+  real    :: dummy2                              ! dummy real
+  integer :: k_min_l, k_min_r, k_max_l, k_max_r  ! Min/max vertical indices in two adjacent columns
+  real    :: zeta_l, zeta_r                      ! dummy variables
+  integer :: k                                   ! vertical index
+
+  ! initialize coeffs
+  coeff_l(:) = 1.0
+  coeff_r(:) = 1.0
+
+  ! Calculate vertical indices containing the boundary layer depths
+  max_bld = MAX(bld_l, bld_r)
+  min_bld = MIN(bld_l, bld_r)
+
+  ! k_min
+  call boundary_k_range(SURFACE, ne-1, h_l, min_bld, dummy1, dummy2, k_min_l, &
+                      zeta_l)
+  call boundary_k_range(SURFACE, ne-1, h_r, min_bld, dummy1, dummy2, k_min_r, &
+                      zeta_r)
+
+  ! k_max
+  call boundary_k_range(SURFACE, ne-1, h_l, max_bld, dummy1, dummy2, k_max_l, &
+                      zeta_l)
+  call boundary_k_range(SURFACE, ne-1, h_r, max_bld, dummy1, dummy2, k_max_r, &
+                      zeta_r)
+  ! left
+  do k=1,k_min_l
+    coeff_l(k) = 0.0
+  enddo
+  do k=k_min_l+1,k_max_l+1
+    coeff_l(k) = (real(k - k_min_l) + 1.0)/(real(k_max_l - k_min_l) + 2.0)
+  enddo
+
+  ! right
+  do k=1,k_min_r
+    coeff_r(k) = 0.0
+  enddo
+  do k=k_min_r+1,k_max_r+1
+    coeff_r(k) = (real(k - k_min_r) + 1.0)/(real(k_max_r - k_min_r) + 2.0)
+  enddo
+
+end subroutine compute_tapering_coeffs
 
 !> Returns interface scalar, Si, for a column of layer values, S.
 subroutine interface_scalar(nk, h, S, Si, i_method, h_neglect)
@@ -1921,7 +2191,8 @@ end function absolute_positions
 
 !> Returns a single column of neutral diffusion fluxes of a tracer.
 subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, KoR, &
-                                hEff, Flx, continuous, h_neglect, remap_CS, h_neglect_edge)
+                                hEff, Flx, continuous, h_neglect, remap_CS, h_neglect_edge, &
+                                coeff_l, coeff_r)
   integer,                      intent(in)    :: nk    !< Number of levels
   integer,                      intent(in)    :: nsurf !< Number of neutral surfaces
   integer,                      intent(in)    :: deg   !< Degree of polynomial reconstructions
@@ -1937,7 +2208,8 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   integer, dimension(nsurf),    intent(in)    :: KoR   !< Index of first right interface above neutral surface
   real, dimension(nsurf-1),     intent(in)    :: hEff  !< Effective thickness between two neutral
                                                        !! surfaces [H ~> m or kg m-2]
-  real, dimension(nsurf-1),     intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers (conc H)
+  real, dimension(nsurf-1),     intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers
+                                                       !! (conc H or conc H L2)
   logical,                      intent(in)    :: continuous !< True if using continuous reconstruction
   real,                         intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions [H ~> m or kg m-2]
@@ -1945,11 +2217,14 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
                                              !! to create sublayers
   real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width used for
                                              !! edge value calculations if continuous is false [H ~> m or kg m-2]
+  real, dimension(nk+1), optional, intent(in) :: coeff_l !< Left-column diffusivity  [L2 ~> m2 or nondim]
+  real, dimension(nk+1), optional, intent(in) :: coeff_r !< Right-column diffusivity [L2 ~> m2 or nondim]
+
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt
   real :: T_right_top, T_right_bottom, T_right_layer, T_right_sub, T_right_top_int, T_right_bot_int
   real :: T_left_top, T_left_bottom, T_left_layer, T_left_sub, T_left_top_int, T_left_bot_int
-  real :: dT_top, dT_bottom, dT_layer, dT_ave, dT_sublayer, dT_top_int, dT_bot_int
+  real :: dT_top, dT_bottom, dT_layer, dT_ave, dT_sublayer, dT_top_int, dT_bot_int, khtr_ave
   real, dimension(nk+1) :: Til !< Left-column interface tracer (conc, e.g. degC)
   real, dimension(nk+1) :: Tir !< Right-column interface tracer (conc, e.g. degC)
   real, dimension(nk) :: aL_l !< Left-column left edge value of tracer (conc, e.g. degC)
@@ -1964,7 +2239,12 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   real, dimension(nk,deg+1) :: ppoly_r_coeffs_r
   real, dimension(nk,deg+1) :: ppoly_r_S_l
   real, dimension(nk,deg+1) :: ppoly_r_S_r
-  logical :: down_flux
+  logical :: down_flux, tapering
+
+  tapering = .false.
+  if (present(coeff_l) .and. present(coeff_r)) tapering = .true.
+  khtr_ave = 1.0
+
   ! Setup reconstruction edge values
   if (continuous) then
     call interface_scalar(nk, hl, Tl, Til, 2, h_neglect)
@@ -1987,6 +2267,14 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
     if (hEff(k_sublayer) == 0.) then
       Flx(k_sublayer) = 0.
     else
+      if (tapering) then
+        klb = KoL(k_sublayer+1)
+        klt = KoL(k_sublayer)
+        krb = KoR(k_sublayer+1)
+        krt = KoR(k_sublayer)
+        ! these are added in this order to preserve vertically-uniform diffusivity answers
+        khtr_ave = 0.25 * ((coeff_l(klb) + coeff_l(klt)) + (coeff_r(krb) + coeff_r(krt)))
+      endif
       if (continuous) then
         klb = KoL(k_sublayer+1)
         T_left_bottom = ( 1. - PiL(k_sublayer+1) ) * Til(klb) + PiL(k_sublayer+1) * Til(klb+1)
@@ -2010,7 +2298,7 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
         else
           dT_ave = dT_layer
         endif
-        Flx(k_sublayer) = dT_ave * hEff(k_sublayer)
+        Flx(k_sublayer) = dT_ave * hEff(k_sublayer) * khtr_ave
       else ! Discontinuous reconstruction
         ! Calculate tracer values on left and right side of the neutral surface
         call neutral_surface_T_eval(nk, nsurf, k_sublayer, KoL, PiL, Tl, Tid_l, deg, iMethod, &
@@ -2036,7 +2324,7 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
                     dT_sublayer >= 0. .and. dT_top_int >= 0. .and. &
                     dT_bot_int >= 0.)
         if (down_flux) then
-          Flx(k_sublayer) = dT_sublayer * hEff(k_sublayer)
+          Flx(k_sublayer) = dT_sublayer * hEff(k_sublayer) * khtr_ave
         else
           Flx(k_sublayer) = 0.
         endif
