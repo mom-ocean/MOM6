@@ -1660,7 +1660,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
 
     ! next make sure mass is consistent with thickness
       do j=G%jsd,G%jed ; do i=G%isd,G%ied
-        if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2)) then
+        if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2) .or. (ISS%hmask(i,j)==3)) then
           ISS%mass_shelf(i,j) = ISS%h_shelf(i,j)*CS%density_ice
         endif
       enddo ; enddo
@@ -1727,7 +1727,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
           CS%rotate_index, CS%turns)
     ! next make sure mass is consistent with thickness
     do j=G%jsd,G%jed ; do i=G%isd,G%ied
-      if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2)) then
+      if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 2) .or. (ISS%hmask(i,j) == 3)) then
         ISS%mass_shelf(i,j) = ISS%h_shelf(i,j)*CS%density_ice
       endif
     enddo ; enddo

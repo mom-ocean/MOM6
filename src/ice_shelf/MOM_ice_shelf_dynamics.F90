@@ -703,7 +703,7 @@ function ice_time_step_CFL(CS, ISS, G)
 
   min_dt = 5.0e17*G%US%s_to_T ! The starting maximum is roughly the lifetime of the universe.
   min_vel = (1.0e-12/(365.0*86400.0)) * G%US%m_s_to_L_T
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (ISS%hmask(i,j) == 1.0) then
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (ISS%hmask(i,j) == 1.0 .or. ISS%hmask(i,j)==3) then
     dt_local = 2.0*G%areaT(i,j) / &
        ((G%dyCu(I,j)  * max(abs(CS%u_shelf(I,J)  + CS%u_shelf(I,j-1)), min_vel) + &
          G%dyCu(I-1,j)* max(abs(CS%u_shelf(I-1,J)+ CS%u_shelf(I-1,j-1)), min_vel)) + &
@@ -979,7 +979,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
       nodefloat = 0
 
       do l=0,1 ; do k=0,1
-        if ((ISS%hmask(i,j) == 1) .and. &
+        if ((ISS%hmask(i,j) == 1 .or. ISS%hmask(i,j)==3) .and. &
             (rhoi_rhow * H_node(i-1+k,j-1+l) - CS%bed_elev(i,j) <= 0)) then
           nodefloat = nodefloat + 1
         endif
@@ -1512,7 +1512,7 @@ subroutine ice_shelf_advect_thickness_x(CS, G, LB, time_step, hmask, h0, h_after
   do j=jsh,jeh ; do I=ish-1,ieh
     if (CS%u_face_mask(I,j) == 4.) then ! The flux itself is a specified boundary condition.
       uh_ice(I,j) = time_step * G%dyCu(I,j) * CS%u_flux_bdry_val(I,j)
-    elseif ((hmask(i,j) == 1) .or. (hmask(i+1,j) == 1)) then
+    elseif ((hmask(i,j) == 1 .or. hmask(i,j) == 3) .or. (hmask(i+1,j) == 1 .or. hmask(i+1,j) == 3)) then
       u_face = 0.5 * (CS%u_shelf(I,J-1) + CS%u_shelf(I,J))
       h_face = 0.0 ! This will apply when the source cell is iceless or not fully ice covered.
 
@@ -1591,8 +1591,7 @@ subroutine ice_shelf_advect_thickness_y(CS, G, LB, time_step, hmask, h0, h_after
   do J=jsh-1,jeh ; do i=ish,ieh
     if (CS%v_face_mask(i,J) == 4.) then ! The flux itself is a specified boundary condition.
       vh_ice(i,J) = time_step * G%dxCv(i,J) * CS%v_flux_bdry_val(i,J)
-    elseif ((hmask(i,j) == 1) .or. (hmask(i,j+1) == 1)) then
-
+    elseif ((hmask(i,j) == 1 .or. hmask(i,j) == 3) .or. (hmask(i,j+1) == 1 .or. hmask(i,j+1) == 3)) then
       v_face = 0.5 * (CS%v_shelf(I-1,J) + CS%v_shelf(I,J))
       h_face = 0.0 ! This will apply when the source cell is iceless or not fully ice covered.
 
@@ -1760,7 +1759,7 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
               partial_vol = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) + tot_flux
 
               if ((partial_vol / G%areaT(i,j)) == h_reference) then ! cell is exactly covered, no overflow
-                ISS%hmask(i,j) = 1
+                if (ISS%hmask(i,j).ne.3) ISS%hmask(i,j) = 1
                 ISS%h_shelf(i,j) = h_reference
                 ISS%area_shelf_h(i,j) = G%areaT(i,j)
               elseif ((partial_vol / G%areaT(i,j)) < h_reference) then
@@ -1770,7 +1769,7 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
                 ISS%h_shelf(i,j) = h_reference
               else
 
-                ISS%hmask(i,j) = 1
+                if (ISS%hmask(i,j).ne.3) ISS%hmask(i,j) = 1
                 ISS%area_shelf_h(i,j) = G%areaT(i,j)
                 !h_temp(i,j) = h_reference
                 partial_vol = partial_vol - h_reference * G%areaT(i,j)
@@ -1962,30 +1961,31 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
       dyh = G%dyT(i,j)
       Dx=dxh
       Dy=dyh
-      if (ISS%hmask(i,j) == 1) then ! we are inside the global computational bdry, at an ice-filled cell
+      if (ISS%hmask(i,j) == 1 .or. ISS%hmask(i,j) == 3) then
+        ! we are inside the global computational bdry, at an ice-filled cell
 
         ! calculate sx
         if ((i+i_off) == gisc) then ! at west computational bdry
-         if (ISS%hmask(i+1,j) == 1) then
+         if (ISS%hmask(i+1,j) == 1 .or. ISS%hmask(i+1,j) == 3) then
             sx = (S(i+1,j)-S(i,j))/dxh
           else
             sx = 0
           endif
         elseif ((i+i_off) == giec) then ! at east computational bdry
-          if (ISS%hmask(i-1,j) == 1) then
+          if (ISS%hmask(i-1,j) == 1 .or. ISS%hmask(i-1,j) == 3) then
             sx = (S(i,j)-S(i-1,j))/dxh
           else
             sx = 0
           endif
         else ! interior
-          if (ISS%hmask(i+1,j) == 1) then
+          if (ISS%hmask(i+1,j) == 1 .or. ISS%hmask(i+1,j) == 3) then
             cnt = cnt+1
             Dx =dxh+ G%dxT(i+1,j)
             sx = S(i+1,j)
           else
             sx = S(i,j)
           endif
-          if (ISS%hmask(i-1,j) == 1) then
+          if (ISS%hmask(i-1,j) == 1 .or. ISS%hmask(i-1,j) == 3) then
             cnt = cnt+1
             Dx =dxh+ G%dxT(i-1,j)
             sx = sx - S(i-1,j)
@@ -2003,26 +2003,26 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
 
         ! calculate sy, similarly
         if ((j+j_off) == gjsc) then ! at south computational bdry
-          if (ISS%hmask(i,j+1) == 1) then
+          if (ISS%hmask(i,j+1) == 1 .or. ISS%hmask(i,j+1) == 3) then
             sy = (S(i,j+1)-S(i,j))/dyh
           else
             sy = 0
           endif
         elseif ((j+j_off) == gjec) then ! at north computational bdry
-          if (ISS%hmask(i,j-1) == 1) then
+          if (ISS%hmask(i,j-1) == 1 .or. ISS%hmask(i,j-1) == 3) then
             sy = (S(i,j)-S(i,j-1))/dyh
           else
             sy = 0
           endif
         else ! interior
-          if (ISS%hmask(i,j+1) == 1) then
+          if (ISS%hmask(i,j+1) == 1 .or. ISS%hmask(i,j+1) == 3) then
             cnt = cnt+1
             Dy =dyh+ G%dyT(i,j+1)
             sy = S(i,j+1)
           else
             sy = S(i,j)
           endif
-          if (ISS%hmask(i,j-1) == 1) then
+          if (ISS%hmask(i,j-1) == 1 .or. ISS%hmask(i,j-1) == 3) then
             cnt = cnt+1
             sy = sy - S(i,j-1)
             Dy =dyh+ G%dyT(i,j-1)
@@ -2258,7 +2258,7 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
 
   Ee=1.0
 
-  do j=js,je ; do i=is,ie ; if (hmask(i,j) == 1) then
+  do j=js,je ; do i=is,ie ; if (hmask(i,j) == 1 .or. hmask(i,j)==3) then
 
       do iq=1,2 ; do jq=1,2
 
@@ -2426,7 +2426,7 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
 
   Ee=1.0
 
-  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (hmask(i,j) == 1) then
+  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (hmask(i,j) == 1 .or. hmask(i,j)==3) then
 
     call bilinear_shape_fn_grid(G, i, j, Phi)
 
@@ -2584,7 +2584,7 @@ subroutine apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, ice_visc,
 
   Ee=1.0
 
-  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (ISS%hmask(i,j) == 1) then
+  do j=jsc-1,jec+1 ; do i=isc-1,iec+1 ; if (ISS%hmask(i,j) == 1 .or. ISS%hmask(i,j) == 3) then
 
     ! process this cell if any corners have umask set to non-dirichlet bdry.
 
@@ -3221,7 +3221,7 @@ subroutine update_velocity_masks(CS, G, hmask, umask, vmask, u_face_mask, v_face
   endif
 
   do j=js,G%jed; do i=is,G%ied
-    if (hmask(i,j) == 1) then
+    if (hmask(i,j) == 1 .or. hmask(i,j)==3) then
       umask(I-1:I,J-1:J)=1
       vmask(I-1:I,J-1:J)=1
     endif
@@ -3362,7 +3362,7 @@ subroutine interpolate_H_to_B(G, h_shelf, hmask, H_node)
       num_h = 0
       do k=0,1
         do l=0,1
-          if (hmask(i+k,j+l) == 1.0) then
+          if (hmask(i+k,j+l) == 1.0 .or. hmask(i+k,j+l) == 3.0) then
             summ = summ + h_shelf(i+k,j+l)
             num_h = num_h + 1
           endif

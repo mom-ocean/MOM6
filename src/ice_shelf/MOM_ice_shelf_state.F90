@@ -31,8 +31,8 @@ type, public :: ice_shelf_state
                                !!   ice-covered cells are treated the same, this may change)
                                !! 2: partially covered, do not solve for velocity
                                !! 0: no ice in cell.
-                               !! 3: bdry condition on thickness set - not in computational domain
-                               !! -2 : default (out of computational boundary, and) not = 3
+                               !! 3: bdry condition on thickness set
+                               !! -2 : default (out of computational boundary)
                                !! NOTE: hmask will change over time and NEEDS TO BE MAINTAINED
                                !!   otherwise the wrong nodes will be included in velocity calcs.
 
