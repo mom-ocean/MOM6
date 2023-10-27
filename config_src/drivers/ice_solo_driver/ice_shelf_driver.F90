@@ -283,7 +283,8 @@ program Shelf_main
 
   call set_axes_info(ocn_grid, GV, US, param_file, diag)
 
-  call initialize_ice_shelf(param_file, ocn_grid, Time, ice_shelf_CSp, diag, fluxes_in=fluxes, solo_ice_sheet_in=.true.)
+  call initialize_ice_shelf(param_file, ocn_grid, Time, ice_shelf_CSp, diag, &
+                            Start_time, dirs%output_directory, fluxes_in=fluxes, solo_ice_sheet_in=.true.)
 
   call initialize_ice_SMB(fluxes%shelf_sfc_mass_flux, ocn_grid, US, param_file)
 

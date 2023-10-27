@@ -48,7 +48,7 @@ use MOM_forcing_type, only : copy_common_forcing_fields, rotate_forcing, rotate_
 use MOM_get_input, only : directories, Get_MOM_input
 use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze, EOS_domain
 use MOM_EOS, only : EOS_type, EOS_init
-use MOM_ice_shelf_dynamics, only : ice_shelf_dyn_CS, update_ice_shelf
+use MOM_ice_shelf_dynamics, only : ice_shelf_dyn_CS, update_ice_shelf, write_ice_shelf_energy
 use MOM_ice_shelf_dynamics, only : register_ice_shelf_dyn_restarts, initialize_ice_shelf_dyn
 use MOM_ice_shelf_dynamics, only : ice_shelf_min_thickness_calve
 use MOM_ice_shelf_dynamics, only : ice_time_step_CFL, ice_shelf_dyn_end
@@ -162,6 +162,8 @@ type, public :: ice_shelf_CS ; private
   type(EOS_type) :: eqn_of_state         !< Type that indicates the equation of state to use.
   logical :: active_shelf_dynamics       !< True if the ice shelf mass changes as a result
                                          !! the dynamic ice-shelf model.
+  logical :: shelf_mass_is_dynamic       !< True if ice shelf mass changes over time. If true, ice
+                                         !! shelf dynamics will be initialized
   logical :: data_override_shelf_fluxes  !< True if the ice shelf surface mass fluxes can be
                                          !! written using the data_override feature (only for MOSAIC grids)
   logical :: override_shelf_movement     !< If true, user code specifies the shelf movement
@@ -784,6 +786,10 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
 
   endif
 
+  if (CS%shelf_mass_is_dynamic) &
+    call write_ice_shelf_energy(CS%dCS, G, US, ISS%mass_shelf, Time, &
+                                time_step=real_to_time(US%T_to_s*time_step) )
+
   call enable_averages(time_step, Time, CS%diag)
   if (CS%id_shelf_mass > 0) call post_data(CS%id_shelf_mass, ISS%mass_shelf, CS%diag)
   if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)
@@ -1211,14 +1217,16 @@ end subroutine add_shelf_flux
 
 
 !> Initializes shelf model data, parameters and diagnostics
-subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in, &
-                                fluxes_in, sfc_state_in, Time_in, solo_ice_sheet_in)
+subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init, directory, forces_in, &
+                                fluxes_in, sfc_state_in, solo_ice_sheet_in)
   type(param_file_type),        intent(in)    :: param_file !< A structure to parse for run-time parameters
   type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
   type(time_type),              intent(inout) :: Time !< The clock that that will indicate the model time
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
   type(MOM_diag_ctrl),          pointer       :: diag !< This is a pointer to the MOM diag CS
                                                       !! which will be discarded
+  type(time_type),              intent(in)    :: Time_init !< The time at initialization.
+  character(len=*),             intent(in)    :: directory  !< The directory where the energy file goes.
 
   type(mech_forcing), optional, target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
   type(forcing),      optional, target, intent(inout) :: fluxes_in !< A structure containing pointers to any
@@ -1226,7 +1234,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   type(surface), target, optional, intent(inout) :: sfc_state_in !< A structure containing fields that
                                                 !! describe the surface state of the ocean.  The
                                                 !! intent is only inout to allow for halo updates.
-  type(time_type),    optional, intent(in)    :: Time_in !< The time at initialization.
   logical,            optional, intent(in)    :: solo_ice_sheet_in !< If present, this indicates whether
                                                    !! a solo ice-sheet driver.
 
@@ -1248,7 +1255,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
   integer :: wd_halos(2)
-  logical :: read_TideAmp, shelf_mass_is_dynamic, debug
+  logical :: read_TideAmp, debug
   logical :: global_indexing
   character(len=240) :: Tideamp_file  ! Input file names
   character(len=80)  :: tideamp_var ! Input file variable names
@@ -1363,7 +1370,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   CS%solo_ice_sheet = .false.
   if (present(solo_ice_sheet_in)) CS%solo_ice_sheet = solo_ice_sheet_in
 
-  if (present(Time_in)) Time = Time_in
+  !if (present(Time_in)) Time = Time_in
 
 
   CS%override_shelf_movement = .false. ; CS%active_shelf_dynamics = .false.
@@ -1373,10 +1380,10 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
   call get_param(param_file, mdl, "DEBUG_IS", CS%debug, &
                  "If true, write verbose debugging messages for the ice shelf.", &
                  default=debug)
-  call get_param(param_file, mdl, "DYNAMIC_SHELF_MASS", shelf_mass_is_dynamic, &
+  call get_param(param_file, mdl, "DYNAMIC_SHELF_MASS", CS%shelf_mass_is_dynamic, &
                  "If true, the ice sheet mass can evolve with time.", &
                  default=.false.)
-  if (shelf_mass_is_dynamic) then
+  if (CS%shelf_mass_is_dynamic) then
     call get_param(param_file, mdl, "OVERRIDE_SHELF_MOVEMENT", CS%override_shelf_movement, &
                  "If true, user provided code specifies the ice-shelf "//&
                  "movement instead of the dynamic ice model.", default=.false.)
@@ -1777,8 +1784,9 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, forces_in,
     ISS%water_flux(:,:) = 0.0
   endif
 
-  if (shelf_mass_is_dynamic) &
-    call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, US, CS%diag, new_sim, solo_ice_sheet_in)
+  if (CS%shelf_mass_is_dynamic) &
+    call initialize_ice_shelf_dyn(param_file, Time, ISS, CS%dCS, G, US, CS%diag, new_sim, &
+    Time_init, directory, solo_ice_sheet_in)
 
   call fix_restart_unit_scaling(US, unscaled=.true.)
 
@@ -2244,6 +2252,9 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
     call update_ice_shelf(CS%dCS, ISS, G, US, time_step, Time, must_update_vel=update_ice_vel)
 
   enddo
+
+  call write_ice_shelf_energy(CS%dCS, G, US, ISS%mass_shelf, Time, &
+                              time_step=real_to_time(US%T_to_s*time_step) )
 
   call enable_averages(full_time_step, Time, CS%diag)
     if (CS%id_area_shelf_h > 0) call post_data(CS%id_area_shelf_h, ISS%area_shelf_h, CS%diag)

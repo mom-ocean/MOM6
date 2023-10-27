@@ -369,7 +369,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   if (OS%use_ice_shelf)  then
     call initialize_ice_shelf(param_file, OS%grid, OS%Time, OS%ice_shelf_CSp, &
-                              OS%diag, OS%forces, OS%fluxes)
+                              OS%diag, Time_init, OS%dirs%output_directory, OS%forces, OS%fluxes)
   endif
 
   if (OS%icebergs_alter_ocean)  then
