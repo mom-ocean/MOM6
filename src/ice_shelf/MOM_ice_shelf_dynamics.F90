@@ -1723,14 +1723,14 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
 
     do j=jsc-1,jec+1
 
-      if (((j+j_off) <= G%domain%njglobal+G%domain%njhalo) .AND. &
-         ((j+j_off) >= G%domain%njhalo+1)) then
+      if (((j+j_off) <= G%domain%njglobal) .AND. &
+          ((j+j_off) >= 1)) then
 
         do i=isc-1,iec+1
 
-          if (((i+i_off) <= G%domain%niglobal+G%domain%nihalo) .AND. &
-              ((i+i_off) >= G%domain%nihalo+1)) then
-        ! first get reference thickness by averaging over cells that are fluxing into this cell
+          if (((i+i_off) <= G%domain%niglobal) .AND. &
+              ((i+i_off) >= 1)) then
+            ! first get reference thickness by averaging over cells that are fluxing into this cell
             n_flux = 0
             h_reference = 0.0
             tot_flux = 0.0
@@ -1738,7 +1738,8 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
             do k=1,2
               if (flux_enter(i,j,k) > 0) then
                 n_flux = n_flux + 1
-                h_reference = h_reference + ISS%h_shelf(i+2*k-3,j)
+                h_reference = h_reference + flux_enter(i,j,k) * ISS%h_shelf(i+2*k-3,j)
+                !h_reference = h_reference + ISS%h_shelf(i+2*k-3,j)
                 tot_flux = tot_flux + flux_enter(i,j,k)
                 flux_enter(i,j,k) = 0.0
               endif
@@ -1747,7 +1748,8 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
             do k=1,2
               if (flux_enter(i,j,k+2) > 0) then
                 n_flux = n_flux + 1
-                h_reference = h_reference + ISS%h_shelf(i,j+2*k-3)
+                h_reference = h_reference + flux_enter(i,j,k+2) * ISS%h_shelf(i,j+2*k-3)
+                !h_reference = h_reference + ISS%h_shelf(i,j+2*k-3)
                 tot_flux = tot_flux + flux_enter(i,j,k+2)
                 flux_enter(i,j,k+2) = 0.0
               endif
@@ -1755,7 +1757,8 @@ subroutine shelf_advance_front(CS, ISS, G, hmask, uh_ice, vh_ice)
 
             if (n_flux > 0) then
               dxdyh = G%areaT(i,j)
-              h_reference = h_reference / real(n_flux)
+              h_reference = h_reference / tot_flux
+              !h_reference = h_reference / real(n_flux)
               partial_vol = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) + tot_flux
 
               if ((partial_vol / G%areaT(i,j)) == h_reference) then ! cell is exactly covered, no overflow
