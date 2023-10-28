@@ -11,11 +11,13 @@ use MOM_diag_mediator,    only : safe_alloc_ptr, post_data, register_diag_field
 use MOM_debugging,        only : hchksum
 use MOM_error_handler,    only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
+use MOM_file_parser,      only : read_param
 use MOM_forcing_type,     only : forcing
 use MOM_grid,             only : ocean_grid_type
 use MOM_io,               only : slasher, vardesc, MOM_read_data
 use MOM_interface_heights, only : thickness_to_dz, find_rho_bottom
 use MOM_isopycnal_slopes, only : vert_fill_TS
+use MOM_string_functions, only : extractWord
 use MOM_time_manager,     only : time_type, set_time, operator(+), operator(<=)
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs, vertvisc_type, p3d
@@ -27,6 +29,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public set_int_tide_input, int_tide_input_init, int_tide_input_end
+public get_input_TKE, get_barotropic_tidal_vel
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -44,9 +47,13 @@ type, public :: int_tide_input_CS ; private
   real :: kappa_fill    !< Vertical diffusivity used to interpolate sensible values
                         !! of T & S into thin layers [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
-  real, allocatable, dimension(:,:) :: TKE_itidal_coef
+  real, allocatable, dimension(:,:,:) :: TKE_itidal_coef
             !< The time-invariant field that enters the TKE_itidal input calculation noting that the
             !! stratification and perhaps density are time-varying [R Z4 H-1 T-2 ~> J m-2 or J m kg-1].
+  real, allocatable, dimension(:,:,:) :: &
+    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [R Z3 T-3 ~> W m-2].
+    tideamp             !< The amplitude of the tidal velocities [Z T-1 ~> m s-1].
+
   character(len=200) :: inputdir !< The directory for input files.
 
   logical :: int_tide_source_test    !< If true, apply an arbitrary generation site
@@ -59,19 +66,19 @@ type, public :: int_tide_input_CS ; private
   integer :: int_tide_source_i       !< I Location of generation site
   integer :: int_tide_source_j       !< J Location of generation site
   logical :: int_tide_use_glob_ij    !< Use global indices for generation site
+  integer :: nFreq = 0               !< The number of internal tide frequency bands
 
 
   !>@{ Diagnostic IDs
-  integer :: id_TKE_itidal_itide = -1, id_Nb = -1, id_N2_bot = -1
+  integer, allocatable, dimension(:) :: id_TKE_itidal_itide
+  integer :: id_Nb = -1, id_N2_bot = -1
   !>@}
 end type int_tide_input_CS
 
 !> This type is used to exchange fields related to the internal tides.
 type, public :: int_tide_input_type
   real, allocatable, dimension(:,:) :: &
-    TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [R Z3 T-3 ~> W m-2].
     h2, &               !< The squared topographic roughness height [Z2 ~> m2].
-    tideamp, &          !< The amplitude of the tidal velocities [Z T-1 ~> m s-1].
     Nb, &               !< The bottom stratification [T-1 ~> s-1].
     Rho_bot             !< The bottom density or the Boussinesq reference density [R ~> kg m-3].
 end type int_tide_input_type
@@ -110,6 +117,7 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   integer :: i, j, is, ie, js, je, nz, isd, ied, jsd, jed
   integer :: i_global, j_global
+  integer :: fr
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -133,52 +141,55 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
 
   if (GV%Boussinesq .or. GV%semi_Boussinesq) then
     !$OMP parallel do default(shared)
-    do j=js,je ; do i=is,ie
+    do fr=1,CS%nFreq ; do j=js,je ; do i=is,ie
       itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
-      itide%TKE_itidal_input(i,j) = min(GV%Z_to_H*CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), CS%TKE_itide_max)
-    enddo ; enddo
+      CS%TKE_itidal_input(i,j,fr) = min(GV%Z_to_H*CS%TKE_itidal_coef(i,j,fr)*itide%Nb(i,j), CS%TKE_itide_max)
+    enddo ; enddo ; enddo
   else
     !$OMP parallel do default(shared)
-    do j=js,je ; do i=is,ie
+    do fr=1,CS%nFreq ; do j=js,je ; do i=is,ie
       itide%Nb(i,j) = G%mask2dT(i,j) * sqrt(N2_bot(i,j))
       itide%Rho_bot(i,j) = G%mask2dT(i,j) * Rho_bot(i,j)
-      itide%TKE_itidal_input(i,j) = min((GV%RZ_to_H*Rho_bot(i,j)) * CS%TKE_itidal_coef(i,j)*itide%Nb(i,j), &
+      CS%TKE_itidal_input(i,j,fr) = min((GV%RZ_to_H*Rho_bot(i,j)) * CS%TKE_itidal_coef(i,j,fr)*itide%Nb(i,j), &
                                         CS%TKE_itide_max)
-    enddo ; enddo
+    enddo ; enddo ; enddo
   endif
 
   if (CS%int_tide_source_test) then
-    itide%TKE_itidal_input(:,:) = 0.0
+    CS%TKE_itidal_input(:,:,:) = 0.0
     if (time_end <= CS%time_max_source) then
       if (CS%int_tide_use_glob_ij) then
-        do j=js,je ; do i=is,ie
+        do fr=1,CS%nFreq ; do j=js,je ; do i=is,ie
           i_global = i + G%idg_offset
           j_global = j + G%jdg_offset
           if ((i_global == CS%int_tide_source_i) .and. (j_global == CS%int_tide_source_j)) then
-            itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
+            CS%TKE_itidal_input(i,j,fr) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
           endif
-        enddo ; enddo
+        enddo ; enddo ; enddo
       else
-        do j=js,je ; do i=is,ie
+        do fr=1,CS%nFreq ; do j=js,je ; do i=is,ie
           ! Input  an arbitrary energy point source.id_
           if (((G%geoLonCu(I-1,j)-CS%int_tide_source_x) * (G%geoLonBu(I,j)-CS%int_tide_source_x) <= 0.0) .and. &
               ((G%geoLatCv(i,J-1)-CS%int_tide_source_y) * (G%geoLatCv(i,j)-CS%int_tide_source_y) <= 0.0)) then
-            itide%TKE_itidal_input(i,j) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
+            CS%TKE_itidal_input(i,j,fr) = 1.0*US%kg_m3_to_R*US%m_to_Z**3*US%T_to_s**3
           endif
-        enddo ; enddo
+        enddo ; enddo ; enddo
       endif
     endif
   endif
 
   if (CS%debug) then
     call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0, scale=US%s_to_T**2)
-    call hchksum(itide%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0, &
+    call hchksum(CS%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0, &
                  scale=US%RZ3_T3_to_W_m2)
   endif
 
   call enable_averages(dt, time_end, CS%diag)
 
-  if (CS%id_TKE_itidal_itide > 0) call post_data(CS%id_TKE_itidal_itide, itide%TKE_itidal_input, CS%diag)
+  do fr=1,CS%nFreq
+    if (CS%id_TKE_itidal_itide(fr) > 0) call post_data(CS%id_TKE_itidal_itide(fr), &
+                                                       CS%TKE_itidal_input(isd:ied,jsd:jed,fr), CS%diag)
+  enddo
   if (CS%id_Nb > 0) call post_data(CS%id_Nb, itide%Nb, CS%diag)
   if (CS%id_N2_bot > 0 ) call post_data(CS%id_N2_bot, N2_bot, CS%diag)
 
@@ -319,6 +330,38 @@ subroutine find_N2_bottom(h, tv, T_f, S_f, h2, fluxes, G, GV, US, N2_bot, rho_bo
 
 end subroutine find_N2_bottom
 
+!> Returns TKE_itidal_input
+subroutine get_input_TKE(G, TKE_itidal_input, nFreq, CS)
+  type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G),nFreq), &
+                         intent(out) :: TKE_itidal_input !< The energy input to the internal waves [R Z3 T-3 ~> W m-2].
+  integer, intent(in) :: nFreq !< number of frequencies
+  type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
+                                                 !! structure for the internal tide input module.
+  integer :: i,j,fr
+
+  do fr=1,nFreq ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
+    TKE_itidal_input(i,j,fr) = CS%TKE_itidal_input(i,j,fr)
+  enddo ; enddo ; enddo
+
+end subroutine get_input_TKE
+
+!> Returns barotropic tidal velocities
+subroutine get_barotropic_tidal_vel(G, vel_btTide, nFreq, CS)
+  type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
+  real, dimension(SZI_(G),SZJ_(G),nFreq), &
+                         intent(out) :: vel_btTide !< Barotropic velocity read from file [L T-1 ~> m s-1].
+  integer, intent(in) :: nFreq !< number of frequencies
+  type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
+                                                 !! structure for the internal tide input module.
+  integer :: i,j,fr
+
+  do fr=1,nFreq ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
+    vel_btTide(i,j,fr) = CS%tideamp(i,j,fr)
+  enddo ; enddo ; enddo
+
+end subroutine get_barotropic_tidal_vel
+
 !> Initializes the data related to the internal tide input module
 subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   type(time_type),           intent(in)    :: Time !< The current model time
@@ -337,6 +380,9 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   character(len=40)  :: mdl = "MOM_int_tide_input"  ! This module's name.
   character(len=200) :: filename, tideamp_file, h2_file ! Input file names or paths
   character(len=80)  :: tideamp_var, rough_var ! Input file variable names
+  character(len=80)  :: var_name
+  character(len=200) :: var_descript
+  character(len=200) :: tidefile_varnames
 
   real :: mask_itidal        ! A multiplicative land mask, 0 or 1 [nondim]
   real :: max_frac_rough     ! The fraction relating the maximum topographic roughness
@@ -349,6 +395,7 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   integer :: tlen_days       !< Time interval from start for adding wave source
                              !! for testing internal tides (BDM)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
+  integer :: num_freq, fr
 
   if (associated(CS)) then
     call MOM_error(WARNING, "int_tide_input_init called with an associated "// &
@@ -390,12 +437,15 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
                units="m s-1", default=0.0, scale=US%m_s_to_L_T)
 
+  call read_param(param_file, "INTERNAL_TIDE_FREQS", num_freq)
+  CS%nFreq= num_freq
+
   allocate(itide%Nb(isd:ied,jsd:jed), source=0.0)
   allocate(itide%Rho_bot(isd:ied,jsd:jed), source=0.0)
   allocate(itide%h2(isd:ied,jsd:jed), source=0.0)
-  allocate(itide%TKE_itidal_input(isd:ied,jsd:jed), source=0.0)
-  allocate(itide%tideamp(isd:ied,jsd:jed), source=utide)
-  allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%TKE_itidal_input(isd:ied,jsd:jed,num_freq), source=0.0)
+  allocate(CS%tideamp(isd:ied,jsd:jed,num_freq), source=utide)
+  allocate(CS%TKE_itidal_coef(isd:ied,jsd:jed, num_freq), source=0.0)
 
   call get_param(param_file, mdl, "KAPPA_ITIDES", kappa_itides, &
                "A topographic wavenumber used with INT_TIDE_DISSIPATION. "//&
@@ -419,10 +469,13 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
                "tidal amplitudes with INT_TIDE_DISSIPATION.", default="tideamp.nc")
     filename = trim(CS%inputdir) // trim(tideamp_file)
     call log_param(param_file, mdl, "INPUTDIR/TIDEAMP_FILE", filename)
-    call get_param(param_file, mdl, "TIDEAMP_VARNAME", tideamp_var, &
-               "The name of the tidal amplitude variable in the input file.", &
-               default="tideamp")
-    call MOM_read_data(filename, tideamp_var, itide%tideamp, G%domain, scale=US%m_s_to_L_T)
+
+    call read_param(param_file, "INTTIDE_AMP_VARNAMES", tidefile_varnames)
+    do fr=1,num_freq
+      tideamp_var = extractWord(tidefile_varnames,fr)
+      call MOM_read_data(filename, tideamp_var, CS%tideamp(:,:,fr), G%domain, scale=US%m_s_to_L_T)
+    enddo
+
   endif
 
   call get_param(param_file, mdl, "H2_FILE", h2_file, &
@@ -475,25 +528,31 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
     endif
   endif
 
-  do j=js,je ; do i=is,ie
+  do fr=1,num_freq ; do j=js,je ; do i=is,ie
     mask_itidal = 1.0
     if (G%bathyT(i,j) + G%Z_ref < min_zbot_itides) mask_itidal = 0.0
 
-    itide%tideamp(i,j) = itide%tideamp(i,j) * mask_itidal * G%mask2dT(i,j)
+    CS%tideamp(i,j,fr) = CS%tideamp(i,j,fr) * mask_itidal * G%mask2dT(i,j)
 
     ! Restrict rms topo to a fraction (often 10 percent) of the column depth.
     if (max_frac_rough >= 0.0) &
       itide%h2(i,j) = min((max_frac_rough*(G%bathyT(i,j)+G%Z_ref))**2, itide%h2(i,j))
 
     ! Compute the fixed part of internal tidal forcing; units are [R Z4 H-1 T-2 ~> J m-2 or J m kg-1] here.
-    CS%TKE_itidal_coef(i,j) = 0.5*US%L_to_Z*kappa_h2_factor * GV%H_to_RZ * &
-         kappa_itides * itide%h2(i,j) * itide%tideamp(i,j)**2
-  enddo ; enddo
+    CS%TKE_itidal_coef(i,j,fr) = 0.5*US%L_to_Z*kappa_h2_factor * GV%H_to_RZ * &
+         kappa_itides * itide%h2(i,j) * CS%tideamp(i,j,fr)**2
+  enddo ; enddo ; enddo
 
 
-  CS%id_TKE_itidal_itide = register_diag_field('ocean_model','TKE_itidal_itide',diag%axesT1,Time, &
-      'Internal Tide Driven Turbulent Kinetic Energy', &
-      'W m-2', conversion=US%RZ3_T3_to_W_m2)
+  allocate( CS%id_TKE_itidal_itide(num_freq), source=-1)
+
+  do fr=1,num_freq
+    write(var_name, '("TKE_itidal_itide_freq",i1)') fr
+    write(var_descript, '("Internal Tide Driven Turbulent Kinetic Energy in frequency ",i1)') fr
+
+    CS%id_TKE_itidal_itide(fr) = register_diag_field('ocean_model',var_name,diag%axesT1,Time, &
+                                                     var_descript, 'W m-2', conversion=US%RZ3_T3_to_W_m2)
+  enddo
 
   CS%id_Nb = register_diag_field('ocean_model','Nb_itide',diag%axesT1,Time, &
        'Bottom Buoyancy Frequency', 's-1', conversion=US%s_to_T)
