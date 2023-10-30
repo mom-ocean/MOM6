@@ -409,7 +409,7 @@ character*(20), parameter :: BT_CONT_STRING = "FROM_BT_CONT"
 !>@}
 
 !> A negligible parameter which avoids division by zero, but is too small to
-!! modify physical values.
+!! modify physical values [nondim].
 real, parameter :: subroundoff = 1e-30
 
 contains
@@ -662,7 +662,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     time_bt_start, &  ! The starting time of the barotropic steps.
     time_step_end, &  ! The end time of a barotropic step.
     time_end_in       ! The end time for diagnostics when this routine started.
-  real :: time_int_in ! The diagnostics' time interval when this routine started.
+  real :: time_int_in ! The diagnostics' time interval when this routine started [s]
   real :: Htot_avg    ! The average total thickness of the tracer columns adjacent to a
                       ! velocity point [H ~> m or kg m-2]
   logical :: do_hifreq_output  ! If true, output occurs every barotropic step.
@@ -3972,7 +3972,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
     vBT_NN, vBT_SS, &  ! Meridional velocities at which the form of the fit changes [L T-1 ~> m s-1]
     FA_v_NN, FA_v_N0, FA_v_S0, FA_v_SS ! Meridional face areas [H L ~> m2 or kg m-1]
   real :: dt ! The baroclinic timestep [T ~> s] or 1.0 [nondim]
-  real, parameter :: C1_3 = 1.0/3.0
+  real, parameter :: C1_3 = 1.0/3.0  ! [nondim]
   integer :: i, j, is, ie, js, je, hs
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -4107,7 +4107,7 @@ subroutine adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
 
   ! Local variables
   real :: dt ! The baroclinic timestep [T ~> s] or 1.0 [nondim]
-  real, parameter :: C1_3 = 1.0/3.0
+  real, parameter :: C1_3 = 1.0/3.0  ! [nondim]
   integer :: i, j, is, ie, js, je, hs
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

@@ -1671,11 +1671,11 @@ subroutine add_detangling_Kh(h, e, Kh_u, Kh_v, KH_u_CFL, KH_v_CFL, tv, dt, G, GV
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(inout) :: int_slope_u !< Ratio that determine how much of
                                                                       !! the isopycnal slopes are taken directly from
                                                                       !! the interface slopes without consideration
-                                                                      !! of density gradients.
+                                                                      !! of density gradients [nondim].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(inout) :: int_slope_v !< Ratio that determine how much of
                                                                       !! the isopycnal slopes are taken directly from
                                                                       !! the interface slopes without consideration
-                                                                      !! of density gradients.
+                                                                      !! of density gradients [nondim].
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     de_top     ! The distances between the top of a layer and the top of the

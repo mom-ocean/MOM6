@@ -108,7 +108,7 @@ type, public :: energetic_PBL_CS ; private
 
   !/ mstar_scheme == 0
   real    :: fixed_mstar     !< Mstar is the ratio of the friction velocity cubed to the TKE available to
-                             !! drive entrainment, nondimensional. This quantity is the vertically
+                             !! drive entrainment [nondim]. This quantity is the vertically
                              !! integrated shear production minus the vertically integrated
                              !! dissipation of TKE produced by shear.  This value is used if the option
                              !! for using a fixed mstar is used.

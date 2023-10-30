@@ -136,14 +136,18 @@ type, public :: ocean_grid_type
     IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
   real, pointer, dimension(:) :: &
-    gridLatT => NULL(), & !< The latitude of T points for the purpose of labeling the output axes.
+    gridLatT => NULL(), & !< The latitude of T points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_N] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLatT.
-    gridLatB => NULL()    !< The latitude of B points for the purpose of labeling the output axes.
+    gridLatB => NULL()    !< The latitude of B points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_N] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLatBu.
   real, pointer, dimension(:) :: &
-    gridLonT => NULL(), & !< The longitude of T points for the purpose of labeling the output axes.
+    gridLonT => NULL(), & !< The longitude of T points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_E] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLonT.
-    gridLonB => NULL()    !< The longitude of B points for the purpose of labeling the output axes.
+    gridLonB => NULL()    !< The longitude of B points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_E] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLonBu.
   character(len=40) :: &
     ! Except on a Cartesian grid, these are usually some variant of "degrees".
@@ -187,8 +191,8 @@ type, public :: ocean_grid_type
   ! initialization routines (but not all)
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line [degrees_N] or [km] or [m]
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line [degrees_E] or [km] or [m]
-  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain
+  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain [degrees_N] or [km] or [m]
+  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain [degrees_E] or [km] or [m]
   real :: Rad_Earth     !< The radius of the planet [m]
   real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
   real :: max_depth     !< The maximum depth of the ocean in depth units [Z ~> m]

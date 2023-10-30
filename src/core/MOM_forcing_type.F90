@@ -2169,7 +2169,7 @@ subroutine forcing_accumulate(flux_tmp, forces, fluxes, G, wt2)
   type(forcing),         intent(inout) :: fluxes !< A structure containing time-averaged
                                                  !! thermodynamic forcing fields
   type(ocean_grid_type), intent(inout) :: G      !< The ocean's grid structure
-  real,                  intent(out)   :: wt2    !< The relative weight of the new fluxes
+  real,                  intent(out)   :: wt2    !< The relative weight of the new fluxes [nondim]
 
   ! This subroutine copies mechancal forcing from flux_tmp to fluxes and
   ! stores the time-weighted averages of the various buoyancy fluxes in fluxes,
@@ -2187,7 +2187,7 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
   type(forcing),             intent(inout) :: fluxes !< A structure containing time-averaged
                                                      !! thermodynamic forcing fields
   type(ocean_grid_type),     intent(inout) :: G      !< The ocean's grid structure
-  real,                      intent(out)   :: wt2    !< The relative weight of the new fluxes
+  real,                      intent(out)   :: wt2    !< The relative weight of the new fluxes [nondim]
   type(mech_forcing), optional, intent(in) :: forces !< A structure with the driving mechanical forces
 
   ! This subroutine copies mechanical forcing from flux_tmp to fluxes and

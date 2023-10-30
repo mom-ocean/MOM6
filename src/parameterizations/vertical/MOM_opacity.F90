@@ -422,7 +422,7 @@ end function
 !> This sets the penetrating shortwave fraction according to the scheme proposed by
 !! Morel and Antoine (1994).
 function SW_pen_frac_morel(chl_data)
-  real, intent(in)  :: chl_data !< The chlorophyll-A concentration in mg m-3.
+  real, intent(in)  :: chl_data !< The chlorophyll-A concentration [mg m-3]
   real :: SW_pen_frac_morel     !< The returned penetrating shortwave fraction [nondim]
 
   !   The following are coefficients for the optical model taken from Morel and
@@ -608,7 +608,7 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   real :: SW_trans          ! fraction of shortwave radiation that is not
                             ! absorbed in a layer [nondim]
   real :: unabsorbed        ! fraction of the shortwave radiation that
-                            ! is not absorbed because the layers are too thin
+                            ! is not absorbed because the layers are too thin [nondim]
   real :: Ih_limit          ! inverse of the total depth at which the
                             ! surface fluxes start to be limited [H-1 ~> m-1 or m2 kg-1]
   real :: h_min_heat        ! minimum thickness layer that should get heated [H ~> m or kg m-2]

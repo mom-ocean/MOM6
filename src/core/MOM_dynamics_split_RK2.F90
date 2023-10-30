@@ -387,7 +387,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
     v_av, & ! The meridional velocity time-averaged over a time step [L T-1 ~> m s-1].
     h_av    ! The layer thickness time-averaged over a time step [H ~> m or kg m-2].
 
-  real, dimension(SZI_(G),SZJ_(G)) :: hbl           ! Boundary layer depth from Cvmix
+  real, dimension(SZI_(G),SZJ_(G)) :: hbl       ! Boundary layer depth from Cvmix [H ~> m or kg m-2]
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
   real :: Idt_bc    ! Inverse of the baroclinic timestep [T-1 ~> s-1]
   logical :: dyn_p_surf
@@ -1055,8 +1055,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   endif
 
   if (CS%fpmix) then
-    if (CS%id_uold > 0) call post_data(CS%id_uold , uold, CS%diag)
-    if (CS%id_vold > 0) call post_data(CS%id_vold , vold, CS%diag)
+    if (CS%id_uold > 0) call post_data(CS%id_uold, uold, CS%diag)
+    if (CS%id_vold > 0) call post_data(CS%id_vold, vold, CS%diag)
   endif
 
   ! The time-averaged free surface height has already been set by the last call to btstep.
@@ -1072,8 +1072,8 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (CS%id_CAv > 0) call post_data(CS%id_CAv, CS%CAv, CS%diag)
 
   ! Here the thickness fluxes are offered for time averaging.
-  if (CS%id_uh         > 0) call post_data(CS%id_uh , uh,                   CS%diag)
-  if (CS%id_vh         > 0) call post_data(CS%id_vh , vh,                   CS%diag)
+  if (CS%id_uh         > 0) call post_data(CS%id_uh,  uh,                   CS%diag)
+  if (CS%id_vh         > 0) call post_data(CS%id_vh,  vh,                   CS%diag)
   if (CS%id_uav        > 0) call post_data(CS%id_uav, u_av,                 CS%diag)
   if (CS%id_vav        > 0) call post_data(CS%id_vav, v_av,                 CS%diag)
   if (CS%id_u_BT_accel > 0) call post_data(CS%id_u_BT_accel, CS%u_accel_bt, CS%diag)
@@ -1301,7 +1301,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, uh, vh, eta, Time, G, GV, US, param
                                     intent(inout) :: u          !< zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                     intent(inout) :: v          !< merid velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) , &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                                     intent(inout) :: h          !< layer thickness [H ~> m or kg m-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                             target, intent(inout) :: uh    !< zonal volume/mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]

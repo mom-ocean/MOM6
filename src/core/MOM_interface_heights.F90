@@ -66,7 +66,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
   real :: p(SZI_(G),SZJ_(G),SZK_(GV)+1)   ! Hydrostatic pressure at each interface [R L2 T-2 ~> Pa]
   real :: dz_geo(SZI_(G),SZJ_(G),SZK_(GV)) ! The change in geopotential height
                                            ! across a layer [L2 T-2 ~> m2 s-2].
-  real :: dilate(SZI_(G))                 ! non-dimensional dilation factor
+  real :: dilate(SZI_(G))                 ! A non-dimensional dilation factor [nondim]
   real :: htot(SZI_(G))                   ! total thickness [H ~> m or kg m-2]
   real :: I_gEarth          ! The inverse of the gravitational acceleration times the
                             ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]

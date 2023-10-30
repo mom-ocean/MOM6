@@ -837,7 +837,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   real :: muza            ! mu(z) at top of the layer [nondim]
   real :: dh              ! Portion of the layer thickness that is in the mixed layer [H ~> m or kg m-2]
   real :: res_scaling_fac ! The resolution-dependent scaling factor [nondim]
-  real, parameter :: two_thirds = 2./3.
+  real, parameter :: two_thirds = 2./3.  ! [nondim]
   logical :: line_is_empty, keep_going
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -1156,7 +1156,7 @@ real elemental function rmean2ts(signal, filtered, tau_growing, tau_decaying, dt
   real, intent(in) :: tau_decaying ! Time scale for decaying signal [T ~> s]
   real, intent(in) :: dt           ! Time step [T ~> s]
   ! Local variables
-  real :: afac, bfac ! Non-dimensional weights
+  real :: afac, bfac ! Non-dimensional fractional weights [nondim]
   real :: rt ! Reciprocal time scale [T-1 ~> s-1]
 
   if (signal>=filtered) then

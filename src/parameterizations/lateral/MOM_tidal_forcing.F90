@@ -256,7 +256,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
   character(len=200) :: tidal_input_files(4*MAX_CONSTITUENTS)
-  real :: tide_sal_scalar_value
+  real :: tide_sal_scalar_value ! The constant of proportionality with the scalar approximation to SAL [nondim]
   integer :: i, j, c, is, ie, js, je, isd, ied, jsd, jed, nc
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
