@@ -67,6 +67,7 @@ type, public :: forcing
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
+    !omega_w2x     => NULL(), & !< the counter-clockwise angle of the wind stress with respect
     ustar         => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
     tau_mag       => NULL(), & !< Magnitude of the wind stress averaged over tracer cells,
                                !! including any contributions from sub-gridscale variability
@@ -194,10 +195,8 @@ type, public :: forcing
   real :: C_p                   !< heat capacity of seawater [Q C-1 ~> J kg-1 degC-1].
                                 !! C_p is is the same value as in thermovar_ptrs_type.
 
-  ! CFC-related arrays needed in the MOM_CFC_cap module
+  ! arrays needed in the some tracer modules, e.g., MOM_CFC_cap
   real, pointer, dimension(:,:) :: &
-    cfc11_flux    => NULL(), &  !< flux of cfc_11 into the ocean [CU R Z T-1 ~> mol m-2 s-1]
-    cfc12_flux    => NULL(), &  !< flux of cfc_12 into the ocean [CU R Z T-1 ~> mol m-2 s-1]
     ice_fraction  => NULL(), &  !< fraction of sea ice coverage at h-cells, from 0 to 1 [nondim].
     u10_sqr       => NULL()     !< wind magnitude at 10 m squared [L2 T-2 ~> m2 s-2]
 
@@ -229,6 +228,8 @@ type, public :: mech_forcing
                        !! contributions from sub-gridscale variability or gustiness [R L Z T-2 ~> Pa]
     ustar => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
     net_mass_src => NULL() !< The net mass source to the ocean [R Z T-1 ~> kg m-2 s-1]
+    !omega_w2x    => NULL()    !< the counter-clockwise angle of the wind stress with respect
+                              !! to the horizontal abscissa (x-coordinate) at tracer points [rad].
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
   real, pointer, dimension(:,:) :: p_surf_full => NULL()
@@ -364,15 +365,13 @@ type, public :: forcing_diags
   integer :: id_taux  = -1
   integer :: id_tauy  = -1
   integer :: id_ustar = -1
+  !integer :: id_omega_w2x = -1
   integer :: id_tau_mag = -1
-
   integer :: id_psurf     = -1
   integer :: id_TKE_tidal = -1
   integer :: id_buoy      = -1
 
-  ! cfc-related diagnostics handles
-  integer :: id_cfc11    = -1
-  integer :: id_cfc12    = -1
+  ! tracer surface flux related diagnostics handles
   integer :: id_ice_fraction = -1
   integer :: id_u10_sqr      = -1
 
@@ -1137,10 +1136,6 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
     call hchksum(fluxes%u10_sqr, mesg//" fluxes%u10_sqr", G%HI, haloshift=hshift, scale=US%L_to_m**2*US%s_to_T**2)
   if (associated(fluxes%ice_fraction)) &
     call hchksum(fluxes%ice_fraction, mesg//" fluxes%ice_fraction", G%HI, haloshift=hshift)
-  if (associated(fluxes%cfc11_flux)) &
-    call hchksum(fluxes%cfc11_flux, mesg//" fluxes%cfc11_flux", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
-  if (associated(fluxes%cfc12_flux)) &
-    call hchksum(fluxes%cfc12_flux, mesg//" fluxes%cfc12_flux", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%salt_flux)) &
     call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%TKE_tidal)) &
@@ -1336,6 +1331,9 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &
       'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
+  !handles%id_omega_w2x = register_diag_field('ocean_model', 'omega_w2x', diag%axesT1, Time, &
+  !    'Counter-clockwise angle of the wind stress from the horizontal axis.', 'rad')
+
   if (present(use_berg_fluxes)) then
     if (use_berg_fluxes) then
       handles%id_ustar_berg = register_diag_field('ocean_model', 'ustar_berg', diag%axesT1, Time, &
@@ -1355,26 +1353,9 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
     endif
   endif
 
-  ! units for cfc11_flux and cfc12_flux are [Conc R Z T-1 ~> mol m-2 s-1]
   ! See:
-  ! http://clipc-services.ceda.ac.uk/dreq/u/0940cbee6105037e4b7aa5579004f124.html
-  ! http://clipc-services.ceda.ac.uk/dreq/u/e9e21426e4810d0bb2d3dddb24dbf4dc.html
   if (present(use_cfcs)) then
     if (use_cfcs) then
-      handles%id_cfc11 = register_diag_field('ocean_model', 'cfc11_flux', diag%axesT1, Time, &
-          'Gas exchange flux of CFC11 into the ocean ', &
-          'mol m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
-          cmor_field_name='fgcfc11', &
-          cmor_long_name='Surface Downward CFC11 Flux', &
-          cmor_standard_name='surface_downward_cfc11_flux')
-
-      handles%id_cfc12 = register_diag_field('ocean_model', 'cfc12_flux', diag%axesT1, Time, &
-          'Gas exchange flux of CFC12 into the ocean ', &
-          'mol m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
-          cmor_field_name='fgcfc12', &
-          cmor_long_name='Surface Downward CFC12 Flux', &
-          cmor_standard_name='surface_downward_cfc12_flux')
-
       handles%id_ice_fraction = register_diag_field('ocean_model', 'ice_fraction', diag%axesT1, Time, &
           'Fraction of cell area covered by sea ice', 'm2 m-2')
 
@@ -2189,7 +2170,11 @@ subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
       fluxes%ustar(i,j) = forces%ustar(i,j)
     enddo ; enddo
   endif
-
+  !if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
+  !  do j=js,je ; do i=is,ie
+  !    fluxes%omega_w2x(i,j) = forces%omega_w2x(i,j)
+  !  enddo ; enddo
+  !endif
   if (associated(forces%tau_mag) .and. associated(fluxes%tau_mag)) then
     do j=js,je ; do i=is,ie
       fluxes%tau_mag(i,j) = forces%tau_mag(i,j)
@@ -2326,7 +2311,11 @@ subroutine copy_back_forcing_fields(fluxes, forces, G)
       forces%ustar(i,j) = fluxes%ustar(i,j)
     enddo ; enddo
   endif
-
+  !if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
+  !  do j=js,je ; do i=is,ie
+  !    forces%omega_w2x(i,j) = fluxes%omega_w2x(i,j)
+  !  enddo ; enddo
+  !endif
   if (associated(forces%tau_mag) .and. associated(fluxes%tau_mag)) then
     do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = fluxes%tau_mag(i,j)
@@ -2950,13 +2939,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (handles%id_netFWGlobalScl > 0)                                               &
       call post_data(handles%id_netFWGlobalScl, fluxes%netFWGlobalScl, diag)
 
-    ! post diagnostics related to cfcs  ====================================
-
-    if ((handles%id_cfc11 > 0) .and. associated(fluxes%cfc11_flux)) &
-      call post_data(handles%id_cfc11, fluxes%cfc11_flux, diag)
-
-    if ((handles%id_cfc11 > 0) .and. associated(fluxes%cfc12_flux)) &
-      call post_data(handles%id_cfc12, fluxes%cfc12_flux, diag)
+    ! post diagnostics related to tracer surface fluxes  ========================
 
     if ((handles%id_ice_fraction > 0) .and. associated(fluxes%ice_fraction)) &
       call post_data(handles%id_ice_fraction, fluxes%ice_fraction, diag)
@@ -2980,6 +2963,9 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
 
     if ((handles%id_ustar > 0) .and. associated(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
+
+    !if ((handles%id_omega_w2x > 0) .and. associated(fluxes%omega_w2x)) &
+    !  call post_data(handles%id_omega_w2x, fluxes%omega_w2x, diag)
 
     if ((handles%id_ustar_berg > 0) .and. associated(fluxes%ustar_berg)) &
       call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
@@ -3021,7 +3007,8 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   logical, optional,     intent(in) :: salt    !< If present and true, allocate salt fluxes
   logical, optional,     intent(in) :: fix_accum_bug !< If present and true, avoid using a bug in
                                                !! accumulation of ustar_gustless
-  logical, optional,     intent(in) :: cfc     !< If present and true, allocate cfc fluxes
+  logical, optional,     intent(in) :: cfc     !< If present and true, allocate fields needed
+                                               !! for cfc surface fluxes
   logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
   logical, optional,     intent(in) :: shelf_sfc_accumulation !< If present and true, and shelf is true,
                                                !! then allocate surface flux deposition from the atmosphere
@@ -3097,8 +3084,6 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)
 
   !These fields should only on allocated when USE_CFC_CAP is activated.
-  call myAlloc(fluxes%cfc11_flux,isd,ied,jsd,jed, cfc)
-  call myAlloc(fluxes%cfc12_flux,isd,ied,jsd,jed, cfc)
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, cfc)
   call myAlloc(fluxes%u10_sqr,isd,ied,jsd,jed, cfc)
 
@@ -3307,6 +3292,7 @@ end subroutine myAlloc
 subroutine deallocate_forcing_type(fluxes)
   type(forcing), intent(inout) :: fluxes !< Forcing fields structure
 
+  !if (associated(fluxes%omega_w2x))            deallocate(fluxes%omega_w2x)
   if (associated(fluxes%ustar))                deallocate(fluxes%ustar)
   if (associated(fluxes%ustar_gustless))       deallocate(fluxes%ustar_gustless)
   if (associated(fluxes%tau_mag))              deallocate(fluxes%tau_mag)
@@ -3356,8 +3342,6 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
   if (associated(fluxes%ice_fraction))         deallocate(fluxes%ice_fraction)
   if (associated(fluxes%u10_sqr))              deallocate(fluxes%u10_sqr)
-  if (associated(fluxes%cfc11_flux))           deallocate(fluxes%cfc11_flux)
-  if (associated(fluxes%cfc12_flux))           deallocate(fluxes%cfc12_flux)
 
   call coupler_type_destructor(fluxes%tr_fluxes)
 
@@ -3368,6 +3352,7 @@ end subroutine deallocate_forcing_type
 subroutine deallocate_mech_forcing(forces)
   type(mech_forcing), intent(inout) :: forces  !< Forcing fields structure
 
+  !if (associated(forces%omega_w2x))      deallocate(forces%omega_w2x)
   if (associated(forces%taux))           deallocate(forces%taux)
   if (associated(forces%tauy))           deallocate(forces%tauy)
   if (associated(forces%ustar))          deallocate(forces%ustar)
