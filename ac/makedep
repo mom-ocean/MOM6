@@ -25,12 +25,12 @@ re_procedure = re.compile(
 )
 
 
-def create_deps(src_dirs, makefile, debug, exec_target, fc_rule,
+def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
                 link_externals, script_path):
     """Create "makefile" after scanning "src_dis"."""
 
     # Scan everything Fortran related
-    all_files = find_files(src_dirs)
+    all_files = find_files(src_dirs, skip_dirs)
 
     # Lists of things
     #  ... all F90 source
@@ -332,9 +332,14 @@ def object_file(src_file):
     return os.path.splitext(os.path.basename(src_file))[0] + '.o'
 
 
-def find_files(src_dirs):
+def find_files(src_dirs, skip_dirs):
     """Return sorted list of all source files starting from each directory in
     the list "src_dirs"."""
+
+    if skip_dirs is not None:
+        skip = [os.path.normpath(s) for s in skip_dirs]
+    else:
+        skip = []
 
     # TODO: Make this a user-defined argument
     extensions = ('.f90', '.f', '.c', '.inc', '.h',  '.fh')
@@ -345,6 +350,8 @@ def find_files(src_dirs):
         if not os.path.isdir(path):
             raise ValueError("Directory '{}' was not found".format(path))
         for p, d, f in os.walk(os.path.normpath(path), followlinks=True):
+            d[:] = [s for s in d if os.path.join(p, s) not in skip]
+
             for file in f:
                 if any(file.lower().endswith(ext) for ext in extensions):
                     files.append(p+'/'+file)
@@ -392,8 +399,13 @@ parser.add_argument(
     action='store_true',
     help="Annotate the makefile with extra information."
 )
+parser.add_argument(
+    '-s', '--skip',
+    action='append',
+    help="Skip directory in source code search."
+)
 args = parser.parse_args()
 
 # Do the thing
-create_deps(args.path, args.makefile, args.debug, args.exec_target,
+create_deps(args.path, args.skip, args.makefile, args.debug, args.exec_target,
             args.fc_rule, args.link_externals, sys.argv[0])
