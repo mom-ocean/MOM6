@@ -1402,6 +1402,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
                  "will be called.  GL_REGULARIZE and GL_COUPLE are exclusive.", &
                  default=.false., do_not_log=CS%GL_regularize)
     if (CS%GL_regularize) CS%GL_couple = .false.
+    if (CS%solo_ice_sheet) CS%GL_couple = .false.
   endif
 
   call get_param(param_file, mdl, "SHELF_THERMO", CS%isthermo, &

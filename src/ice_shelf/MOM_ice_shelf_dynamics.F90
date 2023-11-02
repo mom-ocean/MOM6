@@ -432,6 +432,9 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                  "will be called.  GL_REGULARIZE and GL_COUPLE are exclusive.", &
                  default=.false., do_not_log=CS%GL_regularize)
     if (CS%GL_regularize) CS%GL_couple = .false.
+    if (present(solo_ice_sheet_in)) then
+      if (solo_ice_sheet_in) CS%GL_couple = .false.
+    endif
     if (CS%GL_regularize .and. (CS%n_sub_regularize == 0)) call MOM_error (FATAL, &
       "GROUNDING_LINE_INTERP_SUBGRID_N must be a positive integer if GL regularization is used")
     call get_param(param_file, mdl, "ICE_SHELF_CFL_FACTOR", CS%CFL_factor, &
@@ -826,6 +829,7 @@ subroutine update_ice_shelf(CS, ISS, G, US, time_step, Time, ocean_mass, coupled
     call update_OD_ffrac(CS, G, US, ocean_mass, update_ice_vel)
   elseif (update_ice_vel) then
     call update_OD_ffrac_uncoupled(CS, G, ISS%h_shelf(:,:))
+    CS%GL_couple=.false.
   endif
 
 
@@ -1121,8 +1125,8 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   real, dimension(SZDIB_(G),SZDJB_(G)) :: Au, Av ! The retarding lateral stress contributions [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: u_last, v_last ! Previous velocities [L T-1 ~> m s-1]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thickness at corners [Z ~> m].
-  real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! An array indicating where the ice
-                                                ! shelf is floating: 0 if floating, 1 if not.
+  real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! If GL_regularize=true, an array indicating where the ice
+                                                ! shelf is floating: 0 if floating, 1 if not
   real, dimension(SZDIB_(G),SZDJB_(G)) :: Normvec  ! Used for convergence
   character(len=160) :: mesg  ! The text of an error message
   integer :: conv_flag, i, j, k,l, iter
@@ -1148,18 +1152,18 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
 
   ! need to make these conditional on GL interpolation
   float_cond(:,:) = 0.0 ; H_node(:,:) = 0.0
-  CS%ground_frac(:,:) = 0.0
+  !CS%ground_frac(:,:) = 0.0
   allocate(Phisub(nsub,nsub,2,2,2,2), source=0.0)
 
-  do j=G%jsc,G%jec
-    do i=G%isc,G%iec
+  if (.not. CS%GL_couple) then
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if (rhoi_rhow * ISS%h_shelf(i,j) - CS%bed_elev(i,j) > 0) then
-        float_cond(i,j) = 1.0
+        if (CS%GL_regularize) float_cond(i,j) = 1.0
         CS%ground_frac(i,j) = 1.0
         CS%OD_av(i,j) =0.0
       endif
-    enddo
-  enddo
+    enddo ; enddo
+  endif
 
   call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
   call pass_vector(taudx, taudy, G%domain, TO_ALL, BGRID_NE)
@@ -1209,10 +1213,15 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   if (trim(CS%ice_viscosity_compute) == "MODEL_QUADRATURE") call pass_var(CS%Ee,G%domain)
 
   ! This makes sure basal stress is only applied when it is supposed to be
-  do j=G%jsd,G%jed ; do i=G%isd,G%ied
-!    CS%basal_traction(i,j) = CS%basal_traction(i,j) * CS%ground_frac(i,j)
-    CS%basal_traction(i,j) = CS%basal_traction(i,j) * float_cond(i,j)
-  enddo ; enddo
+  if (CS%GL_regularize) then
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      CS%basal_traction(i,j) = CS%basal_traction(i,j) * float_cond(i,j)
+    enddo ; enddo
+  else
+    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+      CS%basal_traction(i,j) = CS%basal_traction(i,j) * CS%ground_frac(i,j)
+    enddo ; enddo
+  endif
 
   if (CS%nonlin_solve_err_mode == 1) then
     ! call apply_boundary_values(CS, ISS, G, US, time, Phisub, H_node, CS%ice_visc, &
@@ -1284,11 +1293,15 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     if (trim(CS%ice_viscosity_compute) == "MODEL_QUADRATURE") call pass_var(CS%Ee,G%domain)
 
     ! makes sure basal stress is only applied when it is supposed to be
-
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
-!     CS%basal_traction(i,j) = CS%basal_traction(i,j) * CS%ground_frac(i,j)
-      CS%basal_traction(i,j) = CS%basal_traction(i,j) * float_cond(i,j)
-    enddo ; enddo
+    if (CS%GL_regularize) then
+      do j=G%jsd,G%jed ; do i=G%isd,G%ied
+        CS%basal_traction(i,j) = CS%basal_traction(i,j) * float_cond(i,j)
+      enddo ; enddo
+    else
+      do j=G%jsd,G%jed ; do i=G%isd,G%ied
+        CS%basal_traction(i,j) = CS%basal_traction(i,j) * CS%ground_frac(i,j)
+      enddo ; enddo
+    endif
 
     if (CS%nonlin_solve_err_mode == 1) then
       !u_bdry_cont(:,:) = 0 ; v_bdry_cont(:,:) = 0
@@ -1395,8 +1408,8 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
                           intent(in)    :: H_node !< The ice shelf thickness at nodal (corner)
                                              !! points [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: float_cond !< An array indicating where the ice
-                                                !! shelf is floating: 0 if floating, 1 if not.
+                          intent(in)    :: float_cond !< If GL_regularize=true, an array indicating where the ice
+                                                !! shelf is floating: 0 if floating, 1 if not
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(in)    :: hmask !< A mask indicating which tracer points are
                                              !! partly or fully covered by an ice-shelf
@@ -2139,18 +2152,24 @@ subroutine calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, OD)
   rhoi_rhow = rho/rhow
   ! prelim - go through and calculate S
 
-  S(:,:) = -CS%bed_elev(:,:) + ISS%h_shelf(:,:)
-  ! check whether the ice is floating or grounded
-
-  do j=jsc-G%domain%njhalo,jec+G%domain%njhalo
-    do i=isc-G%domain%nihalo,iec+G%domain%nihalo
-      if (rhoi_rhow * ISS%h_shelf(i,j) - CS%bed_elev(i,j) <= 0) then
-        S(i,j) = (1 - rhoi_rhow)*ISS%h_shelf(i,j)
-      else
-        S(i,j) = ISS%h_shelf(i,j)-CS%bed_elev(i,j)
-      endif
+  if (CS%GL_couple) then
+    do j=jsc-G%domain%njhalo,jec+G%domain%njhalo
+      do i=isc-G%domain%nihalo,iec+G%domain%nihalo
+        S(i,j) = -CS%bed_elev(i,j) + (OD(i,j) + ISS%h_shelf(i,j))
+      enddo
     enddo
-  enddo
+  else
+    ! check whether the ice is floating or grounded
+    do j=jsc-G%domain%njhalo,jec+G%domain%njhalo
+      do i=isc-G%domain%nihalo,iec+G%domain%nihalo
+        if (rhoi_rhow * ISS%h_shelf(i,j) - CS%bed_elev(i,j) <= 0) then
+          S(i,j) = (1 - rhoi_rhow)*ISS%h_shelf(i,j)
+        else
+          S(i,j) = ISS%h_shelf(i,j)-CS%bed_elev(i,j)
+        endif
+      enddo
+    enddo
+  endif
 
   call pass_var(S, G%domain)
 
@@ -2413,8 +2432,8 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
                                                !! flow law [R L4 Z T-1 ~> kg m2 s-1]. The exact form
                                                !!  and units depend on the basal law exponent.
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(in)    :: float_cond !< An array indicating where the ice
-                                                !! shelf is floating: 0 if floating, 1 if not.
+                         intent(in)    :: float_cond !< If GL_regularize=true, an array indicating where the ice
+                                                !! shelf is floating: 0 if floating, 1 if not
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: bathyT !< The depth of ocean bathymetry at tracer points
                                                  !! relative to sea-level [Z ~> m].
@@ -2584,8 +2603,8 @@ subroutine matrix_diagonal(CS, G, US, float_cond, H_node, ice_visc, basal_trac, 
   type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
   type(unit_scale_type),  intent(in)    :: US !< A structure containing unit conversion factors
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                          intent(in)    :: float_cond !< An array indicating where the ice
-                                                !! shelf is floating: 0 if floating, 1 if not.
+                          intent(in)    :: float_cond !< If GL_regularize=true, an array indicating where the ice
+                                                !! shelf is floating: 0 if floating, 1 if not
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                           intent(in)    :: H_node !< The ice shelf thickness at nodal
                                                  !! (corner) points [Z ~> m].
@@ -3115,7 +3134,7 @@ subroutine update_OD_ffrac(CS, G, US, ocean_mass, find_avg)
       CS%ground_frac(i,j) = 1.0 - (CS%ground_frac_rt(i,j) * I_counter)
       CS%OD_av(i,j) = CS%OD_rt(i,j) * I_counter
 
-      CS%OD_rt(i,j) = 0.0 ; CS%ground_frac_rt(i,j) = 0.0
+      CS%OD_rt(i,j) = 0.0 ; CS%ground_frac_rt(i,j) = 0.0; CS%OD_rt_counter = 0
     enddo ; enddo
 
     call pass_var(CS%ground_frac, G%domain, complete=.false.)
