@@ -75,7 +75,7 @@ MAKEFLAGS += -R
 -include config.mk
 
 # Set the infra framework
-FRAMEWORK ?= fms1
+FRAMEWORK ?= fms2
 
 # Set the MPI launcher here
 # TODO: This needs more automated configuration
