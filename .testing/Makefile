@@ -245,31 +245,26 @@ COV_LDFLAGS := LDFLAGS="$(LDFLAGS_COVERAGE) $(LDFLAGS_DEPS) $(LDFLAGS_USER)"
 
 
 # Environment variable configuration
-build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
+MOM_ENV := $(PATH_FMS)
+build/symmetric/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/asymmetric/Makefile: MOM_ENV += $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
   MOM_MEMORY=../../../config_src/memory/dynamic_nonsymmetric/MOM_memory.h
-build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
-build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
-build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
-build/opt/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
-build/opt_target/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
-build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/cov/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
-build/unit/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
+build/repro/Makefile: MOM_ENV += $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
+build/openmp/Makefile: MOM_ENV += $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
+build/target/Makefile: MOM_ENV += $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
+build/opt/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+build/opt_target/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+build/coupled/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/nuopc/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/cov/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
+build/unit/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
 
 # Configure script flags
-build/symmetric/Makefile: MOM_ACFLAGS=
-build/asymmetric/Makefile: MOM_ACFLAGS=
-build/repro/Makefile: MOM_ACFLAGS=
-build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
-build/target/Makefile: MOM_ACFLAGS=
-build/opt/Makefile: MOM_ACFLAGS=
-build/opt_target/Makefile: MOM_ACFLAGS=
-build/coupled/Makefile: MOM_ACFLAGS=--with-driver=FMS_cap
-build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_cap
-build/cov/Makefile: MOM_ACFLAGS=
-build/unit/Makefile: MOM_ACFLAGS=--with-driver=unit_tests
+MOM_ACFLAGS := --with-framework=$(FRAMEWORK)
+build/openmp/Makefile: MOM_ACFLAGS += --enable-openmp
+build/coupled/Makefile: MOM_ACFLAGS += --with-driver=FMS_cap
+build/nuopc/Makefile: MOM_ACFLAGS += --with-driver=nuopc_cap
+build/unit/Makefile: MOM_ACFLAGS += --with-driver=unit_tests
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
@@ -277,9 +272,6 @@ build/opt_target/Makefile: | $(TARGET_CODEBASE)
 
 
 # Define source code dependencies
-# NOTE: ./configure is too much, but Makefile is not enough!
-#   Ideally we only want to re-run both Makefile and mkmf, but the mkmf call
-#   is inside ./configure, so we must re-run ./configure as well.
 build/target_codebase/configure: $(TARGET_SOURCE)
 
 
@@ -295,8 +287,8 @@ build/%/MOM6: build/%/Makefile $(MOM_SOURCE)
 build/%/Makefile: ../ac/configure ../ac/Makefile.in deps/lib/libFMS.a
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) --with-framework=$(FRAMEWORK) \
-	  || (cat config.log && false)
+	&& $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
+	|| (cat config.log && false)
 
 
 ../ac/configure: ../ac/configure.ac ../ac/m4
@@ -308,8 +300,8 @@ build/target/Makefile build/opt_target/Makefile: \
   $(TARGET_CODEBASE)/ac/configure deps/lib/libFMS.a
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
-	  || (cat config.log && false)
+	&& $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
+	|| (cat config.log && false)
 
 
 $(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
