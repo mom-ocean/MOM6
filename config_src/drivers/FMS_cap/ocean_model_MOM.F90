@@ -1197,6 +1197,14 @@ subroutine ocean_model_get_UV_surf(OS, Ocean, name, array2D, isc, jsc)
       array2D(i,j) = G%mask2dBu(I+i0,J+j0) * &
                 0.5*(sfc_state%v(i+i0,J+j0)+sfc_state%v(i+i0+1,J+j0))
     enddo ; enddo
+  case('uc')
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      array2D(i,j) = G%mask2dCu(I+i0,J+j0) * sfc_state%u(I+i0,j+j0)
+    enddo ; enddo
+  case('vc')
+    do j=jsc_bnd,jec_bnd ; do i=isc_bnd,iec_bnd
+      array2D(i,j) = G%mask2dCv(I+i0,J+j0) * sfc_state%v(i+i0,J+j0)
+    enddo ; enddo
   case default
     call MOM_error(FATAL,'ocean_model_get_UV_surf: unknown argument name='//name)
   end select
