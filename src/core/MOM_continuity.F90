@@ -3,8 +3,8 @@ module MOM_continuity
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_continuity_PPM, only : continuity_PPM, continuity_PPM_init
-use MOM_continuity_PPM, only : continuity_PPM_stencil
+use MOM_continuity_PPM, only : continuity_PPM, zonal_mass_flux, meridional_mass_flux
+use MOM_continuity_PPM, only : continuity_PPM_stencil, continuity_PPM_init
 use MOM_continuity_PPM, only : continuity_PPM_CS
 use MOM_diag_mediator, only : time_type, diag_ctrl
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
@@ -20,7 +20,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public continuity, continuity_init, continuity_stencil
+public continuity, continuity_fluxes, continuity_adjust_vel, continuity_init, continuity_stencil
 
 !> Control structure for mom_continuity
 type, public :: continuity_CS ; private
@@ -35,10 +35,16 @@ end type continuity_CS
 integer, parameter :: PPM_SCHEME = 1 !< Enumerated constant to select PPM
 character(len=20), parameter :: PPM_STRING = "PPM" !< String to select PPM
 
+!> Finds the thickness fluxes from the continuity solver or their vertical sum without
+!! actually updating the layer thicknesses.
+interface continuity_fluxes
+  module procedure continuity_3d_fluxes, continuity_2d_fluxes
+end interface continuity_fluxes
+
 contains
 
-!> Time steps the layer thicknesses, using a monotonically limited, directionally split PPM scheme,
-!! based on Lin (1994).
+!> Time steps the layer thicknesses, using a monotonically or positive-definite limited, directionally
+!! split PPM scheme, based on Lin (1994).
 subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, vhbt, &
                       visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
   type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
@@ -63,21 +69,23 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, v
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
   type(porous_barrier_type), intent(in)  :: pbv !< porous barrier fractional cell metrics
   real, dimension(SZIB_(G),SZJ_(G)), &
-                 optional, intent(in)    :: uhbt !< The vertically summed volume
-                                                !! flux through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+                 optional, intent(in)    :: uhbt !< The vertically summed volume flux through
+                                                !! zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
-                 optional, intent(in)    :: vhbt !< The vertically summed volume
-                                                !! flux through meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+                 optional, intent(in)    :: vhbt !< The vertically summed volume flux through
+                                                !! meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_u !< Both the fraction of
           !! zonal momentum that remains after a time-step of viscosity, and the fraction of a time-step's
           !! worth of a barotropic acceleration that a layer experiences after viscosity is applied [nondim].
-          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).  When this column is
+          !! under an ice shelf, this can also go to 0 at the top due to the no-slip boundary condition there.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                  optional, intent(in)    :: visc_rem_v !< Both the fraction of
           !! meridional momentum that remains after a time-step of viscosity, and the fraction of a time-step's
           !! worth of a barotropic acceleration that a layer experiences after viscosity is applied [nondim].
-          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).
+          !! Non-dimensional between 0 (at the bottom) and 1 (far above the bottom).  When this column is
+          !! under an ice shelf, this can also go to 0 at the top due to the no-slip boundary condition there.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                  optional, intent(out)   :: u_cor !< The zonal velocities that
           !! give uhbt as the depth-integrated transport [L T-1 ~> m s-1].
@@ -103,6 +111,168 @@ subroutine continuity(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, v
   endif
 
 end subroutine continuity
+
+!> Finds the thickness fluxes from the continuity solver without actually updating the
+!! layer thicknesses.  Because the fluxes in the two directions are calculated based on the
+!! input thicknesses, which are not updated between the direcitons, the fluxes returned here
+!! are not the same as those that would be returned by a call to continuity.
+subroutine continuity_3d_fluxes(u, v, h, uh, vh, dt, G, GV, US, CS, OBC, pbv)
+  type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
+  type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: u   !< Zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(in)    :: v   !< Meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
+                           intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out)   :: uh  !< Thickness fluxes through zonal faces,
+                                                !! u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(out)   :: vh  !< Thickness fluxes through meridional faces,
+                                                !! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real,                    intent(in)    :: dt  !< Time increment [T ~> s].
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(continuity_CS),     intent(in)    :: CS  !< Control structure for mom_continuity.
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
+  type(porous_barrier_type), intent(in)  :: pbv !< porous barrier fractional cell metrics
+
+  if (CS%continuity_scheme == PPM_SCHEME) then
+    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS%PPM, OBC, pbv%por_face_areaU)
+
+    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS%PPM, OBC, pbv%por_face_areaV)
+  else
+    call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")
+  endif
+
+end subroutine continuity_3d_fluxes
+
+!> Find the vertical sum of the thickness fluxes from the continuity solver without actually
+!! updating the layer thicknesses.  Because the fluxes in the two directions are calculated
+!! based on the input thicknesses, which are not updated between the directions, the fluxes
+!! returned here are not the same as those that would be returned by a call to continuity.
+subroutine continuity_2d_fluxes(u, v, h, uhbt, vhbt, dt, G, GV, US, CS, OBC, pbv)
+  type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
+  type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: u   !< Zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(in)    :: v   !< Meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
+                           intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(out)   :: uhbt !< Vertically summed thickness flux through
+                                                !! zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                           intent(out)   :: vhbt !< Vertically summed thickness flux through
+                                                !! meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real,                    intent(in)    :: dt  !< Time increment [T ~> s].
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(continuity_CS),     intent(in)    :: CS  !< Control structure for mom_continuity.
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
+  type(porous_barrier_type), intent(in)  :: pbv !< porous barrier fractional cell metrics
+
+  ! Local variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uh  ! Thickness fluxes through zonal faces,
+                                                    ! u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vh  ! Thickness fluxes through meridional faces,
+                                                    ! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
+  integer :: i, j, k
+
+  uh(:,:,:) = 0.0
+  vh(:,:,:) = 0.0
+
+  if (CS%continuity_scheme == PPM_SCHEME) then
+    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS%PPM, OBC, pbv%por_face_areaU)
+
+    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS%PPM, OBC, pbv%por_face_areaV)
+  else
+    call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")
+  endif
+
+  uhbt(:,:) = 0.0
+  vhbt(:,:) = 0.0
+
+  do k=1,GV%ke ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
+    uhbt(I,j) = uhbt(I,j) + uh(I,j,k)
+  enddo ; enddo ; enddo
+
+  do k=1,GV%ke ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+    vhbt(I,j) = vhbt(I,j) + vh(I,j,k)
+  enddo ; enddo ; enddo
+
+end subroutine continuity_2d_fluxes
+
+
+!> Correct the velocities to give the specified depth-integrated transports by applying a
+!! barotropic acceleration (subject to viscous drag) to the velocities.
+subroutine continuity_adjust_vel(u, v, h, dt, G, GV, US, CS, OBC, pbv, uhbt, vhbt, visc_rem_u, visc_rem_v)
+  type(ocean_grid_type),   intent(inout) :: G   !< Ocean grid structure.
+  type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(inout) :: u   !< Zonal velocity, which will be adjusted to
+                                                !! give uhbt as the depth-integrated
+                                                !! transport [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(inout) :: v   !< Meridional velocity, which will be adjusted
+                                                !! to give vhbt as the depth-integrated
+                                                !! transport [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
+                           intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
+  real,                    intent(in)    :: dt  !< Time increment [T ~> s].
+  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(continuity_CS),     intent(in)    :: CS  !< Control structure for mom_continuity.
+  type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
+  type(porous_barrier_type), intent(in)  :: pbv !< porous barrier fractional cell metrics
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: uhbt !< The vertically summed thickness flux through
+                                                !! zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                           intent(in)    :: vhbt !< The vertically summed thickness flux through
+                                                !! meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                 optional, intent(in)    :: visc_rem_u !< Both the fraction of the zonal momentum
+                                                !! that remains after a time-step of viscosity, and
+                                                !! the fraction of a time-step's worth of a barotropic
+                                                !! acceleration that a layer experiences after viscosity
+                                                !! is applied [nondim].  This goes between 0 (at the
+                                                !! bottom) and 1 (far above the bottom).  When this
+                                                !! column is under an ice shelf, this also goes to 0
+                                                !! at the top due to the no-slip boundary condition there.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                 optional, intent(in)    :: visc_rem_v !< Both the fraction of the meridional momentum
+                                                !! that remains after a time-step of viscosity, and
+                                                !! the fraction of a time-step's worth of a barotropic
+                                                !! acceleration that a layer experiences after viscosity
+                                                !! is applied [nondim].  This goes between 0 (at the
+                                                !! bottom) and 1 (far above the bottom).  When this
+                                                !! column is under an ice shelf, this also goes to 0
+                                                !! at the top due to the no-slip boundary condition there.
+
+  ! Local variables
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u_in  !< Input zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: v_in  !< Input meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uh  !< Volume flux through zonal faces =
+                                                !! u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vh  !< Volume flux through meridional faces =
+                                                !! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
+
+  ! It might not be necessary to separate the input velocity array from the adjusted velocities,
+  ! but it seems safer to do so, even if it might be less efficient.
+  u_in(:,:,:) = u(:,:,:)
+  v_in(:,:,:) = v(:,:,:)
+
+  if (CS%continuity_scheme == PPM_SCHEME) then
+    call zonal_mass_flux(u_in, h, uh, dt, G, GV, US, CS%PPM, OBC, pbv%por_face_areaU, &
+                         uhbt=uhbt, visc_rem_u=visc_rem_u, u_cor=u)
+
+    call meridional_mass_flux(v_in, h, vh, dt, G, GV, US, CS%PPM, OBC, pbv%por_face_areaV, &
+                              vhbt=vhbt, visc_rem_v=visc_rem_v, v_cor=v)
+  else
+    call MOM_error(FATAL, "continuity: Unrecognized value of continuity_scheme")
+  endif
+
+end subroutine continuity_adjust_vel
 
 !> Initializes continuity_cs
 subroutine continuity_init(Time, G, GV, US, param_file, diag, CS)

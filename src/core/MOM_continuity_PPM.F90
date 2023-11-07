@@ -19,6 +19,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public continuity_PPM, continuity_PPM_init, continuity_PPM_stencil
+public zonal_mass_flux, meridional_mass_flux
 
 !>@{ CPU time clock IDs
 integer :: id_clock_update, id_clock_correct
@@ -72,7 +73,7 @@ contains
 !! based on Lin (1994).
 subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, vhbt, &
                           visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
-  type(ocean_grid_type),   intent(inout) :: G   !< The ocean's grid structure.
+  type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u   !< Zonal velocity [L T-1 ~> m s-1].
@@ -147,8 +148,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   !    First, advect zonally.
     LB%ish = G%isc ; LB%ieh = G%iec
     LB%jsh = G%jsc-stencil ; LB%jeh = G%jec+stencil
-    call zonal_mass_flux(u, hin, uh, dt, G, GV, US, CS, LB, OBC, &
-      pbv%por_face_areaU, uhbt, visc_rem_u, u_cor, BT_cont)
+    call zonal_mass_flux(u, hin, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
+                         LB, uhbt, visc_rem_u, u_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -163,8 +164,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
 
     !    Now advect meridionally, using the updated thicknesses to determine
     !  the fluxes.
-    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS, LB, OBC, &
-      pbv%por_face_areaV, vhbt, visc_rem_v, v_cor, BT_cont)
+    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
+                              LB, vhbt, visc_rem_v, v_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -180,8 +181,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     LB%ish = G%isc-stencil ; LB%ieh = G%iec+stencil
     LB%jsh = G%jsc ; LB%jeh = G%jec
 
-    call meridional_mass_flux(v, hin, vh, dt, G, GV, US, CS, LB, OBC, &
-      pbv%por_face_areaV, vhbt, visc_rem_v, v_cor, BT_cont)
+    call meridional_mass_flux(v, hin, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
+                              LB, vhbt, visc_rem_v, v_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -193,8 +194,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   !    Now advect zonally, using the updated thicknesses to determine
   !  the fluxes.
     LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
-    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS, LB, OBC, &
-      pbv%por_face_areaU, uhbt, visc_rem_u, u_cor, BT_cont)
+    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
+                         LB, uhbt, visc_rem_u, u_cor, BT_cont)
 
     call cpu_clock_begin(id_clock_update)
     !$OMP parallel do default(shared)
@@ -210,9 +211,9 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
 end subroutine continuity_PPM
 
 !> Calculates the mass or volume fluxes through the zonal faces, and other related quantities.
-subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_areaU, uhbt, &
-                           visc_rem_u, u_cor, BT_cont)
-  type(ocean_grid_type),   intent(inout) :: G    !< Ocean's grid structure.
+subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, OBC, por_face_areaU, &
+                           LB_in, uhbt, visc_rem_u, u_cor, BT_cont)
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: u    !< Zonal velocity [L T-1 ~> m s-1].
@@ -224,10 +225,11 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   real,                    intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS), intent(in)    :: CS   !< This module's control structure.
-  type(loop_bounds_type),  intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type),    pointer       :: OBC  !< Open boundaries control structure.
   real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), &
                            intent(in)    :: por_face_areaU !< fractional open area of U-faces [nondim]
+  type(loop_bounds_type), &
+                 optional, intent(in)    :: LB_in !< Loop bounds structure.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -265,6 +267,7 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
   real :: I_dt    ! 1.0 / dt [T-1 ~> s-1].
   real :: du_lim  ! The velocity change that give a relative CFL of 1 [L T-1 ~> m s-1].
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west [L ~> m].
+  type(loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   integer :: l_seg
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
@@ -279,6 +282,12 @@ subroutine zonal_mass_flux(u, h_in, uh, dt, G, GV, US, CS, LB, OBC, por_face_are
     local_Flather_OBC = OBC%Flather_u_BCs_exist_globally
     local_open_BC = OBC%open_u_BCs_exist_globally
   endif ; endif
+
+  if (present(LB_in)) then
+    LB = LB_in
+  else
+    LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
+  endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   CFL_dt = CS%CFL_limit_adjust / dt
@@ -523,7 +532,7 @@ end subroutine zonal_mass_flux
 !> Evaluates the zonal mass or volume fluxes in a layer.
 subroutine zonal_flux_layer(u, h, h_L, h_R, uh, duhdu, visc_rem, dt, G, US, j, &
                             ish, ieh, do_I, vol_CFL, por_face_areaU, OBC)
-  type(ocean_grid_type),        intent(inout) :: G        !< Ocean's grid structure.
+  type(ocean_grid_type),        intent(in)    :: G        !< Ocean's grid structure.
   real, dimension(SZIB_(G)),    intent(in)    :: u        !< Zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZIB_(G)),    intent(in)    :: visc_rem !< Both the fraction of the
                         !! momentum originally in a layer that remains after a time-step
@@ -606,7 +615,7 @@ end subroutine zonal_flux_layer
 !! back these thicknesses to account for viscosity and fractional open areas.
 subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL, &
                                 marginal, OBC, por_face_areaU, visc_rem_u)
-  type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)   :: u    !< Zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h    !< Layer thickness used to
@@ -617,7 +626,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
                                                                    !! reconstruction [H ~> m or kg m-2].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h_u !< Effective thickness at zonal faces,
                                                                    !! scaled down to account for the effects of
-                                                                   !! viscoity and the fractional open area
+                                                                   !! viscosity and the fractional open area
                                                                    !! [H ~> m or kg m-2].
   real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
@@ -680,6 +689,11 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
     do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
       h_u(I,j,k) = h_u(I,j,k) * (visc_rem_u(I,j,k) * por_face_areaU(I,j,k))
     enddo ; enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+      h_u(I,j,k) = h_u(I,j,k) * por_face_areaU(I,j,k)
+    enddo ; enddo ; enddo
   endif
 
   local_open_BC = .false.
@@ -695,7 +709,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
             enddo
           enddo ; else ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-              h_u(I,j,k) = h(i,j,k)
+              h_u(I,j,k) = h(i,j,k) * por_face_areaU(I,j,k)
             enddo
           enddo ; endif
         else
@@ -705,7 +719,7 @@ subroutine zonal_face_thickness(u, h, h_L, h_R, h_u, dt, G, GV, US, LB, vol_CFL,
             enddo
           enddo ; else ; do k=1,nz
             do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
-              h_u(I,j,k) = h(i+1,j,k)
+              h_u(I,j,k) = h(i+1,j,k) * por_face_areaU(I,j,k)
             enddo
           enddo ; endif
         endif
@@ -721,7 +735,7 @@ subroutine zonal_flux_adjust(u, h_in, h_L, h_R, uhbt, uh_tot_0, duhdu_tot_0, &
                              du, du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              j, ish, ieh, do_I_in, por_face_areaU, uh_3d, OBC)
 
-  type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)   :: u    !< Zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to
@@ -873,7 +887,7 @@ end subroutine zonal_flux_adjust
 subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, &
                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_I, por_face_areaU)
-  type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u    !< Zonal velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to
@@ -1036,9 +1050,9 @@ subroutine set_zonal_BT_cont(u, h_in, h_L, h_R, BT_cont, uh_tot_0, duhdu_tot_0, 
 end subroutine set_zonal_BT_cont
 
 !> Calculates the mass or volume fluxes through the meridional faces, and other related quantities.
-subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_face_areaV, vhbt, &
-                                visc_rem_v, v_cor, BT_cont)
-  type(ocean_grid_type),                      intent(inout) :: G    !< Ocean's grid structure.
+subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, OBC, por_face_areaV, &
+                                LB_in, vhbt, visc_rem_v, v_cor, BT_cont)
+  type(ocean_grid_type),                      intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                    intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v    !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_in !< Layer thickness used to
@@ -1048,11 +1062,12 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
   real,                                       intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                      intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),                    intent(in)    :: CS   !< This module's control structure.G
-  type(loop_bounds_type),                     intent(in)    :: LB   !< Loop bounds structure.
   type(ocean_OBC_type),                       pointer       :: OBC  !< Open boundary condition type
                                    !! specifies whether, where, and what open boundary conditions are used.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                    intent(in)    :: por_face_areaV  !< fractional open area of V-faces [nondim]
+  type(loop_bounds_type), &
+                                     optional, intent(in)  :: LB_in !< Loop bounds structure.
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in)  :: vhbt  !< The summed volume flux through
                                    !< meridional faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -1090,6 +1105,7 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
   real :: I_dt    ! 1.0 / dt [T-1 ~> s-1].
   real :: dv_lim  ! The velocity change that give a relative CFL of 1 [L T-1 ~> m s-1].
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south [L ~> m].
+  type(loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   integer :: l_seg
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
@@ -1104,6 +1120,12 @@ subroutine meridional_mass_flux(v, h_in, vh, dt, G, GV, US, CS, LB, OBC, por_fac
     local_Flather_OBC = OBC%Flather_v_BCs_exist_globally
     local_open_BC = OBC%open_v_BCs_exist_globally
   endif ; endif
+
+  if (present(LB_in)) then
+    LB = LB_in
+  else
+    LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
+  endif
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   CFL_dt = CS%CFL_limit_adjust / dt
@@ -1343,7 +1365,7 @@ end subroutine meridional_mass_flux
 !> Evaluates the meridional mass or volume fluxes in a layer.
 subroutine merid_flux_layer(v, h, h_L, h_R, vh, dvhdv, visc_rem, dt, G, US, J, &
                             ish, ieh, do_I, vol_CFL, por_face_areaV, OBC)
-  type(ocean_grid_type),        intent(inout) :: G        !< Ocean's grid structure.
+  type(ocean_grid_type),        intent(in)    :: G        !< Ocean's grid structure.
   real, dimension(SZI_(G)),     intent(in)    :: v        !< Meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G)),     intent(in)    :: visc_rem !< Both the fraction of the
          !! momentum originally in a layer that remains after a time-step
@@ -1432,7 +1454,7 @@ end subroutine merid_flux_layer
 !! back these thicknesses to account for viscosity and fractional open areas.
 subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL, &
                                 marginal, OBC, por_face_areaV, visc_rem_v)
-  type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)   :: v    !< Meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h    !< Layer thickness used to calculate fluxes,
@@ -1443,7 +1465,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
                                                                    !! [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: h_v !< Effective thickness at meridional faces,
                                                                    !! scaled down to account for the effects of
-                                                                   !! viscoity and the fractional open area
+                                                                   !! viscosity and the fractional open area
                                                                    !! [H ~> m or kg m-2].
   real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(loop_bounds_type),                    intent(in)    :: LB   !< Loop bounds structure.
@@ -1508,6 +1530,11 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
     do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
       h_v(i,J,k) = h_v(i,J,k) * (visc_rem_v(i,J,k) * por_face_areaV(i,J,k))
     enddo ; enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
+      h_v(i,J,k) = h_v(i,J,k) * por_face_areaV(i,J,k)
+    enddo ; enddo ; enddo
   endif
 
   local_open_BC = .false.
@@ -1523,7 +1550,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
             enddo
           enddo ; else ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-              h_v(i,J,k) = h(i,j,k)
+              h_v(i,J,k) = h(i,j,k) * por_face_areaV(i,J,k)
             enddo
           enddo ; endif
         else
@@ -1533,7 +1560,7 @@ subroutine merid_face_thickness(v, h, h_L, h_R, h_v, dt, G, GV, US, LB, vol_CFL,
             enddo
           enddo ; else ; do k=1,nz
             do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
-              h_v(i,J,k) = h(i,j+1,k)
+              h_v(i,J,k) = h(i,j+1,k) * por_face_areaV(i,J,k)
             enddo
           enddo ; endif
         endif
@@ -1547,7 +1574,7 @@ end subroutine merid_face_thickness
 subroutine meridional_flux_adjust(v, h_in, h_L, h_R, vhbt, vh_tot_0, dvhdv_tot_0, &
                              dv, dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              j, ish, ieh, do_I_in, por_face_areaV, vh_3d, OBC)
-  type(ocean_grid_type),   intent(inout) :: G    !< Ocean's grid structure.
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in)    :: v    !< Meridional velocity [L T-1 ~> m s-1].
@@ -1699,7 +1726,7 @@ end subroutine meridional_flux_adjust
 subroutine set_merid_BT_cont(v, h_in, h_L, h_R, BT_cont, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              visc_rem_max, j, ish, ieh, do_I, por_face_areaV)
-  type(ocean_grid_type),                     intent(inout) :: G    !< Ocean's grid structure.
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)   :: v    !< Meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to calculate fluxes,
