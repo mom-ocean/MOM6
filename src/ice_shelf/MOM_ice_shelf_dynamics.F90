@@ -35,7 +35,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public register_ice_shelf_dyn_restarts, initialize_ice_shelf_dyn, update_ice_shelf
-public ice_time_step_CFL, ice_shelf_dyn_end, write_ice_shelf_energy
+public ice_time_step_CFL, ice_shelf_dyn_end, change_in_draft, write_ice_shelf_energy
 public shelf_advance_front, ice_shelf_min_thickness_calve, calve_to_mask
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
@@ -1090,6 +1090,15 @@ subroutine ice_shelf_advect(CS, ISS, G, time_step, Time)
       call calve_to_mask(G, ISS%h_shelf, ISS%area_shelf_h, ISS%hmask, CS%calve_mask)
     endif
   endif
+
+  do j=jsc,jec; do i=isc,iec
+    ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) * G%IareaT(i,j) * CS%density_ice
+  enddo; enddo
+
+  call pass_var(ISS%mass_shelf, G%domain, complete=.false.)
+  call pass_var(ISS%h_shelf, G%domain, complete=.false.)
+  call pass_var(ISS%area_shelf_h, G%domain, complete=.false.)
+  call pass_var(ISS%hmask, G%domain, complete=.true.)
 
   !call enable_averages(time_step, Time, CS%diag)
   !if (CS%id_h_after_adv > 0) call post_data(CS%id_h_after_adv, ISS%h_shelf, CS%diag)
@@ -3170,6 +3179,53 @@ subroutine update_OD_ffrac_uncoupled(CS, G, h_shelf)
   enddo
 
 end subroutine update_OD_ffrac_uncoupled
+
+subroutine change_in_draft(CS, G, h_shelf0, h_shelf1, ddraft)
+  type(ice_shelf_dyn_CS), intent(inout) :: CS !< A pointer to the ice shelf control structure
+  type(ocean_grid_type),  intent(in)    :: G  !< The grid structure used by the ice shelf.
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: h_shelf0 !< the previous thickness of the ice shelf [Z ~> m].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(in)    :: h_shelf1 !< the current thickness of the ice shelf [Z ~> m].
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                          intent(inout)    :: ddraft !< the change in shelf draft thickness
+  real :: b0,b1
+  integer :: i, j, isc, iec, jsc, jec
+  real    :: rhoi_rhow, OD
+
+  rhoi_rhow = CS%density_ice / CS%density_ocean_avg
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
+  ddraft = 0.0
+
+  do j=jsc,jec
+    do i=isc,iec
+
+      b0=0.0; b1=0.0
+
+      if (h_shelf0(i,j)>0.0) then
+        OD = CS%bed_elev(i,j) - rhoi_rhow * h_shelf0(i,j)
+        if (OD >= 0) then
+          !floating
+          b0 = rhoi_rhow * h_shelf0(i,j)
+        else
+          b0 = CS%bed_elev(i,j)
+        endif
+      endif
+
+      if (h_shelf1(i,j)>0.0) then
+        OD = CS%bed_elev(i,j) - rhoi_rhow * h_shelf1(i,j)
+        if (OD >= 0) then
+          !floating
+          b1 = rhoi_rhow * h_shelf1(i,j)
+        else
+          b1 = CS%bed_elev(i,j)
+        endif
+      endif
+
+      ddraft(i,j) = b1-b0
+    enddo
+  enddo
+end subroutine change_in_draft
 
 !> This subroutine calculates the gradients of bilinear basis elements that
 !! that are centered at the vertices of the cell.  Values are calculated at

@@ -20,12 +20,12 @@ use MOM_forcing_type,  only : forcing, mech_forcing, find_ustar
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_interface_heights, only : thickness_to_dz
-use MOM_io,            only : slasher, MOM_read_data
+use MOM_io,            only : slasher, MOM_read_data, vardesc, var_desc
 use MOM_kappa_shear,   only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type, OBC_NONE, OBC_DIRECTION_E
 use MOM_open_boundary, only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_restart,       only : register_restart_field, query_initialized, MOM_restart_CS
-use MOM_restart,       only : register_restart_field_as_obsolete
+use MOM_restart,       only : register_restart_field_as_obsolete, register_restart_pair
 use MOM_safe_alloc,    only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, porous_barrier_type
@@ -2072,8 +2072,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 end subroutine set_viscous_ML
 
 !> Register any fields associated with the vertvisc_type.
-subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
+subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_CS, use_ice_shelf)
   type(hor_index_type),    intent(in)    :: HI         !< A horizontal index type structure.
+  type(ocean_grid_type),   intent(in) :: G          !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV         !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time
@@ -2082,6 +2083,7 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
                                                        !! viscosities and related fields.
                                                        !! Allocated here.
   type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control structure
+  logical,                 intent(in) :: use_ice_shelf !< if true, register tau_shelf restarts
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
@@ -2090,6 +2092,7 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
   real :: hfreeze !< If hfreeze > 0 [Z ~> m], melt potential will be computed.
   character(len=16)  :: Kv_units, Kd_units
   character(len=40)  :: mdl = "MOM_set_visc"  ! This module's name.
+  type(vardesc) :: u_desc, v_desc
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   call get_param(param_file, mdl, "ADIABATIC", adiabatic, default=.false., &
@@ -2171,6 +2174,19 @@ subroutine set_visc_register_restarts(HI, GV, US, param_file, visc, restart_CS)
     call register_restart_field(visc%sfc_buoy_flx, "SFC_BFLX", .false., restart_CS, &
                                 "Instantaneous surface buoyancy flux", "m2 s-3", &
                                 conversion=US%Z_to_m**2*US%s_to_T**3)
+  endif
+
+  if (use_ice_shelf) then
+    if (.not.allocated(visc%taux_shelf)) &
+      allocate(visc%taux_shelf(G%IsdB:G%IedB, G%jsd:G%jed), source=0.0)
+    if (.not.allocated(visc%tauy_shelf)) &
+      allocate(visc%tauy_shelf(G%isd:G%ied, G%JsdB:G%JedB), source=0.0)
+    u_desc = var_desc("u_taux_shelf", "Pa", "the zonal stress on the ocean under ice shelves", &
+                      hor_grid='Cu',z_grid='1')
+    v_desc = var_desc("v_tauy_shelf", "Pa", "the meridional stress on the ocean under ice shelves", &
+                      hor_grid='Cv',z_grid='1')
+    call register_restart_pair(visc%taux_shelf, visc%tauy_shelf, u_desc, v_desc, &
+                               .false., restart_CS, conversion=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
   endif
 
 end subroutine set_visc_register_restarts

@@ -26,6 +26,7 @@ type, public :: ice_shelf_state
     area_shelf_h => NULL(), &  !< The area per cell covered by the ice shelf [L2 ~> m2].
     h_shelf => NULL(), &       !< the thickness of the shelf [Z ~> m], redundant with mass but may
                                !! make the code more readable
+    dhdt_shelf => NULL(), &       !< the change in thickness of the shelf over time [Z T-1 ~> m s-1]
     hmask => NULL(),&          !< Mask used to indicate ice-covered or partiall-covered cells
                                !! 1: fully covered, solve for velocity here (for now all
                                !!   ice-covered cells are treated the same, this may change)
@@ -70,6 +71,7 @@ subroutine ice_shelf_state_init(ISS, G)
   allocate(ISS%mass_shelf(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%area_shelf_h(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%h_shelf(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%dhdt_shelf(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%hmask(isd:ied,jsd:jed), source=-2.0 )
 
   allocate(ISS%tflux_ocn(isd:ied,jsd:jed), source=0.0 )
@@ -87,7 +89,7 @@ subroutine ice_shelf_state_end(ISS)
 
   if (.not.associated(ISS)) return
 
-  deallocate(ISS%mass_shelf, ISS%area_shelf_h, ISS%h_shelf, ISS%hmask)
+  deallocate(ISS%mass_shelf, ISS%area_shelf_h, ISS%h_shelf, ISS%dhdt_shelf, ISS%hmask)
 
   deallocate(ISS%tflux_ocn, ISS%water_flux, ISS%salt_flux, ISS%tflux_shelf)
   deallocate(ISS%tfreeze)
