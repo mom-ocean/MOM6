@@ -54,6 +54,7 @@ use MOM_ALE,                   only : ALE_init, ALE_end, ALE_regrid, ALE_CS, adj
 use MOM_ALE,                   only : ALE_getCoordinate, ALE_getCoordinateUnits, ALE_writeCoordinateFile
 use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init_conds, pre_ALE_adjustments
 use MOM_ALE,                   only : ALE_remap_tracers, ALE_remap_velocities
+use MOM_ALE,                   only : ALE_remap_set_h_vel, ALE_remap_set_h_vel_via_dz
 use MOM_ALE,                   only : ALE_update_regrid_weights, pre_ALE_diagnostics, ALE_register_diags
 use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
@@ -253,6 +254,8 @@ type, public :: MOM_control_struct ; private
   logical :: remap_aux_vars     !< If true, apply ALE remapping to all of the auxiliary 3-D
                     !! variables that are needed to reproduce across restarts,
                     !! similarly to what is done with the primary state variables.
+  logical :: remap_uv_using_old_alg !< If true, use the old "remapping via a delta z" method for
+                    !! velocities.  If false, remap between two grids described by thicknesses.
 
   type(MOM_stoch_eos_CS) :: stoch_eos_CS !< structure containing random pattern for stoch EOS
   logical :: alternate_first_direction !< If true, alternate whether the x- or y-direction
@@ -1499,6 +1502,14 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   real :: h_new(SZI_(G),SZJ_(G),SZK_(GV))      ! Layer thicknesses after regridding [H ~> m or kg m-2]
   real :: dzRegrid(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The change in grid interface positions due to regridding,
                                                ! in the same units as thicknesses [H ~> m or kg m-2]
+  real :: h_old_u(SZIB_(G),SZJ_(G),SZK_(GV))   ! Source grid thickness at zonal
+                                               ! velocity points [H ~> m or kg m-2]
+  real :: h_old_v(SZI_(G),SZJB_(G),SZK_(GV))   ! Source grid thickness at meridional
+                                               ! velocity points [H ~> m or kg m-2]
+  real :: h_new_u(SZIB_(G),SZJ_(G),SZK_(GV))   ! Destination grid thickness at zonal
+                                               ! velocity points [H ~> m or kg m-2]
+  real :: h_new_v(SZI_(G),SZJB_(G),SZK_(GV))   ! Destination grid thickness at meridional
+                                               ! velocity points [H ~> m or kg m-2]
   logical :: PCM_cell(SZI_(G),SZJ_(G),SZK_(GV)) ! If true, PCM remapping should be used in a cell.
   logical :: use_ice_shelf ! Needed for selecting the right ALE interface.
   logical :: showCallTree
@@ -1620,12 +1631,23 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       if (showCallTree) call callTree_waypoint("new grid generated")
       ! Remap all variables from the old grid h onto the new grid h_new
       call ALE_remap_tracers(CS%ALE_CSp, G, GV, h, h_new, CS%tracer_Reg, showCallTree, dtdia, PCM_cell)
-      call ALE_remap_velocities(CS%ALE_CSp, G, GV, h, h_new, u, v, CS%OBC, dzRegrid, showCallTree, dtdia)
+
+      ! Determine the old and new grid thicknesses at velocity points.
+      call ALE_remap_set_h_vel(CS%ALE_CSp, G, GV, h, h_old_u, h_old_v, CS%OBC, debug=showCallTree)
+      if (CS%remap_uv_using_old_alg) then
+        call ALE_remap_set_h_vel_via_dz(CS%ALE_CSp, G, GV, h_new, h_new_u, h_new_v, CS%OBC, h, dzRegrid, showCallTree)
+      else
+        call ALE_remap_set_h_vel(CS%ALE_CSp, G, GV, h_new, h_new_u, h_new_v, CS%OBC, debug=showCallTree)
+      endif
+
+      ! Remap the velocity components.
+      call ALE_remap_velocities(CS%ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u, v, showCallTree)
+
       if (allocated(tv%SpV_avg)) tv%valid_SpV_halo = -1   ! Record that SpV_avg is no longer valid.
 
       if (CS%remap_aux_vars) then
         if (CS%split) &
-          call remap_dyn_split_RK2_aux_vars(G, GV, CS%dyn_split_RK2_CSp, h, h_new, CS%ALE_CSp, CS%OBC, dzRegrid)
+          call remap_dyn_split_RK2_aux_vars(G, GV, CS%dyn_split_RK2_CSp, h_old_u, h_old_v, h_new_u, h_new_v, CS%ALE_CSp)
 
         if (associated(CS%OBC)) then
           call pass_var(h, G%Domain, complete=.false.)
@@ -2025,6 +2047,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   real, allocatable, dimension(:,:,:) :: h_new    ! Layer thicknesses after regridding [H ~> m or kg m-2]
   real, allocatable, dimension(:,:,:) :: dzRegrid ! The change in grid interface positions due to regridding,
                                                   ! in the same units as thicknesses [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: h_old_u  ! Source grid thickness at zonal velocity points [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: h_old_v  ! Source grid thickness at meridional velocity
+                                                  ! points [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: h_new_u  ! Destination grid thickness at zonal
+                                                  ! velocity points [H ~> m or kg m-2]
+  real, allocatable, dimension(:,:,:) :: h_new_v  ! Destination grid thickness at meridional
+                                                  ! velocity points [H ~> m or kg m-2]
   logical, allocatable, dimension(:,:,:) :: PCM_cell ! If true, PCM remapping should be used in a cell.
   type(group_pass_type) :: tmp_pass_uv_T_S_h, pass_uv_T_S_h
 
@@ -2197,6 +2226,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, "MOM", "USE_REGRIDDING", CS%use_ALE_algorithm, &
                  "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
+  call get_param(param_file, "MOM", "REMAP_UV_USING_OLD_ALG", CS%remap_uv_using_old_alg, &
+                 "If true, uses the old remapping-via-a-delta-z method for "//&
+                 "remapping u and v. If false, uses the new method that remaps "//&
+                 "between grids described by an old and new thickness.", &
+                 default=.false., do_not_log=.not.CS%use_ALE_algorithm)
   call get_param(param_file, "MOM", "REMAP_AUXILIARY_VARS", CS%remap_aux_vars, &
                  "If true, apply ALE remapping to all of the auxiliary 3-dimensional "//&
                  "variables that are needed to reproduce across restarts, similarly to "//&
@@ -2996,6 +3030,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     allocate(h_new(isd:ied, jsd:jed, nz), source=0.0)
     allocate(dzRegrid(isd:ied, jsd:jed, nz+1), source=0.0)
     allocate(PCM_cell(isd:ied, jsd:jed, nz), source=.false.)
+    allocate(h_old_u(IsdB:IedB, jsd:jed, nz), source=0.0)
+    allocate(h_new_u(IsdB:IedB, jsd:jed, nz), source=0.0)
+    allocate(h_old_v(isd:ied, JsdB:JedB, nz), source=0.0)
+    allocate(h_new_v(isd:ied, JsdB:JedB, nz), source=0.0)
     if (use_ice_shelf) then
       call ALE_regrid(G, GV, US, CS%h, h_new, dzRegrid, CS%tv, CS%ALE_CSp, CS%frac_shelf_h, PCM_cell)
     else
@@ -3005,7 +3043,18 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     if (callTree_showQuery()) call callTree_waypoint("new grid generated")
     ! Remap all variables from the old grid h onto the new grid h_new
     call ALE_remap_tracers(CS%ALE_CSp, G, GV, CS%h, h_new, CS%tracer_Reg, CS%debug, PCM_cell=PCM_cell)
-    call ALE_remap_velocities(CS%ALE_CSp, G, GV, CS%h, h_new, CS%u, CS%v, CS%OBC, dzRegrid, debug=CS%debug)
+
+    ! Determine the old and new grid thicknesses at velocity points.
+    call ALE_remap_set_h_vel(CS%ALE_CSp, G, GV, CS%h, h_old_u, h_old_v, CS%OBC, debug=CS%debug)
+    if (CS%remap_uv_using_old_alg) then
+      call ALE_remap_set_h_vel_via_dz(CS%ALE_CSp, G, GV, h_new, h_new_u, h_new_v, CS%OBC, CS%h, dzRegrid, CS%debug)
+    else
+      call ALE_remap_set_h_vel(CS%ALE_CSp, G, GV, h_new, h_new_u, h_new_v, CS%OBC, debug=CS%debug)
+    endif
+
+    ! Remap the velocity components.
+    call ALE_remap_velocities(CS%ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, CS%u, CS%v, CS%debug)
+
     if (allocated(CS%tv%SpV_avg)) CS%tv%valid_SpV_halo = -1   ! Record that SpV_avg is no longer valid.
 
     ! Replace the old grid with new one.  All remapping must be done at this point.
@@ -3013,7 +3062,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
       CS%h(i,j,k) = h_new(i,j,k)
     enddo ; enddo ; enddo
-    deallocate(h_new, dzRegrid, PCM_cell)
+
+    deallocate(h_new, dzRegrid, PCM_cell, h_old_u, h_new_u, h_old_v, h_new_v)
 
     call cpu_clock_begin(id_clock_pass_init)
     call create_group_pass(tmp_pass_uv_T_S_h, CS%u, CS%v, G%Domain)

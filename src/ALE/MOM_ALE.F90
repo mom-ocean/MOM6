@@ -129,6 +129,7 @@ public ALE_regrid_accelerated
 public ALE_remap_scalar
 public ALE_remap_tracers
 public ALE_remap_velocities
+public ALE_remap_set_h_vel, ALE_remap_set_h_vel_via_dz
 public ALE_remap_interface_vals
 public ALE_remap_vertex_vals
 public ALE_PLM_edge_values
@@ -597,6 +598,15 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))         :: h_orig ! The original layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: T      ! local temporary temperatures [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: S      ! local temporary salinities [S ~> ppt]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV))        :: h_old_u ! Source grid thickness at zonal
+                                                               ! velocity points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV))        :: h_old_v ! Source grid thickness at meridional
+                                                               ! velocity points [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV))        :: h_new_u ! Destination grid thickness at zonal
+                                                               ! velocity points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV))        :: h_new_v ! Destination grid thickness at meridional
+                                                               ! velocity points [H ~> m or kg m-2]
+
   ! we have to keep track of the total dzInterface if for some reason
   ! we're using the old remapping algorithm for u/v
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface ! Interface height changes within
@@ -607,7 +617,8 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
   nz = GV%ke
 
   ! initial total interface displacement due to successive regridding
-  dzIntTotal(:,:,:) = 0.
+  if (CS%remap_uv_using_old_alg) &
+    dzIntTotal(:,:,:) = 0.
 
   call create_group_pass(pass_T_S_h, T, G%domain)
   call create_group_pass(pass_T_S_h, S, G%domain)
@@ -647,7 +658,8 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
     if (allocated(tv_local%SpV_avg)) call calc_derived_thermo(tv_local, h, G, GV, US, halo=1)
 
     call regridding_main(CS%remapCS, CS%regridCS, G, GV, US, h_loc, tv_local, h, dzInterface)
-    dzIntTotal(:,:,:) = dzIntTotal(:,:,:) + dzInterface(:,:,:)
+    if (CS%remap_uv_using_old_alg) &
+      dzIntTotal(:,:,:) = dzIntTotal(:,:,:) + dzInterface(:,:,:)
 
     ! remap from original grid onto new grid
     do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
@@ -663,7 +675,15 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
 
   ! remap all state variables (including those that weren't needed for regridding)
   call ALE_remap_tracers(CS, G, GV, h_orig, h, Reg)
-  call ALE_remap_velocities(CS, G, GV, h_orig, h, u, v, OBC, dzIntTotal)
+
+  call ALE_remap_set_h_vel(CS, G, GV, h_orig, h_old_u, h_old_v, OBC)
+  if (CS%remap_uv_using_old_alg) then
+    call ALE_remap_set_h_vel_via_dz(CS, G, GV, h, h_new_u, h_new_v, OBC, h_orig, dzIntTotal)
+  else
+    call ALE_remap_set_h_vel(CS, G, GV, h, h_new_u, h_new_v, OBC)
+  endif
+
+  call ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u, v)
 
   ! save total dzregrid for diags if needed?
   if (present(dzRegrid)) dzRegrid(:,:,:) = dzIntTotal(:,:,:)
@@ -808,36 +828,222 @@ subroutine ALE_remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
 
 end subroutine ALE_remap_tracers
 
+!> This routine sets the thicknesses at velocity points used for vertical remapping.
+subroutine ALE_remap_set_h_vel(CS, G, GV, h_new, h_u, h_v, OBC, debug)
+  type(ALE_CS),                              intent(in)    :: CS      !< ALE control structure
+  type(ocean_grid_type),                     intent(in)    :: G       !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV      !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new   !< Thickness at tracer points of the
+                                                                      !! grid being interpolated to velocity
+                                                                      !! points [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                             intent(inout) :: h_u     !< Grid thickness at zonal velocity
+                                                                      !! points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                             intent(inout) :: h_v     !< Grid thickness at meridional velocity
+                                                                      !! points [H ~> m or kg m-2]
+  type(ocean_OBC_type),                      pointer       :: OBC     !< Open boundary structure
+  logical,                         optional, intent(in)    :: debug   !< If true, show the call tree
+
+  ! Local variables
+  logical :: show_call_tree
+  integer :: i, j, k
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("ALE_remap_set_h_vel()")
+
+  ! Build the u- and v-velocity grid thicknesses for remapping.
+
+  !$OMP parallel do default(shared)
+  do k=1,GV%ke ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (G%mask2dCu(I,j)>0.) then
+    h_u(I,j,k) = 0.5*(h_new(i,j,k) + h_new(i+1,j,k))
+  endif ; enddo ; enddo ; enddo
+  !$OMP parallel do default(shared)
+  do k=1,GV%ke ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (G%mask2dCv(i,J)>0.) then
+    h_v(i,J,k) = 0.5*(h_new(i,j,k) + h_new(i,j+1,k))
+  endif ; enddo ; enddo ; enddo
+
+  ! Mask out blocked portions of velocity cells.
+  if (CS%partial_cell_vel_remap) call ALE_remap_set_h_vel_partial(CS, G, GV, h_new, h_u, h_v)
+
+  ! Take open boundary conditions into account.
+  if (associated(OBC)) call ALE_remap_set_h_vel_OBC(G, GV, h_new, h_u, h_v, OBC)
+
+  if (show_call_tree) call callTree_leave("ALE_remap_set_h_vel()")
+
+end subroutine ALE_remap_set_h_vel
+
+!> This routine sets the thicknesses at velocity points used for vertical remapping using a
+!! combination of the old grid and interface movements.
+subroutine ALE_remap_set_h_vel_via_dz(CS, G, GV, h_new, h_u, h_v, OBC, h_old, dzInterface, debug)
+  type(ALE_CS),                              intent(in)    :: CS           !< ALE control structure
+  type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new        !< Thickness at tracer points of the
+                                                                           !! grid being interpolated to velocity
+                                                                           !! points [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                             intent(inout) :: h_u          !< Grid thickness at zonal velocity
+                                                                           !! points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                             intent(inout) :: h_v          !< Grid thickness at meridional velocity
+                                                                           !! points [H ~> m or kg m-2]
+  type(ocean_OBC_type),                      pointer       :: OBC          !< Open boundary structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                             intent(in)    :: h_old        !< Thickness of source grid when generating
+                                                                           !! the destination grid via the old
+                                                                           !! algorithm [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
+                                             intent(in)    :: dzInterface  !< Change in interface position
+                                                                           !! [H ~> m or kg m-2]
+  logical,                         optional, intent(in)    :: debug        !< If true, show the call tree
+
+  ! Local variables
+  logical :: show_call_tree
+  integer :: i, j, k
+
+  show_call_tree = .false.
+  if (present(debug)) show_call_tree = debug
+  if (show_call_tree) call callTree_enter("ALE_remap_set_h_vel()")
+
+  ! Build the u- and v-velocity grid thicknesses for remapping using the old grid and interface movement.
+
+  !$OMP parallel do default(shared)
+  do k=1,GV%ke ; do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (G%mask2dCu(I,j)>0.) then
+    h_u(I,j,k) = max( 0., 0.5*(h_old(i,j,k) + h_old(i+1,j,k)) + &
+            0.5 * (( dzInterface(i,j,k) + dzInterface(i+1,j,k) ) - &
+                   ( dzInterface(i,j,k+1) + dzInterface(i+1,j,k+1) )) )
+  endif ; enddo ; enddo ; enddo
+
+  !$OMP parallel do default(shared)
+  do k=1,GV%ke ; do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (G%mask2dCv(i,J)>0.) then
+    h_v(i,J,k) = max( 0., 0.5*(h_old(i,j,k) + h_old(i,j+1,k)) + &
+            0.5 * (( dzInterface(i,j,k) + dzInterface(i,j+1,k) ) - &
+                   ( dzInterface(i,j,k+1) + dzInterface(i,j+1,k+1) )) )
+  endif ; enddo ; enddo ; enddo
+
+  ! Mask out blocked portions of velocity cells.
+  if (CS%partial_cell_vel_remap) call ALE_remap_set_h_vel_partial(CS, G, GV, h_old, h_u, h_v)
+
+  ! Take open boundary conditions into account.
+  if (associated(OBC)) call ALE_remap_set_h_vel_OBC(G, GV, h_new, h_u, h_v, OBC)
+
+  if (show_call_tree) call callTree_leave("ALE_remap_set_h_vel()")
+
+end subroutine ALE_remap_set_h_vel_via_dz
+
+!> Mask out the thicknesses at velocity points where they are below the minimum depth
+!! at adjacent tracer points
+subroutine ALE_remap_set_h_vel_partial(CS, G, GV, h_mask, h_u, h_v)
+  type(ALE_CS),                              intent(in)    :: CS           !< ALE control structure
+  type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_mask       !< Thickness at tracer points
+                                                                           !! used to apply the partial
+                                                                           !! cell masking [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                             intent(inout) :: h_u          !< Grid thickness at zonal velocity
+                                                                           !! points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                             intent(inout) :: h_v          !< Grid thickness at meridional velocity
+                                                                           !! points [H ~> m or kg m-2]
+  ! Local variables
+  real, dimension(SZI_(G),SZJ_(G)) :: h_tot  ! The vertically summed thicknesses [H ~> m or kg m-2]
+  real :: h_mask_vel ! A depth below which the thicknesses at a velocity point are masked out [H ~> m or kg m-2]
+  integer :: i, j, k
+
+  h_tot(:,:) = 0.0
+  do k=1,GV%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
+    h_tot(i,j) = h_tot(i,j) + h_mask(i,j,k)
+  enddo ; enddo ; enddo
+
+  !$OMP parallel do default(shared) private(h_mask_vel)
+  do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (G%mask2dCu(I,j)>0.) then
+    h_mask_vel = min(h_tot(i,j), h_tot(i+1,j))
+    call apply_partial_cell_mask(h_u(I,j,:), h_mask_vel)
+  endif ; enddo ; enddo
+
+  !$OMP parallel do default(shared) private(h_mask_vel)
+  do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (G%mask2dCv(i,J)>0.) then
+    h_mask_vel = min(h_tot(i,j), h_tot(i,j+1))
+    call apply_partial_cell_mask(h_v(i,J,:), h_mask_vel)
+  endif ; enddo ; enddo
+
+end subroutine ALE_remap_set_h_vel_partial
+
+! Reset thicknesses at velocity points on open boundary condition segments
+subroutine ALE_remap_set_h_vel_OBC(G, GV, h_new, h_u, h_v, OBC)
+  type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new        !< Thickness at tracer points of the
+                                                                           !! grid being interpolated to velocity
+                                                                           !! points [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                             intent(inout) :: h_u          !< Grid thickness at zonal velocity
+                                                                           !! points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                             intent(inout) :: h_v          !< Grid thickness at meridional velocity
+                                                                           !! points [H ~> m or kg m-2]
+  type(ocean_OBC_type),                      pointer       :: OBC          !< Open boundary structure
+
+  ! Local variables
+  integer :: i, j, k, nz
+
+  if (.not.associated(OBC)) return
+
+  nz = GV%ke
+
+    ! Take open boundary conditions into account.
+    !$OMP parallel do default(shared)
+    do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (OBC%segnum_u(I,j) /= 0) then
+      if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+        do k=1,nz ; h_u(I,j,k) = h_new(i,j,k) ; enddo
+      else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+        do k=1,nz ; h_u(I,j,k) = h_new(i+1,j,k) ; enddo
+      endif
+    endif ; enddo ; enddo
+
+    !$OMP parallel do default(shared)
+    do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (OBC%segnum_v(i,J) /= 0) then
+      if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+        do k=1,nz ; h_v(i,J,k) = h_new(i,j,k) ; enddo
+      else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+        do k=1,nz ; h_v(i,J,k) = h_new(i,j+1,k) ; enddo
+      endif
+    endif ; enddo ; enddo
+
+end subroutine ALE_remap_set_h_vel_OBC
+
 !> This routine remaps velocity components between the old and the new grids,
 !! with thicknesses at velocity points taken to be arithmetic averages of tracer thicknesses.
 !! This routine may be called during initialization of the model at time=0, to
 !! remap initial conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine ALE_remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface, debug, dt)
-  type(ALE_CS),                              intent(in)    :: CS           !< ALE control structure
-  type(ocean_grid_type),                     intent(in)    :: G            !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in)    :: GV           !< Ocean vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_old        !< Thickness of source grid
-                                                                           !! [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_new        !< Thickness of destination grid
-                                                                           !! [H ~> m or kg m-2]
+subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u, v, debug)
+  type(ALE_CS),                              intent(in)    :: CS        !< ALE control structure
+  type(ocean_grid_type),                     intent(in)    :: G         !< Ocean grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV        !< Ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                                             intent(inout) :: u      !< Zonal velocity [L T-1 ~> m s-1]
+                                             intent(in)    :: h_old_u   !< Source grid thickness at zonal
+                                                                        !! velocity points [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                                             intent(inout) :: v      !< Meridional velocity [L T-1 ~> m s-1]
-  type(ocean_OBC_type),                      pointer       :: OBC          !< Open boundary structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                   optional, intent(in)    :: dzInterface  !< Change in interface position
-                                                                           !! [H ~> m or kg m-2]
-  logical,                         optional, intent(in)    :: debug  !< If true, show the call tree
-  real,                            optional, intent(in)    :: dt     !< time step for diagnostics [T ~> s]
+                                             intent(in)    :: h_old_v   !< Source grid thickness at meridional
+                                                                        !! velocity points [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                             intent(in)    :: h_new_u   !< Destination grid thickness at zonal
+                                                                        !! velocity points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                             intent(in)    :: h_new_v   !< Destination grid thickness at meridional
+                                                                        !! velocity points [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                             intent(inout) :: u         !< Zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                             intent(inout) :: v         !< Meridional velocity [L T-1 ~> m s-1]
+  logical,                         optional, intent(in)    :: debug     !< If true, show the call tree
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: h_tot  ! The vertically summed thicknesses [H ~> m or kg m-2]
   real :: h_mask_vel ! A depth below which the thicknesses at a velocity point are masked out [H ~> m or kg m-2]
-  real, dimension(GV%ke+1)                    :: dz   ! The change in interface heights interpolated to
-                                                      ! a velocity point [H ~> m or kg m-2]
-  logical :: PCM(GV%ke) ! If true, do PCM remapping from a cell.
   real :: u_src(GV%ke)  ! A column of u-velocities on the source grid [L T-1 ~> m s-1]
   real :: u_tgt(GV%ke)  ! A column of u-velocities on the target grid [L T-1 ~> m s-1]
   real :: v_src(GV%ke)  ! A column of v-velocities on the source grid [L T-1 ~> m s-1]
@@ -852,11 +1058,6 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface,
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_remap_velocities()")
 
-  ! If remap_uv_using_old_alg is .true. and u or v is requested, then we must have dzInterface. Otherwise,
-  ! u and v can be remapped without dzInterface
-  if (CS%remap_uv_using_old_alg .and. .not.present(dzInterface) )  call MOM_error(FATAL, &
-        "ALE_remap_velocities: dzInterface must be present if using old algorithm.")
-
   if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
   elseif (GV%Boussinesq) then
@@ -867,107 +1068,55 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old, h_new, u, v, OBC, dzInterface,
 
   nz = GV%ke
 
-  if (CS%partial_cell_vel_remap) then
-    h_tot(:,:) = 0.0
-    do k=1,GV%ke ; do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
-      h_tot(i,j) = h_tot(i,j) + h_old(i,j,k)
-    enddo ; enddo ; enddo
-  endif
+  ! --- Remap u profiles from the source vertical grid onto the new target grid.
 
-  ! Remap u velocity component
-  if ( .true. ) then
+  !$OMP parallel do default(shared) private(h1,h2,u_src,h_mask_vel,u_tgt)
+  do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (G%mask2dCu(I,j)>0.) then
+    ! Make a 1-d copy of the start and final grids and the source velocity
+    do k=1,nz
+      h1(k) = h_old_u(I,j,k)
+      h2(k) = h_new_u(I,j,k)
+      u_src(k) = u(I,j,k)
+    enddo
 
-    !$OMP parallel do default(shared) private(h1,h2,dz,u_src,h_mask_vel,u_tgt)
-    do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (G%mask2dCu(I,j)>0.) then
-      ! Build the start and final grids
-      do k=1,nz
-        h1(k) = 0.5*(h_old(i,j,k) + h_old(i+1,j,k))
-        h2(k) = 0.5*(h_new(i,j,k) + h_new(i+1,j,k))
-      enddo
-      if (CS%remap_uv_using_old_alg) then
-        dz(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i+1,j,:) )
-        do k = 1, nz
-          h2(k) = max( 0., h1(k) + ( dz(k) - dz(k+1) ) )
-        enddo
-      endif
+    call remapping_core_h(CS%vel_remapCS, nz, h1, u_src, nz, h2, u_tgt, &
+                          h_neglect, h_neglect_edge)
 
-      if (CS%partial_cell_vel_remap) then
-        h_mask_vel = min(h_tot(i,j), h_tot(i+1,j))
-        call apply_partial_cell_mask(h1, h_mask_vel)
-        call apply_partial_cell_mask(h2, h_mask_vel)
-      endif
+    if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) &
+      call mask_near_bottom_vel(u_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
 
-      if (associated(OBC)) then ; if (OBC%segnum_u(I,j) /= 0) then
-        if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-          do k=1,nz ; h1(k) = h_old(i,j,k) ; h2(k) = h_new(i,j,k) ; enddo
-        else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-          do k=1,nz ; h1(k) = h_old(i+1,j,k) ; h2(k) = h_new(i+1,j,k) ; enddo
-        endif
-      endif ; endif
-
-      ! --- Remap u profiles from the source vertical grid onto the new target grid.
-      do k=1,nz
-        u_src(k) = u(I,j,k)
-      enddo
-      call remapping_core_h(CS%vel_remapCS, nz, h1, u_src, nz, h2, u_tgt, &
-                            h_neglect, h_neglect_edge)
-
-      if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) then
-        call mask_near_bottom_vel(u_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
-      endif
-
-      do k=1,nz
-        u(I,j,k) = u_tgt(k)
-      enddo !k
-    endif ; enddo ; enddo
-  endif
+    ! Copy the column of new velocities back to the 3-d array
+    do k=1,nz
+      u(I,j,k) = u_tgt(k)
+    enddo !k
+  endif ; enddo ; enddo
 
   if (show_call_tree) call callTree_waypoint("u remapped (ALE_remap_velocities)")
 
-  ! Remap v velocity component
-  if ( .true. ) then
-    !$OMP parallel do default(shared) private(h1,h2,v_src,dz,h_mask_vel,v_tgt)
-    do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (G%mask2dCv(i,J)>0.) then
-      ! Build the start and final grids
-      do k=1,nz
-        h1(k) = 0.5*(h_old(i,j,k) + h_old(i,j+1,k))
-        h2(k) = 0.5*(h_new(i,j,k) + h_new(i,j+1,k))
-      enddo
-      if (CS%remap_uv_using_old_alg) then
-        dz(:) = 0.5 * ( dzInterface(i,j,:) + dzInterface(i,j+1,:) )
-        do k = 1, nz
-          h2(k) = max( 0., h1(k) + ( dz(k) - dz(k+1) ) )
-        enddo
-      endif
-      if (CS%partial_cell_vel_remap) then
-        h_mask_vel = min(h_tot(i,j), h_tot(i,j+1))
-        call apply_partial_cell_mask(h1, h_mask_vel)
-        call apply_partial_cell_mask(h2, h_mask_vel)
-      endif
-      if (associated(OBC)) then ; if (OBC%segnum_v(i,J) /= 0) then
-        if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
-          do k=1,nz ; h1(k) = h_old(i,j,k) ; h2(k) = h_new(i,j,k) ; enddo
-        else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-          do k=1,nz ; h1(k) = h_old(i,j+1,k) ; h2(k) = h_new(i,j+1,k) ; enddo
-        endif
-      endif ; endif
 
-      ! --- Remap v profiles from the source vertical grid onto the new target grid.
-      do k=1,nz
-        v_src(k) = v(i,J,k)
-      enddo
-      call remapping_core_h(CS%vel_remapCS, nz, h1, v_src, nz, h2, v_tgt, &
-                            h_neglect, h_neglect_edge)
+  ! --- Remap v profiles from the source vertical grid onto the new target grid.
 
-      if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) then
-        call mask_near_bottom_vel(v_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
-      endif
+  !$OMP parallel do default(shared) private(h1,h2,v_src,h_mask_vel,v_tgt)
+  do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (G%mask2dCv(i,J)>0.) then
 
-      do k=1,nz
-        v(i,J,k) = v_tgt(k)
-      enddo !k
-    endif ; enddo ; enddo
-  endif
+    do k=1,nz
+      h1(k) = h_old_v(i,J,k)
+      h2(k) = h_new_v(i,J,k)
+      v_src(k) = v(i,J,k)
+    enddo
+
+    call remapping_core_h(CS%vel_remapCS, nz, h1, v_src, nz, h2, v_tgt, &
+                          h_neglect, h_neglect_edge)
+
+    if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) then
+      call mask_near_bottom_vel(v_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
+    endif
+
+    ! Copy the column of new velocities back to the 3-d array
+    do k=1,nz
+      v(i,J,k) = v_tgt(k)
+    enddo !k
+  endif ; enddo ; enddo
 
   if (show_call_tree) call callTree_waypoint("v remapped (ALE_remap_velocities)")
   if (show_call_tree) call callTree_leave("ALE_remap_velocities()")

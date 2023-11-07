@@ -1261,29 +1261,34 @@ end subroutine register_restarts_dyn_split_RK2
 
 !> This subroutine does remapping for the auxiliary restart variables that are used
 !! with the split RK2 time stepping scheme.
-subroutine remap_dyn_split_RK2_aux_vars(G, GV, CS, h_old, h_new, ALE_CSp, OBC, dzRegrid)
+subroutine remap_dyn_split_RK2_aux_vars(G, GV, CS, h_old_u, h_old_v, h_new_u, h_new_v, ALE_CSp)
   type(ocean_grid_type),            intent(inout) :: G        !< ocean grid structure
   type(verticalGrid_type),          intent(in)    :: GV       !< ocean vertical grid structure
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS       !< module control structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                    intent(in)    :: h_old    !< Thickness of source grid  [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                                    intent(in)    :: h_new    !< Thickness of destination grid [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                    intent(in)    :: h_old_u  !< Source grid thickness at zonal
+                                                              !! velocity points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                    intent(in)    :: h_old_v  !< Source grid thickness at meridional
+                                                              !! velocity points [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                    intent(in)    :: h_new_u  !< Destination grid thickness at zonal
+                                                              !! velocity points [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                    intent(in)    :: h_new_v  !< Destination grid thickness at meridional
+                                                              !! velocity points [H ~> m or kg m-2]
   type(ALE_CS),                     pointer       :: ALE_CSp  !< ALE control structure to use when remapping
-  type(ocean_OBC_type),             pointer       :: OBC      !< OBC control structure to use when remapping
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                          optional, intent(in)    :: dzRegrid !< Change in interface position [H ~> m or kg m-2]
 
   if (.not.CS%remap_aux) return
 
   if (CS%store_CAu) then
-    call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%u_av, CS%v_av, OBC, dzRegrid)
+    call ALE_remap_velocities(ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, CS%u_av, CS%v_av)
     call pass_vector(CS%u_av, CS%v_av, G%Domain, complete=.false.)
-    call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%CAu_pred, CS%CAv_pred, OBC, dzRegrid)
+    call ALE_remap_velocities(ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, CS%CAu_pred, CS%CAv_pred)
     call pass_vector(CS%CAu_pred, CS%CAv_pred, G%Domain, complete=.true.)
   endif
 
-  call ALE_remap_velocities(ALE_CSp, G, GV, h_old, h_new, CS%diffu, CS%diffv, OBC, dzRegrid)
+  call ALE_remap_velocities(ALE_CSp, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, CS%diffu, CS%diffv)
 
 end subroutine remap_dyn_split_RK2_aux_vars
 
