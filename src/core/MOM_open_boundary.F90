@@ -7,33 +7,33 @@ use MOM_array_transform,      only : rotate_array, rotate_array_pair
 use MOM_array_transform,      only : allocate_rotated_array
 use MOM_coms,                 only : sum_across_PEs, Set_PElist, Get_PElist, PE_here, num_PEs
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
+use MOM_debugging,            only : hchksum, uvchksum
 use MOM_diag_mediator,        only : diag_ctrl, time_type
 use MOM_domains,              only : pass_var, pass_vector
 use MOM_domains,              only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,              only : To_All, EAST_FACE, NORTH_FACE, SCALAR_PAIR, CGRID_NE, CORNER
+use MOM_dyn_horgrid,          only : dyn_horgrid_type
 use MOM_error_handler,        only : MOM_mesg, MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser,          only : get_param, log_version, param_file_type, log_param
 use MOM_grid,                 only : ocean_grid_type, hor_index_type
-use MOM_dyn_horgrid,          only : dyn_horgrid_type
 use MOM_interface_heights,    only : thickness_to_dz
+use MOM_interpolate,          only : init_external_field, time_interp_external, time_interp_external_init
+use MOM_interpolate,          only : external_field
 use MOM_io,                   only : slasher, field_size, SINGLE_FILE
 use MOM_io,                   only : vardesc, query_vardesc, var_desc
+use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
+use MOM_regridding,           only : regridding_CS
+use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
+use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
 use MOM_restart,              only : register_restart_field, register_restart_pair
 use MOM_restart,              only : query_initialized, MOM_restart_CS
-use MOM_obsolete_params,      only : obsolete_logical, obsolete_int, obsolete_real, obsolete_char
-use MOM_string_functions,     only : extract_word, remove_spaces, uppercase
+use MOM_string_functions,     only : extract_word, remove_spaces, uppercase, lowercase
 use MOM_tidal_forcing,        only : astro_longitudes, astro_longitudes_init, eq_phase, nodal_fu, tidal_frequency
 use MOM_time_manager,         only : set_date, time_type, time_type_to_real, operator(-)
 use MOM_tracer_registry,      only : tracer_type, tracer_registry_type, tracer_name_lookup
-use MOM_interpolate,          only : init_external_field, time_interp_external, time_interp_external_init
-use MOM_interpolate,          only : external_field
-use MOM_remapping,            only : remappingSchemesDoc, remappingDefaultScheme, remapping_CS
-use MOM_remapping,            only : initialize_remapping, remapping_core_h, end_remapping
-use MOM_regridding,           only : regridding_CS
 use MOM_unit_scaling,         only : unit_scale_type
 use MOM_variables,            only : thermo_var_ptrs
 use MOM_verticalGrid,         only : verticalGrid_type
-use MOM_string_functions,     only : lowercase
 
 implicit none ; private
 
@@ -528,13 +528,16 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%add_tide_constituents = .false.
     endif
 
-    call get_param(param_file, mdl, "DEBUG", OBC%debug, default=.false.)
-    call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=.false.)
-    if (debug_OBC .or. OBC%debug) &
+    call get_param(param_file, mdl, "DEBUG", debug_OBC, default=.false.)
+    call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=debug_OBC, &
+                   do_not_log=.not.debug_OBC)
+    if (debug_OBC) then
       call log_param(param_file, mdl, "DEBUG_OBC", debug_OBC, &
                  "If true, do additional calls to help debug the performance "//&
                  "of the open boundary condition code.", default=.false., &
                  debuggingParam=.true.)
+      OBC%debug = debug_OBC
+    endif
 
     call get_param(param_file, mdl, "OBC_SILLY_THICK", OBC%silly_h, &
                  "A silly value of thicknesses used outside of open boundary "//&
@@ -854,6 +857,8 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
 !       if (siz(4) == 1) segment%values_needed = .false.
         if (segment%on_pe) then
           if (OBC%brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
+            write(mesg,'("Brushcutter mode sizes ", I6, I6))') siz(1), siz(2)
+            call MOM_error(WARNING, mesg // " " // trim(filename) // " " // trim(fieldname))
             call MOM_error(FATAL,'segment data are not on the supergrid')
           endif
           siz2(1)=1
@@ -2224,6 +2229,8 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
   type(OBC_segment_type), pointer :: segment => NULL()
   integer :: i, j, k, is, ie, js, je, m, nz, n
   integer :: is_obc, ie_obc, js_obc, je_obc
+  logical :: sym
+  character(len=3) :: var_num
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -3297,6 +3304,29 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
   call open_boundary_apply_normal_flow(OBC, G, GV, u_new, v_new)
 
   call pass_vector(u_new, v_new, G%Domain, clock=id_clock_pass)
+
+  if (OBC%debug) then
+    sym = G%Domain%symmetric
+    if (OBC%radiation_BCs_exist_globally) then
+      call uvchksum("radiation_OBCs: OBC%r[xy]_normal", OBC%rx_normal, OBC%ry_normal, G%HI, &
+                  haloshift=0, symmetric=sym, scale=1.0)
+    endif
+    if (OBC%oblique_BCs_exist_globally) then
+      call uvchksum("radiation_OBCs: OBC%r[xy]_oblique_[uv]", OBC%rx_oblique_u, OBC%ry_oblique_v, G%HI, &
+                  haloshift=0, symmetric=sym, scale=1.0/US%L_T_to_m_s**2)
+      call uvchksum("radiation_OBCs: OBC%r[yx]_oblique_[uv]", OBC%ry_oblique_u, OBC%rx_oblique_v, G%HI, &
+                  haloshift=0, symmetric=sym, scale=1.0/US%L_T_to_m_s**2)
+      call uvchksum("radiation_OBCs: OBC%cff_normal_[uv]", OBC%cff_normal_u, OBC%cff_normal_v, G%HI, &
+                  haloshift=0, symmetric=sym, scale=1.0/US%L_T_to_m_s**2)
+    endif
+    if (OBC%ntr == 0) return
+    if (.not. allocated (OBC%tres_x) .or. .not. allocated (OBC%tres_y)) return
+    do m=1,OBC%ntr
+      write(var_num,'(I3.3)') m
+      call uvchksum("radiation_OBCs: OBC%tres_[xy]_"//var_num, OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%HI, &
+                    haloshift=0, symmetric=sym, scale=1.0)
+    enddo
+  endif
 
 end subroutine radiation_open_bdry_conds
 
@@ -5638,9 +5668,6 @@ subroutine remap_OBC_fields(G, GV, h_old, h_new, OBC, PCM_cell)
                      To_All+Scalar_Pair)
   if (OBC%oblique_BCs_exist_globally) then
     call do_group_pass(OBC%pass_oblique, G%Domain)
-!   call pass_vector(OBC%rx_oblique_u, OBC%ry_oblique_v, G%Domain, To_All+Scalar_Pair)
-!   call pass_vector(OBC%ry_oblique_u, OBC%rx_oblique_v, G%Domain, To_All+Scalar_Pair)
-!   call pass_vector(OBC%cff_normal_u, OBC%cff_normal_v, G%Domain, To_All+Scalar_Pair)
   endif
 
 end subroutine remap_OBC_fields

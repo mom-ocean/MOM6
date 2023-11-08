@@ -1627,9 +1627,11 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
         if (CS%split) &
           call remap_dyn_split_RK2_aux_vars(G, GV, CS%dyn_split_RK2_CSp, h, h_new, CS%ALE_CSp, CS%OBC, dzRegrid)
 
-        if (associated(CS%OBC)) &
-          call pass_var(h_new, G%Domain)
+        if (associated(CS%OBC)) then
+          call pass_var(h, G%Domain, complete=.false.)
+          call pass_var(h_new, G%Domain, complete=.true.)
           call remap_OBC_fields(G, GV, h, h_new, CS%OBC, PCM_cell=PCM_cell)
+        endif
 
         call remap_vertvisc_aux_vars(G, GV, CS%visc, h, h_new, CS%ALE_CSp, CS%OBC)
         if (associated(CS%visc%Kv_shear)) &
@@ -3016,10 +3018,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     call cpu_clock_begin(id_clock_pass_init)
     call create_group_pass(tmp_pass_uv_T_S_h, CS%u, CS%v, G%Domain)
     if (use_temperature) then
-      call create_group_pass(tmp_pass_uv_T_S_h, CS%tv%T, G%Domain, halo=1)
-      call create_group_pass(tmp_pass_uv_T_S_h, CS%tv%S, G%Domain, halo=1)
+      call create_group_pass(tmp_pass_uv_T_S_h, CS%tv%T, G%Domain)
+      call create_group_pass(tmp_pass_uv_T_S_h, CS%tv%S, G%Domain)
     endif
-    call create_group_pass(tmp_pass_uv_T_S_h, CS%h, G%Domain, halo=1)
+    call create_group_pass(tmp_pass_uv_T_S_h, CS%h, G%Domain)
     call do_group_pass(tmp_pass_uv_T_S_h, G%Domain)
     call cpu_clock_end(id_clock_pass_init)
 

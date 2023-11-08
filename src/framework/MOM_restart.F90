@@ -660,7 +660,7 @@ end subroutine register_restart_field_0d
 
 
 !> query_initialized_name determines whether a named field has been successfully
-!! read from a restart file or has otherwise been recored as being initialzed.
+!! read from a restart file or has otherwise been recorded as being initialized.
 function query_initialized_name(name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
@@ -1271,7 +1271,7 @@ subroutine only_read_restart_pair_3d(a_ptr, b_ptr, a_name, b_name, G, CS, &
 
 end subroutine only_read_restart_pair_3d
 
-!> Return an indicationof whether the named variable is the restart files, and provie the full path
+!> Return an indication of whether the named variable is in the restart files, and provide the full path
 !! to the restart file in which a variable is found.
 function find_var_in_restart_files(varname, G, CS, file_path, filename, directory, is_global) result (found)
   character(len=*),                intent(in)    :: varname   !< The variable name to be used in the restart file

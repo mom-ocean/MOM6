@@ -414,12 +414,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   h_neglect  = GV%H_subroundoff
-  h_neglect3 = h_neglect**3
+  !h_neglect3 = h_neglect**3
+  h_neglect3 = h_neglect*h_neglect*h_neglect
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
   inv_PI2 = 1.0/((4.0*atan(1.0))**2)
   inv_PI6 = inv_PI3 * inv_PI3
 
-  m_leithy(:,:) = 0. ! Initialize
+  m_leithy(:,:) = 0.0 ! Initialize
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
