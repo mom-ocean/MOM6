@@ -426,7 +426,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
 
   ! Local variables
   integer :: l ! For looping over segments
-  logical :: debug_OBC, mask_outside, reentrant_x, reentrant_y
+  logical :: debug, debug_OBC, mask_outside, reentrant_x, reentrant_y
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=1024) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
@@ -528,25 +528,22 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%add_tide_constituents = .false.
     endif
 
-    call get_param(param_file, mdl, "DEBUG", debug_OBC, default=.false.)
-    call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=debug_OBC, &
-                   do_not_log=.not.debug_OBC)
-    if (debug_OBC) then
-      call log_param(param_file, mdl, "DEBUG_OBC", debug_OBC, &
+    call get_param(param_file, mdl, "DEBUG", debug, default=.false.)
+    ! This extra get_param call is to enable logging if either DEBUG or DEBUG_OBC are true.
+    call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=debug)
+    call get_param(param_file, mdl, "DEBUG_OBC", OBC%debug, &
                  "If true, do additional calls to help debug the performance "//&
-                 "of the open boundary condition code.", default=.false., &
-                 debuggingParam=.true.)
-      OBC%debug = debug_OBC
-    endif
+                 "of the open boundary condition code.", &
+                 default=debug, do_not_log=.not.(debug_OBC.or.debug), debuggingParam=.true.)
 
     call get_param(param_file, mdl, "OBC_SILLY_THICK", OBC%silly_h, &
                  "A silly value of thicknesses used outside of open boundary "//&
                  "conditions for debugging.", units="m", default=0.0, scale=US%m_to_Z, &
-                 do_not_log=.not.debug_OBC, debuggingParam=.true.)
+                 do_not_log=.not.OBC%debug, debuggingParam=.true.)
     call get_param(param_file, mdl, "OBC_SILLY_VEL", OBC%silly_u, &
                  "A silly value of velocities used outside of open boundary "//&
                  "conditions for debugging.", units="m/s", default=0.0, scale=US%m_s_to_L_T, &
-                 do_not_log=.not.debug_OBC, debuggingParam=.true.)
+                 do_not_log=.not.OBC%debug, debuggingParam=.true.)
     reentrant_x = .false.
     call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, default=.true.)
     reentrant_y = .false.
