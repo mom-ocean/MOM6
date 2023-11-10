@@ -116,6 +116,9 @@ DO_PROFILE ?=
 # Enable code coverage runs
 DO_COVERAGE ?=
 
+# Enable code coverage runs
+DO_UNIT_TESTS ?=
+
 # Report failure if coverage report is not uploaded
 REQUIRE_COVERAGE_UPLOAD ?=
 
@@ -151,10 +154,16 @@ ifeq ($(DO_PROFILE), true)
   BUILDS += opt/MOM6 opt_target/MOM6
 endif
 
-# Unit testing
-UNIT_EXECS ?= MOM_unit_tests
+# Coverage
 ifeq ($(DO_COVERAGE), true)
-  BUILDS += cov/MOM6 $(foreach e, $(UNIT_EXECS), unit/$(e))
+  BUILDS += cov/MOM6
+endif
+
+# Unit testing (or coverage)
+UNIT_EXECS ?= $(basename $(notdir $(wildcard ../config_src/drivers/unit_tests/*.F90) ) )
+TIMING_EXECS ?= $(basename $(notdir $(wildcard ../config_src/drivers/timing_tests/*.F90) ) )
+ifneq (X$(DO_COVERAGE)$(DO_UNIT_TESTS)X, XX)
+  BUILDS += $(foreach e, $(UNIT_EXECS), unit/$(e))
 endif
 
 ifeq ($(DO_PROFILE), false)
@@ -258,6 +267,7 @@ build/coupled/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
 build/nuopc/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
 build/cov/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
 build/unit/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
+build/timing/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 
 # Configure script flags
 MOM_ACFLAGS := --with-framework=$(FRAMEWORK)
@@ -265,6 +275,7 @@ build/openmp/Makefile: MOM_ACFLAGS += --enable-openmp
 build/coupled/Makefile: MOM_ACFLAGS += --with-driver=FMS_cap
 build/nuopc/Makefile: MOM_ACFLAGS += --with-driver=nuopc_cap
 build/unit/Makefile: MOM_ACFLAGS += --with-driver=unit_tests
+build/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
@@ -276,10 +287,15 @@ build/target_codebase/configure: $(TARGET_SOURCE)
 
 
 # Build executables
-$(foreach e,$(UNIT_EXECS),build/unit/$(e)): build/unit/Makefile $(MOM_SOURCE)
-	cd $(@D) && $(TIME) $(MAKE) -j
-build/%/MOM6: build/%/Makefile $(MOM_SOURCE)
-	cd $(@D) && $(TIME) $(MAKE) -j
+build/unit/test_%: build/unit/Makefile FORCE
+	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+build/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
+build/timing/time_%: build/timing/Makefile FORCE
+	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+build/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
+build/%/MOM6: build/%/Makefile FORCE
+	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+FORCE: ;
 
 
 # Use autoconf to construct the Makefile for each target
@@ -655,28 +671,47 @@ test.summary:
 .PHONY: run.cov.unit
 run.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov
 
-$(WORKSPACE)/work/unit/std.out: build/unit/MOM_unit_tests
+.PHONY: build.unit
+build.unit: $(foreach f, $(UNIT_EXECS), build/unit/$(f))
+.PHONY: run.unit
+run.unit: $(foreach f, $(UNIT_EXECS), work/unit/$(f).out)
+.PHONY: build.timing
+build.timing: $(foreach f, $(TIMING_EXECS), build/timing/$(f))
+.PHONY: run.timing
+run.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).out)
+.PHONY: show.timing
+show.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).show)
+$(WORKSPACE)/work/timing/%.show:
+	./tools/disp_timing.py $(@:.show=.out)
+
+# General rule to run a unit test executable
+# Pattern is to run build/unit/executable and direct output to executable.out
+$(WORKSPACE)/work/unit/%.out: build/unit/%
+	@mkdir -p $(@D)
+	cd $(@D) ; $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> >(tee $*.err) > $*.out
+
+$(WORKSPACE)/work/unit/test_MOM_file_parser.out: build/unit/test_MOM_file_parser
 	if [ $(REPORT_COVERAGE) ]; then \
 	  find build/unit -name *.gcda -exec rm -f '{}' \; ; \
 	fi
-	rm -rf $(@D)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std.err > std.out \
+	  && rm -f input.nml logfile.0000*.out *_input MOM_parameter_doc.* \
+	  && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> test_MOM_file_parser.err > test_MOM_file_parser.out \
 	  || !( \
-	    cat std.out | tail -n 100 ; \
-	    cat std.err | tail -n 100 ; \
+	    cat test_MOM_file_parser.out | tail -n 100 ; \
+	    cat test_MOM_file_parser.err | tail -n 100 ; \
 	  )
 	cd $(@D) \
-	  && $(TIME) $(MPIRUN) -n 2 $(abspath $<) 2> p2.std.err > p2.std.out \
+	  && $(TIME) $(MPIRUN) -n 2 $(abspath $<) 2> p2.test_MOM_file_parser.err > p2.test_MOM_file_parser.out \
 	  || !( \
-	    cat p2.std.out | tail -n 100 ; \
-	    cat p2.std.err | tail -n 100 ; \
+	    cat p2.test_MOM_file_parser.out | tail -n 100 ; \
+	    cat p2.test_MOM_file_parser.err | tail -n 100 ; \
 	  )
 
 # NOTE: .gcov actually depends on .gcda, but .gcda is produced with std.out
 # TODO: Replace $(WORKSPACE)/work/unit/std.out with *.gcda?
-build/unit/MOM_file_parser_tests.F90.gcov: $(WORKSPACE)/work/unit/std.out
+build/unit/MOM_file_parser_tests.F90.gcov: $(WORKSPACE)/work/unit/test_MOM_file_parser.out
 	cd $(@D) \
 	  && gcov -b *.gcda > gcov.unit.out
 	find $(@D) -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \;
@@ -693,6 +728,10 @@ report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
 	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
+$(WORKSPACE)/work/timing/%.out: build/timing/% FORCE
+	@mkdir -p $(@D)
+	@echo Running $< in $(@D)
+	@cd $(@D) ; $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> $*.err > $*.out
 
 #---
 # Profiling based on FMS clocks

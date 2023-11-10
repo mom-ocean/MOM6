@@ -1794,6 +1794,8 @@ subroutine mixedlayer_restrat_register_restarts(HI, GV, US, param_file, CS, rest
 
 end subroutine mixedlayer_restrat_register_restarts
 
+!> Returns true if a unit test of functions in MOM_mixedlayer_restrat fail.
+!! Returns false otherwise.
 logical function mixedlayer_restrat_unit_tests(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables

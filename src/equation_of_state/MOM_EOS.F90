@@ -84,6 +84,7 @@ public abs_saln_to_prac_saln
 public gsw_sp_from_sr
 public gsw_pt_from_ct
 public query_compressible
+public get_EOS_name
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -181,6 +182,10 @@ integer, parameter, public :: EOS_TEOS10 = 6 !< A named integer specifying an eq
 integer, parameter, public :: EOS_ROQUET_RHO = 7 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_ROQUET_SPV = 8 !< A named integer specifying an equation of state
 integer, parameter, public :: EOS_JACKETT06 = 9 !< A named integer specifying an equation of state
+!> A list of all the available EOS
+integer, dimension(9), public :: list_of_EOS = (/ EOS_LINEAR, EOS_UNESCO, &
+            EOS_WRIGHT, EOS_WRIGHT_FULL, EOS_WRIGHT_REDUCED, &
+            EOS_TEOS10, EOS_ROQUET_RHO, EOS_ROQUET_SPV, EOS_JACKETT06 /)
 
 character*(12), parameter :: EOS_LINEAR_STRING = "LINEAR" !< A string for specifying the equation of state
 character*(12), parameter :: EOS_UNESCO_STRING = "UNESCO" !< A string for specifying the equation of state
@@ -1679,6 +1684,36 @@ logical function query_compressible(EOS)
   query_compressible = EOS%compressible
 end function query_compressible
 
+!> Returns the string identifying the equation of state with enumeration "id"
+function get_EOS_name(id) result (eos_name)
+  integer,        optional, intent(in) :: id !< Enumerated ID
+  character(:), allocatable :: eos_name !< The name of the EOS
+
+  select case (id)
+    case (EOS_LINEAR)
+      eos_name = EOS_LINEAR_STRING
+    case (EOS_UNESCO)
+      eos_name = EOS_UNESCO_STRING
+    case (EOS_WRIGHT)
+      eos_name = EOS_WRIGHT_STRING
+    case (EOS_WRIGHT_REDUCED)
+      eos_name = EOS_WRIGHT_RED_STRING
+    case (EOS_WRIGHT_FULL)
+      eos_name = EOS_WRIGHT_FULL_STRING
+    case (EOS_TEOS10)
+      eos_name = EOS_TEOS10_STRING
+    case (EOS_ROQUET_RHO)
+      eos_name = EOS_ROQUET_RHO_STRING
+    case (EOS_ROQUET_SPV)
+      eos_name = EOS_ROQUET_SPV_STRING
+    case (EOS_JACKETT06)
+      eos_name = EOS_JACKETT06_STRING
+    case default
+      call MOM_error(FATAL, "get_EOS_name: something went wrong internally - enumeration is not valid.")
+  end select
+
+end function get_EOS_name
+
 !> Initializes EOS_type by allocating and reading parameters.  The scaling factors in
 !! US are stored in EOS for later use.
 subroutine EOS_init(param_file, EOS, US)
@@ -2249,7 +2284,11 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "TEOS_POLY TFr has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
-  if (verbose .and. .not.EOS_unit_tests) call MOM_mesg("All EOS consistency tests have passed.")
+  if (EOS_unit_tests) then
+    call MOM_error(WARNING, "EOS_unit_tests: One or more EOS tests have failed!")
+  else
+    if (verbose) call MOM_mesg("EOS_unit_tests: All EOS consistency tests have passed.")
+  endif
 
 end function EOS_unit_tests
 

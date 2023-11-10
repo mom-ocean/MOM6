@@ -19,11 +19,17 @@ jobs:
 
     - uses: ./.github/actions/testing-setup
 
-    - name: Compile unit testing
-      run: make -j build/unit/MOM_unit_tests
+    - name: Compile file parser unit tests
+      run: make -j build/unit/test_MOM_file_parser
 
-    - name: Run unit tests
+    - name: Run file parser unit tests
       run: make run.cov.unit
+
+    - name: Compile unit testing
+      run: make -j build.unit
+
+    - name: Run (single processor) unit tests
+      run: make run.unit
 
     - name: Report unit test coverage to CI (PR)
       if: github.event_name == 'pull_request'
