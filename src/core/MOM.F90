@@ -77,6 +77,9 @@ use MOM_dynamics_unsplit,      only : MOM_dyn_unsplit_CS
 use MOM_dynamics_split_RK2,    only : step_MOM_dyn_split_RK2, register_restarts_dyn_split_RK2
 use MOM_dynamics_split_RK2,    only : initialize_dyn_split_RK2, end_dyn_split_RK2
 use MOM_dynamics_split_RK2,    only : MOM_dyn_split_RK2_CS, remap_dyn_split_rk2_aux_vars
+use MOM_dynamics_split_RK2b,   only : step_MOM_dyn_split_RK2b, register_restarts_dyn_split_RK2b
+use MOM_dynamics_split_RK2b,   only : initialize_dyn_split_RK2b, end_dyn_split_RK2b
+use MOM_dynamics_split_RK2b,   only : MOM_dyn_split_RK2b_CS, remap_dyn_split_RK2b_aux_vars
 use MOM_dynamics_unsplit_RK2,  only : step_MOM_dyn_unsplit_RK2, register_restarts_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : initialize_dyn_unsplit_RK2, end_dyn_unsplit_RK2
 use MOM_dynamics_unsplit_RK2,  only : MOM_dyn_unsplit_RK2_CS
@@ -284,6 +287,9 @@ type, public :: MOM_control_struct ; private
   logical :: do_dynamics             !< If false, does not call step_MOM_dyn_*. This is an
                                      !! undocumented run-time flag that is fragile.
   logical :: split                   !< If true, use the split time stepping scheme.
+  logical :: use_alt_split           !< If true, use a version of the split explicit time stepping
+                                     !! with a heavier emphasis on consistent tranports between the
+                                     !! layered and barotroic variables.
   logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode
                                      !! (i.e., no split between barotropic and baroclinic).
   logical :: interface_filter        !< If true, apply an interface height filter immediately
@@ -379,6 +385,8 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the control structure used for the unsplit RK2 dynamics
   type(MOM_dyn_split_RK2_CS),    pointer :: dyn_split_RK2_CSp => NULL()
     !< Pointer to the control structure used for the mode-split RK2 dynamics
+  type(MOM_dyn_split_RK2b_CS),    pointer :: dyn_split_RK2b_CSp => NULL()
+    !< Pointer to the control structure used for an alternate version of the mode-split RK2 dynamics
   type(thickness_diffuse_CS) :: thickness_diffuse_CSp
     !< Pointer to the control structure used for the isopycnal height diffusive transport.
     !! This is also common referred to as Gent-McWilliams diffusion
@@ -1220,10 +1228,17 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
       endif
     endif
 
-    call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
-                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
-                CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
-                CS%MEKE, CS%thickness_diffuse_CSp, CS%pbv, waves=waves)
+    if (CS%use_alt_split) then
+      call step_MOM_dyn_split_RK2b(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
+                  p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                  CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2b_CSp, calc_dtbt, CS%VarMix, &
+                  CS%MEKE, CS%thickness_diffuse_CSp, CS%pbv, waves=waves)
+    else
+      call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
+                  p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
+                  CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
+                  CS%MEKE, CS%thickness_diffuse_CSp, CS%pbv, waves=waves)
+    endif
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
   elseif (CS%do_dynamics) then ! ------------------------------------ not SPLIT
@@ -1646,8 +1661,12 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       if (allocated(tv%SpV_avg)) tv%valid_SpV_halo = -1   ! Record that SpV_avg is no longer valid.
 
       if (CS%remap_aux_vars) then
-        if (CS%split) &
+        if (CS%split .and. CS%use_alt_split) then
+          call remap_dyn_split_RK2b_aux_vars(G, GV, CS%dyn_split_RK2b_CSp, h_old_u, h_old_v, &
+                                             h_new_u, h_new_v, CS%ALE_CSp)
+        elseif (CS%split) then
           call remap_dyn_split_RK2_aux_vars(G, GV, CS%dyn_split_RK2_CSp, h_old_u, h_old_v, h_new_u, h_new_v, CS%ALE_CSp)
+        endif
 
         if (associated(CS%OBC)) then
           call pass_var(h, G%Domain, complete=.false.)
@@ -2154,6 +2173,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
+  call get_param(param_file, "MOM", "SPLIT_RK2B", CS%use_alt_split, &
+                 "If true, use a version of the split explicit time stepping with a heavier "//&
+                 "emphasis on consistent tranports between the layered and barotroic variables.", &
+                 default=.false., do_not_log=.not.CS%split)
   if (CS%split) then
     CS%use_RK2 = .false.
   else
@@ -2771,7 +2794,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   restart_CSp => CS%restart_CS
 
   call set_restart_fields(GV, US, param_file, CS, restart_CSp)
-  if (CS%split) then
+  if (CS%split .and. CS%use_alt_split) then
+    call register_restarts_dyn_split_RK2b(HI, GV, US, param_file, &
+             CS%dyn_split_RK2b_CSp, restart_CSp, CS%uh, CS%vh)
+  elseif (CS%split) then
     call register_restarts_dyn_split_RK2(HI, GV, US, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then
@@ -3157,12 +3183,19 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   if (CS%split) then
     allocate(eta(SZI_(G),SZJ_(G)), source=0.0)
-    call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
+    if (CS%use_alt_split) then
+      call initialize_dyn_split_RK2b(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
+              G, GV, US, param_file, diag, CS%dyn_split_RK2b_CSp, restart_CSp, &
+              CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
+              CS%thickness_diffuse_CSp, CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, &
+              CS%visc, dirs, CS%ntrunc, CS%pbv, calc_dtbt=calc_dtbt, cont_stencil=CS%cont_stencil)
+    else
+      call initialize_dyn_split_RK2(CS%u, CS%v, CS%h, CS%uh, CS%vh, eta, Time, &
               G, GV, US, param_file, diag, CS%dyn_split_RK2_CSp, restart_CSp, &
               CS%dt, CS%ADp, CS%CDp, MOM_internal_state, CS%VarMix, CS%MEKE, &
-              CS%thickness_diffuse_CSp,                                      &
-              CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp,        &
+              CS%thickness_diffuse_CSp, CS%OBC, CS%update_OBC_CSp, CS%ALE_CSp, CS%set_visc_CSp, &
               CS%visc, dirs, CS%ntrunc, CS%pbv, calc_dtbt=calc_dtbt, cont_stencil=CS%cont_stencil)
+    endif
     if (CS%dtbt_reset_period > 0.0) then
       CS%dtbt_reset_interval = real_to_time(US%T_to_s*CS%dtbt_reset_period)
       ! Set dtbt_reset_time to be the next even multiple of dtbt_reset_interval.
@@ -4116,7 +4149,9 @@ subroutine MOM_end(CS)
 
   if (CS%offline_tracer_mode) call offline_transport_end(CS%offline_CSp)
 
-  if (CS%split) then
+  if (CS%split .and. CS%use_alt_split) then
+    call end_dyn_split_RK2b(CS%dyn_split_RK2b_CSp)
+  elseif (CS%split) then
     call end_dyn_split_RK2(CS%dyn_split_RK2_CSp)
   elseif (CS%use_RK2) then
     call end_dyn_unsplit_RK2(CS%dyn_unsplit_RK2_CSp)
