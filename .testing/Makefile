@@ -255,7 +255,6 @@ build/opt/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 build/opt_target/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
 build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/mct/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
 build/cov/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
 build/unit/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
 
@@ -269,7 +268,6 @@ build/opt/Makefile: MOM_ACFLAGS=
 build/opt_target/Makefile: MOM_ACFLAGS=
 build/coupled/Makefile: MOM_ACFLAGS=--with-driver=FMS_cap
 build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_cap
-build/mct/Makefile: MOM_ACFLAGS=--with-driver=mct_cap
 build/cov/Makefile: MOM_ACFLAGS=
 build/unit/Makefile: MOM_ACFLAGS=--with-driver=unit_tests
 
@@ -369,11 +367,6 @@ check_mom6_api_nuopc: build/nuopc/mom_ocean_model_nuopc.o
 build/coupled/ocean_model_MOM.o: build/coupled/Makefile
 	cd $(@D) && make $(@F)
 check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
-
-# MCT driver
-build/mct/mom_ocean_model_mct.o: build/mct/Makefile
-	cd $(@D) && make $(@F)
-check_mom6_api_mct: build/mct/mom_ocean_model_mct.o
 
 
 #---

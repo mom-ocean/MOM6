@@ -8,3 +8,5 @@ sphinxcontrib-bibtex
 numpy
 six
 future
+# Old Sphinx requires an old Jinja2
+jinja2<3.1
