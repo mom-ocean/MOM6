@@ -89,7 +89,8 @@ subroutine find_obsolete_params(param_file)
   if (test_logic .and. .not.split) call MOM_ERROR(FATAL, &
     "find_obsolete_params: #define DYNAMIC_SURFACE_PRESSURE is not yet "//&
     "implemented without #define SPLIT.")
-
+  call obsolete_char(param_file, "CONTINUITY_SCHEME", warning_val="PPM", &
+                     hint="Only one continuity scheme is available so this need not be specified.")
   call obsolete_real(param_file, "ETA_TOLERANCE_AUX", only_warn=.true.)
   call obsolete_real(param_file, "BT_MASS_SOURCE_LIMIT", 0.0)
   call obsolete_real(param_file, "FIRST_GUESS_SURFACE_LAYER_DEPTH")
