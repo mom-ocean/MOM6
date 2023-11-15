@@ -217,7 +217,6 @@ endif
 
 FMS_SOURCE = $(call SOURCE,deps/fms/src)
 
-
 #---
 # Rules
 
@@ -683,6 +682,24 @@ run.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).out)
 show.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).show)
 $(WORKSPACE)/work/timing/%.show:
 	./tools/disp_timing.py $(@:.show=.out)
+
+# Invoke the above unit/timing rules for a "target" code
+# Invoke with appropriate macros defines, i.e.
+#   make build.timing_target MOM_TARGET_URL=... MOM_TARGET_BRANCH=... TARGET_CODEBASE=build/target_codebase
+#   make run.timing_target TARGET_CODEBASE=build/target_codebase
+
+TIMING_TARGET_EXECS ?= $(basename $(notdir $(wildcard $(TARGET_CODEBASE)/config_src/drivers/timing_tests/*.F90) ) )
+
+.PHONY: build.timing_target
+build.timing_target: $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/build/timing/$(f))
+.PHONY: run.timing_target
+run.timing_target: $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/work/timing/$(f).out)
+.PHONY: compare.timing
+compare.timing: $(foreach f, $(filter $(TIMING_EXECS),$(TIMING_TARGET_EXECS)), work/timing/$(f).compare)
+$(WORKSPACE)/work/timing/%.compare: $(TARGET_CODEBASE)
+	./tools/disp_timing.py -r $(TARGET_CODEBASE)/.testing/$(@:.compare=.out) $(@:.compare=.out)
+$(TARGET_CODEBASE)/.testing/%: | $(TARGET_CODEBASE)
+	cd $(TARGET_CODEBASE)/.testing && make $*
 
 # General rule to run a unit test executable
 # Pattern is to run build/unit/executable and direct output to executable.out
