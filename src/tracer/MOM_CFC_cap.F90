@@ -404,8 +404,7 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! If needed, write out any desired diagnostics from tracer sources & sinks here.
   do m=1,NTR
     if (CS%CFC_data(m)%id_cmor > 0) &
-      call post_data(CS%CFC_data(m)%id_cmor, &
-                     (GV%Rho0*US%R_to_kg_m3)*CS%CFC_data(m)%conc, CS%diag)
+      call post_data(CS%CFC_data(m)%id_cmor, CS%CFC_data(m)%conc, CS%diag)
 
     if (CS%CFC_data(m)%id_sfc_flux > 0) &
       call post_data(CS%CFC_data(m)%id_sfc_flux, CS%CFC_data(m)%sfc_flux, CS%diag)
