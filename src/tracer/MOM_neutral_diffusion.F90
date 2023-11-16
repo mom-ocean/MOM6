@@ -63,9 +63,9 @@ type, public :: neutral_diffusion_CS ; private
   real,    allocatable, dimension(:,:)  :: hbl    !< Boundary layer depth [H ~> m or kg m-2]
   ! Coefficients used to apply tapering from neutral to horizontal direction
   real,    allocatable, dimension(:) :: coeff_l   !< Non-dimensional coefficient in the left column,
-                                                  !! at cell interfaces
+                                                  !! at cell interfaces [nondim]
   real,    allocatable, dimension(:) :: coeff_r   !< Non-dimensional coefficient in the right column,
-                                                  !! at cell interfaces
+                                                  !! at cell interfaces [nondim]
   ! Array used when KhTh_use_ebt_struct is true
   real,    allocatable, dimension(:,:,:) :: Coef_h !< Coef_x and Coef_y averaged at t-points [L2 ~> m2]
   ! Positions of neutral surfaces in both the u, v directions
@@ -84,8 +84,10 @@ type, public :: neutral_diffusion_CS ; private
                                                   !! at a v-point
   real,    allocatable, dimension(:,:,:) :: vHeff !< Effective thickness at v-point [H ~> m or kg m-2]
   ! Coefficients of polynomial reconstructions for temperature and salinity
-  real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_T !< Polynomial coefficients for temperature
-  real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_S !< Polynomial coefficients for salinity
+  real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_T !< Polynomial coefficients of the
+                                                  !! sub-gridscale temperatures [C ~> degC]
+  real,    allocatable, dimension(:,:,:,:) :: ppoly_coeffs_S !< Polynomial coefficients of the
+                                                  !! sub-gridscale salinity [S ~> ppt]
   ! Variables needed for continuous reconstructions
   real,    allocatable, dimension(:,:,:) :: dRdT !< dRho/dT [R C-1 ~> kg m-3 degC-1] at interfaces
   real,    allocatable, dimension(:,:,:) :: dRdS !< dRho/dS [R S-1 ~> kg m-3 ppt-1] at interfaces
@@ -335,7 +337,8 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k
   ! Variables used for reconstructions
-  real, dimension(SZK_(GV),2) :: ppoly_r_S      ! Reconstruction slopes
+  real, dimension(SZK_(GV),2) :: ppoly_r_S  ! Reconstruction slopes that are unused here, in units of a vertical
+                              ! gradient, which for temperature would be [C H-1 ~> degC m-1 or degC m2 kg-1].
   real, dimension(SZI_(G), SZJ_(G)) :: hEff_sum ! Summed effective face thicknesses [H ~> m or kg m-2]
   integer :: iMethod
   real, dimension(SZI_(G)) :: ref_pres ! Reference pressure used to calculate alpha/beta [R L2 T-2 ~> Pa]
@@ -589,24 +592,38 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: Coef_x !< dt * Kh * dy / dx at u-points [L2 ~> m2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), intent(in)    :: Coef_y !< dt * Kh * dx / dy at v-points [L2 ~> m2]
   real,                                         intent(in)    :: dt     !< Tracer time step * I_numitts [T ~> s]
-                                                                     !! (I_numitts in tracer_hordiff)
+                                                                        !! (I_numitts is in tracer_hordiff)
   type(tracer_registry_type),                   pointer       :: Reg    !< Tracer registry
   type(unit_scale_type),                        intent(in)    :: US     !< A dimensional unit scaling type
   type(neutral_diffusion_CS),                   pointer       :: CS     !< Neutral diffusion control structure
 
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),CS%nsurf-1) :: uFlx        ! Zonal flux of tracer [H conc ~> m conc or conc kg m-2]
-  real, dimension(SZI_(G),SZJB_(G),CS%nsurf-1) :: vFlx        ! Meridional flux of tracer
-                                                              ! [H conc ~> m conc or conc kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),CS%nsurf-1) :: uFlx        ! Zonal flux of tracer in units that vary between a
+                        ! thickness times a concentration ([C H ~> degC m or degC kg m-2] for temperature) or a
+                        ! volume or mass times a concentration ([C H L2 ~> degC m3 or degC kg] for temperature),
+                        ! depending on the setting of CS%KhTh_use_ebt_struct.
+  real, dimension(SZI_(G),SZJB_(G),CS%nsurf-1) :: vFlx        ! Meridional flux of tracer in units that vary between a
+                        ! thickness times a concentration ([C H ~> degC m or degC kg m-2] for temperature) or a
+                        ! volume or mass times a concentration ([C H L2 ~> degC m3 or degC kg] for temperature),
+                        ! depending on the setting of CS%KhTh_use_ebt_struct.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))    :: tendency    ! tendency array for diagnostics
                                                               ! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1]
-  real, dimension(SZI_(G),SZJ_(G))             :: tendency_2d ! depth integrated content tendency for diagn
-                                                              ! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1]
-  real, dimension(SZIB_(G),SZJ_(G))            :: trans_x_2d  ! depth integrated diffusive tracer x-transport diagn
-  real, dimension(SZI_(G),SZJB_(G))            :: trans_y_2d  ! depth integrated diffusive tracer y-transport diagn
-  real, dimension(SZK_(GV))                    :: dTracer     ! change in tracer concentration due to ndiffusion
-                                                              ! [H L2 conc ~> m3 conc or kg conc]
-  real :: normalize  ! normalization used for averaging Coef_x and Coef_y to t-points.
+                                                              ! For temperature these units are
+                                                              ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1].
+  real, dimension(SZI_(G),SZJ_(G))             :: tendency_2d ! Depth integrated content tendency for diagnostics
+                                                              ! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1].
+                                                              ! For temperature these units are
+                                                              ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1].
+  real, dimension(SZIB_(G),SZJ_(G))            :: trans_x_2d  ! Depth integrated diffusive tracer x-transport
+                                                              ! diagnostic.  For temperature this has units of
+                                                              ! [C H L2 ~> degC m3 or degC kg].
+  real, dimension(SZI_(G),SZJB_(G))            :: trans_y_2d  ! depth integrated diffusive tracer y-transport
+                                                              ! diagnostic.  For temperature this has units of
+                                                              ! [C H L2 ~> degC m3 or degC kg].
+  real, dimension(SZK_(GV))                    :: dTracer     ! Change in tracer concentration due to neutral diffusion
+                                                              ! [H L2 conc ~> m3 conc or kg conc].  For temperature
+                                                              ! these units are [C H L2 ~> degC m3 or degC kg].
+  real :: normalize  ! normalization used for averaging Coef_x and Coef_y to t-points [nondim].
 
   type(tracer_type), pointer                   :: Tracer => NULL() ! Pointer to the current tracer
 
@@ -950,12 +967,12 @@ subroutine compute_tapering_coeffs(ne, bld_l, bld_r, coeff_l, coeff_r, h_l, h_r)
   ! Local variables
   real :: min_bld, max_bld                       ! Min/Max boundary layer depth in two adjacent columns
   integer :: dummy1                              ! dummy integer
-  real    :: dummy2                              ! dummy real
+  real    :: dummy2                              ! dummy real [nondim]
   integer :: k_min_l, k_min_r, k_max_l, k_max_r  ! Min/max vertical indices in two adjacent columns
-  real    :: zeta_l, zeta_r                      ! dummy variables
+  real    :: zeta_l, zeta_r                      ! dummy variables [nondim]
   integer :: k                                   ! vertical index
 
-  ! initialize coeffs
+  ! Initialize coefficients
   coeff_l(:) = 1.0
   coeff_r(:) = 1.0
 
@@ -996,15 +1013,19 @@ end subroutine compute_tapering_coeffs
 subroutine interface_scalar(nk, h, S, Si, i_method, h_neglect)
   integer,               intent(in)    :: nk       !< Number of levels
   real, dimension(nk),   intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(nk),   intent(in)    :: S        !< Layer scalar (conc, e.g. ppt)
-  real, dimension(nk+1), intent(inout) :: Si       !< Interface scalar (conc, e.g. ppt)
+  real, dimension(nk),   intent(in)    :: S        !< Layer scalar (or concentrations) in arbitrary
+                                                   !! concentration units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk+1), intent(inout) :: Si       !< Interface scalar (or concentrations) in arbitrary
+                                                   !! concentration units (e.g. [C ~> degC] for temperature)
   integer,               intent(in)    :: i_method !< =1 use average of PLM edges
                                                    !! =2 use continuous PPM edge interpolation
   real,                  intent(in)    :: h_neglect !< A negligibly small thickness [H ~> m or kg m-2]
   ! Local variables
   integer :: k, km2, kp1
-  real, dimension(nk) :: diff
-  real :: Sb, Sa
+  real, dimension(nk) :: diff ! Difference in scalar concentrations between layer centers in arbitrary
+                              ! concentration units (e.g. [C ~> degC] for temperature)
+  real :: Sb, Sa ! Values of scalar concentrations at the upper and lower edges of a layer in arbitrary
+                 ! concentration units (e.g. [C ~> degC] for temperature)
 
   call PLM_diff(nk, h, S, 2, 1, diff)
   Si(1) = S(1) - 0.5 * diff(1)
@@ -1032,18 +1053,24 @@ end subroutine interface_scalar
 !> Returns the PPM quasi-fourth order edge value at k+1/2 following
 !! equation 1.6 in Colella & Woodward, 1984: JCP 54, 174-201.
 real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1, h_neglect)
-  real, intent(in) :: hkm1 !< Width of cell k-1
-  real, intent(in) :: hk   !< Width of cell k
-  real, intent(in) :: hkp1 !< Width of cell k+1
-  real, intent(in) :: hkp2 !< Width of cell k+2
-  real, intent(in) :: Ak   !< Average scalar value of cell k
-  real, intent(in) :: Akp1 !< Average scalar value of cell k+1
-  real, intent(in) :: Pk   !< PLM slope for cell k
-  real, intent(in) :: Pkp1 !< PLM slope for cell k+1
+  real, intent(in) :: hkm1 !< Width of cell k-1 in [H ~> m or kg m-2] or other units
+  real, intent(in) :: hk   !< Width of cell k in [H ~> m or kg m-2] or other units
+  real, intent(in) :: hkp1 !< Width of cell k+1 in [H ~> m or kg m-2] or other units
+  real, intent(in) :: hkp2 !< Width of cell k+2 in [H ~> m or kg m-2] or other units
+  real, intent(in) :: Ak   !< Average scalar value of cell k in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
+  real, intent(in) :: Akp1 !< Average scalar value of cell k+1 in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
+  real, intent(in) :: Pk   !< PLM slope for cell k in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
+  real, intent(in) :: Pkp1 !< PLM slope for cell k+1 in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
   real, intent(in) :: h_neglect !< A negligibly small thickness [H ~> m or kg m-2]
 
   ! Local variables
-  real :: R_hk_hkp1, R_2hk_hkp1, R_hk_2hkp1, f1, f2, f3, f4
+  real :: R_hk_hkp1, R_2hk_hkp1, R_hk_2hkp1 ! Reciprocals of combinations of thicknesses [H-1 ~> m-1 or m2 kg-1]
+  real :: f1 ! A work variable with units of an inverse cell width [H-1 ~> m-1 or m2 kg-1]
+  real :: f2, f3, f4 ! Work variables with units of the cell width [H ~> m or kg m-2]
 
   R_hk_hkp1 = hk + hkp1
   if (R_hk_hkp1 <= 0.) then
@@ -1069,17 +1096,23 @@ real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1, h_neglect)
 
 end function ppm_edge
 
-!> Returns the average of a PPM reconstruction between two
-!! fractional positions.
+!> Returns the average of a PPM reconstruction between two fractional positions in the same
+!! arbitrary concentration units as aMean (e.g. usually [C ~> degC] for temperature)
 real function ppm_ave(xL, xR, aL, aR, aMean)
-  real, intent(in) :: xL    !< Fraction position of left bound (0,1)
-  real, intent(in) :: xR    !< Fraction position of right bound (0,1)
-  real, intent(in) :: aL    !< Left edge scalar value, at x=0
-  real, intent(in) :: aR    !< Right edge scalar value, at x=1
-  real, intent(in) :: aMean !< Average scalar value of cell
+  real, intent(in) :: xL    !< Fraction position of left bound (0,1) [nondim]
+  real, intent(in) :: xR    !< Fraction position of right bound (0,1) [nondim]
+  real, intent(in) :: aL    !< Left edge scalar value, at x=0, in arbitrary concentration
+                            !! units (e.g. usually [C ~> degC] for temperature)
+  real, intent(in) :: aR    !< Right edge scalar value, at x=1 in arbitrary concentration
+                            !! units (e.g. usually [C ~> degC] for temperature)
+  real, intent(in) :: aMean !< Average scalar value of cell in arbitrary concentration
+                            !! units (e.g. usually [C ~> degC] for temperature)
 
   ! Local variables
-  real :: dx, xave, a6, a6o3
+  real :: dx   ! Distance between the bounds [nondim]
+  real :: xave ! Average fractional position [nondim]
+  real :: a6, a6o3 ! Terms proportional to the normalized scalar curvature in the same arbitrary
+                   ! concentration units as aMean (e.g. usually [C ~> degC] for temperature)
 
   dx = xR - xL
   xave = 0.5 * ( xR + xL )
@@ -1098,9 +1131,10 @@ real function ppm_ave(xL, xR, aL, aR, aMean)
 end function ppm_ave
 
 !> A true signum function that returns either -abs(a), when x<0; or abs(a) when x>0; or 0 when x=0.
+!! The returned units are the same as those of a [arbitrary].
 real function signum(a,x)
-  real, intent(in) :: a !< The magnitude argument
-  real, intent(in) :: x !< The sign (or zero) argument
+  real, intent(in) :: a !< The magnitude argument in arbitrary units [arbitrary]
+  real, intent(in) :: x !< The sign (or zero) argument [arbitrary]
 
   signum = sign(a,x)
   if (x==0.) signum = 0.
@@ -1111,11 +1145,13 @@ end function signum
 !! The limiting follows equation 1.8 in Colella & Woodward, 1984: JCP 54, 174-201.
 subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
   integer,             intent(in)    :: nk       !< Number of levels
-  real, dimension(nk), intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(nk), intent(in)    :: S        !< Layer salinity (conc, e.g. ppt)
+  real, dimension(nk), intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2] or other units
+  real, dimension(nk), intent(in)    :: S        !< Layer salinity (conc, e.g. ppt) or other tracer
+                                                 !! concentration in arbitrary units [A ~> a]
   integer,             intent(in)    :: c_method !< Method to use for the centered difference
   integer,             intent(in)    :: b_method !< =1, use PCM in first/last cell, =2 uses linear extrapolation
   real, dimension(nk), intent(inout) :: diff     !< Scalar difference across layer (conc, e.g. ppt)
+                                                 !! in the same arbitrary units as S [A ~> a],
                                                  !! determined by the following values for c_method:
                                                  !!   1. Second order finite difference (not recommended)
                                                  !!   2. Second order finite volume (used in original PPM)
@@ -1125,7 +1161,9 @@ subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
 
   ! Local variables
   integer :: k
-  real :: hkm1, hk, hkp1, Skm1, Sk, Skp1, diff_l, diff_r, diff_c
+  real :: hkm1, hk, hkp1  ! Successive layer thicknesses [H ~> m or kg m-2] or other units
+  real :: Skm1, Sk, Skp1  ! Successive layer tracer concentrations in the same arbitrary units as S [A ~> a]
+  real :: diff_l, diff_r, diff_c ! Differences in tracer concentrations in arbitrary units [A ~> a]
 
   do k = 2, nk-1
     hkm1 = h(k-1)
@@ -1144,7 +1182,7 @@ subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
           diff_c = 0.
         endif
       elseif (c_method==2) then
-        ! Second order accurate centered FV slope (from Colella and Woodward, JCP 1984)
+        ! Second order accurate centered finite-volume slope (from Colella and Woodward, JCP 1984)
         diff_c = fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
       elseif (c_method==3) then
         ! Second order accurate finite-volume least squares slope
@@ -1177,15 +1215,19 @@ end subroutine PLM_diff
 !! as a difference across the central cell (i.e. units of scalar S).
 !! Discretization follows equation 1.7 in Colella & Woodward, 1984: JCP 54, 174-201.
 real function fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
-  real, intent(in) :: hkm1 !< Left cell width
-  real, intent(in) :: hk   !< Center cell width
-  real, intent(in) :: hkp1 !< Right cell width
-  real, intent(in) :: Skm1 !< Left cell average value
-  real, intent(in) :: Sk   !< Center cell average value
-  real, intent(in) :: Skp1 !< Right cell average value
+  real, intent(in) :: hkm1 !< Left cell width [H ~> m or kg m-2] or other arbitrary units
+  real, intent(in) :: hk   !< Center cell width [H ~> m or kg m-2] or other arbitrary units
+  real, intent(in) :: hkp1 !< Right cell width [H ~> m or kg m-2] or other arbitrary units
+  real, intent(in) :: Skm1 !< Left cell average value in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
+  real, intent(in) :: Sk   !< Center cell average value in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
+  real, intent(in) :: Skp1 !< Right cell average value in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
 
   ! Local variables
-  real :: h_sum, hp, hm
+  real :: h_sum, hp, hm ! At first sums of thicknesses [H ~> m or kg m-2], then changed into
+                        ! their reciprocals [H-1 ~> m-1 or m2 kg-1]
 
   h_sum = ( hkm1 + hkp1 ) + hk
   if (h_sum /= 0.) h_sum = 1./ h_sum
@@ -1200,19 +1242,30 @@ end function fv_diff
 
 
 !> Returns the cell-centered second-order weighted least squares slope
-!! using three consecutive cell widths and average values. Slope is returned
-!! as a gradient (i.e. units of scalar S over width units).
+!! using three consecutive cell widths and average values.  Slope is returned
+!! as a gradient (i.e. units of scalar S over width units).  For example, for temperature
+!! fvlsq_slope would usually be returned in units of [C H-1 ~> degC m-1 or degC m2 kg-1].
 real function fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
-  real, intent(in) :: hkm1 !< Left cell width
-  real, intent(in) :: hk   !< Center cell width
-  real, intent(in) :: hkp1 !< Right cell width
-  real, intent(in) :: Skm1 !< Left cell average value
-  real, intent(in) :: Sk   !< Center cell average value
-  real, intent(in) :: Skp1 !< Right cell average value
+  real, intent(in) :: hkm1 !< Left cell width [H ~> m or kg m-2] or other arbitrary units
+  real, intent(in) :: hk   !< Center cell width [H ~> m or kg m-2] or other arbitrary units
+  real, intent(in) :: hkp1 !< Right cell width [H ~> m or kg m-2] or other arbitrary units
+  real, intent(in) :: Skm1 !< Left cell average value in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
+  real, intent(in) :: Sk   !< Center cell average value often in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
+  real, intent(in) :: Skp1 !< Right cell average value often in arbitrary concentration
+                           !! units (e.g. [C ~> degC] for temperature)
 
   ! Local variables
-  real :: xkm1, xkp1
-  real :: h_sum, hx_sum, hxsq_sum, hxy_sum, hy_sum, det
+  real :: xkm1, xkp1  ! Distances between layer centers [H ~> m or kg m-2] or other arbitrary units
+  real :: h_sum       ! Sum of the successive cell widths [H ~> m or kg m-2] or other arbitrary units
+  real :: hx_sum      ! Thicknesses times distances [H2 ~> m2 or kg2 m-4]
+  real :: hxsq_sum    ! Thicknesses times squared distances [H3 ~> m3 or kg3 m-6]
+  real :: det         ! The denominator in the weighted slope calculation [H4 ~> m4 or kg4 m-8]
+  real :: hxy_sum     ! Sum of layer concentrations times thicknesses and distances in units that
+                      ! depend on those of Sk (e.g. [C H2 ~> degC m2 or degC kg2 m-4] for temperature)
+  real :: hy_sum      ! Sum of layer concentrations times thicknesses in units that depend on
+                      ! those of Sk (e.g. [C H ~> degC m or degC kg m-2] for temperature)
 
   xkm1 = -0.5 * ( hk + hkm1 )
   xkp1 = 0.5 * ( hk + hkp1 )
@@ -1255,8 +1308,8 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
                                                      !! [R L2 T-2 ~> Pa] or other units following Pl and Pr.
   integer, optional,          intent(in)    :: bl_kl !< Layer index of the boundary layer (left)
   integer, optional,          intent(in)    :: bl_kr !< Layer index of the boundary layer (right)
-  real, optional,             intent(in)    :: bl_zl !< Nondimensional position of the boundary layer (left)
-  real, optional,             intent(in)    :: bl_zr !< Nondimensional position of the boundary layer (right)
+  real, optional,             intent(in)    :: bl_zl !< Fractional position of the boundary layer (left) [nondim]
+  real, optional,             intent(in)    :: bl_zr !< Fractional position of the boundary layer (right) [nondim]
 
   ! Local variables
   integer :: ns                     ! Number of neutral surfaces
@@ -2161,7 +2214,7 @@ function absolute_positions(n,ns,Pint,Karr,NParr)
   integer, intent(in) :: ns        !< Number of neutral surfaces
   real,    intent(in) :: Pint(n+1) !< Position of interface [R L2 T-2 ~> Pa] or other units
   integer, intent(in) :: Karr(ns)  !< Indexes of interfaces about positions
-  real,    intent(in) :: NParr(ns) !< Non-dimensional positions within layers Karr(:)
+  real,    intent(in) :: NParr(ns) !< Non-dimensional positions within layers Karr(:) [nondim]
 
   real,  dimension(ns) :: absolute_positions !< Absolute positions [R L2 T-2 ~> Pa]
                                    !! or other units following Pint
@@ -2184,47 +2237,83 @@ subroutine neutral_surface_flux(nk, nsurf, deg, hl, hr, Tl, Tr, PiL, PiR, KoL, K
   integer,                      intent(in)    :: deg   !< Degree of polynomial reconstructions
   real, dimension(nk),          intent(in)    :: hl    !< Left-column layer thickness [H ~> m or kg m-2]
   real, dimension(nk),          intent(in)    :: hr    !< Right-column layer thickness [H ~> m or kg m-2]
-  real, dimension(nk),          intent(in)    :: Tl    !< Left-column layer tracer (conc, e.g. degC)
-  real, dimension(nk),          intent(in)    :: Tr    !< Right-column layer tracer (conc, e.g. degC)
+  real, dimension(nk),          intent(in)    :: Tl    !< Left-column layer tracer in arbitrary concentration
+                                                       !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk),          intent(in)    :: Tr    !< Right-column layer tracer in arbitrary concentration
+                                                       !! units (e.g. [C ~> degC] for temperature)
   real, dimension(nsurf),       intent(in)    :: PiL   !< Fractional position of neutral surface
-                                                       !! within layer KoL of left column
+                                                       !! within layer KoL of left column [nondim]
   real, dimension(nsurf),       intent(in)    :: PiR   !< Fractional position of neutral surface
-                                                       !! within layer KoR of right column
+                                                       !! within layer KoR of right column [nondim]
   integer, dimension(nsurf),    intent(in)    :: KoL   !< Index of first left interface above neutral surface
   integer, dimension(nsurf),    intent(in)    :: KoR   !< Index of first right interface above neutral surface
   real, dimension(nsurf-1),     intent(in)    :: hEff  !< Effective thickness between two neutral
                                                        !! surfaces [H ~> m or kg m-2]
   real, dimension(nsurf-1),     intent(inout) :: Flx   !< Flux of tracer between pairs of neutral layers
-                                                       !! (conc H or conc H L2)
+                                                       !! in units  (conc H or conc H L2) that depend on
+                                                       !! the presence and units of coeff_l and coeff_r.
+                                                       !! If the tracer is temperature, this could have
+                                                       !! units of [C H ~> degC m or degC kg m-2] or
+                                                       !! [C H L2 ~> degC m3 or degC kg] if coeff_l has
+                                                       !! units of [L2 ~> m2]
   logical,                      intent(in)    :: continuous !< True if using continuous reconstruction
-  real,                         intent(in)    :: h_neglect !< A negligibly small width for the
-                                             !! purpose of cell reconstructions [H ~> m or kg m-2]
+  real,                         intent(in)    :: h_neglect !< A negligibly small width for the purpose
+                                                       !! of cell reconstructions [H ~> m or kg m-2]
   type(remapping_CS), optional, intent(in)    :: remap_CS !< Remapping control structure used
-                                             !! to create sublayers
-  real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width used for
-                                             !! edge value calculations if continuous is false [H ~> m or kg m-2]
-  real, dimension(nk+1), optional, intent(in) :: coeff_l !< Left-column diffusivity  [L2 ~> m2 or nondim]
-  real, dimension(nk+1), optional, intent(in) :: coeff_r !< Right-column diffusivity [L2 ~> m2 or nondim]
+                                                       !! to create sublayers
+  real,               optional, intent(in)    :: h_neglect_edge !< A negligibly small width used for edge value
+                                                       !! calculations if continuous is false [H ~> m or kg m-2]
+  real, dimension(nk+1), optional, intent(in) :: coeff_l !< Left-column diffusivity  [L2 ~> m2] or [nondim]
+  real, dimension(nk+1), optional, intent(in) :: coeff_r !< Right-column diffusivity [L2 ~> m2] or [nondim]
 
   ! Local variables
   integer :: k_sublayer, klb, klt, krb, krt
-  real :: T_right_top, T_right_bottom, T_right_layer, T_right_sub, T_right_top_int, T_right_bot_int
-  real :: T_left_top, T_left_bottom, T_left_layer, T_left_sub, T_left_top_int, T_left_bot_int
-  real :: dT_top, dT_bottom, dT_layer, dT_ave, dT_sublayer, dT_top_int, dT_bot_int, khtr_ave
-  real, dimension(nk+1) :: Til !< Left-column interface tracer (conc, e.g. degC)
-  real, dimension(nk+1) :: Tir !< Right-column interface tracer (conc, e.g. degC)
-  real, dimension(nk) :: aL_l !< Left-column left edge value of tracer (conc, e.g. degC)
-  real, dimension(nk) :: aR_l !< Left-column right edge value of tracer (conc, e.g. degC)
-  real, dimension(nk) :: aL_r !< Right-column left edge value of tracer (conc, e.g. degC)
-  real, dimension(nk) :: aR_r !< Right-column right edge value of tracer (conc, e.g. degC)
+  real :: T_right_sub, T_left_sub ! Tracer concentrations averaged over sub-intervals in the right and left
+                                  ! columns in arbitrary concentration units (e.g. [C ~> degC] for temperature).
+  real :: T_right_layer, T_left_layer ! Tracer concentrations averaged over layers in the right and left
+                                  ! columns in arbitrary concentration units (e.g. [C ~> degC] for temperature).
+  real :: T_right_top, T_right_bottom, T_right_top_int, T_right_bot_int ! Tracer concentrations
+                        ! at various positions in the right column in arbitrary
+                        ! concentration units (e.g. [C ~> degC] for temperature).
+  real :: T_left_top, T_left_bottom, T_left_top_int, T_left_bot_int ! Tracer concentrations
+                        ! at various positions in the left column in arbitrary
+                        ! concentration units (e.g. [C ~> degC] for temperature).
+  real :: dT_layer, dT_ave, dT_sublayer ! Differences in vertically averaged tracer concentrations
+                        ! over various portions of the right and left columns in arbitrary
+                        ! concentration units (e.g. [C ~> degC] for temperature).
+  real :: dT_top, dT_bottom, dT_top_int, dT_bot_int ! Differences in tracer concentrations
+                        ! at various positions between the right and left columns in arbitrary
+                        ! concentration units (e.g. [C ~> degC] for temperature).
+  real :: khtr_ave ! An averaged diffusivity in normalized units [nondim] if coeff_l and coeff_r are
+                   ! absent or in units copied from coeff_l and coeff_r [L2 ~> m2] or [nondim]
+  real, dimension(nk+1) :: Til !< Left-column interface tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk+1) :: Tir !< Right-column interface tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk) :: aL_l !< Left-column left edge value of tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk) :: aR_l !< Left-column right edge value of tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk) :: aL_r !< Right-column left edge value of tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk) :: aR_r !< Right-column right edge value of tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
   ! Discontinuous reconstruction
   integer               :: iMethod
-  real, dimension(nk,2) :: Tid_l !< Left-column interface tracer (conc, e.g. degC)
-  real, dimension(nk,2) :: Tid_r !< Right-column interface tracer (conc, e.g. degC)
-  real, dimension(nk,deg+1) :: ppoly_r_coeffs_l
-  real, dimension(nk,deg+1) :: ppoly_r_coeffs_r
-  real, dimension(nk,deg+1) :: ppoly_r_S_l
-  real, dimension(nk,deg+1) :: ppoly_r_S_r
+  real, dimension(nk,2) :: Tid_l !< Left-column interface tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk,2) :: Tid_r !< Right-column interface tracer in arbitrary concentration
+                              !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk,deg+1) :: ppoly_r_coeffs_l  ! Coefficients of the polynomial descriptions of
+                              ! sub-gridscale tracer concentrations in the left column, in arbitrary
+                              ! concentration units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk,deg+1) :: ppoly_r_coeffs_r  ! Coefficients of the polynomial descriptions of
+                              ! sub-gridscale tracer concentrations in the right column, in arbitrary
+                              ! concentration units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk,deg+1) :: ppoly_r_S_l   ! Reconstruction slopes that are unused here, in units of a vertical
+                              ! gradient, which for temperature would be [C H-1 ~> degC m-1 or degC m2 kg-1].
+  real, dimension(nk,deg+1) :: ppoly_r_S_r   ! Reconstruction slopes that are unused here, in units of a vertical
+                              ! gradient, which for temperature would be [C H-1 ~> degC m-1 or degC m2 kg-1].
   logical :: down_flux, tapering
 
   tapering = .false.
@@ -2327,18 +2416,28 @@ subroutine neutral_surface_T_eval(nk, ns, k_sub, Ks, Ps, T_mean, T_int, deg, iMe
   integer,                   intent(in   ) :: ns        !< Number of neutral surfaces
   integer,                   intent(in   ) :: k_sub     !< Index of current neutral layer
   integer, dimension(ns),    intent(in   ) :: Ks        !< List of the layers associated with each neutral surface
-  real, dimension(ns),       intent(in   ) :: Ps        !< List of the positions within a layer of each surface
-  real, dimension(nk),       intent(in   ) :: T_mean    !< Cell average of tracer
-  real, dimension(nk,2),     intent(in   ) :: T_int     !< Cell interface values of tracer from reconstruction
+  real, dimension(ns),       intent(in   ) :: Ps        !< List of the positions within a layer of each surface [nondim]
+  real, dimension(nk),       intent(in   ) :: T_mean    !< Layer average of tracer in arbitrary concentration
+                                                        !! units (e.g. [C ~> degC] for temperature)
+  real, dimension(nk,2),     intent(in   ) :: T_int     !< Layer interface values of tracer from reconstruction
+                                                        !! in concentration units (e.g. [C ~> degC] for temperature)
   integer,                   intent(in   ) :: deg       !< Degree of reconstruction polynomial (e.g. 1 is linear)
   integer,                   intent(in   ) :: iMethod   !< Method of integration to use
-  real, dimension(nk,deg+1), intent(in   ) :: T_poly    !< Coefficients of polynomial reconstructions
-  real,                      intent(  out) :: T_top     !< Tracer value at top (across discontinuity if necessary)
+  real, dimension(nk,deg+1), intent(in   ) :: T_poly    !< Coefficients of polynomial reconstructions in arbitrary
+                                                        !! concentration units (e.g. [C ~> degC] for temperature)
+  real,                      intent(  out) :: T_top     !< Tracer value at top (across discontinuity if necessary) in
+                                                        !! concentration units (e.g. [C ~> degC] for temperature)
   real,                      intent(  out) :: T_bot     !< Tracer value at bottom (across discontinuity if necessary)
-  real,                      intent(  out) :: T_sub     !< Average of the tracer value over the sublayer
-  real,                      intent(  out) :: T_top_int !< Tracer value at top interface of neutral layer
-  real,                      intent(  out) :: T_bot_int !< Tracer value at bottom interface of neutral layer
-  real,                      intent(  out) :: T_layer   !< Cell-average that the reconstruction belongs to
+                                                        !! in concentration units (e.g. [C ~> degC] for temperature)
+  real,                      intent(  out) :: T_sub     !< Average of the tracer value over the sublayer in arbitrary
+                                                        !! concentration units (e.g. [C ~> degC] for temperature)
+  real,                      intent(  out) :: T_top_int !< Tracer value at the top interface of a neutral layer in
+                                                        !! concentration units (e.g. [C ~> degC] for temperature)
+  real,                      intent(  out) :: T_bot_int !< Tracer value at the bottom interface of a neutral layer in
+                                                        !! concentration units (e.g. [C ~> degC] for temperature)
+  real,                      intent(  out) :: T_layer   !< Cell-average tracer concentration in a layer that
+                                                        !! the reconstruction belongs to in concentration
+                                                        !! units (e.g. [C ~> degC] for temperature)
 
   integer :: kl, ks_top, ks_bot
 
@@ -2376,10 +2475,12 @@ end subroutine neutral_surface_T_eval
 !> Discontinuous PPM reconstructions of the left/right edge values within a cell
 subroutine ppm_left_right_edge_values(nk, Tl, Ti, aL, aR)
   integer,                    intent(in)    :: nk !< Number of levels
-  real, dimension(nk),        intent(in)    :: Tl !< Layer tracer (conc, e.g. degC)
-  real, dimension(nk+1),      intent(in)    :: Ti !< Interface tracer (conc, e.g. degC)
+  real, dimension(nk),        intent(in)    :: Tl !< Layer tracer (conc, e.g. degC) in arbitrary units [A ~> a]
+  real, dimension(nk+1),      intent(in)    :: Ti !< Interface tracer (conc, e.g. degC) in arbitrary units [A ~> a]
   real, dimension(nk),        intent(inout) :: aL !< Left edge value of tracer (conc, e.g. degC)
+                                                  !! in the same arbitrary units as Tl and Ti [A ~> a]
   real, dimension(nk),        intent(inout) :: aR !< Right edge value of tracer (conc, e.g. degC)
+                                                  !! in the same arbitrary units as Tl and Ti [A ~> a]
 
   integer :: k
   ! Setup reconstruction edge values
@@ -2411,13 +2512,13 @@ logical function ndiff_unit_tests_continuous(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   integer, parameter         :: nk = 4
-  real, dimension(nk+1)      :: Tio           ! Test interface temperatures
-  real, dimension(2*nk+2)    :: PiLRo, PiRLo  ! Test positions
+  real, dimension(nk+1)      :: Tio           ! Test interface temperatures [degC]
+  real, dimension(2*nk+2)    :: PiLRo, PiRLo  ! Fractional test positions [nondim]
   integer, dimension(2*nk+2) :: KoL, KoR      ! Test indexes
-  real, dimension(2*nk+1)    :: hEff          ! Test positions
-  real, dimension(2*nk+1)    :: Flx           ! Test flux
+  real, dimension(2*nk+1)    :: hEff          ! Test positions in arbitrary units [arbitrary]
+  real, dimension(2*nk+1)    :: Flx           ! Test flux in the arbitrary units of hEff times [degC]
   logical :: v
-  real :: h_neglect
+  real :: h_neglect  ! A negligible thickness in arbitrary units [arbitrary]
 
   h_neglect = 1.0e-30
 
@@ -2674,12 +2775,16 @@ logical function ndiff_unit_tests_discontinuous(verbose)
   integer, parameter          :: nk = 3
   integer, parameter          :: ns = nk*4
   real, dimension(nk)         :: Sl, Sr    ! Salinities [ppt] and temperatures [degC]
-  real, dimension(nk)         :: hl, hr    ! Thicknesses in pressure units [R L2 T-2 ~> Pa]
+  real, dimension(nk)         :: hl, hr    ! Thicknesses in pressure units [R L2 T-2 ~> Pa] or other
+                                           ! arbitrary units [arbitrary]
   real, dimension(nk,2)       :: TiL, SiL, TiR, SiR ! Cell edge salinities [ppt] and temperatures [degC]
   real, dimension(nk,2)       :: Pres_l, Pres_r ! Interface pressures [R L2 T-2 ~> Pa]
-  integer, dimension(ns)      :: KoL, KoR
-  real, dimension(ns)         :: PoL, PoR
-  real, dimension(ns-1)       :: hEff
+  integer, dimension(ns)      :: KoL, KoR  ! Index of the layer where the interface is found in the
+                                           ! left and right columns
+  real, dimension(ns)         :: PoL, PoR  ! Fractional position of neutral surface within layer KoL
+                                           ! of the left column or KoR of the right column [nondim]
+  real, dimension(ns-1)       :: hEff      ! Effective thickness between two neutral surfaces
+                                           ! in the same units as hl and hr [arbitrary]
   type(neutral_diffusion_CS)  :: CS        !< Neutral diffusion control structure
   real, dimension(nk,2)       :: ppoly_T_l, ppoly_T_r ! Linear reconstruction for T [degC]
   real, dimension(nk,2)       :: ppoly_S_l, ppoly_S_r ! Linear reconstruction for S [ppt]
@@ -2921,15 +3026,15 @@ logical function test_fv_diff(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, ti
   real,             intent(in) :: hkm1  !< Left cell width [nondim]
   real,             intent(in) :: hk    !< Center cell width [nondim]
   real,             intent(in) :: hkp1  !< Right cell width [nondim]
-  real,             intent(in) :: Skm1  !< Left cell average value
-  real,             intent(in) :: Sk    !< Center cell average value
-  real,             intent(in) :: Skp1  !< Right cell average value
-  real,             intent(in) :: Ptrue !< True answer [nondim]
+  real,             intent(in) :: Skm1  !< Left cell average value in arbitrary units [arbitrary]
+  real,             intent(in) :: Sk    !< Center cell average value in arbitrary units [arbitrary]
+  real,             intent(in) :: Skp1  !< Right cell average value in arbitrary units [arbitrary]
+  real,             intent(in) :: Ptrue !< True answer in arbitrary units [arbitrary]
   character(len=*), intent(in) :: title !< Title for messages
 
   ! Local variables
   integer :: stdunit
-  real :: Pret
+  real :: Pret ! Returned normalized gradient in arbitrary units [arbitrary]
 
   Pret = fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   test_fv_diff = (Pret /= Ptrue)
@@ -2950,18 +3055,18 @@ end function test_fv_diff
 !> Returns true if a test of fvlsq_slope() fails, and conditionally writes results to stream
 logical function test_fvlsq_slope(verbose, hkm1, hk, hkp1, Skm1, Sk, Skp1, Ptrue, title)
   logical,          intent(in) :: verbose !< If true, write results to stdout
-  real,             intent(in) :: hkm1  !< Left cell width
-  real,             intent(in) :: hk    !< Center cell width
-  real,             intent(in) :: hkp1  !< Right cell width
-  real,             intent(in) :: Skm1  !< Left cell average value
-  real,             intent(in) :: Sk    !< Center cell average value
-  real,             intent(in) :: Skp1  !< Right cell average value
-  real,             intent(in) :: Ptrue !< True answer
+  real,             intent(in) :: hkm1  !< Left cell width in arbitrary units [B ~> b]
+  real,             intent(in) :: hk    !< Center cell width in arbitrary units [B ~> b]
+  real,             intent(in) :: hkp1  !< Right cell width in arbitrary units [B ~> b]
+  real,             intent(in) :: Skm1  !< Left cell average value in arbitrary units [A ~> a]
+  real,             intent(in) :: Sk    !< Center cell average value in arbitrary units [A ~> a]
+  real,             intent(in) :: Skp1  !< Right cell average value in arbitrary units [A ~> a]
+  real,             intent(in) :: Ptrue !< True answer in arbitrary units [A B-1 ~> a b-1]
   character(len=*), intent(in) :: title !< Title for messages
 
   ! Local variables
   integer :: stdunit
-  real :: Pret
+  real :: Pret  ! Returned slope value [A B-1 ~> a b-1]
 
   Pret = fvlsq_slope(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   test_fvlsq_slope = (Pret /= Ptrue)
@@ -2991,7 +3096,7 @@ logical function test_ifndp(verbose, rhoNeg, Pneg, rhoPos, Ppos, Ptrue, title)
 
   ! Local variables
   integer :: stdunit
-  real :: Pret
+  real :: Pret ! Interpolated fractional position [nondim]
 
   Pret = interpolate_for_nondim_position(rhoNeg, Pneg, rhoPos, Ppos)
   test_ifndp = (Pret /= Ptrue)
@@ -3015,8 +3120,8 @@ end function test_ifndp
 logical function test_data1d(verbose, nk, Po, Ptrue, title)
   logical,             intent(in) :: verbose !< If true, write results to stdout
   integer,             intent(in) :: nk    !< Number of layers
-  real, dimension(nk), intent(in) :: Po    !< Calculated answer
-  real, dimension(nk), intent(in) :: Ptrue !< True answer
+  real, dimension(nk), intent(in) :: Po    !< Calculated answer [arbitrary]
+  real, dimension(nk), intent(in) :: Ptrue !< True answer [arbitrary]
   character(len=*),    intent(in) :: title !< Title for messages
 
   ! Local variables
@@ -3050,8 +3155,8 @@ end function test_data1d
 logical function test_data1di(verbose, nk, Po, Ptrue, title)
   logical,                intent(in) :: verbose !< If true, write results to stdout
   integer,                intent(in) :: nk    !< Number of layers
-  integer, dimension(nk), intent(in) :: Po    !< Calculated answer
-  integer, dimension(nk), intent(in) :: Ptrue !< True answer
+  integer, dimension(nk), intent(in) :: Po    !< Calculated answer [arbitrary]
+  integer, dimension(nk), intent(in) :: Ptrue !< True answer [arbitrary]
   character(len=*),       intent(in) :: title !< Title for messages
 
   ! Local variables
@@ -3086,14 +3191,16 @@ logical function test_nsp(verbose, ns, KoL, KoR, pL, pR, hEff, KoL0, KoR0, pL0, 
   integer,                intent(in) :: ns    !< Number of surfaces
   integer, dimension(ns), intent(in) :: KoL   !< Index of first left interface above neutral surface
   integer, dimension(ns), intent(in) :: KoR   !< Index of first right interface above neutral surface
-  real, dimension(ns),    intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
-  real, dimension(ns),    intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
+  real, dimension(ns),    intent(in) :: pL    !< Fractional position of neutral surface within layer
+                                              !! KoL of left column [nondim]
+  real, dimension(ns),    intent(in) :: pR    !< Fractional position of neutral surface within layer
+                                              !! KoR of right column [nondim]
   real, dimension(ns-1),  intent(in) :: hEff  !< Effective thickness between two neutral surfaces [R L2 T-2 ~> Pa]
   integer, dimension(ns), intent(in) :: KoL0  !< Correct value for KoL
   integer, dimension(ns), intent(in) :: KoR0  !< Correct value for KoR
-  real, dimension(ns),    intent(in) :: pL0   !< Correct value for pL
-  real, dimension(ns),    intent(in) :: pR0   !< Correct value for pR
-  real, dimension(ns-1),  intent(in) :: hEff0 !< Correct value for hEff
+  real, dimension(ns),    intent(in) :: pL0   !< Correct value for pL [nondim]
+  real, dimension(ns),    intent(in) :: pR0   !< Correct value for pR [nondim]
+  real, dimension(ns-1),  intent(in) :: hEff0 !< Correct value for hEff [R L2 T-2 ~> Pa]
   character(len=*),       intent(in) :: title !< Title for messages
 
   ! Local variables
@@ -3138,12 +3245,12 @@ end function test_nsp
 logical function compare_nsp_row(KoL, KoR, pL, pR, KoL0, KoR0, pL0, pR0)
   integer,  intent(in) :: KoL   !< Index of first left interface above neutral surface
   integer,  intent(in) :: KoR   !< Index of first right interface above neutral surface
-  real,     intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column
-  real,     intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column
+  real,     intent(in) :: pL    !< Fractional position of neutral surface within layer KoL of left column [nondim]
+  real,     intent(in) :: pR    !< Fractional position of neutral surface within layer KoR of right column [nondim]
   integer,  intent(in) :: KoL0  !< Correct value for KoL
   integer,  intent(in) :: KoR0  !< Correct value for KoR
-  real,     intent(in) :: pL0   !< Correct value for pL
-  real,     intent(in) :: pR0   !< Correct value for pR
+  real,     intent(in) :: pL0   !< Correct value for pL [nondim]
+  real,     intent(in) :: pR0   !< Correct value for pR [nondim]
 
   compare_nsp_row = .false.
   if (KoL /= KoL0) compare_nsp_row = .true.
@@ -3154,8 +3261,8 @@ end function compare_nsp_row
 
 !> Compares output position from refine_nondim_position with an expected value
 logical function test_rnp(expected_pos, test_pos, title)
-  real,             intent(in) :: expected_pos !< The expected position
-  real,             intent(in) :: test_pos !< The position returned by the code
+  real,             intent(in) :: expected_pos !< The expected position [arbitrary]
+  real,             intent(in) :: test_pos !< The position returned by the code [arbitrary]
   character(len=*), intent(in) :: title    !< A label for this test
   ! Local variables
   integer :: stdunit
@@ -3168,6 +3275,7 @@ logical function test_rnp(expected_pos, test_pos, title)
     write(stdunit,'(A, f20.16, " ==  ", f20.16)') title, expected_pos, test_pos
   endif
 end function test_rnp
+
 !> Deallocates neutral_diffusion control structure
 subroutine neutral_diffusion_end(CS)
   type(neutral_diffusion_CS), pointer :: CS  !< Neutral diffusion control structure

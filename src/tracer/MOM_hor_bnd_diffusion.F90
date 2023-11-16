@@ -32,7 +32,7 @@ public near_boundary_unit_tests, hor_bnd_diffusion, hor_bnd_diffusion_init
 public boundary_k_range, hor_bnd_diffusion_end
 
 ! Private parameters to avoid doing string comparisons for bottom or top boundary layer
-integer, public, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface bopundary
+integer, public, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface boundary
 integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to the bottom boundary
 #include <MOM_memory.h>
 
@@ -53,7 +53,7 @@ type, public :: hbd_CS ; private
                              !! Angstrom or larger without changing it at the bit level [H ~> m or kg m-2].
                              !! If Angstrom is 0 or exceedingly small, this is negligible compared to 1e-17 m.
   ! HBD dynamic grids
-  real,    allocatable, dimension(:,:,:) :: hbd_grd_u   !< HBD thicknesses at t-points adjecent to
+  real,    allocatable, dimension(:,:,:) :: hbd_grd_u   !< HBD thicknesses at t-points adjacent to
                                                           !! u-points                     [H ~> m or kg m-2]
   real,    allocatable, dimension(:,:,:) :: hbd_grd_v   !< HBD thicknesses at t-points adjacent to
                                                           !! v-points (left and right)    [H ~> m or kg m-2]
@@ -182,11 +182,19 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
                                                             !! [conc H L2 ~> conc m3 or conc kg]
   real, dimension(SZI_(G),SZJB_(G))          :: vwork_2d    !< Layer summed v-flux transport
                                                             !! [conc H L2 ~> conc m3 or conc kg]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tendency    !< tendency array for diagnostic [conc T-1 ~> conc s-1]
-  real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d !< depth integrated content tendency for diagn
-  type(tracer_type), pointer                 :: tracer => NULL() !< Pointer to the current tracer
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tendency    !< tendency array for diagnostics at first in
+                                                            !! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1],
+                                                            !! then converted to [conc T-1 ~> conc s-1].
+                                                            ! For temperature these units are
+                                                            ! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1] and
+                                                            ! then [C T-1 ~> degC s-1].
+  real, dimension(SZI_(G),SZJ_(G))           :: tendency_2d !< depth integrated content tendency for diagnostics in
+                                                            !! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1].
+                                                            !! For temperature these units are
+                                                            !! [C H T-1 ~> degC m s-1 or degC kg m-2 s-1].
+  type(tracer_type), pointer                 :: tracer => NULL() !< Pointer to the current tracer [conc]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: tracer_old  !< local copy of the initial tracer concentration,
-                                                            !! only used to compute tendencies.
+                                                            !! only used to compute tendencies [conc].
   real :: tracer_int_prev !< Globally integrated tracer before HBD is applied, in mks units [conc kg]
   real :: tracer_int_end  !< Integrated tracer after HBD is applied, in mks units [conc kg]
   real    :: Idt          !< inverse of the time step [T-1 ~> s-1]
@@ -323,7 +331,7 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
 
 end subroutine hor_bnd_diffusion
 
-!> Build the HBD grid where tracers will be rammaped to.
+!> Build the HBD grid where tracers will be remapped to.
 subroutine hbd_grid(boundary, G, GV, hbl, h, CS)
   integer,                 intent(in   ) :: boundary !< Which boundary layer SURFACE or BOTTOM       [nondim]
   type(ocean_grid_type),   intent(inout) :: G    !< Grid type
@@ -393,8 +401,8 @@ end subroutine hbd_grid
 !> Calculate the harmonic mean of two quantities
 !! See \ref section_harmonic_mean.
 real function harmonic_mean(h1,h2)
-  real :: h1 !< Scalar quantity
-  real :: h2 !< Scalar quantity
+  real :: h1 !< Scalar quantity [arbitrary]
+  real :: h2 !< Scalar quantity [arbitrary]
   if (h1 + h2 == 0.) then
     harmonic_mean = 0.
   else
@@ -407,10 +415,10 @@ end function harmonic_mean
 integer function  find_minimum(x, s, e)
   integer, intent(in) :: s              !< start index
   integer, intent(in) :: e              !< end index
-  real, dimension(e), intent(in) :: x   !< 1D array to be checked
+  real, dimension(e), intent(in) :: x   !< 1D array to be checked [arbitrary]
 
   ! local variables
-  real :: minimum
+  real :: minimum ! Minimum value in the same units as x [arbitrary]
   integer :: location
   integer :: i
 
@@ -427,11 +435,11 @@ end function  find_minimum
 
 !> Swaps the values of its two formal arguments.
 subroutine swap(a, b)
-  real, intent(inout) :: a  !< First value to be swaped
-  real, intent(inout) :: b  !< Second value to be swaped
+  real, intent(inout) :: a  !< First value to be swapped [arbitrary]
+  real, intent(inout) :: b  !< Second value to be swapped [arbitrary]
 
   ! local variables
-  real :: tmp
+  real :: tmp ! A temporary copy of a [arbitrary]
 
   tmp = a
   a = b
@@ -440,8 +448,8 @@ end subroutine swap
 
 !> Receives a 1D array x and sorts it into ascending order.
 subroutine sort(x, n)
-  integer,             intent(in   ) :: n        !< # of pts in the array
-  real, dimension(n),  intent(inout) :: x        !< 1D array to be sorted
+  integer,             intent(in   ) :: n        !< Number of points in the array
+  real, dimension(n),  intent(inout) :: x        !< 1D array to be sorted [arbitrary]
 
   ! local variables
   integer :: i, location
@@ -454,15 +462,15 @@ end subroutine sort
 
 !> Returns the unique values in a 1D array.
 subroutine unique(val, n, val_unique, val_max)
-  integer,                         intent(in   ) :: n          !< # of pts in the array.
-  real, dimension(n),              intent(in   ) :: val        !< 1D array to be checked.
-  real, dimension(:), allocatable, intent(inout) :: val_unique !< Returned 1D array with unique values.
+  integer,                         intent(in   ) :: n          !< Number of points in the array.
+  real, dimension(n),              intent(in   ) :: val        !< 1D array to be checked [arbitrary]
+  real, dimension(:), allocatable, intent(inout) :: val_unique !< Returned 1D array with unique values [arbitrary]
   real,                  optional, intent(in   ) :: val_max    !< sets the maximum value in val_unique to
-                                                               !! this value.
+                                                               !! this value [arbitrary]
   ! local variables
-  real, dimension(n) :: tmp
+  real, dimension(n) :: tmp ! The list of unique values [arbitrary]
   integer :: i, j, ii
-  real :: min_val, max_val
+  real :: min_val, max_val ! The minimum and maximum values in the list [arbitrary]
   logical :: limit
 
   limit = .false.
@@ -510,12 +518,14 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
 
   ! Local variables
   integer                         :: n           !< Number of layers in eta_all
-  real, dimension(nk+1)           :: eta_L, eta_R!< Interfaces in the left and right coloumns
-  real, dimension(:), allocatable :: eta_all     !< Combined interfaces in the left/right columns + hbl_L and hbl_R
-  real, dimension(:), allocatable :: eta_unique  !< Combined interfaces (eta_L, eta_R), possibly hbl_L and hbl_R
-  real                            :: min_depth   !< Minimum depth
-  real                            :: max_depth   !< Maximum depth
-  real                            :: max_bld     !< Deepest BLD
+  real, dimension(nk+1)           :: eta_L, eta_R!< Interfaces in the left and right columns [H ~> m or kg m-2]
+  real, dimension(:), allocatable :: eta_all     !< Combined list of interfaces in the left and right columns
+                                                 !! plus hbl_L and hbl_R [H ~> m or kg m-2]
+  real, dimension(:), allocatable :: eta_unique  !< Combined list of unique interfaces (eta_L, eta_R), possibly
+                                                 !! hbl_L and hbl_R [H ~> m or kg m-2]
+  real                            :: min_depth   !< Minimum depth [H ~> m or kg m-2]
+  real                            :: max_depth   !< Maximum depth [H ~> m or kg m-2]
+  real                            :: max_bld     !< Deepest BLD [H ~> m or kg m-2]
   integer :: k, kk, nk1                          !< loop indices (k and kk) and array size (nk1)
 
   n = (2*nk)+3
@@ -564,7 +574,7 @@ subroutine flux_limiter(F_layer, area_L, area_R, phi_L, phi_R, h_L, h_R)
   real, intent(in) :: phi_R      !< Tracer concentration in the right cell [conc]
 
   ! local variables
-  real :: F_max !< maximum flux allowed
+  real :: F_max !< maximum flux allowed [conc H L2 ~> conc m3 or conc kg]
   ! limit the flux to 0.2 of the tracer *gradient*
   ! Why 0.2?
   !  t=0         t=inf
@@ -723,7 +733,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   ! thicknesses at velocity points & khtr_u at layer centers
   do k = 1,ke
     h_vel(k)   = harmonic_mean(h_L(k), h_R(k))
-    ! GMM, writting 0.5 * (A(k) + A(k+1)) as A(k) + 0.5 * (A(k+1) - A(k)) to recover
+    ! GMM, writing 0.5 * (A(k) + A(k+1)) as A(k) + 0.5 * (A(k+1) - A(k)) to recover
     ! answers with depth-independent khtr
     khtr_ul(k) = khtr_u(k) + 0.5 * (khtr_u(k+1) - khtr_u(k))
   enddo
@@ -741,7 +751,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
     k_bot_max = MAX(k_bot_L, k_bot_R)
     k_bot_diff = (k_bot_max - k_bot_min)
 
-    ! tracer flux where the minimum BLD intersets layer
+    ! tracer flux where the minimum BLD intersects layer
     if ((CS%linear) .and. (k_bot_diff > 1)) then
       ! apply linear decay at the base of hbl
       do k = k_bot_min,1,-1
@@ -815,7 +825,7 @@ logical function near_boundary_unit_tests( verbose )
   ! Local variables
   integer, parameter    :: nk = 2               ! Number of layers
   real, dimension(nk+1) :: eta1                 ! Updated interfaces with one extra value           [m]
-  real, dimension(:), allocatable :: h1         ! Upates layer thicknesses                          [m]
+  real, dimension(:), allocatable :: h1         ! Updated list of layer thicknesses or other field  [m] or [arbitrary]
   real, dimension(nk)   :: phi_L, phi_R         ! Tracer values (left and right column)             [conc]
   real, dimension(nk)   :: h_L, h_R             ! Layer thickness (left and right)                  [m]
   real, dimension(nk+1) :: khtr_u               ! Horizontal diffusivities at U-point and interfaces[m2 s-1]
@@ -823,9 +833,9 @@ logical function near_boundary_unit_tests( verbose )
   real, dimension(nk)   :: F_layer              ! Diffusive flux within each layer at U-point       [conc m3 s-1]
   character(len=120)    :: test_name            ! Title of the unit test
   integer               :: k_top                ! Index of cell containing top of boundary
-  real                  :: zeta_top             ! Nondimension position                             [nondim]
+  real                  :: zeta_top             ! Fractional position in the cell of the top        [nondim]
   integer               :: k_bot                ! Index of cell containing bottom of boundary
-  real                  :: zeta_bot             ! Nondimension position                             [nondim]
+  real                  :: zeta_bot             ! Fractional position in the cell of the bottom     [nondim]
   type(hbd_CS), pointer :: CS
 
   allocate(CS)
@@ -1058,8 +1068,8 @@ logical function test_layer_fluxes(verbose, nk, test_name, F_calc, F_ans)
   logical,                    intent(in) :: verbose   !< If true, write results to stdout
   character(len=80),          intent(in) :: test_name !< Brief description of the unit test
   integer,                    intent(in) :: nk        !< Number of layers
-  real, dimension(nk),        intent(in) :: F_calc    !< Fluxes of the unitless tracer from the algorithm [s^-1]
-  real, dimension(nk),        intent(in) :: F_ans     !< Fluxes of the unitless tracer calculated by hand [s^-1]
+  real, dimension(nk),        intent(in) :: F_calc    !< Fluxes or other quantity from the algorithm [arbitrary]
+  real, dimension(nk),        intent(in) :: F_ans     !< Expected value calculated by hand [arbitrary]
   ! Local variables
   integer :: k
 
@@ -1081,13 +1091,13 @@ end function test_layer_fluxes
 logical function test_boundary_k_range(k_top, zeta_top, k_bot, zeta_bot, k_top_ans, zeta_top_ans,&
                                        k_bot_ans, zeta_bot_ans, test_name, verbose)
   integer :: k_top               !< Index of cell containing top of boundary
-  real    :: zeta_top            !< Nondimension position
+  real    :: zeta_top            !< Fractional position in the cell of the top boundary [nondim]
   integer :: k_bot               !< Index of cell containing bottom of boundary
-  real    :: zeta_bot            !< Nondimension position
-  integer :: k_top_ans           !< Index of cell containing top of boundary
-  real    :: zeta_top_ans        !< Nondimension position
-  integer :: k_bot_ans           !< Index of cell containing bottom of boundary
-  real    :: zeta_bot_ans        !< Nondimension position
+  real    :: zeta_bot            !< Fractional position in the cell of the bottom boundary [nondim]
+  integer :: k_top_ans           !< Expected index of cell containing top of boundary
+  real    :: zeta_top_ans        !< Expected fractional position of the top boundary [nondim]
+  integer :: k_bot_ans           !< Expected index of cell containing bottom of boundary
+  real    :: zeta_bot_ans        !< Expected fractional position of the bottom boundary [nondim]
   character(len=80) :: test_name !< Name of the unit test
   logical :: verbose             !< If true always print output
 
