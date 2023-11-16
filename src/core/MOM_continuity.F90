@@ -7,6 +7,7 @@ use MOM_continuity_PPM, only : continuity=>continuity_PPM
 use MOM_continuity_PPM, only : continuity_stencil=>continuity_PPM_stencil
 use MOM_continuity_PPM, only : continuity_init=>continuity_PPM_init
 use MOM_continuity_PPM, only : continuity_CS=>continuity_PPM_CS
+use MOM_continuity_PPM, only : zonal_edge_thickness, meridional_edge_thickness
 use MOM_continuity_PPM, only : zonal_mass_flux, meridional_mass_flux
 use MOM_diag_mediator, only : time_type
 use MOM_grid, only : ocean_grid_type
@@ -56,9 +57,17 @@ subroutine continuity_3d_fluxes(u, v, h, uh, vh, dt, G, GV, US, CS, OBC, pbv)
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundaries control structure.
   type(porous_barrier_type), intent(in)  :: pbv !< porous barrier fractional cell metrics
 
-    call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU)
+  ! Local variables
+  real :: h_W(SZI_(G),SZJ_(G),SZK_(GV)) ! West edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
+  real :: h_E(SZI_(G),SZJ_(G),SZK_(GV)) ! East edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
+  real :: h_S(SZI_(G),SZJ_(G),SZK_(GV)) ! South edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
+  real :: h_N(SZI_(G),SZJ_(G),SZK_(GV)) ! North edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
 
-    call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV)
+  call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC)
+  call zonal_mass_flux(u, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU)
+
+  call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC)
+  call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV)
 
 end subroutine continuity_3d_fluxes
 
@@ -88,18 +97,22 @@ subroutine continuity_2d_fluxes(u, v, h, uhbt, vhbt, dt, G, GV, US, CS, OBC, pbv
   type(porous_barrier_type), intent(in)  :: pbv !< porous barrier fractional cell metrics
 
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uh  ! Thickness fluxes through zonal faces,
-                                                    ! u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vh  ! Thickness fluxes through meridional faces,
-                                                    ! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: h_W(SZI_(G),SZJ_(G),SZK_(GV)) ! West edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
+  real :: h_E(SZI_(G),SZJ_(G),SZK_(GV)) ! East edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
+  real :: h_S(SZI_(G),SZJ_(G),SZK_(GV)) ! South edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
+  real :: h_N(SZI_(G),SZJ_(G),SZK_(GV)) ! North edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
+  real :: uh(SZIB_(G),SZJ_(G),SZK_(GV)) ! Thickness fluxes through zonal faces, u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: vh(SZI_(G),SZJB_(G),SZK_(GV)) ! Thickness fluxes through v-point faces, v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
   integer :: i, j, k
 
   uh(:,:,:) = 0.0
   vh(:,:,:) = 0.0
 
-  call zonal_mass_flux(u, h, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU)
+  call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC)
+  call zonal_mass_flux(u, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU)
 
-  call meridional_mass_flux(v, h, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV)
+  call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC)
+  call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV)
 
   uhbt(:,:) = 0.0
   vhbt(:,:) = 0.0
@@ -167,16 +180,22 @@ subroutine continuity_adjust_vel(u, v, h, dt, G, GV, US, CS, OBC, pbv, uhbt, vhb
                                                 !! u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vh  !< Volume flux through meridional faces =
                                                 !! v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: h_W(SZI_(G),SZJ_(G),SZK_(GV)) ! West edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
+  real :: h_E(SZI_(G),SZJ_(G),SZK_(GV)) ! East edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
+  real :: h_S(SZI_(G),SZJ_(G),SZK_(GV)) ! South edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
+  real :: h_N(SZI_(G),SZJ_(G),SZK_(GV)) ! North edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
 
   ! It might not be necessary to separate the input velocity array from the adjusted velocities,
   ! but it seems safer to do so, even if it might be less efficient.
   u_in(:,:,:) = u(:,:,:)
   v_in(:,:,:) = v(:,:,:)
 
-  call zonal_mass_flux(u_in, h, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
+  call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC)
+  call zonal_mass_flux(u_in, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
                        uhbt=uhbt, visc_rem_u=visc_rem_u, u_cor=u)
 
-  call meridional_mass_flux(v_in, h, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
+  call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC)
+  call meridional_mass_flux(v_in, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                             vhbt=vhbt, visc_rem_v=visc_rem_v, v_cor=v)
 
 end subroutine continuity_adjust_vel
