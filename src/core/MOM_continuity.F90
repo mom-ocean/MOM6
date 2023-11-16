@@ -9,6 +9,7 @@ use MOM_continuity_PPM, only : continuity_init=>continuity_PPM_init
 use MOM_continuity_PPM, only : continuity_CS=>continuity_PPM_CS
 use MOM_continuity_PPM, only : zonal_edge_thickness, meridional_edge_thickness
 use MOM_continuity_PPM, only : zonal_mass_flux, meridional_mass_flux
+use MOM_continuity_PPM, only : zonal_BT_mass_flux, meridional_BT_mass_flux
 use MOM_diag_mediator, only : time_type
 use MOM_grid, only : ocean_grid_type
 use MOM_open_boundary, only : ocean_OBC_type
@@ -101,29 +102,12 @@ subroutine continuity_2d_fluxes(u, v, h, uhbt, vhbt, dt, G, GV, US, CS, OBC, pbv
   real :: h_E(SZI_(G),SZJ_(G),SZK_(GV)) ! East edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
   real :: h_S(SZI_(G),SZJ_(G),SZK_(GV)) ! South edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
   real :: h_N(SZI_(G),SZJ_(G),SZK_(GV)) ! North edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
-  real :: uh(SZIB_(G),SZJ_(G),SZK_(GV)) ! Thickness fluxes through zonal faces, u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real :: vh(SZI_(G),SZJB_(G),SZK_(GV)) ! Thickness fluxes through v-point faces, v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
-  integer :: i, j, k
-
-  uh(:,:,:) = 0.0
-  vh(:,:,:) = 0.0
 
   call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC)
-  call zonal_mass_flux(u, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU)
+  call zonal_BT_mass_flux(u, h, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, pbv%por_face_areaU)
 
   call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC)
-  call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV)
-
-  uhbt(:,:) = 0.0
-  vhbt(:,:) = 0.0
-
-  do k=1,GV%ke ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
-    uhbt(I,j) = uhbt(I,j) + uh(I,j,k)
-  enddo ; enddo ; enddo
-
-  do k=1,GV%ke ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
-    vhbt(I,j) = vhbt(I,j) + vh(I,j,k)
-  enddo ; enddo ; enddo
+  call meridional_BT_mass_flux(v, h, h_S, h_N, vhbt, dt, G, GV, US, CS, OBC, pbv%por_face_areaV)
 
 end subroutine continuity_2d_fluxes
 

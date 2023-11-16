@@ -22,6 +22,7 @@ public continuity_PPM, continuity_PPM_init, continuity_PPM_stencil
 public zonal_mass_flux, meridional_mass_flux
 public zonal_flux_thickness, meridional_flux_thickness
 public zonal_edge_thickness, meridional_edge_thickness
+public zonal_BT_mass_flux, meridional_BT_mass_flux
 public set_continuity_loop_bounds
 
 !>@{ CPU time clock IDs
@@ -609,6 +610,80 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   endif ; endif
 
 end subroutine zonal_mass_flux
+
+
+!> Calculates the vertically integrated mass or volume fluxes through the zonal faces.
+subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, por_face_areaU, LB_in)
+  type(ocean_grid_type),                      intent(in)  :: G    !< Ocean's grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: u    !< Zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_in !< Layer thickness used to
+                                                                  !! calculate fluxes [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_W  !< Western edge thickness in the PPM
+                                                                  !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_E  !< Eastern edge thickness in the PPM
+                                                                  !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G)),          intent(out) :: uhbt !< The summed volume flux through zonal
+                                                                  !! faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real,                                       intent(in)  :: dt   !< Time increment [T ~> s].
+  type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
+  type(continuity_PPM_CS),                    intent(in)  :: CS   !< This module's control structure.G
+  type(ocean_OBC_type),                       pointer     :: OBC  !< Open boundary condition type
+                                                                  !! specifies whether, where, and what
+                                                                  !! open boundary conditions are used.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)),  intent(in)  :: por_face_areaU !< fractional open area of U-faces [nondim]
+  type(cont_loop_bounds_type),      optional, intent(in)  :: LB_in !< Loop bounds structure.
+
+  ! Local variables
+  real :: uh(SZIB_(G))      ! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: duhdu(SZIB_(G))   ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
+  logical, dimension(SZIB_(G)) :: do_I
+  real :: ones(SZIB_(G))    ! An array of 1's [nondim]
+  type(cont_loop_bounds_type) :: LB
+  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  logical :: local_specified_BC, OBC_in_row
+
+  local_specified_BC = .false.
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    local_specified_BC = OBC%specified_v_BCs_exist_globally
+  endif ; endif
+
+  if (present(LB_in)) then
+    LB = LB_in
+  else
+    LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
+  endif
+  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
+
+  call cpu_clock_begin(id_clock_correct)
+  ones(:) = 1.0 ; do_I(:) = .true.
+
+  uhbt(:,:) = 0.0
+  !$OMP parallel do default(shared) private(uh,duhdu,OBC_in_row)
+  do j=jsh,jeh
+    ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
+    OBC_in_row = .false.
+    if (local_specified_BC) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+      if (OBC%segment(OBC%segnum_u(I,j))%specified) OBC_in_row = .true.
+    endif ; enddo ; endif
+    do k=1,nz
+      ! This sets uh and duhdu.
+      call zonal_flux_layer(u(:,j,k), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh, duhdu, ones, &
+                            dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k), OBC)
+      if (OBC_in_row) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+        if (OBC%segment(OBC%segnum_u(I,j))%specified) uh(I) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+      endif ; enddo ; endif
+
+      ! Accumulate the barotropic transport.
+      do I=ish-1,ieh
+        uhbt(I,j) = uhbt(I,j) + uh(I)
+      enddo
+    enddo ! k-loop
+  enddo ! j-loop
+  call cpu_clock_end(id_clock_correct)
+
+end subroutine zonal_BT_mass_flux
+
 
 !> Evaluates the zonal mass or volume fluxes in a layer.
 subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, j, &
@@ -1421,6 +1496,80 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   endif ; endif
 
 end subroutine meridional_mass_flux
+
+
+!> Calculates the vertically integrated mass or volume fluxes through the meridional faces.
+subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, OBC, por_face_areaV, LB_in)
+  type(ocean_grid_type),                      intent(in)  :: G    !< Ocean's grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v    !< Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_in !< Layer thickness used to
+                                                                  !! calculate fluxes [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_S  !< Southern edge thickness in the PPM
+                                                                  !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_N  !< Northern edge thickness in the PPM
+                                                                  !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJB_(G)),          intent(out) :: vhbt !< The summed volume flux through meridional
+                                                                  !! faces [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real,                                       intent(in)  :: dt   !< Time increment [T ~> s].
+  type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
+  type(continuity_PPM_CS),                    intent(in)  :: CS   !< This module's control structure.G
+  type(ocean_OBC_type),                       pointer     :: OBC  !< Open boundary condition type
+                                                                  !! specifies whether, where, and what
+                                                                  !! open boundary conditions are used.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: por_face_areaV !< fractional open area of V-faces [nondim]
+  type(cont_loop_bounds_type),      optional, intent(in)  :: LB_in !< Loop bounds structure.
+
+  ! Local variables
+  real :: vh(SZI_(G))      ! Volume flux through meridional faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real ::  dvhdv(SZI_(G))  ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
+  logical, dimension(SZI_(G)) :: do_I
+  real :: ones(SZI_(G))    ! An array of 1's [nondim]
+  type(cont_loop_bounds_type) :: LB
+  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  logical :: local_specified_BC, OBC_in_row
+
+  local_specified_BC = .false.
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    local_specified_BC = OBC%specified_v_BCs_exist_globally
+  endif ; endif
+
+  if (present(LB_in)) then
+    LB = LB_in
+  else
+    LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
+  endif
+  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
+
+  call cpu_clock_begin(id_clock_correct)
+  ones(:) = 1.0 ; do_I(:) = .true.
+
+  vhbt(:,:) = 0.0
+  !$OMP parallel do default(shared) private(vh,dvhdv,OBC_in_row)
+  do J=jsh-1,jeh
+    ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
+    OBC_in_row = .false.
+    if (local_specified_BC) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+      if (OBC%segment(OBC%segnum_v(i,J))%specified) OBC_in_row = .true.
+    endif ; enddo ; endif
+    do k=1,nz
+      ! This sets vh and dvhdv.
+      call merid_flux_layer(v(:,J,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh, dvhdv, ones, &
+                            dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
+      if (OBC_in_row) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+        if (OBC%segment(OBC%segnum_v(i,J))%specified) vh(i) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
+      endif ; enddo ; endif
+
+      ! Accumulate the barotropic transport.
+      do i=ish,ieh
+        vhbt(i,J) = vhbt(i,J) + vh(i)
+      enddo
+    enddo ! k-loop
+  enddo ! j-loop
+  call cpu_clock_end(id_clock_correct)
+
+end subroutine meridional_BT_mass_flux
+
 
 !> Evaluates the meridional mass or volume fluxes in a layer.
 subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, US, J, &
