@@ -20,13 +20,14 @@ implicit none ; private
 
 public continuity_PPM, continuity_PPM_init, continuity_PPM_stencil
 public zonal_mass_flux, meridional_mass_flux
-public zonal_flux_thickness, meridional_flux_thickness
 public zonal_edge_thickness, meridional_edge_thickness
+public continuity_zonal_convergence, continuity_merdional_convergence
+public zonal_flux_thickness, meridional_flux_thickness
 public zonal_BT_mass_flux, meridional_BT_mass_flux
 public set_continuity_loop_bounds
 
 !>@{ CPU time clock IDs
-integer :: id_clock_update, id_clock_correct
+integer :: id_clock_reconstruct, id_clock_update, id_clock_correct
 !>@}
 
 !> Control structure for mom_continuity_ppm
@@ -132,12 +133,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   real :: h_S(SZI_(G),SZJ_(G),SZK_(GV)) ! South edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
   real :: h_N(SZI_(G),SZJ_(G),SZK_(GV)) ! North edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
   real :: h_min  ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
-  type(cont_loop_bounds_type) :: LB
-  integer :: is, ie, js, je, nz, stencil
-  integer :: i, j, k
-
+  type(cont_loop_bounds_type) :: LB ! A type indicating the loop range for a phase of the updates
   logical :: x_first
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   h_min = GV%Angstrom_H
 
@@ -150,80 +147,116 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
       "MOM_continuity_PPM: Either both visc_rem_u and visc_rem_v or neither"// &
       " one must be present in call to continuity_PPM.")
 
-  stencil = continuity_PPM_stencil(CS)
-
   if (x_first) then
     !  First advect zonally, with loop bounds that accomodate the subsequent meridional advection.
-    LB = set_continuity_loop_bounds(G, CS, .false., .true.)
-
-    call cpu_clock_begin(id_clock_update)
+    LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.true.)
     call zonal_edge_thickness(hin, h_W, h_E, G, GV, US, CS, OBC, LB)
-    call cpu_clock_end(id_clock_update)
     call zonal_mass_flux(u, hin, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
                          LB, uhbt, visc_rem_u, u_cor, BT_cont)
-
-    call cpu_clock_begin(id_clock_update)
-    !$OMP parallel do default(shared)
-    do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
-  !   Uncomment this line to prevent underflow.
-  !   if (h(i,j,k) < h_min) h(i,j,k) = h_min
-    enddo ; enddo ; enddo
-
-    LB = set_continuity_loop_bounds(G, CS, .false., .false.)
+    call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin)
 
     !  Now advect meridionally, using the updated thicknesses to determine the fluxes.
+    LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
     call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC, LB)
-    call cpu_clock_end(id_clock_update)
-
     call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                               LB, vhbt, visc_rem_v, v_cor, BT_cont)
-
-    call cpu_clock_begin(id_clock_update)
-    !$OMP parallel do default(shared)
-    do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
-  !   This line prevents underflow.
-      if (h(i,j,k) < h_min) h(i,j,k) = h_min
-    enddo ; enddo ; enddo
-    call cpu_clock_end(id_clock_update)
+    call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hmin=h_min)
 
   else  ! .not. x_first
     !  First advect meridionally, with loop bounds that accomodate the subsequent zonal advection.
-    LB = set_continuity_loop_bounds(G, CS, .true., .false.)
-
-    call cpu_clock_begin(id_clock_update)
+    LB = set_continuity_loop_bounds(G, CS, i_stencil=.true., j_stencil=.false.)
     call meridional_edge_thickness(hin, h_S, h_N, G, GV, US, CS, OBC, LB)
-    call cpu_clock_end(id_clock_update)
     call meridional_mass_flux(v, hin, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                               LB, vhbt, visc_rem_v, v_cor, BT_cont)
-
-    call cpu_clock_begin(id_clock_update)
-    !$OMP parallel do default(shared)
-    do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = hin(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k))
-    enddo ; enddo ; enddo
-
-    LB = set_continuity_loop_bounds(G, CS, .false., .false.)
+    call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hin)
 
     !  Now advect zonally, using the updated thicknesses to determine the fluxes.
+    LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
     call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC, LB)
-    call cpu_clock_end(id_clock_update)
     call zonal_mass_flux(u, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
                          LB, uhbt, visc_rem_u, u_cor, BT_cont)
-
-    call cpu_clock_begin(id_clock_update)
-    !$OMP parallel do default(shared)
-    do k=1,nz ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
-      h(i,j,k) = h(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k))
-      ! This line prevents underflow.
-      if (h(i,j,k) < h_min) h(i,j,k) = h_min
-    enddo ; enddo ; enddo
-    call cpu_clock_end(id_clock_update)
-
+    call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hmin=h_min)
   endif
 
 end subroutine continuity_PPM
+
+
+!> Updates the thicknesses due to zonal thickness fluxes.
+subroutine continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin, hmin)
+  type(ocean_grid_type),       intent(in)    :: G    !< Ocean's grid structure
+  type(verticalGrid_type),     intent(in)    :: GV   !< Ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                               intent(inout) :: h    !< Final layer thickness [H ~> m or kg m-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                               intent(in)    :: uh   !< Zonal thickness flux, u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real,                        intent(in)    :: dt   !< Time increment [T ~> s]
+  type(cont_loop_bounds_type), intent(in)    :: LB   !< Loop bounds structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                     optional, intent(in)    :: hin  !< Initial layer thickness [H ~> m or kg m-2].
+                                                     !! If hin is absent, h is also the initial thickness.
+  real,              optional, intent(in)    :: hmin !< The minimum layer thickness [H ~> m or kg m-2]
+
+  real :: h_min  ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
+  integer :: i, j, k
+
+  call cpu_clock_begin(id_clock_update)
+
+  h_min = 0.0 ; if (present(hmin)) h_min = hmin
+
+  if (present(hin)) then
+    !$OMP parallel do default(shared)
+    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+      h(i,j,k) = max( hin(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
+    enddo ; enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+      h(i,j,k) = max( h(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
+    enddo ; enddo ; enddo
+  endif
+
+  call cpu_clock_end(id_clock_update)
+
+end subroutine continuity_zonal_convergence
+
+!> Updates the thicknesses due to meridional thickness fluxes.
+subroutine continuity_merdional_convergence(h, vh, dt, G, GV, LB, hin, hmin)
+  type(ocean_grid_type),       intent(in)    :: G    !< Ocean's grid structure
+  type(verticalGrid_type),     intent(in)    :: GV   !< Ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                               intent(inout) :: h    !< Final layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                               intent(in)    :: vh   !< Meridional thickness flux, v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real,                        intent(in)    :: dt   !< Time increment [T ~> s]
+  type(cont_loop_bounds_type), intent(in)    :: LB   !< Loop bounds structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                     optional, intent(in)    :: hin  !< Initial layer thickness [H ~> m or kg m-2].
+                                                     !! If hin is absent, h is also the initial thickness.
+  real,              optional, intent(in)    :: hmin !< The minimum layer thickness [H ~> m or kg m-2]
+
+  real :: h_min  ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
+  integer :: i, j, k
+
+  call cpu_clock_begin(id_clock_update)
+
+  h_min = 0.0 ; if (present(hmin)) h_min = hmin
+
+  if (present(hin)) then
+    !$OMP parallel do default(shared)
+    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+      h(i,j,k) = max( hin(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k)), h_min )
+    enddo ; enddo ; enddo
+  else
+    !$OMP parallel do default(shared)
+    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+      h(i,j,k) = max( h(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k)), h_min )
+    enddo ; enddo ; enddo
+  endif
+
+  call cpu_clock_end(id_clock_update)
+
+end subroutine continuity_merdional_convergence
+
 
 !> Set the reconstructed thicknesses at the eastern and western edges of tracer cells.
 subroutine zonal_edge_thickness(h_in, h_W, h_E, G, GV, US, CS, OBC, LB_in)
@@ -245,6 +278,8 @@ subroutine zonal_edge_thickness(h_in, h_W, h_E, G, GV, US, CS, OBC, LB_in)
   type(cont_loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
 
+  call cpu_clock_begin(id_clock_reconstruct)
+
   if (present(LB_in)) then
     LB = LB_in
   else
@@ -264,6 +299,8 @@ subroutine zonal_edge_thickness(h_in, h_W, h_E, G, GV, US, CS, OBC, LB_in)
                                 2.0*GV%Angstrom_H, CS%monotonic, CS%simple_2nd, OBC)
     enddo
   endif
+
+  call cpu_clock_end(id_clock_reconstruct)
 
 end subroutine zonal_edge_thickness
 
@@ -288,6 +325,8 @@ subroutine meridional_edge_thickness(h_in, h_S, h_N, G, GV, US, CS, OBC, LB_in)
   type(cont_loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
 
+  call cpu_clock_begin(id_clock_reconstruct)
+
   if (present(LB_in)) then
     LB = LB_in
   else
@@ -307,6 +346,8 @@ subroutine meridional_edge_thickness(h_in, h_S, h_N, G, GV, US, CS, OBC, LB_in)
                                 2.0*GV%Angstrom_H, CS%monotonic, CS%simple_2nd, OBC)
     enddo
   endif
+
+  call cpu_clock_end(id_clock_reconstruct)
 
 end subroutine meridional_edge_thickness
 
@@ -377,6 +418,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, local_open_BC, is_simple
 
+  call cpu_clock_begin(id_clock_correct)
+
   use_visc_rem = present(visc_rem_u)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
   local_open_BC = .false.
@@ -398,7 +441,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   I_dt = 1.0 / dt
   if (CS%aggress_adjust) CFL_dt = I_dt
 
-  call cpu_clock_begin(id_clock_correct)
   if (.not.use_visc_rem) visc_rem(:,:) = 1.0
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,u,h_in,h_W,h_E,use_visc_rem,visc_rem_u,  &
 !$OMP                                  uh,dt,US,G,GV,CS,local_specified_BC,OBC,uhbt,set_BT_cont,    &
@@ -597,7 +639,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       endif
     enddo
   endif
-  call cpu_clock_end(id_clock_correct)
 
   if  (set_BT_cont) then ; if (allocated(BT_cont%h_u)) then
     if (present(u_cor)) then
@@ -608,6 +649,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                                 CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     endif
   endif ; endif
+
+  call cpu_clock_end(id_clock_correct)
 
 end subroutine zonal_mass_flux
 
@@ -639,9 +682,10 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   real :: duhdu(SZIB_(G))   ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
   logical, dimension(SZIB_(G)) :: do_I
   real :: ones(SZIB_(G))    ! An array of 1's [nondim]
-  type(cont_loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: local_specified_BC, OBC_in_row
+
+  call cpu_clock_begin(id_clock_correct)
 
   local_specified_BC = .false.
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
@@ -649,13 +693,11 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   endif ; endif
 
   if (present(LB_in)) then
-    LB = LB_in
+    ish = LB_in%ish ; ieh = LB_in%ieh ; jsh = LB_in%jsh ; jeh = LB_in%jeh ; nz = GV%ke
   else
-    LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
+    ish = G%isc ; ieh = G%iec ; jsh = G%jsc ; jeh = G%jec ; nz = GV%ke
   endif
-  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
-  call cpu_clock_begin(id_clock_correct)
   ones(:) = 1.0 ; do_I(:) = .true.
 
   uhbt(:,:) = 0.0
@@ -1265,6 +1307,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
   logical :: local_Flather_OBC, is_simple, local_open_BC
 
+  call cpu_clock_begin(id_clock_correct)
+
   use_visc_rem = present(visc_rem_v)
   local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
   local_open_BC = .false.
@@ -1286,7 +1330,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   I_dt = 1.0 / dt
   if (CS%aggress_adjust) CFL_dt = I_dt
 
-  call cpu_clock_begin(id_clock_correct)
   if (.not.use_visc_rem) visc_rem(:,:) = 1.0
 !$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,v,h_in,h_S,h_N,vh,use_visc_rem, &
 !$OMP                                  visc_rem_v,dt,US,G,GV,CS,local_specified_BC,OBC,vhbt, &
@@ -1483,7 +1526,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       endif
     enddo
   endif
-  call cpu_clock_end(id_clock_correct)
 
   if (set_BT_cont) then ; if (allocated(BT_cont%h_v)) then
     if (present(v_cor)) then
@@ -1494,6 +1536,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
     endif
   endif ; endif
+
+  call cpu_clock_end(id_clock_correct)
 
 end subroutine meridional_mass_flux
 
@@ -1525,9 +1569,10 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   real ::  dvhdv(SZI_(G))  ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
   logical, dimension(SZI_(G)) :: do_I
   real :: ones(SZI_(G))    ! An array of 1's [nondim]
-  type(cont_loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, nz
   logical :: local_specified_BC, OBC_in_row
+
+  call cpu_clock_begin(id_clock_correct)
 
   local_specified_BC = .false.
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
@@ -1535,13 +1580,11 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   endif ; endif
 
   if (present(LB_in)) then
-    LB = LB_in
+    ish = LB_in%ish ; ieh = LB_in%ieh ; jsh = LB_in%jsh ; jeh = LB_in%jeh ; nz = GV%ke
   else
-    LB%ish = G%isc ; LB%ieh = G%iec ; LB%jsh = G%jsc ; LB%jeh = G%jec
+    ish = G%isc ; ieh = G%iec ; jsh = G%jsc ; jeh = G%jec ; nz = GV%ke
   endif
-  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
-  call cpu_clock_begin(id_clock_correct)
   ones(:) = 1.0 ; do_I(:) = .true.
 
   vhbt(:,:) = 0.0
@@ -1566,6 +1609,7 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
       enddo
     enddo ! k-loop
   enddo ! j-loop
+
   call cpu_clock_end(id_clock_correct)
 
 end subroutine meridional_BT_mass_flux
@@ -2542,6 +2586,7 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
 
   CS%diag => diag
 
+  id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)
   id_clock_update = cpu_clock_id('(Ocean continuity update)', grain=CLOCK_ROUTINE)
   id_clock_correct = cpu_clock_id('(Ocean continuity correction)', grain=CLOCK_ROUTINE)
 
