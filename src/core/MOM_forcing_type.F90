@@ -361,6 +361,7 @@ type, public :: forcing_diags
   integer :: id_saltflux          = -1
   integer :: id_saltFluxIn        = -1
   integer :: id_saltFluxAdded     = -1
+  integer :: id_saltFluxBehind    = -1
 
   integer :: id_total_saltflux        = -1
   integer :: id_total_saltFluxIn      = -1
@@ -2099,7 +2100,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         diag%axesT1,Time,'Salt flux into ocean at surface due to restoring or flux adjustment', &
         units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
-  handles%id_saltFluxAdded = register_diag_field('ocean_model', 'salt_left_behind', &
+  handles%id_saltFluxBehind = register_diag_field('ocean_model', 'salt_left_behind', &
         diag%axesT1,Time,'Salt left in ocean at surface due to ice formation', &
         units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
@@ -3129,6 +3130,9 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_in, G, scale=US%RZ_T_to_kg_m2s)
       call post_data(handles%id_total_saltFluxIn, total_transport, diag)
     endif
+
+    if (handles%id_saltFluxBehind > 0 .and. associated(fluxes%salt_left_behind)) &
+      call post_data(handles%id_saltFluxBehind, fluxes%salt_left_behind, diag)
 
     if (handles%id_saltFluxGlobalAdj > 0)                                            &
       call post_data(handles%id_saltFluxGlobalAdj, fluxes%saltFluxGlobalAdj, diag)
