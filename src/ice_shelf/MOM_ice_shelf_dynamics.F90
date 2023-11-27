@@ -2683,8 +2683,8 @@ end subroutine CG_action_subgrid_basal
 !! Returns the sum of the elements in a square matrix. This sum is bitwise identical even if the matrices are rotated.
 subroutine sum_square_matrix(sum_out, mat_in, n)
   integer, intent(in) :: n !< The length and width of each matrix in mat_in
-  real, dimension(n,n), intent(in) :: mat_in !< The four n x n matrices to be summed individually
-  real, intent(out) :: sum_out !< The sums of each of the 4 matrices given in mat_in
+  real, dimension(n,n), intent(in) :: mat_in !< The n x n matrix whose elements will be summed
+  real, intent(out) :: sum_out !< The sum of the elements of matrix mat_in
   integer :: s0,e0,s1,e1
 
   sum_out=0.0
