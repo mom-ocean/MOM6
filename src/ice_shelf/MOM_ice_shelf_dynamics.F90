@@ -2640,6 +2640,8 @@ subroutine CG_action_subgrid_basal(Phisub, H, U, V, bathyT, dens_ratio, Ucontr, 
 
   real, dimension(SIZE(Phisub,3),SIZE(Phisub,3),2,2) :: Ucontr_sub, Vcontr_sub ! The contributions to Ucontr and Vcontr
                                                                                !! at each sub-cell
+  real, dimension(2,2,SIZE(Phisub,3),SIZE(Phisub,3)) :: uloc_arr !The local sub-cell u-velocity [L T-1 ~> m s-1]
+  real, dimension(2,2,SIZE(Phisub,3),SIZE(Phisub,3)) :: vloc_arr !The local sub-cell v-velocity [L T-1 ~> m s-1]
   real, dimension(2,2) :: Ucontr_q, Vcontr_q !Contributions to a node from each quadrature point in a sub-grid cell
   real    :: subarea ! The fractional sub-cell area [nondim]
   real    :: hloc    ! The local sub-cell ice thickness [Z ~> m]
@@ -2648,22 +2650,24 @@ subroutine CG_action_subgrid_basal(Phisub, H, U, V, bathyT, dens_ratio, Ucontr, 
   nsub = size(Phisub,3)
   subarea = 1.0 / (nsub**2)
 
+  uloc_arr(:,:,:,:) = 0.0; vloc_arr(:,:,:,:)=0.0
+
+  do j=1,nsub ; do i=1,nsub;  do qy=1,2 ; do qx=1,2
+    hloc = (Phisub(qx,qy,i,j,1,1)*H(1,1) + Phisub(qx,qy,i,j,2,2)*H(2,2)) + &
+           (Phisub(qx,qy,i,j,1,2)*H(1,2) + Phisub(qx,qy,i,j,2,1)*H(2,1))
+    if (dens_ratio * hloc - bathyT > 0) then
+      uloc_arr(qx,qy,i,j) = ((Phisub(qx,qy,i,j,1,1) * U(1,1) + Phisub(qx,qy,i,j,2,2) * U(2,2)) + &
+                            (Phisub(qx,qy,i,j,1,2) * U(1,2) + Phisub(qx,qy,i,j,2,1) * U(2,1)))
+      vloc_arr(qx,qy,i,j) = ((Phisub(qx,qy,i,j,1,1) * V(1,1) + Phisub(qx,qy,i,j,2,2) * V(2,2)) + &
+                            (Phisub(qx,qy,i,j,1,2) * V(1,2) + Phisub(qx,qy,i,j,2,1) * V(2,1)))
+    endif
+  enddo; enddo ; enddo ; enddo
+
   do n=1,2 ; do m=1,2 ; do j=1,nsub ; do i=1,nsub
     do qy=1,2 ; do qx=1,2
       !calculate quadrature point contributions for the sub-cell, to each node
-      hloc = (Phisub(qx,qy,i,j,1,1)*H(1,1) + Phisub(qx,qy,i,j,2,2)*H(2,2)) + &
-             (Phisub(qx,qy,i,j,1,2)*H(1,2) + Phisub(qx,qy,i,j,2,1)*H(2,1))
-
-      if (dens_ratio * hloc - bathyT > 0) then
-        Ucontr_q(qx,qy) = Phisub(qx,qy,i,j,m,n) * &
-                        ((Phisub(qx,qy,i,j,1,1) * U(1,1) + Phisub(qx,qy,i,j,2,2) * U(2,2)) + &
-                         (Phisub(qx,qy,i,j,1,2) * U(1,2) + Phisub(qx,qy,i,j,2,1) * U(2,1)))
-        Vcontr_q(qx,qy) = Phisub(qx,qy,i,j,m,n) * &
-                        ((Phisub(qx,qy,i,j,1,1) * V(1,1) + Phisub(qx,qy,i,j,2,2) * V(2,2)) + &
-                         (Phisub(qx,qy,i,j,1,2) * V(1,2) + Phisub(qx,qy,i,j,2,1) * V(2,1)))
-      else
-        Ucontr_q(qx,qy) = 0.0; Vcontr_q(qx,qy) = 0.0
-      endif
+        Ucontr_q(qx,qy) = Phisub(qx,qy,i,j,m,n) * uloc_arr(qx,qy,i,j)
+        Vcontr_q(qx,qy) = Phisub(qx,qy,i,j,m,n) * vloc_arr(qx,qy,i,j)
     enddo; enddo
 
     !calculate sub-cell contribution to each node by summing up quadrature point contributions from the sub-cell
@@ -2891,6 +2895,7 @@ subroutine CG_diagonal_subgrid_basal (Phisub, H_node, bathyT, dens_ratio, f_grnd
 
   real, dimension(SIZE(Phisub,3),SIZE(Phisub,3),2,2) :: f_grnd_sub ! The contributions to nodal f_grnd
                                                                    !! from each sub-cell
+  integer, dimension(2,2,SIZE(Phisub,3),SIZE(Phisub,3)) :: grnd_stat !0 at floating quad points, 1 at grounded
   real, dimension(2,2) :: f_grnd_q  !Contributions to a node from each quadrature point in a sub-grid cell
   real    :: subarea ! The fractional sub-cell area [nondim]
   real    :: hloc    ! The local sub-region thickness [Z ~> m]
@@ -2899,17 +2904,17 @@ subroutine CG_diagonal_subgrid_basal (Phisub, H_node, bathyT, dens_ratio, f_grnd
   nsub = size(Phisub,3)
   subarea = 1.0 / (nsub**2)
 
+  grnd_stat(:,:,:,:)=0
+
+  do j=1,nsub ; do i=1,nsub;  do qy=1,2 ; do qx=1,2
+    hloc = (Phisub(qx,qy,i,j,1,1)*H_node(1,1) + Phisub(qx,qy,i,j,2,2)*H_node(2,2)) + &
+           (Phisub(qx,qy,i,j,1,2)*H_node(1,2) + Phisub(qx,qy,i,j,2,1)*H_node(2,1))
+    if (dens_ratio * hloc - bathyT > 0) grnd_stat(qx,qy,i,j) = 1
+  enddo; enddo ; enddo ; enddo
+
   do n=1,2 ; do m=1,2 ; do j=1,nsub ; do i=1,nsub
     do qy=1,2 ; do qx = 1,2
-      !calculate quadrature point contributions for the sub-cell, to each node
-      hloc = (Phisub(qx,qy,i,j,1,1)*H_node(1,1) + Phisub(qx,qy,i,j,2,2)*H_node(2,2)) + &
-             (Phisub(qx,qy,i,j,1,2)*H_node(1,2) + Phisub(qx,qy,i,j,2,1)*H_node(2,1))
-
-      if (dens_ratio * hloc - bathyT > 0) then
-        f_grnd_q(qx,qy) = Phisub(qx,qy,i,j,m,n)**2
-      else
-        f_grnd_q(qx,qy) = 0.0
-      endif
+        f_grnd_q(qx,qy) = grnd_stat(qx,qy,i,j) * Phisub(qx,qy,i,j,m,n)**2
     enddo ; enddo
     !calculate sub-cell contribution to each node by summing up quadrature point contributions from the sub-cell
     f_grnd_sub(i,j,m,n) = (subarea * 0.25) * ((f_grnd_q(1,1) + f_grnd_q(2,2)) + (f_grnd_q(1,2)+f_grnd_q(2,1)))
