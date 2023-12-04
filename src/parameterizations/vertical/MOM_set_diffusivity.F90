@@ -2052,7 +2052,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   type(diag_ctrl), target,  intent(inout) :: diag !< A structure used to regulate diagnostic output.
   type(set_diffusivity_CS), pointer       :: CS   !< pointer set to point to the module control
                                                   !! structure.
-  type(int_tide_CS),        intent(in), target :: int_tide_CSp !< Internal tide control structure
+  type(int_tide_CS),        pointer       :: int_tide_CSp !< Internal tide control structure
   integer,                  intent(out)   :: halo_TS !< The halo size of tracer points that must be
                                                   !! valid for the calculations in set_diffusivity.
   logical,                  intent(out)   :: double_diffuse !< This indicates whether some version
@@ -2097,7 +2097,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   CS%diag => diag
-  CS%int_tide_CSp  => int_tide_CSp
+  if (associated(int_tide_CSp)) CS%int_tide_CSp  => int_tide_CSp
 
   ! These default values always need to be set.
   CS%BBL_mixing_as_max = .true.

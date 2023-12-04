@@ -221,7 +221,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
   type(verticalGrid_type),  intent(in)    :: GV         !< Vertical grid structure.
   type(unit_scale_type),    intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),    intent(in)    :: param_file !< Run-time parameter file handle
-  type(int_tide_CS),target, intent(in)    :: int_tide_CSp !< A pointer to the internal tides control structure
+  type(int_tide_CS),        pointer       :: int_tide_CSp !< A pointer to the internal tides control structure
   type(diag_ctrl), target,  intent(inout) :: diag       !< Diagnostics control structure.
   type(tidal_mixing_cs),    intent(inout) :: CS         !< This module's control structure.
 
@@ -276,7 +276,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
 
   CS%debug = CS%debug.and.is_root_pe()
   CS%diag => diag
-  CS%int_tide_CSp  => int_tide_CSp
+  if (associated(int_tide_CSp)) CS%int_tide_CSp  => int_tide_CSp
   CS%use_CVmix_tidal = use_CVmix_tidal
   CS%int_tide_dissipation = int_tide_dissipation
 
