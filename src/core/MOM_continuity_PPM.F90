@@ -84,7 +84,7 @@ contains
 !> Time steps the layer thicknesses, using a monotonically limit, directionally split PPM scheme,
 !! based on Lin (1994).
 subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhbt, vhbt, &
-                          visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont)
+                          visc_rem_u, visc_rem_v, u_cor, v_cor, BT_cont, du_cor, dv_cor)
   type(ocean_grid_type),   intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV  !< Vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -133,6 +133,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
                              !! transport [L T-1 ~> m s-1].
   type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe
                              !!  the effective open face areas as a function of barotropic flow.
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                 optional, intent(out)   :: du_cor !< The zonal velocity increments from u that give uhbt
+                                                 !! as the depth-integrated transports [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                 optional, intent(out)   :: dv_cor !< The meridional velocity increments from v that give vhbt
+                                                 !! as the depth-integrated transports [L T-1 ~> m s-1].
 
   ! Local variables
   real :: h_W(SZI_(G),SZJ_(G),SZK_(GV)) ! West edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
@@ -159,14 +165,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.true.)
     call zonal_edge_thickness(hin, h_W, h_E, G, GV, US, CS, OBC, LB)
     call zonal_mass_flux(u, hin, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
-                         LB, uhbt, visc_rem_u, u_cor, BT_cont)
+                         LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin)
 
     !  Now advect meridionally, using the updated thicknesses to determine the fluxes.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
     call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC, LB)
     call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
-                              LB, vhbt, visc_rem_v, v_cor, BT_cont)
+                              LB, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
     call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hmin=h_min)
 
   else  ! .not. x_first
@@ -174,14 +180,14 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.true., j_stencil=.false.)
     call meridional_edge_thickness(hin, h_S, h_N, G, GV, US, CS, OBC, LB)
     call meridional_mass_flux(v, hin, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
-                              LB, vhbt, visc_rem_v, v_cor, BT_cont)
+                              LB, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
     call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hin)
 
     !  Now advect zonally, using the updated thicknesses to determine the fluxes.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
     call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC, LB)
     call zonal_mass_flux(u, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
-                         LB, uhbt, visc_rem_u, u_cor, BT_cont)
+                         LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hmin=h_min)
   endif
 
@@ -511,7 +517,7 @@ end subroutine meridional_edge_thickness
 
 !> Calculates the mass or volume fluxes through the zonal faces, and other related quantities.
 subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_face_areaU, &
-                           LB_in, uhbt, visc_rem_u, u_cor, BT_cont)
+                           LB_in, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
   type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -548,15 +554,18 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                      !! that give uhbt as the depth-integrated transport [L T-1 ~> m s-1]
   type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe the
                      !! effective open face areas as a function of barotropic flow.
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                 optional, intent(out)   :: du_cor !< The zonal velocity increments from u that give uhbt
+                                                 !! as the depth-integrated transports [L T-1 ~> m s-1].
 
   ! Local variables
   real, dimension(SZIB_(G),SZK_(GV)) :: duhdu ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
   real, dimension(SZIB_(G)) :: &
-    du, &      ! Corrective barotropic change in the velocity [L T-1 ~> m s-1].
+    du, &         ! Corrective barotropic change in the velocity to give uhbt [L T-1 ~> m s-1].
     du_min_CFL, & ! Lower limit on du correction to avoid CFL violations [L T-1 ~> m s-1]
     du_max_CFL, & ! Upper limit on du correction to avoid CFL violations [L T-1 ~> m s-1]
     duhdu_tot_0, & ! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
-    uh_tot_0, & ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
+    uh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim].
   logical, dimension(SZIB_(G)) :: do_I
   real, dimension(SZIB_(G),SZK_(GV)) :: &
@@ -571,21 +580,25 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   real :: dx_E, dx_W ! Effective x-grid spacings to the east and west [L ~> m].
   type(cont_loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
-  integer :: l_seg
-  logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, local_open_BC, is_simple
+  integer :: l_seg ! The OBC segment number
+  logical :: use_visc_rem, set_BT_cont
+  logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
+  logical :: simple_OBC_pt(SZIB_(G))  ! Indicates points in a row with specified transport OBCs
 
   call cpu_clock_begin(id_clock_correct)
 
   use_visc_rem = present(visc_rem_u)
-  local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
-  local_open_BC = .false.
-  if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
+
+  set_BT_cont = .false. ; if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
+
+  local_specified_BC = .false. ; local_Flather_OBC = .false. ; local_open_BC = .false.
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_u_BCs_exist_globally
     local_Flather_OBC = OBC%Flather_u_BCs_exist_globally
     local_open_BC = OBC%open_u_BCs_exist_globally
   endif ; endif
+
+  if (present(du_cor)) du_cor(:,:) = 0.0
 
   if (present(LB_in)) then
     LB = LB_in
@@ -599,14 +612,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   if (.not.use_visc_rem) visc_rem(:,:) = 1.0
-!$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,u,h_in,h_W,h_E,use_visc_rem,visc_rem_u,  &
-!$OMP                                  uh,dt,US,G,GV,CS,local_specified_BC,OBC,uhbt,set_BT_cont,    &
-!$OMP                                  CFL_dt,I_dt,u_cor,BT_cont, local_Flather_OBC, &
-!$OMP                                  por_face_areaU) &
-!$OMP                          private(do_I,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0,duhdu_tot_0, &
-!$OMP                                  is_simple,FAuI,visc_rem_max,I_vrm,du_lim,dx_E,dx_W, &
-!$OMP                                  any_simple_OBC,l_seg) &
-!$OMP      firstprivate(visc_rem)
+  !$OMP parallel do default(shared) private(do_I,duhdu,du,du_max_CFL,du_min_CFL,uh_tot_0, &
+  !$OMP                                     duhdu_tot_0,FAuI,visc_rem_max,I_vrm,du_lim,dx_E,dx_W, &
+  !$OMP                                     simple_OBC_pt,any_simple_OBC,l_seg) &
+  !$OMP                        firstprivate(visc_rem)
   do j=jsh,jeh
     do I=ish-1,ieh ; do_I(I) = .true. ; enddo
     ! Set uh and duhdu.
@@ -716,29 +725,31 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           l_seg = OBC%segnum_u(I,j)
 
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          is_simple = .false.
-          if (l_seg /= OBC_NONE) is_simple = OBC%segment(l_seg)%specified
-          do_I(I) = .not. (l_seg /= OBC_NONE .and. is_simple)
-          any_simple_OBC = any_simple_OBC .or. is_simple
+          simple_OBC_pt(I) = .false.
+          if (l_seg /= OBC_NONE) simple_OBC_pt(I) = OBC%segment(l_seg)%specified
+          do_I(I) = .not.simple_OBC_pt(I)
+          any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I)
         enddo ; else ; do I=ish-1,ieh
           do_I(I) = .true.
         enddo ; endif
       endif
 
       if (present(uhbt)) then
+        ! Find du and uh.
         call zonal_flux_adjust(u, h_in, h_W, h_E, uhbt(:,j), uh_tot_0, duhdu_tot_0, du, &
                                du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                                j, ish, ieh, do_I, por_face_areaU, uh, OBC=OBC)
 
         if (present(u_cor)) then ; do k=1,nz
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
-          if (local_specified_BC) then ; do I=ish-1,ieh
-            if (OBC%segnum_u(I,j) /= OBC_NONE) then
-              l_seg = OBC%segnum_u(I,j)
-              if (OBC%segment(l_seg)%specified) u_cor(I,j,k) = OBC%segment(l_seg)%normal_vel(I,j,k)
-            endif
-          enddo ; endif
+          if (any_simple_OBC) then ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
+            u_cor(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+          endif ; enddo ; endif
         enddo ; endif ! u-corrected
+
+        if (present(du_cor)) then
+          do I=ish-1,ieh ; du_cor(I,j) = du(I) ; enddo
+        endif
 
       endif
 
@@ -748,19 +759,16 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                                visc_rem_max, j, ish, ieh, do_I, por_face_areaU)
         if (any_simple_OBC) then
           do I=ish-1,ieh
-            do_I(I) = .false.
-            if (OBC%segnum_u(I,j) /= OBC_NONE) do_I(I) = OBC%segment(OBC%segnum_u(I,j))%specified
-
-            if (do_I(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
+            if (simple_OBC_pt(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo
-          ! NOTE: do_I(I) should prevent access to segment OBC_NONE
-          do k=1,nz ; do I=ish-1,ieh ; if (do_I(I)) then
+          ! NOTE: simple_OBC_pt(I) should prevent access to segment OBC_NONE
+          do k=1,nz ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
             if ((abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_u(I,j))%specified)) &
               FAuI(I) = FAuI(I) + OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
                                   OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
           endif ; enddo ; enddo
-          do I=ish-1,ieh ; if (do_I(I)) then
+          do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
             BT_cont%FA_u_W0(I,j) = FAuI(I) ; BT_cont%FA_u_E0(I,j) = FAuI(I)
             BT_cont%FA_u_WW(I,j) = FAuI(I) ; BT_cont%FA_u_EE(I,j) = FAuI(I)
             BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
@@ -1101,7 +1109,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
                        !! the fraction of a time-step's worth of a barotropic acceleration that a layer
                        !! experiences after viscosity is applied [nondim].
                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G)),       optional, intent(in)    :: uhbt !< The summed volume flux
+  real, dimension(SZIB_(G)),                 intent(in)    :: uhbt !< The summed volume flux
                        !! through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
 
   real, dimension(SZIB_(G)),                 intent(in)    :: du_max_CFL  !< Maximum acceptable
@@ -1403,7 +1411,7 @@ end subroutine set_zonal_BT_cont
 
 !> Calculates the mass or volume fluxes through the meridional faces, and other related quantities.
 subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, por_face_areaV, &
-                                LB_in, vhbt, visc_rem_v, v_cor, BT_cont)
+                                LB_in, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
   type(ocean_grid_type),                      intent(in)  :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                    intent(in)  :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v    !< Meridional velocity [L T-1 ~> m s-1]
@@ -1437,11 +1445,16 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                    !! that give vhbt as the depth-integrated transport [L T-1 ~> m s-1].
   type(BT_cont_type),               optional, pointer     :: BT_cont !< A structure with elements that describe
                                    !! the effective open face areas as a function of barotropic flow.
+  real, dimension(SZI_(G),SZJB_(G)), &
+                                    optional, intent(out)   :: dv_cor !< The meridional velocity increments from v
+                                                                  !! that give vhbt as the depth-integrated
+                                                                  !! transports [L T-1 ~> m s-1].
+
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)) :: &
-    dvhdv      ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
+    dvhdv         ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G)) :: &
-    dv, &      ! Corrective barotropic change in the velocity [L T-1 ~> m s-1].
+    dv, &         ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
     dv_min_CFL, & ! Lower limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dv_max_CFL, & ! Upper limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dvhdv_tot_0, & ! Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
@@ -1460,21 +1473,25 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   real :: dy_N, dy_S ! Effective y-grid spacings to the north and south [L ~> m].
   type(cont_loop_bounds_type) :: LB
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
-  integer :: l_seg
-  logical :: local_specified_BC, use_visc_rem, set_BT_cont, any_simple_OBC
-  logical :: local_Flather_OBC, is_simple, local_open_BC
+  integer :: l_seg ! The OBC segment number
+  logical :: use_visc_rem, set_BT_cont
+  logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
+  logical :: simple_OBC_pt(SZI_(G))  ! Indicates points in a row with specified transport OBCs
 
   call cpu_clock_begin(id_clock_correct)
 
   use_visc_rem = present(visc_rem_v)
-  local_specified_BC = .false. ; set_BT_cont = .false. ; local_Flather_OBC = .false.
-  local_open_BC = .false.
-  if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
+
+  set_BT_cont = .false. ; if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
+
+  local_specified_BC = .false. ; local_Flather_OBC = .false. ; local_open_BC = .false.
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_v_BCs_exist_globally
     local_Flather_OBC = OBC%Flather_v_BCs_exist_globally
     local_open_BC = OBC%open_v_BCs_exist_globally
   endif ; endif
+
+  if (present(dv_cor)) dv_cor(:,:) = 0.0
 
   if (present(LB_in)) then
     LB = LB_in
@@ -1488,14 +1505,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   if (.not.use_visc_rem) visc_rem(:,:) = 1.0
-!$OMP parallel do default(none) shared(ish,ieh,jsh,jeh,nz,v,h_in,h_S,h_N,vh,use_visc_rem, &
-!$OMP                                  visc_rem_v,dt,US,G,GV,CS,local_specified_BC,OBC,vhbt, &
-!$OMP                                  set_BT_cont,CFL_dt,I_dt,v_cor,BT_cont, local_Flather_OBC, &
-!$OMP                                   por_face_areaV) &
-!$OMP                          private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0,    &
-!$OMP                                  dvhdv_tot_0,visc_rem_max,I_vrm,dv_lim,dy_N,      &
-!$OMP                                  is_simple,FAvi,dy_S,any_simple_OBC,l_seg) &
-!$OMP                     firstprivate(visc_rem)
+  !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
+  !$OMP                                     dvhdv_tot_0,FAvi,visc_rem_max,I_vrm,dv_lim,dy_N,dy_S, &
+  !$OMP                                     simple_OBC_pt,any_simple_OBC,l_seg) &
+  !$OMP                        firstprivate(visc_rem)
   do J=jsh-1,jeh
     do i=ish,ieh ; do_I(i) = .true. ; enddo
     ! This sets vh and dvhdv.
@@ -1602,31 +1615,32 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
           l_seg = OBC%segnum_v(i,J)
 
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          is_simple = .false.
-          if (l_seg /= OBC_NONE) is_simple = OBC%segment(l_seg)%specified
-          do_I(i) = .not.(l_seg /= OBC_NONE .and. is_simple)
-          any_simple_OBC = any_simple_OBC .or. is_simple
+          simple_OBC_pt(i) = .false.
+          if (l_seg /= OBC_NONE) simple_OBC_pt(i) = OBC%segment(l_seg)%specified
+          do_I(i) = .not.simple_OBC_pt(i)
+          any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i)
         enddo ; else ; do i=ish,ieh
           do_I(i) = .true.
         enddo ; endif
       endif
 
       if (present(vhbt)) then
+        ! Find dv and vh.
         call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt(:,J), vh_tot_0, dvhdv_tot_0, dv, &
                                dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                                j, ish, ieh, do_I, por_face_areaV, vh, OBC=OBC)
 
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
-          if (local_specified_BC) then ; do i=ish,ieh
-            l_seg = OBC%segnum_v(i,J)
-
-            if (l_seg /= OBC_NONE) then
-              if (OBC%segment(OBC%segnum_v(i,J))%specified) &
-                v_cor(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
-            endif
-          enddo ; endif
+          if (any_simple_OBC) then ; do i=ish,ieh ; if (simple_OBC_pt(i)) then
+            v_cor(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
+          endif ; enddo ; endif
         enddo ; endif ! v-corrected
+
+        if (present(dv_cor)) then
+          do i=ish,ieh ; dv_cor(i,J) = dv(i) ; enddo
+        endif
+
       endif
 
       if (set_BT_cont) then
@@ -1635,19 +1649,16 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                visc_rem_max, J, ish, ieh, do_I, por_face_areaV)
         if (any_simple_OBC) then
           do i=ish,ieh
-            do_I(I) = .false.
-            if (OBC%segnum_v(i,J) /= OBC_NONE) do_I(i) = (OBC%segment(OBC%segnum_v(i,J))%specified)
-
-            if (do_I(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
+            if (simple_OBC_pt(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
-          ! NOTE: do_I(I) should prevent access to segment OBC_NONE
-          do k=1,nz ; do i=ish,ieh ; if (do_I(i)) then
+          ! NOTE: simple_OBC_pt(i) should prevent access to segment OBC_NONE
+          do k=1,nz ; do i=ish,ieh ; if (simple_OBC_pt(i)) then
             if ((abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) .and. &
                 (OBC%segment(OBC%segnum_v(i,J))%specified)) &
               FAvi(i) = FAvi(i) + OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
                                   OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
           endif ; enddo ; enddo
-          do i=ish,ieh ; if (do_I(i)) then
+          do i=ish,ieh ; if (simple_OBC_pt(i)) then
             BT_cont%FA_v_S0(i,J) = FAvi(i) ; BT_cont%FA_v_N0(i,J) = FAvi(i)
             BT_cont%FA_v_SS(i,J) = FAvi(i) ; BT_cont%FA_v_NN(i,J) = FAvi(i)
             BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
@@ -2000,15 +2011,14 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
                              !! fraction of a time-step's worth of a barotropic acceleration that
                              !! a layer experiences after viscosity is applied [nondim].
                              !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G)), &
-                  optional, intent(in)    :: vhbt !< The summed volume flux through meridional faces
+  real, dimension(SZI_(G)), intent(in)    :: vhbt !< The summed volume flux through meridional faces
                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G)), intent(in)    :: dv_max_CFL !< Maximum acceptable value of dv [L T-1 ~> m s-1].
   real, dimension(SZI_(G)), intent(in)    :: dv_min_CFL !< Minimum acceptable value of dv [L T-1 ~> m s-1].
   real, dimension(SZI_(G)), intent(in)    :: vh_tot_0   !< The summed transport with 0 adjustment
-                                                        !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G)), intent(in)    :: dvhdv_tot_0 !< The partial derivative of dv_err with
-                                                         !! dv at 0 adjustment [H L ~> m2 or kg m-1].
+                                                  !! dv at 0 adjustment [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G)), intent(out)   :: dv   !< The barotropic velocity adjustment [L T-1 ~> m s-1].
   real,                     intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
@@ -2036,7 +2046,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
     dv_min, &  ! Lower limit on dv correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
     dv_max     ! Upper limit on dv correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
   real :: dv_prev ! The previous value of dv [L T-1 ~> m s-1].
-  real :: ddv    ! The change in dv from the previous iteration [L T-1 ~> m s-1].
+  real :: ddv     ! The change in dv from the previous iteration [L T-1 ~> m s-1].
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, k, nz, itt, max_itts = 20
