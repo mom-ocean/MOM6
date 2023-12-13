@@ -13,9 +13,16 @@ import sys
 # Pre-compile re searches
 re_module = re.compile(r"^ *module +([a-z_0-9]+)")
 re_use = re.compile(r"^ *use +([a-z_0-9]+)")
+re_cpp_define = re.compile(r"^ *# *define +[_a-zA-Z][_a-zA-Z0-9]")
+re_cpp_undef = re.compile(r"^ *# *undef +[_a-zA-Z][_a-zA-Z0-9]")
+re_cpp_ifdef = re.compile(r"^ *# *ifdef +[_a-zA-Z][_a-zA-Z0-9]")
+re_cpp_ifndef = re.compile(r"^ *# *ifndef +[_a-zA-Z][_a-zA-Z0-9]")
+re_cpp_if = re.compile(r"^ *# *if +")
+re_cpp_else = re.compile(r"^ *# *else")
+re_cpp_endif = re.compile(r"^ *# *endif")
 re_cpp_include = re.compile(r"^ *# *include *[<\"']([a-zA-Z_0-9\.]+)[>\"']")
 re_f90_include = re.compile(r"^ *include +[\"']([a-zA-Z_0-9\.]+)[\"']")
-re_program = re.compile(r"^ *[pP][rR][oO][gG][rR][aA][mM] +([a-zA-Z_0-9]+)")
+re_program = re.compile(r"^ *program +([a-z_0-9]+)", re.IGNORECASE)
 re_end = re.compile(r"^ *end *(module|procedure) ", re.IGNORECASE)
 # NOTE: This excludes comments and tokens with substrings containing `function`
 # or `subroutine`, but will fail if the keywords appear in other contexts.
@@ -26,7 +33,7 @@ re_procedure = re.compile(
 
 
 def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
-                link_externals, script_path):
+                link_externals, defines):
     """Create "makefile" after scanning "src_dis"."""
 
     # Scan everything Fortran related
@@ -66,7 +73,7 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
     o2mods, o2uses, o2h, o2inc, o2prg, prg2o, mod2o = {}, {}, {}, {}, {}, {}, {}
     externals, all_modules = [], []
     for f in F90_files:
-        mods, used, cpp, inc, prg, has_externals = scan_fortran_file(f)
+        mods, used, cpp, inc, prg, has_externals = scan_fortran_file(f, defines)
         # maps object file to modules produced
         o2mods[object_file(f)] = mods
         # maps module produced to object file
@@ -272,10 +279,16 @@ def nested_inc(inc_files, f2F):
     return inc_files + sorted(set(hlst)), used_mods
 
 
-def scan_fortran_file(src_file):
+def scan_fortran_file(src_file, defines=None):
     """Scan the Fortran file "src_file" and return lists of module defined,
     module used, and files included."""
     module_decl, used_modules, cpp_includes, f90_includes, programs = [], [], [], [], []
+
+    cpp_defines = defines if defines is not None else []
+
+    cpp_macros = [define.split('=')[0] for define in cpp_defines]
+    cpp_group_stack = []
+
     with io.open(src_file, 'r', errors='replace') as file:
         lines = file.readlines()
 
@@ -285,7 +298,72 @@ def scan_fortran_file(src_file):
         file_has_externals = False
             # True if the file contains any external objects
 
+        cpp_exclude = False
+            # True if the parser excludes the subsequent lines
+
+        cpp_group_stack = []
+            # Stack of condition group exclusion states
+
         for line in lines:
+            # Start of #ifdef condition group
+            match = re_cpp_ifdef.match(line)
+            if match:
+                cpp_group_stack.append(cpp_exclude)
+
+                # If outer group is excluding or macro is missing, then exclude
+                macro = line.lstrip()[1:].split()[1]
+                cpp_exclude = cpp_exclude or macro not in cpp_macros
+
+            # Start of #ifndef condition group
+            match = re_cpp_ifndef.match(line)
+            if match:
+                cpp_group_stack.append(cpp_exclude)
+
+                # If outer group is excluding or macro is present, then exclude
+                macro = line.lstrip()[1:].split()[1]
+                cpp_exclude = cpp_exclude or macro in cpp_macros
+
+            # Start of #if condition group
+            match = re_cpp_if.match(line)
+            if match:
+                cpp_group_stack.append(cpp_exclude)
+
+                # XXX: Don't attempt to parse #if statements, but store the state.
+                # if/endif stack.  For now, assume that these always fail.
+                cpp_exclude = False
+
+            # Complement #else condition group
+            match = re_cpp_else.match(line)
+            if match:
+                # Reverse the exclude state, if there is no outer exclude state
+                outer_grp_exclude = cpp_group_stack and cpp_group_stack[-1]
+                cpp_exclude = not cpp_exclude or outer_grp_exclude
+
+            # Restore exclude state when exiting conditional block
+            match = re_cpp_endif.match(line)
+            if match:
+                cpp_exclude = cpp_group_stack.pop()
+
+            # Skip lines inside of false condition blocks
+            if cpp_exclude:
+                continue
+
+            # Activate a new macro (ignoring the value)
+            match = re_cpp_define.match(line)
+            if match:
+                new_macro = line.lstrip()[1:].split()[1]
+                cpp_macros.append(new_macro)
+
+            # Deactivate a macro
+            match = re_cpp_undef.match(line)
+            if match:
+                new_macro = line.lstrip()[1:].split()[1]
+                try:
+                    cpp_macros.remove(new_macro)
+                except:
+                    # Ignore missing macros (for now?)
+                    continue
+
             match = re_module.match(line.lower())
             if match:
                 if match.group(1) not in 'procedure':   # avoid "module procedure" statements
@@ -404,8 +482,13 @@ parser.add_argument(
     action='append',
     help="Skip directory in source code search."
 )
+parser.add_argument(
+    '-D', '--define',
+    action='append',
+    help="Apply preprocessor define macros (of the form -DMACRO[=value])",
+)
 args = parser.parse_args()
 
 # Do the thing
 create_deps(args.path, args.skip, args.makefile, args.debug, args.exec_target,
-            args.fc_rule, args.link_externals, sys.argv[0])
+            args.fc_rule, args.link_externals, args.define)
