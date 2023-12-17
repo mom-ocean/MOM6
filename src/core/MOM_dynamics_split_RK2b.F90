@@ -253,14 +253,13 @@ type, public :: MOM_dyn_split_RK2b_CS ; private
   !> A pointer to the update_OBC control structure
   type(update_OBC_CS),    pointer :: update_OBC_CSp => NULL()
 
-  type(group_pass_type) :: pass_eta    !< Structure for group halo pass
-  type(group_pass_type) :: pass_visc_rem  !< Structure for group halo pass
-  type(group_pass_type) :: pass_uvp    !< Structure for group halo pass
-  type(group_pass_type) :: pass_hp_uv  !< Structure for group halo pass
-  type(group_pass_type) :: pass_h_av   !< Structure for group halo pass
-  type(group_pass_type) :: pass_uv     !< Structure for group halo pass
-  type(group_pass_type) :: pass_h      !< Structure for group halo pass
-  type(group_pass_type) :: pass_av_uvh !< Structure for group halo pass
+  type(group_pass_type) :: pass_eta      !< Structure for group halo pass
+  type(group_pass_type) :: pass_visc_rem !< Structure for group halo pass
+  type(group_pass_type) :: pass_uvp      !< Structure for group halo pass
+  type(group_pass_type) :: pass_uv_inst  !< Structure for group halo pass
+  type(group_pass_type) :: pass_hp_uv    !< Structure for group halo pass
+  type(group_pass_type) :: pass_hp_uhvh  !< Structure for group halo pass
+  type(group_pass_type) :: pass_h_uv     !< Structure for group halo pass
 
 end type MOM_dyn_split_RK2b_CS
 
@@ -394,7 +393,6 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
-  logical :: Use_Stokes_PGF ! If true, add Stokes PGF to hydrostatic PGF
   !---For group halo pass
   logical :: showCallTree, sym
 
@@ -469,17 +467,18 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))
+  call create_group_pass(CS%pass_uv_inst, u_inst, v_inst, G%Domain, halo=max(2,cont_stencil))
+
   call create_group_pass(CS%pass_hp_uv, hp, G%Domain, halo=2)
   call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
   call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
 
-  call create_group_pass(CS%pass_uv, u_inst, v_inst, G%Domain, halo=max(2,cont_stencil))
-  call create_group_pass(CS%pass_h, h, G%Domain, halo=max(2,cont_stencil))
-  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
-  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_hp_uhvh, hp, G%Domain, halo=2)
+  call create_group_pass(CS%pass_hp_uhvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
 
-  call create_group_pass(CS%pass_h_av, hp, G%Domain, halo=2)
-  call create_group_pass(CS%pass_h_av, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_h_uv, h, G%Domain, halo=max(2,cont_stencil))
+  call create_group_pass(CS%pass_h_uv, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_h_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
 
   call cpu_clock_end(id_clock_pass)
   !--- end set up for group halo pass
@@ -495,7 +494,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call cpu_clock_end(id_clock_continuity)
 
   if (G%nonblocking_updates) &
-    call start_group_pass(CS%pass_h_av, G%Domain, clock=id_clock_pass)
+    call start_group_pass(CS%pass_hp_uhvh, G%Domain, clock=id_clock_pass)
 
 ! PFu = d/dx M(h,T,S)
 ! pbce = dM/deta
@@ -511,31 +510,22 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     enddo ; enddo
   endif
   ! Stokes shear force contribution to pressure gradient
-  Use_Stokes_PGF = present(Waves)
-  if (Use_Stokes_PGF) then
-    Use_Stokes_PGF = associated(Waves)
-    if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
-    if (Use_Stokes_PGF) then
-      call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
-      call Stokes_PGF(G, GV, US, dz, u_av, v_av, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+  if (present(Waves)) then ; if (associated(Waves)) then ; if (Waves%Stokes_PGF) then
+    call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
+    call Stokes_PGF(G, GV, US, dz, u_av, v_av, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
 
-      ! We are adding Stokes_PGF to hydrostatic PGF here.  The diag PFu/PFv
-      ! will therefore report the sum total PGF and we avoid other
-      ! modifications in the code.  The PFu_Stokes is output within the waves routines.
-      if (.not.Waves%Passive_Stokes_PGF) then
-        do k=1,nz
-          do j=js,je ; do I=Isq,Ieq
-            CS%PFu(I,j,k) = CS%PFu(I,j,k) + CS%PFu_Stokes(I,j,k)
-          enddo ; enddo
-        enddo
-        do k=1,nz
-          do J=Jsq,Jeq ; do i=is,ie
-             CS%PFv(i,J,k) = CS%PFv(i,J,k) + CS%PFv_Stokes(i,J,k)
-          enddo ; enddo
-        enddo
-      endif
+    ! We are adding Stokes_PGF to hydrostatic PGF here.  The diag PFu/PFv
+    ! will therefore report the sum total PGF and we avoid other
+    ! modifications in the code.  The PFu_Stokes is output within the waves routines.
+    if (.not.Waves%Passive_Stokes_PGF) then
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        CS%PFu(I,j,k) = CS%PFu(I,j,k) + CS%PFu_Stokes(I,j,k)
+      enddo ; enddo ; enddo
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        CS%PFv(i,J,k) = CS%PFv(i,J,k) + CS%PFv_Stokes(i,J,k)
+      enddo ; enddo ;  enddo
     endif
-  endif
+  endif ; endif ; endif
   call cpu_clock_end(id_clock_pres)
   call disable_averaging(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with PressureForce (step_MOM_dyn_split_RK2b)")
@@ -544,15 +534,15 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     call open_boundary_zero_normal_flow(CS%OBC, G, GV, CS%PFu, CS%PFv)
 
   if (G%nonblocking_updates) then
-    call complete_group_pass(CS%pass_h_av, G%Domain, clock=id_clock_pass)
+    call complete_group_pass(CS%pass_hp_uhvh, G%Domain, clock=id_clock_pass)
     call start_group_pass(CS%pass_eta, G%Domain, clock=id_clock_pass)
   else
-    call do_group_pass(CS%pass_h_av, G%Domain, clock=id_clock_pass)
+    call do_group_pass(CS%pass_hp_uhvh, G%Domain, clock=id_clock_pass)
   endif
 
   !$OMP parallel do default(shared)
   do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
-    h_av(i,j,k) = 0.5*(hp(i,j,k) + h(i,j,k))
+    h_av(i,j,k) = 0.5*(h(i,j,k) + hp(i,j,k))
   enddo ; enddo ; enddo
 
   ! Calculate a predictor-step estimate of the Coriolis and momentum advection terms
@@ -660,7 +650,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     v_inst(i,J,k) = v_av(i,J,k) - CS%dv_av_inst(i,j) * CS%visc_rem_v(i,J,k)
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
-  call do_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
+  call do_group_pass(CS%pass_uv_inst, G%Domain, clock=id_clock_pass)
 
 ! u_accel_bt = layer accelerations due to barotropic solver
   call cpu_clock_begin(id_clock_continuity)
@@ -781,7 +771,6 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
 
   if (associated(CS%OBC)) then
-
     if (CS%debug) &
       call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
 
@@ -789,13 +778,6 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
     if (CS%debug) &
       call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
-
-    ! These should be done with a pass that excludes uh & vh.
-!   call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
-  endif
-
-  if (G%nonblocking_updates) then
-    call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   endif
 
   ! h_av = (h + hp)/2
@@ -830,33 +812,21 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                        CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
     ! Stokes shear force contribution to pressure gradient
-    Use_Stokes_PGF = present(Waves)
-    if (Use_Stokes_PGF) then
-      Use_Stokes_PGF = associated(Waves)
-      if (Use_Stokes_PGF) Use_Stokes_PGF = Waves%Stokes_PGF
-      if (Use_Stokes_PGF) then
-        call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
-        call Stokes_PGF(G, GV, US, dz, u_av, v_av, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
-        if (.not.Waves%Passive_Stokes_PGF) then
-          do k=1,nz
-            do j=js,je ; do I=Isq,Ieq
-              CS%PFu(I,j,k) = CS%PFu(I,j,k) + CS%PFu_Stokes(I,j,k)
-            enddo ; enddo
-          enddo
-          do k=1,nz
-            do J=Jsq,Jeq ; do i=is,ie
-              CS%PFv(i,J,k) = CS%PFv(i,J,k) + CS%PFv_Stokes(i,J,k)
-            enddo ; enddo
-          enddo
-        endif
+    if (present(Waves)) then ; if (associated(Waves)) then ; if (Waves%Stokes_PGF) then
+      call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
+      call Stokes_PGF(G, GV, US, dz, u_av, v_av, CS%PFu_Stokes, CS%PFv_Stokes, Waves)
+      if (.not.Waves%Passive_Stokes_PGF) then
+        do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+          CS%PFu(I,j,k) = CS%PFu(I,j,k) + CS%PFu_Stokes(I,j,k)
+        enddo ; enddo ; enddo
+        do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+          CS%PFv(i,J,k) = CS%PFv(i,J,k) + CS%PFv_Stokes(i,J,k)
+        enddo ; enddo ; enddo
       endif
-    endif
+    endif ; endif ; endif
     call cpu_clock_end(id_clock_pres)
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2b)")
   endif
-
-  if (G%nonblocking_updates) &
-    call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
 
   if (BT_cont_BT_thick) then
     call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
@@ -994,24 +964,18 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
   if (G%nonblocking_updates) then
     call cpu_clock_end(id_clock_vertvisc)
-    call start_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
+    call start_group_pass(CS%pass_uv_inst, G%Domain, clock=id_clock_pass)
     call cpu_clock_begin(id_clock_vertvisc)
   endif
   call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, US, CS%vertvisc_CSp)
   call cpu_clock_end(id_clock_vertvisc)
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2b)")
 
-! Later, h_av = (h_in + h_out)/2, but for now use h_av to store h_in.
-  !$OMP parallel do default(shared)
-  do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
-    h_av(i,j,k) = h(i,j,k)
-  enddo ; enddo ; enddo
-
   call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
   if (G%nonblocking_updates) then
-    call complete_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
+    call complete_group_pass(CS%pass_uv_inst, G%Domain, clock=id_clock_pass)
   else
-    call do_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
+    call do_group_pass(CS%pass_uv_inst, G%Domain, clock=id_clock_pass)
   endif
 
   ! uh = u_av * h
@@ -1032,30 +996,17 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   ! enddo ; enddo ; enddo
 
   call cpu_clock_end(id_clock_continuity)
-  call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
+
+  call do_group_pass(CS%pass_h_uv, G%Domain, clock=id_clock_pass)
+
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2b)")
 
-  if (G%nonblocking_updates) then
-    call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
-  else
-    call do_group_pass(CS%pass_av_uvh, G%domain, clock=id_clock_pass)
-  endif
-
   if (associated(CS%OBC)) then
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, GV, US, dt)
   endif
-
-  ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
-  !$OMP parallel do default(shared)
-  do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
-    h_av(i,j,k) = 0.5*(h_av(i,j,k) + h(i,j,k))
-  enddo ; enddo ; enddo
-
-  if (G%nonblocking_updates) &
-    call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
 
   !$OMP parallel do default(shared)
   do k=1,nz
@@ -1169,10 +1120,8 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   if (CS%id_deta_dt > 0) call post_data(CS%id_deta_dt, deta_dt, CS%diag)
 
   if (CS%debug) then
-    call MOM_state_chksum("Corrector ", u_inst, v_inst, h, uh, vh, G, GV, US, symmetric=sym)
-    call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
-    call hchksum(h_av, "Corrector avg h", G%HI, haloshift=1, scale=GV%H_to_MKS)
- !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
+    call MOM_state_chksum("Corrector ", u_av, v_av, h, uh, vh, G, GV, US, symmetric=sym)
+    ! call uvchksum("Corrector inst [uv]", u_inst, v_inst, G%HI, symmetric=sym, scale=US%L_T_to_m_s)
   endif
 
   if (showCallTree) call callTree_leave("step_MOM_dyn_split_RK2b()")
