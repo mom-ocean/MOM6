@@ -3071,9 +3071,9 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
   real :: umid, vmid, unorm, eps_min ! Velocities [L T-1 ~> m s-1]
   real :: alpha !Coulomb coefficient [nondim]
   real :: Hf !"floatation thickness" for Coulomb friction [Z ~> m]
-  real :: fN !Effective pressure (ice pressure - ocean pressure) for Coulomb friction [R L2 T-2 ~> Pa]
+  real :: fN !Effective pressure (ice pressure - ocean pressure) for Coulomb friction [Pa]
   real :: fB !for Coulomb Friction [(T L-1)^CS%CF_PostPeak ~> (s m-1)^CS%CF_PostPeak]
-  real :: fN_scale !To convert effective pressure to mks units during Coulomb friction
+  real :: fN_scale !To convert effective pressure to mks units during Coulomb friction [Pa T2 R-1 L-2 ~> 1]
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
