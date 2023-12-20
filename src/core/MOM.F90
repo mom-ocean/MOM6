@@ -288,8 +288,9 @@ type, public :: MOM_control_struct ; private
                                      !! undocumented run-time flag that is fragile.
   logical :: split                   !< If true, use the split time stepping scheme.
   logical :: use_alt_split           !< If true, use a version of the split explicit time stepping
-                                     !! with a heavier emphasis on consistent tranports between the
-                                     !! layered and barotroic variables.
+                                     !! scheme that exchanges velocities with step_MOM that have the
+                                     !! average barotropic phase over a baroclinic timestep rather
+                                     !! than the instantaneous barotropic phase.
   logical :: use_RK2                 !< If true, use RK2 instead of RK3 in unsplit mode
                                      !! (i.e., no split between barotropic and baroclinic).
   logical :: interface_filter        !< If true, apply an interface height filter immediately
@@ -2174,8 +2175,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, "MOM", "SPLIT", CS%split, &
                  "Use the split time stepping if true.", default=.true.)
   call get_param(param_file, "MOM", "SPLIT_RK2B", CS%use_alt_split, &
-                 "If true, use a version of the split explicit time stepping with a heavier "//&
-                 "emphasis on consistent tranports between the layered and barotroic variables.", &
+                 "If true, use a version of the split explicit time stepping scheme that "//&
+                 "exchanges velocities with step_MOM that have the average barotropic phase over "//&
+                 "a baroclinic timestep rather than the instantaneous barotropic phase.", &
                  default=.false., do_not_log=.not.CS%split)
   if (CS%split) then
     CS%use_RK2 = .false.
