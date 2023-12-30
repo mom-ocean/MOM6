@@ -20,7 +20,7 @@ use MOM_forcing_type,  only : forcing, mech_forcing, find_ustar
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_interface_heights, only : thickness_to_dz
-! use MOM_intrinsic_functions, only : cuberoot
+use MOM_intrinsic_functions, only : cuberoot
 use MOM_io,            only : slasher, MOM_read_data, vardesc, var_desc
 use MOM_kappa_shear,   only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type, OBC_NONE, OBC_DIRECTION_E
@@ -101,6 +101,8 @@ type, public :: set_visc_CS ; private
   real    :: omega_frac     !<   When setting the decay scale for turbulence, use this
                             !! fraction of the absolute rotation rate blended with the local
                             !! value of f, as sqrt((1-of)*f^2 + of*4*omega^2) [nondim]
+  logical :: concave_trigonometric_L  !< If true, use trigonometric expressions to determine the
+                            !! fractional open interface lengths for concave topography.
   integer :: answer_date    !< The vintage of the order of arithmetic and expressions in the set
                             !! viscosity calculations.  Values below 20190101 recover the answers
                             !! from the end of 2018, while higher values use updated and more robust
@@ -208,11 +210,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! from lateral lengths to layer thicknesses [H L-1 ~> nondim or kg m-3].
   real :: cdrag_sqrt_H_RL  ! Square root of the drag coefficient, times a unit conversion factor from
                            ! density times lateral lengths to layer thicknesses [H L-1 R-1 ~> m3 kg-1 or nondim]
-  real :: cdrag_L_to_H     ! The drag coeffient times conversion factors from lateral
+  real :: cdrag_L_to_H     ! The drag coefficient times conversion factors from lateral
                            ! distance to thickness units [H L-1 ~> nondim or kg m-3]
-  real :: cdrag_RL_to_H    ! The drag coeffient times conversion factors from density times lateral
+  real :: cdrag_RL_to_H    ! The drag coefficient times conversion factors from density times lateral
                            ! distance to thickness units [H L-1 R-1 ~> m3 kg-1 or nondim]
-  real :: cdrag_conv       ! The drag coeffient times a combination of static conversion factors and in
+  real :: cdrag_conv       ! The drag coefficient times a combination of static conversion factors and in
                            ! situ density or Boussinesq reference density [H L-1 ~> nondim or kg m-3]
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
@@ -268,6 +270,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! horizontal area of a velocity cell [Z ~> m].
   real :: L(SZK_(GV)+1)    ! The fraction of the full cell width that is open at
                            ! the depth of each interface [nondim].
+  real :: L_trig(SZK_(GV)+1) ! The fraction of the full cell width that is open at
+                           ! the depth of each interface from trigonometric expressions [nondim].
+  real :: dL_trig_itt(SZK_(GV)+1)  ! The difference between estimates of the fraction of the full cell
+                           ! width that is open at the depth of each interface [nondim].
+  real :: max_dL_trig_itt  ! The largest difference between L and L_trig, for debugging [nondim]
   real :: h_neglect        ! A thickness that is so small it is usually lost
                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: dz_neglect       ! A vertical distance that is so small it is usually lost
@@ -866,18 +873,32 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         if (crv == 0.0) then
           call find_L_open_uniform_slope(vol_below, Dp, Dm, L, GV)
         elseif (crv > 0.0) then
-          call find_L_open_concave_analytic(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
+          if (CS%concave_trigonometric_L) then
+            call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
+          else
+            call find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
+            if (CS%debug) then
+              call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L_trig, GV)
+              max_dL_trig_itt = 0.0
+              do K=1,nz+1
+                dL_trig_itt(K) = L_trig(K) - L(K)
+                if (abs(dL_trig_itt(K)) > abs(max_dL_trig_itt)) max_dL_trig_itt = dL_trig_itt(K)
+              enddo
+              if (abs(max_dL_trig_itt) > 1.0e-12) &
+                K = nz+1   ! This is here to use with a debugger only.
+            endif
+          endif
         else ! crv < 0.0
           call find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
         endif ! end of crv<0 cases.
 
-        ! Determine the Rayliegh drag contributions.
+        ! Determine the Rayleigh drag contributions.
 
         ! The drag within the bottommost Vol_bbl_chan is applied as a part of an enhanced bottom
         ! viscosity, while above this the drag is applied directly to the layers in question as a
         ! Rayleigh drag term.
 
-        ! Restrict the volume over which the channel drag is applied from the previously determined valu.e
+        ! Restrict the volume over which the channel drag is applied from the previously determined value.
         if (CS%Chan_drag_max_vol >= 0.0) Vol_bbl_chan = min(Vol_bbl_chan, CS%Chan_drag_max_vol)
 
         BBL_visc_frac = 0.0
@@ -1082,9 +1103,9 @@ subroutine find_L_open_uniform_slope(vol_below, Dp, Dm, L, GV)
 
 end subroutine find_L_open_uniform_slope
 
-!> Determine the normalized open length of each interface for concave bathymetry (from the ocean perspective) using
-!! analytic expressions.   In this case there can be two separate open regions.
-subroutine find_L_open_concave_analytic(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
+!> Determine the normalized open length of each interface for concave bathymetry (from the ocean perspective)
+!! using trigonometric expressions.   In this case there can be two separate open regions.
+subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
   type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
                                                    !! the full horizontal area of a velocity cell [Z ~> m]
@@ -1111,7 +1132,7 @@ subroutine find_L_open_concave_analytic(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
   real :: C24_crv          ! 24/crv [Z-1 ~> m-1].
   real :: apb_4a, ax2_3apb ! Various nondimensional ratios of crv and slope [nondim].
   real :: a2x48_apb3, Iapb ! Combinations of crv (a) and slope (b) [Z-1 ~> m-1]
-  real :: L0               ! A linear estimate of L approprate for tiny volumes [nondim].
+  real :: L0               ! A linear estimate of L appropriate for tiny volumes [nondim].
   real :: slope_crv        ! The slope divided by the curvature [nondim]
   real :: tmp_val_m1_to_p1 ! A temporary variable [nondim]
   real, parameter :: C1_3 = 1.0/3.0, C1_12 = 1.0/12.0 ! Rational constants [nondim]
@@ -1122,7 +1143,7 @@ subroutine find_L_open_concave_analytic(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
   ! Each cell extends from x=-1/2 to 1/2, and has a topography
   ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
   crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
-  if (crv < 0.0) call MOM_error(FATAL, "find_L_open_concave should only be called with a positive curvature.")
+  if (crv <= 0.0) call MOM_error(FATAL, "find_L_open_concave should only be called with a positive curvature.")
   slope = Dp - Dm
 
   ! Calculate the volume above which the entire cell is open and the volume at which the
@@ -1168,12 +1189,337 @@ subroutine find_L_open_concave_analytic(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
     endif
   enddo ! k loop to determine L(K) in the concave case
 
-end subroutine find_L_open_concave_analytic
+end subroutine find_L_open_concave_trigonometric
 
 
-!> Determine the normalized open length of each interface for convex bathymetry (from the ocean perspective) using
-!! Newton's method iterations.   In this case there is a single open region with the minimum depth
-!! at one edge of the cell.
+
+!> Determine the normalized open length of each interface for concave bathymetry (from the ocean perspective) using
+!! iterative methods to solve the relevant cubic equations.   In this case there can be two separate open regions.
+subroutine find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
+  type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
+                                                   !! the full horizontal area of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: D_vel !< The average bottom depth at a velocity point [Z ~> m]
+  real,                        intent(in)  :: Dp   !< The larger of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real, dimension(SZK_(GV)+1), intent(out) :: L    !< The fraction of the full cell width that is open at
+                                                   !! the depth of each interface [nondim]
+
+  ! Local variables
+  real :: crv              ! crv is the curvature of the bottom depth across a
+                           ! cell, times the cell width squared [Z ~> m].
+  real :: crv_3            ! crv/3 [Z ~> m].
+  real :: slope            ! The absolute value of the bottom depth slope across
+                           ! a cell times the cell width [Z ~> m].
+
+  ! The following "volumes" have units of vertical heights because they are normalized
+  ! by the full horizontal area of a velocity cell.
+  real :: Vol_open         ! The cell volume above which the face is fully is open [Z ~> m].
+  real :: Vol_2_reg        ! The cell volume above which there are two separate
+                           ! open areas that must be integrated [Z ~> m].
+  real :: L_2_reg          ! The value of L when vol_below is Vol_2_reg [nondim]
+  real :: vol_inflect_1    ! The volume at which there is an inflection point in the expression
+                           ! relating L to vol_err when there is a single open region [Z ~> m]
+  real :: vol_inflect_2    ! The volume at which there is an inflection point in the expression
+                           ! relating L to vol_err when there are two open regions [Z ~> m]
+
+  real :: L_inflect_1      ! The value of L that sits at an inflection point in the expression
+                           ! relating L to vol_err when there is a single open region [nondim]
+  real :: L_inflect_2      ! The value of L that sits at an inflection point in the expression
+                           ! relating L to vol_err when there is are two open regions [nondim]
+  real :: L_max, L_min     ! Maximum and minimum bounds on the solution for L for an interface [nondim]
+  real :: vol_err          ! The difference between the volume below an interface for a given value
+                           ! of L and the target value [Z ~> m]
+  real :: dVol_dL          ! The partial derivative of the volume below with L [Z ~> m]
+  real :: vol_err_max      ! The value of vol_err when L is L_max [Z ~> m]
+
+  ! The following combinations of slope and crv are reused across layers, and hence are pre-calculated
+  ! for efficiency.  All are non-negative.
+  real :: Icrvpslope       ! The inverse of the sum of crv and slope [Z-1 ~> m-1]
+  real :: slope_crv        ! The slope divided by the curvature [nondim]
+  ! These are only used if the slope exceeds or matches the curvature.
+  real :: smc              ! The slope minus the curvature [Z ~> m]
+  real :: C3c_m_s          ! 3 times the curvature minus the slope [Z ~> m]
+  real :: I_3c_m_s         ! The inverse of 3 times the curvature minus the slope [Z-1 ~> m-1]
+  ! These are only used if the curvature exceeds the slope.
+  real :: C4_crv           ! The inverse of a quarter of the curvature [Z-1 ~> m-1]
+  real :: sxcms_c          ! The slope times the difference between the curvature and slope
+                           ! divided by the curvature [Z ~> m]
+  real :: slope2_4crv      ! A quarter of the slope squared divided by the curvature [Z ~> m]
+  real :: I_3s_m_c         ! The inverse of 3 times the slope minus the curvature [Z-1 ~> m-1]
+  real :: C3s_m_c          ! 3 times the slope minus the curvature [Z ~> m]
+
+  real, parameter :: C1_3 = 1.0 / 3.0, C1_12 = 1.0 / 12.0 ! Rational constants [nondim]
+  integer :: K, nz, itt
+  integer, parameter :: max_itt = 10
+
+  nz = GV%ke
+
+  ! Each cell extends from x=-1/2 to 1/2, and has a topography
+  ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
+
+  crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  if (crv <= 0.0) call MOM_error(FATAL, "find_L_open_concave should only be called with a positive curvature.")
+  slope = Dp - Dm
+
+  ! Calculate the volume above which the entire cell is open and the volume at which the
+  ! equation that is solved for L changes because there are two separate open regions.
+  if (slope >= crv) then
+    Vol_open = D_vel - Dm ; Vol_2_reg = Vol_open
+    L_2_reg = 1.0
+    if (crv + slope >= 4.0*crv) then
+      L_inflect_1 = 1.0 ; Vol_inflect_1 = Vol_open
+    else
+      slope_crv = slope / crv
+      L_inflect_1 = 0.25 + 0.25*slope_crv
+      vol_inflect_1 = 0.25*C1_12 * ((slope_crv + 1.0)**2 * (slope + crv))
+    endif
+    ! Precalculate some combinations of crv & slope for later use.
+    smc = slope - crv
+    C3c_m_s = 3.0*crv - slope
+    if (C3c_m_s > 2.0*smc) I_3c_m_s = 1.0 / C3c_m_s
+  else
+    slope_crv = slope / crv
+    Vol_open = 0.25*slope*slope_crv + C1_12*crv
+    Vol_2_reg = 0.5*slope_crv**2 * (crv - C1_3*slope)
+    L_2_reg = slope_crv
+
+    ! The inflection point is useful to know because below the inflection point
+    ! Newton's method converges monotonically from above and conversely above it.
+    ! These are the inflection point values of L and vol_below with a single open segment.
+    vol_inflect_1 = 0.25*C1_12 * ((slope_crv + 1.0)**2 * (slope + crv))
+    L_inflect_1 = 0.25 + 0.25*slope_crv
+    ! These are the inflection point values of L and vol_below when there are two open segments.
+    ! Vol_inflect_2 = Vol_open - 0.125 * crv_3, which is equivalent to:
+    vol_inflect_2 = 0.25*slope*slope_crv + 0.125*crv_3
+    L_inflect_2 = 0.5
+    ! Precalculate some combinations of crv & slope for later use.
+    C4_crv = 4.0 / crv
+    slope2_4crv = 0.25 * slope * slope_crv
+    sxcms_c = slope_crv*(crv - slope)
+    C3s_m_c = 3.0*slope - crv
+    if (C3s_m_c > 2.0*sxcms_c) I_3s_m_c = 1.0 / C3s_m_c
+  endif
+  ! Define some combinations of crv & slope for later use.
+  Icrvpslope = 1.0 / (crv+slope)
+
+  L(nz+1) = 0.0
+  ! Determine the normalized open length (L) at each interface.
+  do K=nz,1,-1
+    if (vol_below(K) >= Vol_open) then ! The whole cell is open.
+      L(K) = 1.0
+    elseif (vol_below(K) < Vol_2_reg) then
+      ! In this case, there is a single contiguous open region from x=1/2-L to 1/2.
+      ! Changing the horizontal variable in the expression from D(x) to D(L) gives:
+      !   x(L) = 1/2 - L
+      !   D(L) = crv*(0.5 - L)^2 + slope*(0.5 - L) + D_vel - crv/12
+      !   D(L) = crv*L^2 - crv*L + crv/4 + slope*(1/2 - L) + D_vel - crv/12
+      !   D(L) = crv*L^2 - (slope+crv)*L + slope/2 + D_vel + crv/6
+      !   D(0) = slope/2 + D_vel + crv/6 = (Dp - Dm)/2 + D_vel + (Dp + Dm - 2*D_vel)/2 = Dp
+      !   D(1) = crv - slope - crv + slope/2 + Dvel + crv/6 = D_vel - slope/2 + crv/6 = Dm
+      !
+      !   vol_below = integral(y = 0 to L) D(y) dy - L * D(L)
+      !             = crv/3*L^3 - (slope+crv)/2*L^2 + (slope/2 + D_vel + crv/6)*L -
+      !                    (crv*L^2 - (slope+crv)*L + slope/2 + D_vel + crv/6) * L
+      !             = -2/3 * crv * L^3 + 1/2 * (slope+crv) * L^2
+      !   vol_below(K) = 0.5*L(K)**2*(slope + crv_3*(3-4*L(K)))
+      ! L(K) is between L(K+1) and slope_crv.
+      L_max = min(L_2_reg, 1.0)
+      if (vol_below(K) <= vol_inflect_1) L_max = min(L_max, L_inflect_1)
+
+      L_min = L(K+1)
+      if (vol_below(K) >= vol_inflect_1) L_min = max(L_min, L_inflect_1)
+
+      ! Ignoring the cubic term gives an under-estimate but is very accurate for near bottom
+      ! layers, so use this as a potential floor.
+      if (2.0*vol_below(K)*Icrvpslope > L_min**2) L_min = sqrt(2.0*vol_below(K)*Icrvpslope)
+
+      ! Start with L_min in most cases.
+      L(k) = L_min
+
+      if (vol_below(K) <= vol_inflect_1) then
+        ! Starting with L_min below L_inflect_1, only the first overshooting iteration of Newton's
+        ! method needs bounding.
+        L(k) = L_min
+        vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L_min is already the best solution.
+        if (vol_err < 0.0) then
+          dVol_dL = L(K) * (slope + crv*(1.0 - 2.0*L(k)))
+          if (L(K)*dVol_dL > vol_err + L_max*dVol_dL) then
+            L(K) = L_max
+          else
+            L(K) = L(K) - (vol_err / dVol_dL)
+          endif
+
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+            dVol_dL = L(K) * (slope + crv*(1.0 - 2.0*L(k)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+      else ! (vol_below(K) > vol_inflect_1)
+        ! Iteration from below converges monotonically, but we need to deal with the case where we are
+        ! close to the peak of the topography and Newton's method mimics the convergence of bisection.
+
+        ! Evaluate the error when L(K) = L_min as a possible first guess.
+        L(k) = L_min
+        vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L_min is already the best solution.
+        if (vol_err < 0.0) then
+
+          ! These two upper estimates deal with the possibility that this point may be near
+          ! the upper extrema, where the error term might be approximately parabolic and
+          ! Newton's method would converge slowly like simple bisection.
+          if (slope < crv) then
+            ! if ((L_2_reg - L_min)*(3.0*slope - crv) > 2.0*slope_crv*(crv-slope)) then
+            if ((L_2_reg - L_min)*C3s_m_c > 2.0*sxcms_c) then
+              ! There is a decent upper estimate of L from the approximate quadratic equation found
+              ! by examining the error expressions at L ~= L_2_reg and ignoring the cubic term.
+              L_max = (slope_crv*(2.0*slope) - sqrt(sxcms_c**2 + &
+                                                    2.0*C3s_m_c*(Vol_2_reg - vol_below(K))) ) * I_3s_m_c
+              ! The line above is equivalent to:
+              ! L_max = (slope_crv*(2.0*slope) - sqrt(slope_crv**2*(crv-slope)**2 + &
+              !                                       2.0*(3.0*slope - crv)*(Vol_2_reg - vol_below(K))) ) / &
+              !                      (3.0*slope - crv)
+            else
+              L_max = slope_crv
+            endif
+          else ! (slope >= crv)
+            if ((1.0 - L_min)*C3c_m_s > 2.0*smc) then
+              ! There is a decent upper estimate of L from the approximate quadratic equation found
+              ! by examining the error expressions at L ~= 1 and ignoring the cubic term.
+              L_max = ( 2.0*crv - sqrt(smc**2 + 2.0*C3c_m_s * (Vol_open - vol_below(K))) ) * I_3c_m_s
+              ! The line above is equivalent to:
+              ! L_max = ( 2.0*crv - sqrt((slope - crv)**2 + 2.0*(3.0*crv - slope) * (Vol_open - vol_below(K))) ) / &
+              !             (3.0*crv - slope)
+            else
+              L_max = 1.0
+            endif
+          endif
+          Vol_err_max = 0.5*L_max**2 * (slope + crv*(1.0 - 4.0*C1_3*L_max)) - vol_below(K)
+          if (Vol_err_max < 0.0) call MOM_error(FATAL, &
+                  "Vol_err_max should never be negative in find_L_open_concave_iterative.")
+          if ((Vol_err_max < abs(Vol_err)) .and. (L_max < 1.0)) then
+            ! Start with 1 bounded Newton's method step from L_max
+            dVol_dL = L_max * (slope + crv*(1.0 - 2.0*L_max))
+            L(K) = max(L_min, L_max - (vol_err_max / dVol_dL) )
+          ! else ! Could use the fact that Vol_err is known to take an iteration?
+          endif
+
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+            dVol_dL = L(K) * (slope + crv*(1.0 - 2.0*L(k)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+
+      endif
+
+      ! To check the answers.
+      ! Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol_below(K)
+    else ! There are two separate open regions.
+      !   vol_below(K) = slope^2/(4*crv) + crv/12 - (crv/12)*(1-L)^2*(1+2L)
+      ! At the deepest volume, L = slope/crv, at the top L = 1.
+
+      ! To check the answers.
+      ! Vol_err = Vol_open - 0.25*crv_3*(1.0+2.0*L(K)) * (1.0-L(K))**2 - vol_below(K)
+      !   or equivalently:
+      ! Vol_err = Vol_open - 0.25*crv_3*(3.0-2.0*(1.0-L(K))) * (1.0-L(K))**2 - vol_below(K)
+      !  ! Note that: Vol_open = 0.25*slope*slope_crv + C1_12*crv
+      ! Vol_err = 0.25*slope*slope_crv + 0.25*crv_3*( 1.0 - (1.0 + 2.0*L(K)) * (1.0-L(K))**2 ) - vol_below(K)
+      ! Vol_err = 0.25*crv_3*L(K)**2*( 3.0 - 2.0*L(K) ) + 0.25*slope*slope_crv - vol_below(K)
+
+      ! Derivation of the L_max limit below:
+      !     Vol_open - vol_below(K) = 0.25*crv_3*(3.0-2.0*(1.0-L(K))) * (1.0-L(K))**2
+      !     (3.0-2.0*(1.0-L(K))) * (1.0-L(K))**2 = (Vol_open - vol_below(K)) / (0.25*crv_3)
+      !   When 1-L(K) << 1:
+      !     3.0 * (1.0-L_max)**2 = (Vol_open - vol_below(K)) / (0.25*crv_3)
+      !     (1.0-L_max)**2 = (Vol_open - vol_below(K)) / (0.25*crv)
+
+      ! Derivation of the L_min limit below:
+      !     Vol_err = 0.25*crv_3*L(K)**2*( 3.0 - 2.0*L(K) ) + 0.25*slope*slope_crv - vol_below(K)
+      !     crv*L(K)**2*( 1.0 - 2.0*C1_3*L(K) ) = 4.0*vol_below(K) - slope*slope_crv
+      !   When L(K) << 1:
+      !     crv*L_min**2 = 4.0*vol_below(K) - slope*slope_crv
+      !     L_min = sqrt((4.0*vol_below(K) - slope*slope_crv)/crv)
+      !   Noting that L(K) >= slope_crv, when L(K)-slope_crv << 1:
+      !     (crv + 2.0*C1_3*slope)*L_min**2 = 4.0*vol_below(K) - slope*slope_crv
+      !     L_min = sqrt((4.0*vol_below(K) - slope*slope_crv)/(crv + 2.0*C1_3*slope))
+
+      if (vol_below(K) <= Vol_inflect_2) then
+        ! Newton's Method would converge monotonically from above, but overshoot from below.
+        L_min = max(L(K+1), L_2_reg) ! L_2_reg = slope_crv
+        ! This under-estimate of L(K) is accurate for L ~= slope_crv:
+        if ((4.0*vol_below(K) - slope*slope_crv) > (crv + 2.0*C1_3*slope)*L_min**2) &
+          L_min = max(L_min, sqrt((4.0*vol_below(K) - slope*slope_crv) / (crv + 2.0*C1_3*slope)))
+        L_max = 0.5 ! = L_inflect_2
+
+        ! Starting with L_min below L_inflect_2, only the first overshooting iteration of Newton's
+        ! method needs bounding.
+        L(k) = L_min
+        Vol_err = crv_3*L(K)**2*( 0.75 - 0.5*L(K) ) + (slope2_4crv - vol_below(K))
+
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L_min is already the best solution.
+        if (vol_err < 0.0) then
+          dVol_dL = 0.5*crv * (L(K) * (1.0 - L(K)))
+          if (L(K)*dVol_dL >= vol_err + L_max*dVol_dL) then
+            L(K) = L_max
+          else
+            L(K) = L(K) - (vol_err / dVol_dL)
+          endif
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            Vol_err = crv_3 * (L(K)**2 * (0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+            dVol_dL = 0.5*crv * (L(K)*(1.0 - L(K)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+      else ! (vol_below(K) > Vol_inflect_2)
+        ! Newton's Method would converge monotonically from below, but overshoots from above, and
+        ! we may need to deal with the case where we are close to the peak of the topography.
+        L_min = max(L(K+1), 0.5)
+        L(k) = L_min
+
+        Vol_err = crv_3 * (L(K)**2 * ( 0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L(k) is already the best solution.
+        if (Vol_err < 0.0) then
+          ! This over-estimate of L(K) is accurate for L ~= 1:
+          L_max = 1.0 - sqrt( (Vol_open - vol_below(K)) * C4_crv )
+          Vol_err_max = crv_3 * (L_max**2 * ( 0.75 - 0.5*L_max)) + (slope2_4crv - vol_below(K))
+          if (Vol_err_max < 0.0) call MOM_error(FATAL, &
+                  "Vol_err_max should never be negative in find_L_open_concave_iterative.")
+          if ((Vol_err_max < abs(Vol_err)) .and. (L_max < 1.0)) then
+            ! Start with 1 bounded Newton's method step from L_max
+            dVol_dL = 0.5*crv * (L_max * (1.0 - L_max))
+            L(K) = max(L_min, L_max - (vol_err_max / dVol_dL) )
+          ! else ! Could use the fact that Vol_err is known to take an iteration?
+          endif
+
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            Vol_err = crv_3 * (L(K)**2 * ( 0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+            dVol_dL = 0.5*crv * (L(K) * (1.0 - L(K)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+      endif
+
+    endif
+  enddo ! k loop to determine L(K) in the concave case
+
+end subroutine find_L_open_concave_iterative
+
+!> Determine the normalized open length of each interface for convex bathymetry (from the ocean
+!! perspective) using Newton's method iterations.  In this case there is a single open region
+!! with the minimum depth at one edge of the cell.
 subroutine find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
   type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZK_(GV)+1), intent(in)  :: vol_below  !< The volume below each interface, normalized by
@@ -1226,7 +1572,7 @@ subroutine find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
   ! Each cell extends from x=-1/2 to 1/2, and has a topography
   ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
   crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
-  if (crv > 0.0) call MOM_error(FATAL, "find_L_open_convex should only be called with a negative curvature.")
+  if (crv >= 0.0) call MOM_error(FATAL, "find_L_open_convex should only be called with a negative curvature.")
   slope = Dp - Dm
 
   ! Calculate the volume above which the entire cell is open and the volume at which the
@@ -1252,7 +1598,7 @@ subroutine find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
     elseif (vol_below(K) <= Vol_direct) then
       ! Both edges of the cell are bounded by walls.
       ! if (CS%answer_date < 20240101)) then
-      L(K) = (-0.25*C24_crv*vol_below(K))**C1_3
+        L(K) = (-0.25*C24_crv*vol_below(K))**C1_3
       ! else
       !   L(K) = cuberoot(-0.25*C24_crv*vol_below(K))
       ! endif
@@ -2592,8 +2938,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "default is to use the same value as SMAG_LAP_CONST if "//&
                  "it is defined, or 0.15 if it is not. The value used is "//&
                  "also 0.15 if the specified value is negative.", &
-                 units="nondim", default=cSmag_chan_dflt)
+                 units="nondim", default=cSmag_chan_dflt, do_not_log=.not.CS%Channel_drag)
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
+
+    call get_param(param_file, mdl, "TRIG_CHANNEL_DRAG_WIDTHS", CS%concave_trigonometric_L, &
+                 "If true, use trigonometric expressions to determine the fractional open "//&
+                 "interface lengths for concave topography.", &
+                 default=.true., do_not_log=.not.CS%Channel_drag)
   endif
 
   Chan_max_thick_dflt = -1.0*US%m_to_Z
