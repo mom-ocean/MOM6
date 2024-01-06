@@ -31,17 +31,6 @@ runs:
         REPORT_ERROR_LOGS=true make deps/lib/libFMS.a -s -j
         echo "::endgroup::"
 
-    - name: Store compiler flags used in Makefile
-      shell: bash
-      run: |
-        echo "::group::config.mk"
-        cd .testing
-        echo "FCFLAGS_DEBUG=-g -O0 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds" >> config.mk
-        echo "FCFLAGS_REPRO=-g -O2 -fbacktrace" >> config.mk
-        echo "FCFLAGS_INIT=-finit-real=snan -finit-integer=2147483647 -finit-derived" >> config.mk
-        cat config.mk
-        echo "::endgroup::"
-
     - name: Compile MOM6 in symmetric memory mode
       shell: bash
       run: |
