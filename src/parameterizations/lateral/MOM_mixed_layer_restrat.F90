@@ -1767,8 +1767,10 @@ subroutine mixedlayer_restrat_register_restarts(HI, GV, US, param_file, CS, rest
                  units="s", default=0., scale=US%s_to_T, do_not_log=.true.)
   call get_param(param_file, mdl, "MLE_MLD_DECAY_TIME2", CS%MLE_MLD_decay_time2, &
                  units="s", default=0., scale=US%s_to_T, do_not_log=.true.)
-  call get_param(param_file, mdl, "MLE%USE_BODNER23", use_Bodner, &
+  call openParameterBlock(param_file, 'MLE', do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_BODNER23", use_Bodner, &
                  default=.false., do_not_log=.true.)
+  call closeParameterBlock(param_file)
   if (CS%MLE_MLD_decay_time>0. .or. CS%MLE_MLD_decay_time2>0. .or. use_Bodner) then
     ! CS%MLD_filtered is used to keep a running mean of the PBL's actively mixed MLD.
     allocate(CS%MLD_filtered(HI%isd:HI%ied,HI%jsd:HI%jed), source=0.)
