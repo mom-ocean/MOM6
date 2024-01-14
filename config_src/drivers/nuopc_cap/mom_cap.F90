@@ -1779,7 +1779,7 @@ subroutine ModelAdvance(gcomp, rc)
         rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
 
         write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') &
-             trim(casename), year, month, day, seconds
+             trim(casename), year, month, day, hour * 3600 + minute * 60 + seconds
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
         ! write restart file(s)
         call ocean_model_restart(ocean_state, restartname=restartname, num_rest_files=num_rest_files)
