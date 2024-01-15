@@ -270,11 +270,19 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! horizontal area of a velocity cell [Z ~> m].
   real :: L(SZK_(GV)+1)    ! The fraction of the full cell width that is open at
                            ! the depth of each interface [nondim].
+  ! The next 9 variables are only used for debugging.
   real :: L_trig(SZK_(GV)+1) ! The fraction of the full cell width that is open at
                            ! the depth of each interface from trigonometric expressions [nondim].
+  real :: vol_err_trig(SZK_(GV)+1) ! The error in the volume below based on L_trig [Z ~> m]
+  real :: vol_err_iter(SZK_(GV)+1) ! The error in the volume below based on L_iter [Z ~> m]
+  real :: norm_err_trig(SZK_(GV)+1) ! vol_err_trig normalized by vol_below [nondim]
+  real :: norm_err_iter(SZK_(GV)+1) ! vol_err_iter normalized by vol_below [nondim]
   real :: dL_trig_itt(SZK_(GV)+1)  ! The difference between estimates of the fraction of the full cell
                            ! width that is open at the depth of each interface [nondim].
   real :: max_dL_trig_itt  ! The largest difference between L and L_trig, for debugging [nondim]
+  real :: max_norm_err_trig ! The largest magnitude value of norm_err_trig in a column [nondim]
+  real :: max_norm_err_iter ! The largest magnitude value of norm_err_iter in a column [nondim]
+
   real :: h_neglect        ! A thickness that is so small it is usually lost
                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: dz_neglect       ! A vertical distance that is so small it is usually lost
@@ -878,14 +886,29 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           else
             call find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
             if (CS%debug) then
+              ! The tests in this block reveal that the iterative and trigonometric solutions are
+              ! mathematically  equiavalent, but in some cases the iterative solution is consistent
+              ! at roundoff, but that the trigonmetric solutions have errors that can be several
+              ! orders of magnitude larger in some cases.
               call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L_trig, GV)
-              max_dL_trig_itt = 0.0
+              call test_L_open_concave(vol_below, D_vel, Dp, Dm, L_trig, vol_err_trig, GV)
+              call test_L_open_concave(vol_below, D_vel, Dp, Dm, L, vol_err_iter, GV)
+              max_dL_trig_itt = 0.0 ; max_norm_err_trig = 0.0 ; max_norm_err_iter = 0.0
+              norm_err_trig(:) = 0.0 ; norm_err_iter(:) = 0.0
               do K=1,nz+1
                 dL_trig_itt(K) = L_trig(K) - L(K)
                 if (abs(dL_trig_itt(K)) > abs(max_dL_trig_itt)) max_dL_trig_itt = dL_trig_itt(K)
+                norm_err_trig(K) = vol_err_trig(K) / (vol_below(K) + dz_neglect)
+                norm_err_iter(K) = vol_err_iter(K) / (vol_below(K) + dz_neglect)
+                if (abs(norm_err_trig(K)) > abs(max_norm_err_trig)) max_norm_err_trig = norm_err_trig(K)
+                if (abs(norm_err_iter(K)) > abs(max_norm_err_iter)) max_norm_err_iter = norm_err_iter(K)
               enddo
-              if (abs(max_dL_trig_itt) > 1.0e-12) &
-                K = nz+1   ! This is here to use with a debugger only.
+              if (abs(max_dL_trig_itt) > 1.0e-13) &
+                K = nz+1   ! This is here only to use as a break point for a debugger.
+              if (abs(max_norm_err_trig) > 1.0e-13) &
+                K = nz+1   ! This is here only to use as a break point for a debugger.
+              if (abs(max_norm_err_iter) > 1.0e-13) &
+                K = nz+1   ! This is here only to use as a break point for a debugger.
             endif
           endif
         else ! crv < 0.0
@@ -1516,6 +1539,89 @@ subroutine find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
   enddo ! k loop to determine L(K) in the concave case
 
 end subroutine find_L_open_concave_iterative
+
+
+
+!> Test the validity the normalized open lengths of each interface for concave bathymetry (from the ocean perspective)
+!! by evaluating and returing the relevant cubic equations.
+subroutine test_L_open_concave(vol_below, D_vel, Dp, Dm, L, vol_err, GV)
+  type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
+                                                   !! the full horizontal area of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: D_vel !< The average bottom depth at a velocity point [Z ~> m]
+  real,                        intent(in)  :: Dp   !< The larger of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real, dimension(SZK_(GV)+1), intent(in)  :: L    !< The fraction of the full cell width that is open at
+                                                   !! the depth of each interface [nondim]
+  real, dimension(SZK_(GV)+1), intent(out) :: vol_err !< The difference between vol_below and the
+                                                   !! value obtained from using L in the cubic equation [Z ~> m]
+
+  ! Local variables
+  real :: crv              ! crv is the curvature of the bottom depth across a
+                           ! cell, times the cell width squared [Z ~> m].
+  real :: crv_3            ! crv/3 [Z ~> m].
+  real :: slope            ! The absolute value of the bottom depth slope across
+                           ! a cell times the cell width [Z ~> m].
+
+  ! The following "volumes" have units of vertical heights because they are normalized
+  ! by the full horizontal area of a velocity cell.
+  real :: Vol_open         ! The cell volume above which the face is fully is open [Z ~> m].
+  real :: Vol_2_reg        ! The cell volume above which there are two separate
+                           ! open areas that must be integrated [Z ~> m].
+  real :: L_2_reg          ! The value of L when vol_below is Vol_2_reg [nondim]
+
+  ! The following combinations of slope and crv are reused across layers, and hence are pre-calculated
+  ! for efficiency.  All are non-negative.
+  real :: slope_crv        ! The slope divided by the curvature [nondim]
+  ! These are only used if the curvature exceeds the slope.
+  real :: slope2_4crv      ! A quarter of the slope squared divided by the curvature [Z ~> m]
+
+  real, parameter :: C1_3 = 1.0 / 3.0, C1_12 = 1.0 / 12.0 ! Rational constants [nondim]
+  integer :: K, nz
+
+  nz = GV%ke
+
+  ! Each cell extends from x=-1/2 to 1/2, and has a topography
+  ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
+
+  crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  if (crv <= 0.0) call MOM_error(FATAL, "test_L_open_concave should only be called with a positive curvature.")
+  slope = Dp - Dm
+
+  ! Calculate the volume above which the entire cell is open and the volume at which the
+  ! equation that is solved for L changes because there are two separate open regions.
+  if (slope >= crv) then
+    Vol_open = D_vel - Dm ; Vol_2_reg = Vol_open
+    L_2_reg = 1.0
+    if (crv + slope >= 4.0*crv) then
+      slope_crv = 1.0
+    else
+      slope_crv = slope / crv
+    endif
+  else
+    slope_crv = slope / crv
+    Vol_open = 0.25*slope*slope_crv + C1_12*crv
+    Vol_2_reg = 0.5*slope_crv**2 * (crv - C1_3*slope)
+    L_2_reg = slope_crv
+  endif
+  slope2_4crv = 0.25 * slope * slope_crv
+
+  ! Determine the volume error based on the normalized open length (L) at each interface.
+  Vol_err(nz+1) = 0.0
+  do K=nz,1,-1
+    if (L(K) >= 1.0) then
+      Vol_err(K) = max(Vol_open - vol_below(K), 0.0)
+    elseif (L(K) <= L_2_reg) then
+      vol_err(K) = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+    else ! There are two separate open regions.
+      Vol_err(K) = crv_3 * (L(K)**2 * ( 0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+    endif
+  enddo ! k loop to determine L(K) in the concave case
+
+end subroutine test_L_open_concave
+
 
 !> Determine the normalized open length of each interface for convex bathymetry (from the ocean
 !! perspective) using Newton's method iterations.  In this case there is a single open region
