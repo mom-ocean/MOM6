@@ -82,13 +82,13 @@ AS_IF([test "x$with_driver" != "x"],
 # Select the model framework (default: FMS1)
 # NOTE: We can phase this out after the FMS1 I/O has been removed from FMS and
 #   replace with a detection test.  For now, it is a user-defined switch.
-MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1
+MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2
 AC_ARG_WITH([framework],
   AS_HELP_STRING([--with-framework=fms1|fms2], [Select the model framework]))
 AS_CASE(["$with_framework"],
   [fms1], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1],
   [fms2], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2],
-  [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1]
+  [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2]
 )
 
 
