@@ -65,7 +65,10 @@
 SHELL = bash
 
 # No implicit rules, suffixes, or variables
-MAKEFLAGS += -rR
+MAKEFLAGS += --no-builtin-rules
+MAKEFLAGS += --no-builtin-variables
+
+.SUFFIXES:
 
 # Determine the MOM6 autoconf srcdir
 AC_SRCDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../ac
@@ -551,8 +554,8 @@ $(WORK)/%/$(1)/ocean.stats $(WORK)/%/$(1)/chksum_diag: $(BUILD)/$(2)/MOM6 | prep
 	  && $(TIME) $(5) $(MPIRUN) -n $(6) $$(abspath $$<) 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
-	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 40 ; \
-	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -n 40 ; \
+	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 100 ; \
+	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -n 100 ; \
 	    rm ocean.stats chksum_diag ; \
 	    echo -e "$(FAIL): $$*.$(1) failed at runtime." \
 	  )
@@ -635,8 +638,8 @@ $(WORK)/%/restart/ocean.stats: $(BUILD)/symmetric/MOM6 | preproc
 	# Run the first half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std1.err > std1.out \
 	  || !( \
-	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 40 ; \
-	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 40 ; \
+	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 100 ; \
+	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 100 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 	# Setup the next inputs
@@ -646,8 +649,8 @@ $(WORK)/%/restart/ocean.stats: $(BUILD)/symmetric/MOM6 | preproc
 	# Run the second half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std2.err > std2.out \
 	  || !( \
-	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 40 ; \
-	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 40 ; \
+	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 100 ; \
+	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 100 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 
