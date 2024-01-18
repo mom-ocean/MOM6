@@ -9,7 +9,7 @@ stages:
 # that is unique to this pipeline.
 # We use the "fetch" strategy to speed up the startup of stages
 variables:
-  JOB_DIR: "/lustre/f2/scratch/oar.gfdl.ogrp-account/runner/builds/$CI_PIPELINE_ID"
+  JOB_DIR: "/gpfs/f5/gfdl_o/scratch/oar.gfdl.ogrp-account/runner/builds/$CI_PIPELINE_ID"
   GIT_STRATEGY: fetch
 
 # Always eport value of $JOB_DIR
