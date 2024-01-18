@@ -16,3 +16,18 @@ runs:
         brew install netcdf-fortran
         brew install mpich
         echo "::endgroup::"
+
+    # NOTE: Floating point exceptions are currently disabled due to an error in
+    # HDF5 1.4.3.  They will be re-enabled when the default brew version has
+    # been updated to a working version.
+
+    - name: Set compiler flags
+      shell: bash
+      run: |
+        cd .testing
+        echo "FCFLAGS_DEBUG = -g -O0 -Wextra -Wno-compare-reals -fbacktrace -fcheck=bounds" >> config.mk
+        echo "FCFLAGS_REPRO = -g -O2 -fbacktrace" >> config.mk
+        echo "FCFLAGS_INIT = -finit-real=snan -finit-integer=2147483647 -finit-derived" >> config.mk
+        echo "FCFLAGS_FMS = -g -fbacktrace -O0" >> config.mk
+        cat config.mk
+        echo "::endgroup::"
