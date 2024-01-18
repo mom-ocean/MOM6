@@ -821,7 +821,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
   endif
 
   if (CS%shelf_mass_is_dynamic) &
-    call write_ice_shelf_energy(CS%dCS, G, US, ISS%mass_shelf, Time, &
+    call write_ice_shelf_energy(CS%dCS, G, US, ISS%mass_shelf, ISS%area_shelf_h, Time, &
                                 time_step=real_to_time(US%T_to_s*time_step) )
 
   if (CS%debug) call MOM_forcing_chksum("Before add shelf flux", fluxes, G, CS%US, haloshift=0)
@@ -1004,7 +1004,7 @@ subroutine change_thickness_using_melt(ISS, G, US, time_step, fluxes, density_ic
         ISS%hmask(i,j) = 0.0
         ISS%area_shelf_h(i,j) = 0.0
       endif
-      ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) * G%IareaT(i,j) * density_ice
+      ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * density_ice
     endif
   enddo ; enddo
 
@@ -2270,7 +2270,7 @@ subroutine change_thickness_using_precip(CS, ISS, G, US, fluxes, time_step, Time
         ISS%hmask(i,j) = 0.0
         ISS%area_shelf_h(i,j) = 0.0
       endif
-      ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j) * G%IareaT(i,j) * CS%density_ice
+      ISS%mass_shelf(i,j) = ISS%h_shelf(i,j) * CS%density_ice
     endif
   enddo ; enddo
 
@@ -2498,8 +2498,8 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
 
   enddo
 
-  call write_ice_shelf_energy(CS%dCS, G, US, ISS%mass_shelf, Time, time_step=time_interval)
-
+  call write_ice_shelf_energy(CS%dCS, G, US, ISS%mass_shelf, ISS%area_shelf_h, Time, &
+                              time_step=time_interval)
   do j=js,je ; do i=is,ie
     ISS%dhdt_shelf(i,j) = (ISS%h_shelf(i,j) - ISS%dhdt_shelf(i,j)) * Ifull_time_step
   enddo; enddo
