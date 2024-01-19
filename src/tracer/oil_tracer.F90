@@ -373,21 +373,21 @@ subroutine oil_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   ! Add oil at the source location
   if (year>=CS%oil_start_year .and. year<=CS%oil_end_year .and. &
       CS%oil_source_i>-999 .and. CS%oil_source_j>-999) then
-    i=CS%oil_source_i ; j=CS%oil_source_j
-    k_max=nz ; h_total=0.
+    i = CS%oil_source_i ; j = CS%oil_source_j
+    k_max = nz ; h_total = 0.
     vol_scale = GV%H_to_m * US%L_to_m**2
     do k=nz, 2, -1
       h_total = h_total + h_new(i,j,k)
-      if (h_total<10.) k_max=k-1 ! Find bottom most interface that is 10 m above bottom
+      if (h_total < 10.*GV%m_to_H) k_max=k-1 ! Find bottom most interface that is 10 m above bottom
     enddo
     do m=1,CS%ntr
-      k=CS%oil_source_k(m)
+      k = CS%oil_source_k(m)
       if (k>0) then
-        k=min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
+        k = min(k,k_max) ! Only insert k or first layer with interface 10 m above bottom
         CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + CS%oil_source_rate*dt / &
                 (vol_scale * (h_new(i,j,k)+GV%H_subroundoff) * G%areaT(i,j) )
       elseif (k<0) then
-        h_total=GV%H_subroundoff
+        h_total = GV%H_subroundoff
         do k=1, nz
           h_total = h_total + h_new(i,j,k)
         enddo
