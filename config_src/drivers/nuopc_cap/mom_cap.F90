@@ -153,6 +153,8 @@ character(len=8)  :: restart_mode = 'alarms'
 character(len=16) :: inst_suffix = ''
 real(8) :: timere
 
+type(ESMF_Time), allocatable :: restartFhTimes(:)
+
 contains
 
 !> NUOPC SetService method is the only public entry point.
@@ -377,6 +379,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   else
     geomtype = ESMF_GEOMTYPE_GRID
   endif
+
 
 end subroutine
 
@@ -613,7 +616,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
         open(newunit=readunit, file=rpointer_filename, form='formatted', status='old', iostat=iostat)
         if (iostat /= 0) then
           call ESMF_LogSetError(ESMF_RC_FILE_OPEN, msg=subname//' ERROR opening '//rpointer_filename, &
-                 line=__LINE__, file=u_FILE_u, rcToReturn=rc)
+               line=__LINE__, file=u_FILE_u, rcToReturn=rc)
           return
         endif
         do
@@ -1534,6 +1537,8 @@ subroutine ModelAdvance(gcomp, rc)
   character(len=:), allocatable          :: rpointer_filename
   integer                                :: num_rest_files
   real(8)                                :: MPI_Wtime, timers
+  logical                                :: write_restart
+  logical                                :: write_restartfh
 
   rc = ESMF_SUCCESS
   if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM Model_ADVANCE: ")
@@ -1685,13 +1690,26 @@ subroutine ModelAdvance(gcomp, rc)
     call ESMF_ClockGetAlarm(clock, alarmname='restart_alarm', alarm=restart_alarm, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+    write_restartfh = .false.
+    ! check if next time is == to any restartfhtime
+    if (allocated(RestartFhTimes)) then
+      do n = 1,size(RestartFhTimes)
+        call ESMF_ClockGetNextTime(clock, MyTime, rc=rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (MyTime == RestartFhTimes(n)) write_restartfh = .true.
+      end do
+    end if
+
+    write_restart = .false.
     if (ESMF_AlarmIsRinging(restart_alarm, rc=rc)) then
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
+      write_restart = .true.
       ! turn off the alarm
       call ESMF_AlarmRingerOff(restart_alarm, rc=rc )
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    end if
 
+    if (write_restart .or. write_restartfh) then
       ! determine restart filename
       call ESMF_ClockGetNextTime(clock, MyTime, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -1714,7 +1732,7 @@ subroutine ModelAdvance(gcomp, rc)
         ! write restart file(s)
         call ocean_model_restart(ocean_state, restartname=restartname, num_rest_files=num_rest_files)
         if (localPet == 0) then
-           ! Write name of restart file in the rpointer file - this is currently hard-coded for the ocean
+          ! Write name of restart file in the rpointer file - this is currently hard-coded for the ocean
           open(newunit=writeunit, file=rpointer_filename, form='formatted', status='unknown', iostat=iostat)
           if (iostat /= 0) then
             call ESMF_LogSetError(ESMF_RC_FILE_OPEN, &
@@ -1791,25 +1809,34 @@ end subroutine ModelAdvance
 
 
 subroutine ModelSetRunClock(gcomp, rc)
+
+  use ESMF, only : ESMF_TimeIntervalSet
+
   type(ESMF_GridComp)  :: gcomp
   integer, intent(out) :: rc
 
   ! local variables
+  type(ESMF_VM)            :: vm
   type(ESMF_Clock)         :: mclock, dclock
   type(ESMF_Time)          :: mcurrtime, dcurrtime
   type(ESMF_Time)          :: mstoptime, dstoptime
   type(ESMF_TimeInterval)  :: mtimestep, dtimestep
+  type(ESMF_TimeInterval)  :: fhInterval
   character(len=128)       :: mtimestring, dtimestring
+  character(len=256)       :: timestr
   character(len=256)       :: cvalue
   character(len=256)       :: restart_option ! Restart option units
   integer                  :: restart_n      ! Number until restart interval
   integer                  :: restart_ymd    ! Restart date (YYYYMMDD)
+  integer                  :: dt_cpl         ! coupling timestep
   type(ESMF_Alarm)         :: restart_alarm
   type(ESMF_Alarm)         :: stop_alarm
   logical                  :: isPresent, isSet
   logical                  :: first_time = .true.
-  character(len=*),parameter :: subname='MOM_cap:(ModelSetRunClock) '
-  character(len=256)       :: timestr
+  integer                  :: localPet
+  integer                  :: n, nfh
+  integer, allocatable     :: restart_fh(:)
+  character(len=*),parameter :: subname='(MOM_cap:ModelSetRunClock) '
   !--------------------------------
 
   rc = ESMF_SUCCESS
@@ -1823,6 +1850,11 @@ subroutine ModelSetRunClock(gcomp, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   call ESMF_ClockGet(mclock, currTime=mcurrtime, timeStep=mtimestep, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+  call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  call ESMF_VMGet(vm, localPet=localPet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
   !--------------------------------
@@ -1948,8 +1980,41 @@ subroutine ModelSetRunClock(gcomp, rc)
     call ESMF_TimeGet(dstoptime, timestring=timestr, rc=rc)
     call ESMF_LogWrite("Stop Alarm will ring at : "//trim(timestr), ESMF_LOGMSG_INFO)
 
-    first_time = .false.
+    ! set up Times to write non-interval restarts
+    call NUOPC_CompAttributeGet(gcomp, name='restart_fh', isPresent=isPresent, isSet=isSet, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    if (isPresent .and. isSet) then
 
+      call ESMF_TimeIntervalGet(dtimestep, s=dt_cpl, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      call NUOPC_CompAttributeGet(gcomp, name='restart_fh', value=cvalue, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+
+      ! convert string to a list of integer restart_fh values
+      nfh = 1 + count(transfer(trim(cvalue), 'a', len(cvalue)) == ",")
+      allocate(restart_fh(1:nfh))
+      allocate(restartFhTimes(1:nfh))
+      read(cvalue,*)restart_fh(1:nfh)
+
+      ! create a list of times at each restart_fh
+      do n = 1,nfh
+        call ESMF_TimeIntervalSet(fhInterval, h=restart_fh(n), rc=rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        restartFhTimes(n) = mcurrtime + fhInterval
+        call ESMF_TimePrint(restartFhTimes(n), options="string", preString="Restart_Fh at ", unit=timestr, rc=rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        if (localPet == 0) then
+          if (mod(3600*restart_fh(n),dt_cpl) /= 0) then
+            write(stdout,'(A)')trim(subname)//trim(timestr)//' will not be written'
+          else
+            write(stdout,'(A)')trim(subname)//trim(timestr)//' will be written'
+          end if
+        end if
+      end do
+      deallocate(restart_fh)
+    end if
+
+    first_time = .false.
   endif
 
   !--------------------------------
