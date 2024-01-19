@@ -14,6 +14,7 @@ use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,  only : mech_forcing, find_ustar
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
+use MOM_intrinsic_functions, only : cuberoot
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_restart,       only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_unit_scaling,  only : unit_scale_type
@@ -67,7 +68,7 @@ type, public :: mixedlayer_restrat_CS ; private
   real    :: nstar                 !< The n* value used to estimate the turbulent vertical momentum flux [nondim]
   real    :: min_wstar2            !< The minimum lower bound to apply to the vertical momentum flux,
                                    !! w'u', in the Bodner et al., restratification parameterization
-                                   !! [m2 s-2].  This avoids a division-by-zero in the limit when u*
+                                   !! [Z2 T-2 ~> m2 s-2].  This avoids a division-by-zero in the limit when u*
                                    !! and the buoyancy flux are zero.
   real    :: BLD_growing_Tfilt     !< The time-scale for a running-mean filter applied to the boundary layer
                                    !! depth (BLD) when the BLD is deeper than the running mean [T ~> s].
@@ -81,6 +82,11 @@ type, public :: mixedlayer_restrat_CS ; private
   real    :: MLD_growing_Tfilt     !< The time-scale for a running-mean filter applied to the time-filtered
                                    !! MLD, when the latter is deeper than the running mean [T ~> s].
                                    !! A value of 0 instantaneously sets the running mean to the current value of MLD.
+  integer :: answer_date           !< The vintage of the order of arithmetic and expressions in the
+                                   !! mixed layer restrat calculations.  Values below 20240201 recover
+                                   !! the answers from the end of 2023, while higher values use the new
+                                   !! cuberoot function in the Bodner code to avoid needing to undo
+                                   !! dimensional rescaling.
 
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
 
@@ -279,7 +285,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
     !! TODO: use derivatives and mid-MLD pressure. Currently this is sigma-0. -AJA
     pRef_MLD(:) = 0.
     EOSdom(:) = EOS_domain(G%HI, halo=1)
-    do j = js-1, je+1
+    do j=js-1,je+1
       dK(:) = 0.5 * h(:,j,1) ! Depth of center of surface layer
       if (CS%use_Stanley_ML) then
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, tv%varT(:,j,1), covTS, varS, &
@@ -289,7 +295,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
       endif
       deltaRhoAtK(:) = 0.
       MLD_fast(:,j) = 0.
-      do k = 2, nz
+      do k=2,nz
         dKm1(:) = dK(:) ! Depth of center of layer K-1
         dK(:) = dK(:) + 0.5 * ( h(:,j,k) + h(:,j,k-1) ) ! Depth of center of layer K
         ! Mixed-layer depth, using sigma-0 (surface reference pressure)
@@ -300,10 +306,10 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
         else
           call calculate_density(tv%T(:,j,k), tv%S(:,j,k), pRef_MLD, deltaRhoAtK, tv%eqn_of_state, EOSdom)
         endif
-        do i = is-1,ie+1
+        do i=is-1,ie+1
           deltaRhoAtK(i) = deltaRhoAtK(i) - rhoSurf(i) ! Density difference between layer K and surface
         enddo
-        do i = is-1, ie+1
+        do i=is-1,ie+1
           ddRho = deltaRhoAtK(i) - deltaRhoAtKm1(i)
           if ((MLD_fast(i,j)==0.) .and. (ddRho>0.) .and. &
               (deltaRhoAtKm1(i)<CS%MLE_density_diff) .and. (deltaRhoAtK(i)>=CS%MLE_density_diff)) then
@@ -312,7 +318,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
           endif
         enddo ! i-loop
       enddo ! k-loop
-      do i = is-1, ie+1
+      do i=is-1,ie+1
         MLD_fast(i,j) = CS%MLE_MLD_stretch * MLD_fast(i,j)
         if ((MLD_fast(i,j)==0.) .and. (deltaRhoAtK(i)<CS%MLE_density_diff)) &
           MLD_fast(i,j) = dK(i) ! Assume mixing to the bottom
@@ -320,7 +326,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
     enddo ! j-loop
   elseif (CS%MLE_use_PBL_MLD) then
     if (GV%Boussinesq .or. (.not.allocated(tv%SpV_avg))) then
-      do j = js-1, je+1 ; do i = is-1, ie+1
+      do j=js-1,je+1 ; do i=is-1,ie+1
         MLD_fast(i,j) = CS%MLE_MLD_stretch * GV%Z_to_H * MLD_in(i,j)
       enddo ; enddo
     else  ! The fully non-Boussinesq conversion between height in MLD_in and thickness.
@@ -356,7 +362,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
-    do j = js-1, je+1 ; do i = is-1, ie+1
+    do j=js-1,je+1 ; do i=is-1,ie+1
       ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.
@@ -373,7 +379,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
     endif
     aFac = CS%MLE_MLD_decay_time2 / ( dt + CS%MLE_MLD_decay_time2 )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time2 )
-    do j = js-1, je+1 ; do i = is-1, ie+1
+    do j=js-1,je+1 ; do i=is-1,ie+1
       ! Expression bFac*MLD_fast(i,j) + aFac*CS%MLD_filtered(i,j) is the time-filtered
       ! (running mean) of MLD. The max() allows the "running mean" to be reset
       ! instantly to a deeper MLD.
@@ -381,7 +387,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, MLD_in, VarMix,
       MLD_slow(i,j) = CS%MLD_filtered_slow(i,j)
     enddo ; enddo
   else
-    do j = js-1, je+1 ; do i = is-1, ie+1
+    do j=js-1,je+1 ; do i=is-1,ie+1
       MLD_slow(i,j) = MLD_fast(i,j)
     enddo ; enddo
   endif
@@ -819,8 +825,8 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   real :: g_Rho0          ! G_Earth/Rho0 times a thickness conversion factor
                           ! [L2 H-1 T-2 R-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2]
   real :: h_vel           ! htot interpolated onto velocity points [H ~> m or kg m-2]
-  real :: w_star3         ! Cube of turbulent convective velocity [m3 s-3]
-  real :: u_star3         ! Cube of surface fruction velocity [m3 s-3]
+  real :: w_star3         ! Cube of turbulent convective velocity [Z3 T-3 ~> m3 s-3]
+  real :: u_star3         ! Cube of surface friction velocity [Z3 T-3 ~> m3 s-3]
   real :: r_wpup          ! reciprocal of vertical momentum flux [T2 L-1 H-1 ~> s2 m-2 or m s2 kg-1]
   real :: absf            ! absolute value of f, interpolated to velocity points [T-1 ~> s-1]
   real :: grid_dsd        ! combination of grid scales [L2 ~> m2]
@@ -837,6 +843,10 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   real :: muza            ! mu(z) at top of the layer [nondim]
   real :: dh              ! Portion of the layer thickness that is in the mixed layer [H ~> m or kg m-2]
   real :: res_scaling_fac ! The resolution-dependent scaling factor [nondim]
+  real :: Z3_T3_to_m3_s3  ! Conversion factors to undo scaling and permit terms to be raised to a
+                          ! fractional power [T3 m3 Z-3 s-3 ~> 1]
+  real :: m2_s2_to_Z2_T2  ! Conversion factors to restore scaling after a term is raised to a
+                          ! fractional power [Z2 s2 T-2 m-2 ~> 1]
   real, parameter :: two_thirds = 2./3.  ! [nondim]
   logical :: line_is_empty, keep_going
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -881,7 +891,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   ! Apply time filter to BLD (to remove diurnal cycle) to obtain "little h".
   ! "little h" is representative of the active mixing layer depth, used in B22 formula (eq 27).
   if (GV%Boussinesq .or. (.not.allocated(tv%SpV_avg))) then
-    do j = js-1, je+1 ; do i = is-1, ie+1
+    do j=js-1,je+1 ; do i=is-1,ie+1
       little_h(i,j) = rmean2ts(GV%Z_to_H*BLD(i,j), CS%MLD_filtered(i,j), &
                                CS%BLD_growing_Tfilt, CS%BLD_decaying_Tfilt, dt)
       CS%MLD_filtered(i,j) = little_h(i,j)
@@ -912,21 +922,49 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   endif
 
   ! Calculate "big H", representative of the mixed layer depth, used in B22 formula (eq 27).
-  do j = js-1, je+1 ; do i = is-1, ie+1
+  do j=js-1,je+1 ; do i=is-1,ie+1
     big_H(i,j) = rmean2ts(little_h(i,j), CS%MLD_filtered_slow(i,j), &
                           CS%MLD_growing_Tfilt, CS%MLD_decaying_Tfilt, dt)
     CS%MLD_filtered_slow(i,j) = big_H(i,j)
   enddo ; enddo
 
-  ! Estimate w'u' at h-points
-  do j = js-1, je+1 ; do i = is-1, ie+1
-    w_star3 = max(0., -bflux(i,j)) * BLD(i,j) & ! (this line in Z3 T-3 ~> m3 s-3)
-              * ( ( US%Z_to_m * US%s_to_T )**3 ) ! [m3 T3 Z-3 s-3 ~> 1]
-    u_star3 = ( US%Z_to_m * US%s_to_T * U_star_2d(i,j) )**3 ! m3 s-3
-    wpup(i,j) = max( CS%min_wstar2, &           ! The max() avoids division by zero later
-                ( CS%mstar * u_star3 + CS%nstar * w_star3 )**two_thirds ) & ! (this line m2 s-2)
-                * ( US%m_to_L * GV%m_to_H * US%T_to_s**2 ) ! [L H s2 m-2 T-2 ~> 1 or kg m-3]
-    ! We filter w'u' with the same time scales used for "little h"
+  ! Estimate w'u' at h-points, with a floor to avoid division by zero later.
+  if (allocated(tv%SpV_avg) .and. .not.(GV%Boussinesq .or. GV%semi_Boussinesq)) then
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      ! This expression differs by a factor of 1. / (Rho_0 * SpV_avg) compared with the other
+      ! expressions below, and it is invariant to the value of Rho_0 in non-Boussinesq mode.
+      wpup(i,j) = max((cuberoot( CS%mstar * U_star_2d(i,j)**3 + &
+                                 CS%nstar * max(0., -bflux(i,j)) * BLD(i,j) ))**2, CS%min_wstar2) * &
+                  ( US%Z_to_L * GV%RZ_to_H / tv%SpV_avg(i,j,1))
+                ! The final line above converts from [Z2 T-2 ~> m2 s-2] to [L H T-2 ~> m2 s-2 or Pa].
+                ! Some rescaling factors and the division by specific volume compensating for other
+                ! factors that are in find_ustar_mech, and others effectively converting the wind
+                ! stresses from [R L Z T-2 ~> Pa] to [L H T-2 ~> m2 s-2 or Pa].  The rescaling factors
+                ! and density being applied to the buoyancy flux are not so neatly explained because
+                ! fractional powers cancel out or combine with terms in the definitions of BLD and
+                ! bflux (such as SpV_avg**-2/3 combining with other terms in bflux to give the thermal
+                ! expansion coefficient) and because the specific volume does vary within the mixed layer.
+    enddo ; enddo
+  elseif (CS%answer_date < 20240201) then
+    Z3_T3_to_m3_s3 = (US%Z_to_m * US%s_to_T)**3
+    m2_s2_to_Z2_T2 = (US%m_to_Z * US%T_to_s)**2
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      w_star3 = max(0., -bflux(i,j)) * BLD(i,j)    ! In [Z3 T-3 ~> m3 s-3]
+      u_star3 = U_star_2d(i,j)**3                  ! In [Z3 T-3 ~> m3 s-3]
+      wpup(i,j) = max(m2_s2_to_Z2_T2 * (Z3_T3_to_m3_s3 * ( CS%mstar * u_star3 + CS%nstar * w_star3 ) )**two_thirds, &
+                      CS%min_wstar2) * &
+                  ( US%Z_to_L * US%Z_to_m * GV%m_to_H ) ! In [L H T-2 ~> m2 s-2 or kg m-1 s-2]
+    enddo ; enddo
+  else
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      w_star3 = max(0., -bflux(i,j)) * BLD(i,j)    ! In [Z3 T-3 ~> m3 s-3]
+      wpup(i,j) = max( (cuberoot(CS%mstar * U_star_2d(i,j)**3 + CS%nstar * w_star3))**2, CS%min_wstar2 ) * &
+                  ( US%Z_to_L * US%Z_to_m * GV%m_to_H ) ! In [L H T-2 ~> m2 s-2 or kg m-1 s-2]
+    enddo ; enddo
+  endif
+
+  ! We filter w'u' with the same time scales used for "little h"
+  do j=js-1,je+1 ; do i=is-1,ie+1
     wpup(i,j) = rmean2ts(wpup(i,j), CS%wpup_filtered(i,j), &
                          CS%BLD_growing_Tfilt, CS%BLD_decaying_Tfilt, dt)
     CS%wpup_filtered(i,j) = wpup(i,j)
@@ -1459,7 +1497,7 @@ end subroutine mixedlayer_restrat_BML
 !> Return the growth timescale for the submesoscale mixed layer eddies in [T ~> s]
 real function growth_time(u_star, hBL, absf, h_neg, vonKar, Kv_rest, restrat_coef)
   real, intent(in) :: u_star   !< Surface friction velocity in thickness-based units [H T-1 ~> m s-1 or kg m-2 s-1]
-  real, intent(in) :: hBL      !< Boundary layer thickness including at least a neglible
+  real, intent(in) :: hBL      !< Boundary layer thickness including at least a negligible
                                !! value to keep it positive definite [H ~> m or kg m-2]
   real, intent(in) :: absf     !< Absolute value of the Coriolis parameter [T-1 ~> s-1]
   real, intent(in) :: h_neg    !< A tiny thickness that is usually lost in roundoff so can be
@@ -1513,6 +1551,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   real :: ustar_min_dflt   ! The default value for RESTRAT_USTAR_MIN [Z T-1 ~> m s-1]
   real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
                            ! temperature variance [nondim]
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   integer :: i, j
@@ -1581,13 +1620,23 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "BLD, when the latter is shallower than the running mean. A value of 0 "//&
              "instantaneously sets the running mean to the current value filtered BLD.", &
              units="s", default=0., scale=US%s_to_T)
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+             "This sets the default value for the various _ANSWER_DATE parameters.", &
+             default=99991231)
+    call get_param(param_file, mdl, "ML_RESTRAT_ANSWER_DATE", CS%answer_date, &
+             "The vintage of the order of arithmetic and expressions in the mixed layer "//&
+             "restrat calculations.  Values below 20240201 recover the answers from the end "//&
+             "of 2023, while higher values use the new cuberoot function in the Bodner code "//&
+             "to avoid needing to undo dimensional rescaling.", &
+             default=default_answer_date, &
+             do_not_log=.not.(CS%use_Bodner.and.(GV%Boussinesq.or.GV%semi_Boussinesq)))
     call get_param(param_file, mdl, "MIN_WSTAR2", CS%min_wstar2, &
              "The minimum lower bound to apply to the vertical momentum flux, w'u', "//&
              "in the Bodner et al., restratification parameterization. This avoids "//&
              "a division-by-zero in the limit when u* and the buoyancy flux are zero.  "//&
              "The default is less than the molecular viscosity of water times the Coriolis "//&
              "parameter a micron away from the equator.", &
-             units="m2 s-2", default=1.0e-24)   ! This parameter stays in MKS units.
+             units="m2 s-2", default=1.0e-24, scale=US%m_to_Z**2*US%T_to_s**2)
     call get_param(param_file, mdl, "TAIL_DH", CS%MLE_tail_dh, &
              "Fraction by which to extend the mixed-layer restratification "//&
              "depth used for a smoother stream function at the base of "//&
