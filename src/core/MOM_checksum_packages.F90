@@ -268,10 +268,11 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   ! Local variables
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: &
     tmp_A, &  ! The area per cell [m2] (unscaled to permit reproducing sum).
-    tmp_V, &  ! The column-integrated volume [m3] (unscaled to permit reproducing sum)
-    tmp_T, &  ! The column-integrated temperature [degC m3] (unscaled to permit reproducing sum)
-    tmp_S     ! The column-integrated salinity [ppt m3] (unscaled to permit reproducing sum)
-  real :: Vol, dV    ! The total ocean volume and its change [m3] (unscaled to permit reproducing sum).
+    tmp_V, &  ! The column-integrated volume [m3] or mass [kg] (unscaled to permit reproducing sum),
+              ! depending on whether the Boussinesq approximation is used
+    tmp_T, &  ! The column-integrated temperature [degC m3] or [degC kg] (unscaled to permit reproducing sum)
+    tmp_S     ! The column-integrated salinity [ppt m3] or [ppt kg] (unscaled to permit reproducing sum)
+  real :: Vol, dV    ! The total ocean volume or mass and its change [m3] or [kg] (unscaled to permit reproducing sum).
   real :: Area       ! The total ocean surface area [m2] (unscaled to permit reproducing sum).
   real :: h_minimum  ! The minimum layer thicknesses [H ~> m or kg m-2]
   real :: T_scale    ! The scaling conversion factor for temperatures [degC C-1 ~> 1]
@@ -284,7 +285,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   !       assumption we will not turn this on with threads
   type(stats), save :: oldT, oldS
   logical, save :: firstCall = .true.
-  real, save :: oldVol ! The previous total ocean volume [m3]
+  real, save :: oldVol ! The previous total ocean volume [m3] or mass [kg]
 
   character(len=80) :: lMsg
   integer :: is, ie, js, je, nz, i, j, k
@@ -308,7 +309,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   h_minimum = 1.E34*GV%m_to_H
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j)>0.) then
-      dV = US%L_to_m**2*G%areaT(i,j)*GV%H_to_m*h(i,j,k)
+      dV = US%L_to_m**2*G%areaT(i,j)*GV%H_to_MKS*h(i,j,k)
       tmp_V(i,j) = tmp_V(i,j) + dV
       if (do_TS .and. h(i,j,k)>0.) then
         T%minimum = min( T%minimum, T_scale*Temp(i,j,k) ) ; T%maximum = max( T%maximum, T_scale*Temp(i,j,k) )

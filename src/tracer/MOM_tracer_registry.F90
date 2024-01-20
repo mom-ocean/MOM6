@@ -786,14 +786,16 @@ subroutine tracer_array_chkinv(mesg, G, GV, h, Tr, ntr)
   integer,                                   intent(in) :: ntr  !< number of registered tracers
 
   ! Local variables
-  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> 1 or m3 kg-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv ! Volumetric tracer inventory in each cell [conc m3]
-  real :: total_inv ! The total amount of tracer [conc m3]
+  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> 1] or cell
+                    ! masses to kg [kg H-1 L-2 ~> 1], depending on whether the Boussinesq approximation is used
+  real :: tr_inv(SZI_(G),SZJ_(G),SZK_(GV)) ! Volumetric or mass-based tracer inventory in
+                    ! each cell [conc m3] or [conc kg]
+  real :: total_inv ! The total amount of tracer [conc m3] or [conc kg]
   integer :: is, ie, js, je, nz
   integer :: i, j, k, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  vol_scale = GV%H_to_m*G%US%L_to_m**2
+  vol_scale = GV%H_to_MKS*G%US%L_to_m**2
   do m=1,ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
       tr_inv(i,j,k) = Tr(m)%conc_scale*Tr(m)%t(i,j,k) * (vol_scale * h(i,j,k) * G%areaT(i,j)*G%mask2dT(i,j))
@@ -814,16 +816,18 @@ subroutine tracer_Reg_chkinv(mesg, G, GV, h, Reg)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
-  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> 1 or m3 kg-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: tr_inv ! Volumetric tracer inventory in each cell [conc m3]
-  real :: total_inv ! The total amount of tracer [conc m3]
+  real :: vol_scale ! The dimensional scaling factor to convert volumes to m3 [m3 H-1 L-2 ~> 1] or cell
+                    ! masses to kg [kg H-1 L-2 ~> 1], depending on whether the Boussinesq approximation is used
+  real :: tr_inv(SZI_(G),SZJ_(G),SZK_(GV)) ! Volumetric or mass-based tracer inventory in
+                    ! each cell [conc m3] or [conc kg]
+  real :: total_inv ! The total amount of tracer [conc m3] or [conc kg]
   integer :: is, ie, js, je, nz
   integer :: i, j, k, m
 
   if (.not.associated(Reg)) return
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  vol_scale = GV%H_to_m*G%US%L_to_m**2
+  vol_scale = GV%H_to_MKS*G%US%L_to_m**2
   do m=1,Reg%ntr
     do k=1,nz ; do j=js,je ; do i=is,ie
       tr_inv(i,j,k) = Reg%Tr(m)%conc_scale*Reg%Tr(m)%t(i,j,k) * (vol_scale * h(i,j,k) * G%areaT(i,j)*G%mask2dT(i,j))
