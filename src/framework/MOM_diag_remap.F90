@@ -658,8 +658,15 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
   logical, dimension(:), intent(inout) :: averaged_mask  !< Mask for horizontally averaged field [nondim]
 
   ! Local variables
-  real, dimension(G%isc:G%iec, G%jsc:G%jec, size(field,3)) :: volume, stuff
-  real, dimension(size(field, 3)) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
+  real :: volume(G%isc:G%iec, G%jsc:G%jec, size(field,3)) ! The area [m2], volume [m3] or mass [kg] of each cell.
+  real :: stuff(G%isc:G%iec, G%jsc:G%jec, size(field,3))  ! The area, volume or mass-weighted integral of the
+                                             ! field being averaged in each cell, in [m2 A], [m3 A] or [kg A],
+                                             ! depending on the weighting for the averages and whether the
+                                             ! model makes the Boussinesq approximation.
+  real, dimension(size(field, 3)) :: vol_sum   ! The global sum of the areas [m2], volumes [m3] or mass [kg]
+                                               ! in the cells that used in the weighted averages.
+  real, dimension(size(field, 3)) :: stuff_sum ! The global sum of the weighted field in all cells, in
+                                               ! [A m2], [A m3] or [A kg]
   type(EFP_type), dimension(2*size(field,3)) :: sums_EFP ! Sums of volume or stuff by layer
   real :: height  ! An average thickness attributed to an velocity point [H ~> m or kg m-2]
   integer :: i, j, k, nz
@@ -688,7 +695,7 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
             I1 = i - G%isdB + 1
             height = 0.5 * (h(i,j,k) + h(i+1,j,k))
             volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) &
-                * (GV%H_to_m * height) * G%mask2dCu(I,j)
+                * (GV%H_to_MKS * height) * G%mask2dCu(I,j)
             stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
           enddo ; enddo
         endif
@@ -717,7 +724,7 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
             J1 = J - G%jsdB + 1
             height = 0.5 * (h(i,j,k) + h(i,j+1,k))
             volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) &
-                * (GV%H_to_m * height) * G%mask2dCv(i,J)
+                * (GV%H_to_MKS * height) * G%mask2dCv(i,J)
             stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
           enddo ; enddo
         endif
@@ -748,7 +755,7 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
             volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) &
-                * (GV%H_to_m * h(i,j,k)) * G%mask2dT(i,j)
+                * (GV%H_to_MKS * h(i,j,k)) * G%mask2dT(i,j)
             stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
           enddo ; enddo
         endif
