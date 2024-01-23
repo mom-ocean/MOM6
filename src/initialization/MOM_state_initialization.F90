@@ -2074,9 +2074,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
 !  else
     ! Initialize sponges without supplying sponge grid
 !    if (sponge_uv) then
-!      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, Idamp_u, Idamp_v)
+!      call initialize_ALE_sponge(Idamp, G, GV, US, param_file, ALE_CSp, Idamp_u, Idamp_v)
 !    else
-!      call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp)
+!      call initialize_ALE_sponge(Idamp, G, GV, US, param_file, ALE_CSp)
 !    endif
   endif
 
@@ -2118,9 +2118,11 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
       endif
 
       if (sponge_uv) then
-        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data, Idamp_u, Idamp_v)
+        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, dz, nz_data, Idamp_u, Idamp_v, &
+                                   data_h_is_Z=.true.)
       else
-        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, h, nz_data)
+        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, dz, nz_data, &
+                                   data_h_is_Z=.true.)
       endif
       if (use_temperature) then
         call set_up_ALE_sponge_field(tmp_T, G, GV, tv%T, ALE_CSp, 'temp', &
@@ -2147,9 +2149,9 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
     else
       ! Initialize sponges without supplying sponge grid
       if (sponge_uv) then
-        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp, Idamp_u, Idamp_v)
+        call initialize_ALE_sponge(Idamp, G, GV, US, param_file, ALE_CSp, Idamp_u, Idamp_v)
       else
-        call initialize_ALE_sponge(Idamp, G, GV, param_file, ALE_CSp)
+        call initialize_ALE_sponge(Idamp, G, GV, US, param_file, ALE_CSp)
       endif
       ! The remaining calls to set_up_sponge_field can be in any order.
       if ( use_temperature) then

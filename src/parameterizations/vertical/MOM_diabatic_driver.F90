@@ -1093,7 +1093,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Tim
   ! Apply ALE sponge
   if (CS%use_sponge .and. associated(CS%ALE_sponge_CSp)) then
     call cpu_clock_begin(id_clock_sponge)
-    call apply_ALE_sponge(h, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
+    call apply_ALE_sponge(h, tv, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)
@@ -1616,7 +1616,7 @@ subroutine diabatic_ALE(u, v, h, tv, Hml, fluxes, visc, ADp, CDp, dt, Time_end, 
   ! Apply ALE sponge
   if (CS%use_sponge .and. associated(CS%ALE_sponge_CSp)) then
     call cpu_clock_begin(id_clock_sponge)
-    call apply_ALE_sponge(h, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
+    call apply_ALE_sponge(h, tv, dt, G, GV, US, CS%ALE_sponge_CSp, CS%Time)
     call cpu_clock_end(id_clock_sponge)
     if (CS%debug) then
       call MOM_state_chksum("apply_sponge ", u, v, h, G, GV, US, haloshift=0)

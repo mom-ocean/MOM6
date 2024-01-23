@@ -2958,7 +2958,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     endif
 
     if (associated(ALE_sponge_in_CSp)) then
-      call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, GV, turns, param_file)
+      call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, GV, US, turns, param_file)
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, T_in, G, GV, CS%T)
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, G, GV, CS%S)
     endif
