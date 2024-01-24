@@ -361,7 +361,6 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: flux_scale ! A dimensional rescaling factor for fluxes [H R-1 Z-1 ~> m3 kg-1 or nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -371,13 +370,11 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! Compute KPP nonlocal term if necessary
   if (present(KPP_CSp)) then
     if (associated(KPP_CSp) .and. present(nonLocalTrans)) then
-      flux_scale = GV%Z_to_H / GV%rho0
-
       do m=1,NTR
         call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, &
                                    CS%CFC_data(m)%sfc_flux(:,:), dt, CS%diag, &
                                    CS%CFC_data(m)%tr_ptr, CS%CFC_data(m)%conc(:,:,:), &
-                                   flux_scale=flux_scale)
+                                   flux_scale=GV%RZ_to_H)
       enddo
     endif
   endif
