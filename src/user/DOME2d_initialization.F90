@@ -9,7 +9,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_interface_heights, only : dz_to_thickness, dz_to_thickness_simple
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -375,7 +374,6 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   real :: T(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for temp [C ~> degC]
   real :: S(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for salt [S ~> ppt]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness in height units [Z ~> m]
-  real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for thickness [H ~> m or kg m-2]
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m]
   real :: Idamp(SZI_(G),SZJ_(G))       ! The sponge damping rate [T-1 ~> s-1]
   real :: S_ref                        ! Reference salinity within the surface layer [S ~> ppt]
@@ -466,7 +464,6 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
     endif
   enddo ; enddo
 
-
   if (use_ALE) then
 
     ! Construct a grid (somewhat arbitrarily) to describe the sponge T/S on
@@ -502,15 +499,8 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
       enddo
     enddo ; enddo
 
-    ! Convert thicknesses from height units to thickness units
-    if (associated(tv%eqn_of_state)) then
-      call dz_to_thickness(dz, T, S, tv%eqn_of_state, h, G, GV, US)
-    else
-      call dz_to_thickness_simple(dz, h, G, GV, US, layer_mode=.true.)
-    endif
-
     ! Store damping rates and the grid on which the T/S sponge data will reside
-    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, dz, nz, data_h_is_Z=.true.)
 
     if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp, 'temp', &
         sp_long_name='temperature', sp_unit='degC s-1')

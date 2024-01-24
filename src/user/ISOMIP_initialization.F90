@@ -10,7 +10,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe, WARNING
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_interface_heights, only : dz_to_thickness
 use MOM_io, only : file_exists, MOM_read_data, slasher
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -458,7 +457,6 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
   real :: S(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for salt [S ~> ppt]
   ! real :: RHO(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for RHO [R ~> kg m-3]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Sponge layer thicknesses in height units [Z ~> m]
-  real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! Sponge layer thicknesses [H ~> m or kg m-2]
   real :: Idamp(SZI_(G),SZJ_(G))    ! The sponge damping rate [T-1 ~> s-1]
   real :: TNUDG                     ! Nudging time scale [T ~> s]
   real :: S_sur, S_bot              ! Surface and bottom salinities in the sponge region [S ~> ppt]
@@ -624,13 +622,6 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
       enddo
     enddo ; enddo
 
-    ! Convert thicknesses from height units to thickness units
-    if (associated(tv%eqn_of_state)) then
-      call dz_to_thickness(dz, T, S, tv%eqn_of_state, h, G, GV, US)
-    else
-      call MOM_error(FATAL, "The ISOMIP test case requires an equation of state.")
-    endif
-
     ! for debugging
     !i=G%iec; j=G%jec
     !do k = 1,nz
@@ -640,7 +631,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
     !enddo
 
     ! This call sets up the damping rates and interface heights in the sponges.
-    call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, PF, ACSp, dz, nz, data_h_is_Z=.true.)
 
     !   Now register all of the fields which are damped in the sponge.   !
     ! By default, momentum is advected vertically within the sponge, but !
