@@ -13,6 +13,7 @@ use MOM_file_parser,     only : get_param, log_param, log_version, param_file_ty
 use MOM_file_parser,     only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,    only : forcing
 use MOM_grid,            only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_unit_scaling,    only : unit_scale_type
 use MOM_verticalGrid,    only : verticalGrid_type
 use MOM_variables,       only : thermo_var_ptrs,  vertvisc_type
@@ -338,6 +339,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   real, dimension(SZK_(GV)+1) :: Kv_col     !< Viscosities at the interfaces [m2 s-1]
   real, dimension(SZI_(G))    :: Kd_sfc     !< Surface value of the diffusivity [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G))    :: depth      !< Distance from surface of an interface [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZK_(GV)) :: dz   !< Height change across layers [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [H ~> m or kg m-2]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: I_2Omega   !< 1/(2 Omega) [T ~> s]
@@ -364,10 +366,12 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   ! Set up the background diffusivity.
   if (CS%Bryan_Lewis_diffusivity) then
 
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
     do i=is,ie
       depth_int(1) = 0.0
       do k=2,nz+1
-        depth_int(k) = depth_int(k-1) + GV%H_to_m*h(i,j,k-1)
+        depth_int(k) = depth_int(k-1) + US%Z_to_m*dz(i,k-1)
       enddo
 
       call CVMix_init_bkgnd(max_nlev=nz, &
