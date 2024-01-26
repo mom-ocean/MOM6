@@ -144,6 +144,7 @@ public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
+public set_h_neglect, set_dz_neglect
 public get_zlike_CS, get_sigma_CS, get_rho_CS
 
 !> Documentation for coordinate options
@@ -1416,13 +1417,7 @@ subroutine build_rho_grid( G, GV, US, h, nom_depth_H, tv, dzInterface, remapCS, 
 #endif
   logical :: ice_shelf
 
-  if (CS%remap_answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
-  endif
+  h_neglect = set_h_neglect(GV, CS%remap_answer_date, h_neglect_edge)
 
   nz = GV%ke
   ice_shelf = present(frac_shelf_h)
@@ -1575,13 +1570,7 @@ subroutine build_grid_HyCOM1( G, GV, US, h, nom_depth_H, tv, h_new, dzInterface,
   real :: z_top_col, totalThickness
   logical :: ice_shelf
 
-  if (CS%remap_answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
-  endif
+  h_neglect = set_h_neglect(GV, CS%remap_answer_date, h_neglect_edge)
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_HyCOM1 : "//&
         "Target densities must be set before build_grid_HyCOM1 is called.")
@@ -2095,6 +2084,49 @@ subroutine write_regrid_file( CS, GV, filepath )
 
 end subroutine write_regrid_file
 
+!> Set appropriate values for the negligible thicknesses used for remapping based on an answer date.
+function set_h_neglect(GV, remap_answer_date, h_neglect_edge) result(h_neglect)
+  type(verticalGrid_type), intent(in)  :: GV   !< Ocean vertical grid structure
+  integer,                 intent(in)  :: remap_answer_date !< The vintage of the expressions to use
+                                               !! for remapping.  Values below 20190101 recover the
+                                               !! remapping answers from 2018. Higher values use more
+                                               !! robust forms of the same remapping algorithms.
+  real,                    intent(out) :: h_neglect_edge !< A negligibly small thickness used in
+                                               !! remapping edge value calculations [H ~> m or kg m-2]
+  real                                 :: h_neglect !< A negligibly small thickness used in
+                                               !! remapping cell reconstructions [H ~> m or kg m-2]
+
+  if (remap_answer_date >= 20190101) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
+end function set_h_neglect
+
+!> Set appropriate values for the negligible vertical layer extents used for remapping based on an answer date.
+function set_dz_neglect(GV, US, remap_answer_date, dz_neglect_edge) result(dz_neglect)
+  type(verticalGrid_type), intent(in)  :: GV   !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
+  integer,                 intent(in)  :: remap_answer_date !< The vintage of the expressions to use
+                                               !! for remapping.  Values below 20190101 recover the
+                                               !! remapping answers from 2018. Higher values use more
+                                               !! robust forms of the same remapping algorithms.
+  real,                    intent(out) :: dz_neglect_edge !< A negligibly small vertical layer extent
+                                               !! used in remapping edge value calculations [Z ~> m]
+  real                                 :: dz_neglect !< A negligibly small vertical layer extent
+                                               !! used in remapping cell reconstructions [Z ~> m]
+
+  if (remap_answer_date >= 20190101) then
+    dz_neglect = GV%dZ_subroundoff ; dz_neglect_edge = GV%dZ_subroundoff
+  elseif (GV%Boussinesq) then
+    dz_neglect = US%m_to_Z*1.0e-30 ; dz_neglect_edge = US%m_to_Z*1.0e-10
+  else
+    dz_neglect = GV%kg_m2_to_H * (GV%H_to_m*US%m_to_Z) * 1.0e-30
+    dz_neglect_edge = GV%kg_m2_to_H * (GV%H_to_m*US%m_to_Z) * 1.0e-10
+  endif
+end function set_dz_neglect
 
 !------------------------------------------------------------------------------
 !> Query the fixed resolution data

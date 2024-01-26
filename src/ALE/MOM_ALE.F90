@@ -1260,16 +1260,17 @@ end subroutine mask_near_bottom_vel
 !! h_dst must be dimensioned as a model array with GV%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
 subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap, &
-                            answers_2018, answer_date )
+                            answers_2018, answer_date, h_neglect, h_neglect_edge)
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   type(verticalGrid_type),                 intent(in)    :: GV        !< Ocean vertical grid structure
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid
-                                                                      !! [H ~> m or kg m-2]
+                                                                      !! [H ~> m or kg m-2] or other units
+                                                                      !! if H_neglect is provided
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid, in arbitrary units [A]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)   :: h_dst     !< Level thickness of destination grid
-                                                                      !! [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)   :: h_dst     !< Level thickness of destination grid in the
+                                                                      !! same units as h_src, often [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(inout) :: s_dst    !< Scalar on destination grid, in the same
                                                                       !! arbitrary units as s_src [A]
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
@@ -1283,10 +1284,16 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
                                                                       !! use more robust forms of the same expressions.
   integer,                       optional, intent(in)    :: answer_date !< The vintage of the expressions to use
                                                                       !! for remapping
+  real,                          optional, intent(in)    :: h_neglect !< A negligibly small thickness used in
+                                                                      !! remapping cell reconstructions, in the same
+                                                                      !! units as h_src, often [H ~> m or kg m-2]
+  real,                          optional, intent(in)    :: h_neglect_edge !< A negligibly small thickness used in
+                                                                      !! remapping edge value calculations, in the same
+                                                                      !! units as h_src, often [H ~> m or kg m-2]
   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(GV%ke+1) ! Change in interface position [H ~> m or kg m-2]
-  real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
+  real :: h_neg, h_neg_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
   logical :: ignore_vanished_layers, use_remapping_core_w, use_2018_remap
 
   ignore_vanished_layers = .false.
@@ -1297,12 +1304,17 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   use_2018_remap = .true. ; if (present(answers_2018)) use_2018_remap = answers_2018
   if (present(answer_date)) use_2018_remap = (answer_date < 20190101)
 
-  if (.not.use_2018_remap) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  if (present(h_neglect)) then
+    h_neg = h_neglect
+    h_neg_edge = h_neg ; if (present(h_neglect_edge)) h_neg_edge = h_neglect_edge
   else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+    if (.not.use_2018_remap) then
+      h_neg = GV%H_subroundoff ; h_neg_edge = GV%H_subroundoff
+    elseif (GV%Boussinesq) then
+      h_neg = GV%m_to_H*1.0e-30 ; h_neg_edge = GV%m_to_H*1.0e-10
+    else
+      h_neg = GV%kg_m2_to_H*1.0e-30 ; h_neg_edge = GV%kg_m2_to_H*1.0e-10
+    endif
   endif
 
   !$OMP parallel do default(shared) firstprivate(n_points,dx)
@@ -1318,10 +1330,10 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
       if (use_remapping_core_w) then
         call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
         call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
-                              GV%ke, dx, s_dst(i,j,:), h_neglect, h_neglect_edge)
+                              GV%ke, dx, s_dst(i,j,:), h_neg, h_neg_edge)
       else
         call remapping_core_h(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
-                              GV%ke, h_dst(i,j,:), s_dst(i,j,:), h_neglect, h_neglect_edge)
+                              GV%ke, h_dst(i,j,:), s_dst(i,j,:), h_neg, h_neg_edge)
       endif
     else
       s_dst(i,j,:) = 0.
