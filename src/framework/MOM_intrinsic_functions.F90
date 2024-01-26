@@ -64,8 +64,11 @@ elemental function cuberoot(x) result(root)
     ! and it is therefore more computationally efficient.
 
     ! This first estimate gives the same magnitude of errors for 0.125 and 1.0 after two iterations.
-    num = 0.707106 ; den = 1.0
-    do itt=1,3
+    ! The first iteration is applied explicitly.
+    num = 0.707106 * (0.707106**3 + 2.0 * asx)
+    den = 2.0 * (0.707106**3) + asx
+
+    do itt=1,2
       ! Halley's method iterates estimates as Root = Root * (Root**3 + 2.*asx) / (2.*Root**3 + asx).
       num_prev = num ; den_prev = den
       num = num_prev * (num_prev**3 + 2.0 * asx * (den_prev**3))
