@@ -92,6 +92,7 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_regrid_accelerated, TS_PLM_edge_values
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_regridding, only : regridding_main, regridding_preadjust_reqs, convective_adjustment
+use MOM_regridding, only : set_dz_neglect
 use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer, homogenize_field
 use MOM_oda_incupd, only: oda_incupd_CS, initialize_oda_incupd_fixed, initialize_oda_incupd
@@ -2483,6 +2484,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   real, dimension(:,:,:), allocatable :: h1  ! Thicknesses on the input grid [H ~> m or kg m-2].
   real, dimension(:,:,:), allocatable :: dz_interface ! Change in position of interface due to
                                     ! regridding [H ~> m or kg m-2]
+  real :: dz_neglect                ! A negligibly small vertical layer extent used in
+                                    ! remapping cell reconstructions [Z ~> m]
+  real :: dz_neglect_edge           ! A negligibly small vertical layer extent used in
+                                    ! remapping edge value calculations [Z ~> m]
   real :: zTopOfCell, zBottomOfCell ! Heights in Z units [Z ~> m].
   type(regridding_CS) :: regridCS ! Regridding parameters and work arrays
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
@@ -2768,6 +2773,11 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                             frac_shelf_h=frac_shelf_h )
 
       deallocate( dz_interface )
+
+      call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, &
+                            old_remap=remap_old_alg, answer_date=remap_answer_date )
+      call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, &
+                            old_remap=remap_old_alg, answer_date=remap_answer_date )
     else
       ! This is the old way of initializing to z* coordinates only
       allocate( hTarget(nz) )
@@ -2788,15 +2798,23 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       enddo ; enddo
       deallocate( hTarget )
 
-      ! This is a simple conversion of the target grid to thickness units that may not be
-      ! appropriate in non-Boussinesq mode.
-      call dz_to_thickness_simple(dz, h, G, GV, US)
-    endif
+      dz_neglect = set_dz_neglect(GV, US, remap_answer_date, dz_neglect_edge)
+      call ALE_remap_scalar(remapCS, G, GV, nkd, dz1, tmpT1dIn, dz, tv%T, all_cells=remap_full_column, &
+                            old_remap=remap_old_alg, answer_date=remap_answer_date, &
+                            H_neglect=dz_neglect, H_neglect_edge=dz_neglect_edge)
+      call ALE_remap_scalar(remapCS, G, GV, nkd, dz1, tmpS1dIn, dz, tv%S, all_cells=remap_full_column, &
+                            old_remap=remap_old_alg, answer_date=remap_answer_date, &
+                            H_neglect=dz_neglect, H_neglect_edge=dz_neglect_edge)
 
-    call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg, answer_date=remap_answer_date )
-    call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, &
-                          old_remap=remap_old_alg, answer_date=remap_answer_date )
+      if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+        ! This is a simple conversion of the target grid to thickness units that is not
+        ! appropriate in non-Boussinesq mode.
+        call dz_to_thickness_simple(dz, h, G, GV, US)
+      else
+        ! Convert dz into thicknesses in units of H using the equation of state as appropriate.
+        call dz_to_thickness(dz, tv, h, G, GV, US)
+      endif
+    endif
 
     deallocate( dz1 )
     deallocate( h1 )
@@ -2879,7 +2897,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                  ks, G, GV, US, PF, just_read)
     endif
 
-    ! Now convert thicknesses to units of H.
+    ! Now convert dz into thicknesses in units of H.
     call dz_to_thickness(dz, tv, h, G, GV, US)
 
   endif ! useALEremapping
