@@ -56,6 +56,8 @@ end type link_parameter
 !> Specify the active parameter block
 type, private :: parameter_block ; private
   character(len=240) :: name = ''   !< The active parameter block name
+  logical :: log_access = .true.
+    !< Log the entry and exit of the block (but not its contents)
 end type parameter_block
 
 !> A structure that can be parsed to read and document run-time parameters.
@@ -2082,17 +2084,29 @@ subroutine clearParameterBlock(CS)
 end subroutine clearParameterBlock
 
 !> Tags blockName onto the end of the active parameter block name
-subroutine openParameterBlock(CS,blockName,desc)
+subroutine openParameterBlock(CS, blockName, desc, do_not_log)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: blockName !< The name of a parameter block being added
   character(len=*), optional, intent(in) :: desc    !< A description of the parameter block being added
+  logical, optional, intent(in) :: do_not_log
+    !< Log block entry if true.  This only prevents logging of entry to the block, and not the contents.
 
   type(parameter_block), pointer :: block => NULL()
+  logical :: do_log
+
+  do_log = .true.
+  if (present(do_not_log)) do_log = .not. do_not_log
+
   if (associated(CS%blockName)) then
     block => CS%blockName
     block%name = pushBlockLevel(block%name,blockName)
-    call doc_openBlock(CS%doc,block%name,desc)
+    if (do_log) then
+      call doc_openBlock(CS%doc, block%name, desc)
+      block%log_access = .true.
+    else
+      block%log_access = .false.
+    endif
   else
     if (is_root_pe()) call MOM_error(FATAL, &
       'openParameterBlock: A push was attempted before allocation.')
@@ -2111,7 +2125,7 @@ subroutine closeParameterBlock(CS)
     if (is_root_pe().and.len_trim(block%name)==0) call MOM_error(FATAL, &
       'closeParameterBlock: A pop was attempted on an empty stack. ("'//&
       trim(block%name)//'")')
-    call doc_closeBlock(CS%doc,block%name)
+    if (block%log_access) call doc_closeBlock(CS%doc, block%name)
   else
     if (is_root_pe()) call MOM_error(FATAL, &
       'closeParameterBlock: A pop was attempted before allocation.')
