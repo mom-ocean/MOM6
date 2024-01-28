@@ -5,6 +5,7 @@ module MOM_intrinsic_functions
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use iso_fortran_env, only : stdout => output_unit, stderr => error_unit
+use iso_fortran_env, only : int64, real64
 
 implicit none ; private
 
@@ -28,6 +29,7 @@ function invcosh(x)
 
 end function invcosh
 
+
 !> Returns the cube root of a real argument at roundoff accuracy, in a form that works properly with
 !! rescaling of the argument by integer powers of 8.  If the argument is a NaN, a NaN is returned.
 elemental function cuberoot(x) result(root)
@@ -45,16 +47,15 @@ elemental function cuberoot(x) result(root)
               ! of the cube root of asx in arbitrary units that can grow or shrink with each iteration [B D]
   real :: den_prev ! The denominator of an expression for the previous iteration of the evolving estimate of
               ! the cube root of asx in arbitrary units that can grow or shrink with each iteration [D]
-  integer :: ex_3 ! One third of the exponent part of x, used to rescale x to get a.
   integer :: itt
+
+  integer(kind=int64) :: e_x, s_x
 
   if ((x >= 0.0) .eqv. (x <= 0.0)) then
     ! Return 0 for an input of 0, or NaN for a NaN input.
     root = x
   else
-    ex_3 = ceiling(exponent(x) / 3.)
-    ! Here asx is in the range of 0.125 <= asx < 1.0
-    asx = scale(abs(x), -3*ex_3)
+    call rescale_exp(x, asx, e_x, s_x)
 
     !   Iteratively determine root_asx = asx**1/3 using Halley's method and then Newton's method,
     ! noting that Halley's method onverges monotonically and needs no bounding.  Halley's method is
@@ -82,10 +83,101 @@ elemental function cuberoot(x) result(root)
     ! that is within the last bit of the true solution.
     root_asx = root_asx - (root_asx**3 - asx) / (3.0 * (root_asx**2))
 
-    root = sign(scale(root_asx, ex_3), x)
+    root = descale_cbrt(root_asx, e_x, s_x)
   endif
-
 end function cuberoot
+
+
+!> Rescale `a` to the range [0.125, 1) while preserving its fractional term.
+pure subroutine rescale_exp(a, x, e_a, s_a)
+  real, intent(in) :: a
+    !< The value to be rescaled
+  real, intent(out) :: x
+    !< The rescaled value of `a`
+  integer(kind=int64), intent(out) :: e_a
+    !< The biased exponent of `a`
+  integer(kind=int64), intent(out) :: s_a
+    !< The sign bit of `a`
+
+  ! Floating point model, if format is (sign, exp, frac)
+  integer, parameter :: bias = maxexponent(1.) - 1
+    !< The double precision exponent offset (assuming a balanced range)
+  integer, parameter :: signbit = storage_size(1.) - 1
+    !< Position of sign bit
+  integer, parameter :: explen = 1 + ceiling(log(real(bias))/log(2.))
+    !< Bit size of exponent
+  integer, parameter :: expbit = signbit - explen
+    !< Position of lowest exponent bit
+  integer, parameter :: fraclen = expbit
+    !< Length of fractional part
+
+  integer(kind=int64) :: xb
+    !< A floating point number, bit-packed as an integer
+  integer(kind=int64) :: e_scaled
+    !< The new rescaled exponent of `a` (i.e. the exponent of `x`)
+
+  ! Pack bits of `a` into `xb` and extract its exponent and sign
+  xb = transfer(a, 1_int64)
+  s_a = ibits(xb, signbit, 1)
+  e_a = ibits(xb, expbit, explen)
+
+  ! Decompose the exponent as `e = modulo(e,3) + 3*(e/3)` and extract the
+  ! rescaled exponent, now in {-3,-2,-1}
+  e_scaled = modulo(e_a, 3) - 3 + bias
+
+  ! Insert the new 11-bit exponent into `xb`, while also setting the sign bit
+  ! to zero, ensuring that `xb` is always positive.
+  call mvbits(e_scaled, 0, explen + 1, xb, fraclen)
+
+  ! Transfer the final modified value to `x`
+  x = transfer(xb, 1.)
+end subroutine rescale_exp
+
+
+!> Descale a real number to its original base, and apply the cube root to the
+!! remaining exponent.
+pure function descale_cbrt(x, e_a, s_a) result(r)
+  real, intent(in) :: x
+    !< Cube root of the rescaled value, which was rescaled to [0.125, 1.0)
+  integer(kind=int64), intent(in) :: e_a
+    !< Exponent of the original value to be cube rooted
+  integer(kind=int64), intent(in) :: s_a
+    !< Sign bit of the original value to be cube rooted
+  real :: r
+    !< Restored value with the cube root applied to its exponent
+
+  ! Floating point model, if format is (sign, exp, frac)
+  integer, parameter :: bias = maxexponent(1.) - 1
+    !< The double precision exponent offset (assuming a balanced range)
+  integer, parameter :: signbit = storage_size(1.) - 1
+    !< Position of sign bit
+  integer, parameter :: explen = 1 + ceiling(log(real(bias))/log(2.))
+    !< Bit size of exponent
+  integer, parameter :: expbit = signbit - explen
+    !< Position of lowest exponent bit
+  integer, parameter :: fraclen = expbit
+    !< Length of fractional part
+
+  integer(kind=int64) :: xb
+    ! Bit-packed real number into integer form
+  integer(kind=int64) :: e_r
+    ! Exponent of the descaled value
+
+  ! Extract the exponent of the rescaled value, in {-3, -2, -1}
+  xb = transfer(x, 1_8)
+  e_r = ibits(xb, expbit, explen)
+
+  ! Apply the cube root to the old exponent (after removing its bias) and add
+  ! to the rescaled exponent.  Correct the previous -3 with a +1.
+  e_r = e_r + (e_a/3 - bias/3 + 1)
+
+  ! Apply the corrected exponent and sign and convert back to real
+  call mvbits(e_r, 0, explen, xb, expbit)
+  call mvbits(s_a, 0, 1, xb, signbit)
+  r = transfer(xb, 1.)
+end function descale_cbrt
+
+
 
 !> Returns true if any unit test of intrinsic_functions fails, or false if they all pass.
 logical function intrinsic_functions_unit_tests(verbose)
