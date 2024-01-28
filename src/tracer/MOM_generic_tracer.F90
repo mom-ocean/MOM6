@@ -38,6 +38,7 @@ module MOM_generic_tracer
   use MOM_forcing_type, only : forcing, optics_type
   use MOM_grid, only : ocean_grid_type
   use MOM_hor_index, only : hor_index_type
+  use MOM_interface_heights, only : thickness_to_dz
   use MOM_io, only : file_exists, MOM_read_data, slasher
   use MOM_open_boundary, only : ocean_OBC_type
   use MOM_open_boundary, only : register_obgc_segments, fill_obgc_segments
@@ -75,8 +76,10 @@ module MOM_generic_tracer
     character(len = 200) :: IC_file !< The file in which the generic tracer initial values can
                                     !! be found, or an empty string for internal initialization.
     logical :: Z_IC_file !< If true, the generic_tracer IC_file is in Z-space.  The default is false.
-    real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers.
-    real :: tracer_land_val = -1.0 !< The values of tracers used where  land is masked out.
+    real :: tracer_IC_val = 0.0    !< The initial value assigned to tracers, in
+                                   !! concentration units [conc]
+    real :: tracer_land_val = -1.0 !< The values of tracers used where land is masked out, in
+                                   !! concentration units [conc]
     logical :: tracers_may_reinit  !< If true, tracers may go through the
                                    !! initialization code if they are not found in the restart files.
 
@@ -102,6 +105,7 @@ contains
     type(tracer_registry_type), pointer      :: tr_Reg     !< Pointer to the control structure for the tracer
                                                            !! advection and diffusion module.
     type(MOM_restart_CS), target, intent(inout)  :: restart_CS !< MOM restart control struct
+
     ! Local variables
     logical :: register_MOM_generic_tracer
     logical :: obc_has
@@ -113,14 +117,17 @@ contains
     ! These can be overridden later in via the field manager?
 
     integer :: ntau, axes(3)
-    type(g_tracer_type), pointer      :: g_tracer,g_tracer_next
-    character(len=fm_string_len)      :: g_tracer_name,longname,units
-    character(len=fm_string_len)      :: obc_src_file_name,obc_src_field_name
-    real                              :: lfac_in,lfac_out
-    real, dimension(:,:,:,:), pointer   :: tr_field
-    real, dimension(:,:,:), pointer     :: tr_ptr
-    real, dimension(HI%isd:HI%ied, HI%jsd:HI%jed,GV%ke)         :: grid_tmask
-    integer, dimension(HI%isd:HI%ied, HI%jsd:HI%jed)           :: grid_kmt
+    type(g_tracer_type), pointer      :: g_tracer, g_tracer_next
+    character(len=fm_string_len)      :: g_tracer_name, longname,units
+    character(len=fm_string_len)      :: obc_src_file_name, obc_src_field_name
+    real :: lfac_in   ! Multiplicative factor used in setting the tracer-specific inverse length
+                      ! scales associated with inflowing tracer reservoirs at OBCs [nondim]
+    real :: lfac_out  ! Multiplicative factor used in setting the tracer-specific inverse length
+                      ! scales associated with outflowing tracer reservoirs at OBCs [nondim]
+    real, dimension(:,:,:,:), pointer   :: tr_field ! A pointer to a generic tracer field, in concentration units [conc]
+    real, dimension(:,:,:), pointer     :: tr_ptr   ! A pointer to a generic tracer field, in concentration units [conc]
+    real,    dimension(SZI_(HI),SZJ_(HI),SZK_(GV)) :: grid_tmask ! A 3-d copy of G%mask2dT [nondim]
+    integer, dimension(SZI_(HI),SZJ_(HI))          :: grid_kmt   ! A 2-d array of nk
 
     register_MOM_generic_tracer = .false.
     if (associated(CS)) then
@@ -141,7 +148,7 @@ contains
   ! Read all relevant parameters and write them to the model log.
     call log_version(param_file, sub_name, version, "")
     call get_param(param_file, sub_name, "GENERIC_TRACER_IC_FILE", CS%IC_file, &
-                 "The file in which the generic trcer initial values can "//&
+                 "The file in which the generic tracer initial values can "//&
                  "be found, or an empty string for internal initialization.", &
                  default=" ")
     if ((len_trim(CS%IC_file) > 0) .and. (scan(CS%IC_file,'/') == 0)) then
@@ -169,7 +176,7 @@ contains
 
     !Fields cannot be diag registered as they are allocated and have to registered later.
     grid_tmask(:,:,:) = 0.0
-    grid_kmt(:,:) = 0.0
+    grid_kmt(:,:) = 0
     axes(:) = -1
 
     !
@@ -222,23 +229,26 @@ contains
 
   !> Register OBC segments for generic tracers
   subroutine register_MOM_generic_tracer_segments(CS, GV, OBC, tr_Reg, param_file)
-    type(MOM_generic_tracer_CS),           pointer    :: CS      !< Pointer to the control structure for this module.
-    type(verticalGrid_type),    intent(in)   :: GV         !< The ocean's vertical grid structure
-    type(ocean_OBC_type),       pointer      :: OBC        !< This open boundary condition type specifies whether,
-                                                           !! where, and what open boundary conditions are used.
-    type(tracer_registry_type), pointer      :: tr_Reg     !< Pointer to the control structure for the tracer
-                                                           !! advection and diffusion module.
-    type(param_file_type),      intent(in)   :: param_file !< A structure to parse for run-time parameters
+    type(MOM_generic_tracer_CS), pointer    :: CS         !< Pointer to the control structure for this module.
+    type(verticalGrid_type),     intent(in) :: GV         !< The ocean's vertical grid structure
+    type(ocean_OBC_type),        pointer    :: OBC        !< This open boundary condition type specifies whether,
+                                                          !! where, and what open boundary conditions are used.
+    type(tracer_registry_type),  pointer    :: tr_Reg     !< Pointer to the control structure for the tracer
+                                                          !! advection and diffusion module.
+    type(param_file_type),       intent(in) :: param_file !< A structure to parse for run-time parameters
+
     ! Local variables
     logical :: obc_has
     ! This include declares and sets the variable "version".
 #   include "version_variable.h"
-
     character(len=128), parameter :: sub_name = 'register_MOM_generic_tracer_segments'
     type(g_tracer_type), pointer      :: g_tracer,g_tracer_next
     character(len=fm_string_len)      :: g_tracer_name
-    character(len=fm_string_len)      :: obc_src_file_name,obc_src_field_name
-    real                              :: lfac_in,lfac_out
+    character(len=fm_string_len)      :: obc_src_file_name, obc_src_field_name
+    real :: lfac_in   ! Multiplicative factor used in setting the tracer-specific inverse length
+                      ! scales associated with inflowing tracer reservoirs at OBCs [nondim]
+    real :: lfac_out  ! Multiplicative factor used in setting the tracer-specific inverse length
+                      ! scales associated with outflowing tracer reservoirs at OBCs [nondim]
 
     if (.NOT. associated(OBC)) return
     !Get the tracer list
@@ -266,6 +276,7 @@ contains
     enddo
 
   end subroutine register_MOM_generic_tracer_segments
+
   !>  Initialize phase II:  Initialize required variables for generic tracers
   !!  There are some steps of initialization that cannot be done in register_MOM_generic_tracer
   !!  This is the place and time to do them:
@@ -275,15 +286,17 @@ contains
   !!
   !!   This subroutine initializes the NTR tracer fields in tr(:,:,:,:)
   !! and it sets up the tracer output.
-  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, CS, &
-                                          sponge_CSp, ALE_sponge_CSp)
+  subroutine initialize_MOM_generic_tracer(restart, day, G, GV, US, h, tv, param_file, diag, OBC, &
+                                           CS, sponge_CSp, ALE_sponge_CSp)
     logical,                               intent(in) :: restart !< .true. if the fields have already been
                                                                  !! read from a restart file.
     type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
     type(ocean_grid_type),                 intent(inout) :: G    !< The ocean's grid structure
     type(verticalGrid_type),               intent(in)    :: GV   !< The ocean's vertical grid structure
     type(unit_scale_type),                 intent(in)    :: US   !< A dimensional unit scaling type
-    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h   !< Layer thicknesses [H ~> m or kg m-2]
+    type(thermo_var_ptrs),                 intent(in) :: tv      !< A structure pointing to various thermodynamic
+                                                                 !! variables
     type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
     type(diag_ctrl),               target, intent(in) :: diag    !< Regulates diagnostic output.
     type(ocean_OBC_type),                  pointer    :: OBC     !< This open boundary condition type specifies whether,
@@ -298,10 +311,11 @@ contains
     integer :: i, j, k, isc, iec, jsc, jec, nk
     type(g_tracer_type), pointer    :: g_tracer,g_tracer_next
     character(len=fm_string_len)      :: g_tracer_name
-    real, dimension(:,:,:,:), pointer   :: tr_field
-    real, dimension(:,:,:), pointer     :: tr_ptr
-    real,    dimension(G%isd:G%ied, G%jsd:G%jed, 1:GV%ke) :: grid_tmask
-    integer, dimension(G%isd:G%ied, G%jsd:G%jed)          :: grid_kmt
+    real, dimension(:,:,:,:), pointer   :: tr_field ! A pointer to a generic tracer field, in concentration units [conc]
+    real, dimension(:,:,:), pointer     :: tr_ptr   ! A pointer to a generic tracer field, in concentration units [conc]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: dz ! Layer vertical extent [Z ~> m]
+    real,    dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: grid_tmask ! A 3-d copy of G%mask2dT [nondim]
+    integer, dimension(SZI_(G),SZJ_(G))          :: grid_kmt   ! A 2-d array of nk
 
     !! 2010/02/04  Add code to re-initialize Generic Tracers if needed during a model simulation
     !! By default, restart cpio should not contain a Generic Tracer IC file and step below will be skipped.
@@ -315,6 +329,8 @@ contains
          ": No tracer in the list.")
     !For each tracer name get its  fields
     g_tracer=>CS%g_tracer_list
+
+    call thickness_to_dz(h, tv, dz, G, GV, US)
 
     do
       if (INDEX(CS%IC_file, '_NULL_') /= 0) then
@@ -335,12 +351,11 @@ contains
                               "initializing generic tracer "//trim(g_tracer_name)//&
                               " using MOM_initialize_tracer_from_Z ")
 
-          call MOM_initialize_tracer_from_Z(h, tr_ptr, G, GV, US, param_file,               &
-                                 src_file = g_tracer%src_file,                              &
-                                 src_var_nam = g_tracer%src_var_name,                       &
-                                 src_var_unit_conversion = g_tracer%src_var_unit_conversion,&
-                                 src_var_record = g_tracer%src_var_record,                  &
-                                 src_var_gridspec = g_tracer%src_var_gridspec               )
+          call MOM_initialize_tracer_from_Z(dz, tr_ptr, G, GV, US, param_file, &
+                                 src_file=g_tracer%src_file, src_var_nam=g_tracer%src_var_name, &
+                                 src_var_unit_conversion=g_tracer%src_var_unit_conversion, &
+                                 src_var_record=g_tracer%src_var_record, src_var_gridspec=g_tracer%src_var_gridspec, &
+                                 h_in_Z_units=.true.)
 
           !Check/apply the bounds for each g_tracer
           do k=1,nk ; do j=jsc,jec ; do i=isc,iec
@@ -466,8 +481,9 @@ contains
     type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
     type(thermo_var_ptrs),   intent(in) :: tv    !< A structure pointing to various thermodynamic variables
     type(optics_type),       intent(in) :: optics !< The structure containing optical properties.
-    real,          optional, intent(in) :: evap_CFL_limit !< Limits how much water can be fluxed out of
-                                                 !! the top layer Stored previously in diabatic CS.
+    real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
+                                                 !! be fluxed out of the top layer in a timestep [nondim]
+                                                 !   Stored previously in diabatic CS.
     real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
                                                  !!  can be applied [H ~> m or kg m-2]
                                                  !   Stored previously in diabatic CS.
@@ -479,14 +495,17 @@ contains
 
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
     character(len=fm_string_len)  :: g_tracer_name
-    real, dimension(:,:), pointer :: stf_array,trunoff_array,runoff_tracer_flux_array
+    real, dimension(:,:), pointer :: stf_array   ! The surface flux of the tracer [conc kg m-2 s-1]
+    real, dimension(:,:), pointer :: trunoff_array  ! The tracer concentration in the river runoff [conc]
+    real, dimension(:,:), pointer :: runoff_tracer_flux_array ! The runoff tracer flux [conc kg m-2 s-1]
 
-    real :: surface_field(SZI_(G),SZJ_(G))
+    real :: surface_field(SZI_(G),SZJ_(G))  ! The surface value of some field, here only used for salinity [S ~> ppt]
     real :: dz_ml(SZI_(G),SZJ_(G))  ! The mixed layer depth in the MKS units used for generic tracers [m]
-    real :: sosga
+    real :: sosga ! The global mean surface salinity [ppt]
 
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,GV%ke) :: rho_dzt, dzt
-    real, dimension(SZI_(G),SZJ_(G),SZK_(GV))      :: h_work
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: rho_dzt ! Layer mass per unit area [kg m-2]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: dzt     ! Layer vertical extents [m]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work  ! A work array of thicknesses [H ~> m or kg m-2]
     integer :: i, j, k, isc, iec, jsc, jec, nk
 
     isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec ; nk = GV%ke
@@ -536,14 +555,15 @@ contains
     !
 
     rho_dzt(:,:,:) = GV%H_to_kg_m2 * GV%Angstrom_H
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec
       rho_dzt(i,j,k) = GV%H_to_kg_m2 * h_old(i,j,k)
-    enddo ; enddo ; enddo !}
+    enddo ; enddo ; enddo
 
     dzt(:,:,:) = 1.0
-    do k = 1, nk ; do j = jsc, jec ; do i = isc, iec  !{
-      dzt(i,j,k) = GV%H_to_m * h_old(i,j,k)
-    enddo ; enddo ; enddo !}
+    call thickness_to_dz(h_old, tv, dzt, G, GV, US)
+    do k=1,nk ; do j=jsc,jec ; do i=isc,iec
+      dzt(i,j,k) = US%Z_to_m * dzt(i,j,k)
+    enddo ; enddo ; enddo
     dz_ml(:,:) = 0.0
     do j=jsc,jec ; do i=isc,iec
       surface_field(i,j) = tv%S(i,j,1)
@@ -639,8 +659,8 @@ contains
 
     ! Local variables
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
-    real, dimension(:,:,:,:), pointer   :: tr_field
-    real, dimension(:,:,:), pointer     :: tr_ptr
+    real, dimension(:,:,:,:), pointer   :: tr_field ! A pointer to a generic tracer field, in concentration units [conc]
+    real, dimension(:,:,:), pointer     :: tr_ptr   ! A pointer to a generic tracer field, in concentration units [conc]
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_stock'
 
     integer :: m
@@ -802,7 +822,7 @@ contains
     real    :: tmax, tmin   ! Maximum and minimum tracer values, in the same units as tr_array
     real    :: tmax0, tmin0 ! First-guest values of tmax and tmin.
     integer :: itmax, jtmax, ktmax, itmin, jtmin, ktmin
-    real    :: fudge ! A factor that is close to 1 that is used to find the location of the extrema.
+    real    :: fudge ! A factor that is close to 1 that is used to find the location of the extrema [nondim].
 
      ! arrays to enable vectorization
     integer :: iminarr(3), imaxarr(3)
@@ -853,7 +873,7 @@ contains
 
     ! Now find the location of the global extrema.
     !
-    ! Note that the fudge factor above guarantees that the location of max (min) is uinque,
+    ! Note that the fudge factor above guarantees that the location of max (min) is unique,
     ! since tmax0 (tmin0) has slightly different values on each processor.
     ! Otherwise, the function tr_array(i,j,k) could be equal to global max (min) at more
     ! than one point in space and this would be a much more difficult problem to solve.
@@ -899,16 +919,16 @@ contains
     real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
     type(MOM_generic_tracer_CS),           pointer       :: CS   !< Pointer to the control structure for this module.
 
-! Local variables
-    real :: sosga
+    ! Local variables
+    real :: sosga ! The global mean surface salinity [ppt]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV),1) :: rho0 ! An unused array of densities [kg m-3]
+    real, dimension(SZI_(G),SZJ_(G),SZK_(GV))   :: dzt  ! Layer vertical extents [m]
 
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_surface_state'
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke,1) :: rho0
-    real, dimension(G%isd:G%ied,G%jsd:G%jed,1:GV%ke) ::  dzt
 
     !Set coupler values
     !nnz: fake rho0
-    rho0=1.0
+    rho0(:,:,:,:) = 1.0
 
     dzt(:,:,:) = GV%H_to_m * h(:,:,:)
 
@@ -937,7 +957,7 @@ contains
     !Niki: The problem with calling diagnostic outputs here is that this subroutine is called every dt_cpld
     !      hence if dt_therm > dt_cpld we get output (and contribution to the mean) at times that tracers
     !      had not been updated.
-    !      Moving this to the end of column physics subrotuine fixes this issue.
+    !      Moving this to the end of column physics subroutine fixes this issue.
 
   end subroutine MOM_generic_tracer_surface_state
 
@@ -976,7 +996,7 @@ contains
   subroutine MOM_generic_tracer_fluxes_accumulate(flux_tmp, weight)
     type(forcing), intent(in)    :: flux_tmp  !< A structure containing pointers to
                                               !! thermodynamic and tracer forcing fields.
-    real,          intent(in)    :: weight    !< A weight for accumulating this flux
+    real,          intent(in)    :: weight    !< A weight for accumulating this flux [nondim]
 
     call generic_tracer_coupler_accumulate(flux_tmp%tr_fluxes, weight)
 
@@ -986,10 +1006,12 @@ contains
   subroutine MOM_generic_tracer_get(name,member,array, CS)
     character(len=*),         intent(in)  :: name   !< Name of requested tracer.
     character(len=*),         intent(in)  :: member !< The tracer element to return.
-    real, dimension(:,:,:),   intent(out) :: array  !< Array filled by this routine.
-    type(MOM_generic_tracer_CS), pointer :: CS   !< Pointer to the control structure for this module.
+    real, dimension(:,:,:),   intent(out) :: array  !< Array filled by this routine, in arbitrary units [A]
+    type(MOM_generic_tracer_CS), pointer  :: CS     !< Pointer to the control structure for this module.
 
-    real, dimension(:,:,:),   pointer :: array_ptr
+    ! Local variables
+    real, dimension(:,:,:),   pointer :: array_ptr  ! The tracer in the generic tracer structures, in
+                                                    ! arbitrary units [A]
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_get'
 
     call g_tracer_get_pointer(CS%g_tracer_list,name,member,array_ptr)

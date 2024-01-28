@@ -340,7 +340,7 @@ subroutine tracer_flow_control_init(restart, day, G, GV, US, h, param_file, diag
     call initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS%CFC_cap_CSp)
 
   if (CS%use_MOM_generic_tracer) &
-    call initialize_MOM_generic_tracer(restart, day, G, GV, US, h, param_file, diag, OBC, &
+    call initialize_MOM_generic_tracer(restart, day, G, GV, US, h, tv, param_file, diag, OBC, &
                                 CS%MOM_generic_tracer_CSp, sponge_CSp, ALE_sponge_CSp)
   if (CS%use_pseudo_salt_tracer) &
     call initialize_pseudo_salt_tracer(restart, day, G, GV, US, h, diag, OBC, CS%pseudo_salt_tracer_CSp, &
