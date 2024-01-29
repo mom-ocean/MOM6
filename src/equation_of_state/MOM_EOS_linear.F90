@@ -167,7 +167,7 @@ elemental subroutine calculate_specvol_derivs_elem_linear(this, T, S, pressure, 
   real,               intent(inout) :: dSV_dT   !< The partial derivative of specific volume with
                                                 !! potential temperature [m3 kg-1 degC-1]
   ! Local variables
-  real :: I_rho2
+  real :: I_rho2  ! The inverse of density squared [m6 kg-2]
 
   ! Sv = 1.0 / (Rho_T0_S0 + dRho_dT*T + dRho_dS*S)
   I_rho2 = 1.0 / (this%Rho_T0_S0 + (this%dRho_dT*T + this%dRho_dS*S))**2
@@ -317,7 +317,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   real :: intz(5)    ! The integrals of density with height at the
                      ! 5 sub-column locations [R L2 T-2 ~> Pa]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
-  real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
+  real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants [nondim].
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m
 
   ! These array bounds work for the indexing convention of the input arrays, but
@@ -488,7 +488,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   real :: intp(5)    ! The integrals of specific volume with pressure at the
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
-  real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants.
+  real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants [nondim].
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
 
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB

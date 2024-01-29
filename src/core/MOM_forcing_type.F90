@@ -3492,7 +3492,7 @@ end subroutine get_mech_forcing_groups
 
 !> Allocates and zeroes-out array.
 subroutine myAlloc(array, is, ie, js, je, flag)
-  real, dimension(:,:), pointer :: array !< Array to be allocated
+  real, dimension(:,:), pointer :: array !< Array to be allocated [arbitrary]
   integer,           intent(in) :: is !< Start i-index
   integer,           intent(in) :: ie !< End i-index
   integer,           intent(in) :: js !< Start j-index
@@ -3970,11 +3970,12 @@ end subroutine homogenize_forcing
 
 subroutine homogenize_field_t(var, G, tmp_scale)
   type(ocean_grid_type),            intent(in)    :: G   !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: var !< The variable to homogenize
-  real,                   optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
-                                                         !! variable that is reversed in the return value
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: var !< The variable to homogenize [A ~> a]
+  real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
+                                                         !! variable that is reversed in the
+                                                         !! return value [a A-1 ~> 1]
 
-  real    :: avg   ! Global average of var, in the same units as var
+  real    :: avg   ! Global average of var, in the same units as var [A ~> a]
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -3987,11 +3988,12 @@ end subroutine homogenize_field_t
 
 subroutine homogenize_field_v(var, G, tmp_scale)
   type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize [A ~> a]
   real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
-                                                         !! variable that is reversed in the return value
+                                                           !! variable that is reversed in the
+                                                           !! return value [a A-1 ~> 1]
 
-  real    :: avg   ! Global average of var, in the same units as var
+  real    :: avg   ! Global average of var, in the same units as var [A ~> a]
   integer :: i, j, is, ie, jsB, jeB
   is = G%isc ; ie = G%iec ; jsB = G%jscB ; jeB = G%jecB
 
@@ -4004,11 +4006,12 @@ end subroutine homogenize_field_v
 
 subroutine homogenize_field_u(var, G, tmp_scale)
   type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize [A ~> a]
   real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
-                                                         !! variable that is reversed in the return value
+                                                           !! variable that is reversed in the
+                                                           !! return value [a A-1 ~> 1]
 
-  real    :: avg   ! Global average of var, in the same units as var
+  real    :: avg   ! Global average of var, in the same units as var [A ~> a]
   integer :: i, j, isB, ieB, js, je
   isB = G%iscB ; ieB = G%iecB ; js = G%jsc ; je = G%jec
 
