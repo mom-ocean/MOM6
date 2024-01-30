@@ -52,14 +52,19 @@ elemental function cuberoot(x) result(root)
   real :: asx ! The absolute value of x rescaled by an integer power of 8 to put it into
               ! the range from 0.125 < asx <= 1.0, in ambiguous units cubed [B3]
   real :: root_asx ! The cube root of asx [B]
+  real :: ra_3 ! root_asx cubed [B3]
   real :: num ! The numerator of an expression for the evolving estimate of the cube root of asx
               ! in arbitrary units that can grow or shrink with each iteration [B C]
   real :: den ! The denominator of an expression for the evolving estimate of the cube root of asx
               ! in arbitrary units that can grow or shrink with each iteration [C]
   real :: num_prev ! The numerator of an expression for the previous iteration of the evolving estimate
               ! of the cube root of asx in arbitrary units that can grow or shrink with each iteration [B D]
+  real :: np_3 ! num_prev cubed  [B3 D3]
   real :: den_prev ! The denominator of an expression for the previous iteration of the evolving estimate of
               ! the cube root of asx in arbitrary units that can grow or shrink with each iteration [D]
+  real :: dp_3 ! den_prev cubed  [C3]
+  real :: r0  ! Initial value of the iterative solver. [B C]
+  real :: r0_3 ! r0 cubed [B3 C3]
   integer :: itt
 
   integer(kind=int64) :: e_x, s_x
@@ -79,14 +84,21 @@ elemental function cuberoot(x) result(root)
 
     ! This first estimate gives the same magnitude of errors for 0.125 and 1.0 after two iterations.
     ! The first iteration is applied explicitly.
-    num = 0.707106 * (0.707106**3 + 2.0 * asx)
-    den = 2.0 * (0.707106**3) + asx
+    r0 = 0.707106
+    r0_3 = r0 * r0 * r0
+    num = r0 * (r0_3 + 2.0 * asx)
+    den = 2.0 * r0_3 + asx
 
     do itt=1,2
       ! Halley's method iterates estimates as Root = Root * (Root**3 + 2.*asx) / (2.*Root**3 + asx).
       num_prev = num ; den_prev = den
-      num = num_prev * (num_prev**3 + 2.0 * asx * (den_prev**3))
-      den = den_prev * (2.0 * num_prev**3 + asx * (den_prev**3))
+
+      ! Pre-compute these as integer powers, to avoid `pow()`-like intrinsics.
+      np_3 = num_prev * num_prev * num_prev
+      dp_3 = den_prev * den_prev * den_prev
+
+      num = num_prev * (np_3 + 2.0 * asx * dp_3)
+      den = den_prev * (2.0 * np_3 + asx * dp_3)
       ! Equivalent to:  root_asx = root_asx * (root_asx**3 + 2.*asx) / (2.*root_asx**3 + asx)
     enddo
     ! At this point the error in root_asx is better than 1 part in 3e14.
@@ -94,7 +106,8 @@ elemental function cuberoot(x) result(root)
 
     ! One final iteration with Newton's method polishes up the root and gives a solution
     ! that is within the last bit of the true solution.
-    root_asx = root_asx - (root_asx**3 - asx) / (3.0 * (root_asx**2))
+    ra_3 = root_asx * root_asx * root_asx
+    root_asx = root_asx - (ra_3 - asx) / (3.0 * (root_asx * root_asx))
 
     root = descale(root_asx, e_x, s_x)
   endif
