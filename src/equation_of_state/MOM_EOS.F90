@@ -1703,7 +1703,7 @@ subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
   do k=1,kd ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
     if (mask_z(i,j,k) >= 1.0) then
       S(i,j,k) = Sref_Sprac * S(i,j,k)
-      T(i,j,k) = EOS%degC_to_C*poTemp_to_consTemp(EOS%S_to_ppt*S(i,j,k), EOS%S_to_ppt*T(i,j,k))
+      T(i,j,k) = EOS%degC_to_C*poTemp_to_consTemp(EOS%C_to_degC*T(i,j,k), EOS%S_to_ppt*S(i,j,k))
     endif
   enddo ; enddo ; enddo
 end subroutine convert_temp_salt_for_TEOS10
