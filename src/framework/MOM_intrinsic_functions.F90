@@ -12,6 +12,19 @@ implicit none ; private
 public :: invcosh, cuberoot
 public :: intrinsic_functions_unit_tests
 
+! Floating point model, if bit layout from high to low is (sign, exp, frac)
+
+integer, parameter :: bias = maxexponent(1.) - 1
+  !< The double precision exponent offset
+integer, parameter :: signbit = storage_size(1.) - 1
+  !< Position of sign bit
+integer, parameter :: explen = 1 + ceiling(log(real(bias))/log(2.))
+  !< Bit size of exponent
+integer, parameter :: expbit = signbit - explen
+  !< Position of lowest exponent bit
+integer, parameter :: fraclen = expbit
+  !< Length of fractional part
+
 contains
 
 !> Evaluate the inverse cosh, either using a math library or an
@@ -55,7 +68,7 @@ elemental function cuberoot(x) result(root)
     ! Return 0 for an input of 0, or NaN for a NaN input.
     root = x
   else
-    call rescale_exp(x, asx, e_x, s_x)
+    call rescale_cbrt(x, asx, e_x, s_x)
 
     !   Iteratively determine root_asx = asx**1/3 using Halley's method and then Newton's method,
     ! noting that Halley's method onverges monotonically and needs no bounding.  Halley's method is
@@ -83,109 +96,90 @@ elemental function cuberoot(x) result(root)
     ! that is within the last bit of the true solution.
     root_asx = root_asx - (root_asx**3 - asx) / (3.0 * (root_asx**2))
 
-    root = descale_cbrt(root_asx, e_x, s_x)
+    root = descale(root_asx, e_x, s_x)
   endif
 end function cuberoot
 
 
-!> Rescale `a` to the range [0.125, 1) while preserving its fractional term.
-pure subroutine rescale_exp(a, x, e_a, s_a)
+!> Rescale `a` to the range [0.125, 1) and compute its cube-root exponent.
+pure subroutine rescale_cbrt(a, x, e_r, s_a)
   real, intent(in) :: a
-    !< The value to be rescaled
+    !< The real parameter to be rescaled for cube root
   real, intent(out) :: x
-    !< The rescaled value of `a`
-  integer(kind=int64), intent(out) :: e_a
-    !< The biased exponent of `a`
+    !< The rescaled value of a
+  integer(kind=int64), intent(out) :: e_r
+    !< Cube root of the exponent of the rescaling of `a`
   integer(kind=int64), intent(out) :: s_a
-    !< The sign bit of `a`
-
-  ! Floating point model, if format is (sign, exp, frac)
-  integer, parameter :: bias = maxexponent(1.) - 1
-    !< The double precision exponent offset (assuming a balanced range)
-  integer, parameter :: signbit = storage_size(1.) - 1
-    !< Position of sign bit
-  integer, parameter :: explen = 1 + ceiling(log(real(bias))/log(2.))
-    !< Bit size of exponent
-  integer, parameter :: expbit = signbit - explen
-    !< Position of lowest exponent bit
-  integer, parameter :: fraclen = expbit
-    !< Length of fractional part
+    !< The sign bit of a
 
   integer(kind=int64) :: xb
-    !< A floating point number, bit-packed as an integer
-  integer(kind=int64) :: e_scaled
-    !< The new rescaled exponent of `a` (i.e. the exponent of `x`)
+    ! Floating point value of a, bit-packed as an integer
+  integer(kind=int64) :: e_a
+    ! Unscaled exponent of a
+  integer(kind=int64) :: e_x
+    ! Exponent of x
+  integer(kind=int64) :: e_div, e_mod
+    ! Quotient and remainder of e in e = 3*(e/3) + modulo(e,3).
 
-  ! Pack bits of `a` into `xb` and extract its exponent and sign
+  ! Pack bits of a into xb and extract its exponent and sign.
   xb = transfer(a, 1_int64)
   s_a = ibits(xb, signbit, 1)
-  e_a = ibits(xb, expbit, explen)
+  e_a = ibits(xb, expbit, explen) - bias
 
-  ! Decompose the exponent as `e = modulo(e,3) + 3*(e/3)` and extract the
-  ! rescaled exponent, now in {-3,-2,-1}
-  e_scaled = modulo(e_a, 3) - 3 + bias
+  ! Compute terms of exponent decomposition e = 3*(e/3) + modulo(e,3).
+  ! (Fortran division is round-to-zero, so we must emulate floor division.)
+  e_mod = modulo(e_a, 3_int64)
+  e_div = (e_a - e_mod)/3
 
-  ! Insert the new 11-bit exponent into `xb`, while also setting the sign bit
-  ! to zero, ensuring that `xb` is always positive.
-  call mvbits(e_scaled, 0, explen + 1, xb, fraclen)
+  ! Our scaling decomposes e_a into e = {3*(e/3) + 3} + {modulo(e,3) - 3}.
 
-  ! Transfer the final modified value to `x`
+  ! The first term is a perfect cube, whose cube root is computed below.
+  e_r = e_div + 1
+
+  ! The second term ensures that x is shifted to [0.125, 1).
+  e_x = e_mod - 3
+
+  ! Insert the new 11-bit exponent into xb and write to x and extend the
+  ! bitcount to 12, so that the sign bit is zero and x is always positive.
+  call mvbits(e_x + bias, 0, explen + 1, xb, fraclen)
   x = transfer(xb, 1.)
-end subroutine rescale_exp
+end subroutine rescale_cbrt
 
 
-!> Descale a real number to its original base, and apply the cube root to the
-!! remaining exponent.
-pure function descale_cbrt(x, e_a, s_a) result(r)
+!> Undo the rescaling of a real number back to its original base.
+pure function descale(x, e_a, s_a) result(a)
   real, intent(in) :: x
-    !< Cube root of the rescaled value, which was rescaled to [0.125, 1.0)
+    !< The rescaled value which is to be restored.
   integer(kind=int64), intent(in) :: e_a
-    !< Exponent of the original value to be cube rooted
+    !< Exponent of the unscaled value
   integer(kind=int64), intent(in) :: s_a
-    !< Sign bit of the original value to be cube rooted
-  real :: r
-    !< Restored value with the cube root applied to its exponent
-
-  ! Floating point model, if format is (sign, exp, frac)
-  integer, parameter :: bias = maxexponent(1.) - 1
-    !< The double precision exponent offset (assuming a balanced range)
-  integer, parameter :: signbit = storage_size(1.) - 1
-    !< Position of sign bit
-  integer, parameter :: explen = 1 + ceiling(log(real(bias))/log(2.))
-    !< Bit size of exponent
-  integer, parameter :: expbit = signbit - explen
-    !< Position of lowest exponent bit
-  integer, parameter :: fraclen = expbit
-    !< Length of fractional part
+    !< Sign bit of the unscaled value
+  real :: a
+    !< Restored value with the corrected exponent and sign
 
   integer(kind=int64) :: xb
     ! Bit-packed real number into integer form
-  integer(kind=int64) :: e_r
-    ! Exponent of the descaled value
+  integer(kind=int64) :: e_x
+    ! Biased exponent of x
 
-  ! Extract the exponent of the rescaled value, in {-3, -2, -1}
+  ! Apply the corrected exponent and sign to x.
   xb = transfer(x, 1_8)
-  e_r = ibits(xb, expbit, explen)
-
-  ! Apply the cube root to the old exponent (after removing its bias) and add
-  ! to the rescaled exponent.  Correct the previous -3 with a +1.
-  e_r = e_r + (e_a/3 - bias/3 + 1)
-
-  ! Apply the corrected exponent and sign and convert back to real
-  call mvbits(e_r, 0, explen, xb, expbit)
+  e_x = ibits(xb, expbit, explen)
+  call mvbits(e_a + e_x, 0, explen, xb, expbit)
   call mvbits(s_a, 0, 1, xb, signbit)
-  r = transfer(xb, 1.)
-end function descale_cbrt
-
+  a = transfer(xb, 1.)
+end function descale
 
 
 !> Returns true if any unit test of intrinsic_functions fails, or false if they all pass.
-logical function intrinsic_functions_unit_tests(verbose)
+function intrinsic_functions_unit_tests(verbose) result(fail)
   logical, intent(in) :: verbose !< If true, write results to stdout
+  logical :: fail !< True if any of the unit tests fail
 
   ! Local variables
   real :: testval  ! A test value for self-consistency testing [nondim]
-  logical :: fail, v
+  logical :: v
+  integer :: n
 
   fail = .false.
   v = verbose
@@ -199,7 +193,15 @@ logical function intrinsic_functions_unit_tests(verbose)
   fail = fail .or. Test_cuberoot(v, 1.0)
   fail = fail .or. Test_cuberoot(v, 0.125)
   fail = fail .or. Test_cuberoot(v, 0.965)
+  fail = fail .or. Test_cuberoot(v, 1.0 - epsilon(1.0))
+  fail = fail .or. Test_cuberoot(v, 1.0 - 0.5*epsilon(1.0))
 
+  testval = 1.0e-99
+  v = .false.
+  do n=-160,160
+    fail = fail .or. Test_cuberoot(v, testval)
+    testval = (-2.908 * (1.414213562373 + 1.2345678901234e-5*n)) * testval
+  enddo
 end function intrinsic_functions_unit_tests
 
 !> True if the cube of cuberoot(val) does not closely match val. False otherwise.
@@ -209,7 +211,7 @@ logical function Test_cuberoot(verbose, val)
   ! Local variables
   real :: diff ! The difference between val and the cube root of its cube.
 
-  diff = val - cuberoot(val**3)
+  diff = val - cuberoot(val)**3
   Test_cuberoot = (abs(diff) > 2.0e-15*abs(val))
 
   if (Test_cuberoot) then
