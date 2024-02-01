@@ -3,15 +3,15 @@ module MOM_write_cputime
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_coms, only : sum_across_PEs, pe_here, num_pes
+use MOM_coms,          only : sum_across_PEs, num_pes
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
-use MOM_io, only : open_file, APPEND_FILE, ASCII_FILE, WRITEONLY_FILE
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_time_manager, only : time_type, get_time, operator(>)
+use MOM_io,            only : open_ASCII_file, close_file, APPEND_FILE, WRITEONLY_FILE
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_time_manager,  only : time_type, get_time, operator(>)
 
 implicit none ; private
 
-public write_cputime, MOM_write_cputime_init, write_cputime_start_clock
+public write_cputime, MOM_write_cputime_init, MOM_write_cputime_end, write_cputime_start_clock
 
 !-----------------------------------------------------------------------
 
@@ -20,20 +20,21 @@ integer :: MAX_TICKS      = 1000 !< The number of ticks per second, used by the 
 
 !> A control structure that regulates the writing of CPU time
 type, public :: write_cputime_CS ; private
-  real :: maxcpu                !<   The maximum amount of cpu time per processor
+  logical :: initialized = .false. !< True if this control structure has been initialized.
+  real :: maxcpu                !<   The maximum amount of CPU time per processor
                                 !! for which MOM should run before saving a restart
-                                !! file and quiting with a return value that
+                                !! file and quitting with a return value that
                                 !! indicates that further execution is required to
-                                !! complete the simulation, in wall-clock seconds.
+                                !! complete the simulation [wall-clock seconds].
   type(time_type) :: Start_time !< The start time of the simulation.
                                 !! Start_time is set in MOM_initialization.F90
-  real :: startup_cputime       !< The CPU time used in the startup phase of the model.
-  real :: prev_cputime = 0.0    !< The last measured CPU time.
-  real :: dn_dcpu_min = -1.0    !< The minimum derivative of timestep with CPU time.
-  real :: cputime2 = 0.0        !< The accumulated cpu time.
+  real :: startup_cputime       !< The CPU time used in the startup phase of the model [clock_cycles].
+  real :: prev_cputime = 0.0    !< The last measured CPU time [clock_cycles].
+  real :: dn_dcpu_min = -1.0    !< The minimum derivative of timestep with CPU time [steps clock_cycles-1].
+  real :: cputime2 = 0.0        !< The accumulated CPU time [clock_cycles].
   integer :: previous_calls = 0 !< The number of times write_CPUtime has been called.
   integer :: prev_n = 0         !< The value of n from the last call.
-  integer :: fileCPU_ascii      !< The unit number of the CPU time file.
+  integer :: fileCPU_ascii= -1  !< The unit number of the CPU time file.
   character(len=200) :: CPUfile !< The name of the CPU time file.
 end type write_cputime_CS
 
@@ -60,9 +61,10 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 
   ! Local variables
   integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = 'MOM_write_cputime'  ! This module's name.
+  logical :: all_default   ! If true, all parameters are using their default values.
 
   if (.not.associated(CS)) then
     allocate(CS)
@@ -70,8 +72,16 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
     CS%prev_cputime = new_cputime
   endif
 
+  CS%initialized = .true.
+
   ! Read all relevant parameters and write them to the model log.
-  call log_version(param_file, mdl, version, "")
+
+  ! Determine whether all parameters are set to their default values.
+  call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, units="wall-clock seconds", default=-1.0, do_not_log=.true.)
+  call get_param(param_file, mdl, "CPU_TIME_FILE", CS%CPUfile, default="CPU_stats", do_not_log=.true.)
+  all_default = (CS%maxcpu == -1.0) .and. (trim(CS%CPUfile) == trim("CPU_stats"))
+
+  call log_version(param_file, mdl, version, "", all_default=all_default)
   call get_param(param_file, mdl, "MAXCPU", CS%maxcpu, &
                  "The maximum amount of cpu time per processor for which "//&
                  "MOM should run before saving a restart file and "//&
@@ -94,26 +104,48 @@ subroutine MOM_write_cputime_init(param_file, directory, Input_start_time, CS)
 
 end subroutine MOM_write_cputime_init
 
-!> This subroutine assesses how much CPU time the model has taken and determines how long the model
-!! should be run before it saves a restart file and stops itself.
-subroutine write_cputime(day, n, nmax, CS)
-  type(time_type),        intent(inout) :: day !< The current model time.
-  integer,                intent(in)    :: n  !< The time step number of the current execution.
-  integer,                intent(inout) :: nmax !< The number of iterations after which to stop so
-                                              !! that the simulation will not run out of CPU time.
-  type(write_cputime_CS), pointer       :: CS !< The control structure set up by a previous
+!> Close the MOM_write_cputime module.
+subroutine MOM_write_cputime_end(CS)
+  type(write_cputime_CS), pointer    :: CS    !< The control structure set up by a previous
                                               !! call to MOM_write_cputime_init.
+
+  if (.not.associated(CS)) return
+
+  ! Flush and close the output files.
+  if (is_root_pe() .and. CS%fileCPU_ascii > 0) then
+    flush(CS%fileCPU_ascii)
+    call close_file(CS%fileCPU_ascii)
+  endif
+
+  deallocate(CS)
+
+end subroutine MOM_write_cputime_end
+
+!> This subroutine assesses how much CPU time the model has taken and determines how long the model
+!! should be run before it saves a restart file and stops itself.  Optionally this may also be used
+!! to trigger this module's end routine.
+subroutine write_cputime(day, n, CS, nmax, call_end)
+  type(time_type),        intent(inout) :: day  !< The current model time.
+  integer,                intent(in)    :: n    !< The time step number of the current execution.
+  type(write_cputime_CS), pointer       :: CS   !< The control structure set up by a previous
+                                                !! call to MOM_write_cputime_init.
+  integer,      optional, intent(inout) :: nmax !< The number of iterations after which to stop so
+                                                !! that the simulation will not run out of CPU time.
+  logical,      optional, intent(in)    :: call_end !< If true, also call MOM_write_cputime_end.
 
   ! Local variables
   real    :: d_cputime     ! The change in CPU time since the last call
-                           ! this subroutine.
-  integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK
-  real    :: reday         ! A real version of day.
-  character(len=256) :: mesg  ! The text of an error message
-  integer :: start_of_day, num_days
+                           ! this subroutine [clock_cycles]
+  integer :: new_cputime   ! The CPU time returned by SYSTEM_CLOCK [clock_cycles]
+  real    :: reday         ! The time in days, including fractional days [days]
+  integer :: start_of_day  ! The number of seconds since the start of the day
+  integer :: num_days      ! The number of days in the time
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL, &
+         "write_cputime: Module must be initialized before it is used.")
 
   call SYSTEM_CLOCK(new_cputime, CLOCKS_PER_SEC, MAX_TICKS)
 !   The following lines extract useful information even if the clock has rolled
@@ -138,7 +170,7 @@ subroutine write_cputime(day, n, nmax, CS)
         ((CS%dn_dcpu_min*d_cputime < (n - CS%prev_n)) .or. &
          (CS%dn_dcpu_min < 0.0))) &
       CS%dn_dcpu_min = (n - CS%prev_n) / d_cputime
-    if (CS%dn_dcpu_min >= 0.0) then
+    if (present(nmax) .and. (CS%dn_dcpu_min >= 0.0)) then
       ! Have the model stop itself after 95% of the CPU time has been used.
       nmax = n + INT( CS%dn_dcpu_min * &
           (0.95*CS%maxcpu * REAL(num_pes())*CLOCKS_PER_SEC - &
@@ -155,11 +187,9 @@ subroutine write_cputime(day, n, nmax, CS)
   !  Reopen or create a text output file.
   if ((CS%previous_calls == 0) .and. (is_root_pe())) then
     if (day > CS%Start_time) then
-      call open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
-                     action=APPEND_FILE, form=ASCII_FILE, nohdrs=.true.)
+      call open_ASCII_file(CS%fileCPU_ascii, trim(CS%CPUfile), action=APPEND_FILE)
     else
-      call open_file(CS%fileCPU_ascii, trim(CS%CPUfile), &
-                     action=WRITEONLY_FILE, form=ASCII_FILE, nohdrs=.true.)
+      call open_ASCII_file(CS%fileCPU_ascii, trim(CS%CPUfile), action=WRITEONLY_FILE)
     endif
   endif
 
@@ -170,11 +200,17 @@ subroutine write_cputime(day, n, nmax, CS)
                             (CS%startup_cputime / CLOCKS_PER_SEC), num_pes()
       write(CS%fileCPU_ascii,*)"        Day, Step number,     CPU time, CPU time change"
     endif
-    write(CS%fileCPU_ascii,'(F12.3,", "I11,", ", F12.3,", ", F12.3)') &
+    write(CS%fileCPU_ascii,'(F12.3,", ",I11,", ",F12.3,", ",F12.3)') &
            reday, n, (CS%cputime2 / real(CLOCKS_PER_SEC)), &
            d_cputime / real(CLOCKS_PER_SEC)
+
+    flush(CS%fileCPU_ascii)
   endif
   CS%previous_calls = CS%previous_calls + 1
+
+  if (present(call_end)) then
+    if (call_end) call MOM_write_cputime_end(CS)
+  endif
 
 end subroutine write_cputime
 

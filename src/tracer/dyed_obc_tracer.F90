@@ -3,6 +3,7 @@ module dyed_obc_tracer
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_coupler_types,      only : atmos_ocn_coupler_flux
 use MOM_diag_mediator,      only : diag_ctrl
 use MOM_error_handler,      only : MOM_error, FATAL, WARNING
 use MOM_file_parser,        only : get_param, log_param, log_version, param_file_type
@@ -15,11 +16,9 @@ use MOM_restart,            only : MOM_restart_CS
 use MOM_time_manager,       only : time_type
 use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_unit_scaling,       only : unit_scale_type
 use MOM_variables,          only : surface
 use MOM_verticalGrid,       only : verticalGrid_type
-
-use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
-use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
 
@@ -37,7 +36,7 @@ type, public :: dyed_obc_tracer_CS ; private
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this subroutine, in g m-3?
 
-  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by aof_set_coupler_flux if it is used and the
+  integer, allocatable, dimension(:) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                                !! surface tracer concentrations are to be provided to the coupler.
 
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -57,12 +56,12 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   type(dyed_obc_tracer_CS),   pointer    :: CS   !< A pointer that is set to point to the
                                                  !! control structure for this module
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS), target, intent(inout) :: restart_CS !< MOM restart control struct
 
-! Local variables
+  ! Local variables
   character(len=80)  :: name, longname
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "dyed_obc_tracer" ! This module's name.
   character(len=200) :: inputdir
   character(len=48)  :: flux_units ! The units for tracer fluxes, usually
@@ -73,9 +72,8 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "dyed_obc_register_tracer called with an "// &
-                            "associated control structure.")
-    return
+    call MOM_error(FATAL, "dyed_obc_register_tracer called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 
@@ -99,7 +97,7 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                    CS%tracer_IC_file)
   endif
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
   do m=1,CS%ntr
     write(name,'("dye_",I2.2)') m
@@ -121,7 +119,7 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! values to the coupler (if any).  This is meta-code and its arguments will
     ! currently (deliberately) give fatal errors if it is used.
     if (CS%coupled_tracers) &
-      CS%ind_tr(m) = aof_set_coupler_flux(trim(name)//'_flux', &
+      CS%ind_tr(m) = atmos_ocn_coupler_flux(trim(name)//'_flux', &
           flux_type=' ', implementation=' ', caller="register_dyed_obc_tracer")
   enddo
 
@@ -137,28 +135,16 @@ subroutine initialize_dyed_obc_tracer(restart, day, G, GV, h, diag, OBC, CS)
   logical,                               intent(in) :: restart !< .true. if the fields have already
                                                                !! been read from a restart file.
   type(time_type), target,               intent(in) :: day     !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(diag_ctrl), target,               intent(in) :: diag    !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),                  pointer    :: OBC     !< Structure specifying open boundary options.
   type(dyed_obc_tracer_CS),              pointer    :: CS      !< The control structure returned by a previous
                                                                !! call to dyed_obc_register_tracer.
 
 ! Local variables
-  real, allocatable :: temp(:,:,:)
-  real, pointer, dimension(:,:,:) :: &
-    OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
-    OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
-                           ! in through u- and v- points through the open
-                           ! boundary conditions, in the same units as tr.
   character(len=24) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes, usually
-                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
   real :: h_neglect         ! A thickness that is so small it is usually lost
                             ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: e(SZK_(G)+1), e_top, e_bot, d_tr
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
 
@@ -199,36 +185,35 @@ end subroutine initialize_dyed_obc_tracer
 !!
 !! The arguments to this subroutine are redundant in that
 !!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
-subroutine dyed_obc_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+subroutine dyed_obc_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, US, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
                                               !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to thermodynamic
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt   !< The amount of time covered by this call [s]
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   type(dyed_obc_tracer_CS), pointer   :: CS   !< The control structure returned by a previous
                                               !! call to dyed_obc_register_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
                                               !! be fluxed out of the top layer in a timestep [nondim]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
-                                              !! fluxes can be applied [m]
+                                              !! fluxes can be applied [H ~> m or kg m-2]
 
 ! Local variables
-  real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -240,8 +225,8 @@ subroutine dyed_obc_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G,
       do k=1,nz ;do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo
-      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
-          evap_CFL_limit, minimum_forcing_depth)
+      call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m), dt, fluxes, h_work, &
+                                          evap_CFL_limit, minimum_forcing_depth)
       if (nz > 1) call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
   else
@@ -256,7 +241,6 @@ end subroutine dyed_obc_tracer_column_physics
 subroutine dyed_obc_tracer_end(CS)
   type(dyed_obc_tracer_CS), pointer :: CS   !< The control structure returned by a previous
                                             !! call to dyed_obc_register_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

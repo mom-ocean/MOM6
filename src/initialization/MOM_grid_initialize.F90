@@ -3,22 +3,18 @@ module MOM_grid_initialize
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_checksums, only : hchksum, Bchksum
-use MOM_checksums, only : uvchksum, hchksum_pair, Bchksum_pair
-use MOM_domains, only : pass_var, pass_vector, pe_here, root_PE, broadcast
-use MOM_domains, only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
-use MOM_domains, only : To_North, To_South, To_East, To_West
-use MOM_domains, only : MOM_define_domain, MOM_define_IO_domain
-use MOM_domains, only : MOM_domain_type
-use MOM_dyn_horgrid, only : dyn_horgrid_type, set_derived_dyn_horgrid
+use MOM_checksums,     only : hchksum, Bchksum, uvchksum, hchksum_pair, Bchksum_pair
+use MOM_domains,       only : pass_var, pass_vector, pe_here, root_PE, broadcast
+use MOM_domains,       only : AGRID, BGRID_NE, CGRID_NE, To_All, Scalar_Pair
+use MOM_domains,       only : To_North, To_South, To_East, To_West
+use MOM_domains,       only : MOM_domain_type, clone_MOM_domain, deallocate_MOM_domain
+use MOM_dyn_horgrid,   only : dyn_horgrid_type, set_derived_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_io, only : MOM_read_data, read_data, slasher, file_exists
-use MOM_io, only : CORNER, NORTH_FACE, EAST_FACE
-use MOM_unit_scaling, only : unit_scale_type
-
-use mpp_domains_mod, only : mpp_get_domain_extents, mpp_deallocate_domain
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_io,            only : MOM_read_data, slasher, file_exists, stdout
+use MOM_io,            only : CORNER, NORTH_FACE, EAST_FACE
+use MOM_unit_scaling,  only : unit_scale_type
 
 implicit none ; private
 
@@ -30,18 +26,18 @@ public set_grid_metrics, initialize_masks, Adcroft_reciprocal
 ! vary with the Boussinesq approximation, the Boussinesq variant is given first.
 
 !> Global positioning system (aka container for information to describe the grid)
-type, public :: GPS ; private
-  real :: len_lon  !< The longitudinal or x-direction length of the domain.
-  real :: len_lat  !< The latitudinal or y-direction length of the domain.
+type, private :: GPS ; private
+  real :: len_lon  !< The longitudinal or x-direction length of the domain [degrees_E] or [km] or [m].
+  real :: len_lat  !< The latitudinal or y-direction length of the domain [degrees_N] or [km] or [m].
   real :: west_lon !< The western longitude of the domain or the equivalent
-                   !! starting value for the x-axis.
+                   !! starting value for the x-axis [degrees_E] or [km] or [m].
   real :: south_lat  !< The southern latitude of the domain or the equivalent
-                   !! starting value for the y-axis.
-  real :: Rad_Earth !< The radius of the Earth [m].
+                   !! starting value for the y-axis [degrees_N] or [km] or [m].
+  real :: Rad_Earth_L !< The radius of the Earth in rescaled units [L ~> m]
   real :: Lat_enhance_factor  !< The amount by which the meridional resolution
-                   !! is enhanced within LAT_EQ_ENHANCE of the equator.
+                   !! is enhanced within LAT_EQ_ENHANCE of the equator [nondim]
   real :: Lat_eq_enhance !< The latitude range to the north and south of the equator
-                   !! over which the resolution is enhanced, in degrees.
+                   !! over which the resolution is enhanced [degrees_N]
   logical :: isotropic !< If true, an isotropic grid on a sphere (also known as a Mercator grid)
                    !! is used. With an isotropic grid, the meridional extent of the domain
                    !! (LENLAT), the zonal extent (LENLON), and the number of grid points in each
@@ -62,10 +58,11 @@ contains
 subroutine set_grid_metrics(G, param_file, US)
   type(dyn_horgrid_type),          intent(inout) :: G  !< The dynamic horizontal grid type
   type(param_file_type),           intent(in)    :: param_file !< Parameter file structure
-  type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
+  type(unit_scale_type),           intent(in)    :: US !< A dimensional unit scaling type
+
   ! Local variables
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   logical :: debug
   character(len=256) :: config
 
@@ -86,6 +83,9 @@ subroutine set_grid_metrics(G, param_file, US)
 
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
+  G%x_ax_unit_short = "degrees_E" ; G%y_ax_unit_short = "degrees_N"
+
+  G%Rad_Earth_L = -1.0*US%m_to_L ; G%len_lat = 0.0 ; G%len_lon = 0.0
   select case (trim(config))
     case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file, US)
     case ("cartesian"); call set_grid_metrics_cartesian(G, param_file, US)
@@ -97,6 +97,12 @@ subroutine set_grid_metrics(G, param_file, US)
     case default ; call MOM_error(FATAL, "MOM_grid_init: set_grid_metrics "//&
            "Unrecognized grid configuration "//trim(config))
   end select
+  if (G%Rad_Earth_L <= 0.0) then
+    ! The grid metrics were set with an option that does not explicitly initialize Rad_Earth.
+    call get_param(param_file, "MOM_grid_init", "RAD_EARTH", G%Rad_Earth_L, &
+                   "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
+  endif
+  G%Rad_Earth = US%L_to_m*G%Rad_Earth_L
 
   ! Calculate derived metrics (i.e. reciprocals and products)
   call callTree_enter("set_derived_metrics(), MOM_grid_initialize.F90")
@@ -115,37 +121,35 @@ end subroutine set_grid_metrics
 subroutine grid_metrics_chksum(parent, G, US)
   character(len=*),       intent(in) :: parent !< A string identifying the caller
   type(dyn_horgrid_type), intent(in) :: G      !< The dynamic horizontal grid type
-  type(unit_scale_type), optional, intent(in) :: US !< A dimensional unit scaling type
+  type(unit_scale_type),  intent(in) :: US !< A dimensional unit scaling type
 
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
   integer :: halo
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
-  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
 
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
-  call hchksum_pair(trim(parent)//': d[xy]T', G%dxT, G%dyT, G%HI, haloshift=halo, scale=L_to_m)
+  call hchksum_pair(trim(parent)//': d[xy]T', G%dxT, G%dyT, G%HI, &
+                    haloshift=halo, scale=US%L_to_m, scalar_pair=.true.)
 
-  call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo, scale=L_to_m)
+  call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo, scale=US%L_to_m)
 
-  call uvchksum(trim(parent)//': dxC[uv]', G%dyCu, G%dxCv, G%HI, haloshift=halo, scale=L_to_m)
+  call uvchksum(trim(parent)//': dxC[uv]', G%dyCu, G%dxCv, G%HI, haloshift=halo, scale=US%L_to_m)
 
-  call Bchksum_pair(trim(parent)//': dxB[uv]', G%dxBu, G%dyBu, G%HI, haloshift=halo, scale=L_to_m)
+  call Bchksum_pair(trim(parent)//': dxB[uv]', G%dxBu, G%dyBu, G%HI, haloshift=halo, scale=US%L_to_m)
 
-  call hchksum_pair(trim(parent)//': Id[xy]T', G%IdxT, G%IdyT, G%HI, haloshift=halo, scale=m_to_L)
+  call hchksum_pair(trim(parent)//': Id[xy]T', G%IdxT, G%IdyT, G%HI, &
+                    haloshift=halo, scale=US%m_to_L, scalar_pair=.true.)
 
-  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdxCu, G%IdyCv, G%HI, haloshift=halo, scale=m_to_L)
+  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdxCu, G%IdyCv, G%HI, haloshift=halo, scale=US%m_to_L)
 
-  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdyCu, G%IdxCv, G%HI, haloshift=halo, scale=m_to_L)
+  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdyCu, G%IdxCv, G%HI, haloshift=halo, scale=US%m_to_L)
 
-  call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', G%IdxBu, G%IdyBu, G%HI, haloshift=halo, scale=m_to_L)
+  call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', G%IdxBu, G%IdyBu, G%HI, haloshift=halo, scale=US%m_to_L)
 
-  call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo, scale=L_to_m**2)
-  call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo, scale=L_to_m**2)
+  call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo, scale=US%L_to_m**2)
+  call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo, scale=US%L_to_m**2)
 
-  call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo, scale=m_to_L**2)
-  call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo, scale=m_to_L**2)
+  call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo, scale=US%m_to_L**2)
+  call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo, scale=US%m_to_L**2)
 
   call hchksum(G%geoLonT,trim(parent)//': geoLonT',G%HI, haloshift=halo)
   call hchksum(G%geoLatT,trim(parent)//': geoLatT',G%HI, haloshift=halo)
@@ -164,46 +168,32 @@ end subroutine grid_metrics_chksum
 !> Sets the grid metrics from a mosaic file.
 subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
-  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
+  type(param_file_type),  intent(in)    :: param_file  !< Parameter file structure
+  type(unit_scale_type),  intent(in)    :: US          !< A dimensional unit scaling type
+
   ! Local variables
-  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: tempH1, tempH2, tempH3, tempH4
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: tempQ1, tempQ2, tempQ3, tempQ4
-  real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: tempE1, tempE2
-  real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: tempN1, tempN2
-  ! These arrays are a holdover from earlier code in which the arrays in G were
-  ! macros and may have had reduced dimensions.
-  real, dimension(G%isd :G%ied ,G%jsd :G%jed ) :: dxT, dyT, areaT
-  real, dimension(G%IsdB:G%IedB,G%jsd :G%jed ) :: dxCu, dyCu
-  real, dimension(G%isd :G%ied ,G%JsdB:G%JedB) :: dxCv, dyCv
-  real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: dxBu, dyBu, areaBu
-  ! This are symmetric arrays, corresponding to the data in the mosaic file
-  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT
-  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU
-  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV
-  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ
-  real, dimension(:,:), allocatable :: tmpGlbl
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  ! These are symmetric arrays, corresponding to the data in the mosaic file
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT ! Areas [L2 ~> m2]
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU ! East face supergrid spacing [L ~> m]
+  real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV ! North face supergrid spacing [L ~> m]
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ ! Corner latitudes or longitudes [degN] or [degE]
+  real, dimension(:,:), allocatable :: tmpGlbl ! A global array of axis labels [degrees_N] or [km] or [m]
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
-  integer :: err=0, ni, nj, global_indices(4)
-  type(MOM_domain_type) :: SGdom ! Supergrid domain
+  type(MOM_domain_type), pointer :: SGdom => NULL() ! Supergrid domain
   logical :: lon_bug  ! If true use an older buggy answer in the tripolar longitude.
-  integer :: i, j, i2, j2
-  integer :: npei,npej
-  integer, dimension(:), allocatable :: exni,exnj
-  integer        :: start(4), nread(4)
+  integer :: i, j, i2, j2, ni, nj
+  integer :: start(4), nread(4)
 
   call callTree_enter("set_grid_metrics_from_mosaic(), MOM_grid_initialize.F90")
 
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
   call get_param(param_file, mdl, "GRID_FILE", grid_file, &
                  "Name of the file from which to read horizontal grid data.", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "USE_TRIPOLAR_GEOLONB_BUG", lon_bug, &
                  "If true, use older code that incorrectly sets the longitude "//&
                  "in some points along the tripolar fold to be off by 360 degrees.", &
-                 default=.true.)
+                 default=.false.)
   call get_param(param_file,  mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
   filename = trim(adjustl(inputdir)) // trim(adjustl(grid_file))
@@ -212,48 +202,10 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
     call MOM_error(FATAL," set_grid_metrics_from_mosaic: Unable to open "//&
                            trim(filename))
 
-  ! Initialize everything to 0.
-  dxCu(:,:) = 0.0 ; dyCu(:,:) = 0.0
-  dxCv(:,:) = 0.0 ; dyCv(:,:) = 0.0
-  dxBu(:,:) = 0.0 ; dyBu(:,:) = 0.0 ; areaBu(:,:) = 0.0
-
   !<MISSING CODE TO READ REFINEMENT LEVEL>
-  ni = 2*(G%iec-G%isc+1) ! i size of supergrid
-  nj = 2*(G%jec-G%jsc+1) ! j size of supergrid
 
-  ! Define a domain for the supergrid (SGdom)
-  npei = G%domain%layout(1) ; npej = G%domain%layout(2)
-  allocate(exni(npei)) ; allocate(exnj(npej))
-  call mpp_get_domain_extents(G%domain%mpp_domain, exni, exnj)
-  allocate(SGdom%mpp_domain)
-  SGdom%nihalo = 2*G%domain%nihalo+1
-  SGdom%njhalo = 2*G%domain%njhalo+1
-  SGdom%niglobal = 2*G%domain%niglobal
-  SGdom%njglobal = 2*G%domain%njglobal
-  SGdom%layout(:) = G%domain%layout(:)
-  SGdom%io_layout(:) = G%domain%io_layout(:)
-  global_indices(1) = 1+SGdom%nihalo
-  global_indices(2) = SGdom%niglobal+SGdom%nihalo
-  global_indices(3) = 1+SGdom%njhalo
-  global_indices(4) = SGdom%njglobal+SGdom%njhalo
-  exni(:) = 2*exni(:) ; exnj(:) = 2*exnj(:)
-  if (associated(G%domain%maskmap)) then
-     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
-            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
-            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
-            xextent=exni,yextent=exnj, &
-            symmetry=.true., name="MOM_MOSAIC", maskmap=G%domain%maskmap)
-  else
-     call MOM_define_domain(global_indices, SGdom%layout, SGdom%mpp_domain, &
-            xflags=G%domain%X_FLAGS, yflags=G%domain%Y_FLAGS, &
-            xhalo=SGdom%nihalo, yhalo=SGdom%njhalo, &
-            xextent=exni,yextent=exnj, &
-            symmetry=.true., name="MOM_MOSAIC")
-  endif
-
-  call MOM_define_IO_domain(SGdom%mpp_domain, SGdom%io_layout)
-  deallocate(exni)
-  deallocate(exnj)
+  call clone_MOM_domain(G%domain, SGdom, symmetric=.true., domain_name="MOM_MOSAIC", &
+                        refine=2, extra_halo=1)
 
   ! Read X from the supergrid
   tmpZ(:,:) = 999.
@@ -301,70 +253,56 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
 
   ! Read DX,DY from the supergrid
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
-  call MOM_read_data(filename,'dx',tmpV,SGdom,position=NORTH_FACE)
-  call MOM_read_data(filename,'dy',tmpU,SGdom,position=EAST_FACE)
+  call MOM_read_data(filename, 'dx', tmpV, SGdom, position=NORTH_FACE, scale=US%m_to_L)
+  call MOM_read_data(filename, 'dy', tmpU, SGdom, position=EAST_FACE, scale=US%m_to_L)
   call pass_vector(tmpU, tmpV, SGdom, To_All+Scalar_Pair, CGRID_NE)
   call extrapolate_metric(tmpV, 2*(G%jsc-G%jsd)+2, missing=0.)
   call extrapolate_metric(tmpU, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
-    dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
-    dyT(i,j) = tmpU(i2-1,j2-1) + tmpU(i2-1,j2)
+    G%dxT(i,j) = tmpV(i2-1,j2-1) + tmpV(i2,j2-1)
+    G%dyT(i,j) = tmpU(i2-1,j2-1) + tmpU(i2-1,j2)
   enddo ; enddo
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    dxCu(I,j) = tmpV(i2,j2-1) + tmpV(i2+1,j2-1)
-    dyCu(I,j) = tmpU(i2,j2-1) + tmpU(i2,j2)
+    G%dxCu(I,j) = tmpV(i2,j2-1) + tmpV(i2+1,j2-1)
+    G%dyCu(I,j) = tmpU(i2,j2-1) + tmpU(i2,j2)
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
-    dxCv(i,J) = tmpV(i2-1,j2) + tmpV(i2,j2)
-    dyCv(i,J) = tmpU(i2-1,j2) + tmpU(i2-1,j2+1)
+    G%dxCv(i,J) = tmpV(i2-1,j2) + tmpV(i2,j2)
+    G%dyCv(i,J) = tmpU(i2-1,j2) + tmpU(i2-1,j2+1)
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    dxBu(I,J) = tmpV(i2,j2) + tmpV(i2+1,j2)
-    dyBu(I,J) = tmpU(i2,j2) + tmpU(i2,j2+1)
+    G%dxBu(I,J) = tmpV(i2,j2) + tmpV(i2+1,j2)
+    G%dyBu(I,J) = tmpU(i2,j2) + tmpU(i2,j2+1)
   enddo ; enddo
 
   ! Read AREA from the supergrid
   tmpT(:,:) = 0.
-  call MOM_read_data(filename, 'area', tmpT, SGdom)
+  call MOM_read_data(filename, 'area', tmpT, SGdom, scale=US%m_to_L**2)
   call pass_var(tmpT, SGdom)
   call extrapolate_metric(tmpT, 2*(G%jsc-G%jsd)+2, missing=0.)
 
   do j=G%jsd,G%jed ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*j
-    areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
-                 (tmpT(i2-1,j2) + tmpT(i2,j2-1))
+    G%areaT(i,j) = (tmpT(i2-1,j2-1) + tmpT(i2,j2)) + &
+                   (tmpT(i2-1,j2) + tmpT(i2,j2-1))
   enddo ; enddo
   do J=G%JsdB,G%JedB ; do I=G%IsdB,G%IedB ; i2 = 2*i ; j2 = 2*j
-    areaBu(I,J) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
-                  (tmpT(i2,j2+1) + tmpT(i2+1,j2))
+    G%areaBu(I,J) = (tmpT(i2,j2) + tmpT(i2+1,j2+1)) + &
+                    (tmpT(i2,j2+1) + tmpT(i2+1,j2))
   enddo ; enddo
 
-  ni=SGdom%niglobal
-  nj=SGdom%njglobal
-  call mpp_deallocate_domain(SGdom%mpp_domain)
-  deallocate(SGdom%mpp_domain)
+  ni = SGdom%niglobal
+  nj = SGdom%njglobal
+  call deallocate_MOM_domain(SGdom)
 
-  call pass_vector(dyCu, dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(dxCu, dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
-  call pass_vector(dxBu, dyBu, G%Domain, To_All+Scalar_Pair, BGRID_NE)
-  call pass_var(areaT, G%Domain)
-  call pass_var(areaBu, G%Domain, position=CORNER)
-
-  do i=G%isd,G%ied ; do j=G%jsd,G%jed
-    G%dxT(i,j) = m_to_L*dxT(i,j) ; G%dyT(i,j) = m_to_L*dyT(i,j) ; G%areaT(i,j) = m_to_L**2*areaT(i,j)
-  enddo ; enddo
-  do I=G%IsdB,G%IedB ; do j=G%jsd,G%jed
-    G%dxCu(I,j) = m_to_L*dxCu(I,j) ; G%dyCu(I,j) = m_to_L*dyCu(I,j)
-  enddo ; enddo
-  do i=G%isd,G%ied ; do J=G%JsdB,G%JedB
-    G%dxCv(i,J) = m_to_L*dxCv(i,J) ; G%dyCv(i,J) = m_to_L*dyCv(i,J)
-  enddo ; enddo
-  do I=G%IsdB,G%IedB ; do J=G%JsdB,G%JedB
-    G%dxBu(I,J) = m_to_L*dxBu(I,J) ; G%dyBu(I,J) = m_to_L*dyBu(I,J) ; G%areaBu(I,J) = m_to_L**2*areaBu(I,J)
-  enddo ; enddo
+  call pass_vector(G%dyCu, G%dxCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(G%dxCu, G%dyCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
+  call pass_vector(G%dxBu, G%dyBu, G%Domain, To_All+Scalar_Pair, BGRID_NE)
+  call pass_var(G%areaT, G%Domain)
+  call pass_var(G%areaBu, G%Domain, position=CORNER)
 
   ! Construct axes for diagnostic output (only necessary because "ferret" uses
   ! broken convention for interpretting netCDF files).
@@ -372,7 +310,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(2) = 2 ; nread(1) = ni+1 ; nread(2) = 2
   allocate( tmpGlbl(ni+1,2) )
   if (is_root_PE()) &
-    call read_data(filename, "x", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "x", tmpGlbl, start, nread, &
+        no_domain=.TRUE., turns=G%HI%turns)
   call broadcast(tmpGlbl, 2*(ni+1), root_PE())
 
   ! I don't know why the second axis is 1 or 2 here. -RWH
@@ -390,7 +329,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   start(:) = 1 ; nread(:) = 1
   start(1) = int(ni/4)+1 ; nread(2) = nj+1
   if (is_root_PE()) &
-    call read_data(filename, "y", tmpGlbl, start, nread, no_domain=.TRUE.)
+    call MOM_read_data(filename, "y", tmpGlbl, start, nread, &
+        no_domain=.TRUE., turns=G%HI%turns)
   call broadcast(tmpGlbl, nj+1, root_PE())
 
   do j=G%jsg,G%jeg
@@ -416,18 +356,16 @@ end subroutine set_grid_metrics_from_mosaic
 !! sets of points.
 subroutine set_grid_metrics_cartesian(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
-  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
+  type(param_file_type),  intent(in)    :: param_file  !< Parameter file structure
+  type(unit_scale_type),  intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, I1off, J1off
   integer :: niglobal, njglobal
-  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
-  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
-  real :: dx_everywhere, dy_everywhere ! Grid spacings [m].
-  real :: I_dx, I_dy                   ! Inverse grid spacings [m-1].
-  real :: PI
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: L_to_m  ! A unit conversion factor [m L-1 ~> nondim]
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB) ! Axis labels [degrees_N] or [km] or [m]
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB) ! Axis labels [degrees_E] or [km] or [m]
+  real :: dx_everywhere, dy_everywhere ! Grid spacings [L ~> m].
+  real :: I_dx, I_dy                   ! Inverse grid spacings [L-1 ~> m-1].
+  real :: PI  ! The ratio of the circumference of a circle to its diameter [nondim]
   character(len=80) :: units_temp
   character(len=48) :: mdl  = "MOM_grid_init set_grid_metrics_cartesian"
 
@@ -438,14 +376,15 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
 
   call callTree_enter("set_grid_metrics_cartesian(), MOM_grid_initialize.F90")
 
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
-  L_to_m = 1.0 ; if (present(US)) L_to_m = US%L_to_m
   PI = 4.0*atan(1.0)
 
   call get_param(param_file, mdl, "AXIS_UNITS", units_temp, &
                  "The units for the Cartesian axes. Valid entries are: \n"//&
                  " \t degrees - degrees of latitude and longitude \n"//&
-                 " \t m - meters \n \t k - kilometers", default="degrees")
+                 " \t m or meter(s) - meters \n"//&
+                 " \t k or km or kilometer(s) - kilometers", default="degrees")
+  if (trim(units_temp) == "k") units_temp = "km"
+
   call get_param(param_file, mdl, "SOUTHLAT", G%south_lat, &
                  "The southern latitude of the domain or the equivalent "//&
                  "starting value for the y-axis.", units=units_temp, &
@@ -460,13 +399,15 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   call get_param(param_file, mdl, "LENLON", G%len_lon, &
                  "The longitudinal or x-direction length of the domain.", &
                  units=units_temp, fail_if_missing=.true.)
-  call get_param(param_file, mdl, "RAD_EARTH", G%Rad_Earth, &
-                 "The radius of the Earth.", units="m", default=6.378e6)
+  call get_param(param_file, mdl, "RAD_EARTH", G%Rad_Earth_L, &
+                 "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
 
   if (units_temp(1:1) == 'k') then
     G%x_axis_units = "kilometers" ; G%y_axis_units = "kilometers"
+    G%x_ax_unit_short = "km" ; G%y_ax_unit_short = "km"
   elseif (units_temp(1:1) == 'm') then
     G%x_axis_units = "meters" ; G%y_axis_units = "meters"
+    G%x_ax_unit_short = "m" ; G%y_ax_unit_short = "m"
   endif
   call log_param(param_file, mdl, "explicit AXIS_UNITS", G%x_axis_units)
 
@@ -499,14 +440,14 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   enddo
 
   if (units_temp(1:1) == 'k') then ! Axes are measured in km.
-    dx_everywhere = 1000.0 * G%len_lon / (REAL(niglobal))
-    dy_everywhere = 1000.0 * G%len_lat / (REAL(njglobal))
+    dx_everywhere = 1000.0*US%m_to_L * G%len_lon / (REAL(niglobal))
+    dy_everywhere = 1000.0*US%m_to_L * G%len_lat / (REAL(njglobal))
   elseif (units_temp(1:1) == 'm') then ! Axes are measured in m.
-    dx_everywhere = G%len_lon / (REAL(niglobal))
-    dy_everywhere = G%len_lat / (REAL(njglobal))
+    dx_everywhere = US%m_to_L*G%len_lon / (REAL(niglobal))
+    dy_everywhere = US%m_to_L*G%len_lat / (REAL(njglobal))
   else ! Axes are measured in degrees of latitude and longitude.
-    dx_everywhere = G%Rad_Earth * G%len_lon * PI / (180.0 * niglobal)
-    dy_everywhere = G%Rad_Earth * G%len_lat * PI / (180.0 * njglobal)
+    dx_everywhere = G%Rad_Earth_L * G%len_lon * PI / (180.0 * niglobal)
+    dy_everywhere = G%Rad_Earth_L * G%len_lat * PI / (180.0 * njglobal)
   endif
 
   I_dx = 1.0 / dx_everywhere ; I_dy = 1.0 / dy_everywhere
@@ -514,30 +455,30 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   do J=JsdB,JedB ; do I=IsdB,IedB
     G%geoLonBu(I,J) = grid_lonB(I) ; G%geoLatBu(I,J) = grid_latB(J)
 
-    G%dxBu(I,J) = m_to_L*dx_everywhere ; G%IdxBu(I,J) = L_to_m*I_dx
-    G%dyBu(I,J) = m_to_L*dy_everywhere ; G%IdyBu(I,J) = L_to_m*I_dy
-    G%areaBu(I,J) = m_to_L**2*dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = L_to_m**2*I_dx * I_dy
+    G%dxBu(I,J) = dx_everywhere ; G%IdxBu(I,J) = I_dx
+    G%dyBu(I,J) = dy_everywhere ; G%IdyBu(I,J) = I_dy
+    G%areaBu(I,J) = dx_everywhere * dy_everywhere ; G%IareaBu(I,J) = I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = grid_lonT(i) ; G%geoLatT(i,j) = grid_LatT(j)
-    G%dxT(i,j) = m_to_L*dx_everywhere ; G%IdxT(i,j) = L_to_m*I_dx
-    G%dyT(i,j) = m_to_L*dy_everywhere ; G%IdyT(i,j) = L_to_m*I_dy
-    G%areaT(i,j) = m_to_L**2*dx_everywhere * dy_everywhere ; G%IareaT(i,j) = L_to_m**2*I_dx * I_dy
+    G%dxT(i,j) = dx_everywhere ; G%IdxT(i,j) = I_dx
+    G%dyT(i,j) = dy_everywhere ; G%IdyT(i,j) = I_dy
+    G%areaT(i,j) = dx_everywhere * dy_everywhere ; G%IareaT(i,j) = I_dx * I_dy
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
     G%geoLonCu(I,j) = grid_lonB(I) ; G%geoLatCu(I,j) = grid_LatT(j)
 
-    G%dxCu(I,j) = m_to_L*dx_everywhere ; G%IdxCu(I,j) = L_to_m*I_dx
-    G%dyCu(I,j) = m_to_L*dy_everywhere ; G%IdyCu(I,j) = L_to_m*I_dy
+    G%dxCu(I,j) = dx_everywhere ; G%IdxCu(I,j) = I_dx
+    G%dyCu(I,j) = dy_everywhere ; G%IdyCu(I,j) = I_dy
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = grid_lonT(i) ; G%geoLatCv(i,J) = grid_latB(J)
 
-    G%dxCv(i,J) = m_to_L*dx_everywhere ; G%IdxCv(i,J) = L_to_m*I_dx
-    G%dyCv(i,J) = m_to_L*dy_everywhere ; G%IdyCv(i,J) = L_to_m*I_dy
+    G%dxCv(i,J) = dx_everywhere ; G%IdxCv(i,J) = I_dx
+    G%dyCv(i,J) = dy_everywhere ; G%IdyCv(i,J) = I_dy
   enddo ; enddo
 
   call callTree_leave("set_grid_metrics_cartesian()")
@@ -554,17 +495,20 @@ end subroutine set_grid_metrics_cartesian
 !! sets of points.
 subroutine set_grid_metrics_spherical(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
-  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
+  type(param_file_type),  intent(in)    :: param_file  !< Parameter file structure
+  type(unit_scale_type),  intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
-  real :: PI, PI_180! PI = 3.1415926... as 4*atan(1)
+  real :: PI     ! PI = 3.1415926... as 4*atan(1) [nondim]
+  real :: PI_180 ! The conversion factor from degrees to radians [radians degree-1]
   integer :: i, j, isd, ied, jsd, jed
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
   integer :: i_offset, j_offset
-  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB)
-  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB)
-  real :: dLon,dLat,latitude,longitude,dL_di
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+  real :: grid_latT(G%jsd:G%jed), grid_latB(G%JsdB:G%JedB) ! Axis labels [degrees_N]
+  real :: grid_lonT(G%isd:G%ied), grid_lonB(G%IsdB:G%IedB) ! Axis labels [degrees_E]
+  real :: dLon      ! The change in longitude between successive grid points [degrees_E]
+  real :: dLat      ! The change in latitude between successive grid points [degrees_N]
+  real :: dL_di     ! dLon rescaled from degrees to radians [radians]
+  real :: latitude  ! The latitude of a grid point [degrees_N]
   character(len=48)  :: mdl  = "MOM_grid_init set_grid_metrics_spherical"
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -574,26 +518,25 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
   i_offset = G%idg_offset ; j_offset = G%jdg_offset
 
   call callTree_enter("set_grid_metrics_spherical(), MOM_grid_initialize.F90")
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
 !    Calculate the values of the metric terms that might be used
 !  and save them in arrays.
-  PI = 4.0*atan(1.0); PI_180 = atan(1.0)/45.
+  PI = 4.0*atan(1.0) ; PI_180 = atan(1.0)/45.
 
   call get_param(param_file, mdl, "SOUTHLAT", G%south_lat, &
-                 "The southern latitude of the domain.", units="degrees", &
+                 "The southern latitude of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "LENLAT", G%len_lat, &
-                 "The latitudinal length of the domain.", units="degrees", &
+                 "The latitudinal length of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "WESTLON", G%west_lon, &
-                 "The western longitude of the domain.", units="degrees", &
+                 "The western longitude of the domain.", units="degrees_E", &
                  default=0.0)
   call get_param(param_file, mdl, "LENLON", G%len_lon, &
-                 "The longitudinal length of the domain.", units="degrees", &
+                 "The longitudinal length of the domain.", units="degrees_E", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mdl, "RAD_EARTH", G%Rad_Earth, &
-                 "The radius of the Earth.", units="m", default=6.378e6)
+  call get_param(param_file, mdl, "RAD_EARTH", G%Rad_Earth_L, &
+                 "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
 
   dLon = G%len_lon/G%Domain%niglobal
   dLat = G%len_lat/G%Domain%njglobal
@@ -637,9 +580,9 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
     ! The following line is needed to reproduce the solution from
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxBu(I,J) = m_to_L*G%Rad_Earth * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
-!   G%dxBu(I,J) = m_to_L*G%Rad_Earth * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
-    G%dyBu(I,J) = m_to_L*G%Rad_Earth * dLat*PI_180
+    G%dxBu(I,J) = G%Rad_Earth_L * COS( G%geoLatBu(I,J)*PI_180 ) * dL_di
+!   G%dxBu(I,J) = G%Rad_Earth_L * dLon*PI_180 * COS( G%geoLatBu(I,J)*PI_180 )
+    G%dyBu(I,J) = G%Rad_Earth_L * dLat*PI_180
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
   enddo ; enddo
 
@@ -649,9 +592,9 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
     ! The following line is needed to reproduce the solution from
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxCv(i,J) = m_to_L*G%Rad_Earth * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
-!   G%dxCv(i,J) = m_to_L*G%Rad_Earth * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
-    G%dyCv(i,J) = m_to_L*G%Rad_Earth * dLat*PI_180
+    G%dxCv(i,J) = G%Rad_Earth_L * COS( G%geoLatCv(i,J)*PI_180 ) * dL_di
+!   G%dxCv(i,J) = G%Rad_Earth_L * (dLon*PI_180) * COS( G%geoLatCv(i,J)*PI_180 )
+    G%dyCv(i,J) = G%Rad_Earth_L * dLat*PI_180
   enddo ; enddo
 
   do j=jsd,jed ; do I=IsdB,IedB
@@ -660,9 +603,9 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
     ! The following line is needed to reproduce the solution from
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxCu(I,j) = m_to_L*G%Rad_Earth * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
-!   G%dxCu(I,j) = m_to_L*G%Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%dyCu(I,j) = m_to_L*G%Rad_Earth * dLat*PI_180
+    G%dxCu(I,j) = G%Rad_Earth_L * COS( G%geoLatCu(I,j)*PI_180 ) * dL_di
+!   G%dxCu(I,j) = G%Rad_Earth_L * dLon*PI_180 * COS( latitude )
+    G%dyCu(I,j) = G%Rad_Earth_L * dLat*PI_180
   enddo ; enddo
 
   do j=jsd,jed ; do i=isd,ied
@@ -671,13 +614,13 @@ subroutine set_grid_metrics_spherical(G, param_file, US)
 
     ! The following line is needed to reproduce the solution from
     ! set_grid_metrics_mercator when used to generate a simple spherical grid.
-    G%dxT(i,j) = m_to_L*G%Rad_Earth * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
-!   G%dxT(i,j) = G%Rad_Earth * dLon*PI_180 * COS( latitude )
-    G%dyT(i,j) = m_to_L*G%Rad_Earth * dLat*PI_180
+    G%dxT(i,j) = G%Rad_Earth_L * COS( G%geoLatT(i,j)*PI_180 ) * dL_di
+!   G%dxT(i,j) = G%Rad_Earth_L * dLon*PI_180 * COS( latitude )
+    G%dyT(i,j) = G%Rad_Earth_L * dLat*PI_180
 
 !   latitude = G%geoLatCv(i,J)*PI_180             ! In radians
 !   dL_di    = G%geoLatCv(i,max(jsd,J-1))*PI_180  ! In radians
-!   G%areaT(i,j) = m_to_L**2 * Rad_Earth**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
+!   G%areaT(i,j) = Rad_Earth_L**2*dLon*dLat*ABS(SIN(latitude)-SIN(dL_di))
     G%areaT(i,j) = G%dxT(i,j) * G%dyT(i,j)
   enddo ; enddo
 
@@ -693,30 +636,32 @@ end subroutine set_grid_metrics_spherical
 !! sets of points.
 subroutine set_grid_metrics_mercator(G, param_file, US)
   type(dyn_horgrid_type), intent(inout) :: G           !< The dynamic horizontal grid type
-  type(param_file_type), intent(in)     :: param_file  !< Parameter file structure
-  type(unit_scale_type), optional, intent(in) :: US    !< A dimensional unit scaling type
+  type(param_file_type),  intent(in)    :: param_file  !< Parameter file structure
+  type(unit_scale_type),  intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
   integer :: i, j, isd, ied, jsd, jed
   integer :: I_off, J_off
   type(GPS) :: GP
-  character(len=128) :: warnmesg
   character(len=48)  :: mdl = "MOM_grid_init set_grid_metrics_mercator"
-  real :: PI, PI_2! PI = 3.1415926... as 4*atan(1), PI_2 = (PI) /2.0
-  real :: y_q, y_h, jd, x_q, x_h, id
+  real :: PI, PI_2  ! PI = 3.1415926... as 4*atan(1), PI_2 = (PI) /2.0 [nondim]
+  real :: y_q, y_h  ! Latitudes of a point [radians]
+  real :: id        ! The i-grid space positions whose longitude is being sought [gridpoints]
+  real :: jd        ! The j-grid space positions whose latitude is being sought [gridpoints]
+  real :: x_q, x_h  ! Longitudes of a point [radians]
   real, dimension(G%isd:G%ied,G%jsd:G%jed) :: &
-    xh, yh ! Latitude and longitude of h points in radians.
+    xh, yh ! Latitude and longitude of h points in radians [radians]
   real, dimension(G%IsdB:G%IedB,G%jsd:G%jed) :: &
-    xu, yu ! Latitude and longitude of u points in radians.
+    xu, yu ! Latitude and longitude of u points in radians [radians]
   real, dimension(G%isd:G%ied,G%JsdB:G%JedB) :: &
-    xv, yv ! Latitude and longitude of v points in radians.
+    xv, yv ! Latitude and longitude of v points in radians [radians]
   real, dimension(G%IsdB:G%IedB,G%JsdB:G%JedB) :: &
-    xq, yq ! Latitude and longitude of q points in radians.
+    xq, yq ! Latitude and longitude of q points in radians [radians]
   real :: fnRef           ! fnRef is the value of Int_dj_dy or
                           ! Int_dj_dy at a latitude or longitude that is
-  real :: jRef, iRef      ! being set to be at grid index jRef or iRef.
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
+                          ! being set to be at grid index jRef or iRef [gridpoints]
+  real :: jRef, iRef      ! The grid index at which fnRef is evaluated [gridpoints]
   integer :: itt1, itt2
-  logical :: debug = .FALSE., simple_area = .true.
+  logical, parameter :: simple_area = .true.
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, IsdB, IedB, JsdB, JedB
 
   !   All of the metric terms should be defined over the domain from
@@ -733,28 +678,28 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
 
   call callTree_enter("set_grid_metrics_mercator(), MOM_grid_initialize.F90")
 
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
   !   Calculate the values of the metric terms that might be used
   ! and save them in arrays.
   PI = 4.0*atan(1.0) ; PI_2 = 0.5*PI
 
   call get_param(param_file, mdl, "SOUTHLAT", GP%south_lat, &
-                 "The southern latitude of the domain.", units="degrees", &
+                 "The southern latitude of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "LENLAT", GP%len_lat, &
-                 "The latitudinal length of the domain.", units="degrees", &
+                 "The latitudinal length of the domain.", units="degrees_N", &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "WESTLON", GP%west_lon, &
-                 "The western longitude of the domain.", units="degrees", &
+                 "The western longitude of the domain.", units="degrees_E", &
                  default=0.0)
   call get_param(param_file, mdl, "LENLON", GP%len_lon, &
-                 "The longitudinal length of the domain.", units="degrees", &
+                 "The longitudinal length of the domain.", units="degrees_E", &
                  fail_if_missing=.true.)
-  call get_param(param_file, mdl, "RAD_EARTH", GP%Rad_Earth, &
-                 "The radius of the Earth.", units="m", default=6.378e6)
+  call get_param(param_file, mdl, "RAD_EARTH", GP%Rad_Earth_L, &
+                 "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
   G%south_lat = GP%south_lat ; G%len_lat = GP%len_lat
   G%west_lon = GP%west_lon ; G%len_lon = GP%len_lon
-  G%Rad_Earth = GP%Rad_Earth
+  G%Rad_Earth_L = GP%Rad_Earth_L
+
   call get_param(param_file, mdl, "ISOTROPIC", GP%isotropic, &
                  "If true, an isotropic grid on a sphere (also known as "//&
                  "a Mercator grid) is used. With an isotropic grid, the "//&
@@ -774,7 +719,7 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
                  units="nondim", default=1.0)
   call get_param(param_file, mdl, "LAT_EQ_ENHANCE", GP%Lat_eq_enhance, &
                  "The latitude range to the north and south of the equator "//&
-                 "over which the resolution is enhanced.", units="degrees", &
+                 "over which the resolution is enhanced.", units="degrees_N", &
                  default=0.0)
 
   !   With an isotropic grid, the north-south extent of the domain,
@@ -804,14 +749,14 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
     y_q = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt2)
     G%gridLatB(J) = y_q*180.0/PI
     ! if (is_root_pe()) &
-    !   write(*, '("J, y_q = ",I4,ES14.4," itts = ",I4)')  j, y_q, itt2
+    !   write(stdout, '("J, y_q = ",I4,ES14.4," itts = ",I4)')  j, y_q, itt2
   enddo
   do j=G%jsg,G%jeg
     jd = fnRef + (j - jRef) - 0.5
     y_h = find_root(Int_dj_dy, dy_dj, GP, jd, 0.0, -1.0*PI_2, PI_2, itt1)
     G%gridLatT(j) = y_h*180.0/PI
     ! if (is_root_pe()) &
-    !   write(*, '("j, y_h = ",I4,ES14.4," itts = ",I4)')  j, y_h, itt1
+    !   write(stdout, '("j, y_h = ",I4,ES14.4," itts = ",I4)')  j, y_h, itt1
   enddo
   do J=JsdB+J_off,JedB+J_off
     jd = fnRef + (J - jRef)
@@ -863,8 +808,8 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   do J=JsdB,JedB ; do I=IsdB,IedB
     G%geoLonBu(I,J) = xq(I,J)*180.0/PI
     G%geoLatBu(I,J) = yq(I,J)*180.0/PI
-    G%dxBu(I,J) = m_to_L*ds_di(xq(I,J), yq(I,J), GP)
-    G%dyBu(I,J) = m_to_L*ds_dj(xq(I,J), yq(I,J), GP)
+    G%dxBu(I,J) = ds_di(xq(I,J), yq(I,J), GP)
+    G%dyBu(I,J) = ds_dj(xq(I,J), yq(I,J), GP)
 
     G%areaBu(I,J) = G%dxBu(I,J) * G%dyBu(I,J)
     G%IareaBu(I,J) = 1.0 / (G%areaBu(I,J))
@@ -873,8 +818,8 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   do j=jsd,jed ; do i=isd,ied
     G%geoLonT(i,j) = xh(i,j)*180.0/PI
     G%geoLatT(i,j) = yh(i,j)*180.0/PI
-    G%dxT(i,j) = m_to_L*ds_di(xh(i,j), yh(i,j), GP)
-    G%dyT(i,j) = m_to_L*ds_dj(xh(i,j), yh(i,j), GP)
+    G%dxT(i,j) = ds_di(xh(i,j), yh(i,j), GP)
+    G%dyT(i,j) = ds_dj(xh(i,j), yh(i,j), GP)
 
     G%areaT(i,j) = G%dxT(i,j)*G%dyT(i,j)
     G%IareaT(i,j) = 1.0 / (G%areaT(i,j))
@@ -883,20 +828,20 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
   do j=jsd,jed ; do I=IsdB,IedB
     G%geoLonCu(I,j) = xu(I,j)*180.0/PI
     G%geoLatCu(I,j) = yu(I,j)*180.0/PI
-    G%dxCu(I,j) = m_to_L*ds_di(xu(I,j), yu(I,j), GP)
-    G%dyCu(I,j) = m_to_L*ds_dj(xu(I,j), yu(I,j), GP)
+    G%dxCu(I,j) = ds_di(xu(I,j), yu(I,j), GP)
+    G%dyCu(I,j) = ds_dj(xu(I,j), yu(I,j), GP)
   enddo ; enddo
 
   do J=JsdB,JedB ; do i=isd,ied
     G%geoLonCv(i,J) = xv(i,J)*180.0/PI
     G%geoLatCv(i,J) = yv(i,J)*180.0/PI
-    G%dxCv(i,J) = m_to_L*ds_di(xv(i,J), yv(i,J), GP)
-    G%dyCv(i,J) = m_to_L*ds_dj(xv(i,J), yv(i,J), GP)
+    G%dxCv(i,J) = ds_di(xv(i,J), yv(i,J), GP)
+    G%dyCv(i,J) = ds_dj(xv(i,J), yv(i,J), GP)
   enddo ; enddo
 
   if (.not.simple_area) then
     do j=JsdB+1,jed ; do i=IsdB+1,ied
-      G%areaT(I,J) = m_to_L**2*GP%Rad_Earth**2 * &
+      G%areaT(I,J) = GP%Rad_Earth_L**2 * &
           (dL(xq(I-1,J-1),xq(I-1,J),yq(I-1,J-1),yq(I-1,J)) + &
           (dL(xq(I-1,J),xq(I,J),yq(I-1,J),yq(I,J)) +          &
           (dL(xq(I,J),xq(I,J-1),yq(I,J),yq(I,J-1)) +          &
@@ -921,45 +866,46 @@ subroutine set_grid_metrics_mercator(G, param_file, US)
 end subroutine set_grid_metrics_mercator
 
 
-!> This function returns the grid spacing in the logical x direction.
+!> This function returns the grid spacing in the logical x direction in [L ~> m].
 function ds_di(x, y, GP)
-  real, intent(in) :: x  !< The longitude in question
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: x  !< The longitude in question [radians]
+  real, intent(in) :: y  !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: ds_di
-  ! Local variables
 
-  ds_di = GP%Rad_Earth * cos(y) * dx_di(x,GP)
+  real :: ds_di  ! The returned grid spacing [L ~> m]
+
+  ds_di = GP%Rad_Earth_L * cos(y) * dx_di(x,GP)
   ! In general, this might be...
-  ! ds_di = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_di(x,y,GP)*dx_di(x,y,GP) + &
+  ! ds_di = GP%Rad_Earth_L * sqrt( cos(y)*cos(y) * dx_di(x,y,GP)*dx_di(x,y,GP) + &
   !                           dy_di(x,y,GP)*dy_di(x,y,GP))
 end function ds_di
 
-!> This function returns the grid spacing in the logical y direction.
+!> This function returns the grid spacing in the logical y direction in [L ~> m].
 function ds_dj(x, y, GP)
-  real, intent(in) :: x  !< The longitude in question
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: x  !< The longitude in question [radians]
+  real, intent(in) :: y  !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  ! Local variables
-  real :: ds_dj
 
-  ds_dj = GP%Rad_Earth * dy_dj(y,GP)
+  real :: ds_dj  ! The returned grid spacing [L ~> m]
+
+  ds_dj = GP%Rad_Earth_L * dy_dj(y,GP)
   ! In general, this might be...
-  ! ds_dj = GP%Rad_Earth * sqrt( cos(y)*cos(y) * dx_dj(x,y,GP)*dx_dj(x,y,GP) + &
+  ! ds_dj = GP%Rad_Earth_L * sqrt( cos(y)*cos(y) * dx_dj(x,y,GP)*dx_dj(x,y,GP) + &
   !                           dy_dj(x,y,GP)*dy_dj(x,y,GP))
 end function ds_dj
 
 !> This function returns the contribution from the line integral along one of the four sides of a
-!! cell face to the area of a cell, assuming that the sides follow a linear path in latitude and
-!! longitude (i.e., on a Mercator grid).
+!! cell face to the area of a cell, in [radians2], assuming that the sides follow a linear path in
+!! latitude and longitude (i.e., on a Mercator grid).
 function  dL(x1, x2, y1, y2)
-  real, intent(in) :: x1 !< Segment starting longitude, in degrees E.
-  real, intent(in) :: x2 !< Segment ending longitude, in degrees E.
-  real, intent(in) :: y1 !< Segment ending latitude, in degrees N.
-  real, intent(in) :: y2 !< Segment ending latitude, in degrees N.
+  real, intent(in) :: x1 !< Segment starting longitude [radians]
+  real, intent(in) :: x2 !< Segment ending longitude [radians]
+  real, intent(in) :: y1 !< Segment starting latitude [radians]
+  real, intent(in) :: y2 !< Segment ending latitude [radians]
   ! Local variables
-  real :: dL
-  real :: r, dy
+  real :: dL ! A contribution to the spanned area the surface of the sphere [radian2]
+  real :: r  ! A contribution from the range of latitudes, including trigonometric factors [radians]
+  real :: dy ! The spanned range of latitudes [radians]
 
   dy = y2 - y1
 
@@ -976,22 +922,24 @@ end function  dL
 !! function fn takes the value fnval, also returning in ittmax the number of iterations of
 !! Newton's method that were used to polish the root.
 function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
-  real :: find_root !< The value of y where fn(y) = fnval that will be returned
-  real,      external    :: fn    !< The external function whose root is being sought
-  real,      external    :: dy_df !< The inverse of the derivative of that function
-  type(GPS), intent(in)  :: GP  !< A structure of grid parameters
-  real,      intent(in)  :: fnval !< The value of fn being sought
-  real,      intent(in)  :: y1    !< A first guess for y
-  real,      intent(in)  :: ymin  !< The minimum permitted value of y
-  real,      intent(in)  :: ymax  !< The maximum permitted value of y
+  real :: find_root !< The value of y where fn(y) = fnval that will be returned [radians]
+  real,      external    :: fn    !< The external function whose root is being sought [gridpoints]
+  real,      external    :: dy_df !< The inverse of the derivative of that function [radian gridpoint-1]
+  type(GPS), intent(in)  :: GP    !< A structure of grid parameters
+  real,      intent(in)  :: fnval !< The value of fn being sought [gridpoints]
+  real,      intent(in)  :: y1    !< A first guess for y [radians]
+  real,      intent(in)  :: ymin  !< The minimum permitted value of y [radians]
+  real,      intent(in)  :: ymax  !< The maximum permitted value of y [radians]
   integer,   intent(out) :: ittmax !< The number of iterations used to polish the root
   ! Local variables
-  real :: y, y_next
-  real :: ybot, ytop, fnbot, fntop
+  real :: y, y_next    ! Successive guesses at the root position [radians]
+  real :: ybot, ytop   ! Brackets bounding the root [radians]
+  real :: fnbot, fntop ! Values of fn at the bounding values of y [gridpoints]
+  real :: dy_dfn       ! The inverse of the local derivative of fn with y [radian gridpoint-1]
+  real :: dy           ! The jump to the next guess of y [radians]
+  real :: fny          ! The difference between fn(y) and the target value [gridpoints]
   integer :: itt
   character(len=256) :: warnmesg
-
-  real :: dy_dfn, dy, fny
 
 !  Bracket the root.  Do not use the bounding values because the value at the
 ! function at the bounds could be infinite, as is the case for the Mercator
@@ -1085,40 +1033,40 @@ function find_root( fn, dy_df, GP, fnval, y1, ymin, ymax, ittmax)
   find_root = y
 end function find_root
 
-!> This function calculates and returns the value of dx/di, where x is the
-!! longitude in Radians, and i is the integral north-south grid index.
+!> This function calculates and returns the value of dx/di in [radian gridpoint-1],
+!! where x is the longitude in Radians, and i is the integral east-west grid index.
 function dx_di(x, GP)
-  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: x !< The longitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: dx_di
+  real :: dx_di         ! The derivative of zonal position with the grid index [radian gridpoint-1]
 
   dx_di = (GP%len_lon * 4.0*atan(1.0)) / (180.0 * GP%niglobal)
 
 end function dx_di
 
 !> This function calculates and returns the integral of the inverse
-!! of dx/di to the point x, in radians.
+!! of dx/di to the point x, in radians [gridpoints]
 function Int_di_dx(x, GP)
-  real, intent(in) :: x  !< The longitude in question
+  real, intent(in) :: x  !< The longitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: Int_di_dx
+  real :: Int_di_dx   ! A position in the global i-index space [gridpoints]
 
   Int_di_dx = x * ((180.0 * GP%niglobal) / (GP%len_lon * 4.0*atan(1.0)))
 
 end function Int_di_dx
 
-!> This subroutine calculates and returns the value of dy/dj, where y is the
-!! latitude in Radians, and j is the integral north-south grid index.
+!> This subroutine calculates and returns the value of dy/dj in [radian gridpoint-1],
+!! where y is the latitude in Radians, and j is the integral north-south grid index.
 function dy_dj(y, GP)
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: y !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: dy_dj
+  real :: dy_dj         ! The derivative of meridional position with the grid index [radian gridpoint-1]
   ! Local variables
-  real :: PI            ! 3.1415926... calculated as 4*atan(1)
+  real :: PI            ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: C0            ! The constant that converts the nominal y-spacing in
-                        ! gridpoints to the nominal spacing in Radians.
+                        ! gridpoints to the nominal spacing in Radians [radian gridpoint-1]
   real :: y_eq_enhance  ! The latitude in radians within which the resolution
-                        ! is enhanced.
+                        ! is enhanced [radians]
   PI = 4.0*atan(1.0)
   if (GP%isotropic) then
     C0 = (GP%len_lon * PI) / (180.0 * GP%niglobal)
@@ -1137,21 +1085,19 @@ function dy_dj(y, GP)
 end function dy_dj
 
 !> This subroutine calculates and returns the integral of the inverse
-!! of dy/dj to the point y, in radians.
+!! of dy/dj to the point y in radians [gridpoints]
 function Int_dj_dy(y, GP)
-  real, intent(in) :: y  !< The latitude in question
+  real, intent(in) :: y  !< The latitude in question [radians]
   type(GPS), intent(in) :: GP  !< A structure of grid parameters
-  real :: Int_dj_dy
+  real :: Int_dj_dy        ! The grid position of latitude y [gridpoints]
   ! Local variables
-  real :: I_C0 = 0.0       !   The inverse of the constant that converts the
+  real :: I_C0             !   The inverse of the constant that converts the
                            ! nominal spacing in gridpoints to the nominal
-                           ! spacing in Radians.
-  real :: PI               ! 3.1415926... calculated as 4*atan(1)
-  real :: y_eq_enhance     ! The latitude in radians from
-                           ! from the equator within which the
-                           ! meridional grid spacing is enhanced by
-                           ! a factor of GP%lat_enhance_factor.
-  real :: r
+                           ! spacing in Radians [gridpoint radian-1]
+  real :: PI               ! 3.1415926... calculated as 4*atan(1) [nondim]
+  real :: y_eq_enhance     ! The latitude in radians from from the equator within which the meridional
+                           ! grid spacing is enhanced by a factor of GP%lat_enhance_factor [radians]
+  real :: r                ! The y grid position in the global index space [gridpoints]
 
   PI = 4.0*atan(1.0)
   if (GP%isotropic) then
@@ -1182,12 +1128,12 @@ end function Int_dj_dy
 
 !> Extrapolates missing metric data into all the halo regions.
 subroutine extrapolate_metric(var, jh, missing)
-  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos
+  real, dimension(:,:), intent(inout) :: var     !< The array in which to fill in halos [abitrary]
   integer,              intent(in)    :: jh      !< The size of the halos to be filled
-  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default.
+  real,       optional, intent(in)    :: missing !< The missing data fill value, 0 by default [abitrary]
   ! Local variables
-  real :: badval
-  integer :: i,j
+  real :: badval ! A bad data value [abitrary]
+  integer :: i, j
 
   badval = 0.0 ; if (present(missing)) badval = missing
 
@@ -1216,8 +1162,8 @@ end subroutine extrapolate_metric
 !> This function implements Adcroft's rule for reciprocals, namely that
 !!   Adcroft_Inv(x) = 1/x for |x|>0 or 0 for x=0.
 function Adcroft_reciprocal(val) result(I_val)
-  real, intent(in) :: val  !< The value being inverted.
-  real :: I_val            !< The Adcroft reciprocal of val.
+  real, intent(in) :: val  !< The value being inverted [abitrary]
+  real :: I_val            !< The Adcroft reciprocal of val [abitrary-1]
 
   I_val = 0.0
   if (val /= 0.0) I_val = 1.0/val
@@ -1226,47 +1172,44 @@ end function Adcroft_reciprocal
 !> Initializes the grid masks and any metrics that come with masks already applied.
 !!
 !!    Initialize_masks sets mask2dT, mask2dCu, mask2dCv, and mask2dBu to mask out
-!! flow over any points which are shallower than Dmin and permit an
+!! flow over any points which are shallower than Dmask and permit an
 !! appropriate treatment of the boundary conditions.  mask2dCu and mask2dCv
 !! are 0.0 at any points adjacent to a land point.  mask2dBu is 0.0 at
 !! any land or boundary point.  For points in the interior, mask2dCu,
 !! mask2dCv, and mask2dBu are all 1.0.
 subroutine initialize_masks(G, PF, US)
-  type(dyn_horgrid_type),          intent(inout) :: G  !< The dynamic horizontal grid type
-  type(param_file_type),           intent(in)    :: PF !< Parameter file structure
-  type(unit_scale_type), optional, intent(in)    :: US !< A dimensional unit scaling type
+  type(dyn_horgrid_type), intent(inout) :: G  !< The dynamic horizontal grid type
+  type(param_file_type),  intent(in)    :: PF !< Parameter file structure
+  type(unit_scale_type),  intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
-  real :: m_to_Z_scale ! A unit conversion factor from m to Z.
-  real :: m_to_L  ! A unit conversion factor [L m-1 ~> nondim]
-  real :: Dmin       ! The depth for masking in the same units as G%bathyT [Z ~> m].
+  real :: Dmask      ! The depth for masking in the same units as G%bathyT [Z ~> m].
   real :: min_depth  ! The minimum ocean depth in the same units as G%bathyT [Z ~> m].
   real :: mask_depth ! The depth shallower than which to mask a point as land [Z ~> m].
   character(len=40)  :: mdl = "MOM_grid_init initialize_masks"
   integer :: i, j
 
   call callTree_enter("initialize_masks(), MOM_grid_initialize.F90")
-  m_to_Z_scale = 1.0 ; if (present(US)) m_to_Z_scale = US%m_to_Z
-  m_to_L = 1.0 ; if (present(US)) m_to_L = US%m_to_L
 
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "If MASKING_DEPTH is unspecified, then anything shallower than "//&
                  "MINIMUM_DEPTH is assumed to be land and all fluxes are masked out. "//&
                  "If MASKING_DEPTH is specified, then all depths shallower than "//&
                  "MINIMUM_DEPTH but deeper than MASKING_DEPTH are rounded to MINIMUM_DEPTH.", &
-                 units="m", default=0.0, scale=m_to_Z_scale)
+                 units="m", default=0.0, scale=US%m_to_Z)
   call get_param(PF, mdl, "MASKING_DEPTH", mask_depth, &
                  "The depth below which to mask points as land points, for which all "//&
-                 "fluxes are zeroed out. MASKING_DEPTH is ignored if negative.", &
-                 units="m", default=-9999.0, scale=m_to_Z_scale)
+                 "fluxes are zeroed out. MASKING_DEPTH is ignored if it has the special "//&
+                 "default value.", &
+                 units="m", default=-9999.0, scale=US%m_to_Z)
 
-  Dmin = min_depth
-  if (mask_depth>=0.) Dmin = mask_depth
+  Dmask = mask_depth
+  if (mask_depth == -9999.0*US%m_to_Z) Dmask = min_depth
 
   G%mask2dCu(:,:) = 0.0 ; G%mask2dCv(:,:) = 0.0 ; G%mask2dBu(:,:) = 0.0
 
   ! Construct the h-point or T-point mask
   do j=G%jsd,G%jed ; do i=G%isd,G%ied
-    if (G%bathyT(i,j) <= Dmin) then
+    if (G%bathyT(i,j) <= Dmask) then
       G%mask2dT(i,j) = 0.0
     else
       G%mask2dT(i,j) = 1.0
@@ -1274,24 +1217,28 @@ subroutine initialize_masks(G, PF, US)
   enddo ; enddo
 
   do j=G%jsd,G%jed ; do I=G%isd,G%ied-1
-    if ((G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i+1,j) <= Dmin)) then
+    if ((G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i+1,j) <= Dmask)) then
       G%mask2dCu(I,j) = 0.0
     else
       G%mask2dCu(I,j) = 1.0
     endif
+    ! This mask may be revised later after the open boundary positions are specified.
+    G%OBCmaskCu(I,j) = G%mask2dCu(I,j)
   enddo ; enddo
 
   do J=G%jsd,G%jed-1 ; do i=G%isd,G%ied
-    if ((G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i,j+1) <= Dmin)) then
+    if ((G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i,j+1) <= Dmask)) then
       G%mask2dCv(i,J) = 0.0
     else
       G%mask2dCv(i,J) = 1.0
     endif
+    ! This mask may be revised later after the open boundary positions are specified.
+    G%OBCmaskCv(i,J) = G%mask2dCv(i,J)
   enddo ; enddo
 
   do J=G%jsd,G%jed-1 ; do I=G%isd,G%ied-1
-    if ((G%bathyT(i+1,j) <= Dmin) .or. (G%bathyT(i+1,j+1) <= Dmin) .or. &
-        (G%bathyT(i,j) <= Dmin) .or. (G%bathyT(i,j+1) <= Dmin)) then
+    if ((G%bathyT(i+1,j) <= Dmask) .or. (G%bathyT(i+1,j+1) <= Dmask) .or. &
+        (G%bathyT(i,j) <= Dmask) .or. (G%bathyT(i,j+1) <= Dmask)) then
       G%mask2dBu(I,J) = 0.0
     else
       G%mask2dBu(I,J) = 1.0
@@ -1302,12 +1249,14 @@ subroutine initialize_masks(G, PF, US)
   call pass_vector(G%mask2dCu, G%mask2dCv, G%Domain, To_All+Scalar_Pair, CGRID_NE)
 
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    ! This open face length may be revised later.
     G%dy_Cu(I,j) = G%mask2dCu(I,j) * G%dyCu(I,j)
     G%areaCu(I,j) = G%dxCu(I,j) * G%dy_Cu(I,j)
     G%IareaCu(I,j) = G%mask2dCu(I,j) * Adcroft_reciprocal(G%areaCu(I,j))
   enddo ; enddo
 
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    ! This open face length may be revised later.
     G%dx_Cv(i,J) = G%mask2dCv(i,J) * G%dxCv(i,J)
     G%areaCv(i,J) = G%dyCv(i,J) * G%dx_Cv(i,J)
     G%IareaCv(i,J) = G%mask2dCv(i,J) * Adcroft_reciprocal(G%areaCv(i,J))

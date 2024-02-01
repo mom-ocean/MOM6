@@ -8,7 +8,7 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data
+use MOM_io, only : file_exists, MOM_read_data
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, operator(+), operator(/)
 use MOM_tracer_flow_control, only : call_tracer_set_forcing
@@ -21,17 +21,14 @@ public user_alter_forcing, user_revise_forcing_init
 
 !> Control structure for user_revise_forcing
 type, public :: user_revise_forcing_CS ; private
-  real :: cdrag  !< The quadratic bottom drag coefficient.
+  real :: cdrag  !< The quadratic bottom drag coefficient [nondim]
 end type user_revise_forcing_CS
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
-  character(len=40) :: mdl = "user_revise_forcing" !< This module's name.
 contains
 
 !> This subroutine sets the surface wind stresses.
-subroutine user_alter_forcing(state, fluxes, day, G, CS)
-  type(surface),            intent(in)    :: state  !< A structure containing fields that
+subroutine user_alter_forcing(sfc_state, fluxes, day, G, CS)
+  type(surface),            intent(in)    :: sfc_state  !< A structure containing fields that
                                                     !! describe the surface state of the ocean.
   type(forcing),            intent(inout) :: fluxes !< A structure containing pointers to any
                                                     !! possible forcing fields. Unused fields
@@ -41,6 +38,7 @@ subroutine user_alter_forcing(state, fluxes, day, G, CS)
   type(user_revise_forcing_CS), pointer   :: CS     !< A pointer to the control structure
                                                     !! returned by a previous call to
                                                     !! surface_forcing_init.
+  return
 
 end subroutine user_alter_forcing
 
@@ -51,6 +49,10 @@ subroutine user_revise_forcing_init(param_file,CS)
   type(user_revise_forcing_CS), pointer   :: CS     !< A pointer to the control structure
                                                     !! returned by a previous call to
                                                     !! surface_forcing_init.
+
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
+  character(len=40) :: mdl = "user_revise_forcing" !< This module's name.
 
   call log_version(param_file, mdl, version)
 

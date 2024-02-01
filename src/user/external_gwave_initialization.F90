@@ -25,42 +25,40 @@ public external_gwave_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the external_gwave experiment.
-subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
   ! Local variables
-  real :: eta1D(SZK_(G)+1)! Interface height relative to the sea surface
-                          ! positive upward [Z ~> m].
-  real :: ssh_anomaly_height ! Vertical height of ssh anomaly
-  real :: ssh_anomaly_width ! Lateral width of anomaly
-  logical :: just_read    ! If true, just read parameters but set nothing.
+  real :: eta1D(SZK_(GV)+1)  ! Interface height relative to the sea surface
+                             ! positive upward [Z ~> m].
+  real :: ssh_anomaly_height ! Vertical height of ssh anomaly [Z ~> m]
+  real :: ssh_anomaly_width  ! Lateral width of anomaly, often in [km] or [degrees_E]
   character(len=40)  :: mdl = "external_gwave_initialize_thickness" ! This subroutine's name.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   integer :: i, j, k, is, ie, js, je, nz
-  real :: PI, Xnondim
+  real :: PI       ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: Xnondim  ! A normalized x position [nondim]
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.just_read) &
     call MOM_mesg("  external_gwave_initialization.F90, external_gwave_initialize_thickness: setting thickness", 5)
 
   if (.not.just_read) call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "SSH_ANOMALY_HEIGHT", ssh_anomaly_height, &
-                 "The vertical displacement of the SSH anomaly. ", units="m", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read, scale=US%m_to_Z)
+                 "The vertical displacement of the SSH anomaly. ", &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "SSH_ANOMALY_WIDTH", ssh_anomaly_width, &
-                 "The lateral width of the SSH anomaly. ", units="coordinate", &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 "The lateral width of the SSH anomaly. ", &
+                 units=G%x_ax_unit_short, fail_if_missing=.not.just_read, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -75,7 +73,7 @@ subroutine external_gwave_initialize_thickness(h, G, GV, US, param_file, just_re
     enddo
     eta1D(nz+1) = -G%max_depth ! Force bottom interface to bottom
     do k=1,nz
-      h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
+      h(i,j,k) = eta1D(K) - eta1D(K+1)
     enddo
   enddo ; enddo
 

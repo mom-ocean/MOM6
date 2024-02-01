@@ -8,20 +8,19 @@ module MOM_controlled_forcing
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_diag_mediator, only : post_data, query_averaging_enabled
+use MOM_diag_mediator, only : post_data, query_averaging_enabled, enable_averages, disable_averaging
 use MOM_diag_mediator, only : register_diag_field, diag_ctrl, safe_alloc_ptr
-use MOM_domains, only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
+use MOM_domains,       only : pass_var, pass_vector, AGRID, To_South, To_West, To_All
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
-use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
-use MOM_forcing_type, only : forcing
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : vardesc, var_desc
-use MOM_restart, only : register_restart_field, MOM_restart_CS
-use MOM_time_manager, only : time_type, operator(+), operator(/), operator(-)
-use MOM_time_manager, only : get_date, set_date
-use MOM_time_manager, only : time_type_to_real, real_to_time
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface
+use MOM_file_parser,   only : read_param, get_param, log_param, log_version, param_file_type
+use MOM_forcing_type,  only : forcing
+use MOM_grid,          only : ocean_grid_type
+use MOM_restart,       only : register_restart_field, MOM_restart_CS
+use MOM_time_manager,  only : time_type, operator(+), operator(/), operator(-)
+use MOM_time_manager,  only : get_date, set_date
+use MOM_time_manager,  only : time_type_to_real, real_to_time
+use MOM_unit_scaling,  only : unit_scale_type
+use MOM_variables,     only : surface
 
 implicit none ; private
 
@@ -32,89 +31,103 @@ public controlled_forcing_init, controlled_forcing_end
 
 !> Control structure for MOM_controlled_forcing
 type, public :: ctrl_forcing_CS ; private
-  logical :: use_temperature !< If true, temperature and salinity are used as
-                             !! state variables.
-  logical :: do_integrated   !< If true, use time-integrated anomalies to control
-                             !! the surface state.
-  integer :: num_cycle       !< The number of elements in the forcing cycle.
-  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate [s-1].
-  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate [s-1].
-  real    :: heat_cyc_rate  !< The rate at which cyclical heating anomaliess
-                            !! accumulate [s-1].
-  real    :: prec_cyc_rate  !< The rate at which cyclical precipitation anomaliess
-                            !! accumulate [s-1].
+  logical :: use_temperature !< If true, temperature and salinity are used as state variables.
+  logical :: do_integrated  !< If true, use time-integrated anomalies to control the surface state.
+  integer :: num_cycle      !< The number of elements in the forcing cycle.
+  real    :: heat_int_rate  !< The rate at which heating anomalies accumulate [T-1 ~> s-1]
+  real    :: prec_int_rate  !< The rate at which precipitation anomalies accumulate [T-1 ~> s-1]
+  real    :: heat_cyc_rate  !< The rate at which cyclical heating anomalies accumulate [T-1 ~> s-1]
+  real    :: prec_cyc_rate  !< The rate at which cyclical precipitation anomalies
+                            !! accumulate [T-1 ~> s-1]
   real    :: Len2           !< The square of the length scale over which the anomalies
-                            !! are smoothed via a Laplacian filter [m2].
+                            !! are smoothed via a Laplacian filter [L2 ~> m2]
   real    :: lam_heat       !< A constant of proportionality between SST anomalies
-                            !! and heat fluxes [W m-2 degC-1].
+                            !! and heat fluxes [Q R Z T-1 C-1 ~> W m-2 degC-1]
   real    :: lam_prec       !< A constant of proportionality between SSS anomalies
-                            !! (normalised by mean SSS) and precipitation [kg m-2].
+                            !! (normalised by mean SSS) and precipitation [R Z T-1 ~> kg m-2 s-1]
   real    :: lam_cyc_heat   !< A constant of proportionality between cyclical SST
-                            !! anomalies and corrective heat fluxes [W m-2 degC-1].
+                            !! anomalies and corrective heat fluxes [Q R Z T-1 C-1 ~> W m-2 degC-1]
   real    :: lam_cyc_prec   !< A constant of proportionality between cyclical SSS
                             !! anomalies (normalised by mean SSS) and corrective
-                            !! precipitation [kg m-2].
+                            !! precipitation [R Z T-1 ~> kg m-2 s-1]
 
-  !>@{ Pointers for data.
-  !! \todo Needs more complete documentation.
-  real, pointer, dimension(:) :: &
-    avg_time => NULL()
   real, pointer, dimension(:,:) :: &
-    heat_0 => NULL(), &
-    precip_0 => NULL()
+    heat_0 => NULL(), &     !< The non-periodic integrative corrective heat flux that has been
+                            !! evolved to control mean SST anomalies [Q R Z T-1 ~> W m-2]
+    precip_0 => NULL()      !< The non-periodic integrative corrective precipitation that has been
+                            !! evolved to control mean SSS anomalies [R Z T-1 ~> kg m-2 s-1]
+
+  ! The final dimension of each of the six variables that follow is for the periodic bins.
   real, pointer, dimension(:,:,:) :: &
-    heat_cyc => NULL(), &
-    precip_cyc => NULL(), &
-    avg_SST_anom => NULL(), &
-    avg_SSS_anom => NULL(), &
-    avg_SSS => NULL()
-  !!@}
+    heat_cyc => NULL(), &   !< The periodic integrative corrective heat flux that has been evolved
+                            !! to control periodic (seasonal) SST anomalies [Q R Z T-1 ~> W m-2].
+                            !! The third dimension is the periodic bins.
+    precip_cyc => NULL()    !< The non-periodic integrative corrective precipitation that has been
+                            !! evolved to control periodic (seasonal) SSS anomalies [R Z T-1 ~> kg m-2 s-1].
+                            !! The third dimension is the periodic bins.
+  real, pointer, dimension(:) :: &
+    avg_time => NULL()      !< The accumulated averaging time in each part of the cycle [T ~> s] or
+                            !! a negative value to indicate that the variables like avg_SST_anom are
+                            !! the actual averages, and not time integrals.
+                            !! The dimension is the periodic bins.
+  real, pointer, dimension(:,:,:) :: &
+    avg_SST_anom => NULL(), & !< The time-averaged periodic sea surface temperature anomalies [C ~> degC],
+                              !! or (at some points in the code), the time-integrated periodic
+                              !! temperature anomalies [T C ~> s degC].
+                              !! The third dimension is the periodic bins.
+    avg_SSS_anom => NULL(), & !< The time-averaged periodic sea surface salinity anomalies [S ~> ppt],
+                              !! or (at some points in the code), the time-integrated periodic
+                              !! salinity anomalies [T S ~> s ppt].
+                              !! The third dimension is the periodic bins.
+    avg_SSS => NULL()         !< The time-averaged periodic sea surface salinities [S ~> ppt], or (at
+                              !! some points in the code), the time-integrated periodic
+                              !! salinities [T S ~> s ppt].
+                              !! The third dimension is the periodic bins.
+
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                             !! regulate the timing of diagnostic output.
-  integer :: id_heat_0 = -1 !< Diagnostic handle
+  integer :: id_heat_0 = -1 !< Diagnostic handle for the steady heat flux
+  integer :: id_prec_0 = -1 !< Diagnostic handle for the steady precipitation
 end type ctrl_forcing_CS
 
 contains
 
-!> This subroutine calls any of the other subroutines in this file
-!! that are needed to specify the current surface forcing fields.
+!> This subroutine determines corrective surface forcing fields using simple control theory.
 subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_precip, &
                               day_start, dt, G, US, CS)
-  type(ocean_grid_type), intent(inout) :: G                    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature
-                                                               !! anomalies [degC].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity
-                                                               !! anomlies [ppt].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface
-                                                               !! salinity [ppt].
+  type(ocean_grid_type), intent(inout) :: G         !< The ocean's grid structure
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SST_anom  !< The sea surface temperature anomalies [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_anom  !< The sea surface salinity anomlies [S ~> ppt]
+  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: SSS_mean  !< The mean sea surface salinity [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_heat !< Virtual (corrective) heat
-                                                               !! fluxes that are augmented
-                                                               !! in this subroutine [W m-2].
+                                                    !! fluxes that are augmented in this
+                                                    !! subroutine [Q R Z T-1 ~> W m-2]
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: virt_precip !< Virtual (corrective)
-                                                               !! precipitation fluxes that
-                                                               !! are augmented in this
-                                                               !! subroutine [kg m-2 s-1].
-  type(time_type),       intent(in)    :: day_start      !< Start time of the fluxes.
-  real,                  intent(in)    :: dt             !< Length of time over which these
-                                                         !! fluxes will be applied [s].
-  type(unit_scale_type), intent(in)    :: US             !< A dimensional unit scaling type
-  type(ctrl_forcing_CS), pointer       :: CS             !< A pointer to the control structure
-                                                         !! returned by a previous call to
-                                                         !! ctrl_forcing_init.
-!
+                                                    !! precipitation fluxes that are augmented
+                                                    !! in this subroutine [R Z T-1 ~> kg m-2 s-1]
+  type(time_type),       intent(in)    :: day_start !< Start time of the fluxes.
+  real,                  intent(in)    :: dt        !< Length of time over which these fluxes
+                                                    !! will be applied [T ~> s]
+  type(unit_scale_type), intent(in)    :: US        !< A dimensional unit scaling type
+  type(ctrl_forcing_CS), pointer       :: CS        !< A pointer to the control structure returned
+                                                    !! by a previous call to ctrl_forcing_init.
+
+  ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    flux_heat_x, &
-    flux_prec_x
+    flux_heat_x, &  ! Zonal smoothing flux of the virtual heat fluxes [L2 Q R Z T-1 ~> W]
+    flux_prec_x     ! Zonal smoothing flux of the virtual precipitation [L2 R Z T-1 ~> kg s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    flux_heat_y, &
-    flux_prec_y
+    flux_heat_y, &  ! Meridional smoothing flux of the virtual heat fluxes [L2 Q R Z T-1 ~> W]
+    flux_prec_y     ! Meridional smoothing flux of the virtual precipitation [L2 R Z T-1 ~> kg s-1]
   type(time_type) :: day_end
-  real    :: coef    ! A heat-flux coefficient [m2].
-  real    :: mr_st, mr_end, mr_mid, mr_prev, mr_next
-  real    :: dt_wt, dt_heat_rate, dt_prec_rate
-  real    :: dt1_heat_rate, dt1_prec_rate, dt2_heat_rate, dt2_prec_rate
-  real    :: wt_per1, wt_st, wt_end, wt_mid
-  integer :: m_st, m_end, m_mid, m_u1, m_u2, m_u3
+  real    :: coef   ! A heat-flux coefficient [L2 ~> m2]
+  real    :: mr_st, mr_end, mr_mid ! Position of various times in the periodic cycle [nondim]
+  real    :: mr_prev, mr_next      ! Position of various times in the periodic cycle [nondim]
+  real    :: dt_wt   ! The timestep times a fractional weight used to accumulate averages [T ~> s]
+  real    :: dt_heat_rate, dt_prec_rate  ! Timestep times the flux accumulation rate [nondim]
+  real    :: dt1_heat_rate, dt1_prec_rate, dt2_heat_rate, dt2_prec_rate ! [nondim]
+  real    :: wt_per1, wt_st, wt_end, wt_mid ! Averaging weights [nondim]
+  integer :: m_st, m_end, m_mid, m_u1, m_u2, m_u3 ! Indices (nominally months) in the periodic cycle
   integer :: yr, mon, day, hr, min, sec
   integer :: i, j, is, ie, js, je
 
@@ -123,7 +136,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
   if (.not.associated(CS)) return
   if ((CS%num_cycle <= 0) .and. (.not.CS%do_integrated)) return
 
-  day_end = day_start + real_to_time(dt)
+  day_end = day_start + real_to_time(US%T_to_s*dt)
 
   do j=js,je ; do i=is,ie
     virt_heat(i,j) = 0.0 ; virt_precip(i,j) = 0.0
@@ -148,12 +161,12 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     do j=js,je ; do i=is,ie
       CS%heat_0(i,j) = CS%heat_0(i,j) + dt_heat_rate * ( &
          -CS%lam_heat*G%mask2dT(i,j)*SST_anom(i,j) + &
-        (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+        (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                           (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
       CS%precip_0(i,j) = CS%precip_0(i,j) + dt_prec_rate * ( &
          CS%lam_prec * G%mask2dT(i,j)*(SSS_anom(i,j) / SSS_mean(i,j)) + &
-        (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+        (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                           (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
 
       virt_heat(i,j) = virt_heat(i,j) + CS%heat_0(i,j)
@@ -257,6 +270,8 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     ! Accumulate the average anomalies for this period.
     dt_wt = wt_per1 * dt
     CS%avg_time(m_mid) = CS%avg_time(m_mid) + dt_wt
+    ! These loops temporarily change the units of the CS%avg_ variables to [C T ~> degC s]
+    ! or [S T ~> ppt s].
     do j=js,je ; do i=is,ie
       CS%avg_SST_anom(i,j,m_mid) = CS%avg_SST_anom(i,j,m_mid) + &
                                    dt_wt * G%mask2dT(i,j) * SST_anom(i,j)
@@ -281,6 +296,7 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
     m_u2 = periodic_int(m_st - 3.0, CS%num_cycle)
     m_u3 = periodic_int(m_st - 2.0, CS%num_cycle)
 
+    ! These loops restore the units of the CS%avg variables to [degC] or [ppt]
     if (CS%avg_time(m_u1) > 0.0) then
       do j=js,je ; do i=is,ie
         CS%avg_SST_anom(i,j,m_u1) = CS%avg_SST_anom(i,j,m_u1) / CS%avg_time(m_u1)
@@ -332,13 +348,13 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
       do j=js,je ; do i=is,ie
         CS%heat_cyc(i,j,m_u1) = CS%heat_cyc(i,j,m_u1) + dt1_heat_rate * ( &
            -CS%lam_cyc_heat*(CS%avg_SST_anom(i,j,m_u2) - CS%avg_SST_anom(i,j,m_u1)) + &
-          (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+          (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                             (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
         CS%precip_cyc(i,j,m_u1) = CS%precip_cyc(i,j,m_u1) + dt1_prec_rate * ( &
-          CS%lam_cyc_prec * (CS%avg_SSS_anom(i,j,m_u2) - CS%avg_SSS_anom(i,j,m_u1)) / &
+          CS%lam_prec * (CS%avg_SSS_anom(i,j,m_u2) - CS%avg_SSS_anom(i,j,m_u1)) / &
                             (0.5*(CS%avg_SSS(i,j,m_u2) + CS%avg_SSS(i,j,m_u1))) + &
-          (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+          (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                             (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
       enddo ; enddo
     endif
@@ -357,24 +373,31 @@ subroutine apply_ctrl_forcing(SST_anom, SSS_anom, SSS_mean, virt_heat, virt_prec
       do j=js,je ; do i=is,ie
         CS%heat_cyc(i,j,m_u2) = CS%heat_cyc(i,j,m_u2) + dt1_heat_rate * ( &
          -CS%lam_cyc_heat*(CS%avg_SST_anom(i,j,m_u3) - CS%avg_SST_anom(i,j,m_u2)) + &
-          (US%m_to_L**2*G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
+          (G%IareaT(i,j) * ((flux_heat_x(I-1,j) - flux_heat_x(I,j)) + &
                             (flux_heat_y(i,J-1) - flux_heat_y(i,J))) ) )
 
         CS%precip_cyc(i,j,m_u2) = CS%precip_cyc(i,j,m_u2) + dt1_prec_rate * ( &
-          CS%lam_cyc_prec * (CS%avg_SSS_anom(i,j,m_u3) - CS%avg_SSS_anom(i,j,m_u2)) / &
+          CS%lam_prec * (CS%avg_SSS_anom(i,j,m_u3) - CS%avg_SSS_anom(i,j,m_u2)) / &
                              (0.5*(CS%avg_SSS(i,j,m_u3) + CS%avg_SSS(i,j,m_u2))) + &
-          (US%m_to_L**2*G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
+          (G%IareaT(i,j) * ((flux_prec_x(I-1,j) - flux_prec_x(I,j)) + &
                             (flux_prec_y(i,J-1) - flux_prec_y(i,J))) ) )
       enddo ; enddo
     endif
 
   endif ! (CS%num_cycle > 0)
 
+  if (CS%do_integrated .and. ((CS%id_heat_0 > 0) .or. (CS%id_prec_0 > 0))) then
+    call enable_averages(dt, day_start + real_to_time(US%T_to_s*dt), CS%diag)
+    if (CS%id_heat_0 > 0) call post_data(CS%id_heat_0, CS%heat_0, CS%diag)
+    if (CS%id_prec_0 > 0) call post_data(CS%id_prec_0, CS%precip_0, CS%diag)
+    call disable_averaging(CS%diag)
+  endif
+
 end subroutine apply_ctrl_forcing
 
 !> This function maps rval into an integer in the range from 1 to num_period.
 function periodic_int(rval, num_period) result (m)
-  real,    intent(in) :: rval       !< Input for mapping.
+  real,    intent(in) :: rval       !< Input for mapping [nondim]
   integer, intent(in) :: num_period !< Maximum output.
   integer             :: m          !< Return value.
 
@@ -389,9 +412,9 @@ end function
 !> This function shifts rval by an integer multiple of num_period so that
 !! 0 <= val_out < num_period.
 function periodic_real(rval, num_period) result(val_out)
-  real,    intent(in) :: rval       !< Input to be shifted into valid range.
+  real,    intent(in) :: rval       !< Input to be shifted into valid range [nondim]
   integer, intent(in) :: num_period !< Maximum valid value.
-  real                :: val_out    !< Return value.
+  real                :: val_out    !< Return value [nondim]
   integer :: nshft
 
   if (rval < 0) then ; nshft = floor(abs(rval) / num_period) + 1
@@ -404,18 +427,18 @@ end function
 
 !> This subroutine is used to allocate and register any fields in this module
 !! that should be written to or read from the restart file.
-subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
+subroutine register_ctrl_forcing_restarts(G, US, param_file, CS, restart_CS)
   type(ocean_grid_type), intent(in) :: G          !< The ocean's grid structure.
+  type(unit_scale_type), intent(in) :: US         !< A dimensional unit scaling type
   type(param_file_type), intent(in) :: param_file !< A structure indicating the
                                                   !! open file to parse for model
                                                   !! parameter values.
   type(ctrl_forcing_CS), pointer :: CS            !< A pointer that is set to point to the
                                                   !! control structure for this module.
-  type(MOM_restart_CS),  pointer :: restart_CS    !< A pointer to the restart control structure.
+  type(MOM_restart_CS), intent(inout) :: restart_CS !< MOM restart control struct
 
   logical :: controlled, use_temperature
   character (len=8) :: period_str
-  type(vardesc) :: vd
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -443,47 +466,55 @@ subroutine register_ctrl_forcing_restarts(G, param_file, CS, restart_CS)
   call read_param(param_file, "CTRL_FORCE_NUM_CYCLE", CS%num_cycle)
 
   if (CS%do_integrated) then
-    call safe_alloc_ptr(CS%heat_0,isd,ied,jsd,jed) ; CS%heat_0(:,:) = 0.0
-    call safe_alloc_ptr(CS%precip_0,isd,ied,jsd,jed) ; CS%precip_0(:,:) = 0.0
-    vd = var_desc("Ctrl_heat","W m-2","Control Integrative Heating",z_grid='1')
-    call register_restart_field(CS%heat_0, vd, .false., restart_CS)
-    vd = var_desc("Ctrl_precip","kg m-2 s-1","Control Integrative Precipitation",z_grid='1')
-    call register_restart_field(CS%precip_0, vd, .false., restart_CS)
+    allocate(CS%heat_0(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%precip_0(isd:ied,jsd:jed), source=0.0)
+
+    call register_restart_field(CS%heat_0, "Ctrl_heat", .false., restart_CS, &
+                  longname="Control Integrative Heating", &
+                  units="W m-2", conversion=US%QRZ_T_to_W_m2, z_grid='1')
+    call register_restart_field(CS%precip_0, "Ctrl_precip", .false., restart_CS, &
+                  longname="Control Integrative Precipitation", &
+                  units="kg m-2 s-1", conversion=US%RZ_T_to_kg_m2s, z_grid='1')
   endif
 
   if (CS%num_cycle > 0) then
+    allocate(CS%heat_cyc(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
+    allocate(CS%precip_cyc(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
+    allocate(CS%avg_time(CS%num_cycle), source=0.0)
+    allocate(CS%avg_SST_anom(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
+    allocate(CS%avg_SSS_anom(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
+    allocate(CS%avg_SSS(isd:ied,jsd:jed,CS%num_cycle), source=0.0)
+
     write (period_str, '(i8)') CS%num_cycle
     period_str = trim('p ')//trim(adjustl(period_str))
-    call safe_alloc_ptr(CS%heat_cyc,isd,ied,jsd,jed,CS%num_cycle) ; CS%heat_cyc(:,:,:) = 0.0
-    call safe_alloc_ptr(CS%precip_cyc,isd,ied,jsd,jed,CS%num_cycle) ; CS%precip_cyc(:,:,:) = 0.0
-    vd = var_desc("Ctrl_heat_cycle", "W m-2","Cyclical Control Heating",&
-                  z_grid='1', t_grid=period_str)
-    call register_restart_field(CS%heat_cyc, vd, .false., restart_CS)
-    vd = var_desc("Ctrl_precip_cycle","kg m-2 s-1","Cyclical Control Precipitation", &
-                  z_grid='1', t_grid=period_str)
-    call register_restart_field(CS%precip_cyc, vd, .false., restart_CS)
 
-    call safe_alloc_ptr(CS%avg_time,CS%num_cycle) ; CS%avg_time(:) = 0.0
-    vd = var_desc("avg_time","sec","Cyclical accumulated averaging time", &
-                  '1',z_grid='1',t_grid=period_str)
-    call register_restart_field(CS%avg_time, vd, .false., restart_CS)
-
-    call safe_alloc_ptr(CS%avg_SST_anom,isd,ied,jsd,jed,CS%num_cycle) ; CS%avg_SST_anom(:,:,:) = 0.0
-    call safe_alloc_ptr(CS%avg_SSS_anom,isd,ied,jsd,jed,CS%num_cycle) ; CS%avg_SSS_anom(:,:,:) = 0.0
-    vd = var_desc("avg_SST_anom","deg C","Cyclical average SST Anomaly", &
-                  z_grid='1',t_grid=period_str)
-    call register_restart_field(CS%avg_SST_anom, vd, .false., restart_CS)
-    vd = var_desc("avg_SSS_anom","g kg-1","Cyclical average SSS Anomaly", &
-                  z_grid='1',t_grid=period_str)
-    call register_restart_field(CS%avg_SSS_anom, vd, .false., restart_CS)
+    call register_restart_field(CS%heat_cyc, "Ctrl_heat_cycle", .false., restart_CS, &
+                  longname="Cyclical Control Heating", &
+                  units="W m-2", conversion=US%QRZ_T_to_W_m2, z_grid='1', t_grid=period_str)
+    call register_restart_field(CS%precip_cyc, "Ctrl_precip_cycle", .false., restart_CS, &
+                  longname="Cyclical Control Precipitation", &
+                  units="kg m-2 s-1", conversion=US%RZ_T_to_kg_m2s, z_grid='1', t_grid=period_str)
+    call register_restart_field(CS%avg_time, "avg_time", .false., restart_CS, &
+                  longname="Cyclical accumulated averaging time", &
+                  units="sec", conversion=US%T_to_s, z_grid='1', t_grid=period_str)
+    call register_restart_field(CS%avg_SST_anom, "avg_SST_anom", .false., restart_CS, &
+                  longname="Cyclical average SST Anomaly", &
+                  units="degC", conversion=US%C_to_degC, z_grid='1', t_grid=period_str)
+    call register_restart_field(CS%avg_SSS_anom, "avg_SSS_anom", .false., restart_CS, &
+                  longname="Cyclical average SSS Anomaly", &
+                  units="g kg-1", conversion=US%S_to_ppt, z_grid='1', t_grid=period_str)
+    call register_restart_field(CS%avg_SSS_anom, "avg_SSS", .false., restart_CS, &
+                  longname="Cyclical average SSS", &
+                  units="g kg-1", conversion=US%S_to_ppt, z_grid='1', t_grid=period_str)
   endif
 
 end subroutine register_ctrl_forcing_restarts
 
 !> Set up this modules control structure.
-subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
+subroutine controlled_forcing_init(Time, G, US, param_file, diag, CS)
   type(time_type),           intent(in) :: Time       !< The current model time.
   type(ocean_grid_type),     intent(in) :: G          !< The ocean's grid structure.
+  type(unit_scale_type),     intent(in) :: US         !< A dimensional unit scaling type
   type(param_file_type),     intent(in) :: param_file !< A structure indicating the
                                                       !! open file to parse for model
                                                       !! parameter values.
@@ -491,12 +522,17 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
                                                       !! diagnostic output.
   type(ctrl_forcing_CS),     pointer    :: CS         !< A pointer that is set to point to the
                                                       !! control structure for this module.
-  real :: smooth_len
+
+  ! Local variables
+  real :: smooth_len    ! A smoothing lengthscale [L ~> m]
   logical :: do_integrated
   integer :: num_cycle
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  integer :: i, j, isc, iec, jsc, jec, m
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "MOM_controlled_forcing" ! This module's name.
+
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
 
   ! These should have already been called.
   ! call read_param(param_file, "CTRL_FORCE_INTEGRATED", CS%do_integrated)
@@ -523,40 +559,45 @@ subroutine controlled_forcing_init(Time, G, param_file, diag, CS)
   CS%diag => diag
 
   call get_param(param_file, mdl, "CTRL_FORCE_HEAT_INT_RATE", CS%heat_int_rate, &
-                 "The integrated rate at which heat flux anomalies are "//&
-                 "accumulated.", units="s-1", default=0.0)
+                 "The integrated rate at which heat flux anomalies are accumulated.", &
+                 units="s-1", default=0.0, scale=US%T_to_s)
   call get_param(param_file, mdl, "CTRL_FORCE_PREC_INT_RATE", CS%prec_int_rate, &
-                 "The integrated rate at which precipitation anomalies "//&
-                 "are accumulated.", units="s-1", default=0.0)
+                 "The integrated rate at which precipitation anomalies are accumulated.", &
+                 units="s-1", default=0.0, scale=US%T_to_s)
   call get_param(param_file, mdl, "CTRL_FORCE_HEAT_CYC_RATE", CS%heat_cyc_rate, &
-                 "The integrated rate at which cyclical heat flux "//&
-                 "anomalies are accumulated.", units="s-1", default=0.0)
+                 "The integrated rate at which cyclical heat flux anomalies are accumulated.", &
+                 units="s-1", default=0.0, scale=US%T_to_s)
   call get_param(param_file, mdl, "CTRL_FORCE_PREC_CYC_RATE", CS%prec_cyc_rate, &
-                 "The integrated rate at which cyclical precipitation "//&
-                 "anomalies are accumulated.", units="s-1", default=0.0)
+                 "The integrated rate at which cyclical precipitation anomalies are accumulated.", &
+                 units="s-1", default=0.0, scale=US%T_to_s)
   call get_param(param_file, mdl, "CTRL_FORCE_SMOOTH_LENGTH", smooth_len, &
-                 "The length scales over which controlled forcing "//&
-                 "anomalies are smoothed.", units="m", default=0.0)
+                 "The length scales over which controlled forcing anomalies are smoothed.", &
+                 units="m", default=0.0, scale=US%m_to_L)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_HEAT", CS%lam_heat, &
                  "A constant of proportionality between SST anomalies "//&
-                 "and controlling heat fluxes", "W m-2 K-1", default=0.0)
+                 "and controlling heat fluxes", &
+                 units="W m-2 K-1", default=0.0, scale=US%W_m2_to_QRZ_T*US%C_to_degC)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_PREC", CS%lam_prec, &
                  "A constant of proportionality between SSS anomalies "//&
                  "(normalised by mean SSS) and controlling precipitation.", &
-                 "kg m-2", default=0.0)
+                 units="kg m-2 s-1", default=0.0, scale=US%kg_m2s_to_RZ_T)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_HEAT", CS%lam_cyc_heat, &
                  "A constant of proportionality between SST anomalies "//&
-                 "and cyclical controlling heat fluxes", "W m-2 K-1", default=0.0)
+                 "and cyclical controlling heat fluxes", &
+                 units="W m-2 K-1", default=0.0, scale=US%W_m2_to_QRZ_T*US%C_to_degC)
   call get_param(param_file, mdl, "CTRL_FORCE_LAMDA_CYC_PREC", CS%lam_cyc_prec, &
                  "A constant of proportionality between SSS anomalies "//&
-                 "(normalised by mean SSS) and cyclical controlling "//&
-                 "precipitation.", "kg m-2", default=0.0)
+                 "(normalised by mean SSS) and cyclical controlling precipitation.", &
+                 units="kg m-2 s-1", default=0.0, scale=US%kg_m2s_to_RZ_T)
 
   CS%Len2 = smooth_len**2
 
-! ### REPLACE THIS WITH ANY DIAGNOSTICS FROM THIS MODULE.
-!  CS%id_taux = register_diag_field('ocean_model', 'taux', diag%axesu1, Time, &
-!        'Zonal Wind Stress', 'Pascal')
+  if (CS%do_integrated) then
+    CS%id_heat_0 = register_diag_field('ocean_model', 'Ctrl_heat', diag%axesT1, Time, &
+         'Control Corrective Heating', 'W m-2', conversion=US%QRZ_T_to_W_m2)
+    CS%id_prec_0 = register_diag_field('ocean_model', 'Ctrl_prec', diag%axesT1, Time, &
+         'Control Corrective Precipitation', 'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
+  endif
 
 end subroutine controlled_forcing_init
 

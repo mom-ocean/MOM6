@@ -13,6 +13,7 @@ use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_time_manager,   only : time_type, time_type_to_real
 use MOM_unit_scaling,   only : unit_scale_type
+use MOM_verticalGrid,   only : verticalGrid_type
 
 implicit none ; private
 
@@ -27,27 +28,30 @@ public register_shelfwave_OBC, shelfwave_OBC_end
 
 !> Control structure for shelfwave open boundaries.
 type, public :: shelfwave_OBC_CS ; private
-  real :: Lx = 100.0        !< Long-shore length scale of bathymetry.
-  real :: Ly = 50.0         !< Cross-shore length scale.
-  real :: f0 = 1.e-4        !< Coriolis parameter.
-  real :: jj = 1            !< Cross-shore wave mode.
-  real :: kk                !< Parameter.
-  real :: ll                !< Longshore wavenumber.
-  real :: alpha             !< 1/Ly.
-  real :: omega             !< Frequency.
+  real :: my_amp        !< Amplitude of the open boundary current inflows [L T-1 ~> m s-1]
+  real :: Lx = 100.0    !< Long-shore length scale of bathymetry [km] or [m]
+  real :: Ly = 50.0     !< Cross-shore length scale [km] or [m]
+  real :: f0 = 1.e-4    !< Coriolis parameter [T-1 ~> s-1]
+  real :: jj = 1.0      !< Cross-shore wave mode [nondim]
+  real :: kk            !< Cross-shore wavenumber [km-1] or [m-1]
+  real :: ll            !< Longshore wavenumber [km-1] or [m-1]
+  real :: alpha         !< Exponential decay rate in the y-direction [km-1] or [m-1]
+  real :: omega         !< Frequency of the shelf wave [T-1 ~> s-1]
 end type shelfwave_OBC_CS
 
 contains
 
 !> Add shelfwave to OBC registry.
-function register_shelfwave_OBC(param_file, CS, OBC_Reg)
+function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(shelfwave_OBC_CS),   pointer    :: CS         !< shelfwave control structure.
-  type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
+  type(ocean_grid_type),    intent(in) :: G          !< The ocean's grid structure.
+  type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
+  type(OBC_registry_type),  pointer    :: OBC_Reg    !< Open boundary condition registry.
   logical                              :: register_shelfwave_OBC
-  ! Local variables
-  real :: kk, ll, PI, len_lat
 
+  ! Local variables
+  real :: PI      ! The ratio of the circumference of a circle to its diameter [nondim]
   character(len=32)  :: casename = "shelfwave"       !< This case's name.
 
   PI = 4.0*atan(1.0)
@@ -61,23 +65,24 @@ function register_shelfwave_OBC(param_file, CS, OBC_Reg)
 
   ! Register the tracer for horizontal advection & diffusion.
   call register_OBC(casename, param_file, OBC_Reg)
-  call get_param(param_file, mdl,"F_0",CS%f0, &
-                 do_not_log=.true.)
-  call get_param(param_file, mdl,"LENLAT",len_lat, &
-                 do_not_log=.true.)
-  call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH",CS%Lx, &
+  call get_param(param_file, mdl, "F_0", CS%f0, &
+                 default=0.0, units="s-1", scale=US%T_to_s, do_not_log=.true.)
+  call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH", CS%Lx, &
                  "Length scale of shelfwave in x-direction.",&
-                 units="Same as x,y", default=100.)
-  call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE",CS%Ly, &
-                 "Length scale of exponential dropoff of topography "//&
-                 "in the y-direction.", &
-                 units="Same as x,y", default=50.)
-  call get_param(param_file, mdl,"SHELFWAVE_Y_MODE",CS%jj, &
+                 units=G%x_ax_unit_short, default=100.)
+  call get_param(param_file, mdl, "SHELFWAVE_Y_LENGTH_SCALE", CS%Ly, &
+                 "Length scale of exponential dropoff of topography in the y-direction.", &
+                 units=G%y_ax_unit_short, default=50.)
+  call get_param(param_file, mdl, "SHELFWAVE_Y_MODE", CS%jj, &
                  "Cross-shore wave mode.",               &
                  units="nondim", default=1.)
+  call get_param(param_file, mdl, "SHELFWAVE_AMPLITUDE", CS%my_amp, &
+                 "Amplitude of the open boundary current inflows in the shelfwave configuration.", &
+                 units="m s-1", default=1.0, scale=US%m_s_to_L_T)
+
   CS%alpha = 1. / CS%Ly
   CS%ll = 2. * PI / CS%Lx
-  CS%kk = CS%jj * PI / len_lat
+  CS%kk = CS%jj * PI / G%len_lat
   CS%omega = 2 * CS%alpha * CS%f0 * CS%ll / &
              (CS%kk*CS%kk + CS%alpha*CS%alpha + CS%ll*CS%ll)
   register_shelfwave_OBC = .true.
@@ -97,22 +102,22 @@ end subroutine shelfwave_OBC_end
 subroutine shelfwave_initialize_topography( D, G, param_file, max_depth, US )
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: m_to_Z  ! A dimensional rescaling factor.
+  real      :: y    ! Position relative to the southern boundary [km] or [m] or [degrees_N]
+  real      :: rLy  ! Exponential decay rate of the topography [km-1] or [m-1] or [degrees_N-1]
+  real      :: Ly   ! Exponential decay lengthscale of the topography [km] or [m] or [degrees_N]
+  real      :: H0   ! The minimum depth of the ocean [Z ~> m]
   integer   :: i, j
-  real      :: y, rLy, Ly, H0
 
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
-
-  call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE",Ly, &
-                 default=50., do_not_log=.true.)
+  call get_param(param_file, mdl,"SHELFWAVE_Y_LENGTH_SCALE", Ly, &
+                 units=G%y_ax_unit_short, default=50., do_not_log=.true.)
   call get_param(param_file, mdl,"MINIMUM_DEPTH", H0, &
-                 default=10., units="m", scale=m_to_Z, do_not_log=.true.)
+                 units="m", default=10., scale=US%m_to_Z, do_not_log=.true.)
 
   rLy = 0. ; if (Ly>0.) rLy = 1. / Ly
 
@@ -125,21 +130,23 @@ subroutine shelfwave_initialize_topography( D, G, param_file, max_depth, US )
 end subroutine shelfwave_initialize_topography
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
-  type(ocean_OBC_type),   pointer    :: OBC  !< This open boundary condition type specifies
-                                             !! whether, where, and what open boundary
-                                             !! conditions are used.
-  type(shelfwave_OBC_CS), pointer    :: CS   !< tidal bay control structure.
-  type(ocean_grid_type),  intent(in) :: G    !< The ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  intent(in) :: h !< layer thickness.
-  type(time_type),        intent(in) :: Time !< model time.
+subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
+  type(ocean_OBC_type),    pointer    :: OBC  !< This open boundary condition type specifies
+                                              !! whether, where, and what open boundary
+                                              !! conditions are used.
+  type(shelfwave_OBC_CS),  pointer    :: CS   !< tidal bay control structure.
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h !< layer thickness [H ~> m or kg m-2]
+  type(time_type),         intent(in) :: Time !< model time.
 
   ! The following variables are used to set up the transport in the shelfwave example.
-  real :: my_amp, time_sec
-  real :: cos_wt, cos_ky, sin_wt, sin_ky, omega, alpha
-  real :: x, y, jj, kk, ll
-  character(len=40)  :: mdl = "shelfwave_set_OBC_data" ! This subroutine's name.
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, n
+  real :: time_sec ! The time in the run [T ~> s]
+  real :: cos_wt, sin_wt ! Cosine and sine associated with the propagating x-direction structure [nondim]
+  real :: cos_ky, sin_ky ! Cosine and sine associated with the y-direction structure [nondim]
+  real :: x, y   ! Positions relative to the western and southern boundaries [km] or [m] or [degrees]
+  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, n
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
 
@@ -149,13 +156,7 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
 
   if (.not.associated(OBC)) return
 
-  time_sec = time_type_to_real(Time)
-  omega = CS%omega
-  alpha = CS%alpha
-  my_amp = 1.0
-  jj = CS%jj
-  kk = CS%kk
-  ll = CS%ll
+  time_sec = US%s_to_T*time_type_to_real(Time)
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
@@ -166,15 +167,15 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, h, Time)
     do j=jsd,jed ; do I=IsdB,IedB
       x = G%geoLonCu(I,j) - G%west_lon
       y = G%geoLatCu(I,j) - G%south_lat
-      sin_wt = sin(ll*x - omega*time_sec)
-      cos_wt = cos(ll*x - omega*time_sec)
-      sin_ky = sin(kk * y)
-      cos_ky = cos(kk * y)
-      segment%normal_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * exp(- alpha * y) * cos_wt * &
-           (alpha * sin_ky + kk * cos_ky)
-!     segment%tangential_vel_bt(I,j) = G%US%m_s_to_L_T*my_amp * ll * exp(- alpha * y) * sin_wt * sin_ky
-!     segment%vorticity_bt(I,j) = my_amp * exp(- alpha * y) * cos_wt * sin_ky&
-!           (ll*ll + kk*kk + alpha*alpha)
+      sin_wt = sin(CS%ll*x - CS%omega*time_sec)
+      cos_wt = cos(CS%ll*x - CS%omega*time_sec)
+      sin_ky = sin(CS%kk * y)
+      cos_ky = cos(CS%kk * y)
+      segment%normal_vel_bt(I,j) = CS%my_amp * exp(- CS%alpha * y) * cos_wt * &
+           (CS%alpha * sin_ky + CS%kk * cos_ky)
+!     segment%tangential_vel_bt(I,j) = CS%my_amp * CS%ll * exp(- CS%alpha * y) * sin_wt * sin_ky
+!     segment%vorticity_bt(I,j) = CS%my_amp * exp(- CS%alpha * y) * cos_wt * sin_ky&
+!           (CS%ll**2 + CS%kk**2 + CS%alpha**2)
     enddo ; enddo
   enddo
 

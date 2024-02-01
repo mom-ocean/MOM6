@@ -1,11 +1,23 @@
-# don't build extra formats (like HTML zip)
-formats:
-  - none
+# Read the Docs configuration file for Sphinx projects
+# See https://docs.readthedocs.io/en/stable/config-file/v2.html for details
 
-# path to pip requirements file to bring in
-# doxygen extensions
-requirements_file: docs/requirements.txt
+# Required
+version: 2
+
+build:
+  os: ubuntu-22.04
+  tools:
+    python: "3.11"
+
+# Extra formats
+# PDF generation is failing for now; disabled on 2020-12-02
+#formats:
+#  - pdf
+
+# Build documentation
+sphinx:
+  configuration: docs/conf.py
 
 python:
-  # make sure we're using Python 3
-  version: 3.5
+  install:
+    - requirements: docs/requirements.txt

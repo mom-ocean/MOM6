@@ -1,15 +1,6 @@
-available_diags.*
-CPU_stats
-chksum_diag
-exitcode
-logfile.*.out
-MOM_parameter_doc.*
-ocean_geometry.nc
-ocean.stats*
-RESTART/
-time_stamp.out
-Vertical_coordinate.nc
-GOLD_IC.nc
-debug.out
-chksum_diag.*
-config.mk
+# Test output
+/config.mk
+/build/
+/work/
+/results/
+/deps/

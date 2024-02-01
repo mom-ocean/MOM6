@@ -7,10 +7,10 @@ use MOM_diag_mediator, only : diag_ctrl, time_type
 use MOM_error_handler, only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
+use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,  only : verticalGrid_type
-use MOM_EOS,           only : calculate_density
+use MOM_EOS,           only : calculate_density, EOS_domain
 
 implicit none ; private
 
@@ -25,13 +25,14 @@ public user_change_diff, user_change_diff_init, user_change_diff_end
 
 !> Control structure for user_change_diffusivity
 type, public :: user_change_diff_CS ; private
-  real :: Kd_add        !< The scale of a diffusivity that is added everywhere
-                        !! without any filtering or scaling [Z2 T-1 ~> m2 s-1].
+  logical :: initialized = .false. !< True if this control structure has been initialized.
+  real :: Kd_add        !< The scale of a diffusivity that is added everywhere without
+                        !! any filtering or scaling [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real :: lat_range(4)  !< 4 values that define the latitude range over which
-                        !! a diffusivity scaled by Kd_add is added [degLat].
+                        !! a diffusivity scaled by Kd_add is added [degrees_N].
   real :: rho_range(4)  !< 4 values that define the coordinate potential
                         !! density range over which a diffusivity scaled by
-                        !! Kd_add is added [kg m-3].
+                        !! Kd_add is added [R ~> kg m-3].
   logical :: use_abs_lat  !< If true, use the absolute value of latitude when
                           !! setting lat_range.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -44,44 +45,47 @@ contains
 !! main code to alter the diffusivities as needed.  The specific example
 !! implemented here augments the diffusivity for a specified range of latitude
 !! and coordinate potential density.
-subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
+subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)   :: h   !< Layer thickness [H ~> m or kg m-2].
   type(thermo_var_ptrs),                    intent(in)    :: tv  !< A structure containing pointers
                                                                  !! to any available thermodynamic
                                                                  !! fields. Absent fields have NULL ptrs.
+  type(unit_scale_type),                    intent(in)    :: US  !< A dimensional unit scaling type
   type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
-                                                                  !! each layer [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
-                                                                  !! at each interface [Z2 T-1 ~> m2 s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: T_f !< Temperature with massless
-                                                                  !! layers filled in vertically [degC].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)),   optional, intent(in)    :: S_f !< Salinity with massless
-                                                                  !! layers filled in vertically [ppt].
-  real, dimension(:,:,:),                     optional, pointer       :: Kd_int_add !< The diapycnal
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of each
+                                                                  !! layer [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at each
+                                                                  !! interface [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(in)    :: T_f !< Temperature with massless
+                                                                  !! layers filled in vertically [C ~> degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(in)    :: S_f !< Salinity with massless
+                                                                  !! layers filled in vertically [S ~> ppt].
+  real, dimension(:,:,:),                      optional, pointer       :: Kd_int_add !< The diapycnal
                                                                   !! diffusivity that is being added at
-                                                                  !! each interface [Z2 T-1 ~> m2 s-1].
+                                                                  !! each interface [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   ! Local variables
-  real :: Rcv(SZI_(G),SZK_(G)) ! The coordinate density in layers [kg m-3].
-  real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures.
+  real :: Rcv(SZI_(G),SZK_(GV)) ! The coordinate density in layers [R ~> kg m-3].
+  real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures [R L2 T-2 ~> Pa].
   real :: rho_fn      ! The density dependence of the input function, 0-1 [nondim].
   real :: lat_fn      ! The latitude dependence of the input function, 0-1 [nondim].
   logical :: use_EOS  ! If true, density is calculated from T & S using an
                       ! equation of state.
   logical :: store_Kd_add  ! Save the added diffusivity as a diagnostic if true.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
 
-  real :: kappa_fill  ! diffusivity used to fill massless layers
-  real :: dt_fill     ! timestep used to fill massless layers
   character(len=200) :: mesg
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   if (.not.associated(CS)) call MOM_error(FATAL,"user_set_diffusivity: "//&
+         "Module must be initialized before it is used.")
+
+  if (.not.CS%initialized) call MOM_error(FATAL,"user_set_diffusivity: "//&
          "Module must be initialized before it is used.")
 
   use_EOS = associated(tv%eqn_of_state)
@@ -103,16 +107,15 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
   if (store_Kd_add) Kd_int_add(:,:,:) = 0.0
 
   do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
+  EOSdom(:) = EOS_domain(G%HI)
   do j=js,je
     if (present(T_f) .and. present(S_f)) then
       do k=1,nz
-        call calculate_density(T_f(:,j,k),S_f(:,j,k),p_ref,Rcv(:,k),&
-                               is,ie-is+1,tv%eqn_of_state)
+        call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
     else
       do k=1,nz
-        call calculate_density(tv%T(:,j,k),tv%S(:,j,k),p_ref,Rcv(:,k),&
-                               is,ie-is+1,tv%eqn_of_state)
+        call calculate_density(tv%T(:,j,k), tv%S(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, EOSdom)
       enddo
     endif
 
@@ -135,7 +138,6 @@ subroutine user_change_diff(h, tv, G, GV, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_a
         else
           lat_fn = val_weights(G%geoLatT(i,j), CS%lat_range)
         endif
-        !   rho_int = 0.5*(Rcv(i,k-1) + Rcv(i,k))
         rho_fn = val_weights( 0.5*(Rcv(i,k-1) + Rcv(i,k)), CS%rho_range)
         if (rho_fn * lat_fn > 0.0) then
           Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add * rho_fn * lat_fn
@@ -149,7 +151,7 @@ end subroutine user_change_diff
 
 !> This subroutine checks whether the 4 values of range are in ascending order.
 function range_OK(range) result(OK)
-  real, dimension(4), intent(in) :: range  !< Four values to check.
+  real, dimension(4), intent(in) :: range  !< Four values to check [arbitrary]
   logical                        :: OK     !< Return value.
 
   OK = ((range(1) <= range(2)) .and. (range(2) <= range(3)) .and. &
@@ -163,11 +165,11 @@ end function range_OK
 !! hit 0 and 1.  The values in range must be in ascending order, as can be
 !! checked by calling range_OK.
 function val_weights(val, range) result(ans)
-  real,               intent(in) :: val    !< Value for which we need an answer.
-  real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero.
-  real                           :: ans    !< Return value.
+  real,               intent(in) :: val    !< Value for which we need an answer [arbitrary units].
+  real, dimension(4), intent(in) :: range  !< Range over which the answer is non-zero [arbitrary units].
+  real                           :: ans    !< Return value [nondim].
   ! Local variables
-  real :: x   ! A nondimensional number between 0 and 1.
+  real :: x   ! A nondimensional number between 0 and 1 [nondim].
 
   ans = 0.0
   if ((val > range(1)) .and. (val < range(4))) then
@@ -201,11 +203,10 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
                                                          !! point to the control
                                                          !! structure for this module.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "user_set_diffusivity"  ! This module's name.
   character(len=200) :: mesg
-  integer :: i, j, is, ie, js, je
 
   if (associated(CS)) then
     call MOM_error(WARNING, "diabatic_entrain_init called with an associated "// &
@@ -214,16 +215,14 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
   endif
   allocate(CS)
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-
+  CS%initialized = .true.
   CS%diag => diag
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of "//&
-                 "latitude and density.", default=0.0, units="m2 s-1", &
-                 scale=US%m2_s_to_Z2_T)
+                 "latitude and density.", default=0.0, units="m2 s-1", scale=GV%m2_s_to_HZ_T)
   if (CS%Kd_add /= 0.0) then
     call get_param(param_file, mdl, "USER_KD_ADD_LAT_RANGE", CS%lat_range(:), &
                  "Four successive values that define a range of latitudes "//&
@@ -231,14 +230,14 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
                  "applied.  The four values specify the latitudes at "//&
                  "which the extra diffusivity starts to increase from 0, "//&
                  "hits its full value, starts to decrease again, and is "//&
-                 "back to 0.", units="degree", default=-1.0e9)
+                 "back to 0.", units="degrees_N", default=-1.0e9)
     call get_param(param_file, mdl, "USER_KD_ADD_RHO_RANGE", CS%rho_range(:), &
                  "Four successive values that define a range of potential "//&
                  "densities over which the user-given extra diffusivity "//&
                  "is applied.  The four values specify the density at "//&
                  "which the extra diffusivity starts to increase from 0, "//&
                  "hits its full value, starts to decrease again, and is "//&
-                 "back to 0.", units="kg m-3", default=-1.0e9)
+                 "back to 0.", units="kg m-3", default=-1.0e9, scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "USER_KD_ADD_USE_ABS_LAT", CS%use_abs_lat, &
                  "If true, use the absolute value of latitude when "//&
                  "checking whether a point fits into range of latitudes.", &

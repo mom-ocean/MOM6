@@ -1,15 +1,25 @@
 # Makefile for Sphinx documentation
-#
 
 # You can set these variables from the command line.
-SPHINXOPTS    =
-SPHINXBUILD   = sphinx-build
-PAPER         =
-BUILDDIR      = _build
+SPHINXOPTS       ?=
+SPHINXBUILD       = sphinx-build
+PAPER            ?=
+BUILDDIR         ?= _build
+DOXYGEN_BIN      ?= doxygen
+DOXYGEN_CONF     ?=
+FINDDOXYGENBIN    = $(DOXYGEN_BIN)
+DOXYGEN_RELEASE  ?= Release_1_8_13
 
 # User-friendly check for sphinx-build
 ifeq ($(shell which $(SPHINXBUILD) >/dev/null 2>&1; echo $$?), 1)
-$(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don't have Sphinx installed, grab it from http://sphinx-doc.org/)
+$(error The '$(SPHINXBUILD)' command was not found. Make sure you have Sphinx installed, then set the SPHINXBUILD environment variable to point to the full path of the '$(SPHINXBUILD)' executable. Alternatively you can add the directory with the executable to your PATH. If you don\'t have Sphinx installed, grab it from http://sphinx-doc.org/)
+endif
+
+# Set DOXYGENBIN variable if the executable is found.  If it is not found, then we set it to a makefile rule that will attempt to build it.
+ifeq ($(shell which $(FINDDOXYGENBIN) >/dev/null 2>&1; echo $$?), 0)
+DOXYGENBIN = $(shell which $(FINDDOXYGENBIN))
+else
+DOXYGENBIN = doxygen/bin/doxygen
 endif
 
 # Internal variables.
@@ -19,7 +29,7 @@ ALLSPHINXOPTS   = -d $(BUILDDIR)/doctrees $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 # the i18n builder cannot share the environment and doctrees with the others
 I18NSPHINXOPTS  = $(PAPEROPT_$(PAPER)) $(SPHINXOPTS) .
 
-.PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext
+.PHONY: help clean html dirhtml singlehtml pickle json htmlhelp qthelp devhelp epub latex latexpdf text man changes linkcheck doctest gettext nortd nortd_latex all
 
 help:
 	@echo "Please use \`make <target>' where <target> is one of"
@@ -45,11 +55,16 @@ help:
 	@echo "  pseudoxml  to make pseudoxml-XML files for display purposes"
 	@echo "  linkcheck  to check all external links for integrity"
 	@echo "  doctest    to run all doctests embedded in the documentation (if enabled)"
+	@echo "  nortd      to run the doxygen html version of the APIs manual"
+	@echo "  nortd_latex to run the doxygen pdf version of the APIs manual"
 
 clean:
-	rm -rf $(BUILDDIR)/*
+	rm -rf $(BUILDDIR)/* api/generated/* MOM6.tags xml
 
-html:
+$(BUILDDIR):
+	mkdir -p $@
+
+html: $(DOXYGENBIN) $(BUILDDIR)
 	$(SPHINXBUILD) -b html $(ALLSPHINXOPTS) $(BUILDDIR)/html
 	@echo
 	@echo "Build finished. The HTML pages are in $(BUILDDIR)/html."
@@ -103,17 +118,17 @@ epub:
 	@echo
 	@echo "Build finished. The epub file is in $(BUILDDIR)/epub."
 
-latex:
+latex: $(DOXYGENBIN) $(BUILDDIR)
 	$(SPHINXBUILD) -b latex $(ALLSPHINXOPTS) $(BUILDDIR)/latex
 	@echo
 	@echo "Build finished; the LaTeX files are in $(BUILDDIR)/latex."
 	@echo "Run \`make' in that directory to run these through (pdf)latex" \
 	      "(use \`make latexpdf' here to do that automatically)."
 
-latexpdf:
+latexpdf: $(DOXYGENBIN) $(BUILDDIR)
 	$(SPHINXBUILD) -b latex $(ALLSPHINXOPTS) $(BUILDDIR)/latex
 	@echo "Running LaTeX files through pdflatex..."
-	$(MAKE) -C $(BUILDDIR)/latex all-pdf
+	$(MAKE) -C $(BUILDDIR)/latex LATEXMKOPTS="-f -silent" all-pdf
 	@echo "pdflatex finished; the PDF files are in $(BUILDDIR)/latex."
 
 latexpdfja:
@@ -177,14 +192,37 @@ pseudoxml:
 	@echo "Build finished. The pseudo-XML files are in $(BUILDDIR)/pseudoxml."
 
 doxygen:
-	git clone https://github.com/doxygen/doxygen
+	git clone -b $(DOXYGEN_RELEASE) --depth 1 https://github.com/doxygen/doxygen
+
 doxygen/bin/doxygen: doxygen
 	(cd $(<); cmake -G "Unix Makefiles" .)
 	(cd $(<); make)
-nortd: doxygen/bin/doxygen
+
+nortd: $(DOXYGENBIN) $(BUILDDIR)
+ifdef DOXYGEN_CONF
+	$< $(DOXYGEN_CONF)
+else
 	$< Doxyfile_nortd
+endif
+ifeq ($(UPDATEHTMLEQS), Y)
+	@echo "Post processing equations."
+	@python3 ./postProcessEquations.py -d $(BUILDDIR) -p APIs -b doxygen -s index.html $(UPDATEHTMLEQSVERBOSE)
+endif
+	@echo "Build finished. The html files are in $(BUILDDIR)/APIs."
+
+nortd_latex: $(DOXYGENBIN) $(BUILDDIR)
+ifdef DOXYGEN_CONF
+	$< $(DOXYGEN_CONF)
+else
+	$< Doxyfile_nortd_latex
+endif
+	# Make sure we are in nonstopmode for generating the pdf by patching the Makefile
+	# Older doxygen versions do not have LATEX_CMD
+	-grep -q "pdflatex refman" $(BUILDDIR)/doxygen_latex/Makefile && sed -i.bak 's/pdflatex refman/pdflatex -interaction=nonstopmode refman/' $(BUILDDIR)/doxygen_latex/Makefile
+	make -C $(BUILDDIR)/doxygen_latex LATEX_CMD="pdflatex -interaction=nonstopmode"
+
 Clean: clean
-	rm -rf _build APIs xml doxygen.log
+	rm -rf $(BUILDDIR) xml MOM6.tags
+
 CLEAN: Clean
-	rm -rf doxygen src
-	rm -rf _build APIs src xml doxygen doxygen.log
+	rm -rf doxygen

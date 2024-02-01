@@ -35,11 +35,11 @@ NJHALO = 4                      ! default = 2
                                 ! y-direction.  With STATIC_MEMORY_ this is set as NJHALO_
                                 ! in MOM_memory.h at compile time; without STATIC_MEMORY_
                                 ! the default is NJHALO_ in MOM_memory.h (if defined) or 2.
-NIGLOBAL = 13                   !
+NIGLOBAL = 10                   !
                                 ! The total number of thickness grid points in the
                                 ! x-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
-NJGLOBAL = 13                   !
+NJGLOBAL = 8                    !
                                 ! The total number of thickness grid points in the
                                 ! y-direction in the physical domain. With STATIC_MEMORY_
                                 ! this is set in MOM_memory.h at compile time.
@@ -283,10 +283,10 @@ HMIX_FIXED = 20.0               !   [m]
 KV = 1.0E-04                    !   [m2 s-1]
                                 ! The background kinematic viscosity in the interior.
                                 ! The molecular value, ~1e-6 m2 s-1, may be used.
-KVML = 0.01                     !   [m2 s-1] default = 1.0E-04
-                                ! The kinematic viscosity in the mixed layer.  A typical
-                                ! value is ~1e-2 m2 s-1. KVML is not used if
-                                ! BULKMIXEDLAYER is true.  The default is set by KV.
+KV_ML_INVZ2 = 0.01              !   [m2 s-1] default = 0.0
+                                ! An extra kinematic viscosity in a mixed layer of thickness HMIX_FIXED, with
+                                ! the actual viscosity scaling as 1/(z*HMIX_FIXED)^2, where z is the distance
+                                ! from the surface, to allow for finite wind stresses to be transmitted through.
 HBBL = 10.0                     !   [m]
                                 ! The thickness of a bottom boundary layer with a
                                 ! viscosity of KVBBL if BOTTOMDRAGLAW is not defined, or
@@ -469,3 +469,11 @@ ENERGYSAVEDAYS = 3.0            !   [hours] default = 1.44E+04
                                 ! energies of the run and other globally summed diagnostics.
 DIAG_AS_CHKSUM = True
 DEBUG = True
+OBC_RADIATION_MAX = 10.0        !   [nondim] default = 10.0
+GRID_ROTATION_ANGLE_BUGS = True !   [Boolean] default = True
+USE_GM_WORK_BUG = True          !   [Boolean] default = True
+USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
+KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
+KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
+GUST_CONST = 0.02               !   [Pa] default = 0.02
+FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False

@@ -4,7 +4,7 @@ module MOM_document
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_time_manager, only : time_type
+use MOM_time_manager,  only : time_type, operator(==), get_time, get_ticks_per_second
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 
 implicit none ; private
@@ -85,7 +85,7 @@ end subroutine doc_param_none
 
 !> This subroutine handles parameter documentation for logicals.
 subroutine doc_param_logical(doc, varname, desc, units, val, default, &
-                             layoutParam, debuggingParam)
+                             layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -95,6 +95,8 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default, &
   logical, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for logicals.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -104,12 +106,13 @@ subroutine doc_param_logical(doc, varname, desc, units, val, default, &
 
   if (doc%filesAreOpen) then
     if (val) then
-      mesg = define_string(doc,varname,STRING_TRUE,units)
+      mesg = define_string(doc, varname, STRING_TRUE, units)
     else
-      mesg = undef_string(doc,varname,units)
+      mesg = undef_string(doc, varname, units)
     endif
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (val .eqv. default) equalsDefault = .true.
       if (default) then
@@ -127,7 +130,7 @@ end subroutine doc_param_logical
 
 !> This subroutine handles parameter documentation for arrays of logicals.
 subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
-                                   layoutParam, debuggingParam)
+                                   layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -137,6 +140,8 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
   logical, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for arrays of logicals.
   integer :: i
   character(len=mLen) :: mesg
@@ -156,9 +161,9 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
       endif
     enddo
 
-    mesg = define_string(doc,varname,valstring,units)
+    mesg = define_string(doc, varname, valstring, units)
 
-  equalsDefault = .false.
+    equalsDefault = .false.
     if (present(default)) then
       equalsDefault = .true.
       do i=1,size(vals) ; if (vals(i) .neqv. default) equalsDefault = .false. ; enddo
@@ -168,6 +173,7 @@ subroutine doc_param_logical_array(doc, varname, desc, units, vals, default, &
         mesg = trim(mesg)//" default = "//STRING_FALSE
       endif
     endif
+    if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
@@ -177,7 +183,7 @@ end subroutine doc_param_logical_array
 
 !> This subroutine handles parameter documentation for integers.
 subroutine doc_param_int(doc, varname, desc, units, val, default, &
-                         layoutParam, debuggingParam)
+                         layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -187,6 +193,8 @@ subroutine doc_param_int(doc, varname, desc, units, val, default, &
   integer, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for integers.
   character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
@@ -197,9 +205,10 @@ subroutine doc_param_int(doc, varname, desc, units, val, default, &
 
   if (doc%filesAreOpen) then
     valstring = int_string(val)
-    mesg = define_string(doc,varname,valstring,units)
+    mesg = define_string(doc, varname, valstring, units)
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (val == default) equalsDefault = .true.
       mesg = trim(mesg)//" default = "//(trim(int_string(default)))
@@ -213,7 +222,7 @@ end subroutine doc_param_int
 
 !> This subroutine handles parameter documentation for arrays of integers.
 subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
-                               layoutParam, debuggingParam)
+                               layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -223,6 +232,8 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
   integer, optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for arrays of integers.
   integer :: i
   character(len=mLen) :: mesg
@@ -238,7 +249,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
       valstring = trim(valstring)//", "//trim(int_string(vals(i)))
     enddo
 
-    mesg = define_string(doc,varname,valstring,units)
+    mesg = define_string(doc, varname, valstring, units)
 
     equalsDefault = .false.
     if (present(default)) then
@@ -246,6 +257,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
       do i=1,size(vals) ; if (vals(i) /= default) equalsDefault = .false. ; enddo
       mesg = trim(mesg)//" default = "//(trim(int_string(default)))
     endif
+    if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
     call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
@@ -255,7 +267,7 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
 end subroutine doc_param_int_array
 
 !> This subroutine handles parameter documentation for reals.
-subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingParam)
+subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -264,6 +276,8 @@ subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingPara
   real,              intent(in) :: val     !< The value of this parameter
   real,    optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for reals.
   character(len=mLen) :: mesg
   character(len=doc%commentColumn)  :: valstring
@@ -274,22 +288,22 @@ subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingPara
 
   if (doc%filesAreOpen) then
     valstring = real_string(val)
-    mesg = define_string(doc,varname,valstring,units)
+    mesg = define_string(doc, varname, valstring, units)
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (val == default) equalsDefault = .true.
       mesg = trim(mesg)//" default = "//trim(real_string(default))
     endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
-                             debuggingParam=debuggingParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, debuggingParam=debuggingParam)
   endif
 end subroutine doc_param_real
 
 !> This subroutine handles parameter documentation for arrays of reals.
-subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debuggingParam)
+subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -298,6 +312,8 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debugg
   real,              intent(in) :: vals(:) !< The array of values to record
   real,    optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for arrays of reals.
   integer :: i
   character(len=mLen) :: mesg
@@ -310,7 +326,7 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debugg
   if (doc%filesAreOpen) then
     valstring = trim(real_array_string(vals(:)))
 
-    mesg = define_string(doc,varname,valstring,units)
+    mesg = define_string(doc, varname, valstring, units)
 
     equalsDefault = .false.
     if (present(default)) then
@@ -318,17 +334,17 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debugg
       do i=1,size(vals) ; if (vals(i) /= default) equalsDefault = .false. ; enddo
       mesg = trim(mesg)//" default = "//trim(real_string(default))
     endif
+    if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
-                             debuggingParam=debuggingParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, debuggingParam=debuggingParam)
   endif
 
 end subroutine doc_param_real_array
 
 !> This subroutine handles parameter documentation for character strings.
 subroutine doc_param_char(doc, varname, desc, units, val, default, &
-                          layoutParam, debuggingParam)
+                          layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
@@ -339,6 +355,8 @@ subroutine doc_param_char(doc, varname, desc, units, val, default, &
            optional, intent(in) :: default !< The default value of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
+  logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                           !! it has the default value, even if there is no default.
 ! This subroutine handles parameter documentation for character strings.
   character(len=mLen) :: mesg
   logical :: equalsDefault
@@ -347,9 +365,10 @@ subroutine doc_param_char(doc, varname, desc, units, val, default, &
   call open_doc_file(doc)
 
   if (doc%filesAreOpen) then
-    mesg = define_string(doc,varname,'"'//trim(val)//'"',units)
+    mesg = define_string(doc, varname, '"'//trim(val)//'"', units)
 
     equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
     if (present(default)) then
       if (trim(val) == trim(default)) equalsDefault = .true.
       mesg = trim(mesg)//' default = "'//trim(adjustl(default))//'"'
@@ -370,7 +389,6 @@ subroutine doc_openBlock(doc, blockName, desc)
   character(len=*), optional, intent(in) :: desc !< A description of the parameter block being opened
 ! This subroutine handles documentation for opening a parameter block.
   character(len=mLen) :: mesg
-  character(len=doc%commentColumn) :: valstring
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
@@ -394,7 +412,6 @@ subroutine doc_closeBlock(doc, blockName)
   character(len=*), intent(in) :: blockName !< The name of the parameter block being closed
 ! This subroutine handles documentation for closing a parameter block.
   character(len=mLen) :: mesg
-  character(len=doc%commentColumn) :: valstring
   integer :: i
 
   if (.not. (is_root_pe() .and. associated(doc))) return
@@ -414,35 +431,43 @@ subroutine doc_closeBlock(doc, blockName)
 end subroutine doc_closeBlock
 
 !> This subroutine handles parameter documentation for time-type variables.
-subroutine doc_param_time(doc, varname, desc, units, val, default, &
-                          layoutParam, debuggingParam)
+subroutine doc_param_time(doc, varname, desc, val, default, units, debuggingParam, like_default)
   type(doc_type),   pointer    :: doc     !< A pointer to a structure that controls where the
                                           !! documentation occurs and its formatting
   character(len=*), intent(in) :: varname !< The name of the parameter being documented
   character(len=*), intent(in) :: desc    !< A description of the parameter being documented
-  character(len=*), intent(in) :: units   !< The units of the parameter being documented
   type(time_type),  intent(in) :: val     !< The value of the parameter
   type(time_type),  optional, intent(in) :: default !< The default value of this parameter
-  logical,          optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
+  character(len=*), optional, intent(in) :: units   !< The units of the parameter being documented
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
-! This subroutine handles parameter documentation for time-type variables.
-!  ### This needs to be written properly!
-  integer :: numspc
-  character(len=mLen) :: mesg
-  logical :: equalsDefault
+  logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as though
+                                             !! it has the default value, even if there is no default.
+
+  ! Local varables
+  character(len=mLen)              :: mesg          ! The output message
+  character(len=doc%commentColumn) :: valstring     ! A string with the formatted value.
+  logical                          :: equalsDefault ! True if val = default.
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
-  equalsDefault = .false.
   if (doc%filesAreOpen) then
-    numspc = max(1,doc%commentColumn-18-len_trim(varname))
-    mesg = "#define "//trim(varname)//" Time-type"//repeat(" ",numspc)//"!"
-    if (len_trim(units) > 0) mesg = trim(mesg)//"   ["//trim(units)//"]"
+    valstring = time_string(val)
+    if (present(units)) then
+      mesg = define_string(doc, varname, valstring, units)
+    else
+      mesg = define_string(doc, varname, valstring, "[days : seconds]")
+    endif
+
+    equalsDefault = .false.
+    if (present(like_default)) equalsDefault = like_default
+    if (present(default)) then
+      if (val == default) equalsDefault = .true.
+      mesg = trim(mesg)//" default = "//trim(time_string(default))
+    endif
 
     if (mesgHasBeenDocumented(doc, varName, mesg)) return ! Avoid duplicates
-    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, &
-                             layoutParam=layoutParam, debuggingParam=debuggingParam)
+    call writeMessageAndDesc(doc, mesg, desc, equalsDefault, debuggingParam=debuggingParam)
   endif
 
 end subroutine doc_param_time
@@ -465,6 +490,9 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   integer :: start_ind = 1             ! The starting index in the description for the next line.
   integer :: nl_ind, tab_ind, end_ind  ! The indices of new-lines, tabs, and the end of a line.
   integer :: len_text, len_tab, len_nl ! The lengths of the text string, tabs and new-lines.
+  integer :: len_cor                   ! The permitted length corrected for tab sizes in a line.
+  integer :: len_desc                  ! The non-whitespace length of the description.
+  integer :: substr_start              ! The starting index of a substring to search for tabs.
   integer :: indnt, msg_pad            ! Space counts used to format a message.
   logical :: msg_done, reset_msg_pad   ! Logicals used to format messages.
   logical :: all, short, layout, debug ! Flags indicating which files to write into.
@@ -491,16 +519,27 @@ subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
   do
     if (len_trim(desc(start_ind:)) < 1) exit
 
-    nl_ind = index(desc(start_ind:), "\n")
+    len_cor = len_text - msg_pad
 
+    substr_start = start_ind
+    len_desc = len_trim(desc)
+    do ! Adjust the available line length for anomalies in the size of tabs, counting \t as 2 spaces.
+      if (substr_start >= start_ind+len_cor) exit
+      tab_ind = index(desc(substr_start:min(len_desc,start_ind+len_cor)), "\t")
+      if (tab_ind == 0) exit
+      substr_start = substr_start + tab_ind
+      len_cor = len_cor + (len_tab - 2)
+    enddo
+
+    nl_ind = index(desc(start_ind:), "\n")
     end_ind = 0
-    if ((nl_ind > 0) .and. (len_trim(desc(start_ind:start_ind+nl_ind-2)) > len_text-msg_pad)) then
+    if ((nl_ind > 0) .and. (len_trim(desc(start_ind:start_ind+nl_ind-2)) > len_cor)) then
       ! This line is too long despite the new-line character.  Look for an earlier space to break.
-      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
+      end_ind = scan(desc(start_ind:start_ind+len_cor), " ", back=.true.) - 1
       if (end_ind > 0) nl_ind = 0
-    elseif ((nl_ind == 0) .and. (len_trim(desc(start_ind:)) > len_text-msg_pad)) then
+    elseif ((nl_ind == 0) .and. (len_trim(desc(start_ind:)) > len_cor)) then
       ! This line is too long and does not have a new-line character.  Look for a space to break.
-      end_ind = scan(desc(start_ind:start_ind+(len_text-msg_pad)), " ", back=.true.) - 1
+      end_ind = scan(desc(start_ind:start_ind+len_cor), " ", back=.true.) - 1
     endif
 
     reset_msg_pad = .false.
@@ -545,6 +584,26 @@ end subroutine writeMessageAndDesc
 
 ! ----------------------------------------------------------------------
 
+!> This function returns a string with a time type formatted as seconds (perhaps including a
+!! fractional number of seconds) and days
+function time_string(time)
+  type(time_type), intent(in) :: time !< The time type being translated
+  character(len=40) :: time_string
+
+  ! Local variables
+  integer :: secs, days, ticks, ticks_per_sec
+
+  call get_time(Time, secs, days, ticks)
+
+  time_string = trim(adjustl(int_string(days))) // ":" // trim(adjustl(int_string(secs)))
+  if (ticks /= 0) then
+    ticks_per_sec = get_ticks_per_second()
+    time_string = trim(time_string) // ":" // &
+                  trim(adjustl(int_string(ticks)))//"/"//trim(adjustl(int_string(ticks_per_sec)))
+  endif
+
+end function time_string
+
 !> This function returns a string with a real formatted like '(G)'
 function real_string(val)
   real, intent(in)  :: val !< The value being written into a string
@@ -578,19 +637,33 @@ function real_string(val)
   elseif (val == 0.) then
     real_string = "0.0"
   else
-    if ((abs(val) <= 1.0e-100) .or. (abs(val) >= 1.0e100)) then
-      write(real_string(1:32), '(ES24.14E3)') val
-      if (.not.testFormattedFloatIsReal(real_string,val)) &
-        write(real_string(1:32), '(ES24.15E3)') val
+    if ((abs(val) < 1.0e-99) .or. (abs(val) >= 1.0e100)) then
+      write(real_string(1:32), '(ES24.14E4)') val
+      if (scan(real_string, "eE") == 0) then  ! Fix a bug with a missing E in PGI formatting
+        ind = scan(real_string, "-+", back=.true.)
+        if (ind > index(real_string, ".") ) &  ! Avoid changing a leading sign.
+          real_string = real_string(1:ind-1)//"E"//real_string(ind:)
+      endif
+      if (.not.testFormattedFloatIsReal(real_string, val)) then
+        write(real_string(1:32), '(ES25.15E4)') val
+        if (scan(real_string, "eE") == 0) then  ! Fix a bug with a missing E in PGI formatting
+          ind = scan(real_string, "-+", back=.true.)
+          if (ind > index(real_string, ".") ) &  ! Avoid changing a leading sign.
+            real_string = real_string(1:ind-1)//"E"//real_string(ind:)
+        endif
+      endif
+      ! Remove a leading 0 from the exponent, if it is there.
+      ind = max(index(real_string, "E+0"), index(real_string, "E-0"))
+      if (ind > 0) real_string = real_string(1:ind+1)//real_string(ind+3:)
     else
       write(real_string(1:32), '(ES23.14)') val
-      if (.not.testFormattedFloatIsReal(real_string,val)) &
+      if (.not.testFormattedFloatIsReal(real_string, val)) &
         write(real_string(1:32), '(ES23.15)') val
     endif
-    do
-      ind = index(real_string,"0E")
+    do  ! Remove extra trailing 0s before the exponent.
+      ind = index(real_string, "0E")
       if (ind == 0) exit
-      if (real_string(ind-1:ind-1) == ".") exit
+      if (real_string(ind-1:ind-1) == ".") exit ! Leave at least one digit after the decimal point.
       real_string = real_string(1:ind-1)//real_string(ind+1:)
     enddo
   endif
@@ -600,7 +673,7 @@ end function real_string
 !> Returns a character string of a comma-separated, compact formatted, reals
 !> e.g. "1., 2., 5*3., 5.E2", that give the list of values.
 function real_array_string(vals, sep)
-  character(len=1320)    :: real_array_string !< The output string listing vals
+  character(len=:) ,allocatable :: real_array_string !< The output string listing vals
   real,      intent(in)  :: vals(:) !< The array of values to record
   character(len=*), &
     optional, intent(in) :: sep     !< The separator between successive values,
@@ -608,34 +681,33 @@ function real_array_string(vals, sep)
 ! Returns a character string of a comma-separated, compact formatted, reals
 ! e.g. "1., 2., 5*3., 5.E2"
   ! Local variables
-  integer :: j, n, b, ns
+  integer :: j, n, ns
   logical :: doWrite
   character(len=10) :: separator
-  n=1 ; doWrite=.true. ; real_array_string='' ; b=1
+  n = 1 ; doWrite = .true. ; real_array_string = ''
   if (present(sep)) then
-    separator=sep ; ns=len(sep)
+    separator = sep ; ns = len(sep)
   else
-    separator=', ' ; ns=2
+    separator = ', ' ; ns = 2
   endif
   do j=1,size(vals)
-    doWrite=.true.
-    if (j<size(vals)) then
-      if (vals(j)==vals(j+1)) then
-        n=n+1
-        doWrite=.false.
+    doWrite = .true.
+    if (j < size(vals)) then
+      if (vals(j) == vals(j+1)) then
+        n = n+1
+        doWrite = .false.
       endif
     endif
     if (doWrite) then
-      if (b>1) then ! Write separator if a number has already been written
-        write(real_array_string(b:),'(A)') separator
-        b=b+ns
+      if (len(real_array_string) > 0) then ! Write separator if a number has already been written
+        real_array_string = real_array_string // separator(1:ns)
       endif
       if (n>1) then
-        write(real_array_string(b:),'(A,"*",A)') trim(int_string(n)),trim(real_string(vals(j)))
+        real_array_string = real_array_string // trim(int_string(n)) // "*" // trim(real_string(vals(j)))
       else
-        write(real_array_string(b:),'(A)') trim(real_string(vals(j)))
+        real_array_string = real_array_string // trim(real_string(vals(j)))
       endif
-      n=1 ; b=len_trim(real_array_string)+1
+      n=1
     endif
   enddo
 end function real_array_string
@@ -675,7 +747,7 @@ function logical_string(val)
 end function logical_string
 
 !> This function returns a string for formatted parameter assignment
-function define_string(doc,varName,valString,units)
+function define_string(doc, varName, valString, units)
   type(doc_type),   pointer    :: doc     !< A pointer to a structure that controls where the
                                           !! documentation occurs and its formatting
   character(len=*), intent(in) :: varName !< The name of the parameter being documented
@@ -696,7 +768,7 @@ function define_string(doc,varName,valString,units)
 end function define_string
 
 !> This function returns a string for formatted false logicals
-function undef_string(doc,varName,units)
+function undef_string(doc, varName, units)
   type(doc_type),   pointer    :: doc     !< A pointer to a structure that controls where the
                                           !! documentation occurs and its formatting
   character(len=*), intent(in) :: varName !< The name of the parameter being documented
@@ -719,21 +791,43 @@ end function undef_string
 ! ----------------------------------------------------------------------
 
 !> This subroutine handles the module documentation
-subroutine doc_module(doc, modname, desc)
+subroutine doc_module(doc, modname, desc, log_to_all, all_default, layoutMod, debuggingMod)
   type(doc_type),   pointer    :: doc     !< A pointer to a structure that controls where the
                                           !! documentation occurs and its formatting
   character(len=*), intent(in) :: modname !< The name of the module being documented
   character(len=*), intent(in) :: desc    !< A description of the module being documented
-! This subroutine handles the module documentation
+  logical, optional, intent(in) :: log_to_all !< If present and true, log this parameter to the
+                                          !! ..._doc.all files, even if this module also has layout
+                                          !! or debugging parameters.
+  logical, optional, intent(in) :: all_default  !< If true, all parameters take their default values.
+  logical, optional, intent(in) :: layoutMod    !< If present and true, this module has layout parameters.
+  logical, optional, intent(in) :: debuggingMod !< If present and true, this module has debugging parameters.
+
+  ! This subroutine handles the module documentation
   character(len=mLen) :: mesg
+  logical :: repeat_doc
 
   if (.not. (is_root_pe() .and. associated(doc))) return
   call open_doc_file(doc)
 
   if (doc%filesAreOpen) then
-    call writeMessageAndDesc(doc, '', '') ! Blank line for delineation
+    ! Add a blank line for delineation
+    call writeMessageAndDesc(doc, '', '', valueWasDefault=all_default, &
+                             layoutParam=layoutMod, debuggingParam=debuggingMod)
     mesg = "! === module "//trim(modname)//" ==="
-    call writeMessageAndDesc(doc, mesg, desc, indent=0)
+    call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0, &
+                             layoutParam=layoutMod, debuggingParam=debuggingMod)
+    if (present(log_to_all)) then ; if (log_to_all) then
+      ! Log the module version again if the previous call was intercepted for use to document
+      ! a layout or debugging module.
+      repeat_doc = .false.
+      if (present(layoutMod)) then ; if (layoutMod) repeat_doc = .true. ; endif
+      if (present(debuggingMod)) then ; if (debuggingMod) repeat_doc = .true. ; endif
+      if (repeat_doc) then
+        call writeMessageAndDesc(doc, '', '', valueWasDefault=all_default)
+        call writeMessageAndDesc(doc, mesg, desc, valueWasDefault=all_default, indent=0)
+      endif
+    endif ; endif
   endif
 end subroutine doc_module
 

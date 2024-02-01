@@ -10,7 +10,6 @@ use MOM_grid, only : ocean_grid_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
@@ -28,19 +27,20 @@ public soliton_initialize_velocity
 contains
 
 !> Initialization of thicknesses in Equatorial Rossby soliton test
-subroutine soliton_initialize_thickness(h, G, GV, US)
+subroutine soliton_initialize_thickness(h, depth_tot, G, GV, US)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h    !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h    !< The thickness that is being initialized [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot !< The nominal total depth of the ocean [Z ~> m]
 
   integer :: i, j, k, is, ie, js, je, nz
   real    :: x, y, x0, y0
   real    :: val1, val2, val3, val4
-  character(len=40) :: verticalCoordinate
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   call MOM_mesg("soliton_initialization.F90, soliton_initialize_thickness: setting thickness")
 
@@ -55,7 +55,7 @@ subroutine soliton_initialize_thickness(h, G, GV, US)
       y = G%geoLatT(i,j)-y0
       val3 = exp(-val1*x)
       val4 = val2 * ( 2.0*val3 / (1.0 + (val3*val3)) )**2
-      h(i,j,k) = GV%Z_to_H * (0.25*val4*(6.0*y*y + 3.0) * exp(-0.5*y*y) + G%bathyT(i,j))
+      h(i,j,k) = (0.25*val4*(6.0*y*y + 3.0) * exp(-0.5*y*y) + depth_tot(i,j))
     enddo
   enddo ; enddo
 
@@ -63,12 +63,12 @@ end subroutine soliton_initialize_thickness
 
 
 !> Initialization of u and v in the equatorial Rossby soliton test
-subroutine soliton_initialize_velocity(u, v, h, G, US)
-  type(ocean_grid_type),                     intent(in)  :: G  !< Grid structure
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(in)  :: h  !< Thickness [H ~> m or kg m-2]
-  type(unit_scale_type),                     intent(in)  :: US !< A dimensional unit scaling type
+subroutine soliton_initialize_velocity(u, v, G, GV, US)
+  type(ocean_grid_type),                      intent(in)  :: G  !< Grid structure
+  type(verticalGrid_type),                    intent(in)  :: GV !< The ocean's vertical grid structure
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(out) :: u  !< i-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: v  !< j-component of velocity [L T-1 ~> m s-1]
+  type(unit_scale_type),                      intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
   real    :: x, x0 ! Positions in the same units as geoLonT.
@@ -79,7 +79,7 @@ subroutine soliton_initialize_velocity(u, v, h, G, US)
   real    :: val4  ! The local velocity amplitude [L T-1 ~> m s-1]
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   x0 = 2.0*G%len_lon/3.0
   y0 = 0.0

@@ -10,9 +10,9 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_tracer_registry, only : tracer_registry_type
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
 
 implicit none ; private
 
@@ -28,31 +28,36 @@ public circle_obcs_initialize_thickness
 contains
 
 !> This subroutine initializes layer thicknesses for the circle_obcs experiment.
-subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_params)
-  type(ocean_grid_type),   intent(in)  :: G   !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, US, param_file, just_read)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   real :: e0(SZK_(GV)+1)   ! The resting interface heights, in depth units [Z ~> m], usually
                            ! negative because it is positive upward.
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward, in depth units [Z ~> m].
-  real :: IC_amp           ! The amplitude of the initial height displacement [H ~> m or kg m-2].
-  real :: diskrad, rad, xCenter, xRadius, lonC, latC, xOffset
-  logical :: just_read
+  real :: IC_amp           ! The amplitude of the initial height displacement [Z ~> m].
+  real :: diskrad          ! Radius of the elevated disk [km] or [degrees] or [m]
+  real :: rad              ! Distance from the center of the elevated disk [km] or [degrees] or [m]
+  real :: lonC             ! The x-position of a point [km] or [degrees] or [m]
+  real :: latC             ! The y-position of a point [km] or [degrees] or [m]
+  real :: xOffset          ! The x-offset of the elevated disc center relative to the domain
+                           ! center [km] or [degrees] or [m]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "circle_obcs_initialization"   ! This module's name.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.just_read) &
     call MOM_mesg("  circle_obcs_initialization.F90, circle_obcs_initialize_thickness: setting thickness", 5)
@@ -61,16 +66,16 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   ! Parameters read by cartesian grid initialization
   call get_param(param_file, mdl, "DISK_RADIUS", diskrad, &
                  "The radius of the initially elevated disk in the "//&
-                 "circle_obcs test case.", units=G%x_axis_units, &
+                 "circle_obcs test case.", units=G%x_ax_unit_short, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_X_OFFSET", xOffset, &
                  "The x-offset of the initially elevated disk in the "//&
-                 "circle_obcs test case.", units=G%x_axis_units, &
-                 default = 0.0, do_not_log=just_read)
+                 "circle_obcs test case.", units=G%x_ax_unit_short, &
+                 default=0.0, do_not_log=just_read)
   call get_param(param_file, mdl, "DISK_IC_AMPLITUDE", IC_amp, &
                  "Initial amplitude of interface height displacements "//&
                  "in the circle_obcs test case.", &
-                 units='m', default=5.0, scale=GV%m_to_H, do_not_log=just_read)
+                 units='m', default=5.0, scale=US%m_to_Z, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -79,15 +84,15 @@ subroutine circle_obcs_initialize_thickness(h, G, GV, param_file, just_read_para
   enddo
 
   ! Uniform thicknesses for base state
-  do j=js,je ; do i=is,ie                        !
-    eta1D(nz+1) = -G%bathyT(i,j)
+  do j=js,je ; do i=is,ie
+    eta1D(nz+1) = -depth_tot(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
         eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
-        h(i,j,k) = GV%Angstrom_H
+        h(i,j,k) = GV%Angstrom_Z
       else
-        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
     enddo
   enddo ; enddo

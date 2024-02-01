@@ -1,0 +1,31 @@
+name: 'install-ubuntu-prerequisites'
+
+description: 'Install prerequisites for Ubuntu Linux compilation'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Install Ubuntu Linux packages
+      shell: bash
+      run: |
+        echo "::group::Install linux packages"
+        sudo apt-get update
+        sudo apt-get install netcdf-bin
+        sudo apt-get install libnetcdf-dev
+        sudo apt-get install libnetcdff-dev
+        sudo apt-get install openmpi-bin
+        sudo apt-get install libopenmpi-dev
+        sudo apt-get install linux-tools-common
+        echo "::endgroup::"
+
+    - name: Store compiler flags used in Makefile
+      shell: bash
+      run: |
+        echo "::group::config.mk"
+        cd .testing
+        echo "FCFLAGS_DEBUG = -g -O0 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds" >> config.mk
+        echo "FCFLAGS_REPRO = -g -O2 -fbacktrace" >> config.mk
+        echo "FCFLAGS_INIT = -finit-real=snan -finit-integer=2147483647 -finit-derived" >> config.mk
+        echo "FCFLAGS_FMS = -g -fbacktrace -O0" >> config.mk
+        cat config.mk
+        echo "::endgroup::"

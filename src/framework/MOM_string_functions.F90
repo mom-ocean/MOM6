@@ -3,6 +3,8 @@ module MOM_string_functions
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use iso_fortran_env, only : stdout=>output_unit, stderr=>error_unit
+
 implicit none ; private
 
 public lowercase, uppercase
@@ -140,13 +142,13 @@ function left_reals(r,sep)
   real, intent(in) :: r(:) !< The array of real variables to convert to a string
   character(len=*), optional, intent(in) :: sep !< The separator between
                                     !! successive values, by default it is ', '.
-  character(len=1320) :: left_reals !< The output string
+  character(len=:), allocatable :: left_reals !< The output string
 
-  integer :: j, n, b, ns
+  integer :: j, n, ns
   logical :: doWrite
   character(len=10) :: separator
 
-  n=1 ; doWrite=.true. ; left_reals='' ; b=1
+  n=1 ; doWrite=.true. ; left_reals=''
   if (present(sep)) then
     separator=sep ; ns=len(sep)
   else
@@ -161,16 +163,15 @@ function left_reals(r,sep)
       endif
     endif
     if (doWrite) then
-      if (b>1) then ! Write separator if a number has already been written
-        write(left_reals(b:),'(A)') separator
-        b=b+ns
+      if (len(left_reals)>0) then ! Write separator if a number has already been written
+        left_reals = left_reals // separator(1:ns)
       endif
       if (n>1) then
-        write(left_reals(b:),'(A,"*",A)') trim(left_int(n)),trim(left_real(r(j)))
+        left_reals = left_reals // trim(left_int(n)) // "*" // trim(left_real(r(j)))
       else
-        write(left_reals(b:),'(A)') trim(left_real(r(j)))
+        left_reals = left_reals // trim(left_real(r(j)))
       endif
-      n=1 ; b=len_trim(left_reals)+1
+      n=1
     endif
   enddo
 end function left_reals
@@ -246,7 +247,6 @@ integer function extract_integer(string, separators, n, missing_value)
   integer,            intent(in) :: n          !< Number of word to extract
   integer, optional,  intent(in) :: missing_value !< Value to assign if word is missing
   ! Local variables
-  integer :: ns, i, b, e, nw
   character(len=20) :: word
 
   word = extract_word(string, separators, n)
@@ -270,7 +270,6 @@ real function extract_real(string, separators, n, missing_value)
   integer,          intent(in) :: n          !< Number of word to extract
   real, optional,   intent(in) :: missing_value !< Value to assign if word is missing
   ! Local variables
-  integer :: ns, i, b, e, nw
   character(len=20) :: word
 
   word = extract_word(string, separators, n)
@@ -319,7 +318,7 @@ logical function string_functions_unit_tests(verbose)
   logical :: fail, v
   fail = .false.
   v = verbose
-  write(*,*) '==== MOM_string_functions: string_functions_unit_tests ==='
+  write(stdout,*) '==== MOM_string_functions: string_functions_unit_tests ==='
   fail = fail .or. localTestS(v,left_int(-1),'-1')
   fail = fail .or. localTestS(v,left_ints(i(:)),'-1, 1, 3, 3, 0')
   fail = fail .or. localTestS(v,left_real(0.),'0.0')
@@ -349,7 +348,7 @@ logical function string_functions_unit_tests(verbose)
   fail = fail .or. localTestR(v,extract_real("1.,2.",",",2),2.)
   fail = fail .or. localTestR(v,extract_real("1.,2.",",",3),0.)
   fail = fail .or. localTestR(v,extract_real("1.,2.",",",4,4.),4.)
-  if (.not. fail) write(*,*) 'Pass'
+  if (.not. fail) write(stdout,*) 'Pass'
   string_functions_unit_tests = fail
 end function string_functions_unit_tests
 
@@ -361,8 +360,11 @@ logical function localTestS(verbose,str1,str2)
   localTestS=.false.
   if (trim(str1)/=trim(str2)) localTestS=.true.
   if (localTestS .or. verbose) then
-    write(*,*) '>'//trim(str1)//'<'
-    if (localTestS) write(*,*) trim(str1),':',trim(str2), '<-- FAIL'
+    write(stdout,*) '>'//trim(str1)//'<'
+    if (localTestS) then
+      write(stdout,*) trim(str1),':',trim(str2), '<-- FAIL'
+      write(stderr,*) trim(str1),':',trim(str2), '<-- FAIL'
+    endif
   endif
 end function localTestS
 
@@ -374,8 +376,11 @@ logical function localTestI(verbose,i1,i2)
   localTestI=.false.
   if (i1/=i2) localTestI=.true.
   if (localTestI .or. verbose) then
-    write(*,*) i1,i2
-    if (localTestI) write(*,*) i1,'!=',i2, '<-- FAIL'
+    write(stdout,*) i1,i2
+    if (localTestI) then
+      write(stdout,*) i1,'!=',i2, '<-- FAIL'
+      write(stderr,*) i1,'!=',i2, '<-- FAIL'
+    endif
   endif
 end function localTestI
 
@@ -387,8 +392,11 @@ logical function localTestR(verbose,r1,r2)
   localTestR=.false.
   if (r1/=r2) localTestR=.true.
   if (localTestR .or. verbose) then
-    write(*,*) r1,r2
-    if (localTestR) write(*,*) r1,'!=',r2, '<-- FAIL'
+    write(stdout,*) r1,r2
+    if (localTestR) then
+      write(stdout,*) r1,'!=',r2, '<-- FAIL'
+      write(stderr,*) r1,'!=',r2, '<-- FAIL'
+    endif
   endif
 end function localTestR
 

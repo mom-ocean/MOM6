@@ -19,13 +19,14 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_hor_index, only : hor_index_type
 use MOM_grid, only : ocean_grid_type
-use MOM_io, only : file_exists, read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_restart, only :  MOM_restart_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, ALE_sponge_CS, get_ALE_sponge_nz_data
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
 use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
+use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : surface
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_verticalGrid, only : verticalGrid_type
@@ -46,13 +47,11 @@ type, public :: RGC_tracer_CS ; private
   character(len = 200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry.
-  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package.
-  real, pointer :: tr_aux(:,:,:,:) => NULL() !< The masked tracer concentration.
-  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out.
-  real :: lenlat           !< the latitudinal or y-direction length of the domain.
-  real :: lenlon           !< the longitudinal or x-direction length of the domain.
-  real :: CSL              !< The length of the continental shelf (x dir, km)
-  real :: lensponge        !< the length of the sponge layer.
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package [kg kg-1]
+  real, pointer :: tr_aux(:,:,:,:) => NULL() !< The masked tracer concentration  [kg kg-1]
+  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out [kg kg-1]
+  real :: CSL              !< The length of the continental shelf (x direction) [km]
+  real :: lensponge        !< the length of the sponge layer [km]
   logical :: mask_tracers  !< If true, tracers are masked out in massless layers.
   logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the timing of diagnostic output.
@@ -61,32 +60,30 @@ end type RGC_tracer_CS
 
 contains
 
-
 !> This subroutine is used to register tracer fields
-function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
-  type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
+function register_RGC_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
+  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure.
   type(param_file_type),      intent(in) :: param_file !<A structure indicating the open file to parse
                                                  !! for model parameter values.
   type(RGC_tracer_CS),        pointer    :: CS   !< A pointer that is set to point to the control
                                                  !! structure for this module (in/out).
   type(tracer_registry_type), pointer    :: tr_Reg !< A pointer to the tracer registry.
-  type(MOM_restart_CS),       pointer    :: restart_CS !< A pointer to the restart control structure.
+  type(MOM_restart_CS),    intent(inout) :: restart_CS !< MOM restart control structure
 
   character(len=80)  :: name, longname
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "RGC_tracer" ! This module's name.
   character(len=200) :: inputdir
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers in this module [kg kg-1]
   logical :: register_RGC_tracer
   integer :: isd, ied, jsd, jed, nz, m
-  isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
 
   if (associated(CS)) then
-    call MOM_error(WARNING, "RGC_register_tracer called with an "// &
-                            "associated control structure.")
-    return
+    call MOM_error(FATAL, "RGC_register_tracer called with an "// &
+                          "associated control structure.")
   endif
   allocate(CS)
 
@@ -108,25 +105,17 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
                  "The exact location and properties of those sponges are \n"//&
                  "specified from MOM_initialization.F90.", default=.false.)
 
-  call get_param(param_file, mdl, "LENLAT", CS%lenlat, &
-                 "The latitudinal or y-direction length of the domain", &
-                 fail_if_missing=.true., do_not_log=.true.)
-
-  call get_param(param_file, mdl, "LENLON", CS%lenlon, &
-                 "The longitudinal or x-direction length of the domain", &
-                 fail_if_missing=.true., do_not_log=.true.)
-
   call get_param(param_file, mdl, "CONT_SHELF_LENGTH", CS%CSL, &
                  "The length of the continental shelf (x dir, km).", &
-                 default=15.0)
+                 units=G%x_ax_unit_short, default=15.0)
 
   call get_param(param_file, mdl, "LENSPONGE", CS%lensponge, &
                  "The length of the sponge layer (km).", &
-                 default=10.0)
+                 units=G%x_ax_unit_short, default=10.0)
 
-  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR)) ; CS%tr(:,:,:,:) = 0.0
+  allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
   if (CS%mask_tracers) then
-    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR)) ; CS%tr_aux(:,:,:,:) = 0.0
+    allocate(CS%tr_aux(isd:ied,jsd:jed,nz,NTR), source=0.0)
   endif
 
   do m=1,NTR
@@ -138,7 +127,7 @@ function register_RGC_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
     ! This is needed to force the compiler not to do a copy in the registration calls.
     tr_ptr => CS%tr(:,:,:,m)
     ! Register the tracer for horizontal advection & diffusion.
-    call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
+    call register_tracer(tr_ptr, tr_Reg, param_file, G%HI, GV, &
                          name=name, longname=longname, units="kg kg-1", &
                          registry_diags=.true., flux_units="kg/s", &
                          restart_CS=restart_CS)
@@ -153,13 +142,13 @@ end function register_RGC_tracer
 subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                                     layer_CSp, sponge_CSp)
 
-  type(ocean_grid_type),   intent(in) :: G !< Grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
+  type(ocean_grid_type),   intent(in) :: G   !< Grid structure.
+  type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure.
   logical,                 intent(in) :: restart !< .true. if the fields have already
                                              !! been read from a restart file.
   type(time_type), target, intent(in) :: day !< Time of the start of the run.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
-                           intent(in) :: h !< Layer thickness, in m or kg m-2.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
   type(diag_ctrl), target, intent(in) :: diag !< Structure used to regulate diagnostic output.
   type(ocean_OBC_type),    pointer    :: OBC !< This open boundary condition type specifies
                                              !! whether, where, and what open boundary
@@ -170,30 +159,17 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
   type(ALE_sponge_CS),     pointer    :: sponge_CSp !< A pointer to the control structure for the
                                              !! sponges, if they are in use.  Otherwise this may be unassociated.
 
-  real, allocatable :: temp(:,:,:)
-  real, pointer, dimension(:,:,:) :: &
-    OBC_tr1_u => NULL(), & ! These arrays should be allocated and set to
-    OBC_tr1_v => NULL()    ! specify the values of tracer 1 that should come
-                           ! in through u- and v- points through the open
-                           ! boundary conditions, in the same units as tr.
+  real, allocatable :: temp(:,:,:) ! A temporary array used for several sponge target values [various]
   character(len=16) :: name     ! A variable's name in a NetCDF file.
-  character(len=72) :: longname ! The long name of that variable.
-  character(len=48) :: units    ! The dimensions of the variable.
-  character(len=48) :: flux_units ! The units for tracer fluxes, usually
-                            ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
-  real :: PI     ! 3.1415926... calculated as 4*atan(1)
-  real :: tr_y   ! Initial zonally uniform tracer concentrations.
-  real :: dist2  ! The distance squared from a line, in m2.
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers in this module [kg kg-1]
   real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected, in m.
-  real :: e(SZK_(G)+1), e_top, e_bot, d_tr ! Heights [Z ~> m].
+                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
   integer :: IsdB, IedB, JsdB, JedB
   integer :: nzdata
 
   if (.not.associated(CS)) return
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   h_neglect = GV%H_subroundoff
@@ -209,8 +185,7 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
                         CS%tracer_IC_file)
       do m=1,NTR
         call query_vardesc(CS%tr_desc(m), name, caller="initialize_RGC_tracer")
-        call read_data(CS%tracer_IC_file, trim(name), &
-                       CS%tr(:,:,:,m), domain=G%Domain%mpp_domain)
+        call MOM_read_data(CS%tracer_IC_file, trim(name), CS%tr(:,:,:,m), G%Domain)
       enddo
     else
       do m=1,NTR
@@ -238,14 +213,14 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       if (nzdata>0) then
         allocate(temp(G%isd:G%ied,G%jsd:G%jed,nzdata))
         do k=1,nzdata ; do j=js,je ; do i=is,ie
-          if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
+          if (G%geoLonT(i,j) >= (G%len_lon - CS%lensponge) .AND. G%geoLonT(i,j) <= G%len_lon) then
             temp(i,j,k) = 0.0
           endif
-        enddo ; enddo; enddo
+        enddo ; enddo ; enddo
         do m=1,1
         ! This is needed to force the compiler not to do a copy in the sponge calls.
           tr_ptr => CS%tr(:,:,:,m)
-          call set_up_ALE_sponge_field(temp, G, tr_ptr, sponge_CSp)
+          call set_up_ALE_sponge_field(temp, G, GV, tr_ptr, sponge_CSp, 'RGC_tracer')
         enddo
         deallocate(temp)
       endif
@@ -254,13 +229,13 @@ subroutine initialize_RGC_tracer(restart, day, G, GV, h, diag, OBC, CS, &
       if (nz>0) then
         allocate(temp(G%isd:G%ied,G%jsd:G%jed,nz))
         do k=1,nz ; do j=js,je ; do i=is,ie
-          if (G%geoLonT(i,j) >= (CS%lenlon - CS%lensponge) .AND. G%geoLonT(i,j) <= CS%lenlon) then
+          if (G%geoLonT(i,j) >= (G%len_lon - CS%lensponge) .AND. G%geoLonT(i,j) <= G%len_lon) then
             temp(i,j,k) = 0.0
           endif
-        enddo ; enddo; enddo
+        enddo ; enddo ; enddo
         do m=1,1
           tr_ptr => CS%tr(:,:,:,m)
-          call set_up_sponge_field(temp, tr_ptr, G, nz, layer_CSp)
+          call set_up_sponge_field(temp, tr_ptr, G, GV, nz, layer_CSp)
         enddo
         deallocate(temp)
       endif
@@ -275,60 +250,57 @@ end subroutine initialize_RGC_tracer
 !> This subroutine applies diapycnal diffusion and any other column
 !! tracer physics or chemistry to the tracers from this file.
 !! This is a simple example of a set of advected passive tracers.
-subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, CS, &
+subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, US, CS, &
                               evap_CFL_limit, minimum_forcing_depth)
-  type(ocean_grid_type),                 intent(in) :: G !< The ocean's grid structure.
-  type(verticalGrid_type),               intent(in) :: GV !< The ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
                                               !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
   type(forcing),           intent(in) :: fluxes !< A structure containing pointers to any possible
                                               !! forcing fields.  Unused fields have NULL ptrs.
-  real,                    intent(in) :: dt !< The amount of time covered by this call [s].
-  type(RGC_tracer_CS),     pointer    :: CS !< The control structure returned by a previous call.
+  real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s].
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(RGC_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous call.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can be
-                                               !! fluxed out of the top layer in a timestep [nondim].
+                                              !! fluxed out of the top layer in a timestep [nondim].
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which fluxes
-                                               !! can be applied [m].
+                                              !! can be applied [H ~> m or kg m-2].
 
 ! The arguments to this subroutine are redundant in that
 !     h_new[k] = h_old[k] + ea[k] - eb[k-1] + eb[k] - ea[k+1]
 
-  real :: b1(SZI_(G))          ! b1 and c1 are variables used by the
-  real :: c1(SZI_(G),SZK_(G))  ! tridiagonal solver.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real :: in_flux(SZI_(G),SZJ_(G),2)  ! total amount of tracer to be injected
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
 
   integer :: i, j, k, is, ie, js, je, nz, m
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.associated(CS)) return
 
-  in_flux(:,:,:) = 0.0
   m=1
   do j=js,je ; do i=is,ie
-     !set tracer to 1.0 in the surface of the continental shelf
-     if (G%geoLonT(i,j) <= (CS%CSL)) then
-        CS%tr(i,j,1,m) = 1.0 !first layer
-     endif
+    ! set tracer to 1.0 in the surface of the continental shelf
+    if (G%geoLonT(i,j) <= (CS%CSL)) then
+      CS%tr(i,j,1,m) = 1.0 !first layer
+    endif
   enddo ; enddo
 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do m=1,NTR
       do k=1,nz ;do j=js,je ; do i=is,ie
-             h_work(i,j,k) = h_old(i,j,k)
+        h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo;
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
-                                       evap_CFL_limit, minimum_forcing_depth, in_flux(:,:,m))
+                                          evap_CFL_limit, minimum_forcing_depth)
 
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tr(:,:,:,m), G, GV)
     enddo
@@ -342,7 +314,6 @@ end subroutine RGC_tracer_column_physics
 
 subroutine RGC_tracer_end(CS)
   type(RGC_tracer_CS), pointer :: CS !< The control structure returned by a previous call to RGC_register_tracer.
-  integer :: m
 
   if (associated(CS)) then
     if (associated(CS%tr)) deallocate(CS%tr)

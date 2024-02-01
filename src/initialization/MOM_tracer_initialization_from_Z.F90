@@ -4,27 +4,18 @@ module MOM_tracer_initialization_from_Z
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging, only : hchksum
-use MOM_coms, only : max_across_PEs, min_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
-use MOM_cpu_clock, only :  CLOCK_ROUTINE, CLOCK_LOOP
-use MOM_domains, only : pass_var, pass_vector, sum_across_PEs, broadcast
-use MOM_domains, only : root_PE, To_All, SCALAR_PAIR, CGRID_NE, AGRID
-use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
+use MOM_cpu_clock, only : CLOCK_ROUTINE, CLOCK_LOOP
+use MOM_domains, only : pass_var
+use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
-use MOM_file_parser, only : get_param, read_param, log_param, param_file_type
-use MOM_file_parser, only : log_version
-use MOM_get_input, only : directories
-use MOM_grid, only : ocean_grid_type, isPointInCell
+use MOM_file_parser, only : get_param, param_file_type, log_version
+use MOM_grid, only : ocean_grid_type
 use MOM_horizontal_regridding, only : myStats, horiz_interp_and_extrap_tracer
-use MOM_regridding, only : regridding_CS
+use MOM_interface_heights, only : dz_to_thickness_simple
 use MOM_remapping, only : remapping_CS, initialize_remapping
-use MOM_remapping, only : remapping_core_h
-use MOM_string_functions, only : uppercase
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type, setVerticalGridAxes
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
-use MOM_EOS, only : int_specific_vol_dp
+use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ALE, only : ALE_remap_scalar
 
 implicit none ; private
@@ -42,20 +33,21 @@ character(len=40)  :: mdl = "MOM_tracer_initialization_from_Z" !< This module's 
 
 contains
 
-!> Initializes a tracer from a z-space data file.
+!> Initializes a tracer from a z-space data file, including any lateral regridding that is needed.
 subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_nam, &
                           src_var_unit_conversion, src_var_record, homogenize, &
                           useALEremapping, remappingScheme, src_var_gridspec )
   type(ocean_grid_type),      intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                               intent(in)    :: h   !< Layer thickness [H ~> m or kg m-2].
-  real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized
+  real, dimension(:,:,:),     pointer       :: tr  !< Pointer to array to be initialized [CU ~> conc]
   type(param_file_type),      intent(in)    :: PF  !< parameter file
   character(len=*),           intent(in)    :: src_file !< source filename
   character(len=*),           intent(in)    :: src_var_nam !< variable name in file
-  real,             optional, intent(in)    :: src_var_unit_conversion !< optional multiplicative unit conversion
+  real,             optional, intent(in)    :: src_var_unit_conversion !< optional multiplicative unit conversion,
+                                                   !! often used for rescaling into model units [CU conc-1 ~> 1]
   integer,          optional, intent(in)    :: src_var_record  !< record to read for multiple time-level files
   logical,          optional, intent(in)    :: homogenize !< optionally homogenize to mean value
   logical,          optional, intent(in)    :: useALEremapping !< to remap or not (optional)
@@ -63,13 +55,11 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   character(len=*), optional, intent(in)    :: src_var_gridspec !< Source variable name in a gridspec file.
                                                                 !! This is not implemented yet.
   ! Local variables
-  real :: land_fill = 0.0
-  character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  character(len=200) :: mesg
-  real               :: convert
+  real :: land_fill = 0.0  ! A value to use to replace missing values [CU ~> conc]
+  real :: convert ! A conversion factor into the model's internal units [CU conc-1 ~> 1]
   integer            :: recnum
-  character(len=10)  :: remapScheme
-  logical            :: homog,useALE
+  character(len=64)  :: remapScheme
+  logical            :: homog, useALE
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -78,26 +68,40 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   integer :: is, ie, js, je, nz ! compute domain indices
   integer :: isd, ied, jsd, jed ! data domain indices
   integer :: i, j, k, kd
-  real, allocatable, dimension(:,:,:), target :: tr_z, mask_z
-  real, allocatable, dimension(:), target :: z_edges_in, z_in
+  real, allocatable, dimension(:,:,:), target :: tr_z   ! Tracer array on the horizontal model grid
+                                                        ! and input-file vertical levels [CU ~> conc]
+  real, allocatable, dimension(:,:,:), target :: mask_z ! Missing value mask on the horizontal model grid
+                                                        ! and input-file vertical levels [nondim]
+  real, allocatable, dimension(:), target :: z_edges_in ! Cell edge depths for input data [Z ~> m]
+  real, allocatable, dimension(:), target :: z_in       ! Cell center depths for input data [Z ~> m]
 
   ! Local variables for ALE remapping
-  real, dimension(:,:,:), allocatable :: hSrc ! Source thicknesses [H ~> m or kg m-2].
+  real, dimension(:,:,:), allocatable :: dzSrc ! Source thicknesses in height units [Z ~> m]
+  real, dimension(:,:,:), allocatable :: hSrc  ! Source thicknesses [H ~> m or kg m-2]
   real, dimension(:), allocatable :: h1 ! A 1-d column of source thicknesses [Z ~> m].
   real :: zTopOfCell, zBottomOfCell, z_bathy  ! Heights [Z ~> m].
   type(remapping_CS) :: remapCS ! Remapping parameters and work arrays
+  type(verticalGrid_type) :: GV_loc ! A temporary vertical grid structure
 
-  real :: missing_value
-  integer :: nPoints
+  real :: missing_value ! A value indicating that there is no valid input data at this point [CU ~> conc]
+  integer :: nPoints    ! The number of valid input data points in a column
   integer :: id_clock_routine, id_clock_ALE
-  logical :: reentrant_x, tripolar_n
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
+                                  ! for remapping.  Values below 20190101 recover the remapping
+                                  ! answers from 2018, while higher values use more robust
+                                  ! forms of the same remapping expressions.
+  integer :: hor_regrid_answer_date  ! The vintage of the order of arithmetic and expressions to use
+                                  ! for horizontal regridding.  Values below 20190101 recover the
+                                  ! answers from 2018, while higher values use expressions that have
+                                  ! been rearranged for rotational invariance.
 
   id_clock_routine = cpu_clock_id('(Initialize tracer from Z)', grain=CLOCK_ROUTINE)
   id_clock_ALE = cpu_clock_id('(Initialize tracer from Z) ALE', grain=CLOCK_LOOP)
 
   call cpu_clock_begin(id_clock_routine)
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
@@ -111,23 +115,37 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
   call get_param(PF, mdl, "Z_INIT_REMAPPING_SCHEME", remapScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING is True.", &
                  default="PLM")
-
-  ! These are model grid properties, but being applied to the data grid for now.
-  ! need to revisit this (mjh)
-  reentrant_x = .false. ;  call get_param(PF, mdl, "REENTRANT_X", reentrant_x,default=.true.)
-  tripolar_n = .false. ;  call get_param(PF, mdl, "TRIPOLAR_N", tripolar_n, default=.false.)
+  call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
+  if (useALE) then
+    call get_param(PF, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
+                 "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
+                 "Values below 20190101 result in the use of older, less accurate expressions "//&
+                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                 "robust and accurate forms of mathematically equivalent expressions.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+    if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
+  endif
+  call get_param(PF, mdl, "HOR_REGRID_ANSWER_DATE", hor_regrid_answer_date, &
+                 "The vintage of the order of arithmetic for horizontal regridding.  "//&
+                 "Dates before 20190101 give the same answers as the code did in late 2018, "//&
+                 "while later versions add parentheses for rotational symmetry.  "//&
+                 "Dates after 20230101 use reproducing sums for global averages.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+  if (.not.GV%Boussinesq) hor_regrid_answer_date = max(hor_regrid_answer_date, 20230701)
 
   if (PRESENT(homogenize)) homog=homogenize
   if (PRESENT(useALEremapping)) useALE=useALEremapping
   if (PRESENT(remappingScheme)) remapScheme=remappingScheme
-  recnum=1
+  recnum = 1
   if (PRESENT(src_var_record)) recnum = src_var_record
-  convert=1.0
+  convert = 1.0
   if (PRESENT(src_var_unit_conversion)) convert = src_var_unit_conversion
 
-  call horiz_interp_and_extrap_tracer(src_file, src_var_nam, convert, recnum, &
-       G, tr_z, mask_z, z_in, z_edges_in, missing_value, reentrant_x, tripolar_n, &
-       homog, m_to_Z=US%m_to_Z)
+  call horiz_interp_and_extrap_tracer(src_file, src_var_nam, recnum, &
+            G, tr_z, mask_z, z_in, z_edges_in, missing_value, &
+            scale=convert, homogenize=homog, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date)
 
   kd = size(z_edges_in,1)-1
   call pass_var(tr_z,G%Domain)
@@ -139,15 +157,17 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
     call cpu_clock_begin(id_clock_ALE)
     ! First we reserve a work space for reconstructions of the source data
     allocate( h1(kd) )
+    allocate( dzSrc(isd:ied,jsd:jed,kd) )
     allocate( hSrc(isd:ied,jsd:jed,kd) )
-    call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false. ) ! Data for reconstructions
+    ! Set parameters for reconstructions
+    call initialize_remapping( remapCS, remapScheme, boundary_extrapolation=.false., answer_date=remap_answer_date )
     ! Next we initialize the regridding package so that it knows about the target grid
 
     do j = js, je ; do i = is, ie
       if (G%mask2dT(i,j)>0.) then
         ! Build the source grid
         zTopOfCell = 0. ; zBottomOfCell = 0. ; nPoints = 0
-        z_bathy = G%bathyT(i,j)
+        z_bathy = G%bathyT(i,j) + G%Z_ref
         do k = 1, kd
           if (mask_z(i,j,k) > 0.) then
             zBottomOfCell = -min( z_edges_in(k+1), z_bathy )
@@ -162,12 +182,18 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
       else
         tr(i,j,:) = 0.
       endif ! mask2dT
-      hSrc(i,j,:) = GV%Z_to_H * h1(:)
+      dzSrc(i,j,:) = h1(:)
     enddo ; enddo
 
-    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false. )
+    ! Equation of state data is not available, so a simpler rescaling will have to suffice,
+    ! but it might be problematic in non-Boussinesq mode.
+    GV_loc = GV ; GV_loc%ke = kd
+    call dz_to_thickness_simple(dzSrc, hSrc, G, GV_loc, US)
+
+    call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false., answer_date=remap_answer_date )
 
     deallocate( hSrc )
+    deallocate( dzSrc )
     deallocate( h1 )
 
     do k=1,nz
@@ -179,7 +205,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
 ! Fill land values
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (tr(i,j,k) == missing_value) then
-      tr(i,j,k)=land_fill
+      tr(i,j,k) = land_fill
     endif
   enddo ; enddo ; enddo
 

@@ -1,0 +1,26 @@
+# Makefile template for FMS
+#
+# Compiler flags are configured by autoconf's configure script.
+#
+# Source code dependencies are configured by makedep and saved to Makefile.dep.
+
+CC = @CC@
+FC = @FC@
+LD = @FC@
+AR = @AR@
+PYTHON = @PYTHON@
+MAKEDEP = @MAKEDEP@
+
+DEFS = @DEFS@
+CPPFLAGS = @CPPFLAGS@
+FCFLAGS = @FCFLAGS@
+LDFLAGS = @LDFLAGS@
+LIBS = @LIBS@
+ARFLAGS = @ARFLAGS@
+
+-include Makefile.dep
+
+.PHONY: depend
+depend: Makefile.dep
+Makefile.dep:
+	$(PYTHON) $(MAKEDEP) -o Makefile.dep -e -x libFMS.a -s @srcdir@/test_fms @srcdir@

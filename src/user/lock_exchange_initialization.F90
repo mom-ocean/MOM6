@@ -23,33 +23,27 @@ contains
 
 !> This subroutine initializes layer thicknesses for the lock_exchange experiment.
 ! -----------------------------------------------------------------------------
-subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_read_params)
+subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
-  real :: e0(SZK_(GV))     ! The resting interface heights [Z ~> m], usually
-                           ! negative because it is positive upward.
-  real :: e_pert(SZK_(GV)) ! Interface height perturbations, positive upward [Z ~> m].
   real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface
                            ! positive upward [Z ~> m].
-  real :: front_displacement ! Vertical displacement acrodd front
-  real :: thermocline_thickness ! Thickness of stratified region
-  logical :: just_read    ! If true, just read parameters but set nothing.
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  real :: front_displacement ! Vertical displacement across front [Z ~> m]
+  real :: thermocline_thickness ! Thickness of stratified region [Z ~> m]
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "lock_exchange_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (.not.just_read) &
     call MOM_mesg("  lock_exchange_initialization.F90, lock_exchange_initialize_thickness: setting thickness", 5)
@@ -86,7 +80,7 @@ subroutine lock_exchange_initialize_thickness(h, G, GV, US, param_file, just_rea
       eta1D(K) = min( eta1D(K), eta1D(K-1) - GV%Angstrom_Z )
     enddo
     do k=nz,1,-1
-      h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
+      h(i,j,k) = eta1D(K) - eta1D(K+1)
     enddo
   enddo ; enddo
 

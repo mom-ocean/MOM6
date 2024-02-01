@@ -10,14 +10,14 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type
 use MOM_tracer_registry, only : tracer_name_lookup
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+use MOM_EOS, only : calculate_density, calculate_density_derivs
 
 implicit none ; private
 
@@ -26,7 +26,7 @@ implicit none ; private
 public DOME_initialize_topography
 public DOME_initialize_thickness
 public DOME_initialize_sponges
-public DOME_set_OBC_data
+public DOME_set_OBC_data, register_DOME_OBC
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -40,14 +40,19 @@ contains
 subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real :: m_to_Z  ! A dimensional rescaling factor.
-  real :: min_depth ! The minimum and maximum depths [Z ~> m].
+  real :: min_depth  ! The minimum ocean depth [Z ~> m]
+  real :: shelf_depth ! The ocean depth on the shelf in the DOME configuration [Z ~> m]
+  real :: slope      ! The bottom slope in the DOME configuration [Z L-1 ~> nondim]
+  real :: shelf_edge_lat ! The latitude of the edge of the topographic shelf [km]
+  real :: inflow_lon ! The edge longitude of the DOME inflow [km]
+  real :: inflow_width ! The longitudinal width of the DOME inflow channel [km]
+  real :: km_to_L    ! The conversion factor from the units of latitude to L [L km-1 ~> 1e3]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "DOME_initialize_topography" ! This subroutine's name.
@@ -55,24 +60,33 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  call MOM_mesg("  DOME_initialization.F90, DOME_initialize_topography: setting topography", 5)
+  km_to_L = 1.0e3*US%m_to_L
 
-  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+  call MOM_mesg("  DOME_initialization.F90, DOME_initialize_topography: setting topography", 5)
 
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
-                 "The minimum depth of the ocean.", units="m", default=0.0, scale=m_to_Z)
+                 "The minimum depth of the ocean.", default=0.0, units="m", scale=US%m_to_Z)
+  call get_param(param_file, mdl, "DOME_TOPOG_SLOPE", slope, &
+                 "The slope of the bottom topography in the DOME configuration.", &
+                 default=0.01, units="nondim", scale=US%L_to_Z)
+  call get_param(param_file, mdl, "DOME_SHELF_DEPTH", shelf_depth, &
+                 "The bottom depth in the shelf inflow region in the DOME configuration.", &
+                 default=600.0, units="m", scale=US%m_to_Z)
+  call get_param(param_file, mdl, "DOME_SHELF_EDGE_LAT", shelf_edge_lat, &
+                 "The latitude of the shelf edge in the DOME configuration.", &
+                 default=600.0, units="km")
+  call get_param(param_file, mdl, "DOME_INFLOW_LON", inflow_lon, &
+                 "The edge longitude of the DOME inflow.", units="km", default=1000.0)
+  call get_param(param_file, mdl, "DOME_INFLOW_WIDTH", inflow_width, &
+                 "The longitudinal width of the DOME inflow channel.", units="km", default=100.0)
 
   do j=js,je ; do i=is,ie
-    if (G%geoLatT(i,j) < 600.0) then
-      if (G%geoLatT(i,j) < 300.0) then
-        D(i,j) = max_depth
-      else
-        D(i,j) = max_depth - 10.0*m_to_Z * (G%geoLatT(i,j)-300.0)
-      endif
+    if (G%geoLatT(i,j) < shelf_edge_lat) then
+      D(i,j) = min(shelf_depth - slope * (G%geoLatT(i,j)-shelf_edge_lat)*km_to_L, max_depth)
     else
-      if ((G%geoLonT(i,j) > 1000.0) .AND. (G%geoLonT(i,j) < 1100.0)) then
-        D(i,j) = 600.0*m_to_Z
+      if ((G%geoLonT(i,j) > inflow_lon) .AND. (G%geoLonT(i,j) < inflow_lon+inflow_width)) then
+        D(i,j) = shelf_depth
       else
         D(i,j) = 0.5*min_depth
       endif
@@ -87,27 +101,25 @@ end subroutine DOME_initialize_topography
 
 ! -----------------------------------------------------------------------------
 !> This subroutine initializes layer thicknesses for the DOME experiment
-subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
+subroutine DOME_initialize_thickness(h, depth_tot, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h           !< The thickness that is being initialized [H ~> m or kg m-2].
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
                                                       !! to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
 
   real :: e0(SZK_(GV)+1)    ! The resting interface heights [Z ~> m], usually
                             ! negative because it is positive upward [Z ~> m].
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface
                             ! positive upward [Z ~> m].
-  logical :: just_read    ! If true, just read parameters but set nothing.
-  character(len=40)  :: mdl = "DOME_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (just_read) return ! This subroutine has no run-time parameters.
 
@@ -124,14 +136,14 @@ subroutine DOME_initialize_thickness(h, G, GV, param_file, just_read_params)
 !  Angstrom thick, and 2.  the interfaces are where they should be   !
 !  based on the resting depths and interface height perturbations,   !
 !  as long at this doesn't interfere with 1.                         !
-    eta1D(nz+1) = -G%bathyT(i,j)
+    eta1D(nz+1) = -depth_tot(i,j)
     do k=nz,1,-1
       eta1D(K) = e0(K)
       if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
         eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
-        h(i,j,k) = GV%Angstrom_H
+        h(i,j,k) = GV%Angstrom_Z
       else
-        h(i,j,k) = GV%Z_to_H * (eta1D(K) - eta1D(K+1))
+        h(i,j,k) = eta1D(K) - eta1D(K+1)
       endif
     enddo
   enddo ; enddo
@@ -140,108 +152,139 @@ end subroutine DOME_initialize_thickness
 ! -----------------------------------------------------------------------------
 
 ! -----------------------------------------------------------------------------
-!> This subroutine sets the inverse restoration time (Idamp), and     !
-!! the values towards which the interface heights and an arbitrary    !
-!! number of tracers should be restored within each sponge. The       !
-!! interface height is always subject to damping, and must always be  !
-!! the first registered field.                                        !
-subroutine DOME_initialize_sponges(G, GV, US, tv, PF, CSp)
-  type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in) :: GV !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  type(thermo_var_ptrs), intent(in) :: tv   !< A structure containing pointers to any available
-                               !! thermodynamic fields, including potential temperature and
-                               !! salinity or mixed layer density. Absent fields have NULL ptrs.
-  type(param_file_type), intent(in) :: PF   !< A structure indicating the open file to
-                                            !! parse for model parameter values.
-  type(sponge_CS),       pointer    :: CSp  !< A pointer that is set to point to the control
-                                            !! structure for this module.
+!> This subroutine sets the inverse restoration time (Idamp), and the values
+!! toward which the interface heights and an arbitrary number of tracers will be
+!! restored within the sponges for the DOME configuration.                                        !
+subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
+  type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure containing any available
+                                              !! thermodynamic fields, including potential
+                                              !! temperature and salinity or mixed layer density.
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in) :: depth_tot  !< The nominal total depth of the ocean [Z ~> m]
+  type(param_file_type),   intent(in) :: PF   !< A structure indicating the open file to
+                                              !! parse for model parameter values.
+  type(sponge_CS),         pointer    :: CSp  !< A pointer that is set to point to the control
+                                              !! structure for this module.
 
-  real :: eta(SZI_(G),SZJ_(G),SZK_(G)+1) ! A temporary array for eta.
-  real :: temp(SZI_(G),SZJ_(G),SZK_(G))  ! A temporary array for other variables. !
-  real :: Idamp(SZI_(G),SZJ_(G))    ! The inverse damping rate [s-1].
+  real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m].
+  real :: temp(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for other variables [various]
+  real :: Idamp(SZI_(G),SZJ_(G))          ! The sponge damping rate [T-1 ~> s-1]
 
-  real :: H0(SZK_(G))  ! Interface heights [Z ~> m].
-  real :: min_depth
-  real :: damp, e_dense, damp_new
+  real :: e_tgt(SZK_(GV)+1) ! Target interface heights [Z ~> m].
+  real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
+  real :: damp_W, damp_E ! Damping rates in the western and eastern sponges [T-1 ~> s-1]
+  real :: peak_damping ! The maximum sponge damping rates as the edges [T-1 ~> s-1]
+  real :: km_to_L      ! The conversion factor from the units of longitude to L [L km-1 ~> 1e3]
+  real :: edge_dist    ! The distance to an edge [L ~> m]
+  real :: sponge_width ! The width of the sponges [L ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
+  km_to_L = 1.0e3*US%m_to_L
 
-!  Here the inverse damping time [s-1], is set. Set Idamp to 0     !
-!  wherever there is no sponge, and the subroutines that are called  !
-!  will automatically set up the sponges only where Idamp is positive!
-!  and mask2dT is 1.                                                   !
-
-!   Set up sponges for DOME configuration
+  !   Set up sponges for the DOME configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
                  "The minimum depth of the ocean.", units="m", default=0.0, scale=US%m_to_Z)
+  call get_param(PF, mdl, "DOME_SPONGE_DAMP_RATE", peak_damping, &
+                 "The largest damping rate in the DOME sponges.", &
+                 default=10.0, units="day-1", scale=1.0/(86400.0*US%s_to_T))
+  call get_param(PF, mdl, "DOME_SPONGE_WIDTH", sponge_width, &
+                 "The width of the the DOME sponges.", &
+                 default=200.0, units="km", scale=km_to_L)
 
-  H0(1) = 0.0
-  do k=2,nz ; H0(k) = -(real(k-1)-0.5)*G%max_depth / real(nz-1) ; enddo
-  do i=is,ie; do j=js,je
-    if (G%geoLonT(i,j) < 100.0) then ; damp = 10.0
-    elseif (G%geoLonT(i,j) < 200.0) then
-      damp = 10.0*(200.0-G%geoLonT(i,j))/100.0
-    else ; damp=0.0
+  ! Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0 wherever
+  ! there is no sponge, and the subroutines that are called will automatically
+  ! set up the sponges only where Idamp is positive and mask2dT is 1.
+
+  Idamp(:,:) = 0.0
+  do j=js,je ; do i=is,ie ; if (depth_tot(i,j) > min_depth) then
+    edge_dist = (G%geoLonT(i,j) - G%west_lon) * km_to_L
+    if (edge_dist < 0.5*sponge_width) then
+      damp_W = peak_damping
+    elseif (edge_dist < sponge_width) then
+      damp_W = peak_damping * (sponge_width - edge_dist) / (0.5*sponge_width)
+    else
+      damp_W = 0.0
     endif
 
-    if (G%geoLonT(i,j) > 1400.0) then ; damp_new = 10.0
-    elseif (G%geoLonT(i,j) > 1300.0) then
-       damp_new = 10.0*(G%geoLonT(i,j)-1300.0)/100.0
-    else ; damp_new = 0.0
+    edge_dist = ((G%len_lon + G%west_lon) - G%geoLonT(i,j)) * km_to_L
+    if (edge_dist < 0.5*sponge_width) then
+      damp_E = peak_damping
+    elseif (edge_dist < sponge_width) then
+      damp_E = peak_damping * (sponge_width - edge_dist) / (0.5*sponge_width)
+    else
+      damp_E = 0.0
     endif
 
-    if (damp <= damp_new) damp=damp_new
+    Idamp(i,j) = max(damp_W, damp_E)
+  endif ; enddo ; enddo
 
-    ! These will be stretched inside of apply_sponge, so they can be in
-    ! depth space for Boussinesq or non-Boussinesq models.
-    eta(i,j,1) = 0.0
-    do k=2,nz
-!     eta(i,j,K)=max(H0(k), -G%bathyT(i,j), GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j))
-      e_dense = -G%bathyT(i,j)
-      if (e_dense >= H0(k)) then ; eta(i,j,K) = e_dense
-      else ; eta(i,j,K) = H0(k) ; endif
-      if (eta(i,j,K) < GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)) &
-          eta(i,j,K) = GV%Angstrom_Z*(nz-k+1) - G%bathyT(i,j)
-    enddo
-    eta(i,j,nz+1) = -G%bathyT(i,j)
+  e_tgt(1) = 0.0
+  do K=2,nz ; e_tgt(K) = -(real(K-1)-0.5)*G%max_depth / real(nz-1) ; enddo
+  e_tgt(nz+1) = -G%max_depth
+  eta(:,:,:) = 0.0
+  do K=1,nz+1 ; do j=js,je ; do i=is,ie
+    ! These target interface heights will be rescaled inside of apply_sponge, so
+    ! they can be in depth space for Boussinesq or non-Boussinesq models.
+    eta(i,j,K) = max(e_tgt(K), GV%Angstrom_Z*(nz+1-K) - depth_tot(i,j))
+  enddo ; enddo ; enddo
 
-    if (G%bathyT(i,j) > min_depth) then
-      Idamp(i,j) = damp/86400.0
-    else ; Idamp(i,j) = 0.0 ; endif
-  enddo ; enddo
-
-!  This call sets up the damping rates and interface heights.
-!  This sets the inverse damping timescale fields in the sponges.    !
+  !  This call stores the sponge damping rates and target interface heights.
   call initialize_sponge(Idamp, eta, G, PF, CSp, GV)
 
-!   Now register all of the fields which are damped in the sponge.   !
-! By default, momentum is advected vertically within the sponge, but !
-! momentum is typically not damped within the sponge.                !
+  !   Now register all of the fields which are damped in the sponge.
+  ! By default, momentum is advected vertically within the sponge, but
+  ! momentum is typically not damped within the layer-mode sponge.
 
-! At this point, the DOME configuration is done. The following are here as a
+! At this point, the layer-mode DOME configuration is done. The following are here as a
 ! template for other configurations.
 
-!  The remaining calls to set_up_sponge_field can be in any order. !
+  !  The remaining calls to set_up_sponge_field can be in any order.
   if ( associated(tv%T) ) then
+    temp(:,:,:) = 0.0
     call MOM_error(FATAL,"DOME_initialize_sponges is not set up for use with"//&
                          " a temperatures defined.")
     ! This should use the target values of T in temp.
-    call set_up_sponge_field(temp, tv%T, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%T, G, GV, nz, CSp)
     ! This should use the target values of S in temp.
-    call set_up_sponge_field(temp, tv%S, G, nz, CSp)
+    call set_up_sponge_field(temp, tv%S, G, GV, nz, CSp)
   endif
 
 end subroutine DOME_initialize_sponges
 
+!> Add DOME to the OBC registry and set up some variables that will be used to guide
+!! code setting up the restart fields related to the OBCs.
+subroutine register_DOME_OBC(param_file, US, OBC, tr_Reg)
+  type(param_file_type),      intent(in) :: param_file !< parameter file.
+  type(unit_scale_type),      intent(in) :: US       !< A dimensional unit scaling type
+  type(ocean_OBC_type),       pointer    :: OBC      !< OBC registry.
+  type(tracer_registry_type), pointer    :: tr_Reg   !< Tracer registry.
+
+  if (OBC%number_of_segments /= 1) then
+    call MOM_error(FATAL, 'Error in register_DOME_OBC - DOME should have 1 OBC segment', .true.)
+  endif
+
+  ! Store this information for use in setting up the OBC restarts for tracer reservoirs.
+  OBC%ntr = tr_Reg%ntr
+  if (.not. allocated(OBC%tracer_x_reservoirs_used)) then
+    allocate(OBC%tracer_x_reservoirs_used(OBC%ntr))
+    allocate(OBC%tracer_y_reservoirs_used(OBC%ntr))
+    OBC%tracer_x_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(:) = .false.
+    OBC%tracer_y_reservoirs_used(1) = .true.
+  endif
+
+end subroutine register_DOME_OBC
+
 !> This subroutine sets the properties of flow at open boundary conditions.
 !! This particular example is for the DOME inflow describe in Legg et al. 2006.
-subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
+subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC !< This open boundary condition type specifies
                                                 !! whether, where, and what open boundary
                                                 !! conditions are used.
@@ -252,57 +295,109 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
   type(ocean_grid_type),      intent(in) :: G   !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in) :: GV  !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in) :: US  !< A dimensional unit scaling type
-  type(param_file_type),      intent(in) :: param_file !< A structure indicating the open file
+  type(param_file_type),      intent(in) :: PF  !< A structure indicating the open file
                               !! to parse for model parameter values.
   type(tracer_registry_type), pointer    :: tr_Reg !< Tracer registry.
 
-! Local variables
-  ! The following variables are used to set the target temperature and salinity.
-  real :: T0(SZK_(G)), S0(SZK_(G))
-  real :: pres(SZK_(G))      ! An array of the reference pressure [Pa].
-  real :: drho_dT(SZK_(G))   ! Derivative of density with temperature [kg m-3 degC-1].
-  real :: drho_dS(SZK_(G))   ! Derivative of density with salinity [kg m-3 ppt-1].
-  real :: rho_guess(SZK_(G)) ! Potential density at T0 & S0 [kg m-3].
+  ! Local variables
+  real :: T0(SZK_(GV))       ! A profile of target temperatures [C ~> degC]
+  real :: S0(SZK_(GV))       ! A profile of target salinities [S ~> ppt]
+  real :: pres(SZK_(GV))     ! An array of the reference pressure [R L2 T-2 ~> Pa].
+  real :: drho_dT(SZK_(GV))  ! Derivative of density with temperature [R C-1 ~> kg m-3 degC-1].
+  real :: drho_dS(SZK_(GV))  ! Derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
+  real :: rho_guess(SZK_(GV)) ! Potential density at T0 & S0 [R ~> kg m-3].
+  real :: S_ref             ! A default value for salinities [S ~> ppt]
+  real :: T_light           ! A first guess at the temperature of the lightest layer [C ~> degC]
   ! The following variables are used to set up the transport in the DOME example.
-  real :: tr_0, y1, y2, tr_k, rst, rsb, rc, v_k, lon_im1
-  real :: D_edge            ! The thickness [Z ~> m], of the dense fluid at the
-                            ! inner edge of the inflow.
-  real :: g_prime_tot       ! The reduced gravity across all layers [L2 Z-1 T-2 ~> m s-2].
-  real :: Def_Rad           ! The deformation radius, based on fluid of
-                            ! thickness D_edge, in the same units as lat [m].
+  real :: tr_0              ! The total integrated inflow transport [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: tr_k              ! The integrated inflow transport of a layer [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: v_k               ! The velocity of a layer at the edge [L T-1 ~> m s-1]
+  real :: yt, yb            ! The log of these variables gives the fractional velocities at the
+                            ! top and bottom of a layer [nondim]
+  real :: rst, rsb          ! The relative position of the top and bottom of a layer [nondim],
+                            ! with a range from 0 for the densest water to -1 for the lightest
+  real :: rc                ! The relative position of the center of a layer [nondim]
+  real :: lon_im1           ! An extrapolated value for the longitude of the western edge of a
+                            ! v-velocity face, in the same units as G%geoLon [km]
+  real :: D_edge            ! The thickness [Z ~> m] of the dense fluid at the
+                            ! inner edge of the inflow
+  real :: RLay_range        ! The range of densities [R ~> kg m-3].
+  real :: Rlay_Ref          ! The surface layer's target density [R ~> kg m-3].
+  real :: f_0               ! The reference value of the Coriolis parameter [T-1 ~> s-1]
+  real :: f_inflow          ! The value of the Coriolis parameter used to determine DOME inflow
+                            ! properties [T-1 ~> s-1]
+  real :: g_prime_tot       ! The reduced gravity across all layers [L2 Z-1 T-2 ~> m s-2]
+  real :: Def_Rad           ! The deformation radius, based on fluid of thickness D_edge [L ~> m]
+  real :: inflow_lon        ! The edge longitude of the DOME inflow [km]
+  real :: I_Def_Rad         ! The inverse of the deformation radius in the same units as G%geoLon [km-1]
   real :: Ri_trans          ! The shear Richardson number in the transition
-                            ! region of the specified shear profile.
+                            ! region of the specified shear profile [nondim]
+  character(len=32)  :: name ! The name of a tracer field.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
-  character(len=32)  :: name
-  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, NTR
+  integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, ntherm, ntr_id
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
   type(tracer_type), pointer      :: tr_ptr => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = G%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  ! The following variables should be transformed into runtime parameters.
-  D_edge = 300.0*US%m_to_Z  ! The thickness of dense fluid in the inflow.
-  Ri_trans = 1.0/3.0 ! The shear Richardson number in the transition region
-                     ! region of the specified shear profile.
+  call get_param(PF, mdl, "DOME_INFLOW_THICKNESS", D_edge, &
+                 "The thickness of the dense DOME inflow at the inner edge.", &
+                 default=300.0, units="m", scale=US%m_to_Z)
+  call get_param(PF, mdl, "DOME_INFLOW_RI_TRANS", Ri_trans, &
+                 "The shear Richardson number in the transition region of the specified "//&
+                 "DOME inflow shear profile.", default=(1.0/3.0), units="nondim")
+  call get_param(PF, mdl, "DENSITY_RANGE", Rlay_range, &
+                 "The range of reference potential densities in the layers.", &
+                 units="kg m-3", default=2.0, scale=US%kg_m3_to_R)
+  call get_param(PF, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
+                 "The reference potential density used for layer 1.", &
+                 units="kg m-3", default=US%R_to_kg_m3*GV%Rho0, scale=US%kg_m3_to_R)
+  call get_param(PF, mdl, "F_0", f_0, &
+                 "The reference value of the Coriolis parameter with the betaplane option.", &
+                 units="s-1", default=0.0, scale=US%T_to_s)
+  call get_param(PF, mdl, "DOME_INFLOW_F", f_inflow, &
+                 "The value of the Coriolis parameter that is used to determine the DOME "//&
+                 "inflow properties.", units="s-1", default=f_0*US%s_to_T, scale=US%T_to_s)
+  call get_param(PF, mdl, "DOME_INFLOW_LON", inflow_lon, &
+                 "The edge longitude of the DOME inflow.", units="km", default=1000.0)
+  if (associated(tv%S) .or. associated(tv%T)) then
+    call get_param(PF, mdl, "S_REF", S_ref, &
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
+    call get_param(PF, mdl, "DOME_T_LIGHT", T_light, &
+                 "A first guess at the temperature of the lightest layer in the DOME test case.", &
+                 units="degC", default=25.0, scale=US%degC_to_C)
+  endif
 
   if (.not.associated(OBC)) return
 
-  g_prime_tot = (GV%g_Earth / GV%Rho0)*2.0
-  Def_Rad = US%L_to_m*sqrt(D_edge*g_prime_tot) / (1.0e-4*US%T_to_s * 1000.0)
-  tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5e3*US%m_to_L*Def_Rad) * GV%Z_to_H
+  if (GV%Boussinesq) then
+    g_prime_tot = (GV%g_Earth / GV%Rho0) * Rlay_range
+    Def_Rad = sqrt(D_edge*g_prime_tot) / abs(f_inflow)
+    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5*Def_Rad) * GV%Z_to_H
+  else
+    g_prime_tot = (GV%g_Earth / (Rlay_Ref + 0.5*Rlay_range)) * Rlay_range
+    Def_Rad = sqrt(D_edge*g_prime_tot) / abs(f_inflow)
+    tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5*Def_Rad) * (Rlay_Ref + 0.5*Rlay_range) * GV%RZ_to_H
+  endif
+
+  I_Def_Rad = 1.0 / (1.0e-3*US%L_to_m*Def_Rad)
 
   if (OBC%number_of_segments /= 1) then
     call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)
     return   !!! Need a better error message here
   endif
+
   segment => OBC%segment(1)
   if (.not. segment%on_pe) return
 
-  NTR = tr_Reg%NTR
-  allocate(segment%field(NTR))
+  ! Set up space for the OBCs to use for all the tracers.
+  ntherm = 0
+  if (associated(tv%S)) ntherm = ntherm + 1
+  if (associated(tv%T)) ntherm = ntherm + 1
+  allocate(segment%field(ntherm+tr_Reg%ntr))
 
   do k=1,nz
     rst = -1.0
@@ -313,10 +408,10 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     rc = -1.0 + real(k-1)/real(nz-1)
 
     ! These come from assuming geostrophy and a constant Ri profile.
-    y1 = (2.0*Ri_trans*rst + Ri_trans + 2.0)/(2.0 - Ri_trans)
-    y2 = (2.0*Ri_trans*rsb + Ri_trans + 2.0)/(2.0 - Ri_trans)
+    yt = (2.0*Ri_trans*rst + Ri_trans + 2.0)/(2.0 - Ri_trans)
+    yb = (2.0*Ri_trans*rsb + Ri_trans + 2.0)/(2.0 - Ri_trans)
     tr_k = tr_0 * (2.0/(Ri_trans*(2.0-Ri_trans))) * &
-           ((log(y1)+1.0)/y1 - (log(y2)+1.0)/y2)
+           ((log(yt)+1.0)/yt - (log(yb)+1.0)/yb)
     v_k = -sqrt(D_edge*g_prime_tot)*log((2.0 + Ri_trans*(1.0 + 2.0*rc)) / &
                                         (2.0 - Ri_trans))
     if (k == nz)  tr_k = tr_k + tr_0 * (2.0/(Ri_trans*(2.0+Ri_trans))) * &
@@ -325,67 +420,68 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, param_file, tr_Reg)
     isd = segment%HI%isd ; ied = segment%HI%ied
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
     do J=JsdB,JedB ; do i=isd,ied
+      ! Here lon_im1 estimates G%geoLonBu(I-1,J), which may not have been set if
+      ! the symmetric memory mode is not being used.
       lon_im1 = 2.0*G%geoLonCv(i,J) - G%geoLonBu(I,J)
-      segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - 1000.0)/Def_Rad) -&
-                                  exp(-2.0*(G%geoLonBu(I,J) - 1000.0)/Def_Rad))
-      segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - 1000.0)/Def_Rad)
+      segment%normal_trans(i,J,k) = tr_k * (exp(-2.0*(lon_im1 - inflow_lon) * I_Def_Rad) - &
+                                  exp(-2.0*(G%geoLonBu(I,J) - inflow_lon) * I_Def_Rad))
+      segment%normal_vel(i,J,k) = v_k * exp(-2.0*(G%geoLonCv(i,J) - inflow_lon) * I_Def_Rad)
     enddo ; enddo
   enddo
 
   !   The inflow values of temperature and salinity also need to be set here if
   ! these variables are used.  The following code is just a naive example.
   if (associated(tv%S)) then
-    ! In this example, all S inflows have values of 35 psu.
+    ! In this example, all S inflows have values given by S_ref.
     name = 'salt'
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_scalar=35.0)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, segment, OBC_scalar=S_ref, scale=US%ppt_to_S)
   endif
   if (associated(tv%T)) then
     ! In this example, the T values are set to be consistent with the layer
-    ! target density and a salinity of 35 psu.  This code is taken from
+    ! target density and a salinity of S_ref.  This code is taken from
     ! USER_initialize_temp_sal.
-    pres(:) = tv%P_Ref ; S0(:) = 35.0 ; T0(1) = 25.0
-    call calculate_density(T0(1),S0(1),pres(1),rho_guess(1),tv%eqn_of_state)
-    call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,1,tv%eqn_of_state)
+    pres(:) = tv%P_Ref ; S0(:) = S_ref ; T0(1) = T_light
+    call calculate_density(T0(1), S0(1), pres(1), rho_guess(1), tv%eqn_of_state)
+    call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state, (/1,1/) )
 
     do k=1,nz ; T0(k) = T0(1) + (GV%Rlay(k)-rho_guess(1)) / drho_dT(1) ; enddo
     do itt=1,6
-      call calculate_density(T0,S0,pres,rho_guess,1,nz,tv%eqn_of_state)
-      call calculate_density_derivs(T0,S0,pres,drho_dT,drho_dS,1,nz,tv%eqn_of_state)
+      call calculate_density(T0, S0, pres, rho_guess, tv%eqn_of_state)
+      call calculate_density_derivs(T0, S0, pres, drho_dT, drho_dS, tv%eqn_of_state)
       do k=1,nz ; T0(k) = T0(k) + (GV%Rlay(k)-rho_guess(k)) / drho_dT(k) ; enddo
     enddo
 
-    ! Temperature on tracer 1???
+    ! Temperature is tracer 1 for the OBCs.
     allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
     do k=1,nz ; do J=JsdB,JedB ; do i=isd,ied
+      ! With the revised OBC code, buffer_src uses the same rescaled units as for tracers.
       segment%field(1)%buffer_src(i,j,k) = T0(k)
     enddo ; enddo ; enddo
     name = 'temp'
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, segment, OBC_array=.true.)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, segment, OBC_array=.true., scale=US%degC_to_C)
   endif
 
-  ! Dye tracers - fight with T,S???
+  ! Set up dye tracers
   ! First dye - only one with OBC values
-  ! This field(1) requires tr_D1 to be the first tracer.
-  allocate(segment%field(1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
+  ! This field(ntherm+1) requires tr_D1 to be the first tracer after temperature and salinity.
+  allocate(segment%field(ntherm+1)%buffer_src(segment%HI%isd:segment%HI%ied,segment%HI%JsdB:segment%HI%JedB,nz))
   do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed ; do i=segment%HI%isd,segment%HI%ied
-    if (k < nz/2) then ; segment%field(1)%buffer_src(i,j,k) = 0.0
-    else ; segment%field(1)%buffer_src(i,j,k) = 1.0 ; endif
+    if (k < nz/2) then ; segment%field(ntherm+1)%buffer_src(i,j,k) = 0.0
+    else ; segment%field(ntherm+1)%buffer_src(i,j,k) = 1.0 ; endif
   enddo ; enddo ; enddo
   name = 'tr_D1'
-  call tracer_name_lookup(tr_Reg, tr_ptr, name)
-  call register_segment_tracer(tr_ptr, param_file, GV, &
-                               OBC%segment(1), OBC_array=.true.)
+  call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+  call register_segment_tracer(tr_ptr, ntr_id, PF, GV, OBC%segment(1), OBC_array=.true.)
 
-  ! All tracers but the first have 0 concentration in their inflows. As this
-  ! is the default value, the following calls are unnecessary.
-  do m=2,NTR
+  ! All tracers but the first have 0 concentration in their inflows. As 0 is the
+  ! default value for the inflow concentrations, the following calls are unnecessary.
+  do m=2,tr_Reg%ntr
     if (m < 10) then ; write(name,'("tr_D",I1.1)') m
     else ; write(name,'("tr_D",I2.2)') m ; endif
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
-    call register_segment_tracer(tr_ptr, param_file, GV, &
-                                 OBC%segment(1), OBC_scalar=0.0)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
+    call register_segment_tracer(tr_ptr, ntr_id, PF, GV, OBC%segment(1), OBC_scalar=0.0)
   enddo
 
 end subroutine DOME_set_OBC_data

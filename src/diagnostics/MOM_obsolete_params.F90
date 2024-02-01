@@ -23,42 +23,18 @@ subroutine find_obsolete_params(param_file)
   character(len=40)  :: mdl = "find_obsolete_params" ! This module's name.
 ! This include declares and sets the variable "version".
 #include "version_variable.h"
-  integer :: test_int, l_seg, nseg
-  logical :: test_logic, test_logic2, test_logic3, split
+  integer :: l_seg, nseg
+  logical :: test_logic, split
   character(len=40)  :: temp_string
 
   if (.not.is_root_pe()) return
 
-  call obsolete_int(param_file, "NTSTEP", &
-       hint="Instead use DT_THERM to set the thermodynamic time-step.")
+  call obsolete_logical(param_file, "BLOCKED_ANALYTIC_FV_PGF", &
+       hint="BLOCKED_ANALYTIC_FV_PGF is no longer available.")
 
-  call obsolete_logical(param_file, "JACOBIAN_PGF", .false., &
-       hint="Instead use ANALYTIC_FV_PGF.")
+  call obsolete_logical(param_file, "ADD_KV_SLOW", &
+       hint="This option is no longer needed, nor supported.")
 
-  call obsolete_logical(param_file, "SADOURNY", &
-       hint="Instead use CORIOLIS_SCHEME='SADOURNY'.")
-
-  call obsolete_logical(param_file, "ARITHMETIC_BT_THICK", &
-       hint="Instead use BT_THICK_SCHEME='ARITHMETIC'.")
-
-  call obsolete_logical(param_file, "HYBRID_BT_THICK", &
-       hint="Instead use BT_THICK_SCHEME='HYBRID'.")
-
-  call obsolete_logical(param_file, "BT_CONT_BT_THICK", &
-       hint="Instead use BT_THICK_SCHEME='FROM_BT_CONT'.")
-
-  call obsolete_logical(param_file, "APPLY_OBC_U", &
-       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
-  call obsolete_logical(param_file, "APPLY_OBC_V", &
-       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
-  call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_NORTH", &
-       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
-  call obsolete_logical(param_file, "APPLY_OBC_V_FLATHER_SOUTH", &
-       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
-  call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_EAST", &
-       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
-  call obsolete_logical(param_file, "APPLY_OBC_U_FLATHER_WEST", &
-       hint="Instead use OBC_NUMBER_SEGMENTS>0 and use the new segments protocol.")
   call obsolete_char(param_file, "OBC_CONFIG", &
        hint="Instead use OBC_USER_CONFIG and use the new segments protocol.")
   call obsolete_char(param_file, "READ_OBC_ETA", &
@@ -80,112 +56,31 @@ subroutine find_obsolete_params(param_file)
          hint="Instead use OBC_SEGMENT_xxx_VELOCITY_NUDGING_TIMESCALES.")
   enddo
 
-  test_logic3 = .true. ; call read_param(param_file,"ENABLE_THERMODYNAMICS",test_logic3)
-  test_logic = .true. ; call read_param(param_file,"TEMPERATURE",test_logic)
-  test_logic2 = .false. ; call read_param(param_file,"TEMPERATURE",test_logic2)
-  if (test_logic .eqv. test_logic2) then ; if (test_logic .eqv. test_logic3) then
-    call MOM_ERROR(WARNING, "find_obsolete_params: "// &
-         "TEMPERATURE is an obsolete run-time flag, but is set consistently with \n"//&
-         "  ENABLE_THERMODYNAMICS.")
-  else
-    call MOM_ERROR(FATAL, "find_obsolete_params: "// &
-         "TEMPERATURE is an obsolete run-time flag.  Use ENABLE_THERMODYNAMICS instead.")
-  endif ; endif
-
-  test_logic = test_logic3 ; call read_param(param_file,"NONLINEAR_EOS",test_logic)
-  if (test_logic .neqv. test_logic3) then
-    call MOM_error(WARNING, "find_obsolete_params: "// &
-          "NONLINEAR_EOS is an obsolete option.  Instead define " // &
-          "USE_EOS to use an equation of state to calculate density.")
-  endif
-
-! test_logic = .true. ; call read_param(param_file,"USE_RIVER_HEAT_CONTENT",test_logic)
-! test_logic2 = .false. ; call read_param(param_file,"USE_RIVER_HEAT_CONTENT",test_logic2)
-! if (test_logic .eqv. test_logic2) call MOM_ERROR(FATAL, "find_obsolete_params: "// &
-!        "USE_RIVER_HEAT_CONTENT, is an obsolete run-time flag.")
-
-! test_logic = .true. ; call read_param(param_file,"USE_CALVING_HEAT_CONTENT",test_logic)
-! test_logic2 = .false. ; call read_param(param_file,"USE_CALVING_HEAT_CONTENT",test_logic2)
-! if (test_logic .eqv. test_logic2) call MOM_ERROR(FATAL, "find_obsolete_params: "// &
-!        "USE_CALVING_HEAT_CONTENT, is an obsolete run-time flag.")
-
-  call obsolete_int(param_file, "NXTOT")
-  call obsolete_int(param_file, "NYTOT")
-  call obsolete_int(param_file, "NZ")
-  call obsolete_int(param_file, "NXPROC")
-  call obsolete_int(param_file, "NYPROC")
-  call obsolete_int(param_file, "NXPROC_IO")
-  call obsolete_int(param_file, "NYPROC_IO")
-  call obsolete_int(param_file, "NXHALO")
-  call obsolete_int(param_file, "NYHALO")
-  call obsolete_int(param_file, "ML_PRESORT_NZ_CONV_ADJ")
-
-  call obsolete_int(param_file, "NIPROC_IO", hint="Use IO_LAYOUT=#,# instead.")
-  call obsolete_int(param_file, "NJPROC_IO", hint="Use IO_LAYOUT=#,# instead.")
-
-  call obsolete_real(param_file, "BT_COR_SLOW_RATE", 0.0)
-  call obsolete_real(param_file, "BT_COR_FRAC", 1.0)
-
+  call obsolete_logical(param_file, "CONVERT_THICKNESS_UNITS", .true.)
   call obsolete_logical(param_file, "MASK_MASSLESS_TRACERS", .false.)
 
-  call obsolete_logical(param_file, "BT_INCLUDE_UDHDT", .false.)
+  call obsolete_logical(param_file, "SALT_REJECT_BELOW_ML", .false.)
+  call obsolete_logical(param_file, "MLE_USE_MLD_AVE_BUG", .false.)
+  call obsolete_logical(param_file, "CORRECT_DENSITY", .true.)
+  call obsolete_char(param_file, "WINDSTRESS_STAGGER", warning_val="C", &
+                     hint="Use WIND_STAGGER instead.")
 
-  call obsolete_logical(param_file, "RIGA_SET_DIFFUSIVITY", .false.)
-  call obsolete_logical(param_file, "RIGA_ITIDE_BUGS", .false.)
-  call obsolete_logical(param_file, "RIGA_ENTRAINMENT_FOIBLES", .false.)
-  call obsolete_logical(param_file, "RIGA_TRACER_DIFFUSE_BUGS", .false.)
-  call obsolete_logical(param_file, "RIGA_KAPPA_SHEAR_BUGS1", .false.)
-  call obsolete_logical(param_file, "RIGA_KAPPA_SHEAR_BUGS2", .false.)
-  call obsolete_logical(param_file, "CONT_PPM_RIGA_BUGS", .false.)
-  call obsolete_logical(param_file, "USE_REPRODUCING_SUM", .true.)
-  call obsolete_logical(param_file, "SLOW_BITWISE_GLOBAL_FORCING_SUMS", .false.)
-  call obsolete_logical(param_file, "ALWAYS_WRITE_GEOM")
-  call obsolete_real(param_file, "I_ZETA")
-
-  call obsolete_logical(param_file, "REF_COMPRESS_3D")
-  call obsolete_char(param_file, "COMPRESS_FILE")
-  call obsolete_char(param_file, "REF_COMPRESS_FILE_TEMP")
-  call obsolete_char(param_file, "REF_COMPRESS_FILE_SALT")
-  call obsolete_char(param_file, "REF_COMPRESS_FILE_DEPTH")
-  call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", "Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
-
-  call obsolete_logical(param_file, "OLD_RESTRAT_PARAM", .false.)
-  call obsolete_real(param_file, "ML_RESTRAT_COEF", 0.0)
-  call obsolete_logical(param_file, "FULL_THICKNESSDIFFUSE", .true.)
-  call obsolete_logical(param_file, "DIFFUSE_ISOPYCNALS", .true.)
-
-  call obsolete_logical(param_file, "MOREL_PEN_SW")
-  call obsolete_logical(param_file, "MANIZZA_PEN_SW")
-
-  call obsolete_logical(param_file, "USE_H2000_SHEAR_MIXING", .false.)
-  call obsolete_real(param_file, "SHEARMIX_LAT_EQ", 0.0)
-  call obsolete_real(param_file, "RINO_CRIT_EQ")
-  call obsolete_real(param_file, "SHEARMIX_RATE_EQ")
+  call obsolete_char(param_file, "DIAG_REMAP_Z_GRID_DEF", &
+                     hint="Use NUM_DIAG_COORDS, DIAG_COORDS and DIAG_COORD_DEF_Z")
 
   call obsolete_real(param_file, "VSTAR_SCALE_FACTOR", hint="Use EPBL_VEL_SCALE_FACTOR instead.")
-  call obsolete_logical(param_file, "ORIG_MLD_ITERATION", .false.)
 
-  call obsolete_logical(param_file, "CONTINUITY_PPM", .true.)
-
-  call obsolete_logical(param_file, "USE_LOCAL_PREF", .true.)
-  call obsolete_logical(param_file, "USE_LOCAL_PREF_CORRECT", .true.)
-  test_logic = .false. ; call read_param(param_file, "USE_JACKSON_PARAM", test_logic)
-  call obsolete_logical(param_file, "RINOMIX", test_logic)
-  call obsolete_logical(param_file, "NORMALIZED_SUM_OUT", .true.)
-
-  call obsolete_real(param_file, "RLAY_RANGE")
-  call obsolete_real(param_file, "RLAY_REF")
-
-  call obsolete_real(param_file, "HMIX")
   call obsolete_real(param_file, "VSTAR_SCALE_COEF")
   call obsolete_real(param_file, "ZSTAR_RIGID_SURFACE_THRESHOLD")
+  call obsolete_logical(param_file, "HENYEY_IGW_BACKGROUND_NEW")
 
-  test_int = -1 ; call read_param(param_file,"ML_RADIATION_CODING",test_int)
-  if (test_int == 1) call MOM_ERROR(FATAL, "find_obsolete_params: "// &
-    "ML_RADIATION_CODING is an obsolete option and the code previously "//&
-    "used by setting it to 1 has been eliminated.")
-  if (test_int /= -1) call MOM_ERROR(WARNING, "find_obsolete_params: "// &
-    "ML_RADIATION_CODING is an obsolete option.")
+  call obsolete_real(param_file, "SLIGHT_DZ_SURFACE")
+  call obsolete_int(param_file, "SLIGHT_NZ_SURFACE_FIXED")
+  call obsolete_real(param_file, "SLIGHT_SURFACE_AVG_DEPTH")
+  call obsolete_real(param_file, "SLIGHT_NLAY_TO_INTERIOR")
+  call obsolete_logical(param_file, "SLIGHT_FIX_HALOCLINES")
+  call obsolete_real(param_file, "HALOCLINE_FILTER_LENGTH")
+  call obsolete_real(param_file, "HALOCLINE_STRAT_TOL")
 
   ! Test for inconsistent parameter settings.
   split = .true. ; test_logic = .false.
@@ -194,22 +89,68 @@ subroutine find_obsolete_params(param_file)
   if (test_logic .and. .not.split) call MOM_ERROR(FATAL, &
     "find_obsolete_params: #define DYNAMIC_SURFACE_PRESSURE is not yet "//&
     "implemented without #define SPLIT.")
-
-  call obsolete_logical(param_file, "USE_LEGACY_SPLIT", .false.)
-
-  call obsolete_logical(param_file, "FLUX_BT_COUPLING", .false.)
-  call obsolete_logical(param_file, "READJUST_BT_TRANS", .false.)
-  call obsolete_logical(param_file, "RESCALE_BT_FACE_AREAS", .false.)
-  call obsolete_logical(param_file, "APPLY_BT_DRAG", .true.)
+  call obsolete_char(param_file, "CONTINUITY_SCHEME", warning_val="PPM", &
+                     hint="Only one continuity scheme is available so this need not be specified.")
+  call obsolete_real(param_file, "ETA_TOLERANCE_AUX", only_warn=.true.)
   call obsolete_real(param_file, "BT_MASS_SOURCE_LIMIT", 0.0)
-
+  call obsolete_real(param_file, "FIRST_GUESS_SURFACE_LAYER_DEPTH")
+  call obsolete_logical(param_file, "CORRECT_SURFACE_LAYER_AVERAGE")
   call obsolete_int(param_file, "SEAMOUNT_LENGTH_SCALE", hint="Use SEAMOUNT_X_LENGTH_SCALE instead.")
+  call obsolete_int(param_file, "USE_LATERAL_BOUNDARY_DIFFUSION", &
+                    hint="Use USE_HORIZONTAL_BOUNDARY_DIFFUSION instead.")
 
   call obsolete_logical(param_file, "MSTAR_FIXED", hint="Instead use MSTAR_MODE.")
   call obsolete_logical(param_file, "USE_VISBECK_SLOPE_BUG", .false.)
+  call obsolete_logical(param_file, "Use_PP81", hint="get_param is case sensitive so use USE_PP81.")
 
+  call obsolete_logical(param_file, "ALLOW_CLOCKS_IN_OMP_LOOPS", .true.)
+  call obsolete_logical(param_file, "LARGE_FILE_SUPPORT", .true.)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
+
+  call read_param(param_file, "INTERPOLATE_SPONGE_TIME_SPACE", test_logic)
+  call obsolete_logical(param_file, "NEW_SPONGES", warning_val=test_logic, &
+                        hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
+
+  call obsolete_logical(param_file, "SMOOTH_RI", hint="Instead use N_SMOOTH_RI.")
+
+  call obsolete_logical(param_file, "TIDE_USE_SAL_SCALAR", hint="Use SAL_SCALAR_APPROX instead.")
+  call obsolete_logical(param_file, "TIDAL_SAL_SHT", hint="Use SAL_HARMONICS instead.")
+  call obsolete_int(param_file, "TIDAL_SAL_SHT_DEGREE", hint="Use SAL_HARMONICS_DEGREE instead.")
+  call obsolete_real(param_file, "RHO_E", hint="Use RHO_SOLID_EARTH instead.")
+  call obsolete_logical(param_file, "DEFAULT_2018_ANSWERS", hint="Instead use DEFAULT_ANSWER_DATE.")
+
+  call obsolete_logical(param_file, "SURFACE_FORCING_2018_ANSWERS", &
+                        hint="Instead use SURFACE_FORCING_ANSWER_DATE.")
+  call obsolete_logical(param_file, "WIND_GYRES_2018_ANSWERS", &
+                        hint="Instead use WIND_GYRES_ANSWER_DATE.")
+
+  call obsolete_logical(param_file, "BAROTROPIC_2018_ANSWERS", &
+                        hint="Instead use BAROTROPIC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "EPBL_2018_ANSWERS", hint="Instead use EPBL_ANSWER_DATE.")
+  call obsolete_logical(param_file, "HOR_REGRID_2018_ANSWERS", &
+                        hint="Instead use HOR_REGRID_ANSWER_DATE.")
+  call obsolete_logical(param_file, "HOR_VISC_2018_ANSWERS", &
+                        hint="Instead use HOR_VISC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "IDL_HURR_2018_ANSWERS", &
+                        hint="Instead use IDL_HURR_ANSWER_DATE.")
+  call obsolete_logical(param_file, "MEKE_GEOMETRIC_2018_ANSWERS", &
+                        hint="Instead use MEKE_GEOMETRIC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "ODA_2018_ANSWERS", hint="Instead use ODA_ANSWER_DATE.")
+  call obsolete_logical(param_file, "OPTICS_2018_ANSWERS", hint="Instead use OPTICS_ANSWER_DATE.")
+  call obsolete_logical(param_file, "REGULARIZE_LAYERS_2018_ANSWERS", &
+                        hint="Instead use REGULARIZE_LAYERS_ANSWER_DATE.")
+  call obsolete_logical(param_file, "REMAPPING_2018_ANSWERS", &
+                        hint="Instead use REMAPPING_ANSWER_DATE.")
+  call obsolete_logical(param_file, "SET_DIFF_2018_ANSWERS", &
+                        hint="Instead use SET_DIFF_ANSWER_DATE.")
+  call obsolete_logical(param_file, "SET_VISC_2018_ANSWERS", &
+                        hint="Instead use SET_VISC_ANSWER_DATE.")
+  call obsolete_logical(param_file, "SURFACE_2018_ANSWERS", hint="Instead use SURFACE_ANSWER_DATE.")
+  call obsolete_logical(param_file, "TIDAL_MIXING_2018_ANSWERS", &
+                        hint="Instead use TIDAL_MIXING_ANSWER_DATE.")
+  call obsolete_logical(param_file, "VERT_FRICTION_2018_ANSWERS", &
+                        hint="Instead use VERT_FRICTION_ANSWER_DATE.")
 
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)
@@ -226,7 +167,7 @@ subroutine obsolete_logical(param_file, varname, warning_val, hint)
   logical :: test_logic, fatal_err
   character(len=128) :: hint_msg
 
-  test_logic = .false. ; call read_param(param_file, varname,test_logic)
+  test_logic = .false. ; call read_param(param_file, varname, test_logic)
   fatal_err = .true.
   if (present(warning_val)) fatal_err = (warning_val .neqv. .true.)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
@@ -260,39 +201,58 @@ subroutine obsolete_logical(param_file, varname, warning_val, hint)
 end subroutine obsolete_logical
 
 !> Test for presence of obsolete STRING in parameter file.
-subroutine obsolete_char(param_file, varname, hint)
+subroutine obsolete_char(param_file, varname, warning_val, hint)
   type(param_file_type), intent(in) :: param_file !< Structure containing parameter file data.
   character(len=*),      intent(in) :: varname    !< Name of obsolete STRING parameter.
+  character(len=*), optional, intent(in) :: warning_val !< An allowed value that causes a warning instead of an error.
   character(len=*), optional, intent(in) :: hint  !< A hint to the user about what to do.
   ! Local variables
   character(len=200) :: test_string, hint_msg
+  logical :: only_warn
 
   test_string = ''; call read_param(param_file, varname, test_string)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
 
-  if (len_trim(test_string) > 0) call MOM_ERROR(FATAL,                 &
-           "MOM_obsolete_params: "//trim(varname)//                    &
-           " is an obsolete run-time flag, and should not be used. "// &
-           trim(hint_msg))
+  if (len_trim(test_string) > 0) then
+    only_warn = .false.
+    if (present(warning_val)) then ! Check if test_string and warning_val are the same.
+      if (len_trim(warning_val) == len_trim(test_string)) then
+        if (index(trim(test_string), trim(warning_val)) == 1) only_warn = .true.
+      endif
+    endif
 
+    if (only_warn) then
+      call MOM_ERROR(WARNING, &
+             "MOM_obsolete_params: "//trim(varname)// &
+             " is an obsolete run-time flag. "//trim(hint_msg))
+    else
+      call MOM_ERROR(FATAL, &
+             "MOM_obsolete_params: "//trim(varname)// &
+             " is an obsolete run-time flag, and should not be used. "//trim(hint_msg))
+    endif
+  endif
 end subroutine obsolete_char
 
 !> Test for presence of obsolete REAL in parameter file.
-subroutine obsolete_real(param_file, varname, warning_val, hint)
+subroutine obsolete_real(param_file, varname, warning_val, hint, only_warn)
   type(param_file_type), intent(in) :: param_file  !< Structure containing parameter file data.
   character(len=*),      intent(in) :: varname     !< Name of obsolete REAL parameter.
   real,        optional, intent(in) :: warning_val !< An allowed value that causes a warning instead of an error.
   character(len=*), optional, intent(in) :: hint   !< A hint to the user about what to do.
+  logical,     optional, intent(in) :: only_warn   !< If present and true, issue warnings instead of fatal errors.
+
   ! Local variables
   real :: test_val, warn_val
+  logical :: issue_warning
   character(len=128) :: hint_msg
 
   test_val = -9e35; call read_param(param_file, varname, test_val)
   warn_val = -9e35; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
+  issue_warning = .false. ; if (present(only_warn)) issue_warning = only_warn
 
   if (test_val /= -9e35) then
-    if (test_val == warn_val) then
+    if ((test_val == warn_val) .or. issue_warning) then
       call MOM_ERROR(WARNING, "MOM_obsolete_params: "//trim(varname)// &
          " is an obsolete run-time flag. "//trim(hint_msg))
     else

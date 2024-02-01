@@ -8,7 +8,7 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, OBC_SIMPLE
+use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary, only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N
 use MOM_open_boundary, only : OBC_DIRECTION_S
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
@@ -16,7 +16,7 @@ use MOM_tracer_registry, only : tracer_registry_type
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_type
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -37,17 +37,15 @@ logical :: first_call = .true.
 contains
 
 !> Set vertical coordinates.
-subroutine USER_set_coord(Rlay, g_prime, GV, param_file, eqn_of_state)
-  type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid
-                                                     !! structure.
-  real, dimension(:),      intent(out) :: Rlay       !< Layer potential density.
-  real, dimension(:),      intent(out) :: g_prime    !< The reduced gravity at
-                                                     !! each interface [L2 Z-1 T-2 ~> m s-2].
-  type(param_file_type),   intent(in)  :: param_file !< A structure indicating the
-                                                     !! open file to parse for model
-                                                     !! parameter values.
-  type(EOS_type),          pointer     :: eqn_of_state !< Integer that selects the
-                                                     !! equation of state.
+subroutine USER_set_coord(Rlay, g_prime, GV, US, param_file)
+  type(verticalGrid_type),  intent(in)  :: GV      !< The ocean's vertical grid structure
+  real, dimension(GV%ke),   intent(out) :: Rlay    !< Layer potential density [R ~> kg m-3].
+  real, dimension(GV%ke+1), intent(out) :: g_prime !< The reduced gravity at each
+                                                   !! interface [L2 Z-1 T-2 ~> m s-2].
+  type(unit_scale_type),    intent(in)  :: US      !< A dimensional unit scaling type
+  type(param_file_type),    intent(in)  :: param_file !< A structure indicating the
+                                                   !! open file to parse for model
+                                                   !! parameter values.
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_set_coord: " // &
@@ -63,10 +61,10 @@ end subroutine USER_set_coord
 subroutine USER_initialize_topography(D, G, param_file, max_depth, US)
   type(dyn_horgrid_type),          intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                                   intent(out) :: D !< Ocean bottom depth in m or Z if US is present
+                                   intent(out) :: D !< Ocean bottom depth [Z ~> m]
   type(param_file_type),           intent(in)  :: param_file !< Parameter file structure
-  real,                            intent(in)  :: max_depth !< Maximum model depth in the units of D
-  type(unit_scale_type), optional, intent(in)  :: US !< A dimensional unit scaling type
+  real,                            intent(in)  :: max_depth !< Maximum model depth [Z ~> m]
+  type(unit_scale_type),           intent(in)  :: US !< A dimensional unit scaling type
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_topography: " // &
@@ -78,52 +76,46 @@ subroutine USER_initialize_topography(D, G, param_file, max_depth, US)
 
 end subroutine USER_initialize_topography
 
-!> initialize thicknesses.
-subroutine USER_initialize_thickness(h, G, GV, param_file, just_read_params)
+!> Initialize thicknesses in depth units.  These will be converted to thickness units later.
+subroutine USER_initialize_thickness(h, G, GV, param_file, just_read)
   type(ocean_grid_type),   intent(in)  :: G  !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)  :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(out) :: h  !< The thicknesses being initialized [H ~> m or kg m-2].
+                           intent(out) :: h  !< The thicknesses being initialized [Z ~> m]
   type(param_file_type),   intent(in)  :: param_file !< A structure indicating the open
                                              !! file to parse for model parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
+  logical,                 intent(in)  :: just_read !< If true, this call will
                                              !! only read parameters without changing h.
-
-  logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_thickness: " // &
     "Unmodified user routine called - you must edit the routine to use it")
 
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
-
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  h(:,:,1) = 0.0 ! h should be set [H ~> m or kg m-2].
+  h(:,:,1:GV%ke) = 0.0 ! h should be set in [Z ~> m].  It will be converted to thickness units
+                       ! [H ~> m or kg m-2] once the temperatures and salinities are known.
 
   if (first_call) call write_user_log(param_file)
 
 end subroutine USER_initialize_thickness
 
 !> initialize velocities.
-subroutine USER_initialize_velocity(u, v, G, US, param_file, just_read_params)
+subroutine USER_initialize_velocity(u, v, G, GV, US, param_file, just_read)
   type(ocean_grid_type),                       intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(out) :: u !< i-component of velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G), SZJB_(G), SZK_(G)), intent(out) :: v !< j-component of velocity [L T-1 ~> m s-1]
+  type(verticalGrid_type),                     intent(in)  :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)), intent(out) :: u !< i-component of velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)), intent(out) :: v !< j-component of velocity [L T-1 ~> m s-1]
   type(unit_scale_type),                       intent(in)  :: US !< A dimensional unit scaling type
   type(param_file_type),                       intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will
-                                                      !! only read parameters without changing h.
-
-  logical :: just_read    ! If true, just read parameters but set nothing.
+  logical,                                     intent(in)  :: just_read !< If true, this call will
+                                                      !! only read parameters without changing u & v.
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_initialize_velocity: " // &
     "Unmodified user routine called - you must edit the routine to use it")
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -136,25 +128,20 @@ end subroutine USER_initialize_velocity
 
 !> This function puts the initial layer temperatures and salinities
 !! into T(:,:,:) and S(:,:,:).
-subroutine USER_init_temperature_salinity(T, S, G, param_file, eqn_of_state, just_read_params)
+subroutine USER_init_temperature_salinity(T, S, G, GV, param_file, just_read)
   type(ocean_grid_type),                     intent(in)  :: G !< Ocean grid structure.
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: T !< Potential temperature [degC].
-  real, dimension(SZI_(G),SZJ_(G), SZK_(G)), intent(out) :: S !< Salinity [ppt].
+  type(verticalGrid_type),                   intent(in)  :: GV !< The ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: T !< Potential temperature [C ~> degC].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: S !< Salinity [S ~> ppt].
   type(param_file_type),                     intent(in)  :: param_file !< A structure indicating the
                                                             !! open file to parse for model
                                                             !! parameter values.
-  type(EOS_type),                            pointer     :: eqn_of_state !< Integer that selects the
-                                                            !! equation of state.
-  logical,       optional, intent(in)  :: just_read_params !< If present and true, this call will only
+  logical,                                   intent(in)  :: just_read !< If true, this call will only
                                                            !! read parameters without changing T & S.
-
-  logical :: just_read    ! If true, just read parameters but set nothing.
 
   call MOM_error(FATAL, &
     "USER_initialization.F90, USER_init_temperature_salinity: " // &
     "Unmodified user routine called - you must edit the routine to use it")
-
-  just_read = .false. ; if (present(just_read_params)) just_read = just_read_params
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -190,7 +177,7 @@ subroutine USER_initialize_sponges(G, GV, use_temp, tv, param_file, CSp, h)
 end subroutine USER_initialize_sponges
 
 !> This subroutine sets the properties of flow at open boundary conditions.
-subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
+subroutine USER_set_OBC_data(OBC, tv, G, GV, param_file, tr_Reg)
   type(ocean_OBC_type),       pointer    :: OBC   !< This open boundary condition type specifies
                                                   !! whether, where, and what open boundary
                                                   !! conditions are used.
@@ -199,6 +186,7 @@ subroutine USER_set_OBC_data(OBC, tv, G, param_file, tr_Reg)
                                        !! temperature and salinity or mixed layer density. Absent
                                        !! fields have NULL ptrs.
   type(ocean_grid_type),      intent(in) :: G     !< The ocean's grid structure.
+  type(verticalGrid_type),    intent(in) :: GV    !< The ocean's vertical grid structure.
   type(param_file_type),      intent(in) :: param_file !< A structure indicating the
                                                   !! open file to parse for model
                                                   !! parameter values.
@@ -228,8 +216,8 @@ subroutine write_user_log(param_file)
                                                   !! open file to parse for model
                                                   !! parameter values.
 
-! This include declares and sets the variable "version".
-#include "version_variable.h"
+  ! This include declares and sets the variable "version".
+# include "version_variable.h"
   character(len=40)  :: mdl = "user_initialization" ! This module's name.
 
   call log_version(param_file, mdl, version)
@@ -241,20 +229,20 @@ end subroutine write_user_log
 !!
 !!  This subroutine initializes the fields for the simulations.
 !!  The one argument passed to initialize, Time, is set to the
-!!  current time of the simulation.  The fields which are initialized
+!!  current time of the simulation.  The fields which might be initialized
 !!  here are:
-!!  - u - Zonal velocity [m s-1].
-!!  - v - Meridional velocity [m s-1].
+!!  - u - Zonal velocity [Z T-1 ~> m s-1].
+!!  - v - Meridional velocity [Z T-1 ~> m s-1].
 !!  - h - Layer thickness [H ~> m or kg m-2].  (Must be positive.)
-!!  - G%bathyT - Basin depth [Z ~> m].  (Must be positive.)
+!!  - G%bathyT - Basin depth [Z ~> m].
 !!  - G%CoriolisBu - The Coriolis parameter [T-1 ~> s-1].
 !!  - GV%g_prime - The reduced gravity at each interface [L2 Z-1 T-2 ~> m s-2].
-!!  - GV%Rlay - Layer potential density (coordinate variable) [kg m-3].
+!!  - GV%Rlay - Layer potential density (coordinate variable) [R ~> kg m-3].
 !!  If ENABLE_THERMODYNAMICS is defined:
-!!  - T - Temperature [degC].
-!!  - S - Salinity [psu].
+!!  - T - Temperature [C ~> degC].
+!!  - S - Salinity [S ~> ppt].
 !!  If BULKMIXEDLAYER is defined:
-!!  - Rml - Mixed layer and buffer layer potential densities [kg m-3].
+!!  - Rml - Mixed layer and buffer layer potential densities [R ~> kg m-3].
 !!  If SPONGE is defined:
 !!  - A series of subroutine calls are made to set up the damping
 !!    rates and reference profiles for all variables that are damped
