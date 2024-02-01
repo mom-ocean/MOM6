@@ -100,7 +100,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
   real, dimension(nz), intent(in)    :: S  !< Salinity for source column [S ~> ppt]
   type(EOS_type),      intent(in)    :: eqn_of_state !< Equation of state structure
   real, dimension(CS%nk+1), &
-                       intent(inout) :: z_interface !< Absolute positions of interfaces
+                       intent(inout) :: z_interface !< Absolute positions of interfaces [H ~> m or kg m-2]
   real, optional,      intent(in)    :: z_rigid_top !< The height of a rigid top (positive upward in the same
                                              !! units as depth) [H ~> m or kg m-2]
   real, optional,      intent(in)    :: eta_orig !< The actual original height of the top in the same
@@ -200,7 +200,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   real, dimension(nz),   intent(in)    :: T  !< T for column [C ~> degC]
   real, dimension(nz),   intent(in)    :: S  !< S for column [S ~> ppt]
   type(EOS_type),        intent(in)    :: eqn_of_state !< Equation of state structure
-  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+  real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces [Z ~> m]
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions
                                              !! in the same units as h [Z ~> m]
@@ -216,7 +216,6 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   real, dimension(nz) :: pres       ! The pressure used in the equation of state [R L2 T-2 ~> Pa].
   real, dimension(nz) :: densities  ! Layer densities [R ~> kg m-3]
   real, dimension(nz) :: T_tmp, S_tmp ! A temporary profile of temperature [C ~> degC] and salinity [S ~> ppt].
-  real, dimension(nz) :: Tmp        ! A temporary variable holding a remapped variable.
   real, dimension(nz) :: h0, h1, hTmp ! Temporary thicknesses [Z ~> m]
   real :: deviation            ! When iterating to determine the final grid, this is the
                                ! deviation between two successive grids [Z ~> m].
@@ -273,11 +272,9 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
       h1(k) = x1(k+1) - x1(k)
     enddo
 
-    call remapping_core_h(remapCS, nz, h0, S, nz, h1, Tmp, h_neglect, h_neglect_edge)
-    S_tmp(:) = Tmp(:)
+    call remapping_core_h(remapCS, nz, h0, S, nz, h1, S_tmp, h_neglect, h_neglect_edge)
 
-    call remapping_core_h(remapCS, nz, h0, T, nz, h1, Tmp, h_neglect, h_neglect_edge)
-    T_tmp(:) = Tmp(:)
+    call remapping_core_h(remapCS, nz, h0, T, nz, h1, T_tmp, h_neglect, h_neglect_edge)
 
     ! Compute the deviation between two successive grids
     deviation = 0.0
@@ -365,17 +362,19 @@ end subroutine copy_finite_thicknesses
 subroutine old_inflate_layers_1d( min_thickness, nk, h )
 
   ! Argument
-  real,               intent(in)    :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2]
+  real,               intent(in)    :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2] or other units
   integer,            intent(in)    :: nk  !< Number of layers in the grid
-  real, dimension(:), intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(:), intent(inout) :: h   !< Layer thicknesses [H ~> m or kg m-2] or other units
 
   ! Local variable
   integer   :: k
   integer   :: k_found
   integer   :: count_nonzero_layers
-  real      :: delta
-  real      :: correction
-  real      :: maxThickness
+  real      :: delta         ! An increase to a layer to increase it to the minimum thickness in the
+                             ! same units as h, often [H ~> m or kg m-2]
+  real      :: correction    ! The accumulated correction that will be applied to the thickest layer
+                             ! to give mass conservation in the same units as h, often [H ~> m or kg m-2]
+  real      :: maxThickness  ! The thickness of the thickest layer in the same units as h, often [H ~> m or kg m-2]
 
   ! Count number of nonzero layers
   count_nonzero_layers = 0
