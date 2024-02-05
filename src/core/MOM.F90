@@ -3152,14 +3152,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   ! Set up pointers within diag mediator control structure,
   ! this needs to occur _after_ CS%h etc. have been allocated.
-  call diag_set_state_ptrs(CS%h, CS%T, CS%S, CS%tv%eqn_of_state, diag)
+  call diag_set_state_ptrs(CS%h, CS%tv, diag)
 
   ! This call sets up the diagnostic axes. These are needed,
   ! e.g. to generate the target grids below.
   call set_axes_info(G, GV, US, param_file, diag)
 
   ! Whenever thickness/T/S changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated.
+  ! for vertical remapping may need to be regenerated.  In non-Boussinesq mode,
+  ! calc_derived_thermo needs to be called before diag_update_remap_grids.
   call diag_update_remap_grids(diag)
 
   ! Setup the diagnostic grid storage types

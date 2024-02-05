@@ -103,7 +103,7 @@ contains
 
 !> Initialize a diagnostic remapping type with the given vertical coordinate.
 subroutine diag_remap_init(remap_cs, coord_tuple, answer_date, GV)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
+  type(diag_remap_ctrl), intent(inout) :: remap_cs    !< Diag remapping control structure
   character(len=*),      intent(in)    :: coord_tuple !< A string in form of
                                                       !! MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME
   integer,               intent(in)    :: answer_date !< The vintage of the order of arithmetic and expressions
@@ -118,10 +118,11 @@ subroutine diag_remap_init(remap_cs, coord_tuple, answer_date, GV)
   remap_cs%vertical_coord_name = trim(extractWord(coord_tuple, 3))
   remap_cs%vertical_coord = coordinateMode(remap_cs%vertical_coord_name)
   remap_cs%Z_based_coord = .false.
-  ! if ( & ! (.not.(GV%Boussinesq .or. GV%semi_Boussinesq)) .and. &
-  !      ((remap_cs%vertical_coord == coordinateMode('ZSTAR')) .or. &
-  !      (remap_cs%vertical_coord == coordinateMode('SIGMA'))) ) &
-  !   remap_cs%Z_based_coord = .true.
+  if (.not.(GV%Boussinesq .or. GV%semi_Boussinesq) .and. &
+      ((remap_cs%vertical_coord == coordinateMode('ZSTAR')) .or. &
+       (remap_cs%vertical_coord == coordinateMode('SIGMA')) .or. &
+       (remap_cs%vertical_coord == coordinateMode('RHO'))) ) &
+    remap_cs%Z_based_coord = .true.
 
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
@@ -295,7 +296,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
     enddo ; enddo
   else
     h_neglect = set_h_neglect(GV, remap_cs%answer_date, h_neglect_edge)
-    Z_unit_scale = GV%Z_to_H
+    Z_unit_scale = GV%Z_to_H  ! This branch is not used in fully non-Boussinesq mode.
     do j=js-1,je+1 ; do i=is-1,ie+1
       bottom_depth(i,j) = GV%Z_to_H * (G%bathyT(i,j) + G%Z_ref)
     enddo ; enddo
