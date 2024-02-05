@@ -1583,7 +1583,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
       allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
       call diag_remap_do_remap(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number), &
-              diag_cs%G, diag_cs%GV, h_diag, staggered_in_x, staggered_in_y, &
+              diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, staggered_in_x, staggered_in_y, &
               diag%axes%mask3d, field, remapped_field)
       if (id_clock_diag_remap>0) call cpu_clock_end(id_clock_diag_remap)
       if (associated(diag%axes%mask3d)) then
@@ -3207,7 +3207,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
     allocate(diag_cs%diag_remap_cs(diag_cs%num_diag_coords))
     ! Initialize each diagnostic vertical coordinate
     do i=1, diag_cs%num_diag_coords
-      call diag_remap_init(diag_cs%diag_remap_cs(i), diag_coords(i), answer_date=remap_answer_date)
+      call diag_remap_init(diag_cs%diag_remap_cs(i), diag_coords(i), answer_date=remap_answer_date, GV=GV)
     enddo
     deallocate(diag_coords)
   endif
