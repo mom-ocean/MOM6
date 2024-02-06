@@ -872,43 +872,51 @@ subroutine set_masks_for_axes_dsamp(G, diag_cs)
     do c=1, diag_cs%num_diag_coords
       ! Level/layer h-points in diagnostic coordinate
       axes => diag_cs%remap_axesTL(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTL(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTL(c)%dsamp(dl)%mask3d, &
+              dl, G%isc, G%jsc, G%isd, G%jsd, &
               G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
       diag_cs%dsamp(dl)%remap_axesTL(c)%mask3d => axes%mask3d !set non-downsampled mask
       ! Level/layer u-points in diagnostic coordinate
       axes => diag_cs%remap_axesCuL(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCuL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-               G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCuL(c)%dsamp(dl)%mask3d, &
+              dl, G%IscB, G%jsc, G%IsdB, G%jsd, &
+              G%HId2%IscB, G%HId2%IecB, G%HId2%jsc, G%HId2%jec, G%HId2%IsdB, G%HId2%IedB, G%HId2%jsd, G%HId2%jed)
       diag_cs%dsamp(dl)%remap_axesCul(c)%mask3d => axes%mask3d !set non-downsampled mask
       ! Level/layer v-points in diagnostic coordinate
       axes => diag_cs%remap_axesCvL(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvL(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
-              G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvL(c)%dsamp(dl)%mask3d, &
+              dl, G%isc, G%JscB, G%isd, G%JsdB, &
+              G%HId2%isc, G%HId2%iec, G%HId2%JscB, G%HId2%JecB, G%HId2%isd, G%HId2%ied, G%HId2%JsdB, G%HId2%JedB)
       diag_cs%dsamp(dl)%remap_axesCvL(c)%mask3d => axes%mask3d !set non-downsampled mask
       ! Level/layer q-points in diagnostic coordinate
       axes => diag_cs%remap_axesBL(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBL(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-              G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBL(c)%dsamp(dl)%mask3d, &
+              dl, G%IscB, G%JscB, G%IsdB, G%JsdB, &
+              G%HId2%IscB, G%HId2%IecB, G%HId2%JscB, G%HId2%JecB, G%HId2%IsdB, G%HId2%IedB, G%HId2%JsdB, G%HId2%JedB)
       diag_cs%dsamp(dl)%remap_axesBL(c)%mask3d => axes%mask3d !set non-downsampled mask
       ! Interface h-points in diagnostic coordinate (w-point)
       axes => diag_cs%remap_axesTi(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTi(c)%dsamp(dl)%mask3d, dl,G%isc, G%jsc,  &
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesTi(c)%dsamp(dl)%mask3d,  &
+              dl, G%isc, G%jsc, G%isd, G%jsd, &
               G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
       diag_cs%dsamp(dl)%remap_axesTi(c)%mask3d => axes%mask3d !set non-downsampled mask
       ! Interface u-points in diagnostic coordinate
       axes => diag_cs%remap_axesCui(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCui(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-              G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCui(c)%dsamp(dl)%mask3d,  &
+              dl, G%IscB, G%jsc, G%IsdB, G%jsd, &
+              G%HId2%IscB, G%HId2%IecB, G%HId2%jsc, G%HId2%jec, G%HId2%IsdB, G%HId2%IedB, G%HId2%jsd, G%HId2%jed)
       diag_cs%dsamp(dl)%remap_axesCui(c)%mask3d => axes%mask3d !set non-downsampled mask
       ! Interface v-points in diagnostic coordinate
       axes => diag_cs%remap_axesCvi(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvi(c)%dsamp(dl)%mask3d, dl,G%isc ,G%JscB, &
-              G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesCvi(c)%dsamp(dl)%mask3d,  &
+              dl, G%isc, G%JscB, G%isd, G%JsdB, &
+              G%HId2%isc, G%HId2%iec, G%HId2%JscB, G%HId2%JecB, G%HId2%isd, G%HId2%ied, G%HId2%JsdB, G%HId2%JedB)
       diag_cs%dsamp(dl)%remap_axesCvi(c)%mask3d => axes%mask3d !set non-downsampled mask
       ! Interface q-points in diagnostic coordinate
       axes => diag_cs%remap_axesBi(c)
-      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d, dl,G%IscB,G%JscB, &
-              G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
+      call downsample_mask(axes%mask3d, diag_cs%dsamp(dl)%remap_axesBi(c)%dsamp(dl)%mask3d,  &
+              dl, G%IscB, G%JscB, G%IsdB, G%JsdB, &
+              G%HId2%IscB, G%HId2%IecB, G%HId2%JscB, G%HId2%JecB, G%HId2%IsdB, G%HId2%IedB, G%HId2%JsdB, G%HId2%JedB)
       diag_cs%dsamp(dl)%remap_axesBi(c)%mask3d => axes%mask3d !set non-downsampled mask
     enddo
   enddo
@@ -3998,13 +4006,13 @@ subroutine downsample_diag_masks_set(G, nz, diag_cs)
 
   do dl=2,MAX_DSAMP_LEV
     ! 2d mask
-    call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT,  dl,G%isc, G%jsc,  &
+    call downsample_mask(G%mask2dT, diag_cs%dsamp(dl)%mask2dT,  dl, G%isc, G%jsc, G%isd, G%jsd, &
             G%HId2%isc, G%HId2%iec, G%HId2%jsc, G%HId2%jec, G%HId2%isd, G%HId2%ied, G%HId2%jsd, G%HId2%jed)
-    call downsample_mask(G%mask2dBu,diag_cs%dsamp(dl)%mask2dBu, dl,G%IscB,G%JscB, &
-            G%HId2%IscB,G%HId2%IecB,G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
-    call downsample_mask(G%mask2dCu,diag_cs%dsamp(dl)%mask2dCu, dl,G%IscB,G%JscB, &
-            G%HId2%IscB,G%HId2%IecB,G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
-    call downsample_mask(G%mask2dCv,diag_cs%dsamp(dl)%mask2dCv, dl,G%isc ,G%JscB, &
+    call downsample_mask(G%mask2dBu, diag_cs%dsamp(dl)%mask2dBu, dl,G%IscB, G%JscB, G%IsdB, G%JsdB, &
+            G%HId2%IscB,G%HId2%IecB, G%HId2%JscB,G%HId2%JecB,G%HId2%IsdB,G%HId2%IedB,G%HId2%JsdB,G%HId2%JedB)
+    call downsample_mask(G%mask2dCu, diag_cs%dsamp(dl)%mask2dCu, dl, G%IscB, G%jsc, G%IsdB, G%jsd, &
+            G%HId2%IscB,G%HId2%IecB, G%HId2%jsc, G%HId2%jec,G%HId2%IsdB,G%HId2%IedB,G%HId2%jsd, G%HId2%jed)
+    call downsample_mask(G%mask2dCv, diag_cs%dsamp(dl)%mask2dCv, dl,G %isc ,G%JscB, G%isd, G%JsdB, &
             G%HId2%isc ,G%HId2%iec, G%HId2%JscB,G%HId2%JecB,G%HId2%isd ,G%HId2%ied, G%HId2%JsdB,G%HId2%JedB)
     ! 3d native masks are needed by diag_manager but the native variables
     ! can only be masked 2d - for ocean points, all layers exists.
@@ -4517,10 +4525,12 @@ end subroutine downsample_field_2d
 !> Allocate and compute the 2d down sampled mask
 !! The masks are down sampled based on a minority rule, i.e., a coarse cell is open (1)
 !! if at least one of the sub-cells are open, otherwise it's closed (0)
-subroutine downsample_mask_2d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_d, jsc_d, jec_d, &
-                              isd_d, ied_d, jsd_d, jed_d)
-  real, dimension(:,:), intent(in) :: field_in !< Original field to be down sampled
-  real, dimension(:,:), pointer :: field_out   !< Down sampled field
+subroutine downsample_mask_2d(field_in, field_out, dl, isc_o, jsc_o, isd_o, jsd_o, &
+                              isc_d, iec_d, jsc_d, jec_d, isd_d, ied_d, jsd_d, jed_d)
+  integer, intent(in) :: isd_o !< Original data domain i-start index
+  integer, intent(in) :: jsd_o !< Original data domain j-start index
+  real, dimension(isd_o:,jsd_o:), intent(in) :: field_in !< Original field to be down sampled in arbitrary units [A]
+  real, dimension(:,:), pointer :: field_out   !< Down sampled field mask [nondim]
   integer, intent(in) :: dl    !< Level of down sampling
   integer, intent(in) :: isc_o !< Original i-start index
   integer, intent(in) :: jsc_o !< Original j-start index
@@ -4528,13 +4538,13 @@ subroutine downsample_mask_2d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
   integer, intent(in) :: iec_d !< Computational i-end index of down sampled data
   integer, intent(in) :: jsc_d !< Computational j-start index of down sampled data
   integer, intent(in) :: jec_d !< Computational j-end index of down sampled data
-  integer, intent(in) :: isd_d !< Computational i-start index of down sampled data
-  integer, intent(in) :: ied_d !< Computational i-end index of down sampled data
-  integer, intent(in) :: jsd_d !< Computational j-start index of down sampled data
-  integer, intent(in) :: jed_d !< Computational j-end index of down sampled data
+  integer, intent(in) :: isd_d !< Data domain i-start index of down sampled data
+  integer, intent(in) :: ied_d !< Data domain i-end index of down sampled data
+  integer, intent(in) :: jsd_d !< Data domain j-start index of down sampled data
+  integer, intent(in) :: jed_d !< Data domain j-end index of down sampled data
   ! Locals
   integer :: i,j,ii,jj,i0,j0
-  real    :: tot_non_zero
+  real    :: tot_non_zero  ! The sum of values in the down-scaled cell [A]
   ! down sampled mask = 0 unless the mask value of one of the down sampling cells is 1
   allocate(field_out(isd_d:ied_d,jsd_d:jed_d))
   field_out(:,:) = 0.0
@@ -4552,10 +4562,12 @@ end subroutine downsample_mask_2d
 !> Allocate and compute the 3d down sampled mask
 !! The masks are down sampled based on a minority rule, i.e., a coarse cell is open (1)
 !! if at least one of the sub-cells are open, otherwise it's closed (0)
-subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_d, jsc_d, jec_d, &
-                              isd_d, ied_d, jsd_d, jed_d)
-  real, dimension(:,:,:), intent(in) :: field_in !< Original field to be down sampled
-  real, dimension(:,:,:), pointer :: field_out   !< down sampled field
+subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isd_o, jsd_o, &
+                              isc_d, iec_d, jsc_d, jec_d, isd_d, ied_d, jsd_d, jed_d)
+  integer, intent(in) :: isd_o !< Original data domain i-start index
+  integer, intent(in) :: jsd_o !< Original data domain j-start index
+  real, dimension(isd_o:,jsd_o:,:), intent(in) :: field_in !< Original field to be down sampled in arbitrary units [A]
+  real, dimension(:,:,:), pointer :: field_out   !< down sampled field mask [nondim]
   integer, intent(in) :: dl    !< Level of down sampling
   integer, intent(in) :: isc_o !< Original i-start index
   integer, intent(in) :: jsc_o !< Original j-start index
@@ -4569,7 +4581,7 @@ subroutine downsample_mask_3d(field_in, field_out, dl, isc_o, jsc_o, isc_d, iec_
   integer, intent(in) :: jed_d !< Computational j-end index of down sampled data
   ! Locals
   integer :: i,j,ii,jj,i0,j0,k,ks,ke
-  real    :: tot_non_zero
+  real    :: tot_non_zero  ! The sum of values in the down-scaled cell [A]
   ! down sampled mask = 0 unless the mask value of one of the down sampling cells is 1
   ks = lbound(field_in,3) ; ke = ubound(field_in,3)
   allocate(field_out(isd_d:ied_d,jsd_d:jed_d,ks:ke))
