@@ -44,26 +44,31 @@ end interface
 contains
 
 !> Write to the terminal some basic statistics about the k-th level of an array
-subroutine myStats(array, missing, is, ie, js, je, k, mesg, scale)
-  real, dimension(:,:), intent(in) :: array !< input array in arbitrary units [A ~> a]
-  real,             intent(in) :: missing !< missing value in arbitrary units [A ~> a]
-  integer,          intent(in) :: is   !< Start index in i
-  integer,          intent(in) :: ie   !< End index in i
-  integer,          intent(in) :: js   !< Start index in j
-  integer,          intent(in) :: je   !< End index in j
-  integer,          intent(in) :: k    !< Level to calculate statistics for
-  character(len=*), intent(in) :: mesg !< Label to use in message
-  real,   optional, intent(in) :: scale !< A scaling factor for output [a A-1 ~> 1]
+subroutine myStats(array, missing, G, k, mesg, scale, full_halo)
+  type(ocean_grid_type), intent(in) :: G     !< Ocean grid type
+  real, dimension(SZI_(G),SZJ_(G)), &
+                         intent(in) :: array !< input array in arbitrary units [A ~> a]
+  real,                  intent(in) :: missing !< missing value in arbitrary units [A ~> a]
+  integer,               intent(in) :: k     !< Level to calculate statistics for
+  character(len=*),      intent(in) :: mesg  !< Label to use in message
+  real,        optional, intent(in) :: scale !< A scaling factor for output [a A-1 ~> 1]
+  logical,     optional, intent(in) :: full_halo !< If present and true, test values on the whole
+                                             !! array rather than just the computational domain.
   ! Local variables
   real :: minA ! Minimum value in the array in the arbitrary units of the input array [A ~> a]
   real :: maxA ! Maximum value in the array in the arbitrary units of the input array [A ~> a]
   real :: scl  ! A factor for undoing any scaling of the array statistics for output [a A-1 ~> 1]
-  integer :: i,j
+  integer :: i, j, is, ie, js, je
   logical :: found
   character(len=120) :: lMesg
 
   scl = 1.0 ; if (present(scale)) scl = scale
   minA = 9.E24 / scl ; maxA = -9.E24 / scl ; found = .false.
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  if (present(full_halo)) then ; if (full_halo) then
+    is = G%isd ; ie = G%ied ; js = G%jsd ; je = G%jed
+  endif ; endif
 
   do j=js,je ; do i=is,ie
     if (array(i,j) /= array(i,j)) stop 'Nan!'
@@ -309,7 +314,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   real, dimension(:,:),  allocatable   :: tr_in      !< A 2-d array for holding input data on its
                                                      !! native horizontal grid, with units that change
                                                      !! as the input data is interpreted [a] then [A ~> a]
-  real, dimension(:,:,:),  allocatable   :: tr_in_full  !< A 3-d array for holding input data on the
+  real, dimension(:,:,:), allocatable  :: tr_in_full  !< A 3-d array for holding input data on the
                                                      !! model horizontal grid, with units that change
                                                      !! as the input data is interpreted [a] then [A ~> a]
   real, dimension(:,:),  allocatable   :: tr_inp     !< Native horizontal grid data extended to the poles
@@ -332,7 +337,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
   real :: npole     ! The number of points contributing to the pole value [nondim]
   real :: missing_val_in ! The missing value in the input field [a]
   real :: roundoff  ! The magnitude of roundoff, usually ~2e-16 [nondim]
-  real :: add_offset, scale_factor  ! File-specific conversion factors.
+  real :: add_offset, scale_factor  ! File-specific conversion factors [a] or [nondim]
   integer :: ans_date           ! The vintage of the expressions and order of arithmetic to use
   logical :: found_attr
   logical :: add_np
@@ -545,7 +550,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
       endif
 
       if (debug) then
-        call myStats(tr_inp, missing_value, 1, id, 1, jd, k, 'Tracer from file', scale=I_scale)
+        call myStats(tr_inp, missing_value, G, k, 'Tracer from file', scale=I_scale, full_halo=.true.)
       endif
 
       call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value)
@@ -568,11 +573,12 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
           (mask_out(i,j) < 1.0)) &
         fill(i,j) = 1.0
     enddo ; enddo
+
     call pass_var(fill, G%Domain)
     call pass_var(good, G%Domain)
 
     if (debug) then
-      call myStats(tr_out, missing_value, is, ie, js, je, k, 'variable from horiz_interp()', scale=I_scale)
+      call myStats(tr_out, missing_value, G, k, 'variable from horiz_interp()', scale=I_scale)
     endif
 
     ! Horizontally homogenize data to produce perfectly "flat" initial conditions
@@ -589,7 +595,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
 
     call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, dtr_iter_stop, answer_date=ans_date)
     if (debug) then
-      call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()', scale=I_scale)
+      call myStats(tr_outf, missing_value, G, k, 'field from fill_miss_2d()', scale=I_scale)
     endif
 
     tr_z(:,:,k) = tr_outf(:,:) * G%mask2dT(:,:)
@@ -850,7 +856,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
       endif
 
       if (debug) then
-        call myStats(tr_inp, missing_value, 1, id, 1, jd, k, 'Tracer from file', scale=I_scale)
+        call myStats(tr_inp, missing_value, G, k, 'Tracer from file', scale=I_scale, full_halo=.true.)
       endif
 
       tr_out(:,:) = 0.0
@@ -878,7 +884,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
       call pass_var(good, G%Domain)
 
       if (debug) then
-        call myStats(tr_out, missing_value, is, ie, js, je, k, 'variable from horiz_interp()', scale=I_scale)
+        call myStats(tr_out, missing_value, G, k, 'variable from horiz_interp()', scale=I_scale)
       endif
 
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
@@ -897,7 +903,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
 
 !     if (debug) then
 !       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI, scale=I_scale)
-!       call myStats(tr_outf, missing_value, is, ie, js, je, k, 'field from fill_miss_2d()', scale=I_scale)
+!       call myStats(tr_outf, missing_value, G, k, 'field from fill_miss_2d()', scale=I_scale)
 !     endif
 
       tr_z(:,:,k) = tr_outf(:,:) * G%mask2dT(:,:)

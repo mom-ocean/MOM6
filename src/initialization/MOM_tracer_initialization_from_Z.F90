@@ -217,7 +217,7 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
     deallocate( h1 )
 
     do k=1,nz
-      call myStats(tr(:,:,k), missing_value, is, ie, js, je, k, 'Tracer from ALE()')
+      call myStats(tr(:,:,k), missing_value, G, k, 'Tracer from ALE()')
     enddo
     call cpu_clock_end(id_clock_ALE)
   endif ! useALEremapping
