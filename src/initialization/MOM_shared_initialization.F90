@@ -256,8 +256,8 @@ subroutine apply_topography_edits_from_file(D, G, param_file, US)
   call close_file_to_read(ncid, topo_edits_file)
 
   do n = 1, n_edits
-    i = ig(n) - G%isd_global + 2 ! +1 for python indexing and +1 for ig-isd_global+1
-    j = jg(n) - G%jsd_global + 2
+    i = ig(n) - G%idg_offset + 1 ! +1 for python indexing
+    j = jg(n) - G%jdg_offset + 1
     if (i>=G%isc .and. i<=G%iec .and. j>=G%jsc .and. j<=G%jec) then
       if (new_depth(n) /= mask_depth) then
         write(stdout,'(a,3i5,f8.2,a,f8.2,2i4)') &
