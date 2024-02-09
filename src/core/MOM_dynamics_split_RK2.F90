@@ -177,8 +177,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                      !! Euler (1) [nondim].  0 is often used.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
   logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
-  logical :: fpmix   !< If true, applies profiles of momentum flux magnitude and direction.
-
+  logical :: fpmix = .false.                 !< If true, applies profiles of momentum flux magnitude and direction.
   logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
 
   !>@{ Diagnostic IDs

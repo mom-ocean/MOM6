@@ -10,7 +10,6 @@ use ensemble_manager_mod, only : FMS_get_ensemble_size => get_ensemble_size
 use ensemble_manager_mod, only : FMS_get_ensemble_pelist => get_ensemble_pelist
 use ensemble_manager_mod, only : FMS_get_ensemble_filter_pelist => get_ensemble_filter_pelist
 use fms2_io_mod, only : fms2_io_set_filename_appendix=>set_filename_appendix
-use fms_io_mod, only  : fms_io_set_filename_appendix=>set_filename_appendix
 
 implicit none ; private
 
@@ -28,7 +27,6 @@ subroutine ensemble_manager_init(ensemble_suffix)
 
   if (present(ensemble_suffix)) then
     call fms2_io_set_filename_appendix(trim(ensemble_suffix))
-    call fms_io_set_filename_appendix(trim(ensemble_suffix))
   else
     call FMS_ensemble_manager_init()
   endif

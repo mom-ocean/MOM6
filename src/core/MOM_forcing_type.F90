@@ -67,7 +67,7 @@ type, public :: forcing
 
   ! surface stress components and turbulent velocity scale
   real, pointer, dimension(:,:) :: &
-    omega_w2x     => NULL(), & !< the counter-clockwise angle of the wind stress with respect
+    !omega_w2x     => NULL(), & !< the counter-clockwise angle of the wind stress with respect
     ustar         => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
     tau_mag       => NULL(), & !< Magnitude of the wind stress averaged over tracer cells,
                                !! including any contributions from sub-gridscale variability
@@ -227,8 +227,8 @@ type, public :: mech_forcing
     tau_mag => NULL(), & !< Magnitude of the wind stress averaged over tracer cells, including any
                        !! contributions from sub-gridscale variability or gustiness [R L Z T-2 ~> Pa]
     ustar => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
-    net_mass_src => NULL(), & !< The net mass source to the ocean [R Z T-1 ~> kg m-2 s-1]
-    omega_w2x    => NULL()    !< the counter-clockwise angle of the wind stress with respect
+    net_mass_src => NULL() !< The net mass source to the ocean [R Z T-1 ~> kg m-2 s-1]
+    !omega_w2x    => NULL()    !< the counter-clockwise angle of the wind stress with respect
                               !! to the horizontal abscissa (x-coordinate) at tracer points [rad].
 
   ! applied surface pressure from other component models (e.g., atmos, sea ice, land ice)
@@ -365,7 +365,7 @@ type, public :: forcing_diags
   integer :: id_taux  = -1
   integer :: id_tauy  = -1
   integer :: id_ustar = -1
-  integer :: id_omega_w2x = -1
+  !integer :: id_omega_w2x = -1
   integer :: id_tau_mag = -1
   integer :: id_psurf     = -1
   integer :: id_TKE_tidal = -1
@@ -1331,8 +1331,8 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &
       'm s-1', conversion=US%Z_to_m*US%s_to_T)
 
-  handles%id_omega_w2x = register_diag_field('ocean_model', 'omega_w2x', diag%axesT1, Time, &
-      'Counter-clockwise angle of the wind stress from the horizontal axis.', 'rad')
+  !handles%id_omega_w2x = register_diag_field('ocean_model', 'omega_w2x', diag%axesT1, Time, &
+  !    'Counter-clockwise angle of the wind stress from the horizontal axis.', 'rad')
 
   if (present(use_berg_fluxes)) then
     if (use_berg_fluxes) then
@@ -2170,12 +2170,11 @@ subroutine copy_common_forcing_fields(forces, fluxes, G, skip_pres)
       fluxes%ustar(i,j) = forces%ustar(i,j)
     enddo ; enddo
   endif
-
-  if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
-    do j=js,je ; do i=is,ie
-      fluxes%omega_w2x(i,j) = forces%omega_w2x(i,j)
-    enddo ; enddo
-  endif
+  !if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
+  !  do j=js,je ; do i=is,ie
+  !    fluxes%omega_w2x(i,j) = forces%omega_w2x(i,j)
+  !  enddo ; enddo
+  !endif
   if (associated(forces%tau_mag) .and. associated(fluxes%tau_mag)) then
     do j=js,je ; do i=is,ie
       fluxes%tau_mag(i,j) = forces%tau_mag(i,j)
@@ -2312,12 +2311,11 @@ subroutine copy_back_forcing_fields(fluxes, forces, G)
       forces%ustar(i,j) = fluxes%ustar(i,j)
     enddo ; enddo
   endif
-
-  if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
-    do j=js,je ; do i=is,ie
-      forces%omega_w2x(i,j) = fluxes%omega_w2x(i,j)
-    enddo ; enddo
-  endif
+  !if (associated(forces%omega_w2x) .and. associated(fluxes%omega_w2x)) then
+  !  do j=js,je ; do i=is,ie
+  !    forces%omega_w2x(i,j) = fluxes%omega_w2x(i,j)
+  !  enddo ; enddo
+  !endif
   if (associated(forces%tau_mag) .and. associated(fluxes%tau_mag)) then
     do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = fluxes%tau_mag(i,j)
@@ -2966,8 +2964,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_ustar > 0) .and. associated(fluxes%ustar)) &
       call post_data(handles%id_ustar, fluxes%ustar, diag)
 
-    if ((handles%id_omega_w2x > 0) .and. associated(fluxes%omega_w2x)) &
-      call post_data(handles%id_omega_w2x, fluxes%omega_w2x, diag)
+    !if ((handles%id_omega_w2x > 0) .and. associated(fluxes%omega_w2x)) &
+    !  call post_data(handles%id_omega_w2x, fluxes%omega_w2x, diag)
 
     if ((handles%id_ustar_berg > 0) .and. associated(fluxes%ustar_berg)) &
       call post_data(handles%id_ustar_berg, fluxes%ustar_berg, diag)
@@ -3294,7 +3292,7 @@ end subroutine myAlloc
 subroutine deallocate_forcing_type(fluxes)
   type(forcing), intent(inout) :: fluxes !< Forcing fields structure
 
-  if (associated(fluxes%omega_w2x))            deallocate(fluxes%omega_w2x)
+  !if (associated(fluxes%omega_w2x))            deallocate(fluxes%omega_w2x)
   if (associated(fluxes%ustar))                deallocate(fluxes%ustar)
   if (associated(fluxes%ustar_gustless))       deallocate(fluxes%ustar_gustless)
   if (associated(fluxes%tau_mag))              deallocate(fluxes%tau_mag)
@@ -3354,7 +3352,7 @@ end subroutine deallocate_forcing_type
 subroutine deallocate_mech_forcing(forces)
   type(mech_forcing), intent(inout) :: forces  !< Forcing fields structure
 
-  if (associated(forces%omega_w2x))      deallocate(forces%omega_w2x)
+  !if (associated(forces%omega_w2x))      deallocate(forces%omega_w2x)
   if (associated(forces%taux))           deallocate(forces%taux)
   if (associated(forces%tauy))           deallocate(forces%tauy)
   if (associated(forces%ustar))          deallocate(forces%ustar)

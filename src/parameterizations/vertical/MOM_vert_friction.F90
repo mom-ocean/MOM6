@@ -220,8 +220,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
   real, dimension(SZI_(G),SZJB_(G))  :: ustar2_v !< ustar squared at v-pts   [L2 T-2 ~> m2 s-2]
   real, dimension(SZIB_(G),SZJ_(G))  :: taux_u   !< zonal wind stress at u-pts  [R L Z T-2 ~> Pa]
   real, dimension(SZI_(G),SZJB_(G))  :: tauy_v   !< meridional wind stress at v-pts  [R L Z T-2 ~> Pa]
-  real, dimension(SZIB_(G),SZJ_(G))  :: omega_w2x_u !< angle between wind and x-axis at u-pts [rad]
-  real, dimension(SZI_(G),SZJB_(G))  :: omega_w2x_v !< angle between wind and y-axis at v-pts [rad]
+  !real, dimension(SZIB_(G),SZJ_(G))  :: omega_w2x_u !< angle between wind and x-axis at u-pts [rad]
+  !real, dimension(SZI_(G),SZJB_(G))  :: omega_w2x_v !< angle between wind and y-axis at v-pts [rad]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: tau_u !< kinematic zonal mtm flux at u-pts [L2 T-2 ~> m2 s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: tau_v !< kinematic mer. mtm flux at v-pts [L2 T-2 ~> m2 s-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: tauxDG_u !< downgradient zonal mtm flux at u-pts [L2 T-2 ~> m2 s-2]
@@ -270,8 +270,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
   hbl_v(:,:)     = 0.
   kbl_u(:,:)     = 0
   kbl_v(:,:)     = 0
-  omega_w2x_u(:,:) = 0.0
-  omega_w2x_v(:,:) = 0.0
+  !omega_w2x_u(:,:) = 0.0
+  !omega_w2x_v(:,:) = 0.0
   tauxDG_u(:,:,:) = 0.0
   tauyDG_v(:,:,:) = 0.0
   do j = js,je
@@ -283,7 +283,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
         tauy = ( G%mask2dCv(i  ,j  )*tauy_v(i  ,j  ) + G%mask2dCv(i  ,j-1)*tauy_v(i  ,j-1) &
              +   G%mask2dCv(i+1,j  )*tauy_v(i+1,j  ) + G%mask2dCv(i+1,j-1)*tauy_v(i+1,j-1) ) / tmp
         ustar2_u(I,j) = sqrt( taux_u(I,j)*taux_u(I,j)  + tauy*tauy )
-        omega_w2x_u(I,j) = atan2( tauy , taux_u(I,j) )
+        !omega_w2x_u(I,j) = atan2( tauy , taux_u(I,j) )
         tauxDG_u(I,j,1)  = taux_u(I,j)
         depth = 0.0
         do k = 1, nz
@@ -305,7 +305,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
         taux = ( G%mask2dCu(i  ,j) * taux_u(i  ,j) + G%mask2dCu(i  ,j+1) * taux_u(i  ,j+1) &
              +   G%mask2dCu(i-1,j) * taux_u(i-1,j) + G%mask2dCu(i-1,j+1) * taux_u(i-1,j+1)) / tmp
         ustar2_v(i,J)  = sqrt(tauy_v(i,J)*tauy_v(i,J) + taux*taux)
-        omega_w2x_v(i,J) = atan2( tauy_v(i,J), taux )
+        !omega_w2x_v(i,J) = atan2( tauy_v(i,J), taux )
         tauyDG_v(i,J,1)  = tauy_v(i,J)
         depth = 0.0
         do k = 1, nz
@@ -377,7 +377,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
     do I = Isq,Ieq
       if( (G%mask2dCu(I,j) > 0.5) ) then
         ! SURFACE
-        tauyDG_u(I,j,1) = ustar2_u(I,j) * cos(omega_w2x_u(I,j))
+        tauyDG_u(I,j,1) = ustar2_u(I,j) !* cos(omega_w2x_u(I,j))
         tau_u(I,j,1)    = ustar2_u(I,j)
         Omega_tau2w_u(I,j,1) =  0.0
         Omega_tau2s_u(I,j,1) =  0.0
@@ -386,7 +386,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           kp1 = MIN(k+1 , nz)
           tau_u(I,j,k+1) = sqrt( tauxDG_u(I,j,k+1)*tauxDG_u(I,j,k+1) + tauyDG_u(I,j,k+1)*tauyDG_u(I,j,k+1))
           Omega_tau2x  = atan2( tauyDG_u(I,j,k+1) , tauxDG_u(I,j,k+1) )
-          omega_tmp = Omega_tau2x - omega_w2x_u(I,j)
+          omega_tmp = Omega_tau2x !- omega_w2x_u(I,j)
           if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
           if ( (omega_tmp  < (0.-pi)) )  omega_tmp = omega_tmp + 2.*pi
           Omega_tau2w_u(I,j,k+1)   =     omega_tmp
@@ -399,7 +399,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
     do i = is, ie
       if( (G%mask2dCv(i,J) > 0.5) ) then
         ! SURFACE
-        tauxDG_v(i,J,1) = ustar2_v(i,J) * sin(omega_w2x_v(i,J))
+        tauxDG_v(i,J,1) = ustar2_v(i,J) !* sin(omega_w2x_v(i,J))
         tau_v(i,J,1)    = ustar2_v(i,J)
         Omega_tau2w_v(i,J,1)   = 0.0
         Omega_tau2s_v(i,J,1)   = 0.0
@@ -408,7 +408,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           kp1 = MIN(k+1 , nz)
           tau_v(i,J,k+1) = sqrt ( tauxDG_v(i,J,k+1)*tauxDG_v(i,J,k+1) + tauyDG_v(i,J,k+1)*tauyDG_v(i,J,k+1) )
           omega_tau2x  =  atan2( tauyDG_v(i,J,k+1) , tauxDG_v(i,J,k+1) )
-          omega_tmp  = omega_tau2x - omega_w2x_v(i,J)
+          omega_tmp  = omega_tau2x !- omega_w2x_v(i,J)
           if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
           if ( (omega_tmp  < (0.-pi)) )  omega_tmp = omega_tmp + 2.*pi
           Omega_tau2w_v(i,J,k+1)   =     omega_tmp
@@ -440,8 +440,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           sin_tmp   = tauyDG_u(I,j,k+1) / (tau_u(I,j,k+1) + GV%H_subroundoff)
 
           ! rotate to wind coordinates
-          Wind_x    = ustar2_u(I,j) * cos(omega_w2x_u(I,j))
-          Wind_y    = ustar2_u(I,j) * sin(omega_w2x_u(I,j))
+          Wind_x    = ustar2_u(I,j) !* cos(omega_w2x_u(I,j))
+          Wind_y    = ustar2_u(I,j) !* sin(omega_w2x_u(I,j))
           tauNL_DG  = (Wind_x * cos_tmp + Wind_y * sin_tmp)
           tauNL_CG  = (Wind_y * cos_tmp - Wind_x * sin_tmp)
           omega_w2s = atan2(tauNL_CG, tauNL_DG)
@@ -465,7 +465,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           Omega_tau2s_u(I,j,k+1) = atan2(tauNL_CG  , (tau_u(I,j,k+1)+tauNL_DG))
           tau_u(I,j,k+1)         = sqrt((tauxDG_u(I,j,k+1) + tauNL_X)**2 + (tauyDG_u(I,j,k+1) + tauNL_Y)**2)
           omega_tau2x            = atan2((tauyDG_u(I,j,k+1) + tauNL_Y), (tauxDG_u(I,j,k+1) + tauNL_X))
-          omega_tau2w            = omega_tau2x -  omega_w2x_u(I,j)
+          omega_tau2w            = omega_tau2x !-  omega_w2x_u(I,j)
           if (omega_tau2w >= pi ) omega_tau2w = omega_tau2w - 2.*pi
           if (omega_tau2w <= (0.-pi) )  omega_tau2w = omega_tau2w + 2.*pi
           Omega_tau2w_u(I,j,k+1) = omega_tau2w
@@ -499,8 +499,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           sin_tmp   = tauyDG_v(i,J,k+1) / (tau_v(i,J,k+1)  + GV%H_subroundoff)
 
           ! rotate into wind coordinate
-          Wind_x    = ustar2_v(i,J) * cos(omega_w2x_v(i,J))
-          Wind_y    = ustar2_v(i,J) * sin(omega_w2x_v(i,J))
+          Wind_x    = ustar2_v(i,J) !* cos(omega_w2x_v(i,J))
+          Wind_y    = ustar2_v(i,J) !* sin(omega_w2x_v(i,J))
           tauNL_DG  = (Wind_x * cos_tmp + Wind_y * sin_tmp)
           tauNL_CG  = (Wind_y * cos_tmp - Wind_x * sin_tmp)
           omega_w2s = atan2(tauNL_CG , tauNL_DG)
@@ -521,8 +521,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           ! diagnostics
           Omega_tau2s_v(i,J,k+1) = atan2(tauNL_CG, tau_v(i,J,k+1) + tauNL_DG)
           tau_v(i,J,k+1)         = sqrt((tauxDG_v(i,J,k+1) + tauNL_X)**2 + (tauyDG_v(i,J,k+1) + tauNL_Y)**2)
-          omega_tau2x            = atan2((tauyDG_v(i,J,k+1) + tauNL_Y) , (tauxDG_v(i,J,k+1) + tauNL_X))
-          omega_tau2w            = omega_tau2x - omega_w2x_v(i,J)
+          !omega_tau2x            = atan2((tauyDG_v(i,J,k+1) + tauNL_Y) , (tauxDG_v(i,J,k+1) + tauNL_X))
+          !omega_tau2w            = omega_tau2x - omega_w2x_v(i,J)
           if (omega_tau2w > pi)  omega_tau2w = omega_tau2w - 2.*pi
           if (omega_tau2w .le. (0.-pi) )  omega_tau2w = omega_tau2w + 2.*pi
           Omega_tau2w_v(i,J,k+1) = omega_tau2w
@@ -546,7 +546,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
   if (CS%id_FPtau2s_v > 0) call post_data(CS%id_FPtau2s_v, omega_tau2s_v, CS%diag)
   if (CS%id_FPtau2w_u > 0) call post_data(CS%id_FPtau2w_u, omega_tau2w_u, CS%diag)
   if (CS%id_FPtau2w_v > 0) call post_data(CS%id_FPtau2w_v, omega_tau2w_v, CS%diag)
-  if (CS%id_FPw2x   > 0)   call post_data(CS%id_FPw2x, forces%omega_w2x , CS%diag)
+  !if (CS%id_FPw2x   > 0)   call post_data(CS%id_FPw2x, forces%omega_w2x , CS%diag)
 
 end subroutine vertFPmix
 
