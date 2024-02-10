@@ -74,6 +74,8 @@ type, public :: hor_visc_CS ; private
                              !! Ah is the background. Leithy = Leith+E
   real    :: c_K             !< Fraction of energy dissipated by the biharmonic term
                              !! that gets backscattered in the Leith+E scheme. [nondim]
+  logical :: smooth_Ah       !< If true (default), then Ah and m_leithy are smoothed.
+                             !! This smoothing requires a lot of blocking communication.
   logical :: use_QG_Leith_visc    !< If true, use QG Leith nonlinear eddy viscosity.
                              !! KH is the background value.
   logical :: bound_Coriolis  !< If true & SMAGORINSKY_AH is used, the biharmonic
@@ -270,16 +272,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     vort_xy_dy, & ! y-derivative of vertical vorticity (d/dy(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
     vort_xy_dy_smooth, & ! y-derivative of smoothed vertical vorticity [L-1 T-1 ~> m-1 s-1]
     div_xx_dx, &  ! x-derivative of horizontal divergence (d/dx(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
-    ubtav, &      ! zonal barotropic velocity averaged over a baroclinic time-step [L T-1 ~> m s-1]
-    u_smooth      ! Zonal velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
+    ubtav         ! zonal barotropic velocity averaged over a baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G)) :: &
     Del2v, &      ! The v-component of the Laplacian of velocity [L-1 T-1 ~> m-1 s-1]
     h_v, &        ! Thickness interpolated to v points [H ~> m or kg m-2].
     vort_xy_dx, & ! x-derivative of vertical vorticity (d/dx(dv/dx - du/dy)) [L-1 T-1 ~> m-1 s-1]
     vort_xy_dx_smooth, & ! x-derivative of smoothed vertical vorticity [L-1 T-1 ~> m-1 s-1]
     div_xx_dy, &  ! y-derivative of horizontal divergence (d/dy(du/dx + dv/dy)) [L-1 T-1 ~> m-1 s-1]
-    vbtav, &      ! meridional barotropic velocity averaged over a baroclinic time-step [L T-1 ~> m s-1]
-    v_smooth      ! Meridional velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
+    vbtav         ! meridional barotropic velocity averaged over a baroclinic time-step [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dudx_bt, dvdy_bt, & ! components in the barotropic horizontal tension [T-1 ~> s-1]
     div_xx, &     ! Estimate of horizontal divergence at h-points [T-1 ~> s-1]
@@ -297,8 +297,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     dudx, dvdy, &    ! components in the horizontal tension [T-1 ~> s-1]
     dudx_smooth, dvdy_smooth, & ! components in the horizontal tension from smoothed velocity [T-1 ~> s-1]
     GME_effic_h, &  ! The filtered efficiency of the GME terms at h points [nondim]
-    htot, &       ! The total thickness of all layers [Z ~> m]
-    m_leithy      ! Kh=m_leithy*Ah in Leith+E parameterization [L-2 ~> m-2]
+    m_leithy, &   ! Kh=m_leithy*Ah in Leith+E parameterization [L-2 ~> m-2]
+    Ah_sq, &      ! The square of the biharmonic viscosity [L8 T-2 ~> m8 s-2]
+    htot          ! The total thickness of all layers [Z ~> m]
   real :: Del2vort_h ! Laplacian of vorticity at h-points [L-2 T-1 ~> m-2 s-1]
   real :: grad_vel_mag_bt_h ! Magnitude of the barotropic velocity gradient tensor squared at h-points [T-2 ~> s-2]
   real :: boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]
@@ -321,9 +322,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grad_vort_mag_q_2d, & ! Magnitude of 2d vorticity gradient at q-points [L-1 T-1 ~> m-1 s-1]
     Del2vort_q, & ! Laplacian of vorticity at q-points [L-2 T-1 ~> m-2 s-1]
     grad_div_mag_q, &  ! Magnitude of divergence gradient at q-points [L-1 T-1 ~> m-1 s-1]
-    hq, &         ! harmonic mean of the harmonic means of the u- & v point thicknesses [H ~> m or kg m-2]
-                  ! This form guarantees that hq/hu < 4.
-    GME_effic_q   ! The filtered efficiency of the GME terms at q points [nondim]
+    hq, &          ! harmonic mean of the harmonic means of the u- & v point thicknesses [H ~> m or kg m-2]
+                   ! This form guarantees that hq/hu < 4.
+    GME_effic_q    ! The filtered efficiency of the GME terms at q points [nondim]
   real :: grad_vel_mag_bt_q ! Magnitude of the barotropic velocity gradient tensor squared at q-points [T-2 ~> s-2]
   real :: boundary_mask_q ! A mask that zeroes out cells with at least one land edge [nondim]
 
@@ -353,10 +354,12 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   ! Zanna-Bolton fields
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+    u_smooth, &       ! Zonal velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
     ZB2020u           !< Zonal acceleration due to convergence of
                       !! along-coordinate stress tensor for ZB model
                       !! [L T-2 ~> m s-2]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+    v_smooth, &       ! Meridional velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
     ZB2020v           !< Meridional acceleration due to convergence
                       !! of along-coordinate stress tensor for ZB model
                       !! [L T-2 ~> m s-2]
@@ -400,6 +403,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
   logical :: use_MEKE_Au
+  integer :: is_vort, ie_vort, js_vort, je_vort  ! Loop ranges for vorticity terms
+  integer :: is_Kh, ie_Kh, js_Kh, je_Kh  ! Loop ranges for thickness point viscosities
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k, n
   real :: inv_PI3, inv_PI2, inv_PI6 ! Powers of the inverse of pi [nondim]
@@ -427,8 +432,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
   inv_PI2 = 1.0/((4.0*atan(1.0))**2)
   inv_PI6 = inv_PI3 * inv_PI3
-
-  m_leithy(:,:) = 0. ! Initialize
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
@@ -465,6 +468,22 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                           "RES_SCALE_MEKE_VISC is True.")
   endif
 
+  ! Set the halo sizes used for the thickness-point viscosities.
+  if (CS%use_Leithy) then
+    js_Kh = js-1 ; je_Kh = je+1 ; is_Kh = is-1 ; ie_Kh = ie+1
+  else
+    js_Kh = Jsq ; je_Kh = je+1 ; is_Kh = Isq ; ie_Kh = ie+1
+  endif
+
+  ! Set the halo sizes used for the vorticity calculations.
+  if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
+    js_vort = js_Kh-2 ; je_vort = Jeq+2 ; is_vort = is_Kh-2 ; ie_vort = Ieq+2
+    if ((G%isc-G%isd < 3) .or. (G%isc-G%isd < 3)) call MOM_error(FATAL, &
+          "The minimum halo size is 3 when a Leith viscosity is being used.")
+  else
+    js_vort = js-2 ; je_vort = Jeq+1 ; is_vort = is-2 ; ie_vort = Ieq+1
+  endif
+
   legacy_bound = (CS%Smagorinsky_Kh .or. CS%Leith_Kh) .and. &
                  (CS%bound_Kh .and. .not.CS%better_bound_Kh)
 
@@ -483,7 +502,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     call pass_var(h, G%domain, halo=2)
 
     ! Calculate the barotropic horizontal tension
-    do J=js-2,je+2 ; do I=is-2,ie+2
+    do j=js-2,je+2 ; do i=is-2,ie+2
       dudx_bt(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * ubtav(I,j) - &
                                      G%IdyCu(I-1,j) * ubtav(I-1,j))
       dvdy_bt(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * vbtav(i,J) - &
@@ -502,11 +521,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     if (CS%no_slip) then
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
+      do J=js-2,je+1 ; do I=is-2,ie+1
         sh_xy_bt(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx_bt(I,J) + dudy_bt(I,J) )
       enddo ; enddo
     else
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
+      do J=js-2,je+1 ; do I=is-2,ie+1
         sh_xy_bt(I,J) = G%mask2dBu(I,J) * ( dvdx_bt(I,J) + dudy_bt(I,J) )
       enddo ; enddo
     endif
@@ -557,12 +576,24 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   endif ! use_GME
 
+  if (CS%use_Leithy) then
+    ! Smooth the velocity. Right now it happens twice. In the future
+    ! one might make the number of smoothing cycles a user-specified parameter
+    do k=1,nz
+      ! One call applies the filter twice
+      u_smooth(:,:,k) = u(:,:,k)
+      v_smooth(:,:,k) = v(:,:,k)
+      call smooth_x9_uv(G, u_smooth(:,:,k), v_smooth(:,:,k), zero_land=.false.)
+    enddo
+    call pass_vector(u_smooth, v_smooth, G%Domain)
+  endif
+
   !$OMP parallel do default(none) &
   !$OMP shared( &
   !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, &
-  !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
-  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
-  !$OMP   use_MEKE_Ku, use_MEKE_Au, &
+  !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, is_vort, ie_vort, js_vort, je_vort, &
+  !$OMP   is_Kh, ie_Kh, js_Kh, je_Kh, apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, &
+  !$OMP   use_MEKE_Ku, use_MEKE_Au, u_smooth, v_smooth, &
   !$OMP   backscat_subround, GME_effic_h, GME_effic_q, &
   !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
   !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_GME, &
@@ -585,8 +616,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff, &
   !$OMP   dudx_smooth, dudy_smooth, dvdx_smooth, dvdy_smooth, &
   !$OMP   vort_xy_smooth, vort_xy_dx_smooth, vort_xy_dy_smooth, &
-  !$OMP   sh_xx_smooth, sh_xy_smooth, u_smooth, v_smooth, &
-  !$OMP   vert_vort_mag_smooth, m_leithy, AhLthy &
+  !$OMP   sh_xx_smooth, sh_xy_smooth, &
+  !$OMP   vert_vort_mag_smooth, m_leithy, Ah_sq, AhLthy &
   !$OMP )
   do k=1,nz
 
@@ -610,37 +641,32 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     enddo ; enddo
 
     ! Components for the shearing strain
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
+    do J=js_vort,je_vort ; do I=is_vort,ie_vort
       dvdx(I,J) = CS%DY_dxBu(I,J)*(v(i+1,J,k)*G%IdyCv(i+1,J) - v(i,J,k)*G%IdyCv(i,J))
       dudy(I,J) = CS%DX_dyBu(I,J)*(u(I,j+1,k)*G%IdxCu(I,j+1) - u(I,j,k)*G%IdxCu(I,j))
     enddo ; enddo
 
     if (CS%use_Leithy) then
-      ! Smooth the velocity. Right now it happens twice. In the future
-      ! one might make the number of smoothing cycles a user-specified parameter
-      u_smooth(:,:) = u(:,:,k)
-      v_smooth(:,:) = v(:,:,k)
-      call smooth_x9(CS, G, field_u=u_smooth,field_v=v_smooth) ! one call applies the filter twice
       ! Calculate horizontal tension from smoothed velocity
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-        dudx_smooth(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * u_smooth(I,j) - &
-                                           G%IdyCu(I-1,j) * u_smooth(I-1,j))
-        dvdy_smooth(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v_smooth(i,J) - &
-                                           G%IdxCv(i,J-1) * v_smooth(i,J-1))
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        dudx_smooth(i,j) = CS%DY_dxT(i,j)*(G%IdyCu(I,j) * u_smooth(I,j,k) - &
+                                           G%IdyCu(I-1,j) * u_smooth(I-1,j,k))
+        dvdy_smooth(i,j) = CS%DX_dyT(i,j)*(G%IdxCv(i,J) * v_smooth(i,J,k) - &
+                                           G%IdxCv(i,J-1) * v_smooth(i,J-1,k))
         sh_xx_smooth(i,j) = dudx_smooth(i,j) - dvdy_smooth(i,j)
       enddo ; enddo
 
       ! Components for the shearing strain from smoothed velocity
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
+      do J=js_Kh-1,je_Kh ; do I=is_Kh-1,ie_Kh
         dvdx_smooth(I,J) = CS%DY_dxBu(I,J) * &
-                         (v_smooth(i+1,J)*G%IdyCv(i+1,J) - v_smooth(i,J)*G%IdyCv(i,J))
+                         (v_smooth(i+1,J,k)*G%IdyCv(i+1,J) - v_smooth(i,J,k)*G%IdyCv(i,J))
         dudy_smooth(I,J) = CS%DX_dyBu(I,J) * &
-                         (u_smooth(I,j+1)*G%IdxCu(I,j+1) - u_smooth(I,j)*G%IdxCu(I,j))
+                         (u_smooth(I,j+1,k)*G%IdxCu(I,j+1) - u_smooth(I,j,k)*G%IdxCu(I,j))
       enddo ; enddo
-    end if ! use Leith+E
+    endif ! use Leith+E
 
     if (CS%id_normstress > 0) then
-      do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+      do j=js,je ; do i=is,ie
         NoSt(i,j,k) = sh_xx(i,j)
       enddo ; enddo
     endif
@@ -651,17 +677,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
     if (CS%use_land_mask) then
-      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
+      do j=js-2,je+2 ; do I=is-2,Ieq+1
         h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
       enddo ; enddo
-      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
+      do J=js-2,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k))
       enddo ; enddo
     else
-      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
+      do j=js-2,je+2 ; do I=is-2,Ieq+1
         h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
       enddo ; enddo
-      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
+      do J=js-2,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo
     endif
@@ -671,8 +697,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (apply_OBC) then ; do n=1,OBC%number_of_segments
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
       if (OBC%zero_strain .or. OBC%freeslip_strain .or. OBC%computed_strain) then
-        if (OBC%segment(n)%is_N_or_S .and. (J >= js-2) .and. (J <= Jeq+1)) then
-          do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+        if (OBC%segment(n)%is_N_or_S .and. (J >= Js_vort) .and. (J <= Je_vort)) then
+          do I = max(OBC%segment(n)%HI%IsdB,Is_vort), min(OBC%segment(n)%HI%IedB,Ie_vort)
             if (OBC%zero_strain) then
               dvdx(I,J) = 0. ; dudy(I,J) = 0.
             elseif (OBC%freeslip_strain) then
@@ -692,9 +718,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                 dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
               endif
             endif
+            if (CS%use_Leithy) then
+              dvdx_smooth(I,J) = dvdx(I,J)
+              dudy_smooth(I,J) = dudy(I,J)
+            endif
           enddo
-        elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-2) .and. (I <= Ieq+1)) then
-          do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+        elseif (OBC%segment(n)%is_E_or_W .and. (I >= is_vort) .and. (I <= ie_vort)) then
+          do J = max(OBC%segment(n)%HI%JsdB,js_vort), min(OBC%segment(n)%HI%JedB,je_vort)
             if (OBC%zero_strain) then
               dvdx(I,J) = 0. ; dudy(I,J) = 0.
             elseif (OBC%freeslip_strain) then
@@ -714,6 +744,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                 dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
               endif
             endif
+            if (CS%use_Leithy) then
+              dvdx_smooth(I,J) = dvdx(I,J)
+              dudy_smooth(I,J) = dudy(I,J)
+            endif
           enddo
         endif
       endif
@@ -723,25 +757,25 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         ! OBC projections, but they might not be necessary if the accelerations
         ! are always zeroed out at OBC points, in which case the i-loop below
         ! becomes do i=is-1,ie+1. -RWH
-        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+        if ((J >= js-2) .and. (J <= Jeq+1)) then
           do i = max(is-2,OBC%segment(n)%HI%isd), min(ie+2,OBC%segment(n)%HI%ied)
             h_v(i,J) = h(i,j,k)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
-        if ((J >= Jsq-1) .and. (J <= Jeq+1)) then
+        if ((J >= js-2) .and. (J <= Jeq+1)) then
           do i = max(is-2,OBC%segment(n)%HI%isd), min(ie+2,OBC%segment(n)%HI%ied)
             h_v(i,J) = h(i,j+1,k)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+        if ((I >= is-2) .and. (I <= Ieq+1)) then
           do j = max(js-2,OBC%segment(n)%HI%jsd), min(je+2,OBC%segment(n)%HI%jed)
             h_u(I,j) = h(i,j,k)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
-        if ((I >= Isq-1) .and. (I <= Ieq+1)) then
+        if ((I >= is-2) .and. (I <= Ieq+1)) then
           do j = max(js-2,OBC%segment(n)%HI%jsd), min(je+2,OBC%segment(n)%HI%jed)
             h_u(I,j) = h(i+1,j,k)
           enddo
@@ -753,25 +787,25 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
       if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
         if ((J >= js-2) .and. (J <= je)) then
-          do I = max(Isq-1,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
+          do I = max(is-2,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
             h_u(I,j+1) = h_u(I,j)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
         if ((J >= js-1) .and. (J <= je+1)) then
-          do I = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
+          do I = max(is-2,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
             h_u(I,j) = h_u(I,j+1)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
         if ((I >= is-2) .and. (I <= ie)) then
-          do J = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
+          do J = max(js-2,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
             h_v(i+1,J) = h_v(i,J)
           enddo
         endif
       elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
         if ((I >= is-1) .and. (I <= ie+1)) then
-          do J = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
+          do J = max(js-2,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
             h_v(i,J) = h_v(i+1,J)
           enddo
         endif
@@ -796,11 +830,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
       ! dudy_smooth and dvdx_smooth do not (yet) include modifications at OBCs from above.
       if (CS%no_slip) then
-        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+        do J=js-1,Jeq ; do I=is-1,Ieq
           sh_xy_smooth(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx_smooth(I,J) + dudy_smooth(I,J) )
         enddo ; enddo
       else
-        do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+        do J=js-1,Jeq ; do I=is-1,Ieq
           sh_xy_smooth(I,J) = G%mask2dBu(I,J) * ( dvdx_smooth(I,J) + dudy_smooth(I,J) )
         enddo ; enddo
       endif
@@ -833,55 +867,53 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     endif
 
     ! Vorticity
-    if (CS%no_slip) then
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-        vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
-    else
-      do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
-        vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-      enddo ; enddo
+    if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy) .or. (CS%id_vort_xy_q>0)) then
+      if (CS%no_slip) then
+        do J=js_vort,je_vort ; do I=is_vort,ie_vort
+          vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      else
+        do J=js_vort,je_vort ; do I=is_vort,ie_vort
+          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+        enddo ; enddo
+      endif
     endif
 
     if (CS%use_Leithy) then
       if (CS%no_slip) then
-        do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
+        do J=js_Kh-1,je_Kh ; do I=is_Kh-1,ie_Kh
           vort_xy_smooth(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx_smooth(I,J) - dudy_smooth(I,J) )
         enddo ; enddo
       else
-        do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
+        do J=js_Kh-1,je_Kh ; do I=is_Kh-1,ie_Kh
           vort_xy_smooth(I,J) = G%mask2dBu(I,J) * ( dvdx_smooth(I,J) - dudy_smooth(I,J) )
         enddo ; enddo
       endif
     endif
 
-    ! Divergence
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
-      div_xx(i,j) = dudx(i,j) + dvdy(i,j)
-    enddo ; enddo
 
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
 
       ! Vorticity gradient
-      do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
+      do J=js-2,je_Kh ; do i=is_Kh-1,ie_Kh+1
         DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
         vort_xy_dx(i,J) = DY_dxBu * (vort_xy(I,J) * G%IdyCu(I,j) - vort_xy(I-1,J) * G%IdyCu(I-1,j))
       enddo ; enddo
 
-      do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
+      do j=js_Kh-1,je_Kh+1 ; do I=is-2,ie_Kh
         DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
         vort_xy_dy(I,j) = DX_dyBu * (vort_xy(I,J) * G%IdxCv(i,J) - vort_xy(I,J-1) * G%IdxCv(i,J-1))
       enddo ; enddo
 
       if (CS%use_Leithy) then
         ! Gradient of smoothed vorticity
-        do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
+        do J=js_Kh-1,je_Kh ; do i=is_Kh,ie_Kh
           DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
           vort_xy_dx_smooth(i,J) = DY_dxBu * &
                       (vort_xy_smooth(I,J) * G%IdyCu(I,j) - vort_xy_smooth(I-1,J) * G%IdyCu(I-1,j))
         enddo ; enddo
 
-        do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
+        do j=js_Kh,je_Kh ; do I=is_Kh-1,ie_Kh
           DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
           vort_xy_dy_smooth(I,j) = DX_dyBu * &
                       (vort_xy_smooth(I,J) * G%IdxCv(i,J) - vort_xy_smooth(I,J-1) * G%IdxCv(i,J-1))
@@ -889,46 +921,53 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       endif ! If Leithy
 
       ! Laplacian of vorticity
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+      ! if (CS%Leith_Ah .or. CS%use_Leithy) then
+      do J=js_Kh-1,je_Kh ; do I=is_Kh-1,ie_Kh
         DY_dxBu = G%dyBu(I,J) * G%IdxBu(I,J)
         DX_dyBu = G%dxBu(I,J) * G%IdyBu(I,J)
 
         Del2vort_q(I,J) = DY_dxBu * (vort_xy_dx(i+1,J) * G%IdyCv(i+1,J) - vort_xy_dx(i,J) * G%IdyCv(i,J)) + &
                           DX_dyBu * (vort_xy_dy(I,j+1) * G%IdyCu(I,j+1) - vort_xy_dy(I,j) * G%IdyCu(I,j))
       enddo ; enddo
+      ! endif
 
       if (CS%modified_Leith) then
 
+        ! Divergence
+        do j=js_Kh-1,je_Kh+1 ; do i=is_Kh-1,ie_Kh+1
+          div_xx(i,j) = dudx(i,j) + dvdy(i,j)
+        enddo ; enddo
+
         ! Divergence gradient
-        do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
+        do j=js-1,je+1 ; do I=is_Kh-1,ie_Kh
           div_xx_dx(I,j) = G%IdxCu(I,j)*(div_xx(i+1,j) - div_xx(i,j))
         enddo ; enddo
-        do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
+        do J=js_Kh-1,je_Kh ; do i=is-1,ie+1
           div_xx_dy(i,J) = G%IdyCv(i,J)*(div_xx(i,j+1) - div_xx(i,j))
         enddo ; enddo
 
         ! Magnitude of divergence gradient
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           grad_div_mag_h(i,j) = sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I-1,j)))**2 + &
                                      (0.5*(div_xx_dy(i,J) + div_xx_dy(i,J-1)))**2)
         enddo ; enddo
-        do j=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+1
+        do J=js-1,Jeq ; do I=is-1,Ieq
           grad_div_mag_q(I,J) = sqrt((0.5*(div_xx_dx(I,j) + div_xx_dx(I,j+1)))**2 + &
                                      (0.5*(div_xx_dy(i,J) + div_xx_dy(i+1,J)))**2)
         enddo ; enddo
 
       else
 
-        do j=Jsq-1,Jeq+2 ; do I=is-2,Ieq+1
+        do j=js-1,je+1 ; do I=is_Kh-1,ie_Kh
           div_xx_dx(I,j) = 0.0
         enddo ; enddo
-        do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
+        do J=js_Kh-1,je_Kh ; do i=is-1,ie+1
           div_xx_dy(i,J) = 0.0
         enddo ; enddo
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           grad_div_mag_h(i,j) = 0.0
         enddo ; enddo
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        do J=js-1,Jeq ; do I=is-1,Ieq
           grad_div_mag_q(I,J) = 0.0
         enddo ; enddo
 
@@ -936,17 +975,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       ! Add in beta for the Leith viscosity
       if (CS%use_beta_in_Leith) then
-        do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
+        do J=js-2,Jeq+1 ; do i=is-1,ie+1
           vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1))
         enddo ; enddo
-        do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
+        do j=js-1,je+1 ; do I=is-2,Ieq+1
           vort_xy_dy(I,j) = vort_xy_dy(I,j) + 0.5 * ( G%dF_dy(i,j) + G%dF_dy(i+1,j))
         enddo ; enddo
       endif ! CS%use_beta_in_Leith
 
       if (CS%use_QG_Leith_visc) then
 
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           grad_vort_mag_h_2d(i,j) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + &
                                          (0.5*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j)))**2 )
         enddo ; enddo
@@ -961,7 +1000,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       endif
 
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         grad_vort_mag_h(i,j) = SQRT((0.5*(vort_xy_dx(i,J) + vort_xy_dx(i,J-1)))**2 + &
                                     (0.5*(vort_xy_dy(I,j) + vort_xy_dy(I-1,j)))**2 )
       enddo ; enddo
@@ -971,7 +1010,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
 
       if (CS%use_Leithy) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           vert_vort_mag_smooth(i,j) = SQRT((0.5*(vort_xy_dx_smooth(i,J) + &
                                                  vort_xy_dx_smooth(i,J-1)))**2 + &
                                            (0.5*(vort_xy_dy_smooth(I,j) + &
@@ -982,7 +1021,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     endif ! CS%Leith_Kh
 
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         sh_xx_sq = sh_xx(i,j)**2
         sh_xy_sq = 0.25 * ( (sh_xy(I-1,J-1)**2 + sh_xy(I,J)**2) &
                           + (sh_xy(I-1,J)**2 + sh_xy(I,J-1)**2) )
@@ -991,13 +1030,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     endif
 
     if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         h_min = min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1))
         hrat_min(i,j) = min(1.0, h_min / (h(i,j,k) + h_neglect))
       enddo ; enddo
 
       if (CS%better_bound_Kh) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           visc_bound_rem(i,j) = 1.0
         enddo ; enddo
       endif
@@ -1008,28 +1047,28 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! largest value from several parameterizations. Also get
       ! the Laplacian component of str_xx.
 
-      if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
+      if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
         if (CS%use_QG_Leith_visc) then
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             grad_vort = grad_vort_mag_h(i,j) + grad_div_mag_h(i,j)
             grad_vort_qg = 3. * grad_vort_mag_h_2d(i,j)
             vert_vort_mag(i,j) = min(grad_vort, grad_vort_qg)
           enddo ; enddo
         else
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             vert_vort_mag(i,j) = grad_vort_mag_h(i,j) + grad_div_mag_h(i,j)
           enddo ; enddo
         endif
       endif
 
       ! Static (pre-computed) background viscosity
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Kh(i,j) = CS%Kh_bg_xx(i,j)
       enddo ; enddo
 
       ! NOTE: The following do-block can be decomposed and vectorized after the
       !   stack size has been reduced.
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         if (CS%add_LES_viscosity) then
           if (CS%Smagorinsky_Kh) &
             Kh(i,j) = Kh(i,j) + CS%Laplac2_const_xx(i,j) * Shear_mag(i,j)
@@ -1046,38 +1085,38 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! All viscosity contributions above are subject to resolution scaling
 
       if (rescale_Kh) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = VarMix%Res_fn_h(i,j) * Kh(i,j)
         enddo ; enddo
       endif
 
       if (legacy_bound) then
         ! Older method of bounding for stability
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = min(Kh(i,j), CS%Kh_Max_xx(i,j))
         enddo ; enddo
       endif
 
       ! Place a floor on the viscosity, if desired.
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Kh(i,j) = max(Kh(i,j), CS%Kh_bg_min)
       enddo ; enddo
 
       if (use_MEKE_Ku) then
         ! *Add* the MEKE contribution (which might be negative)
         if (CS%res_scale_MEKE) then
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Kh(i,j) = Kh(i,j) + MEKE%Ku(i,j) * VarMix%Res_fn_h(i,j)
           enddo ; enddo
         else
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Kh(i,j) = Kh(i,j) + MEKE%Ku(i,j)
           enddo ; enddo
         endif
       endif
 
       if (CS%anisotropic) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           ! *Add* the tension component of anisotropic viscosity
           Kh(i,j) = Kh(i,j) + CS%Kh_aniso * (1. - CS%n1n2_h(i,j)**2)
         enddo ; enddo
@@ -1085,7 +1124,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       ! Newer method of bounding for stability
       if (CS%better_bound_Kh) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           if (Kh(i,j) >= hrat_min(i,j) * CS%Kh_Max_xx(i,j)) then
             visc_bound_rem(i,j) = 0.0
             Kh(i,j) = hrat_min(i,j) * CS%Kh_Max_xx(i,j)
@@ -1098,19 +1137,19 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! In Leith+E parameterization Kh is computed after Ah in the biharmonic loop.
       ! The harmonic component of str_xx is added in the biharmonic loop.
       if (CS%use_Leithy) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = 0.
         enddo ; enddo
-      end if
+      endif
 
       if (CS%id_Kh_h>0 .or. CS%debug) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh_h(i,j,k) = Kh(i,j)
         enddo ; enddo
       endif
 
       if (CS%id_grid_Re_Kh>0) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js,je ; do i=is,ie
           KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
           grid_Kh = max(Kh(i,j), CS%min_grid_Kh)
           grid_Re_Kh(i,j,k) = (sqrt(KE) * sqrt(CS%grid_sp_h2(i,j))) / grid_Kh
@@ -1118,13 +1157,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       endif
 
       if (CS%id_div_xx_h>0) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-          div_xx_h(i,j,k) = div_xx(i,j)
+        do j=js,je ; do i=is,ie
+          div_xx_h(i,j,k) = dudx(i,j) + dvdy(i,j)
         enddo ; enddo
       endif
 
       if (CS%id_sh_xx_h>0) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js,je ; do i=is,ie
           sh_xx_h(i,j,k) = sh_xx(i,j)
         enddo ; enddo
       endif
@@ -1151,21 +1190,21 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! Determine the biharmonic viscosity at h points, using the
       ! largest value from several parameterizations. Also get the
       ! biharmonic component of str_xx.
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Ah(i,j) = CS%Ah_bg_xx(i,j)
       enddo ; enddo
 
       if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
         if (CS%Smagorinsky_Ah) then
           if (CS%bound_Coriolis) then
-            do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+           do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
               AhSm = Shear_mag(i,j) * (CS%Biharm_const_xx(i,j) &
                   + CS%Biharm_const2_xx(i,j) * Shear_mag(i,j) &
               )
               Ah(i,j) = max(Ah(i,j), AhSm)
             enddo ; enddo
           else
-            do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+            do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
               AhSm = CS%Biharm_const_xx(i,j) * Shear_mag(i,j)
               Ah(i,j) = max(Ah(i,j), AhSm)
             enddo ; enddo
@@ -1173,7 +1212,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         endif
 
         if (CS%Leith_Ah) then
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Del2vort_h = 0.25 * ((Del2vort_q(I,J) + Del2vort_q(I-1,J-1)) + &
                                  (Del2vort_q(I-1,J) + Del2vort_q(I,J-1)))
             AhLth = CS%Biharm6_const_xx(i,j) * abs(Del2vort_h) * inv_PI6
@@ -1183,7 +1222,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         if (CS%use_Leithy) then
           ! Get m_leithy
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          if (CS%smooth_Ah) m_leithy(:,:) = 0.0 ! This is here to initialize domain edge halo values.
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Del2vort_h = 0.25 * ((Del2vort_q(I,J) + Del2vort_q(I-1,J-1)) + &
                                  (Del2vort_q(I-1,J) + Del2vort_q(I,J-1)))
             AhLth  = CS%Biharm6_const_xx(i,j) * inv_PI6 * abs(Del2vort_h)
@@ -1197,30 +1237,44 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
               endif
             endif
           enddo ; enddo
-          ! Smooth m_leithy
-          call smooth_x9(CS, G, field_h=m_leithy, zero_land=.true.)
+
+          if (CS%smooth_Ah) then
+            ! Smooth m_leithy.  A single call smoothes twice.
+            call pass_var(m_leithy, G%Domain, halo=2)
+            call smooth_x9_h(G, m_leithy, zero_land=.true.)
+            call pass_var(m_leithy, G%Domain)
+          endif
           ! Get Ah
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Del2vort_h = 0.25 * ((Del2vort_q(I,J) + Del2vort_q(I-1,J-1)) + &
                                  (Del2vort_q(I-1,J) + Del2vort_q(I,J-1)))
             AhLthy = CS%Biharm6_const_xx(i,j) * inv_PI6 * &
                     sqrt(max(0.,Del2vort_h**2 - m_leithy(i,j)*vert_vort_mag_smooth(i,j)**2))
             Ah(i,j) = max(CS%Ah_bg_xx(i,j), AhLthy)
           enddo ; enddo
-          ! Smooth Ah before applying upper bound
-          ! square, then smooth, then square root
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-            Ah_h(i,j,k) = Ah(i,j)**2
-          enddo ; enddo
-          call smooth_x9(CS, G, field_h=Ah_h(:,:,k))
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-            Ah_h(i,j,k) = sqrt(Ah_h(i,j,k))
-            Ah(i,j)     = Ah_h(i,j,k)
-          enddo ; enddo
+          if (CS%smooth_Ah) then
+            ! Smooth Ah before applying upper bound.  Square Ah, then smooth, then take its square root.
+            Ah_sq(:,:) = 0.0 ! This is here to initialize domain edge halo values.
+            do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+              Ah_sq(i,j) = Ah(i,j)**2
+            enddo ; enddo
+            call pass_var(Ah_sq, G%Domain, halo=2)
+            ! A single call smoothes twice.
+            call smooth_x9_h(G, Ah_sq, zero_land=.false.)
+            call pass_var(Ah_sq, G%Domain)
+            do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+              Ah_h(i,j,k) = max(CS%Ah_bg_xx(i,j), sqrt(max(0., Ah_sq(i,j))))
+              Ah(i,j)     = Ah_h(i,j,k)
+            enddo ; enddo
+          else
+            do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+              Ah_h(i,j,k) = Ah(i,j)
+            enddo ; enddo
+          endif
         endif
 
         if (CS%bound_Ah .and. .not. CS%better_bound_Ah) then
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Ah(i,j) = min(Ah(i,j), CS%Ah_Max_xx(i,j))
           enddo ; enddo
         endif
@@ -1228,13 +1282,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       if (use_MEKE_Au) then
         ! *Add* the MEKE contribution
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Ah(i,j) = Ah(i,j) + MEKE%Au(i,j)
         enddo ; enddo
       endif
 
       if (CS%Re_Ah > 0.0) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           KE = 0.125*((u(I,j,k)+u(I-1,j,k))**2 + (v(i,J,k)+v(i,J-1,k))**2)
           Ah(i,j) = sqrt(KE) * CS%Re_Ah_const_xx(i,j)
         enddo ; enddo
@@ -1242,18 +1296,18 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
       if (CS%better_bound_Ah) then
         if (CS%better_bound_Kh) then
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Ah(i,j) = min(Ah(i,j), visc_bound_rem(i,j) * hrat_min(i,j) * CS%Ah_Max_xx(i,j))
           enddo ; enddo
         else
-          do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Ah(i,j) = min(Ah(i,j), hrat_min(i,j) * CS%Ah_Max_xx(i,j))
           enddo ; enddo
         endif
       endif
 
-      if ((CS%id_Ah_h>0) .or. CS%debug) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      if ((CS%id_Ah_h>0) .or. CS%debug .or. CS%use_Leithy) then
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Ah_h(i,j,k) = Ah(i,j)
         enddo ; enddo
       endif
@@ -1261,14 +1315,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       if (CS%use_Leithy) then
         ! Compute Leith+E Kh after bounds have been applied to Ah
         ! and after it has been smoothed. Kh = -m_leithy * Ah
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-            Kh(i,j) = -m_leithy(i,j) * Ah(i,j)
-            Kh_h(i,j,k) = Kh(i,j)
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+          Kh(i,j) = -m_leithy(i,j) * Ah(i,j)
+          Kh_h(i,j,k) = Kh(i,j)
         enddo ; enddo
       endif
 
       if (CS%id_grid_Re_Ah>0) then
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do j=js,je ; do i=is,ie
           KE = 0.125 * ((u(I,j,k) + u(I-1,j,k))**2 + (v(i,J,k) + v(i,J-1,k))**2)
           grid_Ah = max(Ah(i,j), CS%min_grid_Ah)
           grid_Re_Ah(i,j,k) = (sqrt(KE) * CS%grid_sp_h3(i,j)) / grid_Ah
@@ -1462,7 +1516,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
         ! Leith+E doesn't recompute Kh at q points, it just interpolates it from h to q points
         if (CS%use_Leithy) then
-          Kh(I,J) = Kh_h(i+1,j+1,k)
+          Kh(I,J) = 0.25 * ((Kh_h(i,j,k) + Kh_h(i+1,j+1,k)) + (Kh_h(i,j+1,k) + Kh_h(i+1,j,k)))
         end if
 
         if (CS%id_Kh_q>0 .or. CS%debug) &
@@ -1569,7 +1623,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       ! Leith+E doesn't recompute Ah at q points, it just interpolates it from h to q points
       if (CS%use_Leithy) then
         do J=js-1,Jeq ; do I=is-1,Ieq
-           Ah(I,J) = Ah_h(i+1,j+1,k)
+          Ah(I,J) = 0.25 * ((Ah_h(i,j,k) + Ah_h(i+1,j+1,k)) + (Ah_h(i,j+1,k) + Ah_h(i+1,j,k)))
         enddo ; enddo
       end if
 
@@ -1633,7 +1687,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
     else ! .not. use_GME
       ! This changes the units of str_xx from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
-      do J=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
 
@@ -2205,7 +2259,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   if (.not.CS%Laplacian) CS%use_Kh_bg_2d = .false.
   call get_param(param_file, mdl, "KH_BG_2D_BUG", CS%Kh_bg_2d_bug, &
                  "If true, retain an answer-changing horizontal indexing bug in setting "//&
-                 "the corner-point viscosities when USE_KH_BG_2D=True. This is"//&
+                 "the corner-point viscosities when USE_KH_BG_2D=True.  This is "//&
                  "not recommended.", default=.false., do_not_log=.not.CS%use_Kh_bg_2d)
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
@@ -2215,13 +2269,17 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "Use the split time stepping if true.", default=.true., do_not_log=.true.)
   if (CS%use_Leithy) then
     if (.not.(CS%biharmonic .and. CS%Laplacian)) then
-                   call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
+                   call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init: "//&
                    "LAPLACIAN and BIHARMONIC must both be True when USE_LEITHY=True.")
     endif
-    call get_param(param_file, mdl, "LEITHY_CK", CS%c_K, &
-                   "Fraction of biharmonic dissipation that gets backscattered, "//&
-                   "in Leith+E.", units="nondim", default=1.0)
   endif
+  call get_param(param_file, mdl, "LEITHY_CK", CS%c_K, &
+                 "Fraction of biharmonic dissipation that gets backscattered, "//&
+                 "in Leith+E.", units="nondim", default=1.0, do_not_log=.not.CS%use_Leithy)
+  call get_param(param_file, mdl, "SMOOTH_AH", CS%smooth_Ah, &
+                 "If true, Ah and m_leithy are smoothed within Leith+E.  This requires "//&
+                 "lots of blocking communications, which can be expensive", &
+                 default=.true., do_not_log=.not.CS%use_Leithy)
 
   if (CS%use_GME .and. .not.split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
                                            "cannot be used with SPLIT=False.")
@@ -2358,7 +2416,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     CS%dx2q(I,J) = G%dxBu(I,J)*G%dxBu(I,J) ; CS%dy2q(I,J) = G%dyBu(I,J)*G%dyBu(I,J)
     CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
   enddo ; enddo
-  do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+  do j=js-2,Jeq+2 ; do i=is-2,Ieq+2
     CS%dx2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; CS%dy2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
     CS%DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
   enddo ; enddo
@@ -2399,7 +2457,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     ! Calculate and store the background viscosity at h-points
 
     min_grid_sp_h2 = huge(1.)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do j=js-1,Jeq+1 ; do i=is-1,Ieq+1
       ! Static factors in the Smagorinsky and Leith schemes
       grid_sp_h2 = (2.0*CS%dx2h(i,j)*CS%dy2h(i,j)) / (CS%dx2h(i,j) + CS%dy2h(i,j))
       CS%grid_sp_h2(i,j) = grid_sp_h2
@@ -2458,11 +2516,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     enddo ; enddo
   endif
   if (CS%biharmonic) then
-    do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
+    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       CS%Idx2dyCu(I,j) = (G%IdxCu(I,j)*G%IdxCu(I,j)) * G%IdyCu(I,j)
       CS%Idxdy2u(I,j) = G%IdxCu(I,j) * (G%IdyCu(I,j)*G%IdyCu(I,j))
     enddo ; enddo
-    do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
+    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
       CS%Idx2dyCv(i,J) = (G%IdxCv(i,J)*G%IdxCv(i,J)) * G%IdyCv(i,J)
       CS%Idxdy2v(i,J) = G%IdxCv(i,J) * (G%IdyCv(i,J)*G%IdyCv(i,J))
     enddo ; enddo
@@ -2474,7 +2532,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
 
     min_grid_sp_h4 = huge(1.)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do j=js-1,Jeq+1 ; do i=is-1,Ieq+1
       grid_sp_h2 = (2.0*CS%dx2h(i,j)*CS%dy2h(i,j)) / (CS%dx2h(i,j)+CS%dy2h(i,j))
       grid_sp_h3 = grid_sp_h2*sqrt(grid_sp_h2)
       CS%grid_sp_h3(i,j) = grid_sp_h3
@@ -2532,7 +2590,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   endif
   ! The Laplacian bounds should avoid overshoots when CS%bound_coef < 1.
   if (CS%Laplacian .and. CS%better_bound_Kh) then
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do j=js-1,Jeq+1 ; do i=is-1,Ieq+1
       denom = max( &
          (CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) * &
           max(G%IdyCu(I,j)*G%IareaCu(I,j), G%IdyCu(I-1,j)*G%IareaCu(I-1,j)) ), &
@@ -2560,7 +2618,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
   ! empirically work for CS%bound_coef <~ 1.0
   if (CS%biharmonic .and. CS%better_bound_Ah) then
-    do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
+    do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       u0u(I,j) = (CS%Idxdy2u(I,j)*(CS%dy2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(I+1,j) + G%IdyCu(I,j))   + &
                                    CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) ) + &
                  CS%Idx2dyCu(I,j)*(CS%dx2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j)) + &
@@ -2570,7 +2628,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  CS%Idx2dyCu(I,j)*(CS%dx2q(I,J) * CS%DY_dxBu(I,J) * (G%IdyCv(i+1,J) + G%IdyCv(i,J))   + &
                                    CS%dx2q(I,J-1)*CS%DY_dxBu(I,J-1)*(G%IdyCv(i+1,J-1) + G%IdyCv(i,J-1)) ) )
     enddo ; enddo
-    do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
+    do J=js-2,Jeq+1 ; do i=is-1,Ieq+1
       v0u(i,J) = (CS%Idxdy2v(i,J)*(CS%dy2q(I,J) * CS%DX_dyBu(I,J) * (G%IdxCu(I,j+1) + G%IdxCu(I,j))       + &
                                    CS%dy2q(I-1,J)*CS%DX_dyBu(I-1,J)*(G%IdxCu(I-1,j+1) + G%IdxCu(I-1,j)) ) + &
                  CS%Idx2dyCv(i,J)*(CS%dx2h(i,j+1)*CS%DY_dxT(i,j+1)*(G%IdyCu(I,j+1) + G%IdyCu(I-1,j+1))   + &
@@ -2580,7 +2638,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  CS%Idx2dyCv(i,J)*(CS%dx2h(i,j+1)*CS%DX_dyT(i,j+1)*(G%IdxCv(i,J+1) + G%IdxCv(i,J))   + &
                                    CS%dx2h(i,j) * CS%DX_dyT(i,j) * (G%IdxCv(i,J) + G%IdxCv(i,J-1)) ) )
     enddo ; enddo
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do j=js-1,Jeq+1 ; do i=is-1,Ieq+1
       denom = max( &
          (CS%dy2h(i,j) * &
           (CS%DY_dxT(i,j)*(G%IdyCu(I,j)*u0u(I,j) + G%IdyCu(I-1,j)*u0u(I-1,j))  + &
@@ -2859,112 +2917,113 @@ subroutine smooth_GME(CS, G, GME_flux_h, GME_flux_q)
   enddo ! s-loop
 end subroutine smooth_GME
 
-!> Apply a 9-point smoothing filter twice to reduce horizontal two-grid-point noise
-!! Note that this subroutine does not conserve mass or angular momentum, so don't use it
-!! in situations where you need conservation. Also can't apply it to Ah and Kh in the
-!! horizontal_viscosity subroutine because they are not supposed to be halo-updated.
-!! But you _can_ apply them to Kh_h and Ah_h.
-subroutine smooth_x9(CS, G, field_h, field_u, field_v, field_q, zero_land)
-  type(hor_visc_CS),                            intent(in)    :: CS        !< Control structure
-  type(ocean_grid_type),                        intent(in)    :: G         !< Ocean grid
-  real, dimension(SZI_(G),SZJ_(G)), optional,   intent(inout) :: field_h   !< field to be smoothed
-                                                              !! at h points
-  real, dimension(SZIB_(G),SZJ_(G)), optional,  intent(inout) :: field_u   !< field to be smoothed
-                                                              !! at u points
-  real, dimension(SZI_(G),SZJB_(G)), optional,  intent(inout) :: field_v   !< field to be smoothed
-                                                              !! at v points
-  real, dimension(SZIB_(G),SZJB_(G)), optional, intent(inout) :: field_q   !< field to be smoothed
-                                                              !! at q points
-  logical, optional, intent(in)                               :: zero_land !< An optional argument
-                                                              !! indicating whether to set values
-                                                              !! on land to zero (.true.) or
-                                                              !! whether to ignore land values
-                                                              !! (.false. or not present)
-  ! local variables. It would be good to make the _original variables allocatable.
-  real, dimension(SZI_(G),SZJ_(G))   :: field_h_original
-  real, dimension(SZIB_(G),SZJ_(G))  :: field_u_original
-  real, dimension(SZI_(G),SZJB_(G))  :: field_v_original
-  real, dimension(SZIB_(G),SZJB_(G)) :: field_q_original
-  real, dimension(3,3) :: weights, local_weights ! averaging weights for smoothing, nondimensional
-  logical :: zero_land_val ! actual value of zero_land optional argument
-  integer :: i, j, s
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
+!> Apply a 9-point smoothing filter twice to a field staggered at a thickness point to reduce
+!! horizontal two-grid-point noise.
+!! Note that this subroutine does not conserve mass, so don't use it in situations where you
+!! need conservation.  Also note that it assumes that the input field has valid values in the
+!! first two halo points upon entry.
+subroutine smooth_x9_h(G, field_h, zero_land)
+  type(ocean_grid_type),            intent(in)    :: G         !< Ocean grid
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: field_h   !< h-point field to be smoothed [arbitrary]
+  logical,                optional, intent(in)    :: zero_land !< If present and false, return the average
+                                                               !! of the surrounding ocean points when
+                                                               !! smoothing, otherwise use a value of 0 for
+                                                               !! land points and include them in the averages.
 
+  ! Local variables
+  real :: fh_prev(SZI_(G),SZJ_(G))  ! The value of the h-point field at the previous iteration [arbitrary]
+  real :: Iwts             ! The inverse of the sum of the weights [nondim]
+  logical :: zero_land_val ! The value of the zero_land optional argument or .true. if it is absent.
+  integer :: i, j, s, is, ie, js, je
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
+
+  zero_land_val = .true. ; if (present(zero_land)) zero_land_val = zero_land
+
+  do s=1,0,-1
+    fh_prev(:,:) = field_h(:,:)
+    ! apply smoothing on field_h using rotationally symmetric expressions.
+    do j=js-s,je+s ; do i=is-s,ie+s ; if (G%mask2dT(i,j) > 0.0) then
+      Iwts = 0.0625
+      if (.not. zero_land_val) &
+        Iwts = 1.0 / ( (4.0*G%mask2dT(i,j) + &
+                        ( 2.0*((G%mask2dT(i-1,j) + G%mask2dT(i+1,j)) + &
+                               (G%mask2dT(i,j-1) + G%mask2dT(i,j+1))) + &
+                         ((G%mask2dT(i-1,j-1) + G%mask2dT(i+1,j+1)) + &
+                          (G%mask2dT(i-1,j+1) + G%mask2dT(i+1,j-1))) ) ) + 1.0e-16 )
+      field_h(i,j) = Iwts * ( 4.0*G%mask2dT(i,j) * fh_prev(i,j) &
+                            + (2.0*((G%mask2dT(i-1,j) * fh_prev(i-1,j) + G%mask2dT(i+1,j) * fh_prev(i+1,j)) + &
+                                    (G%mask2dT(i,j-1) * fh_prev(i,j-1) + G%mask2dT(i,j+1) * fh_prev(i,j+1))) &
+                              + ((G%mask2dT(i-1,j-1) * fh_prev(i-1,j-1) + G%mask2dT(i+1,j+1) * fh_prev(i+1,j+1)) + &
+                                 (G%mask2dT(i-1,j+1) * fh_prev(i-1,j+1) + G%mask2dT(i+1,j-1) * fh_prev(i-1,j-1))) ))
+    endif ; enddo ; enddo
+  enddo
+
+end subroutine smooth_x9_h
+
+!> Apply a 9-point smoothing filter twice to a pair of velocity components to reduce
+!! horizontal two-grid-point noise.
+!! Note that this subroutine does not conserve angular momentum, so don't use it
+!! in situations where you need conservation.  Also note that it assumes that the
+!! input fields have valid values in the first two halo points upon entry.
+subroutine smooth_x9_uv(G, field_u, field_v, zero_land)
+  type(ocean_grid_type),             intent(in)    :: G         !< Ocean grid
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: field_u   !< u-point field to be smoothed[arbitrary]
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: field_v   !< v-point field to be smoothed [arbitrary]
+  logical,                 optional, intent(in)    :: zero_land !< If present and false, return the average
+                                                                !! of the surrounding ocean points when
+                                                                !! smoothing, otherwise use a value of 0 for
+                                                                !! land points and include them in the averages.
+
+  ! Local variables.
+  real :: fu_prev(SZIB_(G),SZJ_(G))  ! The value of the u-point field at the previous iteration [arbitrary]
+  real :: fv_prev(SZI_(G),SZJB_(G))  ! The value of the v-point field at the previous iteration [arbitrary]
+  real :: Iwts             ! The inverse of the sum of the weights [nondim]
+  logical :: zero_land_val ! The value of the zero_land optional argument or .true. if it is absent.
+  integer :: i, j, s, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  weights = reshape([1., 2., 1., 2., 4., 2., 1., 2., 1.],shape(weights))/16.
+  zero_land_val = .true. ; if (present(zero_land)) zero_land_val = zero_land
 
-  if (present(zero_land)) then
-    zero_land_val = zero_land
-  else
-    zero_land_val = .false.
-  endif
+  do s=1,0,-1
+    fu_prev(:,:) = field_u(:,:)
+    ! apply smoothing on field_u using the original non-rotationally symmetric expressions.
+    do j=js-s,je+s ; do I=Isq-s,Ieq+s ; if (G%mask2dCu(I,j) > 0.0) then
+      Iwts = 0.0625
+      if (.not. zero_land_val) &
+        Iwts = 1.0 / ( (4.0*G%mask2dCu(I,j) + &
+                        ( 2.0*((G%mask2dCu(I-1,j) + G%mask2dCu(I+1,j)) + &
+                               (G%mask2dCu(I,j-1) + G%mask2dCu(I,j+1))) + &
+                         ((G%mask2dCu(I-1,j-1) + G%mask2dCu(I+1,j+1)) + &
+                          (G%mask2dCu(I-1,j+1) + G%mask2dCu(I+1,j-1))) ) ) + 1.0e-16 )
+      field_u(I,j) = Iwts * ( 4.0*G%mask2dCu(I,j) * fu_prev(I,j) &
+                            + (2.0*((G%mask2dCu(I-1,j) * fu_prev(I-1,j) + G%mask2dCu(I+1,j) * fu_prev(I+1,j)) + &
+                                    (G%mask2dCu(I,j-1) * fu_prev(I,j-1) + G%mask2dCu(I,j+1) * fu_prev(I,j+1))) &
+                              + ((G%mask2dCu(I-1,j-1) * fu_prev(I-1,j-1) + G%mask2dCu(I+1,j+1) * fu_prev(I+1,j+1)) + &
+                                 (G%mask2dCu(I-1,j+1) * fu_prev(I-1,j+1) + G%mask2dCu(I+1,j-1) * fu_prev(I-1,j-1))) ))
+    endif ; enddo ; enddo
 
-  if (present(field_h)) then
-    call pass_var(field_h, G%Domain, halo=2) ! Halo size 2 ensures that you can smooth twice
-    do s=1,0,-1
-      field_h_original(:,:) = field_h(:,:)
-      ! apply smoothing on field_h
-      do j=js-s,je+s ; do i=is-s,ie+s
-        ! skip land points
-        if (G%mask2dT(i,j)==0.) cycle
-        ! compute local weights
-        local_weights = weights*G%mask2dT(i-1:i+1,j-1:j+1)
-        if (zero_land_val) local_weights = local_weights/(sum(local_weights) + 1.E-16)
-        field_h(i,j) =  sum(local_weights*field_h_original(i-1:i+1,j-1:j+1))
-      enddo ; enddo
-    enddo
-    call pass_var(field_h, G%Domain)
-  endif
+    fv_prev(:,:) = field_v(:,:)
+    ! apply smoothing on field_v using the original non-rotationally symmetric expressions.
+    do J=Jsq-s,Jeq+s ; do i=is-s,ie+s ; if (G%mask2dCv(i,J) > 0.0) then
+      Iwts = 0.0625
+      if (.not. zero_land_val) &
+        Iwts = 1.0 / ( (4.0*G%mask2dCv(i,J) + &
+                        ( 2.0*((G%mask2dCv(i-1,J) + G%mask2dCv(i+1,J)) + &
+                               (G%mask2dCv(i,J-1) + G%mask2dCv(i,J+1))) + &
+                         ((G%mask2dCv(i-1,J-1) + G%mask2dCv(i+1,J+1)) + &
+                          (G%mask2dCv(i-1,J+1) + G%mask2dCv(i+1,J-1))) ) ) + 1.0e-16 )
+      field_v(i,J) = Iwts * ( 4.0*G%mask2dCv(i,J) * fv_prev(i,J) &
+                            + (2.0*((G%mask2dCv(i-1,J) * fv_prev(i-1,J) + G%mask2dCv(i+1,J) * fv_prev(i+1,J)) + &
+                                    (G%mask2dCv(i,J-1) * fv_prev(i,J-1) + G%mask2dCv(i,J+1) * fv_prev(i,J+1))) &
+                              + ((G%mask2dCv(i-1,J-1) * fv_prev(i-1,J-1) + G%mask2dCv(i+1,J+1) * fv_prev(i+1,J+1)) + &
+                                 (G%mask2dCv(i-1,J+1) * fv_prev(i-1,J+1) + G%mask2dCv(i+1,J-1) * fv_prev(i-1,J-1))) ))
+    endif ; enddo ; enddo
+  enddo
 
-  if (present(field_u)) then
-    call pass_vector(field_u, field_v, G%Domain, halo=2)
-    do s=1,0,-1
-      field_u_original(:,:) = field_u(:,:)
-      ! apply smoothing on field_u
-      do j=js-s,je+s ; do I=Isq-s,Ieq+s
-        ! skip land points
-        if (G%mask2dCu(I,j)==0.) cycle
-        ! compute local weights
-        local_weights = weights*G%mask2dCu(I-1:I+1,j-1:j+1)
-        if (zero_land_val) local_weights = local_weights/(sum(local_weights) + 1.E-16)
-        field_u(I,j) =  sum(local_weights*field_u_original(I-1:I+1,j-1:j+1))
-      enddo ; enddo
-
-      field_v_original(:,:) = field_v(:,:)
-      ! apply smoothing on field_v
-      do J=Jsq-s,Jeq+s ; do i=is-s,ie+s
-        ! skip land points
-        if (G%mask2dCv(i,J)==0.) cycle
-        ! compute local weights
-        local_weights = weights*G%mask2dCv(i-1:i+1,J-1:J+1)
-        if (zero_land_val) local_weights = local_weights/(sum(local_weights) + 1.E-16)
-        field_v(i,J) =  sum(local_weights*field_v_original(i-1:i+1,J-1:J+1))
-      enddo ; enddo
-    enddo
-    call pass_vector(field_u, field_v, G%Domain)
-  endif
-
-  if (present(field_q)) then
-    call pass_var(field_q, G%Domain, halo=2, position=CORNER)
-    do s=1,0,-1
-      field_q_original(:,:) = field_q(:,:)
-      ! apply smoothing on field_q
-      do J=Jsq-s,Jeq+s ; do I=Isq-s,Ieq+s
-        ! skip land points
-        if (G%mask2dBu(I,J)==0.) cycle
-        ! compute local weights
-        local_weights = weights*G%mask2dBu(I-1:I+1,J-1:J+1)
-        if (zero_land_val) local_weights = local_weights/(sum(local_weights) + 1.E-16)
-        field_q(I,J) =  sum(local_weights*field_q_original(I-1:I+1,J-1:J+1))
-      enddo ; enddo
-    enddo
-    call pass_var(field_q, G%Domain, position=CORNER)
-  endif
-
-end subroutine smooth_x9
+end subroutine smooth_x9_uv
 
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
