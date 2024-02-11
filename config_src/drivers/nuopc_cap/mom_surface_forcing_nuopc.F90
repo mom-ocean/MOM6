@@ -147,7 +147,6 @@ type, public :: surface_forcing_CS ; private
     !< Handle for time-interpolated salt restoration field
   type(external_field) :: trestore_handle
     !< Handle for time-interpolated temperature restoration field
-
   ! Diagnostics handles
   type(forcing_diags), public :: handles
 
@@ -299,7 +298,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.true., &
                                press=.true., fix_accum_bug=CS%fix_ustar_gustless_bug, &
                                cfc=CS%use_CFC, hevap=CS%enthalpy_cpl)
-    call safe_alloc_ptr(fluxes%omega_w2x,isd,ied,jsd,jed)
+    !call safe_alloc_ptr(fluxes%omega_w2x,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -705,7 +704,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
 
     call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
     call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
-    call safe_alloc_ptr(forces%omega_w2x,isd,ied,jsd,jed)
+    !call safe_alloc_ptr(forces%omega_w2x,isd,ied,jsd,jed)
 
     if (CS%rigid_sea_ice) then
       call safe_alloc_ptr(forces%rigidity_ice_u,IsdB,IedB,jsd,jed)
@@ -866,7 +865,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       forces%tau_mag(i,j) = gustiness + G%mask2dT(i,j) * sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2)
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
-      forces%omega_w2x(i,j) = atan(tauy_at_h(i,j), taux_at_h(i,j))
+      !forces%omega_w2x(i,j) = atan(tauy_at_h(i,j), taux_at_h(i,j))
     enddo ; enddo
     call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
   else ! C-grid wind stresses.
