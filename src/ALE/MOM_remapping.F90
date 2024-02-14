@@ -1723,7 +1723,7 @@ logical function test_interp(verbose, msg, nsrc, h_src, u_src, ndest, h_dest, u_
   ! Local variables
   real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces [A]
   integer :: k
-  real :: error
+  real :: error ! The difference between the evaluated and expected solutions [A]
 
   ! Interpolate from src to dest
   call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, .true.)
@@ -1760,7 +1760,7 @@ logical function test_reintegrate(verbose, msg, nsrc, h_src, uh_src, ndest, h_de
   ! Local variables
   real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells [A H]
   integer :: k
-  real :: error
+  real :: error  ! The difference between the evaluated and expected solutions [A H]
 
   ! Interpolate from src to dest
   call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
