@@ -1618,7 +1618,7 @@ subroutine find_kappa_tke(N2, S2, kappa_in, Idz, h_Int, dz_Int, dz_h_Int, I_L2_b
         ! Solve for dQ(K)...
         aQ(k) = (0.5*(kappa(K)+kappa(K+1))+kappa0) * Idz(k)
         dQdz(k) = 0.5*(TKE(K) - TKE(K+1))*Idz(k)
-        tke_src = h_Int(K) * (dz_h_Int(K)*((kappa(K) + kappa0)*S2(K) - kappa(k)*N2(K)) - &
+        tke_src = h_Int(K) * ((dz_h_Int(K) * ((kappa(K) + kappa0)*S2(K) - kappa(k)*N2(K))) - &
                                (TKE(k) - q0)*TKE_decay(k)) - &
                   (aQ(k) * (TKE(K) - TKE(K+1)) - aQ(k-1) * (TKE(K-1) - TKE(K)))
         v1 = aQ(k-1) + dQdz(k-1)*dKdQ(K-1)
