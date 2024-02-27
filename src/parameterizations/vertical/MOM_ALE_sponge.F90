@@ -468,6 +468,7 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, US, param_file, CS, I
   character(len=40)  :: mdl = "MOM_sponge"  ! This module's name.
   real, allocatable, dimension(:,:) :: Iresttime_u !< inverse of the restoring time at u points [T-1 ~> s-1]
   real, allocatable, dimension(:,:) :: Iresttime_v !< inverse of the restoring time at v points [T-1 ~> s-1]
+  real :: dz_neglect, dz_neglect_edge ! Negligible layer extents [Z ~> m]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=64)  :: remapScheme
@@ -559,9 +560,19 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, US, param_file, CS, I
   call sum_across_PEs(total_sponge_cols)
 
 ! Call the constructor for remapping control structure
+  if (CS%remap_answer_date >= 20190101) then
+    dz_neglect = GV%dZ_subroundoff ; dz_neglect_edge = GV%dZ_subroundoff
+  elseif (GV%Boussinesq) then
+    dz_neglect = US%m_to_Z*1.0e-30 ; dz_neglect_edge = US%m_to_Z*1.0e-10
+  elseif (GV%semi_Boussinesq) then
+    dz_neglect = GV%kg_m2_to_H*GV%H_to_Z*1.0e-30 ; dz_neglect_edge = GV%kg_m2_to_H*GV%H_to_Z*1.0e-10
+  else
+    dz_neglect = GV%dZ_subroundoff ; dz_neglect_edge = GV%dZ_subroundoff
+  endif
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
                             om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
-                            answer_date=CS%remap_answer_date)
+                            answer_date=CS%remap_answer_date, &
+                            h_neglect=dz_neglect, h_neglect_edge=dz_neglect_edge)
   call log_param(param_file, mdl, "!Total sponge columns at h points", total_sponge_cols, &
                  "The total number of columns where sponges are applied at h points.", like_default=.true.)
   if (CS%sponge_uv) then
@@ -950,7 +961,6 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
                                                         ! edges in the input file [Z ~> m]
   real :: missing_value  ! The missing value in the input data field [various]
   real :: Idt      ! The inverse of the timestep [T-1 ~> s-1]
-  real :: dz_neglect, dz_neglect_edge ! Negligible layer extents [Z ~> m]
   real :: zTopOfCell, zBottomOfCell ! Interface heights (positive upward) in the input dataset [Z ~> m].
   real :: sp_val_u ! Interpolation of sp_val to u-points, often a velocity in [L T-1 ~> m s-1]
   real :: sp_val_v ! Interpolation of sp_val to v-points, often a velocity in [L T-1 ~> m s-1]
@@ -960,16 +970,6 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
   if (.not.associated(CS)) return
 
   Idt = 1.0/dt
-
-  if (CS%remap_answer_date >= 20190101) then
-    dz_neglect = GV%dZ_subroundoff ; dz_neglect_edge = GV%dZ_subroundoff
-  elseif (GV%Boussinesq) then
-    dz_neglect = US%m_to_Z*1.0e-30 ; dz_neglect_edge = US%m_to_Z*1.0e-10
-  elseif (GV%semi_Boussinesq) then
-    dz_neglect = GV%kg_m2_to_H*GV%H_to_Z*1.0e-30 ; dz_neglect_edge = GV%kg_m2_to_H*GV%H_to_Z*1.0e-10
-  else
-    dz_neglect = GV%dZ_subroundoff ; dz_neglect_edge = GV%dZ_subroundoff
-  endif
 
   if (CS%time_varying_sponges) then
     do m=1,CS%fldno
@@ -1038,12 +1038,11 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
         enddo
       endif
       if (CS%time_varying_sponges) then
-
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val(m)%dz(1:nz_data,c), tmp_val2, &
-             CS%nz, dz_col, tmp_val1, dz_neglect, dz_neglect_edge)
+             CS%nz, dz_col, tmp_val1)
       else
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_dz%p(1:nz_data,c), tmp_val2, &
-             CS%nz, dz_col, tmp_val1, dz_neglect, dz_neglect_edge)
+             CS%nz, dz_col, tmp_val1)
       endif
       !Backward Euler method
       if (CS%id_sp_tendency(m) > 0) tmp(i,j,1:nz) = CS%var(m)%p(i,j,1:nz)
@@ -1189,10 +1188,10 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
       enddo
       if (CS%time_varying_sponges) then
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val_u%dz(1:nz_data,c), tmp_val2, &
-                 CS%nz, dz_col, tmp_val1, dz_neglect, dz_neglect_edge)
+                 CS%nz, dz_col, tmp_val1)
       else
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_dzu%p(1:nz_data,c), tmp_val2, &
-                 CS%nz, dz_col, tmp_val1, dz_neglect, dz_neglect_edge)
+                 CS%nz, dz_col, tmp_val1)
       endif
       if (CS%id_sp_u_tendency > 0) tmp_u(i,j,1:nz) = CS%var_u%p(i,j,1:nz)
       !Backward Euler method
@@ -1222,10 +1221,10 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
       enddo
       if (CS%time_varying_sponges) then
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_val_v%dz(1:nz_data,c), tmp_val2, &
-                 CS%nz, dz_col, tmp_val1, dz_neglect, dz_neglect_edge)
+                 CS%nz, dz_col, tmp_val1)
       else
         call remapping_core_h(CS%remap_cs, nz_data, CS%Ref_dzv%p(1:nz_data,c), tmp_val2, &
-                 CS%nz, dz_col, tmp_val1, dz_neglect, dz_neglect_edge)
+                 CS%nz, dz_col, tmp_val1)
       endif
       if (CS%id_sp_v_tendency > 0) tmp_v(i,j,1:nz) = CS%var_v%p(i,j,1:nz)
       !Backward Euler method

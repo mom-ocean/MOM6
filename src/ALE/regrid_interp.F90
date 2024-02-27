@@ -87,14 +87,18 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
   real, dimension(n0,2), intent(inout) :: ppoly0_S  !< Edge slope of polynomial [A H-1]
   real, dimension(n0,DEGREE_MAX+1), intent(inout) :: ppoly0_coefs !< Coefficients of polynomial [A]
   integer,               intent(inout) :: degree    !< The degree of the polynomials
-  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+  real,                  intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions [H]
                                              !! in the same units as h0.
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
                                              !! for the purpose of edge value calculations [H]
                                              !! in the same units as h0.
   ! Local variables
+  real :: h_neg_edge  ! A negligibly small width for the purpose of edge value
+                      ! calculations in the same units as h0 [H]
   logical :: extrapolate
+
+  h_neg_edge = h_neglect ; if (present(h_neglect_edge)) h_neg_edge = h_neglect_edge
 
   ! Reset piecewise polynomials
   ppoly0_E(:,:) = 0.0
@@ -117,7 +121,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P1M_H4 )
       degree = DEGREE_1
       if ( n0 >= 4 ) then
-        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
       else
         call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
       endif
@@ -129,7 +133,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P1M_IH4 )
       degree = DEGREE_1
       if ( n0 >= 4 ) then
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
       else
         call edge_values_explicit_h2( n0, h0, densities, ppoly0_E )
       endif
@@ -148,7 +152,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PPM_CW )
       if ( n0 >= 4 ) then
         degree = DEGREE_2
-        call edge_values_explicit_h4cw( n0, h0, densities, ppoly0_E, h_neglect_edge )
+        call edge_values_explicit_h4cw( n0, h0, densities, ppoly0_E, h_neg_edge )
         call PPM_monotonicity(   n0,     densities, ppoly0_E )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answer_date=CS%answer_date )
         if (extrapolate) then
@@ -167,7 +171,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PPM_H4 )
       if ( n0 >= 4 ) then
         degree = DEGREE_2
-        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_explicit_h4( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answer_date=CS%answer_date )
         if (extrapolate) then
           call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, &
@@ -185,7 +189,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PPM_IH4 )
       if ( n0 >= 4 ) then
         degree = DEGREE_2
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
         call PPM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_coefs, h_neglect, answer_date=CS%answer_date )
         if (extrapolate) then
           call PPM_boundary_extrapolation( n0, h0, densities, ppoly0_E, &
@@ -203,13 +207,13 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P3M_IH4IH3 )
       if ( n0 >= 4 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
         call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect, answer_date=CS%answer_date )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                 ppoly0_coefs, h_neglect, answer_date=CS%answer_date )
         if (extrapolate) then
           call P3M_boundary_extrapolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
-                                           ppoly0_coefs, h_neglect, h_neglect_edge )
+                                           ppoly0_coefs, h_neglect, h_neg_edge )
         endif
       else
         degree = DEGREE_1
@@ -223,7 +227,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_P3M_IH6IH5 )
       if ( n0 >= 6 ) then
         degree = DEGREE_3
-        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
         call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect, answer_date=CS%answer_date )
         call P3M_interpolation( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                 ppoly0_coefs, h_neglect, answer_date=CS%answer_date )
@@ -243,7 +247,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PQM_IH4IH3 )
       if ( n0 >= 4 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_implicit_h4( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
         call edge_slopes_implicit_h3( n0, h0, densities, ppoly0_S, h_neglect, answer_date=CS%answer_date )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                  ppoly0_coefs, h_neglect, answer_date=CS%answer_date )
@@ -263,7 +267,7 @@ subroutine regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, &
     case ( INTERPOLATION_PQM_IH6IH5 )
       if ( n0 >= 6 ) then
         degree = DEGREE_4
-        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neglect_edge, answer_date=CS%answer_date )
+        call edge_values_implicit_h6( n0, h0, densities, ppoly0_E, h_neg_edge, answer_date=CS%answer_date )
         call edge_slopes_implicit_h5( n0, h0, densities, ppoly0_S, h_neglect, answer_date=CS%answer_date )
         call PQM_reconstruction( n0, h0, densities, ppoly0_E, ppoly0_S, &
                                  ppoly0_coefs, h_neglect, answer_date=CS%answer_date )
@@ -335,7 +339,7 @@ subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, 
   real, dimension(n0+1), intent(in)    :: x0  !< Source interface positions [H]
   real, dimension(n1),   intent(inout) :: h1  !< Output cell widths [H]
   real, dimension(n1+1), intent(inout) :: x1  !< Target interface positions [H]
-  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+  real,                  intent(in)    :: h_neglect !< A negligibly small width for the
                                            !! purpose of cell reconstructions [H]
                                            !! in the same units as h0.
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width

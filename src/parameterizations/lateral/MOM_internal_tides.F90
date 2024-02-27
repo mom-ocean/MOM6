@@ -4022,7 +4022,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   enddo
 
   ! Initialize the module that calculates the wave speeds.
-  call wave_speed_init(CS%wave_speed, c1_thresh=IGW_c1_thresh, &
+  call wave_speed_init(CS%wave_speed, GV, c1_thresh=IGW_c1_thresh, &
                        om4_remap_via_sub_cells=om4_remap_via_sub_cells)
 
 end subroutine internal_tides_init
