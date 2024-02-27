@@ -326,7 +326,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
     elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
                             GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), h(i,j,:), T(i,j,:), S(i,j,:), &
-                            eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
+                            eqn_of_state, zInterfaces, h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
     elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
 !     call build_hycom1_column(remap_cs%regrid_cs, nz, &
 !                           GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), zInterfaces)
