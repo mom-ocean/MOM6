@@ -9,6 +9,7 @@ use MOM_error_handler,   only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser,     only : get_param, param_file_type, log_param
 use MOM_hybgen_regrid,   only : hybgen_column_init
 use MOM_hybgen_regrid,   only : hybgen_regrid_CS, get_hybgen_regrid_params
+use MOM_interface_heights, only : calc_derived_thermo
 use MOM_tracer_registry, only : tracer_registry_type, tracer_type, MOM_tracer_chkinv
 use MOM_unit_scaling,    only : unit_scale_type
 use MOM_variables,       only : ocean_grid_type, thermo_var_ptrs
@@ -146,7 +147,8 @@ subroutine hybgen_unmix(G, GV, US, CS, tv, Reg, ntr, h)
   real :: p_col(GV%ke)      ! A column of reference pressures [R L2 T-2 ~> Pa]
   real :: tracer(GV%ke,max(ntr,1)) ! Columns of each tracer [Conc]
   real :: h_tot             ! Total thickness of the water column [H ~> m or kg m-2]
-  real :: nominalDepth      ! Depth of ocean bottom (positive downward) [H ~> m or kg m-2]
+  real :: dz_tot            ! Vertical distance between the top and bottom of the water column [Z ~> m]
+  real :: nominalDepth      ! Depth of ocean bottom in thickness units (positive downward) [H ~> m or kg m-2]
   real :: h_thin            ! A negligibly small thickness to identify essentially
                             ! vanished layers [H ~> m or kg m-2]
   real :: dilate            ! A factor by which to dilate the target positions from z to z* [nondim]
@@ -168,6 +170,15 @@ subroutine hybgen_unmix(G, GV, US, CS, tv, Reg, ntr, h)
 
   h_thin = 1e-6*GV%m_to_H
   debug_conservation = .false. !  Set this to true for debugging
+
+  if ((allocated(tv%SpV_avg)) .and. (tv%valid_SpV_halo < 1)) then
+    if (tv%valid_SpV_halo < 0) then
+      mesg = "invalid values of SpV_avg."
+    else
+      mesg = "insufficiently large SpV_avg halos of width 0 but 1 is needed."
+    endif
+    call MOM_error(FATAL, "hybgen_unmix called in fully non-Boussinesq mode with "//trim(mesg))
+  endif
 
   p_col(:) = CS%ref_pressure
 
@@ -203,13 +214,27 @@ subroutine hybgen_unmix(G, GV, US, CS, tv, Reg, ntr, h)
     endif
 
     ! The following block of code is used to trigger z* stretching of the targets heights.
-    nominalDepth = (G%bathyT(i,j)+G%Z_ref)*GV%Z_to_H
-    if (h_tot <= CS%min_dilate*nominalDepth) then
-      dilate = CS%min_dilate
-    elseif (h_tot >= CS%max_dilate*nominalDepth) then
-      dilate = CS%max_dilate
+    if (allocated(tv%SpV_avg)) then  ! This is the fully non-Boussiesq version
+      dz_tot = 0.0
+      do k=1,nk
+        dz_tot = dz_tot + GV%H_to_RZ * tv%SpV_avg(i,j,k) * h_col(k)
+      enddo
+      if (dz_tot <= CS%min_dilate*(G%bathyT(i,j)+G%Z_ref)) then
+        dilate = CS%min_dilate
+      elseif (dz_tot >= CS%max_dilate*(G%bathyT(i,j)+G%Z_ref)) then
+        dilate = CS%max_dilate
+      else
+        dilate = dz_tot / (G%bathyT(i,j)+G%Z_ref)
+      endif
     else
-      dilate = h_tot / nominalDepth
+      nominalDepth = (G%bathyT(i,j)+G%Z_ref)*GV%Z_to_H
+      if (h_tot <= CS%min_dilate*nominalDepth) then
+        dilate = CS%min_dilate
+      elseif (h_tot >= CS%max_dilate*nominalDepth) then
+        dilate = CS%max_dilate
+      else
+        dilate = h_tot / nominalDepth
+      endif
     endif
 
     terrain_following = (h_tot < dilate*CS%dpns) .and. (CS%dpns >= CS%dsns)
@@ -267,6 +292,9 @@ subroutine hybgen_unmix(G, GV, US, CS, tv, Reg, ntr, h)
       enddo
     endif
   endif ; enddo ; enddo !i & j.
+
+  ! Update the layer properties
+  if (allocated(tv%SpV_avg)) call calc_derived_thermo(tv, h, G, GV, US, halo=1)
 
 end subroutine hybgen_unmix
 

@@ -22,6 +22,17 @@ Usage
 ``make clean``
    Delete the MOM6 test executables and dependency builds (FMS).
 
+``make -j build.unit``
+   Build the unit test programs in config_src/drivers/unit_tests
+
+``make -j run.unit``
+   Run the unit test programs from config_src/drivers/unit_tests in $(WORKSPACE)/work/unit
+
+``make -j build.timing``
+   Build the timing test programs in config_src/drivers/timing_tests
+
+``make -j run.timing``
+   Run the timing test programs from config_src/drivers/timing_tests in $(WORKSPACE)/work/timing
 
 Configuration
 =============

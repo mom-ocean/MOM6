@@ -112,7 +112,7 @@ subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoom
   if (present(adaptDoMin)) CS%adaptDoMin = adaptDoMin
 end subroutine set_adapt_params
 
-subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNext)
+subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, nom_depth_H, zNext)
   type(adapt_CS),                              intent(in)    :: CS   !< The control structure for this module
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
@@ -125,6 +125,10 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: tInt !< Interface temperatures [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), intent(in)    :: sInt !< Interface salinities [S ~> ppt]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   intent(in)    :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)),            intent(in)    :: nom_depth_H !< The bathymetric depth of this column
+                                                                     !! relative to mean sea level or another locally
+                                                                     !! valid reference height, converted to thickness
+                                                                     !! units [H ~> m or kg m-2]
   real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext !< updated interface positions
 
   ! Local variables
@@ -144,7 +148,7 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
   zNext(nz+1) = zInt(i,j,nz+1)
 
   ! local depth for scaling diffusivity
-  depth = (G%bathyT(i,j) + G%Z_ref) * GV%Z_to_H
+  depth = nom_depth_H(i,j)
 
   ! initialize del2sigma and the thickness change response to it zero
   del2sigma(:) = 0.0 ; dh_d2s(:) = 0.0
@@ -244,9 +248,9 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, zNex
 
     ! set vertical grid diffusivity
     kGrid(k) = (CS%adaptTimeRatio * nz**2 * depth) * &
-         (CS%adaptZoomCoeff / (CS%adaptZoom + 0.5*(zNext(K) + zNext(K+1))) + &
-         (CS%adaptBuoyCoeff * drdz / CS%adaptDrho0) + &
-         max(1.0 - CS%adaptZoomCoeff - CS%adaptBuoyCoeff, 0.0) / depth)
+         ( CS%adaptZoomCoeff / (CS%adaptZoom + 0.5*(zNext(K) + zNext(K+1))) + &
+           (CS%adaptBuoyCoeff * drdz / CS%adaptDrho0) + &
+           max(1.0 - CS%adaptZoomCoeff - CS%adaptBuoyCoeff, 0.0) / depth)
   enddo
 
   ! initial denominator (first diagonal element)

@@ -18,6 +18,7 @@ use MOM_file_parser, only : log_version
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta, dz_to_thickness, dz_to_thickness_simple
+use MOM_interface_heights, only : calc_derived_thermo
 use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
 use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init, set_tracer_data
 use MOM_open_boundary, only : OBC_NONE
@@ -153,7 +154,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   real :: depth_tot(SZI_(G),SZJ_(G))   ! The nominal total depth of the ocean [Z ~> m]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! The layer thicknesses in geopotential (z) units [Z ~> m]
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
-  character(len=200) :: config
+  character(len=200) :: config, h_config
   real :: H_rescale   ! A rescaling factor for thicknesses from the representation in
                       ! a restart file to the internal representation in this run [various units ~> 1]
   real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
@@ -263,7 +264,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     convert = .false.
   else
     ! Initialize thickness, h.
-    call get_param(PF, mdl, "THICKNESS_CONFIG", config, &
+    call get_param(PF, mdl, "THICKNESS_CONFIG", h_config, &
              "A string that determines how the initial layer "//&
              "thicknesses are specified for a new run: \n"//&
              " \t file - read interface heights from the file specified \n"//&
@@ -294,7 +295,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              " \t rossby_front - a mixed layer front in thermal wind balance.\n"//&
              " \t USER - call a user modified routine.", &
              default="uniform", do_not_log=just_read)
-    select case (trim(config))
+    select case (trim(h_config))
       case ("file")
         call initialize_thickness_from_file(dz, depth_tot, G, GV, US, PF, file_has_thickness=.false., &
                                             mass_file=.false., just_read=just_read)
@@ -344,12 +345,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       case ("soliton"); call soliton_initialize_thickness(dz, depth_tot, G, GV, US)
       case ("phillips"); call Phillips_initialize_thickness(dz, depth_tot, G, GV, US, PF, &
                                   just_read=just_read)
-      case ("rossby_front"); call Rossby_front_initialize_thickness(dz, G, GV, US, &
-                                      PF, just_read=just_read)
+      case ("rossby_front")
+        call Rossby_front_initialize_thickness(h, G, GV, US, PF, just_read=just_read)
+        convert = .false.  ! Rossby_front initialization works directly in thickness units.
       case ("USER"); call user_initialize_thickness(dz, G, GV, PF, &
                               just_read=just_read)
       case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
-           "Unrecognized layer thickness configuration "//trim(config))
+           "Unrecognized layer thickness configuration "//trim(h_config))
     end select
 
     ! Initialize temperature and salinity (T and S).
@@ -376,6 +378,16 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              " \t USER - call a user modified routine.", &
              fail_if_missing=new_sim, do_not_log=just_read)
 !            " \t baroclinic_zone - an analytic baroclinic zone. \n"//&
+
+      ! Check for incompatible THICKNESS_CONFIG and TS_CONFIG settings
+      if (new_sim .and. (.not.convert)) then ; select case (trim(config))
+        case ("DOME2D", "ISOMIP", "adjustment2d", "baroclinic_zone", "sloshing", &
+              "seamount", "dumbbell", "SCM_CVMix_tests", "dense")
+          call MOM_error(FATAL, "TS_CONFIG = "//trim(config)//" does not work with thicknesses "//&
+              "that have already been converted to thickness units, as is the case with "//&
+              "THICKNESS_CONFIG = "//trim(h_config)//".")
+      end select ; endif
+
       select case (trim(config))
         case ("fit"); call initialize_temp_salt_fit(tv%T, tv%S, G, GV, US, PF, &
                                eos, tv%P_Ref, just_read=just_read)
@@ -401,8 +413,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                     tv%S, dz, G, GV, US, PF, just_read=just_read)
         case ("dumbbell"); call dumbbell_initialize_temperature_salinity(tv%T, &
                                     tv%S, dz, G, GV, US, PF, just_read=just_read)
-        case ("rossby_front"); call Rossby_front_initialize_temperature_salinity ( tv%T, &
-                                        tv%S, dz, G, GV, US, PF, just_read=just_read)
+        case ("rossby_front")
+          if (convert .and. .not.just_read) call dz_to_thickness(dz, tv, h, G, GV, US)
+          call Rossby_front_initialize_temperature_salinity ( tv%T, tv%S, h, &
+                                        G, GV, US, PF, just_read=just_read)
         case ("SCM_CVMix_tests"); call SCM_CVMix_tests_TS_init(tv%T, tv%S, dz, &
                                            G, GV, US, PF, just_read=just_read)
         case ("dense"); call dense_water_initialize_TS(G, GV, US, PF, tv%T, tv%S, &
@@ -464,7 +478,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
       if (new_sim .and. debug) &
         call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_MKS)
-      call ALE_regrid_accelerated(ALE_CSp, G, GV, h, tv, regrid_iterations, u, v, OBC, tracer_Reg, &
+      call ALE_regrid_accelerated(ALE_CSp, G, GV, US, h, tv, regrid_iterations, u, v, OBC, tracer_Reg, &
                                   dt=dt, initial=.true.)
     endif
   endif
@@ -594,8 +608,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call initialize_segment_data(G, GV, US, OBC, PF)
 !     call open_boundary_config(G, US, PF, OBC)
     ! Call this once to fill boundary arrays from fixed values
-    if (.not. OBC%needs_IO_for_data)  &
+    if (OBC%some_need_no_IO_for_data) then
+      call calc_derived_thermo(tv, h, G, GV, US)
       call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
+    endif
 
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
                  "A string that sets how the user code is invoked to set open boundary data: \n"//&
@@ -1117,10 +1133,6 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   real :: z_tolerance    ! The tolerance with which to find the depth matching a specified pressure [Z ~> m].
   integer :: i, j, k
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
-                                  ! recover the remapping answers from 2018.  If false, use more
-                                  ! robust forms of the same remapping expressions.
   integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
                                   ! for remapping.  Values below 20190101 recover the remapping
                                   ! answers from 2018, while higher values use more robust
@@ -1156,25 +1168,16 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
     call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231, do_not_log=just_read)
-    call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=just_read)
-    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers, do_not_log=just_read)
-    ! Revise inconsistent default answer dates for remapping.
-    if (remap_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-    if (.not.remap_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
     call get_param(PF, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
-                 "robust and accurate forms of mathematically equivalent expressions.  "//&
-                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_answer_date, do_not_log=just_read)
+                 "robust and accurate forms of mathematically equivalent expressions.", &
+                 default=default_answer_date, do_not_log=just_read.or.(.not.GV%Boussinesq))
+    if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
   else
     remap_answer_date = 20181231
+    if (.not.GV%Boussinesq) remap_answer_date = 20230701
   endif
 
   if (just_read) return ! All run-time parameters have been read, so return.
@@ -2486,17 +2489,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
   logical :: homogenize, useALEremapping, remap_full_column, remap_general, remap_old_alg
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
-                                  ! recover the remapping answers from 2018.  If false, use more
-                                  ! robust forms of the same remapping expressions.
-  integer :: default_remap_ans_date ! The default setting for remap_answer_date
   integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
                                   ! for remapping.  Values below 20190101 recover the remapping
                                   ! answers from 2018, while higher values use more robust
                                   ! forms of the same remapping expressions.
-  logical :: hor_regrid_answers_2018
-  integer :: default_hor_reg_ans_date ! The default setting for hor_regrid_answer_date
   integer :: hor_regrid_answer_date  ! The vintage of the order of arithmetic and expressions to use
                                   ! for horizontal regridding.  Values below 20190101 recover the
                                   ! answers from 2018, while higher values use expressions that have
@@ -2565,7 +2561,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   call get_param(PF, mdl, "Z_INIT_REMAP_GENERAL", remap_general, &
                  "If false, only initializes to z* coordinates. "//&
                  "If true, allows initialization directly to general coordinates.", &
-                 default=.false., do_not_log=just_read)
+                 default=.not.(GV%Boussinesq.or.GV%semi_Boussinesq) , do_not_log=just_read)
   call get_param(PF, mdl, "Z_INIT_REMAP_FULL_COLUMN", remap_full_column, &
                  "If false, only reconstructs profiles for valid data points. "//&
                  "If true, inserts vanished layers below the valid data.", &
@@ -2577,46 +2573,27 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231, do_not_log=just_read)
-  call get_param(PF, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101), do_not_log=just_read)
   call get_param(PF, mdl, "TEMP_SALT_INIT_VERTICAL_REMAP_ONLY", pre_gridded, &
                  "If true, initial conditions are on the model horizontal grid. " //&
                  "Extrapolation over missing ocean values is done using an ICE-9 "//&
                  "procedure with vertical ALE remapping .", &
                  default=.false., do_not_log=just_read)
   if (useALEremapping) then
-    call get_param(PF, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers, do_not_log=just_read)
-    ! Revise inconsistent default answer dates for remapping.
-    default_remap_ans_date = default_answer_date
-    if (remap_answers_2018 .and. (default_remap_ans_date >= 20190101)) default_remap_ans_date = 20181231
-    if (.not.remap_answers_2018 .and. (default_remap_ans_date < 20190101)) default_remap_ans_date = 20190101
     call get_param(PF, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
-                 "robust and accurate forms of mathematically equivalent expressions.  "//&
-                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_remap_ans_date, do_not_log=just_read)
+                 "robust and accurate forms of mathematically equivalent expressions.", &
+                 default=default_answer_date, do_not_log=just_read.or.(.not.GV%Boussinesq))
+    if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
   endif
-  call get_param(PF, mdl, "HOR_REGRID_2018_ANSWERS", hor_regrid_answers_2018, &
-                 "If true, use the order of arithmetic for horizontal regridding that recovers "//&
-                 "the answers from the end of 2018.  Otherwise, use rotationally symmetric "//&
-                 "forms of the same expressions.", default=default_2018_answers, do_not_log=just_read)
-  ! Revise inconsistent default answer dates for horizontal regridding.
-  default_hor_reg_ans_date = default_answer_date
-  if (hor_regrid_answers_2018 .and. (default_hor_reg_ans_date >= 20190101)) default_hor_reg_ans_date = 20181231
-  if (.not.hor_regrid_answers_2018 .and. (default_hor_reg_ans_date < 20190101)) default_hor_reg_ans_date = 20190101
   call get_param(PF, mdl, "HOR_REGRID_ANSWER_DATE", hor_regrid_answer_date, &
                  "The vintage of the order of arithmetic for horizontal regridding.  "//&
                  "Dates before 20190101 give the same answers as the code did in late 2018, "//&
                  "while later versions add parentheses for rotational symmetry.  "//&
-                 "Dates after 20230101 use reproducing sums for global averages.  "//&
-                 "If both HOR_REGRID_2018_ANSWERS and HOR_REGRID_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_hor_reg_ans_date, do_not_log=just_read)
+                 "Dates after 20230101 use reproducing sums for global averages.", &
+                 default=default_answer_date, do_not_log=just_read.or.(.not.GV%Boussinesq))
+  if (.not.GV%Boussinesq) hor_regrid_answer_date = max(hor_regrid_answer_date, 20230701)
 
   if (.not.useALEremapping) then
     call get_param(PF, mdl, "ADJUST_THICKNESS", correct_thickness, &
@@ -2787,7 +2764,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
       call regridding_preadjust_reqs(regridCS, do_conv_adj, ignore)
       if (do_conv_adj) call convective_adjustment(G, GV_loc, h1, tv_loc)
-      call regridding_main( remapCS, regridCS, G, GV_loc, h1, tv_loc, h, dz_interface, &
+      call regridding_main( remapCS, regridCS, G, GV_loc, US, h1, tv_loc, h, dz_interface, &
                             frac_shelf_h=frac_shelf_h )
 
       deallocate( dz_interface )

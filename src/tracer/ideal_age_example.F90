@@ -12,6 +12,7 @@ use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means, only : global_mass_int_EFP
@@ -21,7 +22,7 @@ use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : surface
+use MOM_variables, only : surface, thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 
 implicit none ; private
@@ -46,13 +47,13 @@ type, public :: ideal_age_tracer_CS ; private
   logical :: Z_IC_file !< If true, the IC_file is in Z-space.  The default is false.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in g m-3?
-  real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
-  real, dimension(NTR_MAX) :: young_val = 0.0 !< The value assigned to tr at the surface.
-  real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
-  real, dimension(NTR_MAX) :: growth_rate !< The exponential growth rate for the young value [year-1].
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package [years] or other units
+  real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value [years] or other units
+  real, dimension(NTR_MAX) :: young_val = 0.0 !< The value assigned to tr at the surface [years] or other units
+  real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out [years] or other units
+  real, dimension(NTR_MAX) :: growth_rate !< The exponential growth rate for the young value [year-1]
   real, dimension(NTR_MAX) :: tracer_start_year !< The year in which tracers start aging, or at which the
-                                              !! surface value equals young_val, in years.
+                                              !! surface value equals young_val [years].
   logical :: use_real_BL_depth   !< If true, uses the BL scheme to determine the number of
                                  !! layers above the BL depth instead of the fixed nkbl value.
   integer :: BL_residence_num    !< The tracer number assigned to the BL residence tracer in this module
@@ -296,7 +297,7 @@ subroutine initialize_ideal_age_tracer(restart, day, G, GV, US, h, diag, OBC, CS
 end subroutine initialize_ideal_age_tracer
 
 !> Applies diapycnal diffusion, aging and regeneration at the surface to the ideal age tracers
-subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, &
+subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, tv, CS, &
               evap_CFL_limit, minimum_forcing_depth, Hbl)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -316,6 +317,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
   real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
   type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(ideal_age_tracer_CS), pointer  :: CS   !< The control structure returned by a previous
                                               !! call to register_ideal_age_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
@@ -331,12 +333,12 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
 ! The arguments to this subroutine are redundant in that
 !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: BL_layers ! Stores number of layers in boundary layer
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified
-  real :: young_val  ! The "young" value for the tracers.
+  real, dimension(SZI_(G),SZJ_(G)) :: BL_layers ! Stores number of layers in boundary layer [nondim]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
+  real :: young_val       ! The "young" value for the tracers [years] or other units
   real :: Isecs_per_year  ! The inverse of the amount of time in a year [T-1 ~> s-1]
-  real :: year            ! The time in years.
-  real :: layer_frac
+  real :: year            ! The time in years [years]
+  real :: layer_frac      ! The fraction of the current layer that is within the mixed layer [nondim]
   integer :: i, j, k, is, ie, js, je, nz, m, nk
   character(len=255) :: msg
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -347,7 +349,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   endif
 
   if (CS%use_real_BL_depth .and. present(Hbl)) then
-    call count_BL_layers(G, GV, h_old, Hbl, BL_layers)
+    call count_BL_layers(G, GV, h_old, Hbl, tv, BL_layers)
   endif
 
   if (.not.associated(CS)) return
@@ -576,33 +578,37 @@ subroutine ideal_age_example_end(CS)
   endif
 end subroutine ideal_age_example_end
 
-subroutine count_BL_layers(G, GV, h, Hbl, BL_layers)
+subroutine count_BL_layers(G, GV, h, Hbl, tv, BL_layers)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in) :: h !< Layer thicknesses [H ~> m or kg m-2].
+                           intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G)), intent(in) :: Hbl !< Boundary layer depth [Z ~> m]
-  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: BL_layers !< Number of model layers in the boundary layer
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
+  real, dimension(SZI_(G),SZJ_(G)), intent(out) :: BL_layers !< Number of model layers in the boundary layer [nondim]
 
-  real :: current_depth
+  real :: dz(SZI_(G),SZK_(GV)) ! Height change across layers [Z ~> m]
+  real :: current_depth  ! Distance from the free surface [Z ~> m]
   integer :: i, j, k, is, ie, js, je, nz, m, nk
   character(len=255) :: msg
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   BL_layers(:,:) = 0.
-  do j=js,je ; do i=is,ie
-
-    current_depth = 0.
-    do k=1,nz
-      current_depth = current_depth + h(i,j,k)*GV%H_to_Z
-      if (Hbl(i,j) <= current_depth) then
-        BL_layers(i,j) = BL_layers(i,j) + (1.0 - (current_depth - Hbl(i,j)) / (h(i,j,k)*GV%H_to_Z))
-        exit
-      else
-        BL_layers(i,j) = BL_layers(i,j) + 1.0
-      endif
+  do j=js,je
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+    do i=is,ie
+      current_depth = 0.
+      do k=1,nz
+        current_depth = current_depth + dz(i,k)
+        if (Hbl(i,j) <= current_depth) then
+          BL_layers(i,j) = BL_layers(i,j) + (1.0 - (current_depth - Hbl(i,j)) / dz(i,k))
+          exit
+        else
+          BL_layers(i,j) = BL_layers(i,j) + 1.0
+        endif
+      enddo
     enddo
-  enddo ; enddo
+  enddo
 
 end subroutine count_BL_layers
 

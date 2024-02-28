@@ -3,11 +3,12 @@ module MOM_full_convection
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_grid, only : ocean_grid_type
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
-use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density_derivs, EOS_domain
+use MOM_grid,              only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
+use MOM_unit_scaling,      only : unit_scale_type
+use MOM_variables,         only : thermo_var_ptrs
+use MOM_verticalGrid,      only : verticalGrid_type
+use MOM_EOS,               only : calculate_density_derivs, EOS_domain
 
 implicit none ; private
 
@@ -31,15 +32,16 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(out)   :: S_adj !< Adjusted salinity [S ~> ppt].
   real, dimension(:,:),    pointer       :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa] (or NULL).
-  real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical
-                                                  !! diffusivity times a timestep [H2 ~> m2 or kg2 m-4].
+  real,                    intent(in)    :: Kddt_smooth  !< A smoothing vertical diffusivity
+                                                  !! times a timestep [H Z ~> m2 or kg m-1].
   integer,                 intent(in)    :: halo  !< Halo width over which to compute
 
   ! Local variables
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     dRho_dT, &  ! The derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
     dRho_dS     ! The derivative of density with salinity [R S-1 ~> kg m-3 ppt-1].
-  real :: h_neglect, h0 ! A thickness that is so small it is usually lost
+  real :: dz(SZI_(G),SZK_(GV)) ! Height change across layers [Z ~> m]
+  real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
 ! logical :: use_EOS    ! If true, density is calculated from T & S using an equation of state.
   real, dimension(SZI_(G),SZK0_(G)) :: &
@@ -90,15 +92,17 @@ subroutine full_convection(G, GV, US, h, tv, T_adj, S_adj, p_surf, Kddt_smooth, 
   if (.not.associated(tv%eqn_of_state)) return
 
   h_neglect = GV%H_subroundoff
-  mix_len = (1.0e20 * nz) * (G%max_depth * GV%Z_to_H)
-  h0 = 1.0e-16*sqrt(Kddt_smooth) + h_neglect
+  mix_len = (1.0e20 * nz) * (G%max_depth * US%Z_to_m * GV%m_to_H)
 
   do j=js,je
     mix(:,:) = 0.0 ; d_b(:,:) = 1.0
     ! These would be Te_b(:,:) = tv%T(:,j,:), etc., but the values are not used
     Te_b(:,:) = 0.0 ; Se_b(:,:) = 0.0
 
-    call smoothed_dRdT_dRdS(h, tv, Kddt_smooth, dRho_dT, dRho_dS, G, GV, US, j, p_surf, halo)
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dz, j, G, GV, halo_size=halo)
+
+    call smoothed_dRdT_dRdS(h, dz, tv, Kddt_smooth, dRho_dT, dRho_dS, G, GV, US, j, p_surf, halo)
 
     do i=is,ie
       do_i(i) = (G%mask2dT(i,j) > 0.0)
@@ -306,14 +310,16 @@ end function is_unstable
 !> Returns the partial derivatives of locally referenced potential density with
 !! temperature and salinity after the properties have been smoothed with a small
 !! constant diffusivity.
-subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, halo)
+subroutine smoothed_dRdT_dRdS(h, dz, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, halo)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZK_(GV)), &
+                           intent(in)  :: dz   !< Height change across layers [Z ~> m]
   type(thermo_var_ptrs),   intent(in)  :: tv   !< A structure pointing to various
                                                !! thermodynamic variables
-  real,                    intent(in)  :: Kddt !< A diffusivity times a time increment [H2 ~> m2 or kg2 m-4].
+  real,                    intent(in)  :: Kddt !< A diffusivity times a time increment [H Z ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZK_(GV)+1), &
                            intent(out) :: dR_dT !< Derivative of locally referenced
                                                !! potential density with temperature [R C-1 ~> kg m-3 degC-1]
@@ -336,8 +342,9 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   real :: pres(SZI_(G))            ! Interface pressures [R L2 T-2 ~> Pa].
   real :: T_EOS(SZI_(G))           ! Filtered and vertically averaged temperatures [C ~> degC]
   real :: S_EOS(SZI_(G))           ! Filtered and vertically averaged salinities [S ~> ppt]
-  real :: kap_dt_x2                ! The product of 2*kappa*dt [H2 ~> m2 or kg2 m-4].
-  real :: h_neglect, h0            ! Negligible thicknesses to allow for zero thicknesses,
+  real :: kap_dt_x2                ! The product of 2*kappa*dt [H Z ~> m2 or kg m-1].
+  real :: dz_neglect, h0           ! A negligible vertical distances [Z ~> m]
+  real :: h_neglect                ! A negligible thickness to allow for zero thicknesses
                                    ! [H ~> m or kg m-2].
   real :: h_tr                     ! The thickness at tracer points, plus h_neglect [H ~> m or kg m-2].
   integer, dimension(2) :: EOSdom  ! The i-computational domain for the equation of state
@@ -347,6 +354,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
   nz = GV%ke
 
   h_neglect = GV%H_subroundoff
+  dz_neglect = GV%dz_subroundoff
   kap_dt_x2 = 2.0*Kddt
 
   if (Kddt <= 0.0) then
@@ -354,9 +362,9 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
       T_f(i,k) = tv%T(i,j,k) ; S_f(i,k) = tv%S(i,j,k)
     enddo ; enddo
   else
-    h0 = 1.0e-16*sqrt(Kddt) + h_neglect
+    h0 = 1.0e-16*sqrt(GV%H_to_m*US%m_to_Z*Kddt) + dz_neglect
     do i=is,ie
-      mix(i,2) = kap_dt_x2 / ((h(i,j,1)+h(i,j,2)) + h0)
+      mix(i,2) = kap_dt_x2 / ((dz(i,1)+dz(i,2)) + h0)
 
       h_tr = h(i,j,1) + h_neglect
       b1(i) = 1.0 / (h_tr + mix(i,2))
@@ -365,7 +373,7 @@ subroutine smoothed_dRdT_dRdS(h, tv, Kddt, dR_dT, dR_dS, G, GV, US, j, p_surf, h
       S_f(i,1) = (b1(i)*h_tr)*tv%S(i,j,1)
     enddo
     do k=2,nz-1 ; do i=is,ie
-      mix(i,K+1) = kap_dt_x2 / ((h(i,j,k)+h(i,j,k+1)) + h0)
+      mix(i,K+1) = kap_dt_x2 / ((dz(i,k)+dz(i,k+1)) + h0)
 
       c1(i,k) = mix(i,K) * b1(i)
       h_tr = h(i,j,k) + h_neglect

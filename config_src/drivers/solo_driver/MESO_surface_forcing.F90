@@ -9,7 +9,7 @@ use MOM_domains, only : pass_var, pass_vector, AGRID
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing, mech_forcing
-use MOM_forcing_type, only : allocate_forcing_type, allocate_mech_forcing
+use MOM_forcing_type, only : allocate_forcing_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : file_exists, MOM_read_data, slasher
 use MOM_time_manager, only : time_type, operator(+), operator(/)
@@ -30,6 +30,8 @@ type, public :: MESO_surface_forcing_CS ; private
   real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
   real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
+  real :: rho_restore        !< The density that is used to convert piston velocities into salt
+                             !! or heat fluxes with salinity or temperature restoring [R ~> kg m-3]
   real :: gust_const         !< A constant unresolved background gustiness
                              !! that contributes to ustar [R L Z T-2 ~> Pa]
   real, dimension(:,:), pointer :: &
@@ -166,14 +168,14 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
 !      call MOM_error(FATAL, "MESO_buoyancy_surface_forcing: " // &
 !        "Temperature and salinity restoring used without modification." )
 
-      rhoXcp = CS%Rho0 * fluxes%C_p
+      rhoXcp = CS%rho_restore * fluxes%C_p
       do j=js,je ; do i=is,ie
         !   Set Temp_restore and Salin_restore to the temperature (in degC) and
         ! salinity (in ppt or PSU) that are being restored toward.
         if (G%mask2dT(i,j) > 0.0) then
           fluxes%heat_added(i,j) = G%mask2dT(i,j) * &
               ((CS%T_Restore(i,j) - sfc_state%SST(i,j)) * rhoXcp * CS%Flux_const)
-          fluxes%vprec(i,j) = - (CS%Rho0 * CS%Flux_const) * &
+          fluxes%vprec(i,j) = - (CS%rho_restore * CS%Flux_const) * &
               (CS%S_Restore(i,j) - sfc_state%SSS(i,j)) / &
               (0.5*(sfc_state%SSS(i,j) + CS%S_Restore(i,j)))
         else
@@ -188,7 +190,7 @@ subroutine MESO_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
         "Buoyancy restoring used without modification." )
 
       ! The -1 is because density has the opposite sign to buoyancy.
-      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%Rho0
+      buoy_rest_const = -1.0 * (CS%G_Earth * CS%Flux_const) / CS%rho_restore
       do j=js,je ; do i=is,ie
        !   Set density_restore to an expression for the surface potential
        ! density [R ~> kg m-3] that is being restored toward.
@@ -272,7 +274,11 @@ subroutine MESO_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "variable NET_SOL.", fail_if_missing=.true.)
     call get_param(param_file, mdl, "INPUTDIR", CS%inputdir, default=".")
     CS%inputdir = slasher(CS%inputdir)
-
+    call get_param(param_file, mdl, "RESTORE_FLUX_RHO", CS%rho_restore, &
+                 "The density that is used to convert piston velocities into salt or heat "//&
+                 "fluxes with RESTORE_SALINITY or RESTORE_TEMPERATURE.", &
+                 units="kg m-3", default=CS%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 do_not_log=(CS%Flux_const==0.0).or.(.not.CS%restorebuoy))
   endif
 
 end subroutine MESO_surface_forcing_init

@@ -1,6 +1,6 @@
 name: Performance Monitor
 
-on: [pull_request]
+on: [push, pull_request]
 
 jobs:
   build-test-perfmon:
@@ -20,6 +20,7 @@ jobs:
     - uses: ./.github/actions/testing-setup
 
     - name: Compile optimized models
+      if: ${{ github.event_name == 'pull_request' }}
       run: >-
         make -j build.prof
         MOM_TARGET_SLUG=$GITHUB_REPOSITORY
@@ -27,12 +28,26 @@ jobs:
         DO_REGRESSION_TESTS=true
 
     - name: Generate profile data
+      if: ${{ github.event_name == 'pull_request' }}
       run: >-
         pip install f90nml &&
         make profile
         DO_REGRESSION_TESTS=true
 
     - name: Generate perf data
+      if: ${{ github.event_name == 'pull_request' }}
       run: |
         sudo sysctl -w kernel.perf_event_paranoid=2
         make perf DO_REGRESSION_TESTS=true
+
+    - name: Compile timing tests
+      run: |
+        make -j build.timing
+
+    - name: Run timing tests
+      run: |
+        make -j run.timing
+
+    - name: Display timing results
+      run: |
+        make -j show.timing

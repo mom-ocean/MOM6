@@ -1452,30 +1452,32 @@ real, dimension(4, lmax+1), parameter :: &
             /), (/4, lmax+1/)) !< Load Love numbers
 
 !> \namespace mom_load_love_numbers
-!! This module serves the sole purpose of storing load Love number. The Love numbers are used for the self-attraction
-!! and loading (SAL) calculation, which is currently embedded in MOM_tidal_forcing module. This separate module ensures
-!! the readability of the tidal module.
+!! This module serves the sole purpose of storing load Love number. The Love numbers are used for the spherical harmonic
+!! self-attraction and loading (SAL) calculation in MOM_self_attr_load module. This separate module ensures readability
+!! of the SAL module.
 !!
 !! Variable Love_Data stores the Love numbers up to degree 1440. From left to right: degree, h, l, and k. Data in this
 !! module is imported from SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean developed by Los Alamos
-!! National Laboratory and University of Michigan (Barton et al. (2022) and Brus et al. (2022)). The load Love numbers
+!! National Laboratory and University of Michigan [Barton et al. (2022) and Brus et al. (2022)]. The load Love numbers
 !! are from Wang et al. (2012), which are in the center of mass of total Earth system reference frame (CM). When used,
-!! Love numbers with degree<2 should be converted to center of mass solid Earth reference frame (CF) (Blewitt (2003)),
+!! Love numbers with degree<2 should be converted to center of mass solid Earth reference frame (CF) [Blewitt (2003)],
 !! as in subroutine calc_love_scaling in MOM_tidal_forcing module.
 !!
 !! References:
 !!
-!! Barton, K.N., Nairita, P., Brus, S.R., Petersen, M.R., Arbic, B.K., Engwirda, D., Roberts, A.F., Westerink, J.,
-!! Wirasaet, D., and Schindelegger, M., 2022: Performance of Model for Prediction Across Scales (MPAS) Ocean as a
-!! Global Barotropic Tide Model. Journal of Advances in Modeling Earth Systems, in review.
+!! Barton, K.N., Pal, N., Brus, S.R., Petersen, M.R., Arbic, B.K., Engwirda, D., Roberts, A.F., Westerink, J.J.,
+!! Wirasaet, D. and Schindelegger, M., 2022. Global Barotropic Tide Modeling Using Inline Self‐Attraction and Loading in
+!! MPAS‐Ocean. Journal of Advances in Modeling Earth Systems, 14(11), p.e2022MS003207.
+!! https://doi.org/10.1029/2022MS003207
 !!
 !! Blewitt, G., 2003. Self‐consistency in reference frames, geocenter definition, and surface loading of the solid
 !! Earth. Journal of geophysical research: solid earth, 108(B2).
 !! https://doi.org/10.1029/2002JB002082
 !!
-!! Brus, S.R., Barton, K.N., Nairita, P., Roberts, A.F., Engwirda, D., Petersen, M.R., Arbic, B.K., Wirasaet, D.,
-!! Westerink, J., and Schindelegger, M., 2022: Scalable self attraction and loading calculations for unstructured ocean
-!! models. Ocean Modelling, in review.
+!! Brus, S.R., Barton, K.N., Pal, N., Roberts, A.F., Engwirda, D., Petersen, M.R., Arbic, B.K., Wirasaet, D.,
+!! Westerink, J.J. and Schindelegger, M., 2023. Scalable self attraction and loading calculations for unstructured ocean
+!! tide models. Ocean Modelling, p.102160.
+!! https://doi.org/10.1016/j.ocemod.2023.102160
 !!
 !! Wang, H., Xiang, L., Jia, L., Jiang, L., Wang, Z., Hu, B. and Gao, P., 2012. Load Love numbers and Green's functions
 !! for elastic Earth models PREM, iasp91, ak135, and modified models with refined crustal structure from Crust 2.0.

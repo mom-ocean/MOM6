@@ -75,7 +75,7 @@ MAKEFLAGS += -R
 -include config.mk
 
 # Set the infra framework
-FRAMEWORK ?= fms1
+FRAMEWORK ?= fms2
 
 # Set the MPI launcher here
 # TODO: This needs more automated configuration
@@ -116,6 +116,9 @@ DO_PROFILE ?=
 # Enable code coverage runs
 DO_COVERAGE ?=
 
+# Enable code coverage runs
+DO_UNIT_TESTS ?=
+
 # Report failure if coverage report is not uploaded
 REQUIRE_COVERAGE_UPLOAD ?=
 
@@ -151,10 +154,16 @@ ifeq ($(DO_PROFILE), true)
   BUILDS += opt/MOM6 opt_target/MOM6
 endif
 
-# Unit testing
-UNIT_EXECS ?= MOM_unit_tests
+# Coverage
 ifeq ($(DO_COVERAGE), true)
-  BUILDS += cov/MOM6 $(foreach e, $(UNIT_EXECS), unit/$(e))
+  BUILDS += cov/MOM6
+endif
+
+# Unit testing (or coverage)
+UNIT_EXECS ?= $(basename $(notdir $(wildcard ../config_src/drivers/unit_tests/*.F90) ) )
+TIMING_EXECS ?= $(basename $(notdir $(wildcard ../config_src/drivers/timing_tests/*.F90) ) )
+ifneq (X$(DO_COVERAGE)$(DO_UNIT_TESTS)X, XX)
+  BUILDS += $(foreach e, $(UNIT_EXECS), unit/$(e))
 endif
 
 ifeq ($(DO_PROFILE), false)
@@ -245,31 +254,28 @@ COV_LDFLAGS := LDFLAGS="$(LDFLAGS_COVERAGE) $(LDFLAGS_DEPS) $(LDFLAGS_USER)"
 
 
 # Environment variable configuration
-build/symmetric/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/asymmetric/Makefile: MOM_ENV=$(PATH_FMS) $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
+MOM_ENV := $(PATH_FMS)
+build/symmetric/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/asymmetric/Makefile: MOM_ENV += $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
   MOM_MEMORY=../../../config_src/memory/dynamic_nonsymmetric/MOM_memory.h
-build/repro/Makefile: MOM_ENV=$(PATH_FMS) $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
-build/openmp/Makefile: MOM_ENV=$(PATH_FMS) $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
-build/target/Makefile: MOM_ENV=$(PATH_FMS) $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
-build/opt/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
-build/opt_target/Makefile: MOM_ENV=$(PATH_FMS) $(OPT_FCFLAGS) $(MOM_LDFLAGS)
-build/coupled/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/nuopc/Makefile: MOM_ENV=$(PATH_FMS) $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/cov/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
-build/unit/Makefile: MOM_ENV=$(PATH_FMS) $(COV_FCFLAGS) $(COV_LDFLAGS)
+build/repro/Makefile: MOM_ENV += $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
+build/openmp/Makefile: MOM_ENV += $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
+build/target/Makefile: MOM_ENV += $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
+build/opt/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+build/opt_target/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+build/coupled/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/nuopc/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+build/cov/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
+build/unit/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
+build/timing/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 
 # Configure script flags
-build/symmetric/Makefile: MOM_ACFLAGS=
-build/asymmetric/Makefile: MOM_ACFLAGS=
-build/repro/Makefile: MOM_ACFLAGS=
-build/openmp/Makefile: MOM_ACFLAGS=--enable-openmp
-build/target/Makefile: MOM_ACFLAGS=
-build/opt/Makefile: MOM_ACFLAGS=
-build/opt_target/Makefile: MOM_ACFLAGS=
-build/coupled/Makefile: MOM_ACFLAGS=--with-driver=FMS_cap
-build/nuopc/Makefile: MOM_ACFLAGS=--with-driver=nuopc_cap
-build/cov/Makefile: MOM_ACFLAGS=
-build/unit/Makefile: MOM_ACFLAGS=--with-driver=unit_tests
+MOM_ACFLAGS := --with-framework=$(FRAMEWORK)
+build/openmp/Makefile: MOM_ACFLAGS += --enable-openmp
+build/coupled/Makefile: MOM_ACFLAGS += --with-driver=FMS_cap
+build/nuopc/Makefile: MOM_ACFLAGS += --with-driver=nuopc_cap
+build/unit/Makefile: MOM_ACFLAGS += --with-driver=unit_tests
+build/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 
 # Fetch regression target source code
 build/target/Makefile: | $(TARGET_CODEBASE)
@@ -277,17 +283,19 @@ build/opt_target/Makefile: | $(TARGET_CODEBASE)
 
 
 # Define source code dependencies
-# NOTE: ./configure is too much, but Makefile is not enough!
-#   Ideally we only want to re-run both Makefile and mkmf, but the mkmf call
-#   is inside ./configure, so we must re-run ./configure as well.
 build/target_codebase/configure: $(TARGET_SOURCE)
 
 
 # Build executables
-$(foreach e,$(UNIT_EXECS),build/unit/$(e)): build/unit/Makefile $(MOM_SOURCE)
-	cd $(@D) && $(TIME) $(MAKE) -j
-build/%/MOM6: build/%/Makefile $(MOM_SOURCE)
-	cd $(@D) && $(TIME) $(MAKE) -j
+build/unit/test_%: build/unit/Makefile FORCE
+	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+build/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
+build/timing/time_%: build/timing/Makefile FORCE
+	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+build/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
+build/%/MOM6: build/%/Makefile FORCE
+	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+FORCE: ;
 
 
 # Use autoconf to construct the Makefile for each target
@@ -295,8 +303,8 @@ build/%/MOM6: build/%/Makefile $(MOM_SOURCE)
 build/%/Makefile: ../ac/configure ../ac/Makefile.in deps/lib/libFMS.a
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) --with-framework=$(FRAMEWORK) \
-	  || (cat config.log && false)
+	&& $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
+	|| (cat config.log && false)
 
 
 ../ac/configure: ../ac/configure.ac ../ac/m4
@@ -308,8 +316,8 @@ build/target/Makefile build/opt_target/Makefile: \
   $(TARGET_CODEBASE)/ac/configure deps/lib/libFMS.a
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
-	  || (cat config.log && false)
+	&& $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
+	|| (cat config.log && false)
 
 
 $(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
@@ -547,8 +555,8 @@ $(WORKSPACE)/work/%/$(1)/ocean.stats $(WORKSPACE)/work/%/$(1)/chksum_diag: build
 	  && $(TIME) $(5) $(MPIRUN) -n $(6) $(abspath $$<) 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
-	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 20 ; \
-	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -n 20 ; \
+	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 40 ; \
+	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -n 40 ; \
 	    rm ocean.stats chksum_diag ; \
 	    echo -e "$(FAIL): $$*.$(1) failed at runtime." \
 	  )
@@ -564,13 +572,21 @@ endef
 
 # Upload coverage reports
 CODECOV_UPLOADER_URL ?= https://uploader.codecov.io/latest/linux/codecov
+CODECOV_TOKEN ?=
+
+ifdef CODECOV_TOKEN
+  CODECOV_TOKEN_ARG = -t $(CODECOV_TOKEN)
+else
+  CODECOV_TOKEN_ARG =
+endif
+
 codecov:
 	curl -s $(CODECOV_UPLOADER_URL) -o $@
 	chmod +x codecov
 
 .PHONY: report.cov
 report.cov: run.cov codecov
-	./codecov -R build/cov -Z -f "*.gcov" \
+	./codecov $(CODECOV_TOKEN_ARG) -R build/cov -Z -f "*.gcov" \
 	  > build/cov/codecov.out \
 	  2> build/cov/codecov.err \
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
@@ -623,8 +639,8 @@ $(WORKSPACE)/work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
 	# Run the first half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std1.err > std1.out \
 	  || !( \
-	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 20 ; \
-	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 20 ; \
+	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 40 ; \
+	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 40 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 	# Setup the next inputs
@@ -634,8 +650,8 @@ $(WORKSPACE)/work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
 	# Run the second half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std2.err > std2.out \
 	  || !( \
-	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 20 ; \
-	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 20 ; \
+	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 40 ; \
+	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 40 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 
@@ -645,26 +661,7 @@ $(WORKSPACE)/work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
 # Not a true rule; only call this after `make test` to summarize test results.
 .PHONY: test.summary
 test.summary:
-	@if ls $(WORKSPACE)/results/*/* &> /dev/null; then \
-	  if ls $(WORKSPACE)/results/*/std.*.err &> /dev/null; then \
-	    echo "The following tests failed to complete:" ; \
-	    ls $(WORKSPACE)/results/*/std.*.out \
-	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
-	  fi; \
-	  if ls $(WORKSPACE)/results/*/ocean.stats.*.diff &> /dev/null; then \
-	    echo "The following tests report solution regressions:" ; \
-	    ls $(WORKSPACE)/results/*/ocean.stats.*.diff \
-	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[3]; if(length(t)>4) v=v"."t[4]; print a[2],":",v}'; \
-	  fi; \
-	  if ls $(WORKSPACE)/results/*/chksum_diag.*.diff &> /dev/null; then \
-	    echo "The following tests report diagnostic regressions:" ; \
-	    ls $(WORKSPACE)/results/*/chksum_diag.*.diff \
-	      | awk '{split($$0,a,"/"); split(a[3],t,"."); v=t[2]; if(length(t)>3) v=v"."t[3]; print a[2],":",v}'; \
-	  fi; \
-	  false ; \
-	else \
-	  echo -e "$(PASS): All tests passed!"; \
-	fi
+	@./tools/report_test_results.sh $(WORKSPACE)/results
 
 
 #---
@@ -674,35 +671,54 @@ test.summary:
 .PHONY: run.cov.unit
 run.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov
 
-$(WORKSPACE)/work/unit/std.out: build/unit/MOM_unit_tests
+.PHONY: build.unit
+build.unit: $(foreach f, $(UNIT_EXECS), build/unit/$(f))
+.PHONY: run.unit
+run.unit: $(foreach f, $(UNIT_EXECS), work/unit/$(f).out)
+.PHONY: build.timing
+build.timing: $(foreach f, $(TIMING_EXECS), build/timing/$(f))
+.PHONY: run.timing
+run.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).out)
+.PHONY: show.timing
+show.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).show)
+$(WORKSPACE)/work/timing/%.show:
+	./tools/disp_timing.py $(@:.show=.out)
+
+# General rule to run a unit test executable
+# Pattern is to run build/unit/executable and direct output to executable.out
+$(WORKSPACE)/work/unit/%.out: build/unit/%
+	@mkdir -p $(@D)
+	cd $(@D) ; $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> >(tee $*.err) > $*.out
+
+$(WORKSPACE)/work/unit/test_MOM_file_parser.out: build/unit/test_MOM_file_parser
 	if [ $(REPORT_COVERAGE) ]; then \
 	  find build/unit -name *.gcda -exec rm -f '{}' \; ; \
 	fi
-	rm -rf $(@D)
 	mkdir -p $(@D)
 	cd $(@D) \
-	  && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std.err > std.out \
+	  && rm -f input.nml logfile.0000*.out *_input MOM_parameter_doc.* \
+	  && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> test_MOM_file_parser.err > test_MOM_file_parser.out \
 	  || !( \
-	    cat std.out | tail -n 100 ; \
-	    cat std.err | tail -n 100 ; \
+	    cat test_MOM_file_parser.out | tail -n 100 ; \
+	    cat test_MOM_file_parser.err | tail -n 100 ; \
 	  )
 	cd $(@D) \
-	  && $(TIME) $(MPIRUN) -n 2 $(abspath $<) 2> p2.std.err > p2.std.out \
+	  && $(TIME) $(MPIRUN) -n 2 $(abspath $<) 2> p2.test_MOM_file_parser.err > p2.test_MOM_file_parser.out \
 	  || !( \
-	    cat p2.std.out | tail -n 100 ; \
-	    cat p2.std.err | tail -n 100 ; \
+	    cat p2.test_MOM_file_parser.out | tail -n 100 ; \
+	    cat p2.test_MOM_file_parser.err | tail -n 100 ; \
 	  )
 
 # NOTE: .gcov actually depends on .gcda, but .gcda is produced with std.out
 # TODO: Replace $(WORKSPACE)/work/unit/std.out with *.gcda?
-build/unit/MOM_file_parser_tests.F90.gcov: $(WORKSPACE)/work/unit/std.out
+build/unit/MOM_file_parser_tests.F90.gcov: $(WORKSPACE)/work/unit/test_MOM_file_parser.out
 	cd $(@D) \
 	  && gcov -b *.gcda > gcov.unit.out
 	find $(@D) -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \;
 
 .PHONY: report.cov.unit
 report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
-	./codecov -R build/unit -f "*.gcov" -Z -n "Unit tests" \
+	./codecov $(CODECOV_TOKEN_ARG) -R build/unit -f "*.gcov" -Z -n "Unit tests" \
 	    > build/unit/codecov.out \
 	    2> build/unit/codecov.err \
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
@@ -712,6 +728,10 @@ report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
 	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
+$(WORKSPACE)/work/timing/%.out: build/timing/% FORCE
+	@mkdir -p $(@D)
+	@echo Running $< in $(@D)
+	@cd $(@D) ; $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> $*.err > $*.out
 
 #---
 # Profiling based on FMS clocks

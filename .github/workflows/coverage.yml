@@ -19,19 +19,29 @@ jobs:
 
     - uses: ./.github/actions/testing-setup
 
-    - name: Compile unit testing
-      run: make -j build/unit/MOM_unit_tests
+    - name: Compile file parser unit tests
+      run: make -j build/unit/test_MOM_file_parser
 
-    - name: Run unit tests
+    - name: Run file parser unit tests
       run: make run.cov.unit
+
+    - name: Compile unit testing
+      run: make -j build.unit
+
+    - name: Run (single processor) unit tests
+      run: make run.unit
 
     - name: Report unit test coverage to CI (PR)
       if: github.event_name == 'pull_request'
       run: make report.cov.unit REQUIRE_COVERAGE_UPLOAD=true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Report unit test coverage to CI (Push)
       if: github.event_name != 'pull_request'
       run: make report.cov.unit
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Compile ocean-only MOM6 with code coverage
       run: make -j build/cov/MOM6
@@ -42,7 +52,11 @@ jobs:
     - name: Report coverage to CI (PR)
       if: github.event_name == 'pull_request'
       run: make report.cov REQUIRE_COVERAGE_UPLOAD=true
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
     - name: Report coverage to CI (Push)
       if: github.event_name != 'pull_request'
       run: make report.cov
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

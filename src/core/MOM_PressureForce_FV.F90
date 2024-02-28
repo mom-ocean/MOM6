@@ -9,7 +9,9 @@ use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_PressureForce_Mont, only : set_pbce_Bouss, set_pbce_nonBouss
+use MOM_self_attr_load, only : calc_SAL, SAL_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
+use MOM_tidal_forcing, only : calc_tidal_forcing_legacy
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
@@ -35,6 +37,7 @@ public PressureForce_FV_Bouss, PressureForce_FV_nonBouss
 !> Finite volume pressure gradient control structure
 type, public :: PressureForce_FV_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
+  logical :: calculate_SAL  !< If true, calculate self-attraction and loading.
   logical :: tides          !< If true, apply tidal momentum forcing.
   real    :: Rho0           !< The density used in the Boussinesq
                             !! approximation [R ~> kg m-3].
@@ -60,10 +63,15 @@ type, public :: PressureForce_FV_CS ; private
                             !! By the default (1) is for a piecewise linear method
 
   logical :: use_stanley_pgf  !< If true, turn on Stanley parameterization in the PGF
-  integer :: id_e_tidal = -1 !< Diagnostic identifier
+  integer :: tides_answer_date !< Recover old answers with tides in Boussinesq mode
+  integer :: id_e_tide = -1 !< Diagnostic identifier
+  integer :: id_e_tide_eq = -1 !< Diagnostic identifier
+  integer :: id_e_tide_sal = -1 !< Diagnostic identifier
+  integer :: id_e_sal = -1 !< Diagnostic identifier
   integer :: id_rho_pgf = -1 !< Diagnostic identifier
   integer :: id_rho_stanley_pgf = -1 !< Diagnostic identifier
   integer :: id_p_stanley = -1 !< Diagnostic identifier
+  type(SAL_CS), pointer :: SAL_CSp => NULL() !< SAL control structure
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_FV_CS
 
@@ -115,8 +123,11 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real, dimension(SZI_(G),SZJ_(G))  :: &
     dp, &       ! The (positive) change in pressure across a layer [R L2 T-2 ~> Pa].
     SSH, &      ! The sea surface height anomaly, in depth units [Z ~> m].
-    e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
-                ! astronomical sources and self-attraction and loading [Z ~> m].
+    e_sal, &    ! The bottom geopotential anomaly due to self-attraction and loading [Z ~> m].
+    e_tide_eq,  & ! The bottom geopotential anomaly due to tidal forces from astronomical sources [Z ~> m].
+    e_tide_sal, & ! The bottom geopotential anomaly due to harmonic self-attraction and loading
+                  ! specific to tides [Z ~> m].
+    e_sal_tide, & ! The summation of self-attraction and loading and tidal forcing [Z ~> m].
     dM, &       ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
     za          ! The geopotential anomaly (i.e. g*e + alpha_0*pressure) at the
@@ -301,17 +312,40 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     enddo ; enddo
   enddo
 
+  ! Calculate and add the self-attraction and loading geopotential anomaly.
+  if (CS%calculate_SAL) then
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref &
+                 - max(-G%bathyT(i,j)-G%Z_ref, 0.0)
+    enddo ; enddo
+    call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
+
+    if ((CS%tides_answer_date>20230630) .or. (.not.GV%semi_Boussinesq) .or. (.not.CS%tides)) then
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        za(i,j) = za(i,j) - GV%g_Earth * e_sal(i,j)
+      enddo ; enddo
+    endif
+  endif
+
+  ! Calculate and add the tidal geopotential anomaly.
   if (CS%tides) then
-    ! Find and add the tidal geopotential anomaly.
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = (za(i,j) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref
-    enddo ; enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, US, CS%tides_CSp)
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      za(i,j) = za(i,j) - GV%g_Earth * e_tidal(i,j)
-    enddo ; enddo
+    if ((CS%tides_answer_date>20230630) .or. (.not.GV%semi_Boussinesq)) then
+      call calc_tidal_forcing(CS%Time, e_tide_eq, e_tide_sal, G, US, CS%tides_CSp)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        za(i,j) = za(i,j) - GV%g_Earth * (e_tide_eq(i,j) + e_tide_sal(i,j))
+      enddo ; enddo
+    else  ! This block recreates older answers with tides.
+      if (.not.CS%calculate_SAL) e_sal(:,:) = 0.0
+      call calc_tidal_forcing_legacy(CS%Time, e_sal, e_sal_tide, e_tide_eq, e_tide_sal, &
+                                     G, US, CS%tides_CSp)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        za(i,j) = za(i,j) - GV%g_Earth * e_sal_tide(i,j)
+      enddo ; enddo
+    endif
   endif
 
   if (CS%GFS_scale < 1.0) then
@@ -408,7 +442,12 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     endif
   endif
 
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
+  ! To be consistent with old runs, tidal forcing diagnostic also includes total SAL.
+  ! New diagnostics are given for each individual field.
+  if (CS%id_e_tide>0) call post_data(CS%id_e_tide, e_sal+e_tide_eq+e_tide_sal, CS%diag)
+  if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
+  if (CS%id_e_tide_eq>0) call post_data(CS%id_e_tide_eq, e_tide_eq, CS%diag)
+  if (CS%id_e_tide_sal>0) call post_data(CS%id_e_tide_sal, e_tide_sal, CS%diag)
 
 end subroutine PressureForce_FV_nonBouss
 
@@ -441,13 +480,17 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: e ! Interface height in depth units [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G))  :: &
-    e_tidal, &  ! The bottom geopotential anomaly due to tidal forces from
-                ! astronomical sources and self-attraction and loading [Z ~> m].
+    e_sal_tide, & ! The summation of self-attraction and loading and tidal forcing [Z ~> m].
+    e_sal, &      ! The bottom geopotential anomaly due to self-attraction and loading [Z ~> m].
+    e_tide_eq,  & ! The bottom geopotential anomaly due to tidal forces from astronomical sources
+                  ! [Z ~> m].
+    e_tide_sal, & ! The bottom geopotential anomaly due to harmonic self-attraction and loading
+                  ! specific to tides [Z ~> m].
     SSH, &      ! The sea surface height anomaly, in depth units [Z ~> m].
     dM          ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G)) :: &
-    Rho_cv_BL   !   The coordinate potential density in the deepest variable
+    Rho_cv_BL   ! The coordinate potential density in the deepest variable
                 ! density near-surface layer [R ~> kg m-3].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     dz_geo, &   ! The change in geopotential thickness through a layer [L2 T-2 ~> m2 s-2].
@@ -519,40 +562,86 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
   h_neglect = GV%H_subroundoff
-  dz_neglect = GV%H_subroundoff * GV%H_to_Z
+  dz_neglect = GV%dZ_subroundoff
   I_Rho0 = 1.0 / GV%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
   rho_ref = CS%Rho0
 
-  if (CS%tides) then
-    !   Determine the surface height anomaly for calculating self attraction
-    ! and loading.  This should really be based on bottom pressure anomalies,
-    ! but that is not yet implemented, and the current form is correct for
-    ! barotropic tides.
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1
-      do i=Isq,Ieq+1
-        SSH(i,j) = -G%bathyT(i,j) - G%Z_ref
-      enddo
-      do k=1,nz ; do i=Isq,Ieq+1
-        SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
-      enddo ; enddo
-    enddo
-    call calc_tidal_forcing(CS%Time, SSH, e_tidal, G, US, CS%tides_CSp)
-  endif
-
-!    Here layer interface heights, e, are calculated.
-  if (CS%tides) then
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -(G%bathyT(i,j) + e_tidal(i,j))
-    enddo ; enddo
-  else
-    !$OMP parallel do default(shared)
+  if (CS%tides_answer_date>20230630) then
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e(i,j,nz+1) = -G%bathyT(i,j)
     enddo ; enddo
+
+    ! Calculate and add the self-attraction and loading geopotential anomaly.
+    if (CS%calculate_SAL) then
+      !   Determine the surface height anomaly for calculating self attraction
+      ! and loading.  This should really be based on bottom pressure anomalies,
+      ! but that is not yet implemented, and the current form is correct for
+      ! barotropic tides.
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1
+        do i=Isq,Ieq+1
+          SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
+        enddo
+        do k=1,nz ; do i=Isq,Ieq+1
+          SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
+        enddo ; enddo
+      enddo
+      call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e(i,j,nz+1) = e(i,j,nz+1) - e_sal(i,j)
+      enddo ; enddo
+    endif
+
+    ! Calculate and add the tidal geopotential anomaly.
+    if (CS%tides) then
+      call calc_tidal_forcing(CS%Time, e_tide_eq, e_tide_sal, G, US, CS%tides_CSp)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e(i,j,nz+1) = e(i,j,nz+1) - (e_tide_eq(i,j) + e_tide_sal(i,j))
+      enddo ; enddo
+    endif
+  else  ! Old answers
+    ! Calculate and add the self-attraction and loading geopotential anomaly.
+    if (CS%calculate_SAL) then
+      !   Determine the surface height anomaly for calculating self attraction
+      ! and loading.  This should really be based on bottom pressure anomalies,
+      ! but that is not yet implemented, and the current form is correct for
+      ! barotropic tides.
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1
+        do i=Isq,Ieq+1
+          SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
+        enddo
+        do k=1,nz ; do i=Isq,Ieq+1
+          SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
+        enddo ; enddo
+      enddo
+      call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
+    else
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e_sal(i,j) = 0.0
+      enddo ; enddo
+    endif
+
+    ! Calculate and add the tidal geopotential anomaly.
+    if (CS%tides) then
+      call calc_tidal_forcing_legacy(CS%Time, e_sal, e_sal_tide, e_tide_eq, e_tide_sal, &
+                                     G, US, CS%tides_CSp)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e(i,j,nz+1) = -(G%bathyT(i,j) + e_sal_tide(i,j))
+      enddo ; enddo
+    else
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e(i,j,nz+1) = -(G%bathyT(i,j) + e_sal(i,j))
+      enddo ; enddo
+    endif
   endif
+
   !$OMP parallel do default(shared)
   do j=Jsq,Jeq+1 ; do k=nz,1,-1 ; do i=Isq,Ieq+1
     e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_Z
@@ -745,18 +834,37 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   endif
 
   if (present(eta)) then
-    if (CS%tides) then
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
     ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
-      !$OMP parallel do default(shared)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%Z_to_H + e_tidal(i,j)*GV%Z_to_H
-      enddo ; enddo
-    else
+    if (CS%tides_answer_date>20230630) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = e(i,j,1)*GV%Z_to_H
       enddo ; enddo
+      if (CS%tides) then
+        !$OMP parallel do default(shared)
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          eta(i,j) = eta(i,j) + (e_tide_eq(i,j)+e_tide_sal(i,j))*GV%Z_to_H
+        enddo ; enddo
+      endif
+      if (CS%calculate_SAL) then
+        !$OMP parallel do default(shared)
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
+        enddo ; enddo
+      endif
+    else ! Old answers
+      if (CS%tides) then
+        !$OMP parallel do default(shared)
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          eta(i,j) = e(i,j,1)*GV%Z_to_H + (e_sal_tide(i,j))*GV%Z_to_H
+        enddo ; enddo
+      else
+        !$OMP parallel do default(shared)
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          eta(i,j) = (e(i,j,1) + e_sal(i,j))*GV%Z_to_H
+        enddo ; enddo
+      endif
     endif
   endif
 
@@ -797,12 +905,21 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     endif
   endif
 
-  if (CS%id_e_tidal>0) call post_data(CS%id_e_tidal, e_tidal, CS%diag)
+  ! To be consistent with old runs, tidal forcing diagnostic also includes total SAL.
+  ! New diagnostics are given for each individual field.
+  if (CS%id_e_tide>0) call post_data(CS%id_e_tide, e_sal_tide, CS%diag)
+  if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
+  if (CS%id_e_tide_eq>0) call post_data(CS%id_e_tide_eq, e_tide_eq, CS%diag)
+  if (CS%id_e_tide_sal>0) call post_data(CS%id_e_tide_sal, e_tide_sal, CS%diag)
+
+  if (CS%id_rho_pgf>0) call post_data(CS%id_rho_pgf, rho_pgf, CS%diag)
+  if (CS%id_rho_stanley_pgf>0) call post_data(CS%id_rho_stanley_pgf, rho_stanley_pgf, CS%diag)
+  if (CS%id_p_stanley>0) call post_data(CS%id_p_stanley, p_stanley, CS%diag)
 
 end subroutine PressureForce_FV_Bouss
 
 !> Initializes the finite volume pressure gradient control structure
-subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CSp)
+subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp, tides_CSp)
   type(time_type), target,    intent(in)    :: Time !< Current model time
   type(ocean_grid_type),      intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),    intent(in)    :: GV !< Vertical grid structure
@@ -810,11 +927,13 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_FV_CS),  intent(inout) :: CS !< Finite volume PGF control structure
+  type(SAL_CS),           intent(in), target, optional :: SAL_CSp !< SAL control structure
   type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
 
   ! Local variables
   real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
                            ! temperature variance [nondim]
+  integer :: default_answer_date ! Global answer date
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
@@ -824,17 +943,30 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
   CS%diag => diag ; CS%Time => Time
   if (present(tides_CSp)) &
     CS%tides_CSp => tides_CSp
+  if (present(SAL_CSp)) &
+    CS%SAL_CSp => SAL_CSp
 
   mdl = "MOM_PressureForce_FV"
   call log_version(param_file, mdl, version, "")
-  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
-                 "The mean ocean density used with BOUSSINESQ true to "//&
-                 "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
-                 "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
+  call get_param(param_file, mdl, "RHO_PGF_REF", CS%Rho0, &
+                 "The reference density that is subtracted off when calculating pressure "//&
+                 "gradient forces.  Its inverse is subtracted off of specific volumes when "//&
+                 "in non-Boussinesq mode.  The default is RHO_0.", &
+                 units="kg m-3", default=GV%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  if (CS%tides) then
+    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+      "This sets the default value for the various _ANSWER_DATE parameters.", &
+      default=99991231)
+    call get_param(param_file, mdl, "TIDES_ANSWER_DATE", CS%tides_answer_date, &
+      "The vintage of self-attraction and loading (SAL) and tidal forcing calculations in "//&
+      "Boussinesq mode. Values below 20230701 recover the old answers in which the SAL is "//&
+      "part of the tidal forcing calculation.  The change is due to a reordered summation "//&
+      "and the difference is only at bit level.", default=20230630)
+  endif
+  call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
+                 "If true, calculate self-attraction and loading.", default=CS%tides)
   call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &
                  "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
@@ -879,9 +1011,17 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, tides_CS
     CS%id_p_stanley = register_diag_field('ocean_model', 'p_stanley', diag%axesTL, &
         Time, 'p in PGF with Stanley correction', 'Pa', conversion=US%RL2_T2_to_Pa)
   endif
+  if (CS%calculate_SAL) then
+    CS%id_e_sal = register_diag_field('ocean_model', 'e_sal', diag%axesT1, &
+        Time, 'Self-attraction and loading height anomaly', 'meter', conversion=US%Z_to_m)
+  endif
   if (CS%tides) then
-    CS%id_e_tidal = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, &
-        Time, 'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
+    CS%id_e_tide = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, Time, &
+        'Tidal Forcing Astronomical and SAL Height Anomaly', 'meter', conversion=US%Z_to_m)
+    CS%id_e_tide_eq  = register_diag_field('ocean_model', 'e_tide_eq', diag%axesT1, Time, &
+        'Equilibrium tides height anomaly', 'meter', conversion=US%Z_to_m)
+    CS%id_e_tide_sal = register_diag_field('ocean_model', 'e_tide_sal', diag%axesT1, Time, &
+        'Read-in tidal self-attraction and loading height anomaly', 'meter', conversion=US%Z_to_m)
   endif
 
   CS%GFS_scale = 1.0

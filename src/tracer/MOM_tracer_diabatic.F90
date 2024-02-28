@@ -56,7 +56,7 @@ subroutine tracer_vertdiff(h_old, ea, eb, dt, tr, G, GV, &
     btm_src         !< The time-integrated bottom source of the tracer [CU H ~> CU m or CU kg m-2].
   real, dimension(SZI_(G)) :: &
     b1, &           !< b1 is used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-    d1              !! d1=1-c1 is used by the tridiagonal solver, nondimensional.
+    d1              !! d1=1-c1 is used by the tridiagonal solver [nondim].
   real :: c1(SZI_(G),SZK_(GV))    !< c1 is used by the tridiagonal solver [nondim].
   real :: h_minus_dsink(SZI_(G),SZK_(GV)) !< The layer thickness minus the
                     !! difference in sinking rates across the layer [H ~> m or kg m-2].
@@ -253,7 +253,7 @@ subroutine tracer_vertdiff_Eulerian(h_old, ent, dt, tr, G, GV, &
     btm_src         !< The time-integrated bottom source of the tracer [CU H ~> CU m or CU kg m-2].
   real, dimension(SZI_(G)) :: &
     b1, &           !< b1 is used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-    d1              !! d1=1-c1 is used by the tridiagonal solver, nondimensional.
+    d1              !! d1=1-c1 is used by the tridiagonal solver [nondim].
   real :: c1(SZI_(G),SZK_(GV))    !< c1 is used by the tridiagonal solver [nondim].
   real :: h_minus_dsink(SZI_(G),SZK_(GV)) !< The layer thickness minus the
                     !! difference in sinking rates across the layer [H ~> m or kg m-2].

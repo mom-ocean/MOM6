@@ -42,18 +42,18 @@ type, public :: oil_tracer_CS ; private
   character(len=200) :: IC_file !< The file in which the age-tracer initial values
                                 !! can be found, or an empty string for internal initialization.
   logical :: Z_IC_file         !< If true, the IC_file is in Z-space.  The default is false.
-  real :: oil_source_longitude !< Latitude of source location (geographic)
-  real :: oil_source_latitude  !< Longitude of source location (geographic)
-  integer :: oil_source_i=-999 !< Local i of source location (computational)
-  integer :: oil_source_j=-999 !< Local j of source location (computational)
+  real :: oil_source_longitude !< Latitude of source location (geographic) [degrees_N]
+  real :: oil_source_latitude  !< Longitude of source location (geographic) [degrees_E]
+  integer :: oil_source_i=-999 !< Local i of source location (computational index location)
+  integer :: oil_source_j=-999 !< Local j of source location (computational index location)
   real :: oil_source_rate     !< Rate of oil injection [kg T-1 ~> kg s-1]
   real :: oil_start_year      !< The time at which the oil source starts [years]
   real :: oil_end_year        !< The time at which the oil source ends [years]
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
-  real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value.
-  real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out.
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, [kg m-3]
+  real, dimension(NTR_MAX) :: IC_val = 0.0    !< The (uniform) initial condition value [kg m-3]
+  real, dimension(NTR_MAX) :: land_val = -1.0 !< The value of tr used where land is masked out [kg m-3]
   real, dimension(NTR_MAX) :: oil_decay_rate  !< Decay rate of oil [T-1 ~> s-1] calculated from oil_decay_days
   integer, dimension(NTR_MAX) :: oil_source_k !< Layer of source
   logical :: oil_may_reinit  !< If true, oil tracers may be reset by the initialization code
