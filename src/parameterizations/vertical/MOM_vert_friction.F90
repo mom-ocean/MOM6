@@ -2116,7 +2116,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       endif
 
       ! Calculate the coupling coefficients from the viscosities.
-      a_cpl(i,K) = Kv_tot(i,K) / (h_shear + I_amax*Kv_tot(i,K))
+      a_cpl(i,K) = Kv_tot(i,K) / (h_shear + (I_amax * Kv_tot(i,K)))
     endif ; enddo ; enddo ! i & k loops
   elseif (abs(CS%Kv_extra_bbl) > 0.0) then
     ! There is a simple enhancement of the near-bottom viscosities, but no adjustment
