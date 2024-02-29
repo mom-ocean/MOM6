@@ -353,9 +353,9 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grid_Re_Ah, &    ! Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
     GME_coeff_h      ! GME coefficient at h-points [L2 T-1 ~> m2 s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
-    u_smooth, &      ! Zonal velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
+    u_smooth         ! Zonal velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
-    v_smooth, &      ! Meridional velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
+    v_smooth         ! Meridional velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
   real :: AhSm       ! Smagorinsky biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLth      ! 2D Leith biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLthy     ! 2D Leith+E biharmonic viscosity [L4 T-1 ~> m4 s-1]
