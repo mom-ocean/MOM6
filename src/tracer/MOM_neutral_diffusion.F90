@@ -119,6 +119,10 @@ type, public :: neutral_diffusion_CS ; private
                                    !! for remapping.  Values below 20190101 recover the remapping
                                    !! answers from 2018, while higher values use more robust
                                    !! forms of the same remapping expressions.
+  integer :: ndiff_answer_date     !< The vintage of the order of arithmetic to use for the neutral
+                                   !! diffusion.  Values of 20240330 or below recover the answers
+                                   !! from the original form of this code, while higher values use
+                                   !! mathematically equivalent expressions that recover rotational symmetry.
   type(KPP_CS),           pointer :: KPP_CSp => NULL()          !< KPP control structure needed to get BLD
   type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()!< ePBL control structure needed to get MLD
 end type neutral_diffusion_CS
@@ -200,6 +204,16 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                  "transports that were unmasked, as used prior to Jan 2018. This is not "//&
                  "recommended.", default=.false.)
 
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
+  call get_param(param_file, mdl, "NDIFF_ANSWER_DATE", CS%ndiff_answer_date, &
+                 "The vintage of the order of arithmetic to use for the neutral diffusion.  "//&
+                 "Values of 20240330 or below recover the answers from the original form of the "//&
+                 "neutral diffusion code, while higher values use mathematically equivalent "//&
+                 "expressions that recover rotational symmetry.", &
+                 default=20240101) !### Change this default later to default_answer_date.
+
   ! Initialize and configure remapping
   if ( .not.CS%continuous_reconstruction ) then
     call get_param(param_file, mdl, "NDIFF_BOUNDARY_EXTRAP", boundary_extrap, &
@@ -211,9 +225,6 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                    "for vertical remapping for all variables. "//&
                    "It can be one of the following schemes: "//&
                    trim(remappingSchemesDoc), default=remappingDefaultScheme)
-    call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
-                 "This sets the default value for the various _ANSWER_DATE parameters.", &
-                 default=99991231)
     call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%remap_answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
@@ -623,6 +634,18 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real, dimension(SZK_(GV))                    :: dTracer     ! Change in tracer concentration due to neutral diffusion
                                                               ! [H L2 conc ~> m3 conc or kg conc].  For temperature
                                                               ! these units are [C H L2 ~> degC m3 or degC kg].
+  real, dimension(SZK_(GV))                    :: dTracer_N   ! Change in tracer concentration due to neutral diffusion
+                                                              ! into a cell via its logically northern face, in
+                                                              ! [H L2 conc ~> m3 conc or kg conc].
+  real, dimension(SZK_(GV))                    :: dTracer_S   ! Change in tracer concentration due to neutral diffusion
+                                                              ! into a cell via its logically southern face, in
+                                                              ! [H L2 conc ~> m3 conc or kg conc].
+  real, dimension(SZK_(GV))                    :: dTracer_E   ! Change in tracer concentration due to neutral diffusion
+                                                              ! into a cell via its logically eastern face, in
+                                                              ! [H L2 conc ~> m3 conc or kg conc].
+  real, dimension(SZK_(GV))                    :: dTracer_W   ! Change in tracer concentration due to neutral diffusion
+                                                              ! into a cell via its logically western face, in
+                                                              ! [H L2 conc ~> m3 conc or kg conc].
   real :: normalize  ! normalization used for averaging Coef_x and Coef_y to t-points [nondim].
 
   type(tracer_type), pointer                   :: Tracer => NULL() ! Pointer to the current tracer
@@ -800,21 +823,39 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
       endif
     endif
 
-    ! Update the tracer concentration from divergence of neutral diffusive flux components
+    ! Update the tracer concentration from divergence of neutral diffusive flux components, noting
+    ! that uFlx and vFlx use an unexpected sign convention.
     if (CS%KhTh_use_ebt_struct) then
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         if (G%mask2dT(i,j)>0.) then
-          dTracer(:) = 0.
-          do ks = 1,CS%nsurf-1
-            k = CS%uKoL(I,j,ks)
-            dTracer(k) = dTracer(k)   + uFlx(I,j,ks)
-            k = CS%uKoR(I-1,j,ks)
-            dTracer(k) =   dTracer(k) - uFlx(I-1,j,ks)
-            k = CS%vKoL(i,J,ks)
-            dTracer(k) = dTracer(k)   + vFlx(i,J,ks)
-            k = CS%vKoR(i,J-1,ks)
-            dTracer(k) =   dTracer(k) - vFlx(i,J-1,ks)
-          enddo
+          if (CS%ndiff_answer_date <= 20240330) then
+            dTracer(:) = 0.
+            do ks = 1,CS%nsurf-1
+              k = CS%uKoL(I,j,ks)
+              dTracer(k) = dTracer(k) + uFlx(I,j,ks)
+              k = CS%uKoR(I-1,j,ks)
+              dTracer(k) = dTracer(k) - uFlx(I-1,j,ks)
+              k = CS%vKoL(i,J,ks)
+              dTracer(k) = dTracer(k) + vFlx(i,J,ks)
+              k = CS%vKoR(i,J-1,ks)
+              dTracer(k) = dTracer(k) - vFlx(i,J-1,ks)
+            enddo
+          else  ! This form recovers rotational symmetry.
+            dTracer_N(:) = 0.0 ; dTracer_S(:) = 0.0 ; dTracer_E(:) = 0.0 ; dTracer_W(:) = 0.0
+            do ks = 1,CS%nsurf-1
+              k = CS%uKoL(I,j,ks)
+              dTracer_E(k) = dTracer_E(k) + uFlx(I,j,ks)
+              k = CS%uKoR(I-1,j,ks)
+              dTracer_W(k) = dTracer_W(k) - uFlx(I-1,j,ks)
+              k = CS%vKoL(i,J,ks)
+              dTracer_N(k) = dTracer_N(k) + vFlx(i,J,ks)
+              k = CS%vKoR(i,J-1,ks)
+              dTracer_S(k) = dTracer_S(k) - vFlx(i,J-1,ks)
+            enddo
+            do k = 1, GV%ke
+              dTracer(k) = (dTracer_N(k) + dTracer_S(k)) + (dTracer_E(k) + dTracer_W(k))
+            enddo
+          endif
           do k = 1, GV%ke
             tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
                             ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
@@ -832,17 +873,34 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     else
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         if (G%mask2dT(i,j)>0.) then
-          dTracer(:) = 0.
-          do ks = 1,CS%nsurf-1
-            k = CS%uKoL(I,j,ks)
-            dTracer(k) = dTracer(k) + Coef_x(I,j,1)   * uFlx(I,j,ks)
-            k = CS%uKoR(I-1,j,ks)
-            dTracer(k) = dTracer(k) - Coef_x(I-1,j,1) * uFlx(I-1,j,ks)
-            k = CS%vKoL(i,J,ks)
-            dTracer(k) = dTracer(k) + Coef_y(i,J,1)   * vFlx(i,J,ks)
-            k = CS%vKoR(i,J-1,ks)
-            dTracer(k) = dTracer(k) - Coef_y(i,J-1,1) * vFlx(i,J-1,ks)
-          enddo
+          if (CS%ndiff_answer_date <= 20240330) then
+            dTracer(:) = 0.
+            do ks = 1,CS%nsurf-1
+              k = CS%uKoL(I,j,ks)
+              dTracer(k) = dTracer(k) + Coef_x(I,j,1)   * uFlx(I,j,ks)
+              k = CS%uKoR(I-1,j,ks)
+              dTracer(k) = dTracer(k) - Coef_x(I-1,j,1) * uFlx(I-1,j,ks)
+              k = CS%vKoL(i,J,ks)
+              dTracer(k) = dTracer(k) + Coef_y(i,J,1)   * vFlx(i,J,ks)
+              k = CS%vKoR(i,J-1,ks)
+              dTracer(k) = dTracer(k) - Coef_y(i,J-1,1) * vFlx(i,J-1,ks)
+            enddo
+          else  ! This form recovers rotational symmetry.
+            dTracer_N(:) = 0.0 ; dTracer_S(:) = 0.0 ; dTracer_E(:) = 0.0 ; dTracer_W(:) = 0.0
+            do ks = 1,CS%nsurf-1
+              k = CS%uKoL(I,j,ks)
+              dTracer_E(k) = dTracer_E(k) + Coef_x(I,j,1)   * uFlx(I,j,ks)
+              k = CS%uKoR(I-1,j,ks)
+              dTracer_W(k) = dTracer_W(k) - Coef_x(I-1,j,1) * uFlx(I-1,j,ks)
+              k = CS%vKoL(i,J,ks)
+              dTracer_N(k) = dTracer_N(k) + Coef_y(i,J,1)   * vFlx(i,J,ks)
+              k = CS%vKoR(i,J-1,ks)
+              dTracer_S(k) = dTracer_S(k) - Coef_y(i,J-1,1) * vFlx(i,J-1,ks)
+            enddo
+            do k = 1, GV%ke
+              dTracer(k) = (dTracer_N(k) + dTracer_S(k)) + (dTracer_E(k) + dTracer_W(k))
+            enddo
+          endif
           do k = 1, GV%ke
             tracer%t(i,j,k) = tracer%t(i,j,k) + dTracer(k) * &
                             ( G%IareaT(i,j) / ( h(i,j,k) + GV%H_subroundoff ) )
