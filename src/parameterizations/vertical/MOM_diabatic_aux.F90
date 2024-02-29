@@ -15,6 +15,7 @@ use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing, extractFluxes1d, forcing_SinglePointPrint
 use MOM_grid,          only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_interpolate,   only : init_external_field, time_interp_external, time_interp_external_init
 use MOM_interpolate,   only : external_field
 use MOM_io,            only : slasher
@@ -31,8 +32,8 @@ implicit none ; private
 
 public diabatic_aux_init, diabatic_aux_end
 public make_frazil, adjust_salt, differential_diffuse_T_S, triDiagTS, triDiagTS_Eulerian
-public find_uv_at_h, diagnoseMLDbyDensityDifference, applyBoundaryFluxesInOut, set_pen_shortwave
-public diagnoseMLDbyEnergy
+public find_uv_at_h, applyBoundaryFluxesInOut, set_pen_shortwave
+public diagnoseMLDbyEnergy, diagnoseMLDbyDensityDifference
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -67,7 +68,12 @@ type, public :: diabatic_aux_CS ; private
                              !! e-folding depth of incoming shortwave radiation.
   type(external_field) :: sbc_chl   !< A handle used in time interpolation of
                              !! chlorophyll read from a file.
-  logical ::  chl_from_file  !< If true, chl_a is read from a file.
+  logical :: chl_from_file   !< If true, chl_a is read from a file.
+  logical :: do_brine_plume  !< If true, insert salt flux below the surface according to
+                             !! a parameterization by \cite Nguyen2009.
+  integer :: brine_plume_n   !< The exponent in the brine plume parameterization.
+  real :: plume_strength     !< Fraction of the available brine to take to the bottom of the mixed
+                             !! layer [nondim].
 
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< Structure used to regulate timing of diagnostic output
@@ -224,7 +230,7 @@ end subroutine make_frazil
 
 !> This subroutine applies double diffusion to T & S, assuming no diapycnal mass
 !! fluxes, using a simple tridiagonal solver.
-subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
+subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, tv, dt, G, GV)
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -234,13 +240,15 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: S    !< Salinity [PSU] or [gSalt/kg], generically [S ~> ppt].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                           intent(inout)    :: Kd_T !< The extra diffusivity of temperature due to
+                           intent(in)    :: Kd_T !< The extra diffusivity of temperature due to
                                                  !! double diffusion relative to the diffusivity of
-                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
+                                                 !! density [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(in)    :: Kd_S !< The extra diffusivity of salinity due to
                                                  !! double diffusion relative to the diffusivity of
-                                                 !! diffusivity of density [Z2 T-1 ~> m2 s-1].
+                                                 !! density [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
+  type(thermo_var_ptrs),   intent(in)    :: tv   !< Structure containing pointers to any
+                                                 !! available thermodynamic fields.
   real,                    intent(in)    :: dt   !<  Time increment [T ~> s].
 
   ! local variables
@@ -248,6 +256,7 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
     b1_T, b1_S, &   ! Variables used by the tridiagonal solvers of T & S [H ~> m or kg m-2].
     d1_T, d1_S      ! Variables used by the tridiagonal solvers [nondim].
   real, dimension(SZI_(G),SZK_(GV)) :: &
+    dz, &           ! Height change across layers [Z ~> m]
     c1_T, c1_S      ! Variables used by the tridiagonal solvers [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZK_(GV)+1) :: &
     mix_T, mix_S    ! Mixing distances in both directions across each interface [H ~> m or kg m-2].
@@ -255,20 +264,27 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
                     ! added to ensure positive definiteness [H ~> m or kg m-2].
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
-  real :: I_h_int   ! The inverse of the thickness associated with an interface [H-1 ~> m-1 or m2 kg-1].
+  real :: dz_neglect ! A vertical distance that is so small it is usually lost
+                    ! in roundoff and can be neglected [Z ~> m].
+  real :: I_dz_int  ! The inverse of the height scale associated with an interface [Z-1 ~> m-1].
   real :: b_denom_T ! The first term in the denominator for the expression for b1_T [H ~> m or kg m-2].
   real :: b_denom_S ! The first term in the denominator for the expression for b1_S [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   h_neglect = GV%H_subroundoff
+  dz_neglect = GV%dZ_subroundoff
 
   !$OMP parallel do default(private) shared(is,ie,js,je,h,h_neglect,dt,Kd_T,Kd_S,G,GV,T,S,nz)
   do j=js,je
+
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
     do i=is,ie
-      I_h_int = 1.0 / (0.5 * (h(i,j,1) + h(i,j,2)) + h_neglect)
-      mix_T(i,2) = ((dt * Kd_T(i,j,2)) * GV%Z_to_H**2) * I_h_int
-      mix_S(i,2) = ((dt * Kd_S(i,j,2)) * GV%Z_to_H**2) * I_h_int
+      I_dz_int = 1.0 / (0.5 * (dz(i,1) + dz(i,2)) + dz_neglect)
+      mix_T(i,2) = (dt * Kd_T(i,j,2)) * I_dz_int
+      mix_S(i,2) = (dt * Kd_S(i,j,2)) * I_dz_int
 
       h_tr = h(i,j,1) + h_neglect
       b1_T(i) = 1.0 / (h_tr + mix_T(i,2))
@@ -280,9 +296,9 @@ subroutine differential_diffuse_T_S(h, T, S, Kd_T, Kd_S, dt, G, GV)
     enddo
     do k=2,nz-1 ; do i=is,ie
       ! Calculate the mixing across the interface below this layer.
-      I_h_int = 1.0 / (0.5 * (h(i,j,k) + h(i,j,k+1)) + h_neglect)
-      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1)) * GV%Z_to_H**2) * I_h_int
-      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1)) * GV%Z_to_H**2) * I_h_int
+      I_dz_int = 1.0 / (0.5 * (dz(i,k) + dz(i,k+1)) + dz_neglect)
+      mix_T(i,K+1) = ((dt * Kd_T(i,j,K+1))) * I_dz_int
+      mix_S(i,K+1) = ((dt * Kd_S(i,j,K+1))) * I_dz_int
 
       c1_T(i,k) = mix_T(i,K) * b1_T(i)
       c1_S(i,k) = mix_S(i,K) * b1_S(i)
@@ -682,19 +698,22 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   ! Local variables
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [R ~> kg m-3].
   real, dimension(SZI_(G)) :: pRef_MLD, pRef_N2 ! Reference pressures [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G)) :: H_subML, dH_N2    ! Summed thicknesses used in N2 calculation [H ~> m].
+  real, dimension(SZI_(G)) :: H_subML, dH_N2    ! Summed thicknesses used in N2 calculation [H ~> m or kg m-2]
+  real, dimension(SZI_(G)) :: dZ_N2             ! Summed vertical distance used in N2 calculation [Z ~> m]
   real, dimension(SZI_(G)) :: T_subML, T_deeper ! Temperatures used in the N2 calculation [C ~> degC].
   real, dimension(SZI_(G)) :: S_subML, S_deeper ! Salinities used in the N2 calculation [S ~> ppt].
   real, dimension(SZI_(G)) :: rho_subML, rho_deeper ! Densities used in the N2 calculation [R ~> kg m-3].
-  real, dimension(SZI_(G)) :: dK, dKm1          ! Depths [Z ~> m].
+  real, dimension(SZI_(G),SZK_(GV)) :: dZ_2d   ! Layer thicknesses in depth units [Z ~> m]
+  real, dimension(SZI_(G)) :: dZ, dZm1         ! Layer thicknesses associated with interfaces [Z ~> m]
   real, dimension(SZI_(G)) :: rhoSurf          ! Density used in finding the mixed layer depth [R ~> kg m-3].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD     ! Diagnosed mixed layer depth [Z ~> m].
   real, dimension(SZI_(G), SZJ_(G)) :: subMLN2 ! Diagnosed stratification below ML [T-2 ~> s-2].
   real, dimension(SZI_(G), SZJ_(G)) :: MLD2    ! Diagnosed MLD^2 [Z2 ~> m2].
   logical, dimension(SZI_(G)) :: N2_region_set ! If true, all necessary values for calculating N2
                                                ! have been stored already.
-  real :: gE_Rho0          ! The gravitational acceleration divided by a mean density [Z T-2 R-1 ~> m4 s-2 kg-1].
-  real :: dH_subML         ! Depth below ML over which to diagnose stratification [H ~> m].
+  real :: gE_Rho0          ! The gravitational acceleration, sometimes divided by the Boussinesq
+                           ! reference density [H T-2 R-1 ~> m4 s-2 kg-1 or m s-2].
+  real :: dZ_sub_ML        ! Depth below ML over which to diagnose stratification [Z ~> m]
   real :: aFac             ! A nondimensional factor [nondim]
   real :: ddRho            ! A density difference [R ~> kg m-3]
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -706,7 +725,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   if (present(id_N2subML)) then
     if (present(dz_subML)) then
       id_N2 = id_N2subML
-      dH_subML = GV%Z_to_H*dz_subML
+      dZ_sub_ML = dz_subML
     else
       call MOM_error(FATAL, "When the diagnostic of the subML stratification is "//&
                 "requested by providing id_N2_subML to diagnoseMLDbyDensityDifference, "//&
@@ -714,29 +733,32 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
     endif
   endif
 
-  gE_rho0 = US%L_to_Z**2*GV%g_Earth / GV%Rho0
+  gE_rho0 = (US%L_to_Z**2 * GV%g_Earth) / GV%H_to_RZ
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   pRef_MLD(:) = 0.0
   EOSdom(:) = EOS_domain(G%HI)
   do j=js,je
-    do i=is,ie ; dK(i) = 0.5 * h(i,j,1) * GV%H_to_Z ; enddo ! Depth of center of surface layer
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dZ_2d, j, G, GV)
+
+    do i=is,ie ; dZ(i) = 0.5 * dZ_2d(i,1) ; enddo ! Depth of center of surface layer
     call calculate_density(tv%T(:,j,1), tv%S(:,j,1), pRef_MLD, rhoSurf, tv%eqn_of_state, EOSdom)
     do i=is,ie
       deltaRhoAtK(i) = 0.
       MLD(i,j) = 0.
       if (id_N2>0) then
         subMLN2(i,j) = 0.0
-        H_subML(i) = h(i,j,1) ; dH_N2(i) = 0.0
+        H_subML(i) = h(i,j,1) ; dH_N2(i) = 0.0 ; dZ_N2(i) = 0.0
         T_subML(i) = 0.0  ; S_subML(i) = 0.0 ; T_deeper(i) = 0.0 ; S_deeper(i) = 0.0
         N2_region_set(i) = (G%mask2dT(i,j)<0.5) ! Only need to work on ocean points.
       endif
     enddo
     do k=2,nz
       do i=is,ie
-        dKm1(i) = dK(i) ! Depth of center of layer K-1
-        dK(i) = dK(i) + 0.5 * ( h(i,j,k) + h(i,j,k-1) ) * GV%H_to_Z ! Depth of center of layer K
+        dZm1(i) = dZ(i) ! Depth of center of layer K-1
+        dZ(i) = dZ(i) + 0.5 * ( dZ_2d(i,k) + dZ_2d(i,k-1) ) ! Depth of center of layer K
       enddo
 
       ! Prepare to calculate stratification, N2, immediately below the mixed layer by finding
@@ -746,15 +768,18 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
           if (MLD(i,j) == 0.0) then  ! Still in the mixed layer.
             H_subML(i) = H_subML(i) + h(i,j,k)
           elseif (.not.N2_region_set(i)) then ! This block is below the mixed layer, but N2 has not been found yet.
-            if (dH_N2(i) == 0.0) then ! Record the temperature, salinity, pressure, immediately below the ML
+            if (dZ_N2(i) == 0.0) then ! Record the temperature, salinity, pressure, immediately below the ML
               T_subML(i) = tv%T(i,j,k) ; S_subML(i) = tv%S(i,j,k)
               H_subML(i) = H_subML(i) + 0.5 * h(i,j,k) ! Start midway through this layer.
               dH_N2(i) = 0.5 * h(i,j,k)
-            elseif (dH_N2(i) + h(i,j,k) < dH_subML) then
+              dZ_N2(i) = 0.5 * dz_2d(i,k)
+            elseif (dZ_N2(i) + dZ_2d(i,k) < dZ_sub_ML) then
               dH_N2(i) = dH_N2(i) + h(i,j,k)
+              dZ_N2(i) = dZ_N2(i) + dz_2d(i,k)
             else  ! This layer includes the base of the region where N2 is calculated.
               T_deeper(i) = tv%T(i,j,k) ; S_deeper(i) = tv%S(i,j,k)
               dH_N2(i) = dH_N2(i) + 0.5 * h(i,j,k)
+              dZ_N2(i) = dZ_N2(i) + 0.5 * dz_2d(i,k)
               N2_region_set(i) = .true.
             endif
           endif
@@ -770,18 +795,18 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
         if ((MLD(i,j) == 0.) .and. (ddRho > 0.) .and. &
             (deltaRhoAtKm1(i) < densityDiff) .and. (deltaRhoAtK(i) >= densityDiff)) then
           aFac = ( densityDiff - deltaRhoAtKm1(i) ) / ddRho
-          MLD(i,j) = dK(i) * aFac + dKm1(i) * (1. - aFac)
+          MLD(i,j) = (dZ(i) * aFac + dZm1(i) * (1. - aFac))
         endif
         if (id_SQ > 0) MLD2(i,j) = MLD(i,j)**2
       enddo ! i-loop
     enddo ! k-loop
     do i=is,ie
-      if ((MLD(i,j) == 0.) .and. (deltaRhoAtK(i) < densityDiff)) MLD(i,j) = dK(i) ! Assume mixing to the bottom
+      if ((MLD(i,j) == 0.) .and. (deltaRhoAtK(i) < densityDiff)) MLD(i,j) = dZ(i) ! Mixing goes to the bottom
     enddo
 
     if (id_N2>0) then  ! Now actually calculate stratification, N2, below the mixed layer.
       do i=is,ie ; pRef_N2(i) = (GV%g_Earth * GV%H_to_RZ) * (H_subML(i) + 0.5*dH_N2(i)) ; enddo
-      ! if ((.not.N2_region_set(i)) .and. (dH_N2(i) > 0.5*dH_subML)) then
+      ! if ((.not.N2_region_set(i)) .and. (dZ_N2(i) > 0.5*dZ_sub_ML)) then
       !    ! Use whatever stratification we can, measured over whatever distance is available?
       !    T_deeper(i) = tv%T(i,j,nz) ; S_deeper(i) = tv%S(i,j,nz)
       !    N2_region_set(i) = .true.
@@ -789,7 +814,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
       call calculate_density(T_subML, S_subML, pRef_N2, rho_subML, tv%eqn_of_state, EOSdom)
       call calculate_density(T_deeper, S_deeper, pRef_N2, rho_deeper, tv%eqn_of_state, EOSdom)
       do i=is,ie ; if ((G%mask2dT(i,j) > 0.0) .and. N2_region_set(i)) then
-        subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / (GV%H_to_z * dH_N2(i))
+        subMLN2(i,j) =  gE_rho0 * (rho_deeper(i) - rho_subML(i)) / dH_N2(i)
       endif ; enddo
     endif
   enddo ! j-loop
@@ -838,9 +863,9 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),3) :: MLD  ! Diagnosed mixed layer depth [Z ~> m].
   real, dimension(SZK_(GV)+1) :: Z_int    ! Depths of the interfaces from the surface [Z ~> m]
-  real, dimension(SZK_(GV)) :: dZ         ! Layer thicknesses in depth units [Z ~> m]
-  real, dimension(SZK_(GV)) :: Rho_c      ! A column of layer densities [R ~> kg m-3]
-  real, dimension(SZK_(GV)) :: pRef_MLD   ! The reference pressure for the mixed layer
+  real, dimension(SZI_(G),SZK_(GV)) :: dZ ! Layer thicknesses in depth units [Z ~> m]
+  real, dimension(SZI_(G),SZK_(GV)) :: Rho_c ! Columns of layer densities [R ~> kg m-3]
+  real, dimension(SZI_(G)) :: pRef_MLD   ! The reference pressure for the mixed layer
                                           ! depth calculation [R L2 T-2 ~> Pa]
   real, dimension(3) :: PE_threshold      ! The energy threshold divided by g [R Z2 ~> kg m-1]
 
@@ -875,6 +900,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   real :: Fgx        ! The mixing energy difference from the target [R Z2 ~> kg m-1]
   real :: Fpx        ! The derivative of Fgx with x  [R Z ~> kg m-2]
 
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: IT, iM
   integer :: i, j, is, ie, js, je, k, nz
 
@@ -888,15 +914,23 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
     PE_threshold(iM) = Mixing_Energy(iM) / (US%L_to_Z**2*GV%g_Earth)
   enddo
 
-  do j=js,je ; do i=is,ie
-    if (G%mask2dT(i,j) > 0.0) then
+  MLD(:,:,:) = 0.0
 
-      call calculate_density(tv%T(i,j,:), tv%S(i,j,:), pRef_MLD, rho_c, tv%eqn_of_state)
+  EOSdom(:) = EOS_domain(G%HI)
+
+  do j=js,je
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
+    do k=1,nz
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,K), pRef_MLD, rho_c(:,k), tv%eqn_of_state, EOSdom)
+    enddo
+
+    do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 
       Z_int(1) = 0.0
       do k=1,nz
-        DZ(k) = h(i,j,k) * GV%H_to_Z
-        Z_int(K+1) = Z_int(K) - DZ(k)
+        Z_int(K+1) = Z_int(K) - dZ(i,k)
       enddo
 
       do iM=1,3
@@ -912,11 +946,11 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
         do k=1,nz
 
           ! This is the unmixed PE cumulative sum from top down
-          PE = PE + 0.5 * rho_c(k) * (Z_int(K)**2 - Z_int(K+1)**2)
+          PE = PE + 0.5 * Rho_c(i,k) * (Z_int(K)**2 - Z_int(K+1)**2)
 
           ! This is the depth and integral of density
-          H_ML_TST = H_ML + DZ(k)
-          RhoDZ_ML_TST = RhoDZ_ML + rho_c(k) * DZ(k)
+          H_ML_TST = H_ML + dZ(i,k)
+          RhoDZ_ML_TST = RhoDZ_ML + Rho_c(i,k) * dZ(i,k)
 
           ! The average density assuming all layers including this were mixed
           Rho_ML = RhoDZ_ML_TST/H_ML_TST
@@ -936,8 +970,8 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
 
             R1 = RhoDZ_ML / H_ML ! The density of the mixed layer (not including this layer)
             D1 = H_ML ! The thickness of the mixed layer (not including this layer)
-            R2 = rho_c(k) ! The density of this layer
-            D2 = DZ(k) ! The thickness of this layer
+            R2 = Rho_c(i,k) ! The density of this layer
+            D2 = dZ(i,k) ! The thickness of this layer
 
             ! This block could be used to calculate the function coefficients if
             ! we don't reference all values to a surface designated as z=0
@@ -964,7 +998,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
             Cc2 = R2 * (D - C)
 
             ! First guess for an iteration using Newton's method
-            X = DZ(k) * 0.5
+            X = dZ(i,k) * 0.5
 
             IT=0
             do while(IT<10)!We can iterate up to 10 times
@@ -996,7 +1030,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
               if (abs(Fgx) > PE_Threshold(iM) * PE_Threshold_fraction) then
                 X2 = X - Fgx / Fpx
                 IT = IT + 1
-                if (X2 < 0. .or. X2 > DZ(k)) then
+                if (X2 < 0. .or. X2 > dZ(i,k)) then
                   ! The iteration seems to be robust, but we need to do something *if*
                   ! things go wrong... How should we treat failed iteration?
                   ! Present solution: Stop trying to compute and just say we can't mix this layer.
@@ -1015,10 +1049,8 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
         enddo
         MLD(i,j,iM) = H_ML
       enddo
-    else
-      MLD(i,j,:) = 0.0
-    endif
-  enddo ; enddo
+    endif ; enddo
+  enddo
 
   if (id_MLD(1) > 0) call post_data(id_MLD(1), MLD(:,:,1), diagPtr)
   if (id_MLD(2) > 0) call post_data(id_MLD(2), MLD(:,:,2), diagPtr)
@@ -1032,7 +1064,7 @@ end subroutine diagnoseMLDbyEnergy
 subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
-                                    SkinBuoyFlux )
+                                    SkinBuoyFlux, MLD)
   type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
   type(ocean_grid_type),   intent(in)    :: G  !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
@@ -1062,6 +1094,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                                                !! salinity [R-1 S-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
+  real, pointer, dimension(:,:), optional :: MLD !< Mixed layer depth for brine plumes [Z ~> m]
 
   ! Local variables
   integer, parameter :: maxGroundings = 5
@@ -1097,12 +1130,19 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     SurfPressure, &  ! Surface pressure (approximated as 0.0) [R L2 T-2 ~> Pa]
     dRhodT,       &  ! change in density per change in temperature [R C-1 ~> kg m-3 degC-1]
     dRhodS,       &  ! change in density per change in salinity [R S-1 ~> kg m-3 ppt-1]
+    dSpV_dT,      &  ! Partial derivative of specific volume with temperature [R-1 C-1 ~> m3 kg-1 degC-1]
+    dSpV_dS,      &  ! Partial derivative of specific volume with to salinity [R-1 S-1 ~> m3 kg-1 ppt-1]
     netheat_rate, &  ! netheat but for dt=1 [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     netsalt_rate, &  ! netsalt but for dt=1 (e.g. returns a rate)
                      ! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
-    netMassInOut_rate! netmassinout but for dt=1 [H T-1 ~> m s-1 or kg m-2 s-1]
+    netMassInOut_rate, & ! netmassinout but for dt=1 [H T-1 ~> m s-1 or kg m-2 s-1]
+    mixing_depth, &  ! The mixing depth for brine plumes [H ~> m or kg m-2]
+    MLD_H, &         ! The mixed layer depth for brine plumes in thickness units [H ~> m or kg m-2]
+    MLD_Z, &         ! Running sum of distance from the surface for finding MLD_H [Z ~> m]
+    total_h          ! Total thickness of the water column [H ~> m or kg m-2]
   real, dimension(SZI_(G), SZK_(GV)) :: &
     h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
+    ! dz, &            ! Layer thicknesses in depth units [Z ~> m]
     T2d, &           ! A 2-d copy of the layer temperatures [C ~> degC]
     pen_TKE_2d, &    ! The TKE required to homogenize the heating by shortwave radiation within
                      ! a layer [R Z3 T-2 ~> J m-2]
@@ -1125,11 +1165,18 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                       ! in units of [Z3 R2 T-2 H-2 ~> kg2 m-5 s-2 or m s-2].
   real    :: GoRho    ! g_Earth times a unit conversion factor divided by density
                       ! [Z T-2 R-1 ~> m4 s-2 kg-1]
+  real    :: g_conv   ! The gravitational acceleration times the conversion factors from non-Boussinesq
+                      ! thickness units to mass per units area [R Z2 H-1 T-2 ~> kg m-2 s-2 or m s-2]
   logical :: calculate_energetics ! If true, calculate the energy required to mix the newly added
                       ! water over the topmost grid cell, assuming that the fluxes of heat and salt
                       ! and rejected brine are initially applied in vanishingly thin layers at the
                       ! top of the layer before being mixed throughout the layer.
   logical :: calculate_buoyancy ! If true, calculate the surface buoyancy flux.
+  real :: dK(SZI_(G))  ! Depth of the layer center in thickness units [H ~> m or kg m-2]
+  real :: A_brine(SZI_(G))  ! Constant [H-(n+1) ~> m-(n+1) or m(2n+2) kg-(n+1)].
+  real :: fraction_left_brine ! Fraction of the brine that has not been applied yet [nondim]
+  real :: plume_fraction ! Fraction of the brine that is applied to a layer [nondim]
+  real :: plume_flux  ! Brine flux to move downwards  [S H ~> ppt m or ppt kg m-2]
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, is, ie, js, je, k, nz, nb
   character(len=45) :: mesg
@@ -1137,6 +1184,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   Idt = 1.0 / dt
+  plume_flux = 0.0
 
   calculate_energetics = (present(cTKE) .and. present(dSV_dT) .and. present(dSV_dS))
   calculate_buoyancy = present(SkinBuoyFlux)
@@ -1156,6 +1204,17 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
   endif
 
+  if (CS%do_brine_plume .and. .not. associated(MLD)) then
+    call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
+                   "Brine plume parameterization requires a mixed-layer depth,\n"//&
+                   "currently coming from the energetic PBL scheme.")
+  endif
+  if (CS%do_brine_plume .and. .not. associated(fluxes%salt_left_behind)) then
+    call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
+                   "Brine plume parameterization requires DO_BRINE_PLUME\n"//&
+                   "to be turned on in SIS2 as well as MOM6.")
+  endif
+
   ! H_limit_fluxes is used by extractFluxes1d to scale down fluxes if the total
   ! depth of the ocean is vanishing. It does not (yet) handle a value of zero.
   ! To accommodate vanishing upper layers, we need to allow for an instantaneous
@@ -1171,18 +1230,20 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  H_limit_fluxes,numberOfGroundings,iGround,jGround,&
   !$OMP                                  nonPenSW,hGrounding,CS,Idt,aggregate_FW_forcing,  &
   !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt,EOSdom,   &
-  !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho, &
+  !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho,&
   !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2, &
-  !$OMP                                  EnthalpyConst)                  &
+  !$OMP                                  EnthalpyConst,MLD)                                &
   !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
   !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
-  !$OMP                                  IforcingDepthScale,                               &
+  !$OMP                                  IforcingDepthScale,g_conv,dSpV_dT,dSpV_dS,        &
   !$OMP                                  dThickness,dTemp,dSalt,hOld,Ithickness,           &
   !$OMP                                  netMassIn,pres,d_pres,p_lay,dSV_dT_2d,            &
   !$OMP                                  netmassinout_rate,netheat_rate,netsalt_rate,      &
   !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,                    &
-  !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst)        &
-  !$OMP                     firstprivate(SurfPressure)
+  !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst,        &
+  !$OMP                                  mixing_depth,A_brine,fraction_left_brine,         &
+  !$OMP                                  plume_fraction,dK,MLD_H,MLD_Z,total_h)                     &
+  !$OMP                     firstprivate(SurfPressure,plume_flux)
   do j=js,je
   ! Work in vertical slices for efficiency
 
@@ -1217,7 +1278,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! Nothing more is done on this j-slice if there is no buoyancy forcing.
     if (.not.associated(fluxes%sw)) cycle
 
-    if (nsw>0) call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=(1.0/GV%Z_to_H))
+    if (nsw>0) then
+      if (GV%Boussinesq .or. (.not.allocated(tv%SpV_avg))) then
+        call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=GV%H_to_Z)
+      else
+        call extract_optics_slice(optics, j, G, GV, opacity=opacityBand, opacity_scale=GV%H_to_RZ, &
+                                  SpV_avg=tv%SpV_avg)
+      endif
+    endif
 
     ! The surface forcing is contained in the fluxes type.
     ! We aggregate the thermodynamic forcing for a time step into the following:
@@ -1298,6 +1366,31 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     !    ocean (and corresponding outward heat content), and ignoring penetrative SW.
     ! B/ update mass, salt, temp from mass leaving ocean.
     ! C/ update temp due to penetrative SW
+    if (CS%do_brine_plume) then
+      ! Find the plume mixing depth.
+      if (GV%Boussinesq .or. .not.allocated(tv%SpV_avg)) then
+        do i=is,ie ; MLD_H(i) = GV%Z_to_H * MLD(i,j) ; total_h(i) = 0.0 ; enddo
+        do k=1,nz ; do i=is,ie ; total_h(i) = total_h(i) + h(i,j,k) ; enddo ; enddo
+      else
+        do i=is,ie ; MLD_H(i) = 0.0 ; MLD_Z(i) = 0.0 ; total_h(i) = 0.0 ; enddo
+        do k=1,nz ; do i=is,ie
+          total_h(i) = total_h(i) + h(i,j,k)
+          if (MLD_Z(i) + GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k) < MLD(i,j)) then
+            MLD_H(i) = MLD_H(i) + h(i,j,k)
+            MLD_Z(i) = MLD_Z(i) + GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
+          elseif (MLD_Z(i) < MLD(i,j)) then  ! This is the last layer in the mixed layer
+            MLD_H(i) = MLD_H(i) + GV%RZ_to_H * (MLD(i,j) - MLD_Z(i)) / tv%SpV_avg(i,j,k)
+            MLD_Z(i) = MLD(i,j)
+          endif
+        enddo ; enddo
+      endif
+      do i=is,ie
+        mixing_depth(i) = min( max(MLD_H(i) - minimum_forcing_depth, minimum_forcing_depth), &
+                               max(total_h(i), GV%angstrom_h) ) + GV%H_subroundoff
+        A_brine(i) = (CS%brine_plume_n + 1) / (mixing_depth(i) ** (CS%brine_plume_n + 1))
+      enddo
+    endif
+
     do i=is,ie
       if (G%mask2dT(i,j) > 0.) then
 
@@ -1343,6 +1436,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
             if (GV%Boussinesq) then
               RivermixConst = -0.5*(CS%rivermix_depth*dt) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
+            elseif (allocated(tv%SpV_avg)) then
+              RivermixConst = -0.5*(CS%rivermix_depth*dt) * ( US%L_to_Z**2*GV%g_Earth ) / tv%SpV_avg(i,j,1)
             else
               RivermixConst = -0.5*(CS%rivermix_depth*dt) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
             endif
@@ -1370,8 +1465,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
         enddo ! k=1,1
 
         ! B/ Update mass, salt, temp from mass leaving ocean and other fluxes of heat and salt.
+        fraction_left_brine = 1.0
         do k=1,nz
-
           ! Place forcing into this layer if this layer has nontrivial thickness.
           ! For layers thin relative to 1/IforcingDepthScale, then distribute
           ! forcing into deeper layers.
@@ -1384,6 +1479,32 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
           ! be distributed downwards.
           if (-fractionOfForcing*netMassOut(i) > evap_CFL_limit*h2d(i,k)) then
             fractionOfForcing = -evap_CFL_limit*h2d(i,k)/netMassOut(i)
+          endif
+
+          if (CS%do_brine_plume .and. associated(fluxes%salt_left_behind)) then
+            if (fluxes%salt_left_behind(i,j) > 0 .and. fraction_left_brine > 0.0) then
+              ! Place forcing into this layer by depth for brine plume parameterization.
+              if (k == 1) then
+                dK(i) = 0.5 * h(i,j,k)         ! Depth of center of layer K
+                plume_flux = - (1000.0*US%ppt_to_S * (CS%plume_strength * fluxes%salt_left_behind(i,j))) * GV%RZ_to_H
+                plume_fraction = 1.0
+              else
+                dK(i) = dK(i) + 0.5 * ( h(i,j,k) + h(i,j,k-1) ) ! Depth of center of layer K
+                plume_flux = 0.0
+              endif
+              if (dK(i) <= mixing_depth(i) .and. fraction_left_brine > 0.0) then
+                plume_fraction = min(fraction_left_brine, (A_brine(i) * dK(i)**CS%brine_plume_n) * h(i,j,k))
+              else
+                IforcingDepthScale = 1. / max(GV%H_subroundoff, minimum_forcing_depth - netMassOut(i) )
+                ! plume_fraction = fraction_left_brine, unless h2d is less than IforcingDepthScale.
+                plume_fraction = min(fraction_left_brine, h2d(i,k)*IforcingDepthScale)
+              endif
+              fraction_left_brine = fraction_left_brine - plume_fraction
+              plume_flux = plume_flux + plume_fraction * (1000.0*US%ppt_to_S * (CS%plume_strength * &
+                           fluxes%salt_left_behind(i,j))) * GV%RZ_to_H
+            else
+              plume_flux = 0.0
+            endif
           endif
 
           ! Change in state due to forcing
@@ -1430,7 +1551,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             endif
             Ithickness  = 1.0/h2d(i,k) ! Inverse of new thickness
             T2d(i,k)    = (hOld*T2d(i,k) + dTemp)*Ithickness
-            tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt)*Ithickness
+            tv%S(i,j,k) = (hOld*tv%S(i,j,k) + dSalt + plume_flux)*Ithickness
           elseif (h2d(i,k) < 0.0) then ! h2d==0 is a special limit that needs no extra handling
             call forcing_SinglePointPrint(fluxes,G,i,j,'applyBoundaryFluxesInOut (h<0)')
             write(0,*) 'applyBoundaryFluxesInOut(): lon,lat=',G%geoLonT(i,j),G%geoLatT(i,j)
@@ -1548,31 +1669,45 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     !  1) Answers will change due to round-off
     !  2) Be sure to save their values BEFORE fluxes are used.
     if (Calculate_Buoyancy) then
-      drhodt(:) = 0.0
-      drhods(:) = 0.0
       netPen_rate(:) = 0.0
       ! Sum over bands and attenuate as a function of depth.
       ! netPen_rate is the netSW as a function of depth, but only the surface value is used here,
       ! in which case the values of dt, h, optics and H_limit_fluxes are irrelevant.  Consider
       ! writing a shorter and simpler variant to handle this very limited case.
-      ! call sumSWoverBands(G, GV, US, h2d(:,:), optics_nbands(optics), optics, j, dt, &
+      ! Find the vertical distances across layers.
+      ! call thickness_to_dz(h, tv, dz, j, G, GV)
+      ! call sumSWoverBands(G, GV, US, h2d, dz, optics_nbands(optics), optics, j, dt, &
       !                     H_limit_fluxes, .true., pen_SW_bnd_rate, netPen)
       do i=is,ie ; do nb=1,nsw ; netPen_rate(i) = netPen_rate(i) + pen_SW_bnd_rate(nb,i) ; enddo ; enddo
 
-      ! Density derivatives
-      if (associated(tv%p_surf)) then ; do i=is,ie ; SurfPressure(i) = tv%p_surf(i,j) ; enddo ; endif
-      call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, &
-                                    tv%eqn_of_state, EOSdom)
       ! 1. Adjust netSalt to reflect dilution effect of FW flux
       ! 2. Add in the SW heating for purposes of calculating the net
       ! surface buoyancy flux affecting the top layer.
       ! 3. Convert to a buoyancy flux, excluding penetrating SW heating
       !    BGR-Jul 5, 2017: The contribution of SW heating here needs investigated for ePBL.
-      do i=is,ie
-        SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * &
-            (dRhodS(i) * (netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
-             dRhodT(i) * ( netHeat_rate(i) + netPen_rate(i)) ) ! [Z2 T-3 ~> m2 s-3]
-      enddo
+      if (associated(tv%p_surf)) then ; do i=is,ie ; SurfPressure(i) = tv%p_surf(i,j) ; enddo ; endif
+
+      if ((.not.GV%Boussinesq) .and. (.not.GV%semi_Boussinesq)) then
+        g_conv = GV%g_Earth * GV%H_to_RZ * US%L_to_Z**2
+
+        ! Specific volume derivatives
+        call calculate_specific_vol_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dSpV_dT, dSpV_dS, &
+                                  tv%eqn_of_state, EOS_domain(G%HI))
+        do i=is,ie
+          SkinBuoyFlux(i,j) = g_conv * &
+              (dSpV_dS(i) * ( netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
+               dSpV_dT(i) * ( netHeat_rate(i) + netPen_rate(i)) ) ! [Z2 T-3 ~> m2 s-3]
+        enddo
+      else
+        ! Density derivatives
+        call calculate_density_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dRhodT, dRhodS, &
+                                      tv%eqn_of_state, EOSdom)
+        do i=is,ie
+          SkinBuoyFlux(i,j) = - GoRho * GV%H_to_Z * &
+              (dRhodS(i) * ( netSalt_rate(i) - tv%S(i,j,1)*netMassInOut_rate(i)) + &
+               dRhodT(i) * ( netHeat_rate(i) + netPen_rate(i)) ) ! [Z2 T-3 ~> m2 s-3]
+        enddo
+      endif
     endif
 
   enddo ! j-loop finish
@@ -1697,6 +1832,16 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
     CS%use_river_heat_content = .false.
     CS%use_calving_heat_content = .false.
   endif
+
+  call get_param(param_file, mdl, "DO_BRINE_PLUME", CS%do_brine_plume, &
+                 "If true, use a brine plume parameterization from "//&
+                 "Nguyen et al., 2009.", default=.false.)
+  call get_param(param_file, mdl, "BRINE_PLUME_EXPONENT", CS%brine_plume_n, &
+                 "If using the brine plume parameterization, set the integer exponent.", &
+                 default=5, do_not_log=.not.CS%do_brine_plume)
+  call get_param(param_file, mdl, "BRINE_PLUME_FRACTION", CS%plume_strength, &
+                 "Fraction of the available brine to mix down using the brine plume parameterization.", &
+                 units="nondim", default=1.0, do_not_log=.not.CS%do_brine_plume)
 
   if (useALEalgorithm) then
     CS%id_createdH = register_diag_field('ocean_model',"created_H",diag%axesT1, &

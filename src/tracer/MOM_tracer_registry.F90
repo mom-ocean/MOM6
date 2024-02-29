@@ -836,15 +836,20 @@ end subroutine tracer_Reg_chkinv
 
 
 !> Find a tracer in the tracer registry by name.
-subroutine tracer_name_lookup(Reg, tr_ptr, name)
+subroutine tracer_name_lookup(Reg, n, tr_ptr, name)
   type(tracer_registry_type), pointer    :: Reg     !< pointer to tracer registry
   type(tracer_type), pointer             :: tr_ptr  !< target or pointer to the tracer array
   character(len=32), intent(in)          :: name    !< tracer name
+  integer, intent(out)                   :: n       !< index to tracer registery
 
-  integer n
   do n=1,Reg%ntr
-    if (lowercase(Reg%Tr(n)%name) == lowercase(name)) tr_ptr => Reg%Tr(n)
+    if (lowercase(Reg%Tr(n)%name) == lowercase(name)) then
+      tr_ptr => Reg%Tr(n)
+      return
+    endif
   enddo
+
+  call MOM_error(FATAL,"MOM cannot find registered tracer: "//name)
 
 end subroutine tracer_name_lookup
 

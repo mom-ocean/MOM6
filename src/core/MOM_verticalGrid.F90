@@ -138,8 +138,12 @@ subroutine verticalGridInit( param_file, GV, US )
                  default=.true., do_not_log=GV%Boussinesq)
   if (GV%Boussinesq) GV%semi_Boussinesq = .true.
   call get_param(param_file, mdl, "RHO_KV_CONVERT", Rho_Kv, &
-                 "The density used to convert input kinematic viscosities into dynamic "//&
-                 "viscosities in non-BOUSSINESQ mode, and similarly for vertical diffusivities.", &
+                 "The density used to convert input vertical distances into thickesses in "//&
+                 "non-BOUSSINESQ mode, and to convert kinematic viscosities into dynamic "//&
+                 "viscosities and similarly for vertical diffusivities.  GV%m_to_H is set "//&
+                 "using this value, whereas GV%Z_to_H is set using RHO_0.  The default is "//&
+                 "RHO_0, but this can be set separately to demonstrate the independence of the "//&
+                 "non-Boussinesq solutions of the value of RHO_0.", &
                  units="kg m-3", default=GV%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
                  do_not_log=GV%Boussinesq)
   call get_param(param_file, mdl, "ANGSTROM", GV%Angstrom_Z, &
@@ -186,18 +190,22 @@ subroutine verticalGridInit( param_file, GV, US )
     GV%m_to_H = 1.0 / GV%H_to_m
     GV%H_to_MKS = GV%H_to_m
     GV%m2_s_to_HZ_T = GV%m_to_H * US%m_to_Z * US%T_to_s
+
+    GV%H_to_Z = GV%H_to_m * US%m_to_Z
+    GV%Z_to_H = US%Z_to_m * GV%m_to_H
   else
     GV%kg_m2_to_H = 1.0 / GV%H_to_kg_m2
-    GV%m_to_H = US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H
-    GV%H_to_m = GV%H_to_kg_m2 / (US%R_to_kg_m3*GV%Rho0)
+    !  GV%m_to_H = US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H
+    GV%m_to_H = US%R_to_kg_m3*rho_Kv * GV%kg_m2_to_H
     GV%H_to_MKS = GV%H_to_kg_m2
     GV%m2_s_to_HZ_T = US%R_to_kg_m3*rho_Kv * GV%kg_m2_to_H * US%m_to_Z * US%T_to_s
+    GV%H_to_m = 1.0 / GV%m_to_H
+
+    GV%H_to_Z = US%m_to_Z * ( GV%H_to_kg_m2 / (US%R_to_kg_m3*GV%Rho0) )
+    GV%Z_to_H = US%Z_to_m * ( US%R_to_kg_m3*GV%Rho0 * GV%kg_m2_to_H )
   endif
 
-  GV%H_to_Z = GV%H_to_m * US%m_to_Z
-  GV%Z_to_H = US%Z_to_m * GV%m_to_H
-
-  GV%Angstrom_H = GV%Z_to_H * GV%Angstrom_Z
+  GV%Angstrom_H = (US%Z_to_m * GV%m_to_H) * GV%Angstrom_Z
   GV%Angstrom_m = US%Z_to_m * GV%Angstrom_Z
 
   GV%H_subroundoff = 1e-20 * max(GV%Angstrom_H, GV%m_to_H*1e-17)

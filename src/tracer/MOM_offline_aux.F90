@@ -642,7 +642,8 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
   real, dimension(SZI_(G),SZJ_(G)),          &
                            intent(inout) :: mld       !< Averaged mixed layer depth [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                           intent(inout) :: Kd        !< Diapycnal diffusivities at interfaces [Z2 T-1 ~> m2 s-1]
+                           intent(inout) :: Kd        !< Diapycnal diffusivities at interfaces
+                                                      !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   type(forcing),           intent(inout) :: fluxes    !< Fields with surface fluxes
   integer,                 intent(in   ) :: ridx_sum  !< Read index for sum, mean, and surf files
   integer,                 intent(in   ) :: ridx_snap !< Read index for snapshot file
@@ -696,7 +697,7 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
 
   ! Check if reading vertical diffusivities or entrainment fluxes
   call MOM_read_data( mean_file, 'Kd_interface', Kd(:,:,1:nk_input+1), G%Domain, &
-                  timelevel=ridx_sum, position=CENTER, scale=US%m2_s_to_Z2_T)
+                  timelevel=ridx_sum, position=CENTER, scale=GV%m2_s_to_HZ_T)
 
   ! This block makes sure that the fluxes control structure, which may not be used in the solo_driver,
   ! contains netMassIn and netMassOut which is necessary for the applyTracerBoundaryFluxesInOut routine

@@ -126,6 +126,7 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
   ! Local variables
   real :: g_int   ! Reduced gravities across the internal interfaces [L2 Z-1 T-2 ~> m s-2].
   real :: g_fs    ! Reduced gravity across the free surface [L2 Z-1 T-2 ~> m s-2].
+  real :: Rlay_Ref ! The target density of the surface layer [R ~> kg m-3].
   character(len=40)  :: mdl = "set_coord_from_gprime" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
@@ -138,11 +139,20 @@ subroutine set_coord_from_gprime(Rlay, g_prime, GV, US, param_file)
   call get_param(param_file, mdl, "GINT", g_int, &
                  "The reduced gravity across internal interfaces.", &
                  units="m s-2", fail_if_missing=.true., scale=US%m_s_to_L_T**2*US%Z_to_m)
+  call get_param(param_file, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
+                 "The reference potential density used for layer 1.", &
+                 units="kg m-3", default=US%R_to_kg_m3*GV%Rho0, scale=US%kg_m3_to_R)
 
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = g_int ; enddo
-  Rlay(1) = GV%Rho0
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
+  Rlay(1) = Rlay_Ref
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
+  else
+    do k=2,nz
+      Rlay(k) = Rlay(k-1) * ((GV%g_Earth + 0.5*g_prime(k)) / (GV%g_Earth - 0.5*g_prime(k)))
+    enddo
+  endif
 
   call callTree_leave(trim(mdl)//'()')
 
@@ -184,9 +194,15 @@ subroutine set_coord_from_layer_density(Rlay, g_prime, GV, US, param_file)
   enddo
 !    These statements set the interface reduced gravities.           !
   g_prime(1) = g_fs
-  do k=2,nz
-    g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1))
-  enddo
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz
+      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+    enddo
+  else
+    do k=2,nz
+      g_prime(k) = 2.0*GV%g_Earth * (Rlay(k) - Rlay(k-1)) / (Rlay(k) + Rlay(k-1))
+    enddo
+  endif
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_layer_density
@@ -237,7 +253,13 @@ subroutine set_coord_from_TS_ref(Rlay, g_prime, GV, US, param_file, eqn_of_state
   call calculate_density(T_ref, S_ref, P_ref, Rlay(1), eqn_of_state)
 
 !    These statements set the layer densities.                       !
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
+  else
+    do k=2,nz
+      Rlay(k) = Rlay(k-1) * ((GV%g_Earth + 0.5*g_prime(k)) / (GV%g_Earth - 0.5*g_prime(k)))
+    enddo
+  endif
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_ref
@@ -294,7 +316,15 @@ subroutine set_coord_from_TS_profile(Rlay, g_prime, GV, US, param_file, eqn_of_s
   g_prime(1) = g_fs
   do k=1,nz ; Pref(k) = P_Ref ; enddo
   call calculate_density(T0, S0, Pref, Rlay, eqn_of_state, (/1,nz/) )
-  do k=2,nz; g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1)) ; enddo
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz
+      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+    enddo
+  else
+    do k=2,nz
+      g_prime(k) = 2.0*GV%g_Earth * (Rlay(k) - Rlay(k-1)) / (Rlay(k) + Rlay(k-1))
+    enddo
+  endif
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_profile
@@ -387,7 +417,15 @@ subroutine set_coord_from_TS_range(Rlay, g_prime, GV, US, param_file, eqn_of_sta
   do k=k_light-1,1,-1
     Rlay(k) = 2.0*Rlay(k+1) - Rlay(k+2)
   enddo
-  do k=2,nz ; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz
+      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+    enddo
+  else
+    do k=2,nz
+      g_prime(k) = 2.0*GV%g_Earth * (Rlay(k) - Rlay(k-1)) / (Rlay(k) + Rlay(k-1))
+    enddo
+  endif
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_from_TS_range
@@ -429,7 +467,15 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
 
   call MOM_read_data(filename, coord_var, Rlay, scale=US%kg_m3_to_R)
   g_prime(1) = g_fs
-  do k=2,nz ; g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1)) ; enddo
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz
+      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+    enddo
+  else
+    do k=2,nz
+      g_prime(k) = 2.0*GV%g_Earth * (Rlay(k) - Rlay(k-1)) / (Rlay(k) + Rlay(k-1))
+    enddo
+  endif
   do k=1,nz ; if (g_prime(k) <= 0.0) then
     call MOM_error(FATAL, "MOM_initialization set_coord_from_file: "//&
        "Zero or negative g_primes read from variable "//"Layer"//" in file "//&
@@ -479,9 +525,15 @@ subroutine set_coord_linear(Rlay, g_prime, GV, US, param_file)
   enddo
   ! These statements set the interface reduced gravities.
   g_prime(1) = g_fs
-  do k=2,nz
-    g_prime(k) = (GV%g_Earth/(GV%Rho0)) * (Rlay(k) - Rlay(k-1))
-  enddo
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz
+      g_prime(k) = (GV%g_Earth/GV%Rho0) * (Rlay(k) - Rlay(k-1))
+    enddo
+  else
+    do k=2,nz
+      g_prime(k) = 2.0*GV%g_Earth * (Rlay(k) - Rlay(k-1)) / (Rlay(k) + Rlay(k-1))
+    enddo
+  endif
 
   call callTree_leave(trim(mdl)//'()')
 end subroutine set_coord_linear
@@ -498,6 +550,7 @@ subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
   type(param_file_type),    intent(in)  :: param_file !< A structure to parse for run-time parameters
   ! Local variables
   real :: g_fs    ! Reduced gravity across the free surface [L2 Z-1 T-2 ~> m s-2].
+  real :: Rlay_Ref ! The target density of the surface layer [R ~> kg m-3].
   character(len=40)  :: mdl = "set_coord_to_none" ! This subroutine's name.
   integer :: k, nz
   nz = GV%ke
@@ -507,11 +560,20 @@ subroutine set_coord_to_none(Rlay, g_prime, GV, US, param_file)
   call get_param(param_file, mdl, "GFS" , g_fs, &
                  "The reduced gravity at the free surface.", units="m s-2", &
                  default=GV%g_Earth*US%L_T_to_m_s**2*US%m_to_Z, scale=US%m_s_to_L_T**2*US%Z_to_m)
+  call get_param(param_file, mdl, "LIGHTEST_DENSITY", Rlay_Ref, &
+                 "The reference potential density used for layer 1.", &
+                 units="kg m-3", default=US%R_to_kg_m3*GV%Rho0, scale=US%kg_m3_to_R)
 
   g_prime(1) = g_fs
   do k=2,nz ; g_prime(k) = 0. ; enddo
-  Rlay(1) = GV%Rho0
-  do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
+  Rlay(1) = Rlay_Ref
+  if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+    do k=2,nz ; Rlay(k) = Rlay(k-1) + g_prime(k)*(GV%Rho0/GV%g_Earth) ; enddo
+  else
+    do k=2,nz
+      Rlay(k) = Rlay(k-1) * ((GV%g_Earth + 0.5*g_prime(k)) / (GV%g_Earth - 0.5*g_prime(k)))
+    enddo
+  endif
 
   call callTree_leave(trim(mdl)//'()')
 
@@ -522,8 +584,8 @@ end subroutine set_coord_to_none
 subroutine write_vertgrid_file(GV, US, param_file, directory)
   type(verticalGrid_type), intent(in)  :: GV         !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US         !< A dimensional unit scaling type
-  type(param_file_type), intent(in)    :: param_file !< A structure to parse for run-time parameters
-  character(len=*),      intent(in)    :: directory  !< The directory into which to place the file.
+  type(param_file_type),   intent(in)  :: param_file !< A structure to parse for run-time parameters
+  character(len=*),        intent(in)  :: directory  !< The directory into which to place the file.
   ! Local variables
   character(len=240) :: filepath
   type(vardesc) :: vars(2)

@@ -11,6 +11,7 @@ use MOM_error_handler,  only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -143,15 +144,16 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   type(CVMix_conv_cs),                       intent(in)  :: CS !< CVMix convection control structure
   real, dimension(SZI_(G),SZJ_(G)),          intent(in)  :: hbl !< Depth of ocean boundary layer [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                             intent(inout) :: Kd !< Diapycnal diffusivity at each interface that
-                                                                 !! will be incremented here [Z2 T-1 ~> m2 s-1].
+                                             intent(inout) :: Kd !< Diapycnal diffusivity at each interface
+                                                                 !! that will be incremented here
+                                                                 !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
-                                             intent(inout) :: KV !< Viscosity at each interface that will be
-                                                                 !! incremented here [Z2 T-1 ~> m2 s-1].
+                                             intent(inout) :: Kv !< Viscosity at each interface that will be
+                                                                 !! incremented here [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                                    optional, intent(inout) :: Kd_aux !< A second diapycnal diffusivity at each
                                                                  !! interface that will also be incremented
-                                                                 !! here [Z2 T-1 ~> m2 s-1].
+                                                                 !! here [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   ! local variables
   real, dimension(SZK_(GV)) :: rho_lwr !< Adiabatic Water Density [kg m-3], this is a dummy
@@ -162,23 +164,27 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   real, dimension(SZK_(GV)+1) :: N2    !< Squared buoyancy frequency [s-2]
   real, dimension(SZK_(GV)+1) :: kv_col !< Viscosities at interfaces in the column [m2 s-1]
   real, dimension(SZK_(GV)+1) :: kd_col !< Diffusivities at interfaces in the column [m2 s-1]
-  real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [m]
-  real, dimension(SZK_(GV))   :: cellHeight  !< Height of cell centers [m]
+  real, dimension(SZK_(GV)+1) :: iFaceHeight !< Height of interfaces [Z ~> m]
+  real, dimension(SZK_(GV))   :: cellHeight  !< Height of cell centers [Z ~> m]
+  real, dimension(SZI_(G),SZK_(GV)) :: dz ! Height change across layers [Z ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     kd_conv, &                         !< Diffusivity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
     kv_conv, &                         !< Viscosity added by convection for diagnostics [Z2 T-1 ~> m2 s-1]
     N2_3d                              !< Squared buoyancy frequency for diagnostics [T-2 ~> s-2]
   integer :: kOBL                      !< level of ocean boundary layer extent
-  real :: g_o_rho0  ! Gravitational acceleration divided by density times unit conversion factors
-                    ! [Z s-2 R-1 ~> m4 s-2 kg-1]
+  real :: g_o_rho0  ! Gravitational acceleration, perhaps divided by density, times unit conversion factors
+                    ! [H s-2 R-1 ~> m4 s-2 kg-1 or m s-2]
   real :: pref      ! Interface pressures [R L2 T-2 ~> Pa]
   real :: rhok, rhokm1 ! In situ densities of the layers above and below at the interface pressure [R ~> kg m-3]
-  real :: hbl_KPP   ! The depth of the ocean boundary as used by KPP [m]
-  real :: dz        ! A thickness [Z ~> m]
+  real :: dh_int    ! The distance between layer centers [H ~> m or kg m-2]
   real :: dh, hcorr ! Limited thicknesses and a cumulative correction [Z ~> m]
   integer :: i, j, k
 
-  g_o_rho0 = US%L_to_Z**2*US%s_to_T**2 * GV%g_Earth / GV%Rho0
+  if (GV%Boussinesq) then
+    g_o_rho0 = (US%L_to_Z**2*US%s_to_T**2*GV%Z_to_H) * GV%g_Earth / GV%Rho0
+  else
+    g_o_rho0 = (US%L_to_Z**2*US%s_to_T**2*GV%RZ_to_H) * GV%g_Earth
+  endif
 
   ! initialize dummy variables
   rho_lwr(:) = 0.0 ; rho_1d(:) = 0.0
@@ -191,6 +197,10 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   if (CS%id_kd_conv > 0) Kd_conv(:,:,:) = 0.0
 
   do j = G%jsc, G%jec
+
+    ! Find the vertical distances across layers.
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
     do i = G%isc, G%iec
 
       ! skip calling at land points
@@ -205,8 +215,8 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
         call calculate_density(tv%t(i,j,k), tv%s(i,j,k), pRef, rhok, tv%eqn_of_state)
         call calculate_density(tv%t(i,j,k-1), tv%s(i,j,k-1), pRef, rhokm1, tv%eqn_of_state)
 
-        dz = ((0.5*(h(i,j,k-1) + h(i,j,k))+GV%H_subroundoff)*GV%H_to_Z)
-        N2(K) = g_o_rho0 * (rhok - rhokm1) / dz ! Can be negative
+        dh_int = 0.5*(h(i,j,k-1) + h(i,j,k)) + GV%H_subroundoff
+        N2(K) = g_o_rho0 * (rhok - rhokm1) / dh_int ! Can be negative
 
       enddo
 
@@ -214,17 +224,16 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
       hcorr = 0.0
       ! compute heights at cell center and interfaces
       do k=1,GV%ke
-        dh = h(i,j,k) * GV%H_to_Z ! Nominal thickness to use for increment, in the units of heights
+        dh = dz(i,k) ! Nominal thickness to use for increment, in the units of heights
         dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
         hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
         dh = max(dh, CS%min_thickness) ! Limited increment dh>=min_thickness
-        cellHeight(k)    = iFaceHeight(k) - 0.5 * US%Z_to_m*dh
-        iFaceHeight(k+1) = iFaceHeight(k) - US%Z_to_m*dh
+        cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+        iFaceHeight(k+1) = iFaceHeight(k) - dh
       enddo
 
       ! gets index of the level and interface above hbl
-      hbl_KPP = US%Z_to_m*hbl(i,j)  ! Convert to the units used by CVMix.
-      kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, hbl_KPP)
+      kOBL = CVMix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, hbl(i,j))
 
       kv_col(:) = 0.0 ; kd_col(:) = 0.0
       call CVMix_coeffs_conv(Mdiff_out=kv_col(:), &
@@ -238,18 +247,18 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
 
       ! Increment the diffusivity outside of the boundary layer.
       do K=max(1,kOBL+1),GV%ke+1
-        Kd(i,j,K) = Kd(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+        Kd(i,j,K) = Kd(i,j,K) + GV%m2_s_to_HZ_T * kd_col(K)
       enddo
       if (present(Kd_aux)) then
         ! Increment the other diffusivity outside of the boundary layer.
         do K=max(1,kOBL+1),GV%ke+1
-          Kd_aux(i,j,K) = Kd_aux(i,j,K) + US%m2_s_to_Z2_T * kd_col(K)
+          Kd_aux(i,j,K) = Kd_aux(i,j,K) + GV%m2_s_to_HZ_T * kd_col(K)
         enddo
       endif
 
       ! Increment the viscosity outside of the boundary layer.
       do K=max(1,kOBL+1),GV%ke+1
-        Kv(i,j,K) = Kv(i,j,K) + US%m2_s_to_Z2_T * kv_col(K)
+        Kv(i,j,K) = Kv(i,j,K) + GV%m2_s_to_HZ_T * kv_col(K)
       enddo
 
       ! Store 3-d arrays for diagnostics.
@@ -277,8 +286,8 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
     !   call hchksum(Kd_conv, "MOM_CVMix_conv: Kd_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
     ! if (CS%id_kv_conv > 0) &
     !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
+    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
   endif
 
   ! send diagnostics to post_data

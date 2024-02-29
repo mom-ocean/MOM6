@@ -62,7 +62,8 @@ type, public :: surface_forcing_CS ; private
                                 !! from MOM_domains) to indicate the staggering of
                                 !! the winds that are being provided in calls to
                                 !! update_ocean_model.
-  logical :: use_temperature    !< If true, temp and saln used as state variables
+  logical :: use_temperature    !< If true, temp and saln used as state variables.
+  logical :: nonBous            !< If true, this run is fully non-Boussinesq
   real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress [nondim].
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
@@ -112,8 +113,10 @@ type, public :: surface_forcing_CS ; private
                                 !! salinity to a specified value.
   logical :: restore_temp       !< If true, the coupled MOM driver adds a term to restore sea
                                 !! surface temperature to a specified value.
-  real    :: Flux_const_salt                !< Piston velocity for surface salt restoring [Z T-1 ~> m s-1]
-  real    :: Flux_const_temp                !< Piston velocity for surface temp restoring [Z T-1 ~> m s-1]
+  real    :: Flux_const_salt    !< Piston velocity for surface salinity restoring [Z T-1 ~> m s-1]
+  real    :: Flux_const_temp    !< Piston velocity for surface temperature restoring [Z T-1 ~> m s-1]
+  real    :: rho_restore        !< The density that is used to convert piston velocities into salt
+                                !! or heat fluxes with salinity or temperature restoring [R ~> kg m-3]
   logical :: trestore_SPEAR_ECDA            !< If true, modify restoring data wrt local SSS
   real    :: SPEAR_dTf_dS                   !< The derivative of the freezing temperature with
                                             !! salinity [C S-1 ~> degC ppt-1].
@@ -175,6 +178,7 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: t_flux          =>NULL() !< sensible heat flux [W m-2]
   real, pointer, dimension(:,:) :: q_flux          =>NULL() !< specific humidity flux [kg m-2 s-1]
   real, pointer, dimension(:,:) :: salt_flux       =>NULL() !< salt flux [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: excess_salt     =>NULL() !< salt left behind by brine rejection [kg m-2 s-1]
   real, pointer, dimension(:,:) :: lw_flux         =>NULL() !< long wave radiation [W m-2]
   real, pointer, dimension(:,:) :: sw_flux_vis_dir =>NULL() !< direct visible sw radiation [W m-2]
   real, pointer, dimension(:,:) :: sw_flux_vis_dif =>NULL() !< diffuse visible sw radiation [W m-2]
@@ -267,7 +271,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
 
   kg_m2_s_conversion = US%kg_m2s_to_RZ_T
-  if (CS%restore_temp) rhoXcp = CS%Rho0 * fluxes%C_p
+  if (CS%restore_temp) rhoXcp = CS%rho_restore * fluxes%C_p
   open_ocn_mask(:,:)     = 1.0
   fluxes%vPrecGlobalAdj  = 0.0
   fluxes%vPrecGlobalScl  = 0.0
@@ -279,8 +283,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! allocation and initialization if this is the first time that this
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
-    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.true., press=.true., &
-                               fix_accum_bug=CS%fix_ustar_gustless_bug)
+    call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.not.CS%nonBous, press=.true., &
+                               fix_accum_bug=CS%fix_ustar_gustless_bug, tau_mag=CS%nonBous)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -303,6 +307,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
     call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_added,isd,ied,jsd,jed)
+
+    if (associated(IOB%excess_salt)) call safe_alloc_ptr(fluxes%salt_left_behind,isd,ied,jsd,jed)
 
     do j=js-2,je+2 ; do i=is-2,ie+2
       fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
@@ -360,7 +366,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       do j=js,je ; do i=is,ie
         delta_sss = data_restore(i,j) - sfc_state%SSS(i,j)
         delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
-        fluxes%salt_flux(i,j) = 1.e-3*US%S_to_ppt*G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const_salt)* &
+        fluxes%salt_flux(i,j) = 1.e-3*US%S_to_ppt*G%mask2dT(i,j) * (CS%rho_restore*CS%Flux_const_salt)* &
              (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j)) * delta_sss  ! R Z T-1 ~> kg Salt m-2 s-1
       enddo ; enddo
       if (CS%adjust_net_srestore_to_zero) then
@@ -383,7 +389,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
           delta_sss = sfc_state%SSS(i,j) - data_restore(i,j)
           delta_sss = sign(1.0,delta_sss) * min(abs(delta_sss), CS%max_delta_srestore)
           fluxes%vprec(i,j) = (CS%basin_mask(i,j)*open_ocn_mask(i,j)*CS%srestore_mask(i,j))* &
-                      (CS%Rho0*CS%Flux_const_salt) * &
+                      (CS%rho_restore*CS%Flux_const_salt) * &
                       delta_sss / (0.5*(sfc_state%SSS(i,j) + data_restore(i,j)))
         endif
       enddo ; enddo
@@ -576,6 +582,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
         call check_mask_val_consistency(IOB%salt_flux(i-i0,j-j0), G%mask2dT(i,j), i, j, 'salt_flux', G)
     enddo ; enddo
   endif
+  if (associated(IOB%excess_salt)) then
+    do j=js,je ; do i=is,ie
+      fluxes%salt_left_behind(i,j) = G%mask2dT(i,j)*(kg_m2_s_conversion*IOB%excess_salt(i-i0,j-j0))
+    enddo ; enddo
+  endif
 
 !#CTRL# if (associated(CS%ctrl_forcing_CSp)) then
 !#CTRL#   do j=js,je ; do i=is,ie
@@ -708,8 +719,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   ! allocation and initialization if this is the first time that this
   ! mechanical forcing type has been used.
   if (.not.forces%initialized) then
-    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., &
-                               press=.true.)
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.not.CS%nonBous, &
+                               press=.true., tau_mag=CS%nonBous)
 
     call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
     call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)
@@ -782,14 +793,26 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
   ! Set the wind stresses and ustar.
   if (wt1 <= 0.0) then
     call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux=forces%taux, tauy=forces%tauy, &
-                              ustar=forces%ustar, mag_tau=forces%tau_mag, tau_halo=1)
+                              tau_halo=1)
+    if (associated(forces%ustar)) &
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=forces%ustar)
+    if (associated(forces%tau_mag)) &
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, mag_tau=forces%tau_mag)
   else
     call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux=forces%taux, tauy=forces%tauy, &
-                              ustar=ustar_tmp, mag_tau=tau_mag_tmp, tau_halo=1)
-    do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = wt1*forces%ustar(i,j) + wt2*ustar_tmp(i,j)
-      forces%tau_mag(i,j) = wt1*forces%tau_mag(i,j) + wt2*tau_mag_tmp(i,j)
-    enddo ; enddo
+                              tau_halo=1)
+    if (associated(forces%ustar)) then
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=ustar_tmp)
+      do j=js,je ; do i=is,ie
+        forces%ustar(i,j) = wt1*forces%ustar(i,j) + wt2*ustar_tmp(i,j)
+      enddo ; enddo
+    endif
+    if (associated(forces%tau_mag)) then
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, mag_tau=tau_mag_tmp)
+      do j=js,je ; do i=is,ie
+        forces%tau_mag(i,j) = wt1*forces%tau_mag(i,j) + wt2*tau_mag_tmp(i,j)
+      enddo ; enddo
+    endif
   endif
 
   ! Find the net mass source in the input forcing without other adjustments.
@@ -950,7 +973,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
 
   ! Set surface momentum stress related fields as a function of staggering.
   if (present(taux) .or. present(tauy) .or. &
-      ((do_ustar.or.do_gustless) .and. .not.associated(IOB%stress_mag)) ) then
+      ((do_ustar .or. do_tau_mag .or. do_gustless) .and. .not.associated(IOB%stress_mag)) ) then
 
     if (wind_stagger == BGRID_NE) then
       taux_in_B(:,:) = 0.0 ; tauy_in_B(:,:) = 0.0
@@ -1268,14 +1291,14 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   ! Local variables
   real :: utide             ! The RMS tidal velocity [Z T-1 ~> m s-1].
   real :: Flux_const_dflt   ! A default piston velocity for restoring surface properties [m day-1]
+  logical :: Boussinesq       ! If true, this run is fully Boussinesq
+  logical :: semi_Boussinesq  ! If true, this run is partially non-Boussinesq
+  real :: rho_TKE_tidal     ! The constant bottom density used to translate tidal amplitudes into the
+                            ! tidal bottom TKE input used with INT_TIDE_DISSIPATION [R ~> kg m-3]
   logical :: new_sim              ! False if this simulation was started from a restart file
                                   ! or other equivalent files.
   logical :: iceberg_flux_diags   ! If true, diagnostics of fluxes from icebergs are available.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
-  logical :: answers_2018         ! If true, use the order of arithmetic and expressions that recover
-                                  ! the answers from the end of 2018.  Otherwise, use a simpler
-                                  ! expression to calculate gustiness.
   type(time_type)    :: Time_frc
   type(directories)  :: dirs      ! A structure containing relevant directory paths and input filenames.
   character(len=200) :: TideAmp_file, gust_file, salt_file, temp_file ! Input file names.
@@ -1312,12 +1335,20 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
+  call get_param(param_file, mdl, "BOUSSINESQ", Boussinesq, &
+                 "If true, make the Boussinesq approximation.", default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "SEMI_BOUSSINESQ", semi_Boussinesq, &
+                 "If true, do non-Boussinesq pressure force calculations and use mass-based "//&
+                 "thicknesses, but use RHO_0 to convert layer thicknesses into certain "//&
+                 "height changes.  This only applies if BOUSSINESQ is false.", &
+                 default=.true., do_not_log=.true.)
+  CS%nonBous = .not.(Boussinesq .or. semi_Boussinesq)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
-                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
+                 units="kg m-3", default=1035.0, scale=US%kg_m3_to_R) ! (, do_not_log=CS%nonBous)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
                  "The latent heat of fusion.", units="J/kg", default=hlf, scale=US%J_kg_to_Q)
   call get_param(param_file, mdl, "LATENT_HEAT_VAPORIZATION", CS%latent_heat_vapor, &
@@ -1493,6 +1524,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "The derivative of the freezing temperature with salinity.", &
                  units="deg C PSU-1", default=-0.054, scale=US%degC_to_C*US%S_to_ppt, &
                  do_not_log=.not.CS%trestore_SPEAR_ECDA)
+  call get_param(param_file, mdl, "RESTORE_FLUX_RHO", CS%rho_restore, &
+                 "The density that is used to convert piston velocities into salt or heat "//&
+                 "fluxes with RESTORE_SALINITY or RESTORE_TEMPERATURE.", &
+                 units="kg m-3", default=CS%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 do_not_log=.not.(CS%restore_temp.or.CS%restore_salt))
 
   ! Optionally read tidal amplitude from input file [Z T-1 ~> m s-1] on model grid.
   ! Otherwise use default tidal amplitude for bottom frictionally-generated
@@ -1517,6 +1553,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "The constant tidal amplitude used with INT_TIDE_DISSIPATION.", &
                  units="m s-1", default=0.0, scale=US%m_to_Z*US%T_to_s)
   endif
+  call get_param(param_file, mdl, "TKE_TIDAL_RHO", rho_TKE_tidal, &
+                 "The constant bottom density used to translate tidal amplitudes into the tidal "//&
+                 "bottom TKE input used with INT_TIDE_DISSIPATION.", &
+                 units="kg m-3", default=CS%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 do_not_log=.not.(CS%read_TIDEAMP.or.(CS%utide>0.0)))
 
   call safe_alloc_ptr(CS%TKE_tidal,isd,ied,jsd,jed)
   call safe_alloc_ptr(CS%ustar_tidal,isd,ied,jsd,jed)
@@ -1529,13 +1570,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
         rescale=US%m_to_Z*US%T_to_s)
     do j=jsd, jed; do i=isd, ied
       utide = CS%TKE_tidal(i,j)
-      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
+      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
     do j=jsd,jed; do i=isd,ied
       utide = CS%utide
-      CS%TKE_tidal(i,j) = CS%Rho0*CS%cd_tides*(utide*utide*utide)
+      CS%TKE_tidal(i,j) = rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   endif
@@ -1564,22 +1605,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
-  call get_param(param_file, mdl, "SURFACE_FORCING_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the answers "//&
-                 "from the end of 2018.  Otherwise, use a simpler expression to calculate gustiness.", &
-                 default=default_2018_answers)
-                 ! Revise inconsistent default answer dates.
-  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
   call get_param(param_file, mdl, "SURFACE_FORCING_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the gustiness "//&
                  "calculations.  Values below 20190101 recover the answers from the end "//&
-                 "of 2018, while higher values use a simpler expression to calculate gustiness.  "//&
-                 "If both SURFACE_FORCING_2018_ANSWERS and SURFACE_FORCING_ANSWER_DATE are "//&
-                 "specified, the latter takes precedence.", default=default_answer_date)
+                 "of 2018, while higher values use a simpler expression to calculate gustiness.", &
+                 default=default_answer_date)
 
   call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
                  "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
@@ -1728,6 +1758,9 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   endif
   if (associated(iobt%mass_berg)) then
     chks = field_chksum( iobt%mass_berg  ) ; if (root) write(outunit,100) 'iobt%mass_berg      ', chks
+  endif
+  if (associated(iobt%excess_salt)) then
+    chks = field_chksum( iobt%excess_salt    ) ; if (root) write(outunit,100) 'iobt%excess_salt    ', chks
   endif
 100 FORMAT("   CHECKSUM::",A20," = ",Z20)
 

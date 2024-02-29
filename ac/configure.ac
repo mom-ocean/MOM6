@@ -238,8 +238,13 @@ AC_COMPILE_IFELSE(
 
 # Python interpreter test
 
+# Declare the Python interpreter variable
 AC_ARG_VAR([PYTHON], [Python interpreter command])
 
+# If PYTHON is set to an empty string, then unset it
+AS_VAR_IF([PYTHON], [], [AS_UNSET([PYTHON])], [])
+
+# Now attempt to find a Python interpreter if PYTHON is unset
 AS_VAR_SET_IF([PYTHON], [
   AC_PATH_PROGS([PYTHON], ["$PYTHON"], [none])
 ], [

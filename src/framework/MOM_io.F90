@@ -148,6 +148,20 @@ interface read_attribute
   module procedure read_attribute_int32, read_attribute_int64
 end interface read_attribute
 
+!> Type that stores information that can be used to create a non-decomposed axis.
+type :: axis_info
+  character(len=32)  :: name = ""       !< The name of this axis for use in files
+  character(len=256) :: longname = ""   !< A longer name describing this axis
+  character(len=48)  :: units = ""      !< The units of the axis labels
+  character(len=8)   :: cartesian = "N" !< A variable indicating which direction
+                                        !! this axis corresponds with. Valid values
+                                        !! include 'X', 'Y', 'Z', 'T', and 'N' for none.
+  integer            :: sense = 0       !< This is 1 for axes whose values increase upward, or -1
+                                        !! if they increase downward.  The default, 0, is ignored.
+  integer            :: ax_size = 0     !< The number of elements in this axis
+  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis [arbitrary]
+end type axis_info
+
 !> Type for describing a 3-d variable for output
 type, public :: vardesc
   character(len=64)  :: name               !< Variable name in a NetCDF file
@@ -165,21 +179,8 @@ type, public :: vardesc
   character(len=32)  :: dim_names(5)       !< The names in the file of the axes for this variable
   integer            :: position = -1      !< An integer encoding the horizontal position, it may
                                            !! CENTER, CORNER, EAST_FACE, NORTH_FACE, or 0.
+  type(axis_info) :: extra_axes(5)         !< dimensions other than space-time
 end type vardesc
-
-!> Type that stores information that can be used to create a non-decomposed axis.
-type :: axis_info ; private
-  character(len=32)  :: name = ""       !< The name of this axis for use in files
-  character(len=256) :: longname = ""   !< A longer name describing this axis
-  character(len=48)  :: units = ""      !< The units of the axis labels
-  character(len=8)   :: cartesian = "N" !< A variable indicating which direction
-                                        !! this axis corresponds with. Valid values
-                                        !! include 'X', 'Y', 'Z', 'T', and 'N' for none.
-  integer            :: sense = 0       !< This is 1 for axes whose values increase upward, or -1
-                                        !! if they increase downward.  The default, 0, is ignored.
-  integer            :: ax_size = 0     !< The number of elements in this axis
-  real, allocatable, dimension(:) :: ax_data !< The values of the data on the axis [arbitrary]
-end type axis_info
 
 !> Type that stores for a global file attribute
 type :: attribute_info ; private
@@ -271,7 +272,8 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
                                                      !! required if the new file uses any
                                                      !! vertical grid axes.
   integer(kind=int64),     optional, intent(in) :: checksums(:,:) !< checksums of vars
-  type(axis_info),         optional, intent(in) :: extra_axes(:)  !< Types with information about
+  type(axis_info),         dimension(:), &
+                           optional, intent(in) :: extra_axes !< Types with information about
                                                      !! some axes that might be used in this file
   type(attribute_info),    optional, intent(in) :: global_atts(:) !< Global attributes to
                                                      !! write to this file
@@ -1751,7 +1753,8 @@ end subroutine verify_variable_units
 !! have default values that are empty strings or are appropriate for a 3-d
 !! tracer field at the tracer cell centers.
 function var_desc(name, units, longname, hor_grid, z_grid, t_grid, cmor_field_name, &
-                  cmor_units, cmor_longname, conversion, caller, position, dim_names, fixed) result(vd)
+                  cmor_units, cmor_longname, conversion, caller, position, dim_names, &
+                  extra_axes, fixed) result(vd)
   character(len=*),           intent(in) :: name            !< variable name
   character(len=*), optional, intent(in) :: units           !< variable units
   character(len=*), optional, intent(in) :: longname        !< variable long name
@@ -1772,6 +1775,8 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, cmor_field_na
                                                             !! NORTH_FACE, and 0 for no horizontal dimensions.
   character(len=*), dimension(:), &
                     optional, intent(in) :: dim_names       !< The names of the dimensions of this variable
+  type(axis_info),  dimension(:), &
+                    optional, intent(in) :: extra_axes      !< dimensions other than space-time
   logical,          optional, intent(in) :: fixed           !< If true, this does not evolve with time
   type(vardesc)                          :: vd              !< vardesc type that is created
 
@@ -1795,7 +1800,8 @@ function var_desc(name, units, longname, hor_grid, z_grid, t_grid, cmor_field_na
   call modify_vardesc(vd, units=units, longname=longname, hor_grid=hor_grid, &
                       z_grid=z_grid, t_grid=t_grid, position=position, dim_names=dim_names, &
                       cmor_field_name=cmor_field_name, cmor_units=cmor_units, &
-                      cmor_longname=cmor_longname, conversion=conversion, caller=cllr)
+                      cmor_longname=cmor_longname, conversion=conversion, caller=cllr, &
+                      extra_axes=extra_axes)
 
 end function var_desc
 
@@ -1803,7 +1809,8 @@ end function var_desc
 !> This routine modifies the named elements of a vardesc type.
 !! All arguments are optional, except the vardesc type to be modified.
 subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
-                 cmor_field_name, cmor_units, cmor_longname, conversion, caller, position, dim_names)
+                 cmor_field_name, cmor_units, cmor_longname, conversion, caller, position, dim_names, &
+                 extra_axes)
   type(vardesc),              intent(inout) :: vd              !< vardesc type that is modified
   character(len=*), optional, intent(in)    :: name            !< name of variable
   character(len=*), optional, intent(in)    :: units           !< units of variable
@@ -1825,6 +1832,8 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                                                !! NORTH_FACE, and 0 for no horizontal dimensions.
   character(len=*), dimension(:), &
                     optional, intent(in)    :: dim_names       !< The names of the dimensions of this variable
+  type(axis_info),  dimension(:), &
+                    optional, intent(in)    :: extra_axes      !< dimensions other than space-time
 
   character(len=120) :: cllr
   integer :: n
@@ -1874,6 +1883,12 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   if (present(dim_names)) then
     do n=1,min(5,size(dim_names)) ; if (len_trim(dim_names(n)) > 0) then
       call safe_string_copy(dim_names(n), vd%dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
+    endif ; enddo
+  endif
+
+  if (present(extra_axes)) then
+    do n=1,size(extra_axes) ; if (len_trim(extra_axes(n)%name) > 0) then
+      vd%extra_axes(n) = extra_axes(n)
     endif ; enddo
   endif
 
@@ -2020,7 +2035,7 @@ end function cmor_long_std
 !> This routine queries vardesc
 subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                          cmor_field_name, cmor_units, cmor_longname, conversion, caller, &
-                         position, dim_names)
+                         extra_axes, position, dim_names)
   type(vardesc),              intent(in)  :: vd                 !< vardesc type that is queried
   character(len=*), optional, intent(out) :: name               !< name of variable
   character(len=*), optional, intent(out) :: units              !< units of variable
@@ -2035,6 +2050,8 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                                                 !! convert from intensive to extensive
                                                                 !! [various] or [a A-1 ~> 1]
   character(len=*), optional, intent(in)  :: caller             !< calling routine?
+  type(axis_info),  dimension(5), &
+                    optional, intent(out) :: extra_axes      !< dimensions other than space-time
   integer,          optional, intent(out) :: position        !< A coded integer indicating the horizontal position
                                                             !! of this variable if it has such dimensions.
                                                             !! Valid values include CORNER, CENTER, EAST_FACE
@@ -2043,7 +2060,8 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                     optional, intent(out) :: dim_names       !< The names of the dimensions of this variable
 
   integer :: n
-  character(len=120) :: cllr
+  integer, parameter :: nmax_extraaxes = 5
+  character(len=120) :: cllr, varname
   cllr = "mod_vardesc"
   if (present(caller)) cllr = trim(caller)
 
@@ -2073,6 +2091,19 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   if (present(dim_names)) then
     do n=1,min(5,size(dim_names))
       call safe_string_copy(vd%dim_names(n), dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
+    enddo
+  endif
+
+  if (present(extra_axes)) then
+    ! save_restart expects 5 extra axes (can be empty)
+    do n=1, nmax_extraaxes
+      if (vd%extra_axes(n)%ax_size>=1) then
+        extra_axes(n) = vd%extra_axes(n)
+      else
+        ! return an empty axis
+        write(varname,"('dummy',i1.1)") n
+        call set_axis_info(extra_axes(n), name=trim(varname), ax_size=1)
+      endif
     enddo
   endif
 

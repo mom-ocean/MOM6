@@ -10,7 +10,6 @@ stages:
 # We use the "fetch" strategy to speed up the startup of stages
 variables:
   JOB_DIR: "/lustre/f2/scratch/oar.gfdl.ogrp-account/runner/builds/$CI_PIPELINE_ID"
-  WORKSPACE: "/lustre/f2/scratch/oar.gfdl.ogrp-account/runner/$CI_RUNNER_ID"
   GIT_STRATEGY: fetch
 
 # Always eport value of $JOB_DIR
@@ -185,9 +184,9 @@ actions:gnu:
     - make -s -j
     - MPIRUN= make preproc -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
-    - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" WORKSPACE=$WORKSPACE test -s -j') > job.sh
-    - sbatch --clusters=c5 --nodes=2 --time=0:10:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 ) && make WORKSPACE=$WORKSPACE test -s
-    - make WORKSPACE=$WORKSPACE test.summary
+    - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
+    - sbatch --clusters=c5 --nodes=2 --time=0:10:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 ) && make test -s
+    - make test.summary
 
 actions:intel:
   stage: tests
@@ -205,9 +204,9 @@ actions:intel:
     - make -s -j
     - MPIRUN= make preproc -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
-    - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" WORKSPACE=$WORKSPACE test -s -j') > job.sh
-    - sbatch --clusters=c5 --nodes=2 --time=0:10:00 --account=gfdl_o --qos=debug --job-name=MOM6.intel.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 ) && make WORKSPACE=$WORKSPACE test -s
-    - make WORKSPACE=$WORKSPACE test.summary
+    - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
+    - sbatch --clusters=c5 --nodes=2 --time=0:10:00 --account=gfdl_o --qos=debug --job-name=MOM6.intel.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 ) && make test -s
+    - make test.summary
 
 # Tests
 #
