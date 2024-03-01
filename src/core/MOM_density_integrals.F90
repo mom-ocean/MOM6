@@ -243,9 +243,9 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
         hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
@@ -254,12 +254,12 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         ! T, S, and z are interpolated in the horizontal.  The z interpolation
         ! is linear, but for T and S it may be thickness weighted.
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-        dz_x(m,i) = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i+1,j) - z_b(i+1,j))
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
+        dz_x(m,i) = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i+1,j) - z_b(i+1,j)))
         pos = i*15+(m-2)*5
-        T15(pos+1) = wtT_L*T(i,j) + wtT_R*T(i+1,j)
-        S15(pos+1) = wtT_L*S(i,j) + wtT_R*S(i+1,j)
-        p15(pos+1) = -GxRho*((wt_L*z_t(i,j) + wt_R*z_t(i+1,j)) - z0pres)
+        T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i+1,j))
+        S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i+1,j))
+        p15(pos+1) = -GxRho*(((wt_L*z_t(i,j)) + (wt_R*z_t(i+1,j))) - z0pres)
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m,i)
@@ -309,9 +309,9 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
         hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
@@ -320,12 +320,12 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         ! T, S, and z are interpolated in the horizontal.  The z interpolation
         ! is linear, but for T and S it may be thickness weighted.
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
-        dz_y(m,i) = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i,j+1) - z_b(i,j+1))
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
+        dz_y(m,i) = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i,j+1) - z_b(i,j+1)))
         pos = i*15+(m-2)*5
-        T15(pos+1) = wtT_L*T(i,j) + wtT_R*T(i,j+1)
-        S15(pos+1) = wtT_L*S(i,j) + wtT_R*S(i,j+1)
-        p15(pos+1) = -GxRho*((wt_L*z_t(i,j) + wt_R*z_t(i,j+1)) - z0pres)
+        T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i,j+1))
+        S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i,j+1))
+        p15(pos+1) = -GxRho*(((wt_L*z_t(i,j)) + (wt_R*z_t(i,j+1))) - z0pres)
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i)
@@ -584,15 +584,15 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i+1,j,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i+1,j,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i+1,j,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
+        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i+1,j,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i+1,j,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i+1,j,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i+1,j,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
         Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i+1,j,k); Sbr = S_b(i+1,j,k)
@@ -600,20 +600,20 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
 
       do m=2,4
         w_left = wt_t(m) ; w_right = wt_b(m)
-        dz_x(m,i) = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i+1,j,K) - e(i+1,j,K+1))
+        dz_x(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i+1,j,K) - e(i+1,j,K+1)))
 
         ! Salinity and temperature points are linearly interpolated in
         ! the horizontal. The subscript (1) refers to the top value in
         ! the vertical profile while subscript (5) refers to the bottom
         ! value in the vertical profile.
         pos = i*15+(m-2)*5
-        T15(pos+1) = w_left*Ttl + w_right*Ttr
-        T15(pos+5) = w_left*Tbl + w_right*Tbr
+        T15(pos+1) = (w_left*Ttl) + (w_right*Ttr)
+        T15(pos+5) = (w_left*Tbl) + (w_right*Tbr)
 
-        S15(pos+1) = w_left*Stl + w_right*Str
-        S15(pos+5) = w_left*Sbl + w_right*Sbr
+        S15(pos+1) = (w_left*Stl) + (w_right*Str)
+        S15(pos+5) = (w_left*Sbl) + (w_right*Sbr)
 
-        p15(pos+1) = -GxRho*((w_left*e(i,j,K) + w_right*e(i+1,j,K)) - z0pres)
+        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - z0pres)
 
         ! Pressure
         do n=2,5
@@ -625,9 +625,9 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
           S15(pos+n) = wt_t(n) * S15(pos+1) + wt_b(n) * S15(pos+5)
           T15(pos+n) = wt_t(n) * T15(pos+1) + wt_b(n) * T15(pos+5)
         enddo
-        if (use_varT) T215(pos+1:pos+5) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i+1,j,k)
-        if (use_covarTS) TS15(pos+1:pos+5) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i+1,j,k)
-        if (use_varS) S215(pos+1:pos+5) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i+1,j,k)
+        if (use_varT) T215(pos+1:pos+5) = (w_left*tv%varT(i,j,k)) + (w_right*tv%varT(i+1,j,k))
+        if (use_covarTS) TS15(pos+1:pos+5) = (w_left*tv%covarTS(i,j,k)) + (w_right*tv%covarTS(i+1,j,k))
+        if (use_varS) S215(pos+1:pos+5) = (w_left*tv%varS(i,j,k)) + (w_right*tv%varS(i+1,j,k))
       enddo
     enddo
 
@@ -648,14 +648,14 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
       if (use_rho_ref) then
         do m = 2,4
           pos = i*15+(m-2)*5
-          intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
-                            12.0*r15(pos+3)) )
+          intz(m) = (G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                            12.0*r15(pos+3)) ))
         enddo
       else
         do m = 2,4
           pos = i*15+(m-2)*5
-          intz(m) = G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
-                            12.0*r15(pos+3)) - rho_ref )
+          intz(m) = (G_e*dz_x(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + 32.0*(r15(pos+2)+r15(pos+4)) + &
+                            12.0*r15(pos+3)) - rho_ref ))
         enddo
       endif
       ! Use Boole's rule to integrate the bottom pressure anomaly values in x.
@@ -680,15 +680,15 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i,j+1,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i,j+1,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i,j+1,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
+        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i,j+1,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i,j+1,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i,j+1,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i,j+1,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
         Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i,j+1,k); Sbr = S_b(i,j+1,k)
@@ -696,20 +696,20 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
 
       do m=2,4
         w_left = wt_t(m) ; w_right = wt_b(m)
-        dz_y(m,i) = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i,j+1,K) - e(i,j+1,K+1))
+        dz_y(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i,j+1,K) - e(i,j+1,K+1)))
 
         ! Salinity and temperature points are linearly interpolated in
         ! the horizontal. The subscript (1) refers to the top value in
         ! the vertical profile while subscript (5) refers to the bottom
         ! value in the vertical profile.
         pos = i*15+(m-2)*5
-        T15(pos+1) = w_left*Ttl + w_right*Ttr
-        T15(pos+5) = w_left*Tbl + w_right*Tbr
+        T15(pos+1) = (w_left*Ttl) + (w_right*Ttr)
+        T15(pos+5) = (w_left*Tbl) + (w_right*Tbr)
 
-        S15(pos+1) = w_left*Stl + w_right*Str
-        S15(pos+5) = w_left*Sbl + w_right*Sbr
+        S15(pos+1) = (w_left*Stl) + (w_right*Str)
+        S15(pos+5) = (w_left*Sbl) + (w_right*Sbr)
 
-        p15(pos+1) = -GxRho*((w_left*e(i,j,K) + w_right*e(i,j+1,K)) - z0pres)
+        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - z0pres)
 
         ! Pressure
         do n=2,5
@@ -721,9 +721,9 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
           S15(pos+n) = wt_t(n) * S15(pos+1) + wt_b(n) * S15(pos+5)
           T15(pos+n) = wt_t(n) * T15(pos+1) + wt_b(n) * T15(pos+5)
         enddo
-        if (use_varT) T215(pos+1:pos+5) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i,j+1,k)
-        if (use_covarTS) TS15(pos+1:pos+5) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i,j+1,k)
-        if (use_varS) S215(pos+1:pos+5) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i,j+1,k)
+        if (use_varT) T215(pos+1:pos+5) = (w_left*tv%varT(i,j,k)) + (w_right*tv%varT(i,j+1,k))
+        if (use_covarTS) TS15(pos+1:pos+5) = (w_left*tv%covarTS(i,j,k)) + (w_right*tv%covarTS(i,j+1,k))
+        if (use_varS) S215(pos+1:pos+5) = (w_left*tv%varS(i,j,k)) + (w_right*tv%varS(i,j+1,k))
       enddo
     enddo
 
@@ -748,16 +748,16 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
       if (use_rho_ref) then
         do m = 2,4
           pos = i*15+(m-2)*5
-          intz(m) = G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
+          intz(m) = (G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
                                            32.0*(r15(pos+2)+r15(pos+4)) + &
-                                           12.0*r15(pos+3)) )
+                                           12.0*r15(pos+3)) ))
         enddo
       else
         do m = 2,4
           pos = i*15+(m-2)*5
-          intz(m) = G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
+          intz(m) = (G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
                                            32.0*(r15(pos+2)+r15(pos+4)) + &
-                                           12.0*r15(pos+3)) - rho_ref )
+                                           12.0*r15(pos+3)) - rho_ref ))
         enddo
       endif
       ! Use Boole's rule to integrate the values.
@@ -977,19 +977,19 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
-        Tml = ( (hWght*hR)*tv%T(i+1,j,k)+ (hWght*hL + hR*hL)*tv%T(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i+1,j,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i+1,j,k) ) * iDenom
-        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + hR*hL)*tv%T(i+1,j,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
-        Sml = ( (hWght*hR)*tv%S(i+1,j,k) + (hWght*hL + hR*hL)*tv%S(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i+1,j,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
-        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i+1,j,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
+        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
+        Tml = ( (hWght*hR)*tv%T(i+1,j,k)+ (hWght*hL + (hR*hL))*tv%T(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i+1,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i+1,j,k) ) * iDenom
+        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + (hR*hL))*tv%T(i+1,j,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
+        Sml = ( (hWght*hR)*tv%S(i+1,j,k) + (hWght*hL + (hR*hL))*tv%S(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i+1,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i+1,j,k) ) * iDenom
+        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + (hR*hL))*tv%S(i+1,j,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
         Tml = tv%T(i,j,k); Tmr = tv%T(i+1,j,k)
@@ -1004,19 +1004,19 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         ! the horizontal. The subscript (1) refers to the top value in
         ! the vertical profile while subscript (5) refers to the bottom
         ! value in the vertical profile.
-        T_top = w_left*Ttl + w_right*Ttr
-        T_mn = w_left*Tml + w_right*Tmr
-        T_bot = w_left*Tbl + w_right*Tbr
+        T_top = (w_left*Ttl) + (w_right*Ttr)
+        T_mn = (w_left*Tml) + (w_right*Tmr)
+        T_bot = (w_left*Tbl) + (w_right*Tbr)
 
-        S_top = w_left*Stl + w_right*Str
-        S_mn = w_left*Sml + w_right*Smr
-        S_bot = w_left*Sbl + w_right*Sbr
+        S_top = (w_left*Stl) + (w_right*Str)
+        S_mn = (w_left*Sml) + (w_right*Smr)
+        S_bot = (w_left*Sbl) + (w_right*Sbr)
 
         ! Pressure
-        dz_x(m,i) = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i+1,j,K) - e(i+1,j,K+1))
+        dz_x(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i+1,j,K) - e(i+1,j,K+1)))
 
         pos = i*15+(m-2)*5
-        p15(pos+1) = -GxRho*((w_left*e(i,j,K) + w_right*e(i+1,j,K)) - z0pres)
+        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - z0pres)
         do n=2,5
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m,i)
         enddo
@@ -1032,9 +1032,9 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
           T15(pos+n) = wt_t(n) * T_top + wt_b(n) * ( T_bot + t6 * wt_t(n) )
         enddo
         if (use_stanley_eos) then
-          if (use_varT) T215(pos+1:pos+5) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i+1,j,k)
-          if (use_covarTS) TS15(pos+1:pos+5) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i+1,j,k)
-          if (use_varS) S215(pos+1:pos+5) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i+1,j,k)
+          if (use_varT) T215(pos+1:pos+5) = (w_left*tv%varT(i,j,k)) + (w_right*tv%varT(i+1,j,k))
+          if (use_covarTS) TS15(pos+1:pos+5) = (w_left*tv%covarTS(i,j,k)) + (w_right*tv%covarTS(i+1,j,k))
+          if (use_varS) S215(pos+1:pos+5) = (w_left*tv%varS(i,j,k)) + (w_right*tv%varS(i+1,j,k))
         endif
         if (use_stanley_eos) then
           call calculate_density(T5, S5, p5, T25, TS5, S25, r5, EOS, rho_ref=rho_ref)
@@ -1082,19 +1082,19 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + hL*hR )
-        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
-        Tml = ( (hWght*hR)*tv%T(i,j+1,k)+ (hWght*hL + hR*hL)*tv%T(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i,j+1,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i,j+1,k) ) * iDenom
-        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + hR*hL)*tv%T(i,j+1,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
-        Sml = ( (hWght*hR)*tv%S(i,j+1,k)+ (hWght*hL + hR*hL)*tv%S(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i,j+1,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
-        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i,j+1,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
+        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
+        Tml = ( (hWght*hR)*tv%T(i,j+1,k)+ (hWght*hL + (hR*hL))*tv%T(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i,j+1,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i,j+1,k) ) * iDenom
+        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + (hR*hL))*tv%T(i,j+1,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
+        Sml = ( (hWght*hR)*tv%S(i,j+1,k)+ (hWght*hL + (hR*hL))*tv%S(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i,j+1,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i,j+1,k) ) * iDenom
+        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + (hR*hL))*tv%S(i,j+1,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
         Tml = tv%T(i,j,k); Tmr = tv%T(i,j+1,k)
@@ -1109,19 +1109,19 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         ! the horizontal. The subscript (1) refers to the top value in
         ! the vertical profile while subscript (5) refers to the bottom
         ! value in the vertical profile.
-        T_top = w_left*Ttl + w_right*Ttr
-        T_mn = w_left*Tml + w_right*Tmr
-        T_bot = w_left*Tbl + w_right*Tbr
+        T_top = (w_left*Ttl) + (w_right*Ttr)
+        T_mn = (w_left*Tml) + (w_right*Tmr)
+        T_bot = (w_left*Tbl) + (w_right*Tbr)
 
-        S_top = w_left*Stl + w_right*Str
-        S_mn = w_left*Sml + w_right*Smr
-        S_bot = w_left*Sbl + w_right*Sbr
+        S_top = (w_left*Stl) + (w_right*Str)
+        S_mn = (w_left*Sml) + (w_right*Smr)
+        S_bot = (w_left*Sbl) + (w_right*Sbr)
 
         ! Pressure
-        dz_y(m,i) = w_left*(e(i,j,K) - e(i,j,K+1)) + w_right*(e(i,j+1,K) - e(i,j+1,K+1))
+        dz_y(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i,j+1,K) - e(i,j+1,K+1)))
 
         pos = i*15+(m-2)*5
-        p15(pos+1) = -GxRho*((w_left*e(i,j,K) + w_right*e(i,j+1,K)) - z0pres)
+        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - z0pres)
         do n=2,5
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i)
         enddo
@@ -1138,9 +1138,9 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         enddo
 
         if (use_stanley_eos) then
-          if (use_varT) T215(pos+1:pos+5) = w_left*tv%varT(i,j,k) + w_right*tv%varT(i,j+1,k)
-          if (use_covarTS) TS15(pos+1:pos+5) = w_left*tv%covarTS(i,j,k) + w_right*tv%covarTS(i,j+1,k)
-          if (use_varS) S215(pos+1:pos+5) = w_left*tv%varS(i,j,k) + w_right*tv%varS(i,j+1,k)
+          if (use_varT) T215(pos+1:pos+5) = (w_left*tv%varT(i,j,k)) + (w_right*tv%varT(i,j+1,k))
+          if (use_covarTS) TS15(pos+1:pos+5) = (w_left*tv%covarTS(i,j,k)) + (w_right*tv%covarTS(i,j+1,k))
+          if (use_varS) S215(pos+1:pos+5) = (w_left*tv%varS(i,j,k)) + (w_right*tv%varS(i,j+1,k))
         endif
       enddo
     enddo
@@ -1372,24 +1372,24 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
 
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
         pos = i*15+(m-2)*5
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
-        p15(pos+1) = wt_L*p_b(i,j) + wt_R*p_b(i+1,j)
-        dp_x(m,I) = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
-        T15(pos+1) = wtT_L*T(i,j) + wtT_R*T(i+1,j)
-        S15(pos+1) = wtT_L*S(i,j) + wtT_R*S(i+1,j)
+        p15(pos+1) = (wt_L*p_b(i,j)) + (wt_R*p_b(i+1,j))
+        dp_x(m,I) = (wt_L*(p_b(i,j) - p_t(i,j))) + (wt_R*(p_b(i+1,j) - p_t(i+1,j)))
+        T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i+1,j))
+        S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i+1,j))
 
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
@@ -1427,24 +1427,24 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
 
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
         pos = i*15+(m-2)*5
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
-        p15(pos+1) = wt_L*p_b(i,j) + wt_R*p_b(i,j+1)
-        dp_y(m,i) = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
-        T15(pos+1) = wtT_L*T(i,j) + wtT_R*T(i,j+1)
-        S15(pos+1) = wtT_L*S(i,j) + wtT_R*S(i,j+1)
+        p15(pos+1) = (wt_L*p_b(i,j)) + (wt_R*p_b(i,j+1))
+        dp_y(m,i) = (wt_L*(p_b(i,j) - p_t(i,j))) + (wt_R*(p_b(i,j+1) - p_t(i,j+1)))
+        T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i,j+1))
+        S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i,j+1))
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
           p15(pos+n) = p15(pos+n-1) - 0.25*dp_y(m,i)
@@ -1613,25 +1613,25 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
 
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
-        P_top = wt_L*p_t(i,j) + wt_R*p_t(i+1,j)
-        P_bot = wt_L*p_b(i,j) + wt_R*p_b(i+1,j)
-        T_top = wtT_L*T_t(i,j) + wtT_R*T_t(i+1,j)
-        T_bot = wtT_L*T_b(i,j) + wtT_R*T_b(i+1,j)
-        S_top = wtT_L*S_t(i,j) + wtT_R*S_t(i+1,j)
-        S_bot = wtT_L*S_b(i,j) + wtT_R*S_b(i+1,j)
+        P_top = (wt_L*p_t(i,j)) + (wt_R*p_t(i+1,j))
+        P_bot = (wt_L*p_b(i,j)) + (wt_R*p_b(i+1,j))
+        T_top = (wtT_L*T_t(i,j)) + (wtT_R*T_t(i+1,j))
+        T_bot = (wtT_L*T_b(i,j)) + (wtT_R*T_b(i+1,j))
+        S_top = (wtT_L*S_t(i,j)) + (wtT_R*S_t(i+1,j))
+        S_bot = (wtT_L*S_b(i,j)) + (wtT_R*S_b(i+1,j))
         dp_90(m,I) = C1_90*(P_bot - P_top)
 
         ! Salinity, temperature and pressure with linear interpolation in the vertical.
@@ -1674,25 +1674,25 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
 
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
-        P_top = wt_L*p_t(i,j) + wt_R*p_t(i,j+1)
-        P_bot = wt_L*p_b(i,j) + wt_R*p_b(i,j+1)
-        T_top = wtT_L*T_t(i,j) + wtT_R*T_t(i,j+1)
-        T_bot = wtT_L*T_b(i,j) + wtT_R*T_b(i,j+1)
-        S_top = wtT_L*S_t(i,j) + wtT_R*S_t(i,j+1)
-        S_bot = wtT_L*S_b(i,j) + wtT_R*S_b(i,j+1)
+        P_top = (wt_L*p_t(i,j)) + (wt_R*p_t(i,j+1))
+        P_bot = (wt_L*p_b(i,j)) + (wt_R*p_b(i,j+1))
+        T_top = (wtT_L*T_t(i,j)) + (wtT_R*T_t(i,j+1))
+        T_bot = (wtT_L*T_b(i,j)) + (wtT_R*T_b(i,j+1))
+        S_top = (wtT_L*S_t(i,j)) + (wtT_R*S_t(i,j+1))
+        S_bot = (wtT_L*S_b(i,j)) + (wtT_R*S_b(i,j+1))
         dp_90(m,i) = C1_90*(P_bot - P_top)
 
         ! Salinity, temperature and pressure with linear interpolation in the vertical.
