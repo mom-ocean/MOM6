@@ -291,36 +291,36 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-          dvSdx(I,J) = ((-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J) - &
-                        (-Waves%us_y(i,J,k))*G%dyCv(i,J))
-          duSdy(I,J) = ((-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1) - &
-                        (-Waves%us_x(I,j,k))*G%dxCu(I,j))
+          dvSdx(I,J) = (-Waves%us_y(i+1,J,k)*G%dyCv(i+1,J)) - &
+                       (-Waves%us_y(i,J,k)*G%dyCv(i,J))
+          duSdy(I,J) = (-Waves%us_x(I,j+1,k)*G%dxCu(I,j+1)) - &
+                       (-Waves%us_x(I,j,k)*G%dxCu(I,j))
         enddo; enddo
       endif
       if (.not. Waves%Passive_Stokes_VF) then
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-          dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J) - &
-                       (v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
-          dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1) - &
-                       (u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
+          dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J)) - &
+                      ((v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
+          dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1)) - &
+                      ((u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
         enddo; enddo
       else
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-          dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J))
-          dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))
+          dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
+          dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
         enddo; enddo
       endif
     else
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J) - v(i,J,k)*G%dyCv(i,J))
-        dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1) - u(I,j,k)*G%dxCu(I,j))
+        dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
+        dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
       enddo; enddo
     endif
     do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
-      hArea_v(i,J) = 0.5*(Area_h(i,j) * h(i,j,k) + Area_h(i,j+1) * h(i,j+1,k))
+      hArea_v(i,J) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
     enddo ; enddo
     do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
-      hArea_u(I,j) = 0.5*(Area_h(i,j) * h(i,j,k) + Area_h(i+1,j) * h(i+1,j,k))
+      hArea_u(I,j) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
     enddo ; enddo
 
     if (CS%Coriolis_En_Dis) then
@@ -667,8 +667,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ! Energy conserving scheme, Sadourny 1975
         do j=js,je ; do I=Isq,Ieq
           CAu(I,j,k) = 0.25 * &
-            (q(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
-             q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
+            ((q(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
+             (q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
@@ -681,8 +681,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
       do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = ((a(I,j) * vh(i+1,J,k) +  c(I,j) * vh(i,J-1,k))  + &
-                      (b(I,j) * vh(i,J,k) +  d(I,j) * vh(i+1,J-1,k))) * G%IdxCu(I,j)
+        CAu(I,j,k) = (((a(I,j) * vh(i+1,J,k)) +  (c(I,j) * vh(i,J-1,k)))  + &
+                      ((b(I,j) * vh(i,J,k)) +  (d(I,j) * vh(i+1,J-1,k)))) * G%IdxCu(I,j)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
@@ -707,8 +707,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
                        (h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) * G%IdxCu(I,j)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           VHeff = ((vh(i,J,k) + vh(i+1,J-1,k)) + (vh(i,J-1,k) + vh(i+1,J,k)) )
-          QVHeff = 0.5*( (abs_vort(I,J)+abs_vort(I,J-1))*VHeff &
-                        -(abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff) )
+          QVHeff = 0.5*( ((abs_vort(I,J)+abs_vort(I,J-1))*VHeff) &
+                       - ((abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff)) )
           CAu(I,j,k) = (QVHeff / ( h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) ) * G%IdxCu(I,j)
         endif
       enddo ; enddo
@@ -717,7 +717,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) + &
-            (ep_u(i,j)*uh(I-1,j,k) - ep_u(i+1,j)*uh(I+1,j,k)) * G%IdxCu(I,j)
+            ((ep_u(i,j)*uh(I-1,j,k)) - (ep_u(i+1,j)*uh(I+1,j,k))) * G%IdxCu(I,j)
     enddo ; enddo ; endif
 
     if (Stokes_VF) then
@@ -725,8 +725,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ! Computing the diagnostic Stokes contribution to CAu
         do j=js,je ; do I=Isq,Ieq
           CAuS(I,j,k) = 0.25 * &
-                (qS(I,J) * (vh(i+1,J,k) + vh(i,J,k)) + &
-                 qS(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
+                ((qS(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
+                 (qS(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
         enddo ; enddo
       endif
     endif
@@ -786,8 +786,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ! Energy conserving scheme, Sadourny 1975
         do J=Jsq,Jeq ; do i=is,ie
           CAv(i,J,k) = - 0.25* &
-              (q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q(I,J)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
+              ((q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
+               (q(I,J)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
         enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
@@ -800,10 +800,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
       do J=Jsq,Jeq ; do i=is,ie
-        CAv(i,J,k) = - ((a(I-1,j)   * uh(I-1,j,k) + &
-                         c(I,j+1)   * uh(I,j+1,k))  &
-                      + (b(I,j)     * uh(I,j,k) +   &
-                         d(I-1,j+1) * uh(I-1,j+1,k))) * G%IdyCv(i,J)
+        CAv(i,J,k) = - (((a(I-1,j)   * uh(I-1,j,k)) + &
+                         (c(I,j+1)   * uh(I,j+1,k)))  &
+                      + ((b(I,j)     * uh(I,j,k)) +   &
+                         (d(I-1,j+1) * uh(I-1,j+1,k)))) * G%IdyCv(i,J)
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
@@ -830,8 +830,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
           UHeff = ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
                    (uh(I-1,j  ,k)+uh(I  ,j+1,k)) )
-          QUHeff = 0.5*( (abs_vort(I,J)+abs_vort(I-1,J))*UHeff &
-                        -(abs_vort(I,J)-abs_vort(I-1,J))*abs(UHeff) )
+          QUHeff = 0.5*( ((abs_vort(I,J)+abs_vort(I-1,J))*UHeff) &
+                       - ((abs_vort(I,J)-abs_vort(I-1,J))*abs(UHeff)) )
           CAv(i,J,k) = - QUHeff / &
                        (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         endif
@@ -841,7 +841,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then ; do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) + &
-            (ep_v(i,j)*vh(i,J-1,k) - ep_v(i,j+1)*vh(i,J+1,k)) * G%IdyCv(i,J)
+            ((ep_v(i,j)*vh(i,J-1,k)) - (ep_v(i,j+1)*vh(i,J+1,k))) * G%IdyCv(i,J)
     enddo ; enddo ; endif
 
     if (Stokes_VF) then
@@ -849,8 +849,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ! Computing the diagnostic Stokes contribution to CAv
         do J=Jsq,Jeq ; do i=is,ie
           CAvS(I,j,k) = 0.25 * &
-                (qS(I,J) * (uh(I,j+1,k) + uh(I,j,k)) + &
-                 qS(I,J-1) * (uh(I-1,j,k) + uh(I-1,j+1,k))) * G%IdyCv(i,J)
+                ((qS(I,J) * (uh(I,j+1,k) + uh(I,j,k))) + &
+                 (qS(I,J-1) * (uh(I-1,j,k) + uh(I-1,j+1,k)))) * G%IdyCv(i,J)
         enddo; enddo
       endif
     endif
@@ -997,10 +997,10 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      KE(i,j) = ( ( G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k)) + &
-                    G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k)) ) + &
-                  ( G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k)) + &
-                    G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k)) ) )*0.25*G%IareaT(i,j)
+      KE(i,j) = ( ( (G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))) + &
+                    (G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k))) ) + &
+                  ( (G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))) + &
+                    (G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k))) ) )*0.25*G%IareaT(i,j)
     enddo ; enddo
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
