@@ -1088,10 +1088,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         tau_mag = 0.0 ; gustiness = CS%gust_const
         if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
              (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0.0) then
-          tau_mag = sqrt(((G%mask2dBu(I,J)*(taux_in_B(I,J)**2 + tauy_in_B(I,J)**2) + &
-              G%mask2dBu(I-1,J-1)*(taux_in_B(I-1,J-1)**2 + tauy_in_B(I-1,J-1)**2)) + &
-             (G%mask2dBu(I,J-1)*(taux_in_B(I,J-1)**2 + tauy_in_B(I,J-1)**2) + &
-              G%mask2dBu(I-1,J)*(taux_in_B(I-1,J)**2 + tauy_in_B(I-1,J)**2)) ) / &
+          tau_mag = sqrt(((G%mask2dBu(I,J)*((taux_in_B(I,J)**2) + (tauy_in_B(I,J)**2)) + &
+              G%mask2dBu(I-1,J-1)*((taux_in_B(I-1,J-1)**2) + (tauy_in_B(I-1,J-1)**2))) + &
+             (G%mask2dBu(I,J-1)*((taux_in_B(I,J-1)**2) + (tauy_in_B(I,J-1)**2)) + &
+              G%mask2dBu(I-1,J)*((taux_in_B(I-1,J)**2) + (tauy_in_B(I-1,J)**2))) ) / &
             ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
           if (CS%read_gust_2d) gustiness = CS%gust(i,j)
         endif
@@ -1105,7 +1105,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
       enddo ; enddo
     elseif (wind_stagger == AGRID) then
       do j=js,je ; do i=is,ie
-        tau_mag = G%mask2dT(i,j) * sqrt(taux_in_A(i,j)**2 + tauy_in_A(i,j)**2)
+        tau_mag = G%mask2dT(i,j) * sqrt((taux_in_A(i,j)**2) + (tauy_in_A(i,j)**2))
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0.0)) gustiness = CS%gust(i,j)
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
@@ -1120,10 +1120,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
       do j=js,je ; do i=is,ie
         taux2 = 0.0 ; tauy2 = 0.0
         if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0.0) &
-          taux2 = (G%mask2dCu(I-1,j)*taux_in_C(I-1,j)**2 + G%mask2dCu(I,j)*taux_in_C(I,j)**2) / &
+          taux2 = (G%mask2dCu(I-1,j)*(taux_in_C(I-1,j)**2) + G%mask2dCu(I,j)*(taux_in_C(I,j)**2)) / &
                   (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
         if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0.0) &
-          tauy2 = (G%mask2dCv(i,J-1)*tauy_in_C(i,J-1)**2 + G%mask2dCv(i,J)*tauy_in_C(i,J)**2) / &
+          tauy2 = (G%mask2dCv(i,J-1)*(tauy_in_C(i,J-1)**2) + G%mask2dCv(i,J)*(tauy_in_C(i,J)**2)) / &
                   (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
         tau_mag = sqrt(taux2 + tauy2)
 

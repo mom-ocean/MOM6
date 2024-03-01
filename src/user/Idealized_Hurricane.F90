@@ -312,15 +312,15 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0))
   enddo ; enddo ; endif
 
   !> Get tau_mag [R L Z T-2 ~> Pa]
   if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
     forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2)))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
   enddo ; enddo ; endif
 
 end subroutine idealized_hurricane_wind_forcing
@@ -660,15 +660,15 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0))
   enddo ; enddo ; endif
 
   !> Set magnitude of the wind stress [R L Z T-2 ~> Pa]
   if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
     forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2)))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
   enddo ; enddo ; endif
 
 end subroutine SCM_idealized_hurricane_wind_forcing
