@@ -1580,28 +1580,28 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           !a3 = (yW - yNW)*(0.5*(xW + xNW))
           !a4 = (yNW - yN)*(0.5*(xNW + xN))
           !aW = a1 + a2 + a3 + a4
-          aW = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
+          aW = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
           ! southwest area
           !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
           !a2 = (yS - ySW)*(0.5*(xS + xSW))
           !a3 = (ySW - yW)*(0.5*(xSW + xW))
           !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
           !aSW = a1 + a2 + a3 + a4
-          aSW = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
+          aSW = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
           ! south area
           !a1 = (yE - ySE)*(0.5*(xE + xSE))
           !a2 = (ySE - yS)*(0.5*(xSE + xS))
           !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
           !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
           !aS = a1 + a2 + a3 + a4
-          aS = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
+          aS = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
           ! area within cell
           !a1 = (yNE - yE)*(0.5*(xNE + xE))
           !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
           !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
           !a4 = (yN - yNE)*(0.5*(xN + xNE))
           !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
+          aC = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
       elseif (0.25*TwoPi <= theta .and. theta < 0.5*TwoPi) then
           xCrn = x(I,J-1); yCrn = y(I,J-1)
           ! south area
@@ -1610,28 +1610,28 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           !a3 = (ySW - yW)*(0.5*(xSW + xW))
           !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
           !aS = a1 + a2 + a3 + a4
-          aS = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
+          aS = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
           ! southeast area
           !a1 = (yE - ySE)*(0.5*(xE + xSE))
           !a2 = (ySE - yS)*(0.5*(xSE + xS))
           !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
           !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
           !aSE = a1 + a2 + a3 + a4
-          aSE = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
+          aSE = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
           ! east area
           !a1 = (yNE - yE)*(0.5*(xNE + xE))
           !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
           !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
           !a4 = (yN - yNE)*(0.5*(xN + xNE))
           !aE = a1 + a2 + a3 + a4
-          aE = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
+          aE = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
           ! area within cell
           !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
           !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
           !a3 = (yW - yNW)*(0.5*(xW + xNW))
           !a4 = (yNW - yN)*(0.5*(xNW + xN))
           !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
+          aC = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
       elseif (0.5*TwoPi <= theta .and. theta < 0.75*TwoPi) then
           xCrn = x(I,J); yCrn = y(I,J)
           ! east area
@@ -1640,28 +1640,28 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
           !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
           !aE = a1 + a2 + a3 + a4
-          aE = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
+          aE = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
           ! northeast area
           !a1 = (yNE - yE)*(0.5*(xNE + xE))
           !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
           !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
           !a4 = (yN - yNE)*(0.5*(xN + xNE))
           !aNE = a1 + a2 + a3 + a4
-          aNE = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
+          aNE = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
           ! north area
           !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
           !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
           !a3 = (yW - yNW)*(0.5*(xW + xNW))
           !a4 = (yNW - yN)*(0.5*(xNW + xN))
           !aN = a1 + a2 + a3 + a4
-          aN = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
+          aN = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
           ! area within cell
           !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
           !a2 = (yS - ySW)*(0.5*(xS + xSW))
           !a3 = (ySW - yW)*(0.5*(xSW + xW))
           !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
           !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
+          aC = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
       elseif (0.75*TwoPi <= theta .and. theta <= 1.00*TwoPi) then
           xCrn = x(I-1,J); yCrn = y(I-1,J)
           ! north area
@@ -1670,37 +1670,37 @@ subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS
           !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
           !a4 = (yN - yNE)*(0.5*(xN + xNE))
           !aN = a1 + a2 + a3 + a4
-          aN = 0.5 * ((yCrn - yNE)*(xN - xE) + (xCrn - xNE)*(yE - yN))
+          aN = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
           ! northwest area
           !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
           !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
           !a3 = (yW - yNW)*(0.5*(xW + xNW))
           !a4 = (yNW - yN)*(0.5*(xNW + xN))
           !aNW = a1 + a2 + a3 + a4
-          aNW = 0.5 * ((yCrn - yNW)*(xW - xN) + (xCrn - xNW)*(yN - yW))
+          aNW = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
           ! west area
           !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
           !a2 = (yS - ySW)*(0.5*(xS + xSW))
           !a3 = (ySW - yW)*(0.5*(xSW + xW))
           !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
           !aW = a1 + a2 + a3 + a4
-          aW = 0.5 * ((yCrn - ySW)*(xS - xW) + (xCrn - xSW)*(yW - yS))
+          aW = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
           ! area within cell
           !a1 = (yE - ySE)*(0.5*(xE + xSE))
           !a2 = (ySE - yS)*(0.5*(xSE + xS))
           !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
           !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
           !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * ((yCrn - ySE)*(xE - xS) + (xCrn - xSE)*(yS - yE))
+          aC = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
       endif
 
       ! energy weighting ----------------------------------------
       a_total = (((aNE + aSW) + (aNW + aSE)) + ((aN + aS) + (aW + aE))) + aC
 
-      E_new(m) = ( ( ( ( aNE*En(i+1,j+1) + aSW*En(i-1,j-1) )     + &
-                       ( aNW*En(i-1,j+1) + aSE*En(i+1,j-1) ) )   + &
-                     ( ( aN*En(i,j+1)    + aS*En(i,j-1)    )     + &
-                       ( aW*En(i-1,j)    + aE*En(i+1,j)    ) ) ) + &
+      E_new(m) = ( ( ( ( (aNE*En(i+1,j+1)) + (aSW*En(i-1,j-1)) )     + &
+                       ( (aNW*En(i-1,j+1)) + (aSE*En(i+1,j-1)) ) )   + &
+                     ( ( (aN*En(i,j+1))    + (aS*En(i,j-1))    )     + &
+                       ( (aW*En(i-1,j))    + (aE*En(i+1,j))    ) ) ) + &
                         aC*En(i,j)  ) / ( dx(i,j)*dy(i,j) )
     enddo ! m-loop
     ! update energy in cell
@@ -1767,8 +1767,8 @@ subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB, res
       Fdt_p(i,j,a) = -dt*flux_x(I,j)  ! right face influx [R Z3 L2 T-2 ~> J]
 
       residual_loss(i,j,a) = residual_loss(i,j,a) + &
-                            (abs(flux_x(I-1,j)) * CS%residual(i,j) * G%IareaT(i,j) + &
-                             abs(flux_x(I,j)) * CS%residual(i,j) * G%IareaT(i,j))
+                            ((abs(flux_x(I-1,j)) * CS%residual(i,j) * G%IareaT(i,j)) + &
+                             (abs(flux_x(I,j)) * CS%residual(i,j) * G%IareaT(i,j)))
     enddo ; enddo
 
   enddo ! a-loop
@@ -1848,8 +1848,8 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB, res
       Fdt_p(i,j,a) = -dt*flux_y(i,J)  ! north face influx [R Z3 L2 T-2 ~> J]
 
       residual_loss(i,j,a) = residual_loss(i,j,a) + &
-                            (abs(flux_y(i,J-1)) * CS%residual(i,j) * G%IareaT(i,j) + &
-                             abs(flux_y(i,J)) * CS%residual(i,j) * G%IareaT(i,j))
+                            ((abs(flux_y(i,J-1)) * CS%residual(i,j) * G%IareaT(i,j)) + &
+                             (abs(flux_y(i,J)) * CS%residual(i,j) * G%IareaT(i,j)))
 
       !if ((En(i,j,a) + G%IareaT(i,j)*(Fdt_m(i,j,a) + Fdt_p(i,j,a))) < 0.0) then ! for debugging
       !  call MOM_error(WARNING, "propagate_y: OutFlux>Available prior to reflection", .true.)
