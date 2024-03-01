@@ -1649,8 +1649,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
               gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
              (gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J)) + &
               gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1)))) + &
-            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)) * CS%BT_Coriolis_scale**2 )
+            ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+             (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))) * CS%BT_Coriolis_scale**2 )
       H_eff_dx2 = max(H_min_dyn * ((G%IdxT(i,j))**2 + (G%IdyT(i,j))**2), &
                       G%IareaT(i,j) * &
                         ((Datu(I,j)*G%IdxCu(I,j) + Datu(I-1,j)*G%IdxCu(I-1,j)) + &
@@ -2906,8 +2906,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
       ((gtot_E(i,j)*Datu(I,j)*G%IdxCu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IdxCu(I-1,j)) + &
        (gtot_N(i,j)*Datv(i,J)*G%IdyCv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IdyCv(i,J-1))) + &
-      ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)) * CS%BT_Coriolis_scale**2 )
+      ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+       (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))) * CS%BT_Coriolis_scale**2 )
     if (Idt_max2 * min_max_dt2 > 1.0) min_max_dt2 = 1.0 / Idt_max2
   enddo ; enddo
   dtbt_max = sqrt(min_max_dt2 / dgeo_de)

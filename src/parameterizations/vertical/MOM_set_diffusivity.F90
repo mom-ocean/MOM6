@@ -1631,8 +1631,8 @@ subroutine add_MLrad_diffusivity(dz, fluxes, tv, j, Kd_int, G, GV, US, CS, TKE_t
     if (CS%ML_omega_frac >= 1.0) then
       f_sq = 4.0 * Omega2
     else
-      f_sq = 0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                     (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f_sq = 0.25 * ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                     (G%Coriolis2Bu(I,J-1) + G%Coriolis2Bu(I-1,J)))
       if (CS%ML_omega_frac > 0.0) &
         f_sq = CS%ML_omega_frac * 4.0 * Omega2 + (1.0 - CS%ML_omega_frac) * f_sq
     endif

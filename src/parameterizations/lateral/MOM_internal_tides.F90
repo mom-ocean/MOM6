@@ -361,8 +361,8 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
   if (CS%energized_angle <= 0) then
     frac_per_sector = 1.0 / real(CS%nAngle)
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do a=1,CS%nAngle ; do j=js,je ; do i=is,ie
-      f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                 (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+      f2 = 0.25*((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                 (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1)))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*(1.0-CS%q_itides) * &
                             CS%fraction_tidal_input(fr,m) * TKE_itidal_input(i,j,fr)
@@ -371,8 +371,8 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     frac_per_sector = 1.0
     a = CS%energized_angle
     do m=1,CS%nMode ; do fr=1,CS%nFreq ; do j=js,je ; do i=is,ie
-      f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                 (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+      f2 = 0.25*((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                 (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1)))
       if (CS%frequency(fr)**2 > f2) &
         CS%En(i,j,a,fr,m) = CS%En(i,j,a,fr,m) + dt*frac_per_sector*(1.0-CS%q_itides) * &
                             CS%fraction_tidal_input(fr,m) * TKE_itidal_input(i,j,fr)
@@ -630,8 +630,8 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
       do j=js,je ; do i=is,ie
         id_g = i + G%idg_offset ; jd_g = j + G%jdg_offset ! for debugging
         ! Calculate horizontal phase velocity magnitudes
-        f2 = 0.25*((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                   (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+        f2 = 0.25*((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                   (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1)))
         Kmag2 = (freq2 - f2) / (cn(i,j,m)**2 + cn_subRO**2)
         c_phase = 0.0
         if (Kmag2 > 0.0) then
@@ -1134,8 +1134,8 @@ subroutine refract(En, cn, freq, dt, G, US, NAngle, use_PPMang)
 
   ! Do the refraction.
     do i=is,ie
-      f2 = 0.25* ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                 (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f2 = 0.25* ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                 (G%Coriolis2Bu(I,J-1) + G%Coriolis2Bu(I-1,J)))
       favg = 0.25*((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
                    (G%CoriolisBu(I,J-1) + G%CoriolisBu(I-1,J)))
       df_dx = 0.5*((G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)) - &
@@ -1355,7 +1355,7 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle, residual_loss)
     ! Fix indexing here later
     speed(:,:) = 0.0
     do J=jsh-1,jeh ; do I=ish-1,ieh
-      f2 = G%CoriolisBu(I,J)**2
+      f2 = G%Coriolis2Bu(I,J)
       speed(I,J) = 0.25*((cn(i,j) + cn(i+1,j+1)) + (cn(i+1,j) + cn(i,j+1))) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
@@ -1385,12 +1385,12 @@ subroutine propagate(En, cn, freq, dt, G, US, CS, NAngle, residual_loss)
     enddo
 
     do j=jsh,jeh ; do I=ish-1,ieh
-      f2 = 0.5 * (G%CoriolisBu(I,J)**2 + G%CoriolisBu(I,J-1)**2)
+      f2 = 0.5 * (G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I,J-1))
       speed_x(I,j) = 0.5*(cn(i,j) + cn(i+1,j)) * G%mask2dCu(I,j) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo
     do J=jsh-1,jeh ; do i=ish,ieh
-      f2 = 0.5 * (G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J)**2)
+      f2 = 0.5 * (G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J))
       speed_y(i,J) = 0.5*(cn(i,j) + cn(i,j+1)) * G%mask2dCv(i,J) * &
                      sqrt(max(freq2 - f2, 0.0)) * Ifreq
     enddo ; enddo

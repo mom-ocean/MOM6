@@ -1516,7 +1516,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do J=js-1,Jeq ; do I=is-1,Ieq
       CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
-                         max(G%CoriolisBu(I,J)**2, absurdly_small_freq**2)
+                         max(G%Coriolis2Bu(I,J), absurdly_small_freq**2)
       CS%beta_dx2_q(I,J) = oneOrTwo * ((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * (sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
@@ -1526,7 +1526,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do j=js,je ; do I=is-1,Ieq
       CS%f2_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
-          max(0.5* (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq**2)
+          max(0.5* (G%Coriolis2Bu(I,J)+G%Coriolis2Bu(I,J-1)), absurdly_small_freq**2)
       CS%beta_dx2_u(I,j) = oneOrTwo * ((G%dxCu(I,j))**2 + (G%dyCu(I,j))**2) * (sqrt( &
           0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
                   ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
@@ -1537,7 +1537,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
     do J=js-1,Jeq ; do i=is,ie
       CS%f2_dx2_v(i,J) = ((G%dxCv(i,J))**2 + (G%dyCv(i,J))**2) * &
-          max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq**2)
+          max(0.5*(G%Coriolis2Bu(I,J)+G%Coriolis2Bu(I-1,J)), absurdly_small_freq**2)
       CS%beta_dx2_v(i,J) = oneOrTwo * ((G%dxCv(i,J))**2 + (G%dyCv(i,J))**2) * (sqrt( &
           ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
           0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
@@ -1572,8 +1572,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%f2_dx2_h(isd:ied,jsd:jed), source=0.0)
     do j=js-1,je+1 ; do i=is-1,ie+1
       CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
-          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                      (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
+          max(0.25 * ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                      (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))), &
               absurdly_small_freq**2)
       CS%beta_dx2_h(i,j) = oneOrTwo * ((G%dxT(i,j))**2 + (G%dyT(i,j))**2) * (sqrt(0.5 * &
           ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &

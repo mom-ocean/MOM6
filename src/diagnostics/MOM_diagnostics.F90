@@ -679,8 +679,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
         f2_h = absurdly_small_freq2 + 0.25 * &
-            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+            ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+             (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1)))
         mag_beta = sqrt(0.5 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
@@ -729,8 +729,8 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       do j=js,je ; do i=is,ie
         ! Blend the equatorial deformation radius with the standard one.
         f2_h = absurdly_small_freq2 + 0.25 * &
-            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2))
+            ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+             (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1)))
         mag_beta = sqrt(0.5 * ( &
             (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
              ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
