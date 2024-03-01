@@ -356,24 +356,24 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
       raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
       raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j))
 
-      intx_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+      intx_dpa(i,j) = G_e*C1_6 * ((dzL*(2.0*raL + raR)) + (dzR*(2.0*raR + raL)))
     else
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
-        dz = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i+1,j) - z_b(i+1,j))
+        dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i+1,j) - z_b(i+1,j)))
         rho_anom = (Rho_T0_S0 - rho_ref) + &
-                   (dRho_dT * (wtT_L*T(i,j) + wtT_R*T(i+1,j)) + &
-                    dRho_dS * (wtT_L*S(i,j) + wtT_R*S(i+1,j)))
+                   (dRho_dT * ((wtT_L*T(i,j)) + (wtT_R*T(i+1,j))) + &
+                    dRho_dS * ((wtT_L*S(i,j)) + (wtT_R*S(i+1,j))))
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Boole's rule to integrate the values.
@@ -395,24 +395,24 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
       raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
       raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1))
 
-      inty_dpa(i,j) = G_e*C1_6 * (dzL*(2.0*raL + raR) + dzR*(2.0*raR + raL))
+      inty_dpa(i,j) = G_e*C1_6 * ((dzL*(2.0*raL + raR)) + (dzR*(2.0*raR + raL)))
     else
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
-        dz = wt_L*(z_t(i,j) - z_b(i,j)) + wt_R*(z_t(i,j+1) - z_b(i,j+1))
+        dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i,j+1) - z_b(i,j+1)))
         rho_anom = (Rho_T0_S0 - rho_ref) + &
-                   (dRho_dT * (wtT_L*T(i,j) + wtT_R*T(i,j+1)) + &
-                    dRho_dS * (wtT_L*S(i,j) + wtT_R*S(i,j+1)))
+                   (dRho_dT * ((wtT_L*T(i,j)) + (wtT_R*T(i,j+1))) + &
+                    dRho_dS * ((wtT_L*S(i,j)) + (wtT_R*S(i,j+1))))
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Boole's rule to integrate the values.
@@ -530,26 +530,26 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
       dRho_TS = dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j)
       aaR = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
 
-      intx_dza(i,j) = C1_6 * (2.0*(dpL*aaL + dpR*aaR) + (dpL*aaR + dpR*aaL))
+      intx_dza(i,j) = C1_6 * (2.0*((dpL*aaL) + (dpR*aaR)) + ((dpL*aaR) + (dpR*aaL)))
     else
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
-        dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i+1,j) - p_t(i+1,j))
+        dp = (wt_L*(p_b(i,j) - p_t(i,j))) + (wt_R*(p_b(i+1,j) - p_t(i+1,j)))
 
-        dRho_TS = dRho_dT*(wtT_L*T(i,j) + wtT_R*T(i+1,j)) + &
-                  dRho_dS*(wtT_L*S(i,j) + wtT_R*S(i+1,j))
+        dRho_TS = dRho_dT*((wtT_L*T(i,j)) + (wtT_R*T(i+1,j))) + &
+                  dRho_dS*((wtT_L*S(i,j)) + (wtT_R*S(i+1,j)))
         ! alpha_anom = 1.0/(Rho_T0_S0  + dRho_TS)) - alpha_ref
         alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
         intp(m) = alpha_anom*dp
@@ -575,26 +575,26 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
       dRho_TS = dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1)
       aaR = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
 
-      inty_dza(i,j) = C1_6 * (2.0*(dpL*aaL + dpR*aaR) + (dpL*aaR + dpR*aaL))
+      inty_dza(i,j) = C1_6 * (2.0*((dpL*aaL) + (dpR*aaR)) + ((dpL*aaR) + (dpR*aaL)))
     else
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
-      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
+      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
       do m=2,4
         wt_L = 0.25*real(5-m) ; wt_R = 1.0-wt_L
-        wtT_L = wt_L*hWt_LL + wt_R*hWt_RL ; wtT_R = wt_L*hWt_LR + wt_R*hWt_RR
+        wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
-        dp = wt_L*(p_b(i,j) - p_t(i,j)) + wt_R*(p_b(i,j+1) - p_t(i,j+1))
+        dp = (wt_L*(p_b(i,j) - p_t(i,j))) + (wt_R*(p_b(i,j+1) - p_t(i,j+1)))
 
-        dRho_TS = dRho_dT*(wtT_L*T(i,j) + wtT_R*T(i,j+1)) + &
-                  dRho_dS*(wtT_L*S(i,j) + wtT_R*S(i,j+1))
+        dRho_TS = dRho_dT*((wtT_L*T(i,j)) + (wtT_R*T(i,j+1))) + &
+                  dRho_dS*((wtT_L*S(i,j)) + (wtT_R*S(i,j+1)))
         ! alpha_anom = 1.0/(Rho_T0_S0  + dRho_TS)) - alpha_ref
         alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
         intp(m) = alpha_anom*dp
