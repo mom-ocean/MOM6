@@ -912,7 +912,7 @@ subroutine convective_adjustment(h, u, v, R0, SpV0, Rcv, T, S, eps, d_eb, &
   do k1=min(nzc-1,nkmb),1,-1
     do i=is,ie
       h_orig_k1(i) = h(i,k1)
-      KE_orig(i) = 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2)
+      KE_orig(i) = 0.5*h(i,k1)*((u(i,k1)**2) + (v(i,k1)**2))
       uhtot(i) = h(i,k1)*u(i,k1) ; vhtot(i) = h(i,k1)*v(i,k1)
       if (CS%nonBous_energetics) then
         SpV0_tot(i) = SpV0(i,k1) * h(i,k1)
@@ -949,7 +949,7 @@ subroutine convective_adjustment(h, u, v, R0, SpV0, Rcv, T, S, eps, d_eb, &
             dKE_CA(i,k1) = dKE_CA(i,k1) + dKE_CA(i,k)
           endif
           KE_orig(i) = KE_orig(i) + 0.5*h_ent* &
-              (u(i,k)*u(i,k) + v(i,k)*v(i,k))
+              ((u(i,k)*u(i,k)) + (v(i,k)*v(i,k)))
           uhtot(i) = uhtot(i) + h_ent*u(i,k)
           vhtot(i) = vhtot(i) + h_ent*v(i,k)
 
@@ -974,7 +974,7 @@ subroutine convective_adjustment(h, u, v, R0, SpV0, Rcv, T, S, eps, d_eb, &
       endif
       u(i,k1) = uhtot(i) * Ih ; v(i,k1) = vhtot(i) * Ih
       dKE_CA(i,k1) = dKE_CA(i,k1) + CS%bulk_Ri_convective * &
-           (KE_orig(i) - 0.5*h(i,k1)*(u(i,k1)**2 + v(i,k1)**2))
+           (KE_orig(i) - 0.5*h(i,k1)*((u(i,k1)**2) + (v(i,k1)**2)))
       Rcv(i,k1) = Rcv_tot(i) * Ih
       T(i,k1) = Ttot(i) * Ih ; S(i,k1) = Stot(i) * Ih
     endif ; enddo
@@ -1407,7 +1407,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
         if ((h_ent > 0.0) .and. (htot(i) > 0.0)) &
             dKE_FC(i) = dKE_FC(i) + CS%bulk_Ri_convective * 0.5 * &
               ((h_ent) / (htot(i)*(h_ent+htot(i)))) * &
-              ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
+              (((uhtot(i)-u(i,k)*htot(i))**2) + ((vhtot(i)-v(i,k)*htot(i))**2))
 
         if (h_ent > 0.0) then
           htot(i)  = htot(i)  + h_ent
@@ -1785,7 +1785,7 @@ subroutine mechanical_entrainment(h, d_eb, htot, Ttot, Stot, uhtot, vhtot, &
           dRL = g_H_2Rho0 * (R0(i,k)*htot(i) - R0_tot(i) )
         endif
         dMKE = CS%bulk_Ri_ML * 0.5 * &
-            ((uhtot(i)-u(i,k)*htot(i))**2 + (vhtot(i)-v(i,k)*htot(i))**2)
+            (((uhtot(i)-u(i,k)*htot(i))**2) + ((vhtot(i)-v(i,k)*htot(i))**2))
 
 ! Find the TKE that would remain if the entire layer were entrained.
         kh = Idecay_len_TKE(i)*h_avail ; exp_kh = exp(-kh)
