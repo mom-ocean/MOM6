@@ -368,7 +368,7 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
 
   ! Implementing Holland (1980) parameteric wind profile
 
-  radius = SQRT(XX**2 + YY**2)
+  radius = SQRT((XX**2) + (YY**2))
 
   !/ BGR
   ! rkm - r converted to km for Holland prof.
@@ -451,7 +451,7 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   dV = U10*cos(Adir-Alph) - Vocn + V_TS
 
   !  Use a simple drag coefficient as a function of U10 (from Sullivan et al., 2010)
-  du10 = sqrt(du**2+dv**2)
+  du10 = sqrt((du**2) + (dv**2))
   if (dU10 < 11.0*US%m_s_to_L_T) then
     Cd = 1.2e-3
   elseif (dU10 < 20.0*US%m_s_to_L_T) then
@@ -465,8 +465,8 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   endif
 
   ! Compute stress vector
-  TX = US%L_to_Z * CS%rho_a * Cd * sqrt(dU**2 + dV**2) * dU
-  TY = US%L_to_Z * CS%rho_a * Cd * sqrt(dU**2 + dV**2) * dV
+  TX = US%L_to_Z * CS%rho_a * Cd * sqrt((dU**2) + (dV**2)) * dU
+  TY = US%L_to_Z * CS%rho_a * Cd * sqrt((dU**2) + (dV**2)) * dV
 
 end subroutine idealized_hurricane_wind_profile
 
@@ -541,7 +541,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
   !/ BR
   ! Calculate x position as a function of time.
   xx = US%s_to_T*( t0 - time_type_to_real(day)) * CS%hurr_translation_spd * cos(transdir)
-  rad = sqrt(xx**2 + CS%dy_from_center**2)
+  rad = sqrt((xx**2) + (CS%dy_from_center**2))
   !/ BR
   ! rkm - rad converted to km for Holland prof.
   !       used in km due to error, correct implementation should
@@ -619,7 +619,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     !BR
     !  Add a simple drag coefficient as a function of U10 |
     !/----------------------------------------------------|
-    du10 = sqrt(du**2+dv**2)
+    du10 = sqrt((du**2) + (dv**2))
     if (dU10 < 11.0*US%m_s_to_L_T) then
       Cd = 1.2e-3
     elseif (dU10 < 20.0*US%m_s_to_L_T) then
@@ -641,7 +641,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     Vocn = 0. ! sfc_state%v(i,J)
     dU = U10*sin(Adir-pie-Alph) - Uocn + U_TS
     dV = U10*cos(Adir-Alph) - Vocn + V_TS
-    du10=sqrt(du**2+dv**2)
+    du10 = sqrt((du**2) + (dv**2))
     if (dU10 < 11.0*US%m_s_to_L_T) then
       Cd = 1.2e-3
     elseif (dU10 < 20.0*US%m_s_to_L_T) then
