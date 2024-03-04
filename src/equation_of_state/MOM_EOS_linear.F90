@@ -361,9 +361,9 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
       do m=2,4
@@ -400,9 +400,9 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
       do m=2,4
@@ -535,9 +535,9 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intp(1) = dza(i,j) ; intp(5) = dza(i+1,j)
       do m=2,4
@@ -580,9 +580,9 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
       hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-      iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-      hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-      hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+      iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+      hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+      hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
 
       intp(1) = dza(i,j) ; intp(5) = dza(i,j+1)
       do m=2,4

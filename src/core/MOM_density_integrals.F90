@@ -243,9 +243,9 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
         hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
@@ -309,9 +309,9 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
         hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
@@ -584,15 +584,15 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
-        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i+1,j,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i+1,j,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i+1,j,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i+1,j,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + hL*hR )
+        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i+1,j,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i+1,j,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i+1,j,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
         Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i+1,j,k); Sbr = S_b(i+1,j,k)
@@ -680,15 +680,15 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
-        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i,j+1,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i,j+1,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i,j+1,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i,j+1,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + hL*hR )
+        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i,j+1,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i,j+1,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i,j+1,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
         Stl = S_t(i,j,k); Sbl = S_b(i,j,k); Str = S_t(i,j+1,k); Sbr = S_b(i,j+1,k)
@@ -977,19 +977,19 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
-        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
-        Tml = ( (hWght*hR)*tv%T(i+1,j,k)+ (hWght*hL + (hR*hL))*tv%T(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i+1,j,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i+1,j,k) ) * iDenom
-        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + (hR*hL))*tv%T(i+1,j,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
-        Sml = ( (hWght*hR)*tv%S(i+1,j,k) + (hWght*hL + (hR*hL))*tv%S(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i+1,j,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i+1,j,k) ) * iDenom
-        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + (hR*hL))*tv%S(i+1,j,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + hL*hR )
+        Ttl = ( (hWght*hR)*T_t(i+1,j,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i+1,j,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+        Tml = ( (hWght*hR)*tv%T(i+1,j,k)+ (hWght*hL + hR*hL)*tv%T(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i+1,j,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i+1,j,k) ) * iDenom
+        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + hR*hL)*tv%T(i+1,j,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i+1,j,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i+1,j,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+        Sml = ( (hWght*hR)*tv%S(i+1,j,k) + (hWght*hL + hR*hL)*tv%S(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i+1,j,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i+1,j,k) ) * iDenom
+        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i+1,j,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i+1,j,k); Tbr = T_b(i+1,j,k)
         Tml = tv%T(i,j,k); Tmr = tv%T(i+1,j,k)
@@ -1082,19 +1082,19 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1./( hWght*(hR + hL) + (hL*hR) )
-        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + (hR*hL))*T_t(i,j,k) ) * iDenom
-        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + (hR*hL))*T_b(i,j,k) ) * iDenom
-        Tml = ( (hWght*hR)*tv%T(i,j+1,k)+ (hWght*hL + (hR*hL))*tv%T(i,j,k) ) * iDenom
-        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + (hR*hL))*T_t(i,j+1,k) ) * iDenom
-        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + (hR*hL))*T_b(i,j+1,k) ) * iDenom
-        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + (hR*hL))*tv%T(i,j+1,k) ) * iDenom
-        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + (hR*hL))*S_t(i,j,k) ) * iDenom
-        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + (hR*hL))*S_b(i,j,k) ) * iDenom
-        Sml = ( (hWght*hR)*tv%S(i,j+1,k)+ (hWght*hL + (hR*hL))*tv%S(i,j,k) ) * iDenom
-        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + (hR*hL))*S_t(i,j+1,k) ) * iDenom
-        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + (hR*hL))*S_b(i,j+1,k) ) * iDenom
-        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + (hR*hL))*tv%S(i,j+1,k) ) * iDenom
+        iDenom = 1./( hWght*(hR + hL) + hL*hR )
+        Ttl = ( (hWght*hR)*T_t(i,j+1,k) + (hWght*hL + hR*hL)*T_t(i,j,k) ) * iDenom
+        Tbl = ( (hWght*hR)*T_b(i,j+1,k) + (hWght*hL + hR*hL)*T_b(i,j,k) ) * iDenom
+        Tml = ( (hWght*hR)*tv%T(i,j+1,k)+ (hWght*hL + hR*hL)*tv%T(i,j,k) ) * iDenom
+        Ttr = ( (hWght*hL)*T_t(i,j,k) + (hWght*hR + hR*hL)*T_t(i,j+1,k) ) * iDenom
+        Tbr = ( (hWght*hL)*T_b(i,j,k) + (hWght*hR + hR*hL)*T_b(i,j+1,k) ) * iDenom
+        Tmr = ( (hWght*hL)*tv%T(i,j,k) + (hWght*hR + hR*hL)*tv%T(i,j+1,k) ) * iDenom
+        Stl = ( (hWght*hR)*S_t(i,j+1,k) + (hWght*hL + hR*hL)*S_t(i,j,k) ) * iDenom
+        Sbl = ( (hWght*hR)*S_b(i,j+1,k) + (hWght*hL + hR*hL)*S_b(i,j,k) ) * iDenom
+        Sml = ( (hWght*hR)*tv%S(i,j+1,k)+ (hWght*hL + hR*hL)*tv%S(i,j,k) ) * iDenom
+        Str = ( (hWght*hL)*S_t(i,j,k) + (hWght*hR + hR*hL)*S_t(i,j+1,k) ) * iDenom
+        Sbr = ( (hWght*hL)*S_b(i,j,k) + (hWght*hR + hR*hL)*S_b(i,j+1,k) ) * iDenom
+        Smr = ( (hWght*hL)*tv%S(i,j,k) + (hWght*hR + hR*hL)*tv%S(i,j+1,k) ) * iDenom
       else
         Ttl = T_t(i,j,k); Tbl = T_b(i,j,k); Ttr = T_t(i,j+1,k); Tbr = T_b(i,j+1,k)
         Tml = tv%T(i,j,k); Tmr = tv%T(i,j+1,k)
@@ -1372,9 +1372,9 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
@@ -1427,9 +1427,9 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
@@ -1613,9 +1613,9 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
@@ -1674,9 +1674,9 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
         hWght = hWght * ( (hL-hR)/(hL+hR) )**2
-        iDenom = 1.0 / ( hWght*(hR + hL) + (hL*hR) )
-        hWt_LL = (hWght*hL + (hR*hL)) * iDenom ; hWt_LR = (hWght*hR) * iDenom
-        hWt_RR = (hWght*hR + (hR*hL)) * iDenom ; hWt_RL = (hWght*hL) * iDenom
+        iDenom = 1.0 / ( hWght*(hR + hL) + hL*hR )
+        hWt_LL = (hWght*hL + hR*hL) * iDenom ; hWt_LR = (hWght*hR) * iDenom
+        hWt_RR = (hWght*hR + hR*hL) * iDenom ; hWt_RL = (hWght*hL) * iDenom
       else
         hWt_LL = 1.0 ; hWt_LR = 0.0 ; hWt_RR = 1.0 ; hWt_RL = 0.0
       endif
