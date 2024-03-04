@@ -3144,15 +3144,11 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   ! Local variables
   integer :: ios, i, new_unit
   logical :: opened, new_file
-  logical :: remap_answers_2018   ! If true, use the order of arithmetic and expressions that
-                                  ! recover the remapping answers from 2018.  If false, use more
-                                  ! robust forms of the same remapping expressions.
   integer :: remap_answer_date    ! The vintage of the order of arithmetic and expressions to use
                                   ! for remapping.  Values below 20190101 recover the remapping
                                   ! answers from 2018, while higher values use more robust
                                   ! forms of the same remapping expressions.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags.
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt, doc_path
   character(len=240), allocatable :: diag_coords(:)
@@ -3182,23 +3178,13 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
-  call get_param(param_file, mdl, "REMAPPING_2018_ANSWERS", remap_answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
-  ! Revise inconsistent default answer dates for remapping.
-  if (remap_answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-  if (.not.remap_answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
   call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
-                 "robust and accurate forms of mathematically equivalent expressions.  "//&
-                 "If both REMAPPING_2018_ANSWERS and REMAPPING_ANSWER_DATE are specified, the "//&
-                 "latter takes precedence.", default=default_answer_date)
+                 "robust and accurate forms of mathematically equivalent expressions.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+  if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
   call get_param(param_file, mdl, 'USE_GRID_SPACE_DIAGNOSTIC_AXES', diag_cs%grid_space_axes, &
                  'If true, use a grid index coordinate convention for diagnostic axes. ',&
                  default=.false.)
@@ -3553,37 +3539,45 @@ subroutine diag_mediator_end(time, diag_CS, end_diag_manager)
   enddo
 
   call diag_grid_storage_end(diag_cs%diag_grid_temp)
-  deallocate(diag_cs%mask3dTL)
-  deallocate(diag_cs%mask3dBL)
-  deallocate(diag_cs%mask3dCuL)
-  deallocate(diag_cs%mask3dCvL)
-  deallocate(diag_cs%mask3dTi)
-  deallocate(diag_cs%mask3dBi)
-  deallocate(diag_cs%mask3dCui)
-  deallocate(diag_cs%mask3dCvi)
+  if (associated(diag_cs%mask3dTL))  deallocate(diag_cs%mask3dTL)
+  if (associated(diag_cs%mask3dBL))  deallocate(diag_cs%mask3dBL)
+  if (associated(diag_cs%mask3dCuL)) deallocate(diag_cs%mask3dCuL)
+  if (associated(diag_cs%mask3dCvL)) deallocate(diag_cs%mask3dCvL)
+  if (associated(diag_cs%mask3dTi))  deallocate(diag_cs%mask3dTi)
+  if (associated(diag_cs%mask3dBi))  deallocate(diag_cs%mask3dBi)
+  if (associated(diag_cs%mask3dCui)) deallocate(diag_cs%mask3dCui)
+  if (associated(diag_cs%mask3dCvi)) deallocate(diag_cs%mask3dCvi)
   do dl=2,MAX_DSAMP_LEV
-    deallocate(diag_cs%dsamp(dl)%mask2dT)
-    deallocate(diag_cs%dsamp(dl)%mask2dBu)
-    deallocate(diag_cs%dsamp(dl)%mask2dCu)
-    deallocate(diag_cs%dsamp(dl)%mask2dCv)
-    deallocate(diag_cs%dsamp(dl)%mask3dTL)
-    deallocate(diag_cs%dsamp(dl)%mask3dBL)
-    deallocate(diag_cs%dsamp(dl)%mask3dCuL)
-    deallocate(diag_cs%dsamp(dl)%mask3dCvL)
-    deallocate(diag_cs%dsamp(dl)%mask3dTi)
-    deallocate(diag_cs%dsamp(dl)%mask3dBi)
-    deallocate(diag_cs%dsamp(dl)%mask3dCui)
-    deallocate(diag_cs%dsamp(dl)%mask3dCvi)
+    if (associated(diag_cs%dsamp(dl)%mask2dT))   deallocate(diag_cs%dsamp(dl)%mask2dT)
+    if (associated(diag_cs%dsamp(dl)%mask2dBu))  deallocate(diag_cs%dsamp(dl)%mask2dBu)
+    if (associated(diag_cs%dsamp(dl)%mask2dCu))  deallocate(diag_cs%dsamp(dl)%mask2dCu)
+    if (associated(diag_cs%dsamp(dl)%mask2dCv))  deallocate(diag_cs%dsamp(dl)%mask2dCv)
+    if (associated(diag_cs%dsamp(dl)%mask3dTL))  deallocate(diag_cs%dsamp(dl)%mask3dTL)
+    if (associated(diag_cs%dsamp(dl)%mask3dBL))  deallocate(diag_cs%dsamp(dl)%mask3dBL)
+    if (associated(diag_cs%dsamp(dl)%mask3dCuL)) deallocate(diag_cs%dsamp(dl)%mask3dCuL)
+    if (associated(diag_cs%dsamp(dl)%mask3dCvL)) deallocate(diag_cs%dsamp(dl)%mask3dCvL)
+    if (associated(diag_cs%dsamp(dl)%mask3dTi))  deallocate(diag_cs%dsamp(dl)%mask3dTi)
+    if (associated(diag_cs%dsamp(dl)%mask3dBi))  deallocate(diag_cs%dsamp(dl)%mask3dBi)
+    if (associated(diag_cs%dsamp(dl)%mask3dCui)) deallocate(diag_cs%dsamp(dl)%mask3dCui)
+    if (associated(diag_cs%dsamp(dl)%mask3dCvi)) deallocate(diag_cs%dsamp(dl)%mask3dCvi)
 
     do i=1,diag_cs%num_diag_coords
-      deallocate(diag_cs%dsamp(dl)%remap_axesTL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCuL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCvL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesBL(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesTi(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCui(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesCvi(i)%dsamp(dl)%mask3d)
-      deallocate(diag_cs%dsamp(dl)%remap_axesBi(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesTL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesTL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCuL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCuL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCvL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCvL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesBL(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesBL(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesTi(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesTi(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCui(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCui(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesCvi(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesCvi(i)%dsamp(dl)%mask3d)
+      if (associated(diag_cs%dsamp(dl)%remap_axesBi(i)%dsamp(dl)%mask3d)) &
+        deallocate(diag_cs%dsamp(dl)%remap_axesBi(i)%dsamp(dl)%mask3d)
     enddo
   enddo
 

@@ -11,6 +11,7 @@ use MOM_file_parser,        only : get_param, log_param, log_version, param_file
 use MOM_forcing_type,       only : forcing
 use MOM_grid,               only : ocean_grid_type
 use MOM_hor_index,          only : hor_index_type
+use MOM_interface_heights,  only : thickness_to_dz
 use MOM_io,                 only : vardesc, var_desc, query_vardesc
 use MOM_open_boundary,      only : ocean_OBC_type
 use MOM_restart,            only : query_initialized, MOM_restart_CS
@@ -21,7 +22,7 @@ use MOM_tracer_registry,    only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init,      only : tracer_Z_init
 use MOM_unit_scaling,       only : unit_scale_type
-use MOM_variables,          only : surface
+use MOM_variables,          only : surface, thermo_var_ptrs
 use MOM_verticalGrid,       only : verticalGrid_type
 
 implicit none ; private
@@ -189,7 +190,7 @@ end function register_dye_tracer
 
 !> This subroutine initializes the CS%ntr tracer fields in tr(:,:,:,:)
 !! and it sets up the tracer output.
-subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_CSp)
+subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_CSp, tv)
   logical,                            intent(in) :: restart !< .true. if the fields have already been
                                                             !! read from a restart file.
   type(time_type), target,            intent(in) :: day  !< Time of the start of the run.
@@ -202,10 +203,12 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
                                                          !! conditions are used.
   type(dye_tracer_CS),                pointer    :: CS   !< The control structure returned by a previous
                                                          !! call to register_dye_tracer.
-  type(sponge_CS),                    pointer    :: sponge_CSp    !< A pointer to the control structure
-                                                                  !! for the sponges, if they are in use.
+  type(sponge_CS),                    pointer    :: sponge_CSp !< A pointer to the control structure
+                                                         !! for the sponges, if they are in use.
+  type(thermo_var_ptrs),              intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 
-! Local variables
+  ! Local variables
+  real    :: dz(SZI_(G),SZK_(GV)) ! Height change across layers [Z ~> m]
   real    :: z_bot    ! Height of the bottom of the layer relative to the sea surface [Z ~> m]
   real    :: z_center ! Height of the center of the layer relative to the sea surface [Z ~> m]
   integer :: i, j, k, m
@@ -216,8 +219,9 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
   CS%diag => diag
 
   ! Establish location of source
-  do m= 1, CS%ntr
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+  do j=G%jsc,G%jec
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+    do m=1,CS%ntr ; do i=G%isc,G%iec
       ! A dye is set dependent on the center of the cell being inside the rectangular box.
       if (CS%dye_source_minlon(m) < G%geoLonT(i,j) .and. &
           CS%dye_source_maxlon(m) >= G%geoLonT(i,j) .and. &
@@ -226,8 +230,8 @@ subroutine initialize_dye_tracer(restart, day, G, GV, h, diag, OBC, CS, sponge_C
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = 0.0
         do k = 1, GV%ke
-          z_bot = z_bot - h(i,j,k)*GV%H_to_Z
-          z_center = z_bot + 0.5*h(i,j,k)*GV%H_to_Z
+          z_bot = z_bot - dz(i,k)
+          z_center = z_bot + 0.5*dz(i,k)
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0
@@ -244,7 +248,7 @@ end subroutine initialize_dye_tracer
 !! This is a simple example of a set of advected passive tracers.
 !! The arguments to this subroutine are redundant in that
 !!     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
-subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, CS, &
+subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, tv, CS, &
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
@@ -264,6 +268,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
                                               !! and tracer forcing fields.  Unused fields have NULL ptrs.
   real,                    intent(in) :: dt   !< The amount of time covered by this call [T ~> s]
   type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(dye_tracer_CS),     pointer    :: CS   !< The control structure returned by a previous
                                               !! call to register_dye_tracer.
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
@@ -271,8 +276,9 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
                                               !! fluxes can be applied [H ~> m or kg m-2]
 
-! Local variables
+  ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
+  real    :: dz(SZI_(G),SZK_(GV)) ! Height change across layers [Z ~> m]
   real    :: z_bot    ! Height of the bottom of the layer relative to the sea surface [Z ~> m]
   real    :: z_center ! Height of the center of the layer relative to the sea surface [Z ~> m]
   integer :: i, j, k, is, ie, js, je, nz, m
@@ -284,7 +290,7 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do m=1,CS%ntr
-      do k=1,nz ;do j=js,je ; do i=is,ie
+      do k=1,nz ; do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
       enddo ; enddo ; enddo
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m), dt, fluxes, h_work, &
@@ -297,8 +303,9 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
     enddo
   endif
 
-  do m=1,CS%ntr
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+  do j=js,je
+    call thickness_to_dz(h_new, tv, dz, j, G, GV)
+    do m=1,CS%ntr ; do i=is,ie
       ! A dye is set dependent on the center of the cell being inside the rectangular box.
       if (CS%dye_source_minlon(m) < G%geoLonT(i,j) .and. &
           CS%dye_source_maxlon(m) >= G%geoLonT(i,j) .and. &
@@ -307,8 +314,8 @@ subroutine dye_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
           G%mask2dT(i,j) > 0.0 ) then
         z_bot = 0.0
         do k=1,nz
-          z_bot = z_bot - h_new(i,j,k)*GV%H_to_Z
-          z_center = z_bot + 0.5*h_new(i,j,k)*GV%H_to_Z
+          z_bot = z_bot - dz(i,k)
+          z_center = z_bot + 0.5*dz(i,k)
           if ( z_center > -CS%dye_source_maxdepth(m) .and. &
                z_center < -CS%dye_source_mindepth(m) ) then
             CS%tr(i,j,k,m) = 1.0

@@ -276,7 +276,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
     call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.true., &
-                               press=.true., fix_accum_bug=CS%fix_ustar_gustless_bug)
+                               press=.true., fix_accum_bug=CS%fix_ustar_gustless_bug, tau_mag=.true.)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -649,7 +649,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   ! mechanical forcing type has been used.
   if (.not.forces%initialized) then
 
-    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true.)
+    call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., press=.true., tau_mag=.true.)
 
     call safe_alloc_ptr(forces%p_surf,isd,ied,jsd,jed)
     call safe_alloc_ptr(forces%p_surf_full,isd,ied,jsd,jed)

@@ -10,6 +10,7 @@ use MOM_file_parser,     only : get_param, log_param, log_version, param_file_ty
 use MOM_forcing_type,    only : forcing
 use MOM_hor_index,       only : hor_index_type
 use MOM_grid,            only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_io,              only : file_exists, MOM_read_data, slasher, vardesc, var_desc, query_vardesc
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_segment_tracer_type
 use MOM_open_boundary,   only : OBC_segment_type
@@ -19,7 +20,7 @@ use MOM_time_manager,    only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_unit_scaling,    only : unit_scale_type
-use MOM_variables,       only : surface
+use MOM_variables,       only : surface, thermo_var_ptrs
 use MOM_verticalGrid,    only : verticalGrid_type
 
 implicit none ; private
@@ -156,7 +157,7 @@ end function register_DOME_tracer
 
 !> Initializes the NTR tracer fields in tr(:,:,:,:) and sets up the tracer output.
 subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
-                                  sponge_CSp, param_file)
+                                  sponge_CSp, tv)
   type(ocean_grid_type),                 intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),               intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                 intent(in) :: US   !< A dimensional unit scaling type
@@ -170,27 +171,27 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
                                                                !! call to DOME_register_tracer.
   type(sponge_CS),                       pointer    :: sponge_CSp    !< A pointer to the control structure
                                                                      !! for the sponges, if they are in use.
-  type(param_file_type),                 intent(in) :: param_file !< A structure to parse for run-time parameters
+  type(thermo_var_ptrs),                 intent(in) :: tv   !< A structure pointing to various thermodynamic variables
 
-! Local variables
+  ! Local variables
   real, allocatable :: temp(:,:,:) ! Target values for the tracers in the sponges, perhaps in [g kg-1]
   character(len=16) :: name     ! A variable's name in a NetCDF file.
   real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers, perhaps in [g kg-1]
+  real :: dz(SZI_(G),SZK_(GV)) ! Height change across layers [Z ~> m]
   real :: tr_y   ! Initial zonally uniform tracer concentrations, perhaps in [g kg-1]
-  real :: h_neglect         ! A thickness that is so small it is usually lost
-                            ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: dz_neglect        ! A thickness that is so small it is usually lost
+                            ! in roundoff and can be neglected [Z ~> m or kg m-2].
   real :: e(SZK_(GV)+1)     ! Interface heights relative to the sea surface (negative down) [Z ~> m]
   real :: e_top  ! Height of the top of the tracer band relative to the sea surface [Z ~> m]
   real :: e_bot  ! Height of the bottom of the tracer band relative to the sea surface [Z ~> m]
   real :: d_tr   ! A change in tracer concentrations, in tracer units, perhaps [g kg-1]
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, m
-  integer :: IsdB, IedB, JsdB, JedB
 
   if (.not.associated(CS)) return
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-  h_neglect = GV%H_subroundoff
+
+  dz_neglect = GV%dz_subroundoff
 
   CS%Time => day
   CS%diag => diag
@@ -225,31 +226,34 @@ subroutine initialize_DOME_tracer(restart, day, G, GV, US, h, diag, OBC, CS, &
       enddo ; enddo ; enddo
 
       if (NTR >= 7) then
-        do j=js,je ; do i=is,ie
-          e(1) = 0.0
-          do k=1,nz
-            e(K+1) = e(K) - h(i,j,k)*GV%H_to_Z
-            do m=7,NTR
-              e_top = -CS%sheet_spacing * (real(m-6))
-              e_bot = -CS%sheet_spacing * (real(m-6) + 0.5)
-              if (e_top < e(K)) then
-                if (e_top < e(K+1)) then ; d_tr = 0.0
-                elseif (e_bot < e(K+1)) then
-                  d_tr = 1.0 * (e_top-e(K+1)) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
-                else ; d_tr = 1.0 * (e_top-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
+        do j=js,je
+          call thickness_to_dz(h, tv, dz, j, G, GV)
+          do i=is,ie
+            e(1) = 0.0
+            do k=1,nz
+              e(K+1) = e(K) - dz(i,k)
+              do m=7,NTR
+                e_top = -CS%sheet_spacing * (real(m-6))
+                e_bot = -CS%sheet_spacing * (real(m-6) + 0.5)
+                if (e_top < e(K)) then
+                  if (e_top < e(K+1)) then ; d_tr = 0.0
+                  elseif (e_bot < e(K+1)) then
+                    d_tr = 1.0 * (e_top-e(K+1)) / (dz(i,k)+dz_neglect)
+                  else ; d_tr = 1.0 * (e_top-e_bot) / (dz(i,k)+dz_neglect)
+                  endif
+                elseif (e_bot < e(K)) then
+                  if (e_bot < e(K+1)) then ; d_tr = 1.0
+                  else ; d_tr = 1.0 * (e(K)-e_bot) / (dz(i,k)+dz_neglect)
+                  endif
+                else
+                  d_tr = 0.0
                 endif
-              elseif (e_bot < e(K)) then
-                if (e_bot < e(K+1)) then ; d_tr = 1.0
-                else ; d_tr = 1.0 * (e(K)-e_bot) / ((h(i,j,k)+h_neglect)*GV%H_to_Z)
-                endif
-              else
-                d_tr = 0.0
-              endif
-              if (h(i,j,k) < 2.0*GV%Angstrom_H) d_tr=0.0
-              CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + d_tr
+                if (dz(i,k) < 2.0*GV%Angstrom_Z) d_tr=0.0
+                CS%tr(i,j,k,m) = CS%tr(i,j,k,m) + d_tr
+              enddo
             enddo
           enddo
-        enddo ; enddo
+        enddo
       endif
 
     endif

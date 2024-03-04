@@ -22,6 +22,7 @@ public initialize_ice_flow_from_file
 public initialize_ice_shelf_boundary_from_file
 public initialize_ice_C_basal_friction
 public initialize_ice_AGlen
+public initialize_ice_SMB
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
 ! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
@@ -351,7 +352,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
         hmask(i+1,j) = 3.0
         h_bdry_val(i+1,j) = h_shelf(i+1,j)
         thickness_bdry_val(i+1,j) = h_bdry_val(i+0*1,j)
-        u_face_mask_bdry(i+1,j) = 3.0
+        u_face_mask_bdry(i+1,j) = 5.0
         u_bdry_val(i+1,j) = input_vel*(1-16.0*((G%geoLatBu(i-1,j)/lenlat-0.5))**4) !velocity distribution
       endif
 
@@ -429,31 +430,32 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
   filename = trim(inputdir)//trim(vel_file)
   call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", filename)
   call get_param(PF, mdl, "ICE_U_VEL_VARNAME", ushelf_varname, &
-                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 "The name of the u velocity variable in ICE_VELOCITY_FILE.", &
                  default="u_shelf")
   call get_param(PF, mdl, "ICE_V_VEL_VARNAME", vshelf_varname, &
-                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 "The name of the v velocity variable in ICE_VELOCITY_FILE.", &
                  default="v_shelf")
   call get_param(PF, mdl, "ICE_VISC_VARNAME", ice_visc_varname, &
-                 "The name of the thickness variable in ICE_VELOCITY_FILE.", &
+                 "The name of the ice viscosity variable in ICE_VELOCITY_FILE.", &
                  default="viscosity")
+  call get_param(PF, mdl, "ICE_FLOAT_FRAC_VARNAME", floatfr_varname, &
+                 "The name of the ice float fraction (grounding fraction) variable in ICE_VELOCITY_FILE.", &
+                 default="float_frac")
   call get_param(PF, mdl, "BED_TOPO_FILE", bed_topo_file, &
                  "The file from which the bed elevation is read.", &
                  default="ice_shelf_vel.nc")
   call get_param(PF, mdl, "BED_TOPO_VARNAME", bed_varname, &
-                 "The name of the thickness variable in ICE_INPUT_FILE.", &
+                 "The name of the bed elevation variable in ICE_INPUT_FILE.", &
                  default="depth")
   if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
        " initialize_ice_shelf_velocity_from_file: Unable to open "//trim(filename))
-
-  floatfr_varname = "float_frac"
 
   call MOM_read_data(filename, trim(ushelf_varname), u_shelf, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
   call MOM_read_data(filename, trim(vshelf_varname), v_shelf, G%Domain, position=CORNER, scale=US%m_s_to_L_T)
   call MOM_read_data(filename, trim(floatfr_varname), float_cond, G%Domain, scale=1.)
 
   filename = trim(inputdir)//trim(bed_topo_file)
-  call MOM_read_data(filename,trim(bed_varname), bed_elev, G%Domain, scale=1.0)
+  call MOM_read_data(filename, trim(bed_varname), bed_elev, G%Domain, scale=US%m_to_Z)
 
 
 end subroutine initialize_ice_flow_from_file
@@ -656,5 +658,51 @@ subroutine initialize_ice_AGlen(AGlen, G, US, PF)
     call MOM_read_data(filename,trim(varname), AGlen, G%Domain)
 
   endif
-end subroutine
+end subroutine initialize_ice_AGlen
+
+!> Initialize ice surface mass balance field that is held constant over time
+subroutine initialize_ice_SMB(SMB, G, US, PF)
+  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
+  real, dimension(SZDI_(G),SZDJ_(G)), &
+                         intent(inout) :: SMB !< Ice surface mass balance parameter, often in [kg m-2 s-1]
+  type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
+  type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
+
+  real :: SMB_val  ! Constant ice surface mass balance parameter, often in [kg m-2 s-1]
+  character(len=40)  :: mdl = "initialize_ice_SMB" ! This subroutine's name.
+  character(len=200) :: config
+  character(len=200) :: varname
+  character(len=200) :: inputdir, filename, SMB_file
+
+  call get_param(PF, mdl, "ICE_SMB_CONFIG", config, &
+                 "This specifies how the initial ice surface mass balance parameter is specified. "//&
+                 "Valid values are: CONSTANT and FILE.", &
+                 default="CONSTANT")
+
+  if (trim(config)=="CONSTANT") then
+    call get_param(PF, mdl, "SMB", SMB_val, &
+                 "Surface mass balance.", units="kg m-2 s-1", default=0.0)
+
+    SMB(:,:) = SMB_val
+
+  elseif (trim(config)=="FILE") then
+    call MOM_mesg("  MOM_ice_shelf.F90, initialize_ice_shelf: reading SMB parameter")
+    call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
+    inputdir = slasher(inputdir)
+
+    call get_param(PF, mdl, "ICE_SMB_FILE", SMB_file, &
+                 "The file from which the ice surface mass balance is read.", &
+                 default="ice_SMB.nc")
+    filename = trim(inputdir)//trim(SMB_file)
+    call log_param(PF, mdl, "INPUTDIR/ICE_SMB_FILE", filename)
+    call get_param(PF, mdl, "ICE_SMB_VARNAME", varname, &
+                   "The variable to use as surface mass balance.", &
+                   default="SMB")
+
+    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
+       " initialize_ice_SMV_from_file: Unable to open "//trim(filename))
+    call MOM_read_data(filename,trim(varname), SMB, G%Domain)
+
+  endif
+end subroutine initialize_ice_SMB
 end module MOM_ice_shelf_initialize

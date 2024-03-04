@@ -117,7 +117,8 @@ subroutine build_hycom1_column(CS, remapCS, eqn_of_state, nz, depth, h, T, S, p_
   real, dimension(nz+1), intent(in)    :: z_col !< Interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1), intent(inout) :: z_col_new !< Absolute positions of interfaces [H ~> m or kg m-2]
   real, optional,        intent(in)    :: zScale !< Scaling factor from the input coordinate thicknesses in [Z ~> m]
-                                                !! to desired units for zInterface, perhaps GV%Z_to_H.
+                                                !! to desired units for zInterface, perhaps GV%Z_to_H in which
+                                                !! case this has units of [H Z-1 ~> nondim or kg m-3]
   real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the purpose of
                                                 !! cell reconstruction [H ~> m or kg m-2]
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose of
@@ -220,7 +221,6 @@ subroutine build_hycom1_target_anomaly(CS, remapCS, eqn_of_state, nz, depth, h, 
   real, dimension(nz),   intent(in)  :: S      !< Salinity of column [S ~> ppt]
   real, dimension(nz),   intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(nz),   intent(in)  :: p_col  !< Layer pressure [R L2 T-2 ~> Pa]
-                                               !! to desired units for zInterface, perhaps GV%Z_to_H.
   real, dimension(nz),   intent(out) :: R      !< Layer density [R ~> kg m-3]
   real, dimension(nz+1), intent(out) :: RiAnom !< The interface density anomaly
                                                !! w.r.t. the interface target

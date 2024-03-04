@@ -265,7 +265,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           ! Use inside bathymetry
           cff = sqrt(GV%g_Earth * depth_tot(i+1,j) )
           val2 = mag_SSH * exp(- CS%F_0 * y / cff)
-          segment%eta(I,j) = GV%Z_to_H*val2 * cos(omega * time_sec)
+          segment%SSH(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = val2 * (val1 * cff * cosa / depth_tot(i+1,j) )
           if (segment%nudged) then
             do k=1,nz
@@ -279,7 +279,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           endif
         else
           ! Baroclinic, not rotated yet
-          segment%eta(I,j) = 0.0
+          segment%SSH(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
           if (segment%nudged) then
             do k=1,nz
@@ -323,7 +323,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
         if (CS%mode == 0) then
           cff = sqrt(GV%g_Earth * depth_tot(i,j+1) )
           val2 = mag_SSH * exp(- 0.5 * (G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J)) * y / cff)
-          segment%eta(I,j) = GV%Z_to_H*val2 * cos(omega * time_sec)
+          segment%SSH(I,j) = val2 * cos(omega * time_sec)
           segment%normal_vel_bt(I,j) = (val1 * cff * sina / depth_tot(i,j+1) ) * val2
           if (segment%nudged) then
             do k=1,nz
@@ -337,7 +337,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           endif
         else
           ! Not rotated yet
-          segment%eta(i,J) = 0.0
+          segment%SSH(i,J) = 0.0
           segment%normal_vel_bt(i,J) = 0.0
           if (segment%nudged) then
             do k=1,nz

@@ -61,7 +61,21 @@ type, public :: hybgen_regrid_CS ; private
   !> Nominal density of interfaces [R ~> kg m-3]
   real, allocatable, dimension(:) :: target_density
 
-  real :: onem       !< Nominally one m in thickness units [H ~> m or kg m-2]
+  real :: dp_far_from_sfc  !< A distance that determines when an interface is suffiently far from
+                     !! the surface that certain adjustments can be made in the Hybgen regridding
+                     !! code [H ~> m or kg m-2].  In Hycom, this is set to tenm (nominally 10 m).
+  real :: dp_far_from_bot  !< A distance that determines when an interface is suffiently far from
+                     !! the bottom that certain adjustments can be made in the Hybgen regridding
+                     !! code [H ~> m or kg m-2].  In Hycom, this is set to onem (nominally 1 m).
+  real :: h_thin     !< A layer thickness below which a layer is considered to be too thin for
+                     !! certain adjustments to be made in the Hybgen regridding code.
+                     !! In Hycom, this is set to onemm (nominally 0.001 m).
+
+  real :: rho_eps    !< A small nonzero density that is used to prevent division by zero
+                     !! in several expressions in the Hybgen regridding code [R ~> kg m-3].
+
+  real :: onem       !< Nominally one m in thickness units [H ~> m or kg m-2], used only in
+                     !! certain debugging tests.
 
 end type hybgen_regrid_CS
 
@@ -166,6 +180,28 @@ subroutine init_hybgen_regrid(CS, GV, US, param_file)
                  "A bottom boundary layer thickness within which Hybgen is able to move "//&
                  "overlying layers upward to match a target density.", &
                  units="m", default=0.0, scale=GV%m_to_H)
+  call get_param(param_file, mdl, "HYBGEN_FAR_FROM_SURFACE", CS%dp_far_from_sfc, &
+                 "A distance that determines when an interface is suffiently far "//&
+                 "from the surface that certain adjustments can be made in the Hybgen "//&
+                 "regridding code.  In Hycom, this is set to tenm (nominally 10 m).", &
+                 units="m", default=10.0, scale=GV%m_to_H)
+  call get_param(param_file, mdl, "HYBGEN_FAR_FROM_BOTTOM", CS%dp_far_from_bot, &
+                 "A distance that determines when an interface is suffiently far "//&
+                 "from the bottom that certain adjustments can be made in the Hybgen "//&
+                 "regridding code.  In Hycom, this is set to onem (nominally 1 m).", &
+                 units="m", default=1.0, scale=GV%m_to_H)
+  call get_param(param_file, mdl, "HYBGEN_H_THIN", CS%h_thin, &
+                 "A layer thickness below which a layer is considered to be too thin for "//&
+                 "certain adjustments to be made in the Hybgen regridding code.  "//&
+                 "In Hycom, this is set to onemm (nominally 0.001 m).", &
+                 units="m", default=0.001, scale=GV%m_to_H)
+
+  call get_param(param_file, mdl, "HYBGEN_DENSITY_EPSILON", CS%rho_eps, &
+                 "A small nonzero density that is used to prevent division by zero "//&
+                 "in several expressions in the Hybgen regridding code.", &
+                 units="kg m-3", default=1e-11, scale=US%kg_m3_to_R)
+
+
   call get_param(param_file, mdl, "HYBGEN_REMAP_DENSITY_MATCH", CS%hybiso, &
                  "A tolerance between the layer densities and their target, within which "//&
                  "Hybgen determines that remapping uses PCM for a layer.", &
@@ -300,12 +336,17 @@ end subroutine get_hybgen_regrid_params
 
 
 !> Modify the input grid to give a new vertical grid based on the HYCOM hybgen code.
-subroutine hybgen_regrid(G, GV, US, dp, tv, CS, dzInterface, PCM_cell)
+subroutine hybgen_regrid(G, GV, US, dp, nom_depth_H, tv, CS, dzInterface, PCM_cell)
   type(ocean_grid_type),   intent(in)    :: G   !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV  !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in)    :: dp  !< Source grid layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)    :: nom_depth_H !< The bathymetric depth of this column
+                                                !! relative to mean sea level or another locally
+                                                !! valid reference height, converted to thickness
+                                                !! units [H ~> m or kg m-2]
   type(thermo_var_ptrs),   intent(in)    :: tv  !< Thermodynamics structure
   type(hybgen_regrid_CS),  intent(in)    :: CS  !< hybgen control structure
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1), &
@@ -457,7 +498,7 @@ subroutine hybgen_regrid(G, GV, US, dp, tv, CS, dzInterface, PCM_cell)
     enddo
 
     ! The following block of code is used to trigger z* stretching of the targets heights.
-    nominalDepth = (G%bathyT(i,j) + G%Z_ref)*GV%Z_to_H
+    nominalDepth = nom_depth_H(i,j)
     if (h_tot <= CS%min_dilate*nominalDepth) then
       dilate = CS%min_dilate
     elseif (h_tot >= CS%max_dilate*nominalDepth) then
@@ -482,8 +523,7 @@ subroutine hybgen_regrid(G, GV, US, dp, tv, CS, dzInterface, PCM_cell)
     enddo !k
 
     ! Determine the new layer thicknesses.
-    call hybgen_column_regrid(CS, nk, CS%thkbot, CS%onem, &
-                              1.0e-11*US%kg_m3_to_R, Rcv_tgt, fixlay, qhrlx, dp0ij, &
+    call hybgen_column_regrid(CS, nk, CS%thkbot, Rcv_tgt, fixlay, qhrlx, dp0ij, &
                               dp0cum, Rcv, h_col, dz_int)
 
     ! Store the output from hybgenaij_regrid in 3-d arrays.
@@ -669,13 +709,11 @@ real function cushn(delp, dp0)
 end function cushn
 
 !> Create a new grid for a column of water using the Hybgen algorithm.
-subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
+subroutine hybgen_column_regrid(CS, nk, thkbot, Rcv_tgt, &
                                 fixlay, qhrlx, dp0ij, dp0cum, Rcv, h_in, dp_int)
   type(hybgen_regrid_CS), intent(in)    :: CS  !< hybgen regridding control structure
   integer, intent(in)    :: nk            !< number of layers
   real,    intent(in)    :: thkbot        !< thickness of bottom boundary layer [H ~> m or kg m-2]
-  real,    intent(in)    :: onem          !< one m in pressure units [H ~> m or kg m-2]
-  real,    intent(in)    :: epsil         !< small nonzero density to prevent division by zero [R ~> kg m-3]
   real,    intent(in)    :: Rcv_tgt(nk)   !< Target potential density [R ~> kg m-3]
   integer, intent(in)    :: fixlay        !< deepest fixed coordinate layer
   real,    intent(in)    :: qhrlx( nk+1)  !< relaxation coefficient per timestep [nondim]
@@ -702,20 +740,14 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
   real :: h_hat0 ! A first guess at thickness movement upward across the interface
                  ! between layers k and k-1 [H ~> m or kg m-2]
   real :: dh_cor ! Thickness changes [H ~> m or kg m-2]
-  real :: tenm   ! ten m  in pressure units [H ~> m or kg m-2]
-  real :: onemm  ! one mm in pressure units [H ~> m or kg m-2]
   logical :: trap_errors
   integer :: k
   character(len=256) :: mesg  ! A string for output messages
 
   ! This line needs to be consistent with the parameters set in cushn().
-  real, parameter :: qqmn=-4.0, qqmx=2.0  ! shifted range for cushn
-! real, parameter :: qqmn=-2.0, qqmx=4.0  ! traditional range for cushn
-! real, parameter :: qqmn=-4.0, qqmx=6.0  ! somewhat wider range for cushn
-
-  !### These hard-coded parameters should be changed to run-time variables.
-  tenm = 10.0*onem
-  onemm = 0.001*onem
+  real, parameter :: qqmn=-4.0, qqmx=2.0  ! shifted range for cushn [nondim]
+! real, parameter :: qqmn=-2.0, qqmx=4.0  ! traditional range for cushn [nondim]
+! real, parameter :: qqmn=-4.0, qqmx=6.0  ! somewhat wider range for cushn [nondim]
 
   trap_errors = .true.
 
@@ -769,26 +801,26 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
 
   ! Remap the non-fixed layers.
 
-  ! In the Hycom version, this loop was fused the loop correcting water that is
+  ! In the Hycom version, this loop was fused with the loop correcting water that is
   ! too light, and it ran down the water column, but if there are a set of layers
   ! that are very dense, that structure can lead to all of the water being remapped
   ! into a single thick layer.  Splitting the loops and running the loop upwards
-  ! (as is done here avoids that catastrophic problem for layers that are far from
+  ! (as is done here) avoids that catastrophic problem for layers that are far from
   ! their targets.  However, this code is still prone to a thin-thick-thin null mode.
   do k=nk,fixlay+2,-1
     !  This is how the Hycom code would do this loop: do k=fixlay+1,nk ; if (k>fixlay+1) then
 
-    if ((Rcv(k) > Rcv_tgt(k) + epsil)) then
+    if ((Rcv(k) > Rcv_tgt(k) + CS%rho_eps)) then
       ! Water in layer k is too dense, so try to dilute with water from layer k-1
       ! Do not move interface if k = fixlay + 1
 
       if ((Rcv(k-1) >= Rcv_tgt(k-1)) .or. &
-          (p_int(k) <= dp0cum(k) + onem) .or. &
+          (p_int(k) <= dp0cum(k) + CS%dp_far_from_bot) .or. &
           (h_col(k) <= h_col(k-1))) then
         ! If layer k-1 is too light, there is a conflict in the direction the
         ! inteface between them should move, so thicken the thinner of the two.
 
-        if ((Rcv_tgt(k) - Rcv(k-1)) <= epsil) then
+        if ((Rcv_tgt(k) - Rcv(k-1)) <= CS%rho_eps) then
           ! layer k-1 is far too dense, take the entire layer
           ! If this code is working downward and this branch is repeated in a series
           ! of successive layers, it can accumulate into a very thick homogenous layers.
@@ -814,7 +846,7 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
         ! layer (thinner than its minimum thickness) in the interior ocean,
         ! move interface k-1 (and k-2 if necessary) upward
         ! Only work on layers that are sufficiently far from the fixed near-surface layers.
-        if ((h_hat >= 0.0) .and. (k > fixlay+2) .and. (p_int(k-1) > dp0cum(k-1) + tenm)) then
+        if ((h_hat >= 0.0) .and. (k > fixlay+2) .and. (p_int(k-1) > dp0cum(k-1) + CS%dp_far_from_sfc)) then
 
           ! Only act if interface k-1 is near the bottom or layer k-2 could donate water.
           if ( (p_int(nk+1) - p_int(k-1) < thkbot) .or. &
@@ -828,7 +860,7 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
               h_hat2 = cushn(h_col(k-2) + (h_hat0 - h_hat), dp0ij(k-2)) - h_col(k-2)
             endif !fixlay+3:else
 
-            if (h_hat2 < -onemm) then
+            if (h_hat2 < -CS%h_thin) then
               dh_cor = qhrlx(k-1) * max(h_hat2, -h_hat - h_col(k-1))
               h_col(k-2)  = h_col(k-2) + dh_cor
               h_col(k-1)  = h_col(k-1) - dh_cor
@@ -838,9 +870,9 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
               h_hat = cushn(h_hat0 + h_col(k-1), dp0ij(k-1)) - h_col(k-1)
             elseif (k <= fixlay+3) then
               ! Do nothing.
-            elseif (p_int(k-2) > dp0cum(k-2) + tenm .and. &
-                   (p_int(nk+1) - p_int(k-2) < thkbot .or. &
-                    h_col(k-3) > qqmx*dp0ij(k-3))) then
+            elseif ( (p_int(k-2) > dp0cum(k-2) + CS%dp_far_from_sfc) .and. &
+                     ( (p_int(nk+1) - p_int(k-2) < thkbot) .or. &
+                       (h_col(k-3) > qqmx*dp0ij(k-3)) ) ) then
 
               ! Determine how much water layer k-3 could supply without becoming too thin.
               if (k == fixlay+4) then
@@ -850,7 +882,7 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
                 ! Maintain minimum thickess of layer k-3.
                 h_hat3 = cushn(h_col(k-3) + (h_hat0 - h_hat), dp0ij(k-3)) - h_col(k-3)
               endif !fixlay+4:else
-              if (h_hat3 < -onemm) then
+              if (h_hat3 < -CS%h_thin) then
                 ! Water is moved from layer k-3 to k-2, but do not dilute layer k-2 too much.
                 dh_cor = qhrlx(k-2) * max(h_hat3, -h_col(k-2))
                 h_col(k-3) = h_col(k-3) + dh_cor
@@ -860,7 +892,7 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
 
                 ! Now layer k-2 might be able donate to layer k-1.
                 h_hat2 = cushn(h_col(k-2) + (h_hat0 - h_hat), dp0ij(k-2)) - h_col(k-2)
-                if (h_hat2 < -onemm) then
+                if (h_hat2 < -CS%h_thin) then
                   dh_cor = qhrlx(k-1) * (max(h_hat2, -h_hat - h_col(k-1)) )
                   h_col(k-2) = h_col(k-2) + dh_cor
                   h_col(k-1) = h_col(k-1) - dh_cor
@@ -890,17 +922,17 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
   enddo
 
   do k=fixlay+1,nk
-    if (Rcv(k) < Rcv_tgt(k) - epsil) then   ! layer too light
+    if (Rcv(k) < Rcv_tgt(k) - CS%rho_eps) then   ! layer too light
       ! Water in layer k is too light, so try to dilute with water from layer k+1.
       ! Entrainment is not possible if layer k touches the bottom.
       if (p_int(k+1) < p_int(nk+1)) then  ! k<nk
         if ((Rcv(k+1) <= Rcv_tgt(k+1)) .or. &
-            (p_int(k+1) <= dp0cum(k+1) + onem) .or. &
+            (p_int(k+1) <= dp0cum(k+1) + CS%dp_far_from_bot) .or. &
             (h_col(k) < h_col(k+1))) then
           ! If layer k+1 is too dense, there is a conflict in the direction the
           ! inteface between them should move, so thicken the thinner of the two.
 
-          if     ((Rcv(k+1) - Rcv_tgt(k)) <= epsil) then
+          if     ((Rcv(k+1) - Rcv_tgt(k)) <= CS%rho_eps) then
             ! layer k+1 is far too light, so take the entire layer
             ! Because this code is working downward, this flux does not accumulate across
             ! successive layers.
@@ -953,19 +985,19 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, onem, epsil, Rcv_tgt, &
   if (trap_errors) then
     ! Verify that everything is consistent.
     do k=1,nk
-      if (abs((h_col(k) - h_in(k)) + (dp_int(K) - dp_int(K+1))) > 1.0e-13*max(p_int(nk+1), onem)) then
+      if (abs((h_col(k) - h_in(k)) + (dp_int(K) - dp_int(K+1))) > 1.0e-13*max(p_int(nk+1), CS%onem)) then
         write(mesg, '("k ",i4," h ",es13.4," h_in ",es13.4, " dp ",2es13.4," err ",es13.4)') &
               k, h_col(k), h_in(k), dp_int(K), dp_int(K+1), (h_col(k) - h_in(k)) + (dp_int(K) - dp_int(K+1))
         call MOM_error(FATAL, "Mismatched thickness changes in hybgen_regrid: "//trim(mesg))
       endif
-      if (h_col(k) < 0.0) then ! Could instead do: -1.0e-15*max(p_int(nk+1), onem)) then
+      if (h_col(k) < 0.0) then ! Could instead do: -1.0e-15*max(p_int(nk+1), CS%onem)) then
         write(mesg, '("k ",i4," h ",es13.4," h_in ",es13.4, " dp ",2es13.4, " fixlay ",i4)') &
               k, h_col(k), h_in(k), dp_int(K), dp_int(K+1), fixlay
         call MOM_error(FATAL, "Significantly negative final thickness in hybgen_regrid: "//trim(mesg))
       endif
     enddo
     do K=1,nk+1
-      if (abs(dp_int(K) - (p_int(K) - pres_in(K))) > 1.0e-13*max(p_int(nk+1), onem)) then
+      if (abs(dp_int(K) - (p_int(K) - pres_in(K))) > 1.0e-13*max(p_int(nk+1), CS%onem)) then
         call MOM_error(FATAL, "Mismatched interface height changes in hybgen_regrid.")
       endif
     enddo

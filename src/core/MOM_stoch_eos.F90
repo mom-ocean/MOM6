@@ -40,7 +40,7 @@ type, public :: MOM_stoch_eos_CS ; private
   real :: stanley_coeff   !< Coefficient correlating the temperature gradient
                           !! and SGS T variance [nondim]; if <0, turn off scheme in all codes
   real :: stanley_a       !< a in exp(aX) in stochastic coefficient [nondim]
-  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [Z2 T-1 ~> m2 s-1]
+  real :: kappa_smooth    !< A diffusivity for smoothing T/S in vanished layers [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
   !>@{ Diagnostic IDs
   integer :: id_stoch_eos  = -1, id_stoch_phi  = -1, id_tvar_sgs = -1
@@ -51,9 +51,10 @@ end type MOM_stoch_eos_CS
 contains
 
 !> Initializes MOM_stoch_eos module, returning a logical indicating whether this module will be used.
-logical function MOM_stoch_eos_init(Time, G, US, param_file, diag, CS, restart_CS)
+logical function MOM_stoch_eos_init(Time, G, GV, US, param_file, diag, CS, restart_CS)
   type(time_type),         intent(in)    :: Time       !< Time for stochastic process
   type(ocean_grid_type),   intent(in)    :: G          !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV         !< Vertical grid structure
   type(unit_scale_type),   intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< structure indicating parameter file to parse
   type(diag_ctrl), target, intent(inout) :: diag       !< Structure used to control diagnostics
@@ -80,7 +81,7 @@ logical function MOM_stoch_eos_init(Time, G, US, param_file, diag, CS, restart_C
   call get_param(param_file, "MOM_stoch_eos", "KD_SMOOTH", CS%kappa_smooth, &
                  "A diapycnal diffusivity that is used to interpolate "//&
                  "more sensible values of T & S into thin layers.", &
-                 units="m2 s-1", default=1.0e-6, scale=US%m_to_Z**2*US%T_to_s, &
+                 units="m2 s-1", default=1.0e-6, scale=GV%m2_s_to_HZ_T, &
                  do_not_log=(CS%stanley_coeff<0.0))
 
   ! Don't run anything if STANLEY_COEFF < 0
@@ -193,9 +194,10 @@ subroutine post_stoch_EOS_diags(CS, tv, diag)
 end subroutine post_stoch_EOS_diags
 
 !> Computes a parameterization of the SGS temperature variance
-subroutine MOM_calc_varT(G, GV, h, tv, CS, dt)
+subroutine MOM_calc_varT(G, GV, US, h, tv, CS, dt)
   type(ocean_grid_type),   intent(in)   :: G   !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)   :: GV  !< Vertical grid structure
+  type(unit_scale_type),   intent(in)   :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)),  &
                           intent(in)    :: h   !< Layer thickness [H ~> m]
   type(thermo_var_ptrs),  intent(inout) :: tv  !< Thermodynamics structure
@@ -219,7 +221,7 @@ subroutine MOM_calc_varT(G, GV, h, tv, CS, dt)
   ! extreme gradients along layers which are vanished against topography. It is
   ! still a poor approximation in the interior when coordinates are strongly tilted.
   if (.not. associated(tv%varT)) allocate(tv%varT(G%isd:G%ied, G%jsd:G%jed, GV%ke), source=0.0)
-  call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, halo_here=1, larger_h_denom=.true.)
+  call vert_fill_TS(h, tv%T, tv%S, CS%kappa_smooth*dt, T, S, G, GV, US, halo_here=1, larger_h_denom=.true.)
 
   do k=1,G%ke
     do j=G%jsc,G%jec

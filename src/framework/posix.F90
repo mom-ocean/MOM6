@@ -13,6 +13,16 @@ use, intrinsic :: iso_c_binding, only : c_f_procpointer
 
 implicit none
 
+!> Container for file metadata from stat
+!!
+!! NOTE: This is currently just a placeholder containing fields, such as size,
+!! uid, mode, etc.  A readable Fortran type may be used in the future.
+type, bind(c) :: stat_buf
+  private
+  character(kind=c_char) :: state(SIZEOF_STAT_BUF)
+    !< Byte array containing file metadata
+end type stat_buf
+
 !> Container for the jump point buffer created by setjmp().
 !!
 !! The buffer typically contains the current register values, stack pointers,
@@ -51,6 +61,34 @@ interface
     integer(kind=c_int) :: rc
       !< Function return code
   end function chmod_posix
+
+  !> C interface to POSIX mkdir()
+  !! Users should use the Fortran-defined mkdir() function.
+  function mkdir_posix(path, mode) result(rc) bind(c, name="mkdir")
+    ! #include <sys/stat.h>
+    ! int mkdir(const char *path, mode_t mode);
+    import :: c_char, c_int
+
+    character(kind=c_char), dimension(*), intent(in) :: path
+      !< Zero-delimited file path
+    integer(kind=c_int), value, intent(in) :: mode
+      !< File permission to be assigned to file.
+    integer(kind=c_int) :: rc
+      !< Function return code
+  end function mkdir_posix
+
+  !> C interface to POSIX stat()
+  !! Users should use the Fortran-defined stat() function.
+  function stat_posix(path, buf) result(rc) bind(c, name="stat")
+    import :: c_char, stat_buf, c_int
+
+    character(kind=c_char), dimension(*), intent(in) :: path
+      !< Pathname of a POSIX file
+    type(stat_buf), intent(in) :: buf
+      !< Information describing the file if it exists
+    integer(kind=c_int) :: rc
+      !< Function return code
+  end function
 
   !> C interface to POSIX signal()
   !! Users should use the Fortran-defined signal() function.
@@ -240,6 +278,44 @@ function chmod(path, mode) result(rc)
   rc = int(rc_c)
 end function chmod
 
+!> Create a file directory
+!!
+!! This creates a new directory named `path` with permissons set by `mode`.
+!! If successful, it returns zero.  Otherwise, it returns -1.
+function mkdir(path, mode) result(rc)
+  character(len=*), intent(in) :: path
+  integer, intent(in) :: mode
+  integer :: rc
+
+  integer(kind=c_int) :: mode_c
+  integer(kind=c_int) :: rc_c
+
+  mode_c = int(mode, kind=c_int)
+  rc_c = mkdir_posix(path//c_null_char, mode_c)
+  rc = int(rc_c)
+end function mkdir
+
+!> Get file status
+!!
+!! This obtains information about the named file and writes it to buf.
+!! If found, it returns zero.  Otherwise, it returns -1.
+function stat(path, buf) result(rc)
+  character(len=*), intent(in) :: path
+    !< Pathname of file to be inspected
+  type(stat_buf), intent(out) :: buf
+    !< Buffer containing information about the file if it exists
+    ! NOTE: Currently the contents of buf are not readable, but we could move
+    ! the contents into a readable Fortran type.
+  integer :: rc
+    !< Function return code
+
+  integer(kind=c_int) :: rc_c
+
+  rc_c = stat_posix(path//c_null_char, buf)
+
+  rc = int(rc_c)
+end function stat
+
 !> Create a signal handler `handle` to be called when `sig` is detected.
 !!
 !! If successful, the previous handler for `sig` is returned.  Otherwise,
@@ -359,6 +435,9 @@ function setjmp_missing(env) result(rc) bind(c)
   print '(a)', 'ERROR: setjmp() is not implemented in this build.'
   print '(a)', 'Recompile with autoconf or -DSETJMP_NAME=\"<symbol name>\".'
   error stop
+
+  ! NOTE: compilers may expect a return value, even if it is unreachable
+  rc = -1
 end function setjmp_missing
 
 !> Placeholder function for a missing or unconfigured longjmp
@@ -386,7 +465,7 @@ function sigsetjmp_missing(env, savesigs) result(rc) bind(c)
   print '(a)', 'Recompile with autoconf or -DSIGSETJMP_NAME=\"<symbol name>\".'
   error stop
 
-  ! NOTE: Compilers may expect a return value, even if it is unreachable
+  ! NOTE: compilers may expect a return value, even if it is unreachable
   rc = -1
 end function sigsetjmp_missing
 

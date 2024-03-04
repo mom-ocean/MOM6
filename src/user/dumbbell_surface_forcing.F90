@@ -25,9 +25,8 @@ public dumbbell_dynamic_forcing, dumbbell_buoyancy_forcing, dumbbell_surface_for
 type, public :: dumbbell_surface_forcing_CS ; private
   logical :: use_temperature !< If true, temperature and salinity are used as state variables.
   logical :: restorebuoy     !< If true, use restoring surface buoyancy forcing.
-  real :: Rho0               !< The density used in the Boussinesq approximation [R ~> kg m-3].
   real :: G_Earth            !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2]
-  real :: Flux_const         !< The restoring rate at the surface [Z T-1 ~> m s-1].
+  real :: Flux_const         !< The restoring rate at the surface [R Z T-1 ~> kg m-2 s-1].
 ! real :: gust_const         !< A constant unresolved background gustiness
 !                            !! that contributes to ustar [R L Z T-2 ~> Pa].
   real :: slp_amplitude      !< The amplitude of pressure loading [R L2 T-2 ~> Pa] applied
@@ -114,7 +113,7 @@ subroutine dumbbell_buoyancy_forcing(sfc_state, fluxes, day, dt, G, US, CS)
   if (CS%use_temperature .and. CS%restorebuoy) then
     do j=js,je ; do i=is,ie
       if (CS%forcing_mask(i,j)>0.) then
-        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * (CS%Rho0*CS%Flux_const)) * &
+        fluxes%vprec(i,j) = - (G%mask2dT(i,j) * CS%Flux_const) * &
                 ((CS%S_restore(i,j) - sfc_state%SSS(i,j)) /  (0.5 * (CS%S_restore(i,j) + sfc_state%SSS(i,j))))
 
       endif
@@ -181,6 +180,9 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   real :: S_surf  ! Initial surface salinity [S ~> ppt]
   real :: S_range ! Range of the initial vertical distribution of salinity [S ~> ppt]
   real :: x       ! Latitude normalized by the domain size [nondim]
+  real :: Rho0          ! The density used in the Boussinesq approximation [R ~> kg m-3]
+  real :: rho_restore   ! The density that is used to convert piston velocities into salt
+                        ! or heat fluxes with salinity or temperature restoring [R ~> kg m-3]
   integer :: i, j
   logical :: dbrotate    ! If true, rotate the domain.
 # include "version_variable.h"
@@ -202,7 +204,7 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
   call get_param(param_file, mdl, "G_EARTH", CS%G_Earth, &
                  "The gravitational acceleration of the Earth.", &
                  units="m s-2", default=9.80, scale=US%m_to_L**2*US%Z_to_m*US%T_to_s**2)
-  call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
+  call get_param(param_file, mdl, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
                  "properties, or with BOUSSINSEQ false to convert some "//&
@@ -233,8 +235,13 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  "The constant that relates the restoring surface fluxes to the relative "//&
                  "surface anomalies (akin to a piston velocity).  Note the non-MKS units.", &
                  default=0.0, units="m day-1", scale=US%m_to_Z*US%T_to_s)
-    ! Convert CS%Flux_const from m day-1 to m s-1.
-    CS%Flux_const = CS%Flux_const / 86400.0
+    call get_param(param_file, mdl, "RESTORE_FLUX_RHO", rho_restore, &
+                 "The density that is used to convert piston velocities into salt or heat "//&
+                 "fluxes with RESTORE_SALINITY or RESTORE_TEMPERATURE.", &
+                 units="kg m-3", default=Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 do_not_log=(CS%Flux_const==0.0))
+    ! Convert FLUXCONST from m day-1 to m s-1 and Flux_const to [R Z T-1 ~> kg m-2 s-1]
+    CS%Flux_const = rho_restore * (CS%Flux_const / 86400.0)
 
 
     allocate(CS%forcing_mask(G%isd:G%ied, G%jsd:G%jed), source=0.0)

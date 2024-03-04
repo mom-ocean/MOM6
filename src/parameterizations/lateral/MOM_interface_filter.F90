@@ -148,7 +148,7 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
   endif
 
   ! Calculate uhD, vhD from h, e, Lsm2_u, Lsm2_v
-  call filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size=filter_itts-1)
+  call filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, tv, G, GV, US, halo_size=filter_itts-1)
 
 
   do itt=2,filter_itts
@@ -156,14 +156,23 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
     !$OMP parallel do default(shared)
     do j=js-hs,je+hs
       do i=is-hs,ie+hs ; de_smooth(i,j,nz+1) = 0.0 ; enddo
-      do k=nz,1,-1 ; do i=is-hs,ie+hs
-        de_smooth(i,j,k) = de_smooth(i,j,k+1) + GV%H_to_Z * G%IareaT(i,j) * &
-            ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
-      enddo ; enddo
+
+      if (allocated(tv%SpV_avg)) then
+        ! This is the fully non-Boussinesq version.
+        do k=nz,1,-1 ; do i=is-hs,ie+hs
+          de_smooth(i,j,K) = de_smooth(i,j,K+1) + (GV%H_to_RZ * tv%SpV_avg(i,j,k)) * G%IareaT(i,j) * &
+              ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
+        enddo ; enddo
+      else
+        do k=nz,1,-1 ; do i=is-hs,ie+hs
+          de_smooth(i,j,K) = de_smooth(i,j,K+1) + GV%H_to_Z * G%IareaT(i,j) * &
+              ((uhD(I,j,k) - uhD(I-1,j,k)) + (vhD(i,J,k) - vhD(i,J-1,k)))
+        enddo ; enddo
+      endif
     enddo
 
     ! Calculate uhD, vhD from h, de_smooth, Lsm2_u, Lsm2_v
-    call filter_interface(h, de_smooth, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size=filter_itts-itt)
+    call filter_interface(h, de_smooth, Lsm2_u, Lsm2_v, uhD, vhD, tv, G, GV, US, halo_size=filter_itts-itt)
   enddo
 
   ! Offer diagnostic fields for averaging. This must occur before updating the layer thicknesses
@@ -227,7 +236,7 @@ end subroutine interface_filter
 !> Calculates parameterized layer transports for use in the continuity equation.
 !! Fluxes are limited to give positive definite thicknesses.
 !! Called by interface_filter().
-subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size)
+subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, tv, G, GV, US, halo_size)
   type(ocean_grid_type),                       intent(in)  :: G     !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)  :: GV    !< Vertical grid structure
   type(unit_scale_type),                       intent(in)  :: US    !< A dimensional unit scaling type
@@ -241,6 +250,7 @@ subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size
                                                                     !! [H L2 ~> m3 or kg]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),  intent(out) :: vhD   !< Meridional mass fluxes
                                                                     !! [H L2 ~> m3 or kg]
+  type(thermo_var_ptrs),                       intent(in)  :: tv     !< Thermodynamics structure
   integer,                           optional, intent(in)  :: halo_size !< The size of the halo to work on,
                                                                     !! 0 by default.
 
@@ -256,14 +266,16 @@ subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size
   real :: Sfn_est       ! A preliminary estimate (before limiting) of the overturning
                         ! streamfunction [H L2 ~> m3 or kg].
   real :: Sfn           ! The overturning streamfunction [H L2 ~> m3 or kg].
+  real :: Rho_avg       ! The in situ density averaged to an interface [R ~> kg m-3]
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
+  real :: hn_2          ! Half of h_neglect [H ~> m or kg m-2].
   integer :: i, j, k, is, ie, js, je, nz, hs
 
   hs = 0 ; if (present(halo_size)) hs = halo_size
   is = G%isc-hs ; ie = G%iec+hs ; js = G%jsc-hs ; je = G%jec+hs ; nz = GV%ke
 
-  h_neglect = GV%H_subroundoff
+  h_neglect = GV%H_subroundoff ; hn_2 = 0.5*h_neglect
 
   ! Find the maximum and minimum permitted streamfunction.
   !$OMP parallel do default(shared)
@@ -286,7 +298,15 @@ subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size
       do I=is-1,ie
         Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%OBCmaskCu(I,j)
 
-        Sfn_est = (Lsm2_u(I,j)*G%dy_Cu(I,j)) * (GV%Z_to_H * Slope)
+        if (allocated(tv%SpV_avg)) then
+          ! This is the fully non-Boussinesq version.
+          Rho_avg = ( ((h(i,j,k) + h(i,j,k-1)) + (h(i+1,j,k) + h(i+1,j,k-1))) + 4.0*hn_2 ) / &
+                ( ((h(i,j,k)+hn_2) * tv%SpV_avg(i,j,k)   + (h(i,j,k-1)+hn_2) * tv%SpV_avg(i,j,k-1)) + &
+                  ((h(i+1,j,k)+hn_2)*tv%SpV_avg(i+1,j,k) + (h(i+1,j,k-1)+hn_2)*tv%SpV_avg(i+1,j,k-1)) )
+          Sfn_est = (Lsm2_u(I,j)*G%dy_Cu(I,j)) * (GV%RZ_to_H * Slope) * Rho_avg
+        else
+          Sfn_est = (Lsm2_u(I,j)*G%dy_Cu(I,j)) * (GV%Z_to_H * Slope)
+        endif
 
         ! Make sure that there is enough mass above to allow the streamfunction
         ! to satisfy the boundary condition of 0 at the surface.
@@ -318,7 +338,15 @@ subroutine filter_interface(h, e, Lsm2_u, Lsm2_v, uhD, vhD, G, GV, US, halo_size
       do i=is,ie
         Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%OBCmaskCv(i,J)
 
-        Sfn_est = (Lsm2_v(i,J)*G%dx_Cv(i,J)) * (GV%Z_to_H * Slope)
+        if (allocated(tv%SpV_avg)) then
+          ! This is the fully non-Boussinesq version.
+          Rho_avg = ( ((h(i,j,k) + h(i,j,k-1)) + (h(i,j+1,k) + h(i,j+1,k-1))) + 4.0*hn_2 ) / &
+                ( ((h(i,j,k)+hn_2) * tv%SpV_avg(i,j,k)   + (h(i,j,k-1)+hn_2) * tv%SpV_avg(i,j,k-1)) + &
+                  ((h(i,j+1,k)+hn_2)*tv%SpV_avg(i,j+1,k) + (h(i,j+1,k-1)+hn_2)*tv%SpV_avg(i,j+1,k-1)) )
+          Sfn_est = (Lsm2_v(i,J)*G%dx_Cv(i,J)) * (GV%RZ_to_H * Slope) * Rho_avg
+        else
+          Sfn_est = (Lsm2_v(i,J)*G%dx_Cv(i,J)) * (GV%Z_to_H * Slope)
+        endif
 
         ! Make sure that there is enough mass above to allow the streamfunction
         ! to satisfy the boundary condition of 0 at the surface.

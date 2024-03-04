@@ -15,7 +15,7 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public MOM_grid_init, MOM_grid_end, set_derived_metrics, set_first_direction
-public isPointInCell, hor_index_type, get_global_grid_size, rescale_grid_bathymetry
+public isPointInCell, hor_index_type, get_global_grid_size
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -136,14 +136,18 @@ type, public :: ocean_grid_type
     IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
   real, pointer, dimension(:) :: &
-    gridLatT => NULL(), & !< The latitude of T points for the purpose of labeling the output axes.
+    gridLatT => NULL(), & !< The latitude of T points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_N] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLatT.
-    gridLatB => NULL()    !< The latitude of B points for the purpose of labeling the output axes.
+    gridLatB => NULL()    !< The latitude of B points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_N] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLatBu.
   real, pointer, dimension(:) :: &
-    gridLonT => NULL(), & !< The longitude of T points for the purpose of labeling the output axes.
+    gridLonT => NULL(), & !< The longitude of T points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_E] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLonT.
-    gridLonB => NULL()    !< The longitude of B points for the purpose of labeling the output axes.
+    gridLonB => NULL()    !< The longitude of B points for the purpose of labeling the output axes,
+                          !! often in units of [degrees_E] or [km] or [m] or [gridpoints].
                           !! On many grids this is the same as geoLonBu.
   character(len=40) :: &
     ! Except on a Cartesian grid, these are usually some variant of "degrees".
@@ -187,8 +191,8 @@ type, public :: ocean_grid_type
   ! initialization routines (but not all)
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line [degrees_N] or [km] or [m]
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line [degrees_E] or [km] or [m]
-  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain
+  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain [degrees_N] or [km] or [m]
+  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain [degrees_E] or [km] or [m]
   real :: Rad_Earth     !< The radius of the planet [m]
   real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
   real :: max_depth     !< The maximum depth of the ocean in depth units [Z ~> m]
@@ -399,40 +403,6 @@ subroutine MOM_grid_init(G, param_file, US, HI, global_indexing, bathymetry_at_v
   G%HId2%IegB = G%HId2%ieg ; G%HId2%JegB = G%HId2%jeg
 
 end subroutine MOM_grid_init
-
-!> rescale_grid_bathymetry permits a change in the internal units for the bathymetry on the grid,
-!! both rescaling the depths and recording the new internal units.
-subroutine rescale_grid_bathymetry(G, m_in_new_units)
-  type(ocean_grid_type), intent(inout) :: G    !< The horizontal grid structure
-  real,                  intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
-  !### It appears that this routine is never called.
-
-  ! Local variables
-  real :: rescale ! A unit rescaling factor [various combinations of units ~> 1]
-  integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  if (m_in_new_units == 1.0) return
-  if (m_in_new_units < 0.0) &
-    call MOM_error(FATAL, "rescale_grid_bathymetry: Negative depth units are not permitted.")
-  if (m_in_new_units == 0.0) &
-    call MOM_error(FATAL, "rescale_grid_bathymetry: Zero depth units are not permitted.")
-
-  rescale = 1.0 / m_in_new_units
-  do j=jsd,jed ; do i=isd,ied
-    G%bathyT(i,j) = rescale*G%bathyT(i,j)
-  enddo ; enddo
-  if (G%bathymetry_at_vel) then ; do j=jsd,jed ; do I=IsdB,IedB
-    G%Dblock_u(I,j) = rescale*G%Dblock_u(I,j) ; G%Dopen_u(I,j) = rescale*G%Dopen_u(I,j)
-  enddo ; enddo ; endif
-  if (G%bathymetry_at_vel) then ; do J=JsdB,JedB ; do i=isd,ied
-    G%Dblock_v(i,J) = rescale*G%Dblock_v(i,J) ; G%Dopen_v(i,J) = rescale*G%Dopen_v(i,J)
-  enddo ; enddo ; endif
-  G%max_depth = rescale*G%max_depth
-
-end subroutine rescale_grid_bathymetry
 
 !> set_derived_metrics calculates metric terms that are derived from other metrics.
 subroutine set_derived_metrics(G, US)
