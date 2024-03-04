@@ -111,7 +111,7 @@ type, public :: hor_visc_CS ; private
                              !! limit the grid Reynolds number [L2 T-1 ~> m2 s-1]
   real    :: min_grid_Ah     !< Minimun horizontal biharmonic viscosity used to
                              !! limit grid Reynolds number [L4 T-1 ~> m4 s-1]
-
+  logical :: use_cont_thick  !< If true, thickness at velocity points adopts h[uv] in BT_cont from continuity solver.
   type(ZB2020_CS) :: ZB2020  !< Zanna-Bolton 2020 control structure.
   logical :: use_ZB2020      !< If true, use Zanna-Bolton 2020 parameterization.
 
@@ -239,7 +239,7 @@ contains
 !!   v[is-2:ie+2,js-2:je+2]
 !!   h[is-1:ie+1,js-1:je+1]
 subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
-                                CS, OBC, BT, TD, ADp)
+                                CS, OBC, BT, TD, ADp, hu_cont, hv_cont)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -263,6 +263,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   type(barotropic_CS), intent(in), optional  :: BT     !< Barotropic control structure
   type(thickness_diffuse_CS), intent(in), optional :: TD  !< Thickness diffusion control structure
   type(accel_diag_ptrs), intent(in), optional :: ADp   !< Acceleration diagnostics
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                        optional, intent(in) :: hu_cont !< Layer thickness at u-points [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                        optional, intent(in) :: hv_cont !< Layer thickness at v-points [H ~> m or kg m-2].
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -391,6 +395,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
   logical :: use_MEKE_Au
+  logical :: use_cont_huv
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k, n
   real :: inv_PI3, inv_PI2, inv_PI6 ! Powers of the inverse of pi [nondim]
@@ -444,6 +449,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   ! Toggle whether to use a Laplacian viscosity derived from MEKE
   use_MEKE_Ku = allocated(MEKE%Ku)
   use_MEKE_Au = allocated(MEKE%Au)
+
+  use_cont_huv = CS%use_cont_thick .and. present(hu_cont) .and. present(hv_cont)
 
   rescale_Kh = .false.
   if (VarMix%use_variable_mixing) then
@@ -655,6 +662,16 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
       do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
+      enddo ; enddo
+    endif
+
+    ! The following should obviously be combined with the previous block if adopted.
+    if (use_cont_huv) then
+      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
+        h_u(I,j) = hu_cont(I,j,k)
+      enddo ; enddo
+      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
+        h_v(i,J) = hv_cont(i,J,k)
       enddo ; enddo
     endif
 
@@ -1969,6 +1986,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
+  call get_param(param_file, mdl, "USE_CONT_THICKNESS", CS%use_cont_thick, &
+                 "If true, use thickness at velocity points from continuity solver. This option"//&
+                 "currently only works with split mode.", default=.false.)
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
                  default=.false.)
