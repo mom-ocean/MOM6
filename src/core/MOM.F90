@@ -2904,6 +2904,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   if (CS%rotate_index) then
     G_in%ke = GV%ke
 
+    ! Allocate the auxiliary non-symmetric domain for debugging or I/O purposes.
+    if (CS%debug .or. G_in%symmetric) then
+      call clone_MOM_domain(G_in%Domain, G_in%Domain_aux, symmetric=.false.)
+    else ; G_in%Domain_aux => G_in%Domain ; endif
+
     allocate(u_in(G_in%IsdB:G_in%IedB, G_in%jsd:G_in%jed, nz), source=0.0)
     allocate(v_in(G_in%isd:G_in%ied, G_in%JsdB:G_in%JedB, nz), source=0.0)
     allocate(h_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz), source=GV%Angstrom_H)
