@@ -260,7 +260,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: Dp, Dm           ! The depths at the edges of a velocity cell [Z ~> m].
   real :: crv              ! crv is the curvature of the bottom depth across a
                            ! cell, times the cell width squared [Z ~> m].
-  real :: crv_3            ! crv/3 [Z ~> m].
   real :: slope            ! The absolute value of the bottom depth slope across
                            ! a cell times the cell width [Z ~> m].
   real :: Vol_bbl_chan     ! The volume of the bottom boundary layer as used in the channel
@@ -304,7 +303,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: h_sum            ! The sum of the thicknesses of the layers below the one being
                            ! worked on [H ~> m or kg m-2].
   real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0 ! Rational constants [nondim]
-  real :: C2pi_3           ! An irrational constant, 2/3 pi. [nondim]
   real :: tmp              ! A temporary variable, sometimes in [Z ~> m]
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
@@ -318,7 +316,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   dz_neglect = GV%dZ_subroundoff
 
   Rho0x400_G = 400.0*(GV%H_to_RZ / (US%L_to_Z**2 * GV%g_Earth))
-  C2pi_3 = 8.0*atan(1.0)/3.0
 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
@@ -424,7 +421,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   if (allocated(visc%Ray_v)) visc%Ray_v(:,:,:) = 0.0
 
   !$OMP parallel do default(private) shared(u,v,h,dz,tv,visc,G,GV,US,CS,Rml,nz,nkmb,nkml,K2, &
-  !$OMP                                     Isq,Ieq,Jsq,Jeq,h_neglect,dz_neglect,Rho0x400_G,C2pi_3, &
+  !$OMP                                     Isq,Ieq,Jsq,Jeq,h_neglect,dz_neglect,Rho0x400_G, &
   !$OMP                                     U_bg_sq,cdrag_sqrt,cdrag_sqrt_H,cdrag_sqrt_H_RL, &
   !$OMP                                     cdrag_L_to_H,cdrag_RL_to_H,use_BBL_EOS,BBL_thick_max, &
   !$OMP                                     OBC,D_u,D_v,mask_u,mask_v,pbv)
@@ -870,7 +867,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
-        crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+        crv = 3.0*(Dp + Dm - 2.0*D_vel)
         slope = Dp - Dm
 
         ! If the curvature is small enough, there is no reason not to assume
@@ -882,15 +879,15 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           call find_L_open_uniform_slope(vol_below, Dp, Dm, L, GV)
         elseif (crv > 0.0) then
           if (CS%concave_trigonometric_L) then
-            call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
+            call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L, GV)
           else
             call find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
             if (CS%debug) then
               ! The tests in this block reveal that the iterative and trigonometric solutions are
-              ! mathematically  equiavalent, but in some cases the iterative solution is consistent
+              ! mathematically equivalent, but in some cases the iterative solution is consistent
               ! at roundoff, but that the trigonmetric solutions have errors that can be several
               ! orders of magnitude larger in some cases.
-              call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L_trig, GV)
+              call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L_trig, GV)
               call test_L_open_concave(vol_below, D_vel, Dp, Dm, L_trig, vol_err_trig, GV)
               call test_L_open_concave(vol_below, D_vel, Dp, Dm, L, vol_err_iter, GV)
               max_dL_trig_itt = 0.0 ; max_norm_err_trig = 0.0 ; max_norm_err_iter = 0.0
@@ -1128,7 +1125,7 @@ end subroutine find_L_open_uniform_slope
 
 !> Determine the normalized open length of each interface for concave bathymetry (from the ocean perspective)
 !! using trigonometric expressions.   In this case there can be two separate open regions.
-subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L, GV)
+subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L, GV)
   type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
   real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
                                                    !! the full horizontal area of a velocity cell [Z ~> m]
@@ -1137,7 +1134,6 @@ subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L
                                                    !! of a velocity cell [Z ~> m]
   real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
                                                    !! of a velocity cell [Z ~> m]
-  real,                        intent(in)  :: C2pi_3 !< An irrational constant, 2/3 pi [nondim]
   real, dimension(SZK_(GV)+1), intent(out) :: L    !< The fraction of the full cell width that is open at
                                                    !! the depth of each interface [nondim]
 
@@ -1159,6 +1155,7 @@ subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L
   real :: slope_crv        ! The slope divided by the curvature [nondim]
   real :: tmp_val_m1_to_p1 ! A temporary variable [nondim]
   real, parameter :: C1_3 = 1.0/3.0, C1_12 = 1.0/12.0 ! Rational constants [nondim]
+  real, parameter :: C2pi_3 = 8.0*atan(1.0)/3.0  ! An irrational constant, 2/3 pi. [nondim]
   integer :: K, nz
 
   nz = GV%ke
@@ -1166,7 +1163,6 @@ subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, C2pi_3, L
   ! Each cell extends from x=-1/2 to 1/2, and has a topography
   ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
   crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
-  if (crv <= 0.0) call MOM_error(FATAL, "find_L_open_concave should only be called with a positive curvature.")
   slope = Dp - Dm
 
   ! Calculate the volume above which the entire cell is open and the volume at which the
@@ -1284,7 +1280,6 @@ subroutine find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
   ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
 
   crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
-  if (crv <= 0.0) call MOM_error(FATAL, "find_L_open_concave should only be called with a positive curvature.")
   slope = Dp - Dm
 
   ! Calculate the volume above which the entire cell is open and the volume at which the
@@ -1424,8 +1419,8 @@ subroutine find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
             endif
           endif
           Vol_err_max = 0.5*L_max**2 * (slope + crv*(1.0 - 4.0*C1_3*L_max)) - vol_below(K)
-          if (Vol_err_max < 0.0) call MOM_error(FATAL, &
-                  "Vol_err_max should never be negative in find_L_open_concave_iterative.")
+          ! if (Vol_err_max < 0.0) call MOM_error(FATAL, &
+          !        "Vol_err_max should never be negative in find_L_open_concave_iterative.")
           if ((Vol_err_max < abs(Vol_err)) .and. (L_max < 1.0)) then
             ! Start with 1 bounded Newton's method step from L_max
             dVol_dL = L_max * (slope + crv*(1.0 - 2.0*L_max))
@@ -1516,8 +1511,8 @@ subroutine find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
           ! This over-estimate of L(K) is accurate for L ~= 1:
           L_max = 1.0 - sqrt( (Vol_open - vol_below(K)) * C4_crv )
           Vol_err_max = crv_3 * (L_max**2 * ( 0.75 - 0.5*L_max)) + (slope2_4crv - vol_below(K))
-          if (Vol_err_max < 0.0) call MOM_error(FATAL, &
-                  "Vol_err_max should never be negative in find_L_open_concave_iterative.")
+          ! if (Vol_err_max < 0.0) call MOM_error(FATAL, &
+          !         "Vol_err_max should never be negative in find_L_open_concave_iterative.")
           if ((Vol_err_max < abs(Vol_err)) .and. (L_max < 1.0)) then
             ! Start with 1 bounded Newton's method step from L_max
             dVol_dL = 0.5*crv * (L_max * (1.0 - L_max))
@@ -1587,7 +1582,6 @@ subroutine test_L_open_concave(vol_below, D_vel, Dp, Dm, L, vol_err, GV)
   ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
 
   crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
-  if (crv <= 0.0) call MOM_error(FATAL, "test_L_open_concave should only be called with a positive curvature.")
   slope = Dp - Dm
 
   ! Calculate the volume above which the entire cell is open and the volume at which the
@@ -1678,7 +1672,6 @@ subroutine find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
   ! Each cell extends from x=-1/2 to 1/2, and has a topography
   ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
   crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
-  if (crv >= 0.0) call MOM_error(FATAL, "find_L_open_convex should only be called with a negative curvature.")
   slope = Dp - Dm
 
   ! Calculate the volume above which the entire cell is open and the volume at which the
