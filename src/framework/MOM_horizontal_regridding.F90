@@ -125,7 +125,7 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
   real, dimension(SZI_(G),SZJ_(G)) :: good_new ! The values of good_ to use for the next iteration [nondim]
 
   real    :: east, west, north, south ! Valid neighboring values or 0 for invalid values [arbitrary]
-  real    :: ge, gw, gn, gs  ! Flags indicating which neighbors have valid values [nondim]
+  real    :: ge, gw, gn, gs  ! Flags set to 0 or 1 indicating which neighbors have valid values [nondim]
   real    :: ngood     ! The number of valid values in neighboring points [nondim]
   real    :: nfill     ! The remaining number of points to fill [nondim]
   real    :: nfill_prev ! The previous value of nfill [nondim]
@@ -227,23 +227,30 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
   ! Do Laplacian smoothing for the points that have been filled in.
   do k=1,npass
     call pass_var(aout,G%Domain)
-    do j=js,je ; do i=is,ie
-      if (fill(i,j) == 1) then
-        east = max(good(i+1,j),fill(i+1,j)) ; west = max(good(i-1,j),fill(i-1,j))
-        north = max(good(i,j+1),fill(i,j+1)) ; south = max(good(i,j-1),fill(i,j-1))
-        if (ans_2018) then
+
+    a_chg(:,:) = 0.0
+    if (ans_2018) then
+      do j=js,je ; do i=is,ie
+        if (fill(i,j) == 1) then
+          east = max(good(i+1,j),fill(i+1,j)) ; west = max(good(i-1,j),fill(i-1,j))
+          north = max(good(i,j+1),fill(i,j+1)) ; south = max(good(i,j-1),fill(i,j-1))
           a_chg(i,j) = relax_coeff*(south*aout(i,j-1)+north*aout(i,j+1) + &
                                     west*aout(i-1,j)+east*aout(i+1,j) - &
                                    (south+north+west+east)*aout(i,j))
-        else
-          a_chg(i,j) = relax_coeff*( ((south*aout(i,j-1) + north*aout(i,j+1)) + &
-                                  (west*aout(i-1,j)+east*aout(i+1,j))) - &
-                                 ((south+north)+(west+east))*aout(i,j) )
         endif
-      else
-        a_chg(i,j) = 0.
-      endif
-    enddo ; enddo
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        if (fill(i,j) == 1) then
+          ge = max(good(i+1,j),fill(i+1,j)) ; gw = max(good(i-1,j),fill(i-1,j))
+          gn = max(good(i,j+1),fill(i,j+1)) ; gs = max(good(i,j-1),fill(i,j-1))
+          a_chg(i,j) = relax_coeff*( ((gs*aout(i,j-1) + gn*aout(i,j+1)) + &
+                                      (gw*aout(i-1,j) + ge*aout(i+1,j))) - &
+                                     ((gs + gn) + (gw + ge))*aout(i,j) )
+        endif
+      enddo ; enddo
+    endif
+
     ares = 0.0
     do j=js,je ; do i=is,ie
       aout(i,j) = a_chg(i,j) + aout(i,j)
