@@ -230,7 +230,7 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
   type(ocean_OBC_type),           pointer    :: OBC        !< This open boundary condition type
                                                            !! specifies whether, where, and what
                                                            !! open boundary conditions are used.
-  type(CFC_cap_CS),              pointer    :: CS          !< The control structure returned by a
+  type(CFC_cap_CS),               pointer    :: CS         !< The control structure returned by a
                                                            !! previous call to register_CFC_cap.
 
   ! local variables
@@ -259,7 +259,8 @@ subroutine initialize_CFC_cap(restart, day, G, GV, US, h, diag, OBC, CS)
     write(m2char, "(I1)") m
     CS%CFC_data(m)%id_cmor = register_diag_field('ocean_model', &
         'cfc1'//m2char, diag%axesTL, day, &
-        'Mole Concentration of CFC1'//m2char//' in Sea Water', 'mol m-3')
+        'Mole Concentration of CFC1'//m2char//' in Sea Water', 'mol m-3', &
+        conversion=GV%Rho0*US%R_to_kg_m3)
 
     CS%CFC_data(m)%id_sfc_flux = register_diag_field('ocean_model', &
         'cfc1'//m2char//'_flux', diag%axesT1, day, &
@@ -360,7 +361,7 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: flux_scale
+  real :: flux_scale ! A dimensional rescaling factor for fluxes [H R-1 Z-1 ~> m3 kg-1 or nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -403,8 +404,7 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! If needed, write out any desired diagnostics from tracer sources & sinks here.
   do m=1,NTR
     if (CS%CFC_data(m)%id_cmor > 0) &
-      call post_data(CS%CFC_data(m)%id_cmor, &
-                     (GV%Rho0*US%R_to_kg_m3)*CS%CFC_data(m)%conc, CS%diag)
+      call post_data(CS%CFC_data(m)%id_cmor, CS%CFC_data(m)%conc, CS%diag)
 
     if (CS%CFC_data(m)%id_sfc_flux > 0) &
       call post_data(CS%CFC_data(m)%id_sfc_flux, CS%CFC_data(m)%sfc_flux, CS%diag)

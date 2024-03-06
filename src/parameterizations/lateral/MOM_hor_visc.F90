@@ -23,7 +23,8 @@ use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use MOM_variables,             only : accel_diag_ptrs
-use MOM_Zanna_Bolton,          only : Zanna_Bolton_2020, ZB_2020_init, ZB2020_CS
+use MOM_Zanna_Bolton,          only : ZB2020_lateral_stress, ZB2020_init, ZB2020_end, &
+                                      ZB2020_CS, ZB2020_copy_gradient_and_thickness
 
 implicit none ; private
 
@@ -105,7 +106,7 @@ type, public :: hor_visc_CS ; private
                              !! the answers from the end of 2018, while higher values use updated
                              !! and more robust forms of the same expressions.
   real    :: GME_h0          !< The strength of GME tapers quadratically to zero when the bathymetric
-                             !! depth is shallower than GME_H0 [Z ~> m]
+                             !! total water column thickness is less than GME_H0 [H ~> m or kg m-2]
   real    :: GME_efficiency  !< The nondimensional prefactor multiplying the GME coefficient [nondim]
   real    :: GME_limiter     !< The absolute maximum value the GME coefficient is allowed to take [L2 T-1 ~> m2 s-1].
   real    :: min_grid_Kh     !< Minimum horizontal Laplacian viscosity used to
@@ -259,7 +260,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                                        !! related to Mesoscale Eddy Kinetic Energy.
   type(VarMix_CS),               intent(inout) :: VarMix !< Variable mixing control structure
   type(unit_scale_type),         intent(in)  :: US     !< A dimensional unit scaling type
-  type(hor_visc_CS),             intent(in)  :: CS     !< Horizontal viscosity control structure
+  type(hor_visc_CS),             intent(inout)  :: CS  !< Horizontal viscosity control structure
   type(ocean_OBC_type), optional, pointer    :: OBC    !< Pointer to an open boundary condition type
   type(barotropic_CS), intent(in), optional  :: BT     !< Barotropic control structure
   type(thickness_diffuse_CS), intent(in), optional :: TD  !< Thickness diffusion control structure
@@ -351,19 +352,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     grid_Re_Kh, &    ! Grid Reynolds number for Laplacian horizontal viscosity at h points [nondim]
     grid_Re_Ah, &    ! Grid Reynolds number for Biharmonic horizontal viscosity at h points [nondim]
     GME_coeff_h      ! GME coefficient at h-points [L2 T-1 ~> m2 s-1]
-
-  ! Zanna-Bolton fields
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
-    u_smooth, &       ! Zonal velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
-    ZB2020u           !< Zonal acceleration due to convergence of
-                      !! along-coordinate stress tensor for ZB model
-                      !! [L T-2 ~> m s-2]
+    u_smooth         ! Zonal velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
-    v_smooth, &       ! Meridional velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
-    ZB2020v           !< Meridional acceleration due to convergence
-                      !! of along-coordinate stress tensor for ZB model
-                      !! [L T-2 ~> m s-2]
-
+    v_smooth         ! Meridional velocity, smoothed with a spatial low-pass filter [L T-1 ~> m s-1]
   real :: AhSm       ! Smagorinsky biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLth      ! 2D Leith biharmonic viscosity [L4 T-1 ~> m4 s-1]
   real :: AhLthy     ! 2D Leith+E biharmonic viscosity [L4 T-1 ~> m4 s-1]
@@ -374,8 +366,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: hu, hv     ! Thicknesses interpolated by arithmetic means to corner
                      ! points; these are first interpolated to u or v velocity
                      ! points where masks are applied [H ~> m or kg m-2].
-  real :: h_arith_q  ! The arithmetic mean total thickness at q points [Z ~> m]
-  real :: I_GME_h0   ! The inverse of GME tapering scale [Z-1 ~> m-1]
+  real :: h_arith_q  ! The arithmetic mean total thickness at q points [H ~> m or kg m-2]
+  real :: I_GME_h0   ! The inverse of GME tapering scale [H-1 ~> m-1 or m2 kg-1]
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected [H ~> m or kg m-2]
   real :: h_neglect3 ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
   real :: h_min      ! Minimum h at the 4 neighboring velocity points [H ~> m]
@@ -428,10 +420,13 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   h_neglect  = GV%H_subroundoff
-  h_neglect3 = h_neglect**3
+  !h_neglect3 = h_neglect**3
+  h_neglect3 = h_neglect*h_neglect*h_neglect
   inv_PI3 = 1.0/((4.0*atan(1.0))**3)
   inv_PI2 = 1.0/((4.0*atan(1.0))**2)
   inv_PI6 = inv_PI3 * inv_PI3
+
+  m_leithy(:,:) = 0.0 ! Initialize
 
   if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
     apply_OBC = OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally
@@ -534,7 +529,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       htot(i,j) = 0.0
     enddo ; enddo
     do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
-      htot(i,j) = htot(i,j) + GV%H_to_Z*h(i,j,k)
+      htot(i,j) = htot(i,j) + h(i,j,k)
     enddo ; enddo ; enddo
 
     I_GME_h0 = 1.0 / CS%GME_h0
@@ -1429,6 +1424,14 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo ; enddo
     endif
 
+    ! Pass the velocity gradients and thickness to ZB2020
+    if (CS%use_ZB2020) then
+      call ZB2020_copy_gradient_and_thickness( &
+           sh_xx, sh_xy, vort_xy,              &
+           hq,                                 &
+           G, GV, CS%ZB2020, k)
+    endif
+
     if (CS%Laplacian) then
       ! Determine the Laplacian viscosity at q points, using the
       ! largest value from several parameterizations. Also get the
@@ -1854,18 +1857,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   enddo ! end of k loop
 
-  if (CS%use_ZB2020) then
-    call Zanna_Bolton_2020(u, v, h, ZB2020u, ZB2020v, G, GV, CS%ZB2020)
-
-    do k=1,nz ; do j=js,je ; do I=Isq,Ieq
-      diffu(I,j,k) = diffu(I,j,k) + ZB2020u(I,j,k)
-    enddo ; enddo ; enddo
-
-    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
-      diffv(i,J,k) = diffv(i,J,k) + ZB2020v(i,J,k)
-    enddo ; enddo ; enddo
-  endif
-
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
   if (CS%id_shearstress > 0) call post_data(CS%id_shearstress, ShSt, CS%diag)
@@ -1935,6 +1926,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     if (CS%id_diffv_visc_rem > 0) call post_product_v(CS%id_diffv_visc_rem, diffv, ADp%visc_rem_v, G, nz, CS%diag)
   endif
 
+  if (CS%use_ZB2020) then
+    call ZB2020_lateral_stress(u, v, h, diffu, diffv, G, GV, CS%ZB2020, &
+                               CS%dx2h, CS%dy2h, CS%dx2q, CS%dy2q)
+  endif
+
 end subroutine horizontal_viscosity
 
 !> Allocates space for and calculates static variables used by horizontal_viscosity().
@@ -1990,11 +1986,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: use_MEKE      ! If true, the MEKE parameterization is in use.
-  logical :: answers_2018  ! If true, use the order of arithmetic and expressions that recover the
-                           ! answers from the end of 2018.  Otherwise, use updated and more robust
-                           ! forms of the same expressions.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
-  logical :: default_2018_answers ! The default setting for the various 2018_ANSWERS flags
   character(len=200) :: inputdir, filename ! Input file names and paths
   character(len=80) ::  Kh_var ! Input variable names
   real    :: deg2rad       ! Converts degrees to radians [radians degree-1]
@@ -2013,7 +2005,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   ! init control structure
-  call ZB_2020_init(Time, GV, US, param_file, diag, CS%ZB2020, CS%use_ZB2020)
+  call ZB2020_init(Time, G, GV, US, param_file, diag, CS%ZB2020, CS%use_ZB2020)
 
   CS%initialized = .true.
 
@@ -2025,22 +2017,13 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
-  call get_param(param_file, mdl, "DEFAULT_2018_ANSWERS", default_2018_answers, &
-                 "This sets the default value for the various _2018_ANSWERS parameters.", &
-                 default=(default_answer_date<20190101))
-  call get_param(param_file, mdl, "HOR_VISC_2018_ANSWERS", answers_2018, &
-                 "If true, use the order of arithmetic and expressions that recover the "//&
-                 "answers from the end of 2018.  Otherwise, use updated and more robust "//&
-                 "forms of the same expressions.", default=default_2018_answers)
-  ! Revise inconsistent default answer dates for horizontal viscosity.
-  if (answers_2018 .and. (default_answer_date >= 20190101)) default_answer_date = 20181231
-  if (.not.answers_2018 .and. (default_answer_date < 20190101)) default_answer_date = 20190101
   call get_param(param_file, mdl, "HOR_VISC_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the horizontal "//&
                  "viscosity calculations.  Values below 20190101 recover the answers from the "//&
                  "end of 2018, while higher values use updated and more robust forms of the "//&
-                 "same expressions.  If both HOR_VISC_2018_ANSWERS and HOR_VISC_ANSWER_DATE are "//&
-                 "specified, the latter takes precedence.", default=default_answer_date)
+                 "same expressions.", &
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+  if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
@@ -2291,7 +2274,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     call get_param(param_file, mdl, "GME_H0", CS%GME_h0, &
                    "The strength of GME tapers quadratically to zero when the bathymetric "//&
                    "depth is shallower than GME_H0.", &
-                   units="m", scale=US%m_to_Z, default=1000.0)
+                   units="m", scale=GV%m_to_H, default=1000.0)
     call get_param(param_file, mdl, "GME_EFFICIENCY", CS%GME_efficiency, &
                    "The nondimensional prefactor multiplying the GME coefficient.", &
                    units="nondim", default=1.0)
@@ -3074,6 +3057,11 @@ subroutine hor_visc_end(CS)
     DEALLOC_(CS%n1n1_m_n2n2_h)
     DEALLOC_(CS%n1n1_m_n2n2_q)
   endif
+
+  if (CS%use_ZB2020) then
+    call ZB2020_end(CS%ZB2020)
+  endif
+
 end subroutine hor_visc_end
 !> \namespace mom_hor_visc
 !!

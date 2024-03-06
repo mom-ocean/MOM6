@@ -8,7 +8,7 @@ use MOM_checksums,     only : is_NaN
 use MOM_coms,          only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs, field_chksum
 use MOM_coms,          only : reproducing_sum, reproducing_sum_EFP, EFP_to_real, real_to_EFP
 use MOM_coms,          only : EFP_type, operator(+), operator(-), assignment(=), EFP_sum_across_PEs
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing
 use MOM_grid,          only : ocean_grid_type
@@ -510,24 +510,18 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     do k=1,nz ; vol_lay(k) = (US%m_to_L**2*GV%H_to_Z/GV%H_to_kg_m2)*mass_lay(k) ; enddo
   else
     tmp1(:,:,:) = 0.0
-    if (CS%do_APE_calc) then
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = HL2_to_kg * h(i,j,k) * areaTm(i,j)
-      enddo ; enddo ; enddo
-      mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      tmp1(i,j,k) = HL2_to_kg * h(i,j,k) * areaTm(i,j)
+    enddo ; enddo ; enddo
+    mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
 
+    if (CS%do_APE_calc) then
       call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = US%Z_to_m*US%L_to_m**2*(eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
       vol_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=vol_lay)
       do k=1,nz ; vol_lay(k) = US%m_to_Z*US%m_to_L**2 * vol_lay(k) ; enddo
-    else
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = HL2_to_kg * h(i,j,k) * areaTm(i,j)
-      enddo ; enddo ; enddo
-      mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
-      do k=1,nz ; vol_lay(k) = US%m_to_Z*US%m_to_L**2*US%kg_m3_to_R * (mass_lay(k) / GV%Rho0) ; enddo
     endif
   endif ! Boussinesq
 
@@ -643,7 +637,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
         hbelow = 0.0
-        do k=nz,1,-1
+        do K=nz,1,-1
           hbelow = hbelow + h(i,j,k) * GV%H_to_Z
           hint = Z_0APE(K) + (hbelow - (G%bathyT(i,j) + G%Z_ref))
           hbot = Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref)
@@ -652,14 +646,28 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
-    else
+    elseif (GV%semi_Boussinesq) then
       do j=js,je ; do i=is,ie
-        do k=nz,1,-1
+        do K=nz,1,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref), 0.0)
           PE_pt(i,j,K) = (0.5 * PE_scale_factor * areaTm(i,j) * (GV%Rho0*GV%g_prime(K))) * &
-                  (hint * hint - hbot * hbot)
+                         (hint * hint - hbot * hbot)
         enddo
+      enddo ; enddo
+    else
+      do j=js,je ; do i=is,ie
+        do K=nz,2,-1
+          hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
+          hbot = max(Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref), 0.0)
+          PE_pt(i,j,K) = (0.25 * PE_scale_factor * areaTm(i,j) * &
+                          ((GV%Rlay(k)+GV%Rlay(k-1))*GV%g_prime(K))) * &
+                         (hint * hint - hbot * hbot)
+        enddo
+        hint = Z_0APE(1) + eta(i,j,1)  ! eta and H_0 have opposite signs.
+        hbot = max(Z_0APE(1) - (G%bathyT(i,j) + G%Z_ref), 0.0)
+        PE_pt(i,j,1) = (0.5 * PE_scale_factor * areaTm(i,j) * (GV%Rlay(1)*GV%g_prime(1))) * &
+                       (hint * hint - hbot * hbot)
       enddo ; enddo
     endif
 
@@ -1077,7 +1085,7 @@ subroutine depth_list_setup(G, GV, US, DL, CS)
         valid_DL_read = .true. ! Otherwise there would have been a fatal error.
       endif
     else
-      if (is_root_pe()) call MOM_error(WARNING, "depth_list_setup: "// &
+      if (is_root_pe()) call MOM_error(NOTE, "depth_list_setup: "// &
         trim(CS%depth_list_file)//" does not exist.  Creating a new file.")
       valid_DL_read = .false.
     endif

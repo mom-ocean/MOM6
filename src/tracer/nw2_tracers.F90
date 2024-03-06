@@ -9,6 +9,7 @@ use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc
 use MOM_restart, only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_time_manager, only : time_type, time_type_to_real
@@ -115,7 +116,7 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
   type(ocean_grid_type),              intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type),            intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),              intent(in) :: US   !< A dimensional unit scaling type
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                       intent(in) :: h    !< Layer thicknesses [H ~> m or kg m-2]
   type(thermo_var_ptrs),              intent(in) :: tv   !< A structure pointing to various
                                                          !! thermodynamic variables
@@ -124,7 +125,8 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
   type(nw2_tracers_CS),               pointer    :: CS !< The control structure returned by a previous
                                                        !! call to register_nw2_tracer.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta ! Interface heights [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Interface heights [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: dz  ! Vertical extent of layers [Z ~> m]
   real :: rscl ! z* scaling factor [nondim]
   character(len=8)  :: var_name ! The variable's name.
   integer :: i, j, k, m
@@ -135,20 +137,22 @@ subroutine initialize_nw2_tracers(restart, day, G, GV, US, h, tv, diag, CS)
   CS%diag => diag
 
   ! Calculate z* interface positions
+  call thickness_to_dz(h, tv, dz, G, GV, US)
+
   if (GV%Boussinesq) then
     ! First calculate interface positions in z-space (m)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       eta(i,j,GV%ke+1) = - G%mask2dT(i,j) * G%bathyT(i,j)
     enddo ; enddo
     do k=GV%ke,1,-1 ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * h(i,j,k) * GV%H_to_Z
+      eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * dz(i,j,k)
     enddo ; enddo ; enddo
     ! Re-calculate for interface positions in z*-space (m)
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if (G%bathyT(i,j)>0.) then
         rscl = G%bathyT(i,j) / ( eta(i,j,1) + G%bathyT(i,j) )
         do K=GV%ke, 1, -1
-          eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * h(i,j,k) * GV%H_to_Z * rscl
+          eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * dz(i,j,k) * rscl
         enddo
       endif
     enddo ; enddo
@@ -176,15 +180,15 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
               evap_CFL_limit, minimum_forcing_depth)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_old !< Layer thickness before entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: h_new !< Layer thickness after entrainment [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: ea   !< an array to which the amount of fluid entrained
                                               !! from the layer above during this call will be
                                               !! added [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                            intent(in) :: eb   !< an array to which the amount of fluid entrained
                                               !! from the layer below during this call will be
                                               !! added [H ~> m or kg m-2].
@@ -206,8 +210,9 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 ! The arguments to this subroutine are redundant in that
 !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)+1) :: eta ! Interface heights [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: eta ! Interface heights [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: dz  ! Vertical extent of layers [Z ~> m]
   integer :: i, j, k, m
   real :: dt_x_rate ! dt * restoring rate [nondim]
   real :: rscl ! z* scaling factor [nondim]
@@ -231,20 +236,22 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   endif
 
   ! Calculate z* interface positions
+  call thickness_to_dz(h_new, tv, dz, G, GV, US)
+
   if (GV%Boussinesq) then
-    ! First calculate interface positions in z-space (m)
+    ! First calculate interface positions in z-space [Z ~> m]
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       eta(i,j,GV%ke+1) = - G%mask2dT(i,j) * G%bathyT(i,j)
     enddo ; enddo
     do k=GV%ke,1,-1 ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * h_new(i,j,k) * GV%H_to_Z
+      eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * dz(i,j,k)
     enddo ; enddo ; enddo
-    ! Re-calculate for interface positions in z*-space (m)
+    ! Re-calculate for interface positions in z*-space [Z ~> m]
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if (G%bathyT(i,j)>0.) then
         rscl = G%bathyT(i,j) / ( eta(i,j,1) + G%bathyT(i,j) )
         do K=GV%ke, 1, -1
-          eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * h_new(i,j,k) * GV%H_to_Z * rscl
+          eta(i,j,K) = eta(i,j,K+1) + G%mask2dT(i,j) * dz(i,j,k) * rscl
         enddo
       endif
     enddo ; enddo
@@ -269,7 +276,7 @@ real function nw2_tracer_dist(m, G, GV, eta, i, j, k)
   integer, intent(in) :: m !< Indicates the NW2 tracer
   type(ocean_grid_type),   intent(in) :: G   !< The ocean's grid structure
   type(verticalGrid_type), intent(in) :: GV  !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G),0:SZK_(G)), &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                            intent(in) :: eta !< Interface position [Z ~> m]
   integer, intent(in) :: i !< Cell index i
   integer, intent(in) :: j !< Cell index j
@@ -280,7 +287,7 @@ real function nw2_tracer_dist(m, G, GV, eta, i, j, k)
   pi = 2.*acos(0.)
   x = ( G%geolonT(i,j) - G%west_lon ) / G%len_lon ! 0 ... 1
   y = -G%geolatT(i,j) / G%south_lat ! -1 ... 1
-  z = - 0.5 * ( eta(i,j,K-1) + eta(i,j,K) ) / GV%max_depth ! 0 ... 1
+  z = - 0.5 * ( eta(i,j,K) + eta(i,j,K+1) ) / GV%max_depth ! 0 ... 1
   select case ( mod(m-1,3) )
   case (0) ! sin(2 pi x/L)
     nw2_tracer_dist = sin( 2.0 * pi * x )

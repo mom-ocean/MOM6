@@ -1,6 +1,12 @@
 #ifndef MOM6_POSIX_H_
 #define MOM6_POSIX_H_
 
+! STAT_BUF_SIZE should be set to sizeof(stat).
+! The default value is based on glibc 2.28.
+#ifndef SIZEOF_STAT_BUF
+#define SIZEOF_STAT_BUF 144
+#endif
+
 ! JMP_BUF_SIZE should be set to sizeof(jmp_buf).
 ! If unset, then use a typical glibc value (25 long ints)
 #ifndef SIZEOF_JMP_BUF

@@ -1,4 +1,4 @@
-program MOM_unit_tests
+program test_MOM_file_parser
 
 use MPI
 use MOM_domains, only : MOM_infra_init
@@ -62,4 +62,4 @@ if (rank == root) then
   close(io_unit, status='delete')
 endif
 
-end program MOM_unit_tests
+end program test_MOM_file_parser

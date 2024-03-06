@@ -32,6 +32,7 @@ program MOM6
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
   use MOM,                 only : step_offline
+  use MOM,                 only : save_MOM_restart
   use MOM_coms,            only : Set_PElist
   use MOM_domains,         only : MOM_infra_init, MOM_infra_end, set_MOM_thread_affinity
   use MOM_ensemble_manager, only : ensemble_manager_init, get_ensemble_size
@@ -48,11 +49,11 @@ program MOM6
   use MOM_ice_shelf,       only : shelf_calc_flux, add_shelf_forces, ice_shelf_save_restart
   use MOM_ice_shelf,       only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
   use MOM_ice_shelf,       only : ice_shelf_query
+  use MOM_ice_shelf_initialize, only : initialize_ice_SMB
   use MOM_interpolate,     only : time_interp_external_init
   use MOM_io,              only : file_exists, open_ASCII_file, close_file
   use MOM_io,              only : check_nml_error, io_infra_init, io_infra_end
   use MOM_io,              only : APPEND_FILE, READONLY_FILE
-  use MOM_restart,         only : MOM_restart_CS, save_restart
   use MOM_string_functions,only : uppercase
   use MOM_surface_forcing, only : set_forcing, forcing_save_restart
   use MOM_surface_forcing, only : surface_forcing_init, surface_forcing_CS
@@ -134,7 +135,7 @@ program MOM6
   real :: dtdia                   ! The diabatic timestep [T ~> s]
   real :: t_elapsed_seg           ! The elapsed time in this run segment [T ~> s]
   integer :: n, ns, n_max, nts, n_last_thermo
-  logical :: diabatic_first, single_step_call
+  logical :: diabatic_first, single_step_call, initialize_smb
   type(time_type) :: Time2, time_chg ! Temporary time variables
 
   integer :: Restart_control    ! An integer that is bit-tested to determine whether
@@ -177,9 +178,6 @@ program MOM6
   logical                            :: override_shelf_fluxes !< If true, and shelf dynamics are active,
                                         !! the data_override feature is enabled (only for MOSAIC grid types)
   type(wave_parameters_cs),  pointer :: waves_CSp => NULL()
-  type(MOM_restart_CS),      pointer :: &
-    restart_CSp => NULL()     !< A pointer to the restart control structure
-                              !! that will be used for MOM restart files.
   type(diag_ctrl),           pointer :: &
     diag => NULL()            !< A pointer to the diagnostic regulatory structure
   !-----------------------------------------------------------------------
@@ -281,7 +279,7 @@ program MOM6
   if (segment_start_time_set) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     Time = segment_start_time
-    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
+    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, &
                         segment_start_time, offline_tracer_mode=offline_tracer_mode, &
                         diag_ptr=diag, tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp, &
                         waves_CSp=Waves_CSp)
@@ -289,7 +287,7 @@ program MOM6
     ! In this case, the segment starts at a time read from the MOM restart file
     ! or is left at Start_time by MOM_initialize.
     Time = Start_time
-    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, restart_CSp, &
+    call initialize_MOM(Time, Start_time, param_file, dirs, MOM_CSp, &
                         offline_tracer_mode=offline_tracer_mode, diag_ptr=diag, &
                         tracer_flow_CSp=tracer_flow_CSp, ice_shelf_CSp=ice_shelf_CSp, waves_CSp=Waves_CSp)
   endif
@@ -305,6 +303,9 @@ program MOM6
     call initialize_ice_shelf_forces(ice_shelf_CSp, grid, US, forces)
     call ice_shelf_query(ice_shelf_CSp, grid, data_override_shelf_fluxes=override_shelf_fluxes)
     if (override_shelf_fluxes) call data_override_init(Ocean_Domain_in=grid%domain%mpp_domain)
+    call get_param(param_file, mod_name, "INITIALIZE_ICE_SHEET_SMB", &
+                   initialize_smb, "Read in a constant SMB for the ice sheet", default=.false.)
+    if (initialize_smb) call initialize_ice_SMB(fluxes%shelf_sfc_mass_flux, grid, US, param_file)
   endif
 
 
@@ -473,7 +474,7 @@ program MOM6
     endif
 
     if (ns==1) then
-      call finish_MOM_initialization(Time, dirs, MOM_CSp, restart_CSp)
+      call finish_MOM_initialization(Time, dirs, MOM_CSp)
     endif
 
     ! This call steps the model over a time dt_forcing.
@@ -564,16 +565,15 @@ program MOM6
     if ((permit_incr_restart) .and. (fluxes%fluxes_used) .and. &
         (Time + (Time_step_ocean/2) > restart_time)) then
       if (BTEST(Restart_control,1)) then
-        call save_restart(dirs%restart_output_dir, Time, grid, &
-                          restart_CSp, .true., GV=GV)
+        call save_MOM_restart(MOM_CSp, dirs%restart_output_dir, Time, grid, &
+            time_stamped=.true., GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir, .true.)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                     dirs%restart_output_dir, .true.)
       endif
       if (BTEST(Restart_control,0)) then
-        call save_restart(dirs%restart_output_dir, Time, grid, &
-                          restart_CSp, GV=GV)
+        call save_MOM_restart(MOM_CSp, dirs%restart_output_dir, Time, grid, GV=GV)
         call forcing_save_restart(surface_forcing_CSp, grid, Time, &
                             dirs%restart_output_dir)
         if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
@@ -598,9 +598,10 @@ program MOM6
          "For conservation, the ocean restart files can only be "//&
          "created after the buoyancy forcing is applied.")
 
-    call save_restart(dirs%restart_output_dir, Time, grid, restart_CSp, GV=GV)
+    call save_MOM_restart(MOM_CSp, dirs%restart_output_dir, Time, grid, GV=GV)
     if (use_ice_shelf) call ice_shelf_save_restart(ice_shelf_CSp, Time, &
                                 dirs%restart_output_dir)
+
     ! Write the ocean solo restart file.
     call write_ocean_solo_res(Time, Start_time, calendar_type, &
                               trim(dirs%restart_output_dir)//'ocean_solo.res')

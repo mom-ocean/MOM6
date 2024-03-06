@@ -39,7 +39,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   ! Local variables
   character(len=40)  :: mdl = "dyed_obcs_set_OBC_data" ! This subroutine's name.
   character(len=80)  :: name, longname
-  integer :: is, ie, js, je, isd, ied, jsd, jed, m, n, nz
+  integer :: is, ie, js, je, isd, ied, jsd, jed, m, n, nz, ntr_id
   integer :: IsdB, IedB, JsdB, JedB
   real :: dye ! Inflow dye concentration [arbitrary]
   type(tracer_type), pointer      :: tr_ptr => NULL()
@@ -65,7 +65,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
   do m=1,ntr
     write(name,'("dye_",I2.2)') m
     write(longname,'("Concentration of dyed_obc Tracer ",I2.2, " on segment ",I2.2)') m, m
-    call tracer_name_lookup(tr_Reg, tr_ptr, name)
+    call tracer_name_lookup(tr_Reg, ntr_id, tr_ptr, name)
 
     do n=1,OBC%number_of_segments
       if (n == m) then
@@ -73,7 +73,7 @@ subroutine dyed_obcs_set_OBC_data(OBC, G, GV, param_file, tr_Reg)
       else
         dye = 0.0
       endif
-      call register_segment_tracer(tr_ptr, param_file, GV, &
+      call register_segment_tracer(tr_ptr, ntr_id, param_file, GV, &
                                    OBC%segment(n), OBC_scalar=dye)
     enddo
   enddo

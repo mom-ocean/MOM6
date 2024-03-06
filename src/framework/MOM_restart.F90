@@ -14,6 +14,7 @@ use MOM_io, only : MOM_read_data, read_data, MOM_write_field, field_exists
 use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
 use MOM_io, only : MULTIPLE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
+use MOM_io, only : axis_info, get_axis_info
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,  only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager,  only : days_in_month, get_date, set_date
@@ -26,6 +27,7 @@ public save_restart, query_initialized, set_initialized, only_read_from_restarts
 public restart_registry_lock, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
 public register_restart_field_as_obsolete, register_restart_pair
+public lock_check
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -445,7 +447,7 @@ end subroutine register_restart_pair_ptr4d
 
 !> Register a 4-d field for restarts, providing the metadata as individual arguments
 subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units, conversion, &
-                                     hor_grid, z_grid, t_grid)
+                                     hor_grid, z_grid, t_grid, extra_axes)
   real, dimension(:,:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
                                                       !! in arbitrary rescaled units [A ~> a]
@@ -460,8 +462,26 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+  type(axis_info),  dimension(:), &
+                    optional, intent(in) :: extra_axes !< dimensions other than space-time
 
   type(vardesc) :: vd
+  character(len=32), dimension(:), allocatable :: dim_names
+  integer :: n, n_extradims
+
+  ! first 2 dimensions in dim_names are reserved for i,j
+  ! so extra_dimensions are shifted to index 3.
+  ! this is designed not to break the behavior in SIS2
+  ! (see register_restart_field_4d in SIS_restart.F90)
+  if (present(extra_axes)) then
+    n_extradims = size(extra_axes)
+    allocate(dim_names(n_extradims+2))
+    dim_names(1) = ""
+    dim_names(2) = ""
+    do n=3,n_extradims+2
+      dim_names(n) = extra_axes(n-2)%name
+    enddo
+  endif
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_4d: Module must be initialized before "//&
@@ -469,8 +489,13 @@ subroutine register_restart_field_4d(f_ptr, name, mandatory, CS, longname, units
 
   call lock_check(CS, name=name)
 
-  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
-                z_grid=z_grid, t_grid=t_grid)
+  if (present(extra_axes)) then
+    vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                  z_grid=z_grid, t_grid=t_grid, dim_names=dim_names, extra_axes=extra_axes)
+  else
+    vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                  z_grid=z_grid, t_grid=t_grid)
+  endif
 
   call register_restart_field_ptr4d(f_ptr, vd, mandatory, CS, conversion)
 
@@ -478,7 +503,7 @@ end subroutine register_restart_field_4d
 
 !> Register a 3-d field for restarts, providing the metadata as individual arguments
 subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units, conversion, &
-                                     hor_grid, z_grid, t_grid)
+                                     hor_grid, z_grid, t_grid, extra_axes)
   real, dimension(:,:,:), &
                       target, intent(in) :: f_ptr     !< A pointer to the field to be read or written
                                                       !! in arbitrary rescaled units [A ~> a]
@@ -493,8 +518,26 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
   character(len=*), optional, intent(in) :: hor_grid  !< variable horizontal staggering, 'h' if absent
   character(len=*), optional, intent(in) :: z_grid    !< variable vertical staggering, 'L' if absent
   character(len=*), optional, intent(in) :: t_grid    !< time description: s, p, or 1, 's' if absent
+  type(axis_info),  dimension(:), &
+                    optional, intent(in) :: extra_axes !< dimensions other than space-time
 
   type(vardesc) :: vd
+  character(len=32), dimension(:), allocatable :: dim_names
+  integer :: n, n_extradims
+
+  ! first 2 dimensions in dim_names are reserved for i,j
+  ! so extra_dimensions are shifted to index 3.
+  ! this is designed not to break the behavior in SIS2
+  ! (see register_restart_field_4d in SIS_restart.F90)
+  if (present(extra_axes)) then
+    n_extradims = size(extra_axes)
+    allocate(dim_names(n_extradims+2))
+    dim_names(1) = ""
+    dim_names(2) = ""
+    do n=3,n_extradims+2
+      dim_names(n) = extra_axes(n-2)%name
+    enddo
+  endif
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart: " // &
       "register_restart_field_3d: Module must be initialized before "//&
@@ -502,8 +545,13 @@ subroutine register_restart_field_3d(f_ptr, name, mandatory, CS, longname, units
 
   call lock_check(CS, name=name)
 
-  vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
-                z_grid=z_grid, t_grid=t_grid)
+  if (present(extra_axes)) then
+    vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                  z_grid=z_grid, t_grid=t_grid, dim_names=dim_names, extra_axes=extra_axes)
+  else
+    vd = var_desc(name, units=units, longname=longname, hor_grid=hor_grid, &
+                  z_grid=z_grid, t_grid=t_grid)
+  endif
 
   call register_restart_field_ptr3d(f_ptr, vd, mandatory, CS, conversion)
 
@@ -612,7 +660,7 @@ end subroutine register_restart_field_0d
 
 
 !> query_initialized_name determines whether a named field has been successfully
-!! read from a restart file or has otherwise been recored as being initialzed.
+!! read from a restart file or has otherwise been recorded as being initialized.
 function query_initialized_name(name, CS) result(query_initialized)
   character(len=*),     intent(in) :: name  !< The name of the field that is being queried
   type(MOM_restart_CS), intent(in) :: CS    !< MOM restart control struct
@@ -1223,7 +1271,7 @@ subroutine only_read_restart_pair_3d(a_ptr, b_ptr, a_name, b_name, G, CS, &
 
 end subroutine only_read_restart_pair_3d
 
-!> Return an indicationof whether the named variable is the restart files, and provie the full path
+!> Return an indication of whether the named variable is in the restart files, and provide the full path
 !! to the restart file in which a variable is found.
 function find_var_in_restart_files(varname, G, CS, file_path, filename, directory, is_global) result (found)
   character(len=*),                intent(in)    :: varname   !< The variable name to be used in the restart file
@@ -1309,7 +1357,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
   type(MOM_infra_file) :: IO_handle     ! The I/O handle of the open fileset
-  integer :: m, nz
+  integer :: m, nz, na
   integer :: num_files                  ! The number of restart files that will be used.
   integer :: seconds, days, year, month, hour, minute
   character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
@@ -1320,8 +1368,12 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer(kind=8) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
   integer :: turns
+  integer, parameter :: nmax_extradims = 5
+  type(axis_info), dimension(:), allocatable :: extra_axes
 
   turns = CS%turns
+
+  allocate (extra_axes(nmax_extradims))
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "save_restart: Module must be initialized before it is used.")
@@ -1361,8 +1413,14 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
 
     do m=start_var,CS%novars
       call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                         z_grid=z_grid, t_grid=t_grid, caller="save_restart")
+                         z_grid=z_grid, t_grid=t_grid, caller="save_restart", &
+                         extra_axes=extra_axes)
+
       var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
+      ! factor in size of extra axes, or multiply by 1
+      do na=1,nmax_extradims
+        var_sz = var_sz*extra_axes(na)%ax_size
+      enddo
 
       if ((m==start_var) .OR. (size_in_file < max_file_size-var_sz)) then
         size_in_file = size_in_file + var_sz
@@ -1445,10 +1503,10 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
 
     if (CS%parallel_restartfiles) then
       call create_MOM_file(IO_handle, trim(restartpath), vars, next_var-start_var, &
-          fields, MULTIPLE, G=G, GV=GV, checksums=check_val)
+          fields, MULTIPLE, G=G, GV=GV, checksums=check_val, extra_axes=extra_axes)
     else
       call create_MOM_file(IO_handle, trim(restartpath), vars, next_var-start_var, &
-          fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val)
+          fields, SINGLE_FILE, G=G, GV=GV, checksums=check_val, extra_axes=extra_axes)
     endif
 
     do m=start_var,next_var-1
@@ -1650,7 +1708,7 @@ subroutine restore_state(filename, directory, day, G, CS)
           elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                                 G%Domain, timelevel=1, position=pos, scale=scale)
+                                 G%Domain, timelevel=1, position=pos, scale=scale, global_file=unit_is_global(n))
             else ! This array is not domain-decomposed.  This variant may be under-tested.
               call MOM_error(FATAL, &
                         "MOM_restart does not support 4-d arrays without domain decomposition.")

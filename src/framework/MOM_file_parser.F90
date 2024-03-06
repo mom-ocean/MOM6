@@ -154,28 +154,34 @@ subroutine open_param_file(filename, CS, checkable, component, doc_file_dir, ens
   ! Check that this file has not already been opened
   if (CS%nfiles > 0) then
     reopened_file = .false.
-    inquire(file=trim(filename), number=iounit)
-    if (iounit /= -1) then
-      do i = 1, CS%nfiles
-        if (CS%iounit(i) == iounit) then
-          call assert(trim(CS%filename(1)) == trim(filename), &
-              "open_param_file: internal inconsistency! "//trim(filename)// &
-              " is registered as open but has the wrong unit number!")
-          call MOM_error(WARNING, &
-              "open_param_file: file "//trim(filename)// &
-              " has already been opened. This should NOT happen!"// &
-              " Did you specify the same file twice in a namelist?")
-          reopened_file = .true.
-        endif ! unit numbers
-      enddo ! i
+
+    if (is_root_pe()) then
+      inquire(file=trim(filename), number=iounit)
+      if (iounit /= -1) then
+        do i = 1, CS%nfiles
+          if (CS%iounit(i) == iounit) then
+            call assert(trim(CS%filename(1)) == trim(filename), &
+                "open_param_file: internal inconsistency! "//trim(filename)// &
+                " is registered as open but has the wrong unit number!")
+            call MOM_error(WARNING, &
+                "open_param_file: file "//trim(filename)// &
+                " has already been opened. This should NOT happen!"// &
+                " Did you specify the same file twice in a namelist?")
+            reopened_file = .true.
+          endif ! unit numbers
+        enddo ! i
+      endif
     endif
+
     if (any_across_PEs(reopened_file)) return
   endif
 
   ! Check that the file exists to readstdlog
-  inquire(file=trim(filename), exist=file_exists)
-  if (.not.file_exists) call MOM_error(FATAL, &
-      "open_param_file: Input file '"// trim(filename)//"' does not exist.")
+  if (is_root_pe()) then
+    inquire(file=trim(filename), exist=file_exists)
+    if (.not.file_exists) call MOM_error(FATAL, &
+        "open_param_file: Input file '"// trim(filename)//"' does not exist.")
+  endif
 
   Netcdf_file = .false.
   if (strlen > 3) then

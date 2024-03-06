@@ -83,7 +83,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1]
   real, optional,              intent(in) :: str !< The surface wind stress [R L Z T-2 ~> Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z T-1 ~> m s-1].
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc
+                                                 !! [H T-1 ~> m s-1 or Pa s m-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
@@ -223,8 +224,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                       (vel_scale*ADp%du_other(I,j,k)) ; enddo
     endif
     if (present(a)) then
-      write(file,'(/,"a:     ",ES10.3," ")', advance='no') US%Z_to_m*a(I,j,ks)*dt
-      do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ")', advance='no') (US%Z_to_m*a(I,j,K)*dt) ; enddo
+      write(file,'(/,"a:     ",ES10.3," ")', advance='no') h_scale*a(I,j,ks)*dt
+      do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ")', advance='no') (h_scale*a(I,j,K)*dt) ; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ")', advance='no')
@@ -422,7 +423,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
   real,                        intent(in) :: vel_rpt !< The velocity magnitude that triggers a report [L T-1 ~> m s-1]
   real, optional,              intent(in) :: str !< The surface wind stress [R L Z T-2 ~> Pa]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), &
-                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc [Z T-1 ~> m s-1].
+                     optional, intent(in) :: a   !< The layer coupling coefficients from vertvisc
+                                                 !! [H T-1 ~> m s-1 or Pa s m-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                      optional, intent(in) :: hv  !< The layer thicknesses at velocity grid points,
                                                  !! from vertvisc [H ~> m or kg m-2].
@@ -566,8 +568,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
                                       (vel_scale*ADp%dv_other(i,J,k)) ; enddo
     endif
     if (present(a)) then
-      write(file,'(/,"a:     ",ES10.3," ")', advance='no') US%Z_to_m*a(i,J,ks)*dt
-      do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ")', advance='no') (US%Z_to_m*a(i,J,K)*dt) ; enddo
+      write(file,'(/,"a:     ",ES10.3," ")', advance='no') h_scale*a(i,J,ks)*dt
+      do K=ks+1,ke+1 ; if (do_k(k-1)) write(file,'(ES10.3," ")', advance='no') (h_scale*a(i,J,K)*dt) ; enddo
     endif
     if (present(hv)) then
       write(file,'(/,"hvel:  ")', advance='no')

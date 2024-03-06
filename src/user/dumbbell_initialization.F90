@@ -10,6 +10,7 @@ use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
 use MOM_interface_heights, only : dz_to_thickness, dz_to_thickness_simple
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_sponge, only : set_up_sponge_field, initialize_sponge, sponge_CS
 use MOM_tracer_registry, only : tracer_registry_type
 use MOM_unit_scaling, only : unit_scale_type
@@ -472,10 +473,13 @@ subroutine dumbbell_initialize_sponges(G, GV, US, tv, h_in, depth_tot, param_fil
     if (associated(tv%S)) call set_up_ALE_sponge_field(S, G, GV, tv%S, ACSp, 'salt', &
                           sp_long_name='salinity', sp_unit='g kg-1 s-1')
   else
+    ! Convert thicknesses from thickness units to height units
+    call thickness_to_dz(h_in, tv, dz, G, GV, US)
+
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       eta(i,j,1) = 0.0
       do k=2,nz
-        eta(i,j,k) = eta(i,j,k-1) - GV%H_to_Z * h_in(i,j,k-1)
+        eta(i,j,k) = eta(i,j,k-1) - dz(i,j,k-1)
       enddo
       eta(i,j,nz+1) = -depth_tot(i,j)
       do k=1,nz
