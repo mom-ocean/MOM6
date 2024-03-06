@@ -19,7 +19,8 @@ use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
 use mpp_domains_mod, only : mpp_compute_block_extent
 use mpp_domains_mod, only : mpp_broadcast_domain, mpp_redistribute, mpp_global_field
 use mpp_domains_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
-use mpp_domains_mod, only : CYCLIC_GLOBAL_DOMAIN, FOLD_NORTH_EDGE
+use mpp_domains_mod, only : CYCLIC_GLOBAL_DOMAIN
+use mpp_domains_mod, only : FOLD_NORTH_EDGE, FOLD_SOUTH_EDGE, FOLD_EAST_EDGE, FOLD_WEST_EDGE
 use mpp_domains_mod, only : To_East => WUPDATE, To_West => EUPDATE, Omit_Corners => EDGEUPDATE
 use mpp_domains_mod, only : To_North => SUPDATE, To_South => NUPDATE
 use mpp_domains_mod, only : CENTER, CORNER, NORTH_FACE => NORTH, EAST_FACE => EAST
@@ -1555,6 +1556,19 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
     call get_layout_extents(MD_in, exnj, exni)
 
     MOM_dom%X_FLAGS = MD_in%Y_FLAGS ; MOM_dom%Y_FLAGS = MD_in%X_FLAGS
+    ! Correct the position of a tripolar grid, assuming that flags are not additive.
+    if (modulo(qturns, 4) == 1) then
+      if (MD_in%Y_FLAGS == FOLD_NORTH_EDGE) MOM_dom%X_FLAGS = FOLD_EAST_EDGE
+      if (MD_in%Y_FLAGS == FOLD_SOUTH_EDGE) MOM_dom%X_FLAGS = FOLD_WEST_EDGE
+      if (MD_in%X_FLAGS == FOLD_EAST_EDGE) MOM_dom%Y_FLAGS = FOLD_SOUTH_EDGE
+      if (MD_in%X_FLAGS == FOLD_WEST_EDGE) MOM_dom%Y_FLAGS = FOLD_NORTH_EDGE
+    elseif (modulo(qturns, 4) == 3) then
+      if (MD_in%Y_FLAGS == FOLD_NORTH_EDGE) MOM_dom%X_FLAGS = FOLD_WEST_EDGE
+      if (MD_in%Y_FLAGS == FOLD_SOUTH_EDGE) MOM_dom%X_FLAGS = FOLD_EAST_EDGE
+      if (MD_in%X_FLAGS == FOLD_EAST_EDGE) MOM_dom%Y_FLAGS = FOLD_NORTH_EDGE
+      if (MD_in%X_FLAGS == FOLD_WEST_EDGE) MOM_dom%Y_FLAGS = FOLD_SOUTH_EDGE
+    endif
+
     MOM_dom%layout(:) = MD_in%layout(2:1:-1)
     MOM_dom%io_layout(:) = io_layout_in(2:1:-1)
   else
@@ -1563,11 +1577,19 @@ subroutine clone_MD_to_MD(MD_in, MOM_dom, min_halo, halo_size, symmetric, domain
     call get_layout_extents(MD_in, exni, exnj)
 
     MOM_dom%X_FLAGS = MD_in%X_FLAGS ; MOM_dom%Y_FLAGS = MD_in%Y_FLAGS
+    ! Correct the position of a tripolar grid, assuming that flags are not additive.
+    if (modulo(qturns, 4) == 2) then
+      if (MD_in%Y_FLAGS == FOLD_NORTH_EDGE) MOM_dom%Y_FLAGS = FOLD_SOUTH_EDGE
+      if (MD_in%Y_FLAGS == FOLD_SOUTH_EDGE) MOM_dom%Y_FLAGS = FOLD_NORTH_EDGE
+      if (MD_in%X_FLAGS == FOLD_EAST_EDGE) MOM_dom%X_FLAGS = FOLD_WEST_EDGE
+      if (MD_in%X_FLAGS == FOLD_WEST_EDGE) MOM_dom%X_FLAGS = FOLD_EAST_EDGE
+    endif
+
     MOM_dom%layout(:) = MD_in%layout(:)
     MOM_dom%io_layout(:) = io_layout_in(:)
   endif
 
-  ! Ensure that the points per processor are the same on the source and densitation grids.
+  ! Ensure that the points per processor are the same on the source and destination grids.
   select case (qturns)
     case (1) ; call invert(exni)
     case (2) ; call invert(exni) ; call invert(exnj)
