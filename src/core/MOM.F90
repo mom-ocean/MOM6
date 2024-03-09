@@ -1436,8 +1436,11 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
   if (CS%debug) call MOM_tracer_chksum("Post-diffuse ", CS%tracer_Reg, G)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
-  call update_segment_tracer_reservoirs(G, GV, CS%uhtr, CS%vhtr, h, CS%OBC, &
+  if (associated(CS%OBC)) then
+    call pass_vector(CS%uhtr, CS%vhtr, G%Domain)
+    call update_segment_tracer_reservoirs(G, GV, CS%uhtr, CS%vhtr, h, CS%OBC, &
                      CS%t_dyn_rel_adv, CS%tracer_Reg)
+  endif
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
 
   call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)

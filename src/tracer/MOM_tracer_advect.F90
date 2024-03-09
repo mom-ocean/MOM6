@@ -123,7 +123,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   x_first = (MOD(G%first_direction,2) == 0)
 
   ! increase stencil size for Colella & Woodward PPM
-  if (CS%usePPM .and. .not. CS%useHuynh) stencil = 3
+! if (CS%usePPM .and. .not. CS%useHuynh) stencil = 3
+  if (CS%usePPM) stencil = 3
 
   ntr = Reg%ntr
   Idt = 1.0 / dt
