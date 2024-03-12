@@ -63,8 +63,6 @@ integer, parameter  :: INTEGRATION_PLM = 1  !< Piecewise Linear Method
 integer, parameter  :: INTEGRATION_PPM = 3  !< Piecewise Parabolic Method
 integer, parameter  :: INTEGRATION_PQM = 5  !< Piecewise Quartic Method
 
-character(len=40)  :: mdl = "MOM_remapping" !< This module's name.
-
 !> Documentation for external callers
 character(len=360), public :: remappingSchemesDoc = &
                  "PCM         (1st-order accurate)\n"//&
@@ -181,7 +179,6 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
   real :: uh_err       ! A bound on the error in the sum of u*h, as estimated by the remapping code [A H]
   real :: hNeglect, hNeglect_edge ! Negligibly small cell widths in the same units as h0 [H]
   integer :: iMethod   ! An integer indicating the integration method used
-  integer :: k
 
   hNeglect = 1.0e-30 ; if (present(h_neglect)) hNeglect = h_neglect
   hNeglect_edge = 1.0e-10 ; if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
@@ -190,7 +187,7 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
                                hNeglect, hNeglect_edge, PCM_cell )
 
   if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
-                                 CS%boundary_extrapolation, ppoly_r_coefs, ppoly_r_E, ppoly_r_S)
+                                 CS%boundary_extrapolation, ppoly_r_coefs, ppoly_r_E)
 
   call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h1, iMethod, &
                           CS%force_bounds_in_subcell, u1, uh_err )
@@ -233,7 +230,7 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1, h_neglect, h_neglect_ed
                                   hNeglect, hNeglect_edge )
 
   if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
-                                   CS%boundary_extrapolation, ppoly_r_coefs, ppoly_r_E, ppoly_r_S)
+                                   CS%boundary_extrapolation, ppoly_r_coefs, ppoly_r_E)
 
   ! This is a temporary step prior to switching to remapping_core_h()
   do k = 1, n1
@@ -387,15 +384,14 @@ end subroutine build_reconstructions_1d
 
 !> Checks that edge values and reconstructions satisfy bounds
 subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
-                                    ppoly_r_coefs, ppoly_r_E, ppoly_r_S)
+                                    ppoly_r_coefs, ppoly_r_E)
   integer,                  intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0),      intent(in)  :: h0 !< Cell widths on source grid [H]
   real, dimension(n0),      intent(in)  :: u0 !< Cell averages on source grid [A]
   integer,                  intent(in)  :: deg !< Degree of polynomial reconstruction
   logical,                  intent(in)  :: boundary_extrapolation !< Extrapolate at boundaries if true
-  real, dimension(n0,deg+1),intent(in) :: ppoly_r_coefs !< Coefficients of polynomial [A]
-  real, dimension(n0,2),    intent(in) :: ppoly_r_E !< Edge value of polynomial [A]
-  real, dimension(n0,2),    intent(in) :: ppoly_r_S !< Edge slope of polynomial [A H-1]
+  real, dimension(n0,deg+1),intent(in)  :: ppoly_r_coefs !< Coefficients of polynomial [A]
+  real, dimension(n0,2),    intent(in)  :: ppoly_r_E !< Edge value of polynomial [A]
   ! Local variables
   integer :: i0, n
   real :: u_l, u_c, u_r ! Cell averages [A]
@@ -942,6 +938,7 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
   k_dest = 0
   h_dest_rem = 0.
   h_src_rem = 0.
+  uh_src_rem = 0.
   src_ran_out = .false.
 
   do while(.true.)
@@ -997,8 +994,8 @@ end subroutine reintegrate_column
 !! separation dh.
 real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, xa, xb)
   integer,       intent(in)    :: n0     !< Number of cells in source grid
-  real,          intent(in)    :: u0(:)  !< Cell means [A]
-  real,          intent(in)    :: ppoly0_E(:,:)     !< Edge value of polynomial [A]
+  real,          intent(in)    :: u0(n0) !< Cell means [A]
+  real,          intent(in)    :: ppoly0_E(n0,2)    !< Edge value of polynomial [A]
   real,          intent(in)    :: ppoly0_coefs(:,:) !< Coefficients of polynomial [A]
   integer,       intent(in)    :: method !< Remapping scheme to use
   integer,       intent(in)    :: i0     !< Source cell index
@@ -1013,6 +1010,7 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, x
   real :: a_L, a_R, u_c, a_c    ! Values of the polynomial at various locations [A]
   real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials [nondim]
 
+  u_ave = 0. ! Avoids warnings about "potentially unset values"; u_ave is always calculated for legitimate schemes
   if (xb > xa) then
     select case ( method )
       case ( INTEGRATION_PCM )
@@ -1091,6 +1089,7 @@ real function average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, x
               + xa * ( ppoly0_coefs(i0,4)   &
               + xa *   ppoly0_coefs(i0,5) ) ) )
       case default
+        u_ave = 0.
         call MOM_error( FATAL,'The selected integration method is invalid' )
     end select
   endif
