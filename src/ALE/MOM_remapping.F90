@@ -493,8 +493,6 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
   integer :: i_sub ! Index of sub-cell
   integer :: i0 ! Index into h0(1:n0), source column
   integer :: i1 ! Index into h1(1:n1), target column
-  integer :: i_max ! Used to record which sub-cell is the largest contribution of a source cell
-  real :: dh_max ! Used to record which sub-cell is the largest contribution of a source cell [H]
   real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
   real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
   real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell [A]
@@ -535,89 +533,11 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
                                 isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
-  ! Uses: h_sub, isub_src, h0_eff
+  ! Uses: h_sub, h0_eff, isub_src, h0_eff
   ! Sets: u_sub, uh_sub
-  xa = 0.
-  dh0_eff = 0.
-  uh_sub(1) = 0.
-  u_sub(1) = ppoly0_E(1,1)
-  u02_err = 0.
-  do i_sub = 2, n0+n1
-
-    ! Sub-cell thickness from loop above
-    dh = h_sub(i_sub)
-
-    ! Source cell
-    i0 = isub_src(i_sub)
-
-    ! Evaluate average and integral for sub-cell i_sub.
-    ! Integral is over distance dh but expressed in terms of non-dimensional
-    ! positions with source cell from xa to xb  (0 <= xa <= xb <= 1).
-    dh0_eff = dh0_eff + dh ! Cumulative thickness within the source cell
-    if (h0_eff(i0)>0.) then
-      xb = dh0_eff / h0_eff(i0) ! This expression yields xa <= xb <= 1.0
-      xb = min(1., xb) ! This is only needed when the total target column is wider than the source column
-      u_sub(i_sub) = average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, xa, xb)
-    else ! Vanished cell
-      xb = 1.
-      u_sub(i_sub) = u0(i0)
-    endif
-    if (debug_bounds) then
-      if (method<5 .and.(u_sub(i_sub)<u0_min(i0) .or. u_sub(i_sub)>u0_max(i0))) then
-        write(0,*) 'Sub cell average is out of bounds',i_sub,'method=',method
-        write(0,*) 'xa,xb: ',xa,xb
-        write(0,*) 'Edge values: ',ppoly0_E(i0,:),'mean',u0(i0)
-        write(0,*) 'a_c: ',(u0(i0)-ppoly0_E(i0,1))+(u0(i0)-ppoly0_E(i0,2))
-        write(0,*) 'Polynomial coeffs: ',ppoly0_coefs(i0,:)
-        write(0,*) 'Bounds min=',u0_min(i0),'max=',u0_max(i0)
-        write(0,*) 'Average: ',u_sub(i_sub),'rel to min=',u_sub(i_sub)-u0_min(i0),'rel to max=',u_sub(i_sub)-u0_max(i0)
-        call MOM_error( FATAL, 'MOM_remapping, remap_via_sub_cells: '//&
-             'Sub-cell average is out of bounds!' )
-      endif
-    endif
-    if (force_bounds_in_subcell) then
-      ! These next two lines should not be needed but when using PQM we found roundoff
-      ! can lead to overshoots. These lines sweep issues under the rug which need to be
-      ! properly .. later. -AJA
-      u_orig = u_sub(i_sub)
-      u_sub(i_sub) = max( u_sub(i_sub), u0_min(i0) )
-      u_sub(i_sub) = min( u_sub(i_sub), u0_max(i0) )
-      u02_err = u02_err + dh*abs( u_sub(i_sub) - u_orig )
-    endif
-    uh_sub(i_sub) = dh * u_sub(i_sub)
-
-    if (isub_src(i_sub+1) /= i0) then
-      ! If the next sub-cell is in a different source cell, reset the position counters
-      dh0_eff = 0.
-      xa = 0.
-    else
-      xa = xb ! Next integral will start at end of last
-    endif
-
-  enddo
-  u_sub(n0+n1+1) = ppoly0_E(n0,2)                   ! This value is only needed when total target column
-  uh_sub(n0+n1+1) = ppoly0_E(n0,2) * h_sub(n0+n1+1) ! is wider than the source column
-
-  if (adjust_thickest_subcell) then
-    ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
-    ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
-    ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
-    ! Uses: i0_last_thick_cell, isrc_max, h_sub, isrc_start, isrc_end, uh_sub, u0, h0
-    ! Updates: uh_sub
-    do i0 = 1, i0_last_thick_cell
-      i_max = isrc_max(i0)
-      dh_max = h_sub(i_max)
-      if (dh_max > 0.) then
-        ! duh will be the sum of sub-cell integrals within the source cell except for the thickest sub-cell.
-        duh = 0.
-        do i_sub = isrc_start(i0), isrc_end(i0)
-          if (i_sub /= i_max) duh = duh + uh_sub(i_sub)
-        enddo
-        uh_sub(i_max) = u0(i0)*h0(i0) - duh
-        u02_err = u02_err + max( abs(uh_sub(i_max)), abs(u0(i0)*h0(i0)), abs(duh) )
-      endif
-    enddo
-  endif
+  call remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, &
+                             h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                             method, force_bounds_in_subcell, u_sub, uh_sub, u02_err)
 
   ! Loop over each target cell summing the integrals from sub-cells within the target cell.
   ! Uses: itgt_start, itgt_end, h_sub, uh_sub, u_sub
@@ -924,6 +844,138 @@ subroutine intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
 
   enddo
 end subroutine intersect_src_tgt_grids
+
+!> Remaps column of n0 values u0 on grid h0 to subgrid h_sub
+subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, &
+                                 h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                                 method, force_bounds_in_subcell, u_sub, uh_sub, u02_err)
+  integer, intent(in)  :: n0      !< Number of cells in source grid
+  real,    intent(in)  :: h0(n0)  !< Source grid widths (size n0) [H]
+  real,    intent(in)  :: u0(n0)  !< Source grid widths (size n0) [H]
+  real,    intent(in)  :: ppoly0_E(n0,2)    !< Edge value of polynomial [A]
+  real,    intent(in)  :: ppoly0_coefs(:,:) !< Coefficients of polynomial [A]
+  integer, intent(in)  :: n1      !< Number of cells in target grid
+  real,    intent(in)  :: h_sub(n0+n1+1) !< Overlapping sub-cell thicknesses, h_sub [H]
+  real,    intent(in)  :: h0_eff(n0) !< Effective thickness of source cells [H]
+  integer, intent(in)  :: isrc_start(n0) !< Index of first sub-cell within each source cell
+  integer, intent(in)  :: isrc_end(n0) !< Index of last sub-cell within each source cell
+  integer, intent(in)  :: isrc_max(n0) !< Index of thickest sub-cell within each source cell
+  integer, intent(in)  :: isub_src(n0+n1+1) !< Index of source cell for each sub-cell
+  integer, intent(in)  :: method  !< Remapping scheme to use
+  logical, intent(in)  :: force_bounds_in_subcell !< Force sub-cell values to be bounded
+  real,    intent(out) :: u_sub(n0+n1+1) !< Sub-cell cell averages (size n1) [A]
+  real,    intent(out) :: uh_sub(n0+n1+1) !< Sub-cell cell integrals (size n1) [A H]
+  real,    intent(out) :: u02_err !< Integrated reconstruction error estimates [A H]
+  ! Local variables
+  integer :: i_sub ! Index of sub-cell
+  integer :: i0 ! Index into h0(1:n0), source column
+  integer :: i_max ! Used to record which sub-cell is the largest contribution of a source cell
+  real :: dh_max ! Used to record which sub-cell is the largest contribution of a source cell [H]
+  real :: xa, xb ! Non-dimensional position within a source cell (0..1) [nondim]
+  real :: dh ! The width of the sub-cell [H]
+  real :: duh ! The total amount of accumulated stuff (u*h) [A H]
+  real :: dh0_eff ! Running sum of source cell thickness [H]
+  real :: u0_min(n0), u0_max(n0) !< Min/max of u0 for each source cell [A]
+  ! For error checking/debugging
+  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
+  logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
+  logical, parameter :: debug_bounds = .false. ! For debugging overshoots etc.
+  integer :: i0_last_thick_cell
+  real :: u_orig              ! The original value of the reconstruction in a cell [A]
+
+  i0_last_thick_cell = 0
+  do i0 = 1, n0
+    u0_min(i0) = min(ppoly0_E(i0,1), ppoly0_E(i0,2))
+    u0_max(i0) = max(ppoly0_E(i0,1), ppoly0_E(i0,2))
+    if (h0(i0)>0.) i0_last_thick_cell = i0
+  enddo
+
+  ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
+  ! Uses: h_sub, isub_src, h0_eff
+  ! Sets: u_sub, uh_sub
+  xa = 0.
+  dh0_eff = 0.
+  uh_sub(1) = 0.
+  u_sub(1) = ppoly0_E(1,1)
+  u02_err = 0.
+  do i_sub = 2, n0+n1
+
+    ! Sub-cell thickness from loop above
+    dh = h_sub(i_sub)
+
+    ! Source cell
+    i0 = isub_src(i_sub)
+
+    ! Evaluate average and integral for sub-cell i_sub.
+    ! Integral is over distance dh but expressed in terms of non-dimensional
+    ! positions with source cell from xa to xb  (0 <= xa <= xb <= 1).
+    dh0_eff = dh0_eff + dh ! Cumulative thickness within the source cell
+    if (h0_eff(i0)>0.) then
+      xb = dh0_eff / h0_eff(i0) ! This expression yields xa <= xb <= 1.0
+      xb = min(1., xb) ! This is only needed when the total target column is wider than the source column
+      u_sub(i_sub) = average_value_ppoly( n0, u0, ppoly0_E, ppoly0_coefs, method, i0, xa, xb)
+    else ! Vanished cell
+      xb = 1.
+      u_sub(i_sub) = u0(i0)
+    endif
+    if (debug_bounds) then
+      if (method<5 .and.(u_sub(i_sub)<u0_min(i0) .or. u_sub(i_sub)>u0_max(i0))) then
+        write(0,*) 'Sub cell average is out of bounds',i_sub,'method=',method
+        write(0,*) 'xa,xb: ',xa,xb
+        write(0,*) 'Edge values: ',ppoly0_E(i0,:),'mean',u0(i0)
+        write(0,*) 'a_c: ',(u0(i0)-ppoly0_E(i0,1))+(u0(i0)-ppoly0_E(i0,2))
+        write(0,*) 'Polynomial coeffs: ',ppoly0_coefs(i0,:)
+        write(0,*) 'Bounds min=',u0_min(i0),'max=',u0_max(i0)
+        write(0,*) 'Average: ',u_sub(i_sub),'rel to min=',u_sub(i_sub)-u0_min(i0),'rel to max=',u_sub(i_sub)-u0_max(i0)
+        call MOM_error( FATAL, 'MOM_remapping, remap_via_sub_cells: '//&
+             'Sub-cell average is out of bounds!' )
+      endif
+    endif
+    if (force_bounds_in_subcell) then
+      ! These next two lines should not be needed but when using PQM we found roundoff
+      ! can lead to overshoots. These lines sweep issues under the rug which need to be
+      ! properly .. later. -AJA
+      u_orig = u_sub(i_sub)
+      u_sub(i_sub) = max( u_sub(i_sub), u0_min(i0) )
+      u_sub(i_sub) = min( u_sub(i_sub), u0_max(i0) )
+      u02_err = u02_err + dh*abs( u_sub(i_sub) - u_orig )
+    endif
+    uh_sub(i_sub) = dh * u_sub(i_sub)
+
+    if (isub_src(i_sub+1) /= i0) then
+      ! If the next sub-cell is in a different source cell, reset the position counters
+      dh0_eff = 0.
+      xa = 0.
+    else
+      xa = xb ! Next integral will start at end of last
+    endif
+
+  enddo
+  u_sub(n0+n1+1) = ppoly0_E(n0,2)                   ! This value is only needed when total target column
+  uh_sub(n0+n1+1) = ppoly0_E(n0,2) * h_sub(n0+n1+1) ! is wider than the source column
+
+  if (adjust_thickest_subcell) then
+    ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
+    ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
+    ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
+    ! Uses: i0_last_thick_cell, isrc_max, h_sub, isrc_start, isrc_end, uh_sub, u0, h0
+    ! Updates: uh_sub
+    do i0 = 1, i0_last_thick_cell
+      i_max = isrc_max(i0)
+      dh_max = h_sub(i_max)
+      if (dh_max > 0.) then
+        ! duh will be the sum of sub-cell integrals within the source cell except for the thickest sub-cell.
+        duh = 0.
+        do i_sub = isrc_start(i0), isrc_end(i0)
+          if (i_sub /= i_max) duh = duh + uh_sub(i_sub)
+        enddo
+        uh_sub(i_max) = u0(i0)*h0(i0) - duh
+        u02_err = u02_err + max( abs(uh_sub(i_max)), abs(u0(i0)*h0(i0)), abs(duh) )
+      endif
+    enddo
+  endif
+
+end subroutine remap_src_to_sub_grid
 
 !> Linearly interpolate interface data, u_src, from grid h_src to a grid h_dest
 subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, mask_edges)
@@ -1425,6 +1477,8 @@ logical function remapping_unit_tests(verbose)
   real, allocatable, dimension(:,:) :: ppoly0_S     ! Edge slopes of polynomials [A H-1]
   real, allocatable, dimension(:,:) :: ppoly0_coefs ! Coefficients of polynomials [A]
   real, allocatable, dimension(:) :: h_sub, h0_eff ! Subgrid and effective source thicknesses [H]
+  real, allocatable, dimension(:) :: u_sub, uh_sub ! Subgrid values and totals [A, A H]
+  real :: u02_err ! Error in remaping [A]
   integer, allocatable, dimension(:) :: isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src ! Indices
   integer :: answer_date  ! The vintage of the expressions to test
   real, parameter :: hNeglect_dflt = 1.0e-30 ! A thickness [H ~> m or kg m-2] that can be
@@ -1675,6 +1729,20 @@ logical function remapping_unit_tests(verbose)
   call test%int_arr(3, itgt_start, (/1,4,5/), 'itgt_start')
   call test%int_arr(3, itgt_end, (/3,4,6/), 'itgt_end')
   call test%int_arr(6, isub_src, (/1,1,2,2,2,2/), 'isub_src')
+  allocate(ppoly0_coefs(2,2), ppoly0_E(2,2), ppoly0_S(2,2))
+  ! h_src =     |<-   2   ->|<-       4         ->|
+  ! h_sub =     |0|<- 2   ->|0|<- 2 ->|<-  2  ->|0|
+  ! u_src =     |     2     |         5           |
+  !  edge =     |1         3|3                   7|
+  ! u_sub =     |1|   2     |3|   4   |    6    |7|
+  call PLM_reconstruction(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect )
+  call PLM_boundary_extrapolation(2, (/2.,4./),(/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect)
+  allocate(u_sub(6), uh_sub(6))
+  call remap_src_to_sub_grid(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, &
+                             3, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                             INTEGRATION_PLM, .false., u_sub, uh_sub, u02_err)
+  call test%real_arr(6, u_sub, (/1.,2.,3.,4.,6.,7./), 'u_sub')
+  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! Test 4: n0=2, n1=3  Incomplete target column, sum(h_tgt)<sum(h_src), useful for diagnostics
@@ -1703,6 +1771,20 @@ logical function remapping_unit_tests(verbose)
   call test%int_arr(3, itgt_start, (/1,4,5/), 'itgt_start')
   call test%int_arr(3, itgt_end, (/3,4,5/), 'itgt_end')
   call test%int_arr(6, isub_src, (/1,1,2,2,2,2/), 'isub_src')
+! allocate(ppoly0_coefs(2,2), ppoly0_E(2,2), ppoly0_S(2,2))
+! ! h_src =     |<-   2   ->|<-       4         ->|
+! ! h_sub =     |0|<- 2   ->|0|<- 2 ->|<-1->|<-1->|
+! ! u_src =     |     2     |         5           |
+! !  edge =     |1         3|3                   7|
+! ! u_sub =     |1|   2     |3|   4   | 5.5 | 6.5 |
+! call PLM_reconstruction(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect )
+! call PLM_boundary_extrapolation(2, (/2.,4./),(/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect)
+! allocate(u_sub(6), uh_sub(6))
+! call remap_src_to_sub_grid(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, &
+!                            3, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+!                            INTEGRATION_PLM, .false., u_sub, uh_sub, u02_err)
+! call test%real_arr(6, u_sub, (/1.,2.,3.,4.,5.5,6.5/), 'u_sub')
+! deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! Test 5: n0=2, n1=3  Target column exceeds source column, sum(h_tgt)>sum(h_src), useful for diagnostics
@@ -1731,7 +1813,21 @@ logical function remapping_unit_tests(verbose)
   call test%int_arr(2, itgt_start, (/1,4/), 'itgt_start')
   call test%int_arr(2, itgt_end, (/3,6/), 'itgt_end')
   call test%int_arr(6, isub_src, (/1,1,2,2,3,3/), 'isub_src')
+  allocate(ppoly0_coefs(3,2), ppoly0_E(3,2), ppoly0_S(3,2))
+  ! h_src =     |     2     |    2    |  1  |
+  ! h_sub =     |0|   2     |0|  2    |  1  |  1  |
+  ! u_src =     |     2     |    4    | 5.5 |
+  !  edge =     |1         3|3       5|5   6|
+  ! u_sub =     |1|   2     |3|  4    | 5.5 |  6  |
+  call PLM_reconstruction(3, (/2.,2.,1./), (/2.,4.,5.5/), ppoly0_E, ppoly0_coefs, h_neglect )
+  call PLM_boundary_extrapolation(3, (/2.,2.,1./),(/2.,4.,5.5/), ppoly0_E, ppoly0_coefs, h_neglect)
+  allocate(u_sub(6), uh_sub(6))
+  call remap_src_to_sub_grid(3, (/2.,2.,1./), (/2.,4.,5.5/), ppoly0_E, ppoly0_coefs, &
+                             2, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                             INTEGRATION_PLM, .false., u_sub, uh_sub, u02_err)
+  call test%real_arr(6, u_sub, (/1.,2.,3.,4.,5.5,6./), 'u_sub')
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
+  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub)
 
   ! Test 6: n0=3, n1=5  Source and targets with vanished layers
   ! h_src =     |      2      |0|      2      |
