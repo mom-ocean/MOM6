@@ -414,7 +414,8 @@ contains
       endif
 
       call g_tracer_get_obc_segment_props(g_tracer,g_tracer_name,obc_has )
-      if(obc_has .and. g_tracer_is_prog(g_tracer)) call fill_obgc_segments(G, GV, OBC, tr_ptr, g_tracer_name)
+      if(obc_has .and. g_tracer_is_prog(g_tracer) .and. .not.restart) &
+             call fill_obgc_segments(G, GV, OBC, tr_ptr, g_tracer_name)
       !traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
       if (.NOT. associated(g_tracer_next)) exit
