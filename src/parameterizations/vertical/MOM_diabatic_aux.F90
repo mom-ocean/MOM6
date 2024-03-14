@@ -643,7 +643,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity, tracer_flow
     if (CS%chl_from_file) then
       ! Only the 2-d surface chlorophyll can be read in from a file.  The
       ! same value is assumed for all layers.
-      call time_interp_external(CS%sbc_chl, CS%Time, chl_2d)
+      call time_interp_external(CS%sbc_chl, CS%Time, chl_2d, turns=G%HI%turns)
       do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.0) .and. (chl_2d(i,j) < 0.0)) then
           write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
@@ -1899,7 +1899,11 @@ subroutine diabatic_aux_init(Time, G, GV, US, param_file, diag, CS, useALEalgori
         call log_param(param_file, mdl, "INPUTDIR/CHL_FILE", chl_filename)
         call get_param(param_file, mdl, "CHL_VARNAME", chl_varname, &
                    "Name of CHL_A variable in CHL_FILE.", default='CHL_A')
-        CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), MOM_domain=G%Domain)
+        if (modulo(G%Domain%turns, 4) /= 0) then
+          CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), MOM_domain=G%Domain%domain_in)
+        else
+          CS%sbc_chl = init_external_field(chl_filename, trim(chl_varname), MOM_domain=G%Domain)
+        endif
       endif
 
       CS%id_chl = register_diag_field('ocean_model', 'Chl_opac', diag%axesT1, Time, &

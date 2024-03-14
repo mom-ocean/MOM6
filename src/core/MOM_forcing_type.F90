@@ -6,6 +6,7 @@ module MOM_forcing_type
 use MOM_array_transform, only : rotate_array, rotate_vector, rotate_array_pair
 use MOM_coupler_types, only : coupler_2d_bc_type, coupler_type_destructor
 use MOM_coupler_types, only : coupler_type_increment_data, coupler_type_initialized
+use MOM_coupler_types, only : coupler_type_copy_data
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
@@ -3702,9 +3703,11 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
   if (associated(fluxes_in%ustar_tidal)) &
     call rotate_array(fluxes_in%ustar_tidal, turns, fluxes%ustar_tidal)
 
-  ! TODO: tracer flux rotation
-  if (coupler_type_initialized(fluxes%tr_fluxes)) &
-    call MOM_error(FATAL, "Rotation of tracer BC fluxes not yet implemented.")
+  ! NOTE: Tracer fields are handled by FMS, so are left unrotated.  Any
+  ! reads/writes to tr_fields must be appropriately rotated.
+  if (coupler_type_initialized(fluxes%tr_fluxes)) then
+    call coupler_type_copy_data(fluxes_in%tr_fluxes, fluxes%tr_fluxes)
+  endif
 
   ! Scalars and flags
   fluxes%accumulate_p_surf = fluxes_in%accumulate_p_surf
@@ -3757,10 +3760,18 @@ subroutine rotate_mech_forcing(forces_in, turns, forces)
   endif
 
   if (do_press) then
-    ! NOTE: p_surf_SSH either points to p_surf or p_surf_full
     call rotate_array(forces_in%p_surf, turns, forces%p_surf)
     call rotate_array(forces_in%p_surf_full, turns, forces%p_surf_full)
     call rotate_array(forces_in%net_mass_src, turns, forces%net_mass_src)
+
+    ! p_surf_SSH points to either p_surf or p_surf_full
+    if (associated(forces_in%p_surf_SSH, forces_in%p_surf)) then
+      forces%p_surf_SSH => forces%p_surf
+    else if (associated(forces_in%p_surf_SSH, forces_in%p_surf_full)) then
+      forces%p_surf_SSH => forces%p_surf_full
+    else
+      forces%p_surf_SSH => null()
+    endif
   endif
 
   if (do_iceberg) then

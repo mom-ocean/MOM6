@@ -6,6 +6,7 @@ module MOM_variables
 use MOM_array_transform, only : rotate_array, rotate_vector
 use MOM_coupler_types, only : coupler_1d_bc_type, coupler_2d_bc_type
 use MOM_coupler_types, only : coupler_type_spawn, coupler_type_destructor, coupler_type_initialized
+use MOM_coupler_types, only : coupler_type_copy_data
 use MOM_debugging,     only : hchksum
 use MOM_domains,       only : MOM_domain_type, get_domain_extent, group_pass_type
 use MOM_EOS,           only : EOS_type
@@ -499,9 +500,11 @@ subroutine rotate_surface_state(sfc_state_in, sfc_state, G, turns)
   sfc_state%T_is_conT = sfc_state_in%T_is_conT
   sfc_state%S_is_absS = sfc_state_in%S_is_absS
 
-  ! TODO: tracer field rotation
-  if (coupler_type_initialized(sfc_state_in%tr_fields)) &
-    call MOM_error(FATAL, "Rotation of surface state tracers is not yet implemented.")
+  ! NOTE: Tracer fields are handled by FMS, so are left unrotated.  Any
+  ! reads/writes to tr_fields must be appropriately rotated.
+  if (coupler_type_initialized(sfc_state_in%tr_fields)) then
+    call coupler_type_copy_data(sfc_state_in%tr_fields, sfc_state%tr_fields)
+  endif
 end subroutine rotate_surface_state
 
 !> Allocates the arrays contained within a BT_cont_type and initializes them to 0.

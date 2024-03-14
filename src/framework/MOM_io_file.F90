@@ -1326,7 +1326,13 @@ subroutine open_file_nc(handle, filename, action, MOM_domain, threading, fileset
 
   if (present(MOM_domain)) then
     handle%domain_decomposed = .true.
-    call hor_index_init(MOM_domain, handle%HI)
+
+    ! Input files use unrotated indexing.
+    if (associated(MOM_domain%domain_in)) then
+      call hor_index_init(MOM_domain%domain_in, handle%HI)
+    else
+      call hor_index_init(MOM_domain, handle%HI)
+    endif
   endif
 
   call handle%axes%init()

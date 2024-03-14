@@ -1072,7 +1072,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
 
   if (CS%debug) then
     if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) &
-        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, &
+                      scale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(visc%kv_bbl_u) .and. allocated(visc%kv_bbl_v)) &
         call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
                       haloshift=0, scale=GV%HZ_T_to_m2_s, scalar_pair=.true.)
