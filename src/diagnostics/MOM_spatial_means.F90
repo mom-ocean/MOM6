@@ -166,7 +166,7 @@ function global_area_integral(var, G, scale, area, tmp_scale)
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units of the
   ! input array while [a] indicates the unscaled (e.g., mks) units that can be used with the reproducing sums
   real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming ! An unscaled cell integral [a m2]
-  real :: scalefac  ! An overall scaling factor for the areas and variable.
+  real :: scalefac  ! An overall scaling factor for the areas and variable, perhaps in [m2 a A-1 L-2 ~> 1]
   real :: temp_scale ! A temporary scaling factor [a A-1 ~> 1] or [1]
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -493,7 +493,7 @@ subroutine global_j_mean(array, j_mean, G, mask, scale, tmp_scale)
                                                             !! arbitrary, possibly rescaled units [A ~> a]
   real, dimension(SZI_(G)),         intent(out)   :: j_mean !<  Global mean of array along its j-axis [a] or [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)), &
-                          optional, intent(in)    :: mask  !< An array used for weighting the j-mean
+                          optional, intent(in)    :: mask  !< An array used for weighting the j-mean [nondim]
   real,                   optional, intent(in)    :: scale !< A rescaling factor for the output variable [a A-1 ~> 1]
                                                            !! that converts it back to unscaled (e.g., mks)
                                                            !! units to enable the use of the reproducing sums

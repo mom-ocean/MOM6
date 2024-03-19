@@ -91,7 +91,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=40)  :: mdl = "ideal_age_example" ! This module's name.
   character(len=200) :: inputdir ! The directory where the input files are.
   character(len=48)  :: var_name ! The variable's name.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [years]
   logical :: register_ideal_age_tracer
   logical :: do_ideal_age, do_vintage, do_ideal_age_dated, do_BL_residence
   integer :: isd, ied, jsd, jed, nz, m

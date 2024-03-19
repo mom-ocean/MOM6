@@ -2973,7 +2973,7 @@ end subroutine smooth_x9_h
 !! input fields have valid values in the first two halo points upon entry.
 subroutine smooth_x9_uv(G, field_u, field_v, zero_land)
   type(ocean_grid_type),             intent(in)    :: G         !< Ocean grid
-  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: field_u   !< u-point field to be smoothed[arbitrary]
+  real, dimension(SZIB_(G),SZJ_(G)), intent(inout) :: field_u   !< u-point field to be smoothed [arbitrary]
   real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: field_v   !< v-point field to be smoothed [arbitrary]
   logical,                 optional, intent(in)    :: zero_land !< If present and false, return the average
                                                                 !! of the surrounding ocean points when

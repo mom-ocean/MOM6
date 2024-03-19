@@ -1936,12 +1936,12 @@ end function mixedlayer_restrat_unit_tests
 !> Returns true if any cell of u and u_true are not identical. Returns false otherwise.
 logical function test_answer(verbose, u, u_true, label, tol)
   logical,            intent(in) :: verbose !< If true, write results to stdout
-  real,               intent(in) :: u      !< Values to test
-  real,               intent(in) :: u_true !< Values to test against (correct answer)
+  real,               intent(in) :: u      !< Values to test in arbitrary units [A]
+  real,               intent(in) :: u_true !< Values to test against (correct answer) [A]
   character(len=*),   intent(in) :: label  !< Message
-  real, optional,     intent(in) :: tol    !< The tolerance for differences between u and u_true
+  real, optional,     intent(in) :: tol    !< The tolerance for differences between u and u_true [A]
   ! Local variables
-  real :: tolerance ! The tolerance for differences between u and u_true
+  real :: tolerance ! The tolerance for differences between u and u_true [A]
   integer :: k
 
   tolerance = 0.0 ; if (present(tol)) tolerance = tol

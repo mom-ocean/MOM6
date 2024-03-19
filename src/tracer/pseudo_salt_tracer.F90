@@ -73,7 +73,7 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=48)  :: var_name ! The variable's name.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [ppt]
   logical :: register_pseudo_salt_tracer
   integer :: isd, ied, jsd, jed, nz
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke

@@ -102,7 +102,7 @@ function register_OCMIP2_CFC(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  real, dimension(:,:,:), pointer :: tr_ptr => NULL()
+  real, dimension(:,:,:), pointer :: tr_ptr => NULL() ! A pointer to a CFC tracer [mol m-3]
   real :: a11_dflt(4), a12_dflt(4) ! Default values of the various coefficients
   real :: d11_dflt(4), d12_dflt(4) ! in the expressions for the solubility and
   real :: e11_dflt(3), e12_dflt(3) ! Schmidt numbers [various units by element].
@@ -359,10 +359,11 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, GV, US, CS)
   type(verticalGrid_type),                   intent(in)  :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: tr   !< The tracer concentration array
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: tr   !< The CFC tracer concentration array [mol m-3]
   character(len=*),                          intent(in)  :: name !< The tracer name
-  real,                                      intent(in)  :: land_val !< A value the tracer takes over land
-  real,                                      intent(in)  :: IC_val !< The initial condition value for the tracer
+  real,                                      intent(in)  :: land_val !< A value the tracer takes over land [mol m-3]
+  real,                                      intent(in)  :: IC_val !< The initial condition value for
+                                                                 !! the CRC tracer [mol m-3]
   type(OCMIP2_CFC_CS),                       pointer     :: CS   !< The control structure returned by a
                                                                  !! previous call to register_OCMIP2_CFC.
 
@@ -439,7 +440,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
     CFC11_flux, &    ! The fluxes of CFC11 and CFC12 into the ocean, in unscaled units of
-    CFC12_flux       ! CFC concentrations times meters per second [CU R Z T-1 ~> CU kg m-2 s-1]
+    CFC12_flux       ! CFC concentrations times a vertical mass flux [mol R Z m-3 T-1 ~> mol kg m-3 s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
   integer :: i, j, k, is, ie, js, je, nz, idim(4), jdim(4)
 
@@ -545,8 +546,8 @@ subroutine OCMIP2_CFC_surface_state(sfc_state, h, G, GV, US, CS)
   real :: SST       ! Sea surface temperature [degC].
   real :: alpha_11  ! The solubility of CFC 11 [mol m-3 pptv-1].
   real :: alpha_12  ! The solubility of CFC 12 [mol m-3 pptv-1].
-  real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12.
-  real :: sc_no_term   ! A term related to the Schmidt number.
+  real :: sc_11, sc_12 ! The Schmidt numbers of CFC 11 and CFC 12 [nondim].
+  real :: sc_no_term   ! A term related to the Schmidt number [nondim].
   integer :: i, j, is, ie, js, je, idim(4), jdim(4)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec

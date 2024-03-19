@@ -92,7 +92,7 @@ function register_oil_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   character(len=3)   :: name_tag ! String for creating identifying oils
   character(len=48) :: flux_units ! The units for tracer fluxes, here
                             ! kg(oil) s-1 or kg(oil) m-3 kg(water) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [kg m-3]
   logical :: register_oil_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke

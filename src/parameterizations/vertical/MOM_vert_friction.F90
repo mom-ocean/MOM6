@@ -551,12 +551,12 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
 end subroutine vertFPmix
 
-!> Returns the empirical shape-function given sigma.
+!> Returns the empirical shape-function given sigma [nondim]
 real function G_sig(sigma)
-  real , intent(in) :: sigma   !< non-dimensional normalized boundary layer depth [m]
+  real , intent(in) :: sigma    !< Normalized boundary layer depth [nondim]
 
   ! local variables
-  real :: p1, c2, c3  !< parameters used to fit and match empirycal shape-functions.
+  real :: p1, c2, c3  !< Parameters used to fit and match empirical shape-functions [nondim]
 
   ! parabola
   p1 = 0.287

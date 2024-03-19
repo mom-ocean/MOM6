@@ -93,10 +93,10 @@ subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoom
   type(adapt_CS),    pointer    :: CS  !< The control structure for this module
   real,    optional, intent(in) :: adaptTimeRatio !< Ratio of optimisation and diffusion timescales [nondim]
   real,    optional, intent(in) :: adaptAlpha     !< Nondimensional coefficient determining
-                                                  !! how much optimisation to apply
+                                                  !! how much optimisation to apply [nondim]
   real,    optional, intent(in) :: adaptZoom      !< Near-surface zooming depth [H ~> m or kg m-2]
   real,    optional, intent(in) :: adaptZoomCoeff !< Near-surface zooming coefficient [nondim]
-  real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient
+  real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient [nondim]
   real,    optional, intent(in) :: adaptDrho0  !< Reference density difference for
                                                !! stratification-dependent diffusion [R ~> kg m-3]
   logical, optional, intent(in) :: adaptDoMin  !< If true, form a HYCOM1-like mixed layer by

@@ -1023,7 +1023,8 @@ subroutine compute_tapering_coeffs(ne, bld_l, bld_r, coeff_l, coeff_r, h_l, h_r)
   real, dimension(ne),   intent(inout) :: coeff_r  !< Tapering coefficient, right column           [nondim]
 
   ! Local variables
-  real :: min_bld, max_bld                       ! Min/Max boundary layer depth in two adjacent columns
+  real :: min_bld         ! Minimum of the boundary layer depth in two adjacent columns [H ~> m or kg m-2]
+  real :: max_bld         ! Maximum of the boundary layer depth in two adjacent columns [H ~> m or kg m-2]
   integer :: dummy1                              ! dummy integer
   real    :: dummy2                              ! dummy real [nondim]
   integer :: k_min_l, k_min_r, k_max_l, k_max_r  ! Min/max vertical indices in two adjacent columns
