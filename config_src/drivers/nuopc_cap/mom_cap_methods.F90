@@ -853,7 +853,7 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
 
   ! local variables
   type(ESMF_StateItem_Flag)     :: itemFlag
-  integer                       :: n, i, j, i1, j1, ig,jg
+  integer                       :: n, i, j, k, i1, j1, ig,jg
   integer                       :: lbnd1,lbnd2
   real(ESMF_KIND_R8), pointer   :: dataPtr1d(:)
   real(ESMF_KIND_R8), pointer   :: dataPtr2d(:,:)
@@ -888,6 +888,13 @@ subroutine State_SetExport(state, fldname, isc, iec, jsc, jec, input, ocean_grid
           dataPtr1d(n) = dataPtr1d(n) * areacor(n)
         enddo
       end if
+
+      ! if a maskmap is provided, set exports of all eliminated cells to zero.
+      if (associated(ocean_grid%Domain%maskmap)) then
+        do k = n+1, size(dataPtr1d)
+          dataPtr1d(k) = 0.0
+        enddo
+      endif
 
     else if (geomtype == ESMF_GEOMTYPE_GRID) then
 

@@ -1323,7 +1323,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
   wd_halos(:)=0
   allocate(CS%Grid)
   call MOM_domains_init(CS%Grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
-       domain_name='MOM_Ice_Shelf_in')
+                        domain_name='MOM_Ice_Shelf_in', US=CS%US)
   !allocate(CS%Grid_in%HI)
   !call hor_index_init(CS%Grid%Domain, CS%Grid%HI, param_file, &
   !     local_indexing=.not.global_indexing)

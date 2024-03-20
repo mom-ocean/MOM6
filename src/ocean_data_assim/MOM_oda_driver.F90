@@ -291,7 +291,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   CS%G => G
   allocate(CS%Grid)
   ! params NIHALO_ODA, NJHALO_ODA set the DA halo size
-  call MOM_domains_init(CS%Grid%Domain,PF,param_suffix='_ODA')
+  call MOM_domains_init(CS%Grid%Domain, PF, param_suffix='_ODA', US=CS%US)
   allocate(HI)
   call hor_index_init(CS%Grid%Domain, HI, PF)
   call verticalGridInit( PF, CS%GV, CS%US )

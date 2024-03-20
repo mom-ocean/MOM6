@@ -42,6 +42,7 @@ end interface field_chksum
 interface sum_across_PEs
   module procedure sum_across_PEs_int4_0d
   module procedure sum_across_PEs_int4_1d
+  module procedure sum_across_PEs_int4_2d
   module procedure sum_across_PEs_int8_0d
   module procedure sum_across_PEs_int8_1d
   module procedure sum_across_PEs_int8_2d
@@ -356,6 +357,15 @@ subroutine sum_across_PEs_int4_1d(field, length, pelist)
 
   call mpp_sum(field, length, pelist)
 end subroutine sum_across_PEs_int4_1d
+
+!> Find the sum of the values in corresponding positions of field across PEs, and return these sums in field.
+subroutine sum_across_PEs_int4_2d(field, length, pelist)
+  integer(kind=int32), dimension(:,:), intent(inout) :: field     !< The values to add, the sums upon return
+  integer,                             intent(in)    :: length    !< Number of elements in field to add
+  integer,                 optional,   intent(in)    :: pelist(:) !< List of PEs to work with
+
+  call mpp_sum(field, length, pelist)
+end subroutine sum_across_PEs_int4_2d
 
 !> Find the sum of field across PEs, and return this sum in field.
 subroutine sum_across_PEs_int8_0d(field, pelist)
