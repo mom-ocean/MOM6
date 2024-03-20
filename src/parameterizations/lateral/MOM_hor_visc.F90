@@ -300,7 +300,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
     GME_effic_h, &  ! The filtered efficiency of the GME terms at h points [nondim]
     m_leithy, &   ! Kh=m_leithy*Ah in Leith+E parameterization [L-2 ~> m-2]
     Ah_sq, &      ! The square of the biharmonic viscosity [L8 T-2 ~> m8 s-2]
-    htot          ! The total thickness of all layers [Z ~> m]
+    htot          ! The total thickness of all layers [H ~> m or kg m-2]
   real :: Del2vort_h ! Laplacian of vorticity at h-points [L-2 T-1 ~> m-2 s-1]
   real :: grad_vel_mag_bt_h ! Magnitude of the barotropic velocity gradient tensor squared at h-points [T-2 ~> s-2]
   real :: boundary_mask_h ! A mask that zeroes out cells with at least one land edge [nondim]

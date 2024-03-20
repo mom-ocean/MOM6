@@ -2538,13 +2538,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 #endif
   G_in => CS%G_in
 #ifdef STATIC_MEMORY_
-  call MOM_domains_init(G_in%domain, US, param_file, symmetric=symmetric, &
-            static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
-            NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
-            NJPROC=NJPROC_)
+  call MOM_domains_init(G_in%domain, param_file, symmetric=symmetric, &
+                        static_memory=.true., NIHALO=NIHALO_, NJHALO=NJHALO_, &
+                        NIGLOBAL=NIGLOBAL_, NJGLOBAL=NJGLOBAL_, NIPROC=NIPROC_, &
+                        NJPROC=NJPROC_, US=US)
 #else
-  call MOM_domains_init(G_in%domain, US, param_file, symmetric=symmetric, &
-                        domain_name="MOM_in")
+  call MOM_domains_init(G_in%domain, param_file, symmetric=symmetric, &
+                        domain_name="MOM_in", US=US)
 #endif
 
   ! Copy input grid (G_in) domain to active grid G
