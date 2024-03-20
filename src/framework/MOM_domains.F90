@@ -63,12 +63,11 @@ contains
 !> MOM_domains_init initializes a MOM_domain_type variable, based on the information
 !! read in from a param_file_type, and optionally returns data describing various
 !! properties of the domain type.
-subroutine MOM_domains_init(MOM_dom, US, param_file, symmetric, static_memory, &
+subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &
-                            min_halo, domain_name, include_name, param_suffix)
+                            min_halo, domain_name, include_name, param_suffix, US)
   type(MOM_domain_type),           pointer       :: MOM_dom      !< A pointer to the MOM_domain_type
                                                                  !! being defined here.
-  type(unit_scale_type),           pointer       :: US           !< A dimensional unit scaling type
   type(param_file_type),           intent(in)    :: param_file   !< A structure to parse for
                                                                  !! run-time parameters
   logical, optional,               intent(in)    :: symmetric    !< If present, this specifies
@@ -99,6 +98,7 @@ subroutine MOM_domains_init(MOM_dom, US, param_file, symmetric, static_memory, &
                                                                  !! "MOM_memory.h" if missing.
   character(len=*),      optional, intent(in)    :: param_suffix !< A suffix to apply to
                                                                  !! layout-specific parameters.
+  type(unit_scale_type), optional, pointer       :: US           !< A dimensional unit scaling type
 
   ! Local variables
   integer, dimension(2) :: layout    ! The number of logical processors in the i- and j- directions
@@ -120,6 +120,7 @@ subroutine MOM_domains_init(MOM_dom, US, param_file, symmetric, static_memory, &
   logical            :: auto_mask_table ! Runtime flag that turns on automatic mask table generator
   integer            :: auto_io_layout_fac ! Used to compute IO layout when auto_mask_table is True.
   logical            :: mask_table_exists ! True if there is a mask table file
+  logical :: is_MOM_domain  ! True if this domain is being set for MOM, and not another component like SIS2.
   character(len=128) :: inputdir   ! The directory in which to find the diag table
   character(len=200) :: mask_table ! The file name and later the full path to the diag table
   character(len=64)  :: inc_nm     ! The name of the memory include file
@@ -288,7 +289,16 @@ subroutine MOM_domains_init(MOM_dom, US, param_file, symmetric, static_memory, &
   call get_param(param_file, mdl, "INPUTDIR", inputdir, do_not_log=.true., default=".")
   inputdir = slasher(inputdir)
 
-  call get_param(param_file, mdl, "TOPO_CONFIG", topo_config, do_not_log=.true., fail_if_missing=.true.)
+  is_MOM_domain = .true.
+  if (present(domain_name)) then
+    is_MOM_domain = (index(domain_name, "MOM") > 1)
+  endif
+
+  if (is_MOM_domain) then
+    call get_param(param_file, mdl, "TOPO_CONFIG", topo_config, do_not_log=.true., fail_if_missing=.true.)
+  else ! SIS2 has a default value for TOPO_CONFIG.
+    call get_param(param_file, mdl, "TOPO_CONFIG", topo_config, default="file", do_not_log=.true.)
+  endif
 
   auto_mask_table = .false.
   if (.not. present(param_suffix) .and. .not. is_static .and. trim(topo_config) == 'file') then
@@ -314,7 +324,7 @@ subroutine MOM_domains_init(MOM_dom, US, param_file, symmetric, static_memory, &
     call cpu_clock_begin(id_clock_auto_mask)
     if (is_root_PE()) then
       call gen_auto_mask_table(n_global, reentrant, tripolar_N, PEs_used, param_file, inputdir, &
-                               auto_mask_table_fname, US, auto_layout)
+                               auto_mask_table_fname, auto_layout, US)
     endif
     call broadcast(auto_layout, length=2)
     call cpu_clock_end(id_clock_auto_mask)
@@ -462,17 +472,18 @@ subroutine MOM_define_layout(n_global, ndivs, layout)
 end subroutine MOM_define_layout
 
 !> Given a desired number of active npes, generate a layout and mask_table
-subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file, inputdir, filename, US, layout)
+subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file, inputdir, filename, layout, US)
   integer, dimension(2), intent(in)         :: n_global   !< The total number of gridpoints in 2 directions
   logical, dimension(2), intent(in)         :: reentrant  !< True if the x- and y- directions are periodic.
-  logical                                   :: tripolar_N !< A flag indicating whether there is n. tripolar connectivity
+  logical,               intent(in)         :: tripolar_N !< A flag indicating whether there is n. tripolar connectivity
   integer,               intent(in)         :: npes       !< The desired number of active PEs.
   type(param_file_type), intent(in)         :: param_file !< A structure to parse for run-time parameters
-  character(len=128), intent(in)            :: inputdir   !< INPUTDIR parameter
+  character(len=128),    intent(in)         :: inputdir   !< INPUTDIR parameter
   character(len=:), allocatable, intent(in) :: filename   !< Mask table file path (to be auto-generated.)
-  type(unit_scale_type), pointer            :: US !< A dimensional unit scaling type
   integer, dimension(2), intent(out)        :: layout     !< The generated layout of PEs (incl. masked blocks)
-  !local
+  type(unit_scale_type), optional, pointer  :: US         !< A dimensional unit scaling type
+
+  ! Local variables
   real, dimension(n_global(1), n_global(2)) :: D        ! Bathymetric depth (to be read in from TOPO_FILE) [Z ~> m]
   integer, dimension(:,:), allocatable :: mask          ! Cell masks (based on D and MINIMUM_DEPTH)
   character(len=200) :: topo_filepath, topo_file        ! Strings for file/path
@@ -483,18 +494,23 @@ subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file
   real :: Dmask          ! The depth for masking in the same units as D             [Z ~> m]
   real :: min_depth      ! The minimum ocean depth in the same units as D           [Z ~> m]
   real :: mask_depth     ! The depth shallower than which to mask a point as land.  [Z ~> m]
-  real :: glob_ocn_frac  ! ratio of ocean points to total number of points
-  real :: r_p            ! aspect ratio for division count p.
+  real :: glob_ocn_frac  ! ratio of ocean points to total number of points          [nondim]
+  real :: r_p            ! aspect ratio for division count p.                       [nondim]
+  real :: m_to_Z         ! A conversion factor from m to height units           [Z m-1 ~> 1]
   integer :: nx, ny      ! global domain sizes
   integer, parameter :: ibuf=2, jbuf=2
-  real, parameter :: r_extreme = 4.0 ! aspect ratio limit (>1) for a layout to be considered.
+  real, parameter :: r_extreme = 4.0 ! aspect ratio limit (>1) for a layout to be considered [nondim]
   integer :: num_masked_blocks
   integer, allocatable :: mask_table(:,:)
 
+  m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
   ! Read in params necessary for auto-masking
-  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, do_not_log=.true., units="m", default=0.0)
-  call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, do_not_log=.true., units="m", default=-9999.0)
-  call get_param(param_file, mdl, "TOPO_CONFIG", topo_config, do_not_log=.true., fail_if_missing=.true.)
+  call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
+                 units="m", default=0.0, scale=m_to_Z, do_not_log=.true.)
+  call get_param(param_file, mdl, "MASKING_DEPTH", mask_depth, &
+                 units="m", default=-9999.0, scale=m_to_Z, do_not_log=.true.)
+  call get_param(param_file, mdl, "TOPO_CONFIG", topo_config, default="file", do_not_log=.true.)
   call get_param(param_file, mdl, "TOPO_FILE", topo_file, do_not_log=.true., default="topog.nc")
   call get_param(param_file, mdl, "TOPO_VARNAME", topo_varname, do_not_log=.true., default="depth")
   topo_filepath = trim(inputdir)//trim(topo_file)
@@ -514,15 +530,15 @@ subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file
   ny = n_global(2)
 
   ! Read in bathymetric depth.
-  D(:,:) = -9.0e30 * US%m_to_Z ! Initializing to a very large negative depth (tall mountains) everywhere.
+  D(:,:) = -9.0e30 * m_to_Z ! Initializing to a very large negative depth (tall mountains) everywhere.
   call read_field(topo_filepath, trim(topo_varname), D, start=(/1, 1/), nread=n_global, no_domain=.true., &
-      scale=US%m_to_Z)
+                  scale=m_to_Z)
 
   allocate(mask(nx+2*ibuf, ny+2*jbuf), source=0)
 
   ! Determine cell masks
   Dmask = mask_depth
-  if (mask_depth == -9999.0) Dmask = min_depth
+  if (mask_depth == -9999.0*m_to_Z) Dmask = min_depth
   do i=1,nx ; do j=1,ny
     if (D(i,j) <= Dmask) then
       mask(i+ibuf,j+jbuf) = 0
