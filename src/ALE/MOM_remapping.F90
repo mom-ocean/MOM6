@@ -40,6 +40,37 @@ type, public :: remapping_CS ; private
   integer :: answer_date = 99991231
 end type
 
+!> Class to assist in unit tests
+type :: testing
+  private
+  !> True if any fail has been encountered since instantiation of "testing"
+  logical :: state = .false.
+  !> Count of tests checked
+  integer :: num_tests_checked = 0
+  !> Count of tests failed
+  integer :: num_tests_failed = 0
+  !> If true, be verbose and write results to stdout. Default True.
+  logical :: verbose = .true.
+  !> Error channel
+  integer :: stderr = 0
+  !> Standard output channel
+  integer :: stdout = 6
+  !> If true, stop instantly
+  logical :: stop_instantly = .false.
+  !> Record instances that fail
+  integer :: ifailed(100) = 0.
+  !> Record label of first instance that failed
+  character(len=:), allocatable :: label_first_fail
+
+  contains
+    procedure :: test => test           !< Update the testing state
+    procedure :: set => set             !< Set attributes
+    procedure :: outcome => outcome     !< Return current outcome
+    procedure :: summarize => summarize !< Summarize testing state
+    procedure :: real_arr => real_arr   !< Compare array of reals
+    procedure :: int_arr => int_arr     !< Compare array of integers
+end type
+
 ! The following routines are visible to the outside world
 public remapping_core_h, remapping_core_w
 public initialize_remapping, end_remapping, remapping_set_param, extract_member_remapping_CS
@@ -138,21 +169,6 @@ subroutine extract_member_remapping_CS(CS, remapping_scheme, degree, boundary_ex
   if (present(force_bounds_in_subcell)) force_bounds_in_subcell = CS%force_bounds_in_subcell
 
 end subroutine extract_member_remapping_CS
-
-!> Calculate edge coordinate x from cell width h
-subroutine buildGridFromH(nz, h, x)
-  integer,               intent(in)    :: nz !< Number of cells
-  real, dimension(nz),   intent(in)    :: h  !< Cell widths [H]
-  real, dimension(nz+1), intent(inout) :: x  !< Edge coordinates starting at x(1)=0 [H]
-  ! Local variables
-  integer :: k
-
-  x(1) = 0.0
-  do k = 1,nz
-    x(k+1) = x(k) + h(k)
-  enddo
-
-end subroutine buildGridFromH
 
 !> Remaps column of values u0 on grid h0 to grid h1 assuming the top edge is aligned.
 subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edge, PCM_cell)
@@ -1338,74 +1354,60 @@ end subroutine end_remapping
 logical function remapping_unit_tests(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
-  integer, parameter :: n0 = 4, n1 = 3, n2 = 6
-  real :: h0(n0), x0(n0+1), u0(n0)  ! Thicknesses [H], interface heights [H] and values [A] for profile 0
-  real :: h1(n1), x1(n1+1), u1(n1)  ! Thicknesses [H], interface heights [H] and values [A] for profile 1
-  real :: dx1(n1+1)                 ! Interface height changes for profile 1 [H]
-  real :: h2(n2), x2(n2+1), u2(n2)  ! Thicknesses [H], interface heights [H] and values [A] for profile 2
-  data u0 /9., 3., -3., -9./   ! Linear profile, 4 at surface to -4 at bottom [A]
-  data h0 /4*0.75/ ! 4 uniform layers with total depth of 3 [H]
-  data h1 /3*1./   ! 3 uniform layers with total depth of 3 [H]
-  data h2 /6*0.5/  ! 6 uniform layers with total depth of 3 [H]
+  integer :: n0, n1, n2
+  real, allocatable :: h0(:), h1(:), h2(:) ! Thicknesses for test columns [H]
+  real, allocatable :: u0(:), u1(:), u2(:) ! Values for test profiles [A]
+  real, allocatable :: dx1(:) ! Change in interface position [H]
   type(remapping_CS) :: CS !< Remapping control structure
   real, allocatable, dimension(:,:) :: ppoly0_E     ! Edge values of polynomials [A]
   real, allocatable, dimension(:,:) :: ppoly0_S     ! Edge slopes of polynomials [A H-1]
   real, allocatable, dimension(:,:) :: ppoly0_coefs ! Coefficients of polynomials [A]
   integer :: answer_date  ! The vintage of the expressions to test
-  integer :: i
   real, parameter :: hNeglect_dflt = 1.0e-30 ! A thickness [H ~> m or kg m-2] that can be
                                       ! added to thicknesses in a denominator without
                                       ! changing the numerical result, except where
                                       ! a division by zero would otherwise occur.
   real :: err                         ! Errors in the remapped thicknesses [H] or values [A]
   real :: h_neglect, h_neglect_edge   ! Tiny thicknesses used in remapping [H]
-  logical :: thisTest, v, fail
+  type(testing) :: test ! Unit testing convenience functions
 
-  v = verbose
+  call test%set( verbose=verbose ) ! Sets the verbosity flag in test
+
   answer_date = 20190101 ! 20181231
   h_neglect = hNeglect_dflt
   h_neglect_edge = hNeglect_dflt ; if (answer_date < 20190101) h_neglect_edge = 1.0e-10
 
-  write(stdout,*) '==== MOM_remapping: remapping_unit_tests ================='
-  remapping_unit_tests = .false. ! Normally return false
+  if (verbose) write(stdout,*) '  ===== MOM_remapping: remapping_unit_tests ================='
 
-  thisTest = .false.
-  call buildGridFromH(n0, h0, x0)
-  do i=1,n0+1
-    err=x0(i)-0.75*real(i-1)
-    if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
-  enddo
-  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed buildGridFromH() 1'
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
-  call buildGridFromH(n1, h1, x1)
-  do i=1,n1+1
-    err=x1(i)-real(i-1)
-    if (abs(err)>real(i-1)*epsilon(err)) thisTest = .true.
-  enddo
-  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed buildGridFromH() 2'
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  ! This line carries out tests on some older remapping schemes.
+  call test%test( remapping_attic_unit_tests(verbose), 'attic remapping unit tests' )
 
-  thisTest = .false.
+  if (verbose) write(stdout,*) '  - - - - - 1st generation tests - - - - -'
+
   call initialize_remapping(CS, 'PPM_H4', answer_date=answer_date)
-  if (verbose) write(stdout,*) 'h0 (test data)'
-  if (verbose) call dumpGrid(n0,h0,x0,u0)
 
+  ! Profile 0: 4 layers of thickness 0.75 and total depth 3, with du/dz=8
+  n0 = 4
+  allocate( h0(n0), u0(n0) )
+  h0 = (/0.75, 0.75, 0.75, 0.75/)
+  u0 = (/9., 3., -3., -9./)
+
+  ! Profile 1: 3 layers of thickness 1.0 and total depth 3
+  n1 = 3
+  allocate( h1(n1), u1(n1), dx1(n1+1) )
+  h1 = (/1.0, 1.0, 1.0/)
+
+  ! Profile 2: 6 layers of thickness 0.5 and total depth 3
+  n2 = 6
+  allocate( h2(n2), u2(n2) )
+  h2 = (/0.5, 0.5, 0.5, 0.5, 0.5, 0.5/)
+
+  ! Mapping u1 from h1 to h2
   call dzFromH1H2( n0, h0, n1, h1, dx1 )
   call remapping_core_w( CS, n0, h0, u0, n1, dx1, u1, h_neglect, h_neglect_edge)
-  do i=1,n1
-    err=u1(i)-8.*(0.5*real(1+n1)-real(i))
-    if (abs(err)>real(n1-1)*epsilon(err)) thisTest = .true.
-  enddo
-  if (verbose) write(stdout,*) 'h1 (by projection)'
-  if (verbose) call dumpGrid(n1,h1,x1,u1)
-  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed remapping_core_w()'
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  call test%real_arr(3, u1, (/8.,0.,-8./), 'remapping_core_w() PPM_H4')
 
-  thisTest = .false.
-  allocate(ppoly0_E(n0,2))
-  allocate(ppoly0_S(n0,2))
-  allocate(ppoly0_coefs(n0,CS%degree+1))
-
+  allocate(ppoly0_E(n0,2), ppoly0_S(n0,2), ppoly0_coefs(n0,CS%degree+1))
   ppoly0_E(:,:) = 0.0
   ppoly0_S(:,:) = 0.0
   ppoly0_coefs(:,:) = 0.0
@@ -1414,387 +1416,376 @@ logical function remapping_unit_tests(verbose)
   call PPM_reconstruction( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect, answer_date=answer_date )
   call PPM_boundary_extrapolation( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
 
-  thisTest = .false.
-  call buildGridFromH(n2, h2, x2)
-
-  if (verbose) write(stdout,*) 'Via sub-cells'
-  thisTest = .false.
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
                             n2, h2, INTEGRATION_PPM, .false., u2, err )
-  if (verbose) call dumpGrid(n2,h2,x2,u2)
-
-  do i=1,n2
-    err=u2(i)-8./2.*(0.5*real(1+n2)-real(i))
-    if (abs(err)>2.*epsilon(err)) thisTest = .true.
-  enddo
-  if (thisTest) write(stdout,*) 'remapping_unit_tests: Failed remap_via_sub_cells() 2'
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  call test%real_arr(6, u2, (/10.,6.,2.,-2.,-6.,-10./), 'remap_via_sub_cells() 2')
 
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
                             6, (/.125,.125,.125,.125,.125,.125/), INTEGRATION_PPM, .false., u2, err )
-  if (verbose) call dumpGrid(6,h2,x2,u2)
+  call test%real_arr(6, u2, (/11.5,10.5,9.5,8.5,7.5,6.5/), 'remap_via_sub_cells() 3')
 
   call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
                             3, (/2.25,1.5,1./), INTEGRATION_PPM, .false., u2, err )
-  if (verbose) call dumpGrid(3,h2,x2,u2)
+  call test%real_arr(3, u2, (/3.,-10.5,-12./), 'remap_via_sub_cells() 4')
 
-  if (.not. remapping_unit_tests) write(stdout,*) 'Pass'
-
-  write(stdout,*) '===== MOM_remapping: new remapping_unit_tests =================='
+  if (verbose) write(stdout,*) '  - - - - - reconstruction tests - - - - -'
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs)
   allocate(ppoly0_coefs(5,6))
   allocate(ppoly0_E(5,2))
   allocate(ppoly0_S(5,2))
 
-  call PCM_reconstruction(3, (/1.,2.,4./), ppoly0_E(1:3,:), &
-                          ppoly0_coefs(1:3,:) )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,1), (/1.,2.,4./), 'PCM: left edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,2), (/1.,2.,4./), 'PCM: right edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,1), (/1.,2.,4./), 'PCM: P0')
+  call PCM_reconstruction(3, (/1.,2.,4./), &
+                          ppoly0_E(1:3,:), ppoly0_coefs(1:3,:) )
+  call test%real_arr(3, ppoly0_E(:,1), (/1.,2.,4./), 'PCM: left edges')
+  call test%real_arr(3, ppoly0_E(:,2), (/1.,2.,4./), 'PCM: right edges')
+  call test%real_arr(3, ppoly0_coefs(:,1), (/1.,2.,4./), 'PCM: P0')
 
-  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,3.,5./), ppoly0_E(1:3,:), &
-                          ppoly0_coefs(1:3,:), h_neglect )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,1), (/1.,2.,5./), 'Unlim PLM: left edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,2), (/1.,4.,5./), 'Unlim PLM: right edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,1), (/1.,2.,5./), 'Unlim PLM: P0')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,2), (/0.,2.,0./), 'Unlim PLM: P1')
+  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,3.,5./), &
+                          ppoly0_E(1:3,:), ppoly0_coefs(1:3,:), h_neglect )
+  call test%real_arr(3, ppoly0_E(:,1), (/1.,2.,5./), 'Unlim PLM: left edges')
+  call test%real_arr(3, ppoly0_E(:,2), (/1.,4.,5./), 'Unlim PLM: right edges')
+  call test%real_arr(3, ppoly0_coefs(:,1), (/1.,2.,5./), 'Unlim PLM: P0')
+  call test%real_arr(3, ppoly0_coefs(:,2), (/0.,2.,0./), 'Unlim PLM: P1')
 
-  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,2.,7./), ppoly0_E(1:3,:), &
-                          ppoly0_coefs(1:3,:), h_neglect )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,1), (/1.,1.,7./), 'Left lim PLM: left edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,2), (/1.,3.,7./), 'Left lim PLM: right edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,1), (/1.,1.,7./), 'Left lim PLM: P0')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,2), (/0.,2.,0./), 'Left lim PLM: P1')
+  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,2.,7./), &
+                          ppoly0_E(1:3,:), ppoly0_coefs(1:3,:), h_neglect )
+  call test%real_arr(3, ppoly0_E(:,1), (/1.,1.,7./), 'Left lim PLM: left edges')
+  call test%real_arr(3, ppoly0_E(:,2), (/1.,3.,7./), 'Left lim PLM: right edges')
+  call test%real_arr(3, ppoly0_coefs(:,1), (/1.,1.,7./), 'Left lim PLM: P0')
+  call test%real_arr(3, ppoly0_coefs(:,2), (/0.,2.,0./), 'Left lim PLM: P1')
 
-  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,6.,7./), ppoly0_E(1:3,:), &
-                          ppoly0_coefs(1:3,:), h_neglect )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,1), (/1.,5.,7./), 'Right lim PLM: left edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,2), (/1.,7.,7./), 'Right lim PLM: right edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,1), (/1.,5.,7./), 'Right lim PLM: P0')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,2), (/0.,2.,0./), 'Right lim PLM: P1')
+  call PLM_reconstruction(3, (/1.,1.,1./), (/1.,6.,7./), &
+                          ppoly0_E(1:3,:), ppoly0_coefs(1:3,:), h_neglect )
+  call test%real_arr(3, ppoly0_E(:,1), (/1.,5.,7./), 'Right lim PLM: left edges')
+  call test%real_arr(3, ppoly0_E(:,2), (/1.,7.,7./), 'Right lim PLM: right edges')
+  call test%real_arr(3, ppoly0_coefs(:,1), (/1.,5.,7./), 'Right lim PLM: P0')
+  call test%real_arr(3, ppoly0_coefs(:,2), (/0.,2.,0./), 'Right lim PLM: P1')
 
-  call PLM_reconstruction(3, (/1.,2.,3./), (/1.,4.,9./), ppoly0_E(1:3,:), &
-                          ppoly0_coefs(1:3,:), h_neglect )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,1), (/1.,2.,9./), 'Non-uniform line PLM: left edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_E(:,2), (/1.,6.,9./), 'Non-uniform line PLM: right edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,1), (/1.,2.,9./), 'Non-uniform line PLM: P0')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 3, ppoly0_coefs(:,2), (/0.,4.,0./), 'Non-uniform line PLM: P1')
+  call PLM_reconstruction(3, (/1.,2.,3./), (/1.,4.,9./), &
+                          ppoly0_E(1:3,:), ppoly0_coefs(1:3,:), h_neglect )
+  call test%real_arr(3, ppoly0_E(:,1), (/1.,2.,9./), 'Non-uniform line PLM: left edges')
+  call test%real_arr(3, ppoly0_E(:,2), (/1.,6.,9./), 'Non-uniform line PLM: right edges')
+  call test%real_arr(3, ppoly0_coefs(:,1), (/1.,2.,9./), 'Non-uniform line PLM: P0')
+  call test%real_arr(3, ppoly0_coefs(:,2), (/0.,4.,0./), 'Non-uniform line PLM: P1')
 
-  call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E, &
-                                h_neglect=1e-10, answer_date=answer_date )
+  call edge_values_explicit_h4(5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), &
+                               ppoly0_E, h_neglect=1e-10, answer_date=answer_date )
   ! The next two tests currently fail due to roundoff, but pass when given a reasonable tolerance.
-  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges', tol=8.0e-15)
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
-  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/2.,4.,6.,8.,10./), 'Line H4: right edges', tol=1.0e-14)
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  call test%real_arr(5, ppoly0_E(:,1), (/0.,2.,4.,6.,8./), 'Line H4: left edges', tol=8.0e-15)
+  call test%real_arr(5, ppoly0_E(:,2), (/2.,4.,6.,8.,10./), 'Line H4: right edges', tol=1.0e-14)
+
   ppoly0_E(:,1) = (/0.,2.,4.,6.,8./)
   ppoly0_E(:,2) = (/2.,4.,6.,8.,10./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/1.,3.,5.,7.,9./), ppoly0_E(1:5,:), &
                               ppoly0_coefs(1:5,:), h_neglect, answer_date=answer_date )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,1), (/1.,2.,4.,6.,9./), 'Line PPM: P0')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,2), (/0.,2.,2.,2.,0./), 'Line PPM: P1')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,3), (/0.,0.,0.,0.,0./), 'Line PPM: P2')
+  call test%real_arr(5, ppoly0_coefs(:,1), (/1.,2.,4.,6.,9./), 'Line PPM: P0')
+  call test%real_arr(5, ppoly0_coefs(:,2), (/0.,2.,2.,2.,0./), 'Line PPM: P1')
+  call test%real_arr(5, ppoly0_coefs(:,3), (/0.,0.,0.,0.,0./), 'Line PPM: P2')
 
   call edge_values_explicit_h4( 5, (/1.,1.,1.,1.,1./), (/1.,1.,7.,19.,37./), ppoly0_E, &
                                 h_neglect=1e-10, answer_date=answer_date )
   ! The next two tests are now passing when answer_date >= 20190101, but otherwise only work to roundoff.
-  thisTest = test_answer(v, 5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges', tol=2.7e-14)
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
-  thisTest = test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges', tol=4.8e-14)
-  remapping_unit_tests = remapping_unit_tests .or. thisTest
+  call test%real_arr(5, ppoly0_E(:,1), (/3.,0.,3.,12.,27./), 'Parabola H4: left edges', tol=2.7e-14)
+  call test%real_arr(5, ppoly0_E(:,2), (/0.,3.,12.,27.,48./), 'Parabola H4: right edges', tol=4.8e-14)
   ppoly0_E(:,1) = (/0.,0.,3.,12.,27./)
   ppoly0_E(:,2) = (/0.,3.,12.,27.,48./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,1.,7.,19.,37./), ppoly0_E(1:5,:), &
                           ppoly0_coefs(1:5,:), h_neglect, answer_date=answer_date )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_E(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: left edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_E(:,2), (/0.,3.,12.,27.,37./), 'Parabola PPM: right edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: P0')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,2), (/0.,0.,6.,12.,0./), 'Parabola PPM: P1')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,3), (/0.,3.,3.,3.,0./), 'Parabola PPM: P2')
+  call test%real_arr(5, ppoly0_E(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: left edges')
+  call test%real_arr(5, ppoly0_E(:,2), (/0.,3.,12.,27.,37./), 'Parabola PPM: right edges')
+  call test%real_arr(5, ppoly0_coefs(:,1), (/0.,0.,3.,12.,37./), 'Parabola PPM: P0')
+  call test%real_arr(5, ppoly0_coefs(:,2), (/0.,0.,6.,12.,0./), 'Parabola PPM: P1')
+  call test%real_arr(5, ppoly0_coefs(:,3), (/0.,3.,3.,3.,0./), 'Parabola PPM: P2')
 
   ppoly0_E(:,1) = (/0.,0.,6.,10.,15./)
   ppoly0_E(:,2) = (/0.,6.,12.,17.,15./)
   call PPM_reconstruction(5, (/1.,1.,1.,1.,1./), (/0.,5.,7.,16.,15./), ppoly0_E(1:5,:), &
                           ppoly0_coefs(1:5,:), h_neglect, answer_date=answer_date )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_E(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: left edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_E(:,2), (/0.,6.,9.,16.,15./), 'Limits PPM: right edges')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: P0')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,2), (/0.,6.,0.,0.,0./), 'Limits PPM: P1')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 5, ppoly0_coefs(:,3), (/0.,-3.,3.,0.,0./), 'Limits PPM: P2')
+  call test%real_arr(5, ppoly0_E(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: left edges')
+  call test%real_arr(5, ppoly0_E(:,2), (/0.,6.,9.,16.,15./), 'Limits PPM: right edges')
+  call test%real_arr(5, ppoly0_coefs(:,1), (/0.,3.,6.,16.,15./), 'Limits PPM: P0')
+  call test%real_arr(5, ppoly0_coefs(:,2), (/0.,6.,0.,0.,0./), 'Limits PPM: P1')
+  call test%real_arr(5, ppoly0_coefs(:,3), (/0.,-3.,3.,0.,0./), 'Limits PPM: P2')
 
   call PLM_reconstruction(4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E(1:4,:), &
                           ppoly0_coefs(1:4,:), h_neglect )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 4, ppoly0_E(1:4,1), (/5.,5.,3.,1./), 'PPM: left edges h=0110')
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 4, ppoly0_E(1:4,2), (/5.,3.,1.,1./), 'PPM: right edges h=0110')
+  call test%real_arr(4, ppoly0_E(1:4,1), (/5.,5.,3.,1./), 'PPM: left edges h=0110')
+  call test%real_arr(4, ppoly0_E(1:4,2), (/5.,3.,1.,1./), 'PPM: right edges h=0110')
   call remap_via_sub_cells( 4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E(1:4,:), &
                             ppoly0_coefs(1:4,:), &
                             2, (/1.,1./), INTEGRATION_PLM, .false., u2, err )
-  remapping_unit_tests = remapping_unit_tests .or. &
-    test_answer(v, 2, u2, (/4.,2./), 'PLM: remapped  h=0110->h=11')
+  call test%real_arr(2, u2, (/4.,2./), 'PLM: remapped  h=0110->h=11')
 
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs)
 
-  ! This line carries out tests on some older remapping schemes.
-  remapping_unit_tests = remapping_unit_tests .or. remapping_attic_unit_tests(verbose)
+  if (verbose) write(stdout,*) '  - - - - - interpolation tests - - - - -'
 
-  if (.not. remapping_unit_tests) write(stdout,*) 'Pass'
-
-  write(stdout,*) '=== MOM_remapping: interpolation and reintegration unit tests ==='
-  if (verbose) write(stdout,*) '- - - - - - - - - - interpolation tests  - - - - - - - - -'
-
-  fail = test_interp(verbose, 'Identity: 3 layer', &
+  call test_interp(test, 'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./), &
                      3, (/1.,2.,3./), (/1.,2.,3.,4./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'A: 3 layer to 2', &
+  call test_interp(test, 'A: 3 layer to 2', &
                      3, (/1.,1.,1./), (/1.,2.,3.,4./), &
                      2, (/1.5,1.5/), (/1.,2.5,4./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'B: 2 layer to 3', &
+  call test_interp(test, 'B: 2 layer to 3', &
                      2, (/1.5,1.5/), (/1.,4.,7./), &
                      3, (/1.,1.,1./), (/1.,3.,5.,7./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'C: 3 layer (vanished middle) to 2', &
+  call test_interp(test, 'C: 3 layer (vanished middle) to 2', &
                      3, (/1.,0.,2./), (/1.,2.,2.,3./), &
                      2, (/1.,2./), (/1.,2.,3./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'D: 3 layer (deep) to 3', &
+  call test_interp(test, 'D: 3 layer (deep) to 3', &
                      3, (/1.,2.,3./), (/1.,2.,4.,7./), &
                      2, (/2.,2./), (/1.,3.,5./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'E: 3 layer to 3 (deep)', &
+  call test_interp(test, 'E: 3 layer to 3 (deep)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
                      3, (/2.,3.,4./), (/1.,3.,6.,8./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'F: 3 layer to 4 with vanished top/botton', &
+  call test_interp(test, 'F: 3 layer to 4 with vanished top/botton', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
                      4, (/0.,2.,5.,0./), (/0.,1.,3.,8.,0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'Fs: 3 layer to 4 with vanished top/botton (shallow)', &
+  call test_interp(test, 'Fs: 3 layer to 4 with vanished top/botton (shallow)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
                      4, (/0.,2.,4.,0./), (/0.,1.,3.,7.,0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_interp(verbose, 'Fd: 3 layer to 4 with vanished top/botton (deep)', &
+  call test_interp(test, 'Fd: 3 layer to 4 with vanished top/botton (deep)', &
                      3, (/1.,2.,4./), (/1.,2.,4.,8./), &
                      4, (/0.,2.,6.,0./), (/0.,1.,3.,8.,0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  if (verbose) write(stdout,*) '- - - - - - - - - - reintegration tests  - - - - - - - - -'
+  if (verbose) write(stdout,*) '  - - - - - reintegration tests - - - - -'
 
-  fail = test_reintegrate(verbose, 'Identity: 3 layer', &
+  call test_reintegrate(test, 'Identity: 3 layer', &
                      3, (/1.,2.,3./), (/-5.,2.,1./), &
                      3, (/1.,2.,3./), (/-5.,2.,1./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'A: 3 layer to 2', &
+  call test_reintegrate(test, 'A: 3 layer to 2', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,3./), (/-4.,2./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'A: 3 layer to 2 (deep)', &
+  call test_reintegrate(test, 'A: 3 layer to 2 (deep)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,4./), (/-4.,2./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'A: 3 layer to 2 (shallow)', &
+  call test_reintegrate(test, 'A: 3 layer to 2 (shallow)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      2, (/3.,2./), (/-4.,1.5/) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'B: 3 layer to 4 with vanished top/bottom', &
+  call test_reintegrate(test, 'B: 3 layer to 4 with vanished top/bottom', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      4, (/0.,3.,3.,0./), (/0.,-4.,2.,0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'C: 3 layer to 4 with vanished top//middle/bottom', &
+  call test_reintegrate(test, 'C: 3 layer to 4 with vanished top//middle/bottom', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      5, (/0.,3.,0.,3.,0./), (/0.,-4.,0.,2.,0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'D: 3 layer to 3 (vanished)', &
+  call test_reintegrate(test, 'D: 3 layer to 3 (vanished)', &
                      3, (/2.,2.,2./), (/-5.,2.,1./), &
                      3, (/0.,0.,0./), (/0.,0.,0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'D: 3 layer (vanished) to 3', &
+  call test_reintegrate(test, 'D: 3 layer (vanished) to 3', &
                      3, (/0.,0.,0./), (/-5.,2.,1./), &
                      3, (/2.,2.,2./), (/0., 0., 0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
 
-  fail = test_reintegrate(verbose, 'D: 3 layer (vanished) to 3 (vanished)', &
+  call test_reintegrate(test, 'D: 3 layer (vanished) to 3 (vanished)', &
                      3, (/0.,0.,0./), (/-5.,2.,1./), &
-                     3, (/0.,0.,0./), (/0., 0., 0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
+                     3, (/0.,0.,0./), (/0.,0.,0./) )
 
-  fail = test_reintegrate(verbose, 'D: 3 layer (vanished) to 3 (vanished)', &
+  call test_reintegrate(test, 'D: 3 layer (vanished) to 3 (vanished)', &
                      3, (/0.,0.,0./), (/0.,0.,0./), &
-                     3, (/0.,0.,0./), (/0., 0., 0./) )
-  remapping_unit_tests = remapping_unit_tests .or. fail
+                     3, (/0.,0.,0./), (/0.,0.,0./) )
 
-  if (.not. remapping_unit_tests) write(stdout,*) 'Pass'
+  remapping_unit_tests = test%summarize('remapping_unit_tests')
 
 end function remapping_unit_tests
 
-!> Returns true if any cell of u and u_true are not identical. Returns false otherwise.
-logical function test_answer(verbose, n, u, u_true, label, tol)
-  logical,            intent(in) :: verbose !< If true, write results to stdout
-  integer,            intent(in) :: n      !< Number of cells in u
-  real, dimension(n), intent(in) :: u      !< Values to test [A]
-  real, dimension(n), intent(in) :: u_true !< Values to test against (correct answer) [A]
-  character(len=*),   intent(in) :: label  !< Message
-  real,     optional, intent(in) :: tol    !< The tolerance for differences between u and u_true [A]
-  ! Local variables
-  real :: tolerance ! The tolerance for differences between u and u_true [A]
-  integer :: k
-
-  tolerance = 0.0 ; if (present(tol)) tolerance = tol
-  test_answer = .false.
-  do k = 1, n
-    if (abs(u(k) - u_true(k)) > tolerance) test_answer = .true.
-  enddo
-  if (test_answer .or. verbose) then
-    write(stdout,'(a4,2a24,1x,a)') 'k','Calculated value','Correct value',label
-    do k = 1, n
-      if (abs(u(k) - u_true(k)) > tolerance) then
-        write(stdout,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
-        write(stderr,'(i4,1p2e24.16,a,1pe24.16,a)') k,u(k),u_true(k),' err=',u(k)-u_true(k),' < wrong'
-      else
-        write(stdout,'(i4,1p2e24.16)') k,u(k),u_true(k)
-      endif
-    enddo
-  endif
-
-end function test_answer
-
-!> Returns true if a test of interpolate_column() produces the wrong answer
-logical function test_interp(verbose, msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
-  logical,                  intent(in) :: verbose !< If true, write results to stdout
-  character(len=*),         intent(in) :: msg   !< Message to label test
-  integer,                  intent(in) :: nsrc  !< Number of source cells
-  real, dimension(nsrc),    intent(in) :: h_src !< Thickness of source cells [H]
-  real, dimension(nsrc+1),  intent(in) :: u_src !< Values at source cell interfaces [A]
-  integer,                  intent(in) :: ndest !< Number of destination cells
+!> Test if interpolate_column() produces the wrong answer
+subroutine test_interp(test, msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
+  type(testing),         intent(inout) :: test   !< Unit testing convenience functions
+  character(len=*),         intent(in) :: msg    !< Message to label test
+  integer,                  intent(in) :: nsrc   !< Number of source cells
+  real, dimension(nsrc),    intent(in) :: h_src  !< Thickness of source cells [H]
+  real, dimension(nsrc+1),  intent(in) :: u_src  !< Values at source cell interfaces [A]
+  integer,                  intent(in) :: ndest  !< Number of destination cells
   real, dimension(ndest),   intent(in) :: h_dest !< Thickness of destination cells [H]
   real, dimension(ndest+1), intent(in) :: u_true !< Correct value at destination cell interfaces [A]
   ! Local variables
   real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces [A]
-  integer :: k
-  real :: error ! The difference between the evaluated and expected solutions [A]
 
   ! Interpolate from src to dest
   call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, .true.)
+  call test%real_arr(ndest, u_dest, u_true, msg)
+end subroutine test_interp
 
-  test_interp = .false.
-  do k=1,ndest+1
-    if (u_dest(k)/=u_true(k)) test_interp = .true.
-  enddo
-  if (verbose .or. test_interp) then
-    write(stdout,'(2a)') ' Test: ',msg
-    write(stdout,'(a3,3(a24))') 'k','u_result','u_true','error'
-    do k=1,ndest+1
-      error = u_dest(k)-u_true(k)
-      if (error==0.) then
-        write(stdout,'(i3,3(1pe24.16))') k,u_dest(k),u_true(k),u_dest(k)-u_true(k)
-      else
-        write(stdout,'(i3,3(1pe24.16),1x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
-        write(stderr,'(i3,3(1pe24.16),1x,a)') k,u_dest(k),u_true(k),u_dest(k)-u_true(k),'<--- WRONG!'
-      endif
-    enddo
-  endif
-end function test_interp
-
-!> Returns true if a test of reintegrate_column() produces the wrong answer
-logical function test_reintegrate(verbose, msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
-  logical,                intent(in) :: verbose !< If true, write results to stdout
-  character(len=*),       intent(in) :: msg   !< Message to label test
-  integer,                intent(in) :: nsrc  !< Number of source cells
-  real, dimension(nsrc),  intent(in) :: h_src !< Thickness of source cells [H]
-  real, dimension(nsrc),  intent(in) :: uh_src !< Values of source cell stuff [A H]
-  integer,                intent(in) :: ndest  !< Number of destination cells
-  real, dimension(ndest), intent(in) :: h_dest !< Thickness of destination cells [H]
+!> Test if reintegrate_column() produces the wrong answer
+subroutine test_reintegrate(test, msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
+  type(testing),       intent(inout) :: test    !< Unit testing convenience functions
+  character(len=*),       intent(in) :: msg     !< Message to label test
+  integer,                intent(in) :: nsrc    !< Number of source cells
+  real, dimension(nsrc),  intent(in) :: h_src   !< Thickness of source cells [H]
+  real, dimension(nsrc),  intent(in) :: uh_src  !< Values of source cell stuff [A H]
+  integer,                intent(in) :: ndest   !< Number of destination cells
+  real, dimension(ndest), intent(in) :: h_dest  !< Thickness of destination cells [H]
   real, dimension(ndest), intent(in) :: uh_true !< Correct value of destination cell stuff [A H]
   ! Local variables
   real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells [A H]
-  integer :: k
-  real :: error  ! The difference between the evaluated and expected solutions [A H]
 
   ! Interpolate from src to dest
   call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
+  call test%real_arr(ndest, uh_dest, uh_true, msg)
 
-  test_reintegrate = .false.
-  do k=1,ndest
-    if (uh_dest(k)/=uh_true(k)) test_reintegrate = .true.
+end subroutine test_reintegrate
+
+! =========================================================================================
+! The following provide the function for the testing_type helper class
+
+!> Update the state with "test"
+subroutine test(this, state, label)
+  class(testing),   intent(inout) :: this  !< This testing class
+  logical,          intent(in)    :: state !< True to indicate a fail, false otherwise
+  character(len=*), intent(in)    :: label !< Message
+
+  this%num_tests_checked = this%num_tests_checked + 1
+  if (state) then
+    this%state = .true.
+    this%num_tests_failed = this%num_tests_failed + 1
+    this%ifailed( this%num_tests_failed ) = this%num_tests_checked
+    if (this%num_tests_failed == 1) this%label_first_fail = label
+  endif
+  if (this%stop_instantly .and. this%state) stop 1
+end subroutine test
+
+!> Set attributes
+subroutine set(this, verbose, stdout, stderr, stop_instantly)
+  class(testing), intent(inout) :: this  !< This testing class
+  logical, optional, intent(in) :: verbose !< True or false setting to assign to verbosity
+  integer, optional, intent(in) :: stdout !< The stdout channel to use
+  integer, optional, intent(in) :: stderr !< The stderr channel to use
+  logical, optional, intent(in) :: stop_instantly !< If true, stop immediately on error detection
+
+  if (present(verbose)) then
+    this%verbose = verbose
+  endif
+  if (present(stdout)) then
+    this%stdout = stdout
+  endif
+  if (present(stderr)) then
+    this%stderr = stderr
+  endif
+  if (present(stop_instantly)) then
+    this%stop_instantly = stop_instantly
+  endif
+end subroutine set
+
+!> Returns state
+logical function outcome(this)
+  class(testing), intent(inout) :: this !< This testing class
+  outcome = this%state
+end function outcome
+
+!> Summarize results
+logical function summarize(this, label)
+  class(testing),  intent(inout) :: this  !< This testing class
+  character(len=*),   intent(in) :: label !< Message
+  integer :: i
+
+  if (this%state) then
+    write(this%stdout,'(a," : ",a,", ",i4," failed of ",i4," tested")') &
+         'FAIL', trim(label), this%num_tests_failed, this%num_tests_checked
+    write(this%stdout,'(a,100i4)') 'Failed tests:',(this%ifailed(i),i=1,this%num_tests_failed)
+    write(this%stdout,'(a,a)') 'First failed test: ',trim(this%label_first_fail)
+    write(this%stderr,'(a,100i4)') 'Failed tests:',(this%ifailed(i),i=1,this%num_tests_failed)
+    write(this%stderr,'(a,a)') 'First failed test: ',trim(this%label_first_fail)
+    write(this%stderr,'(a," : ",a)') trim(label),'FAILED'
+  else
+    write(this%stdout,'(a," : ",a,", all ",i4," tests passed")') &
+         'Pass', trim(label), this%num_tests_checked
+  endif
+  summarize = this%state
+end function summarize
+
+!> Compare u_test to u_true, report, and return true if a difference larger than tol is measured
+!!
+!! If in verbose mode, display results to stdout
+!! If a difference is measured, display results to stdout and stderr
+subroutine real_arr(this, n, u_test, u_true, label, tol)
+  class(testing),  intent(inout) :: this   !< This testing class
+  integer,            intent(in) :: n      !< Number of cells in u
+  real, dimension(n), intent(in) :: u_test !< Values to test [A]
+  real, dimension(n), intent(in) :: u_true !< Values to test against (correct answer) [A]
+  character(len=*),   intent(in) :: label  !< Message
+  real,     optional, intent(in) :: tol    !< The tolerance for differences between u and u_true [A]
+  ! Local variables
+  integer :: k
+  logical :: this_test
+  real :: tolerance, err ! Tolerance for differences, and error [A]
+
+  tolerance = 0.0
+  if (present(tol)) tolerance = tol
+  this_test = .false.
+
+  ! Scan for any mismatch between u_test and u_true
+  do k = 1, n
+    if (abs(u_test(k) - u_true(k)) > tolerance) this_test = .true.
   enddo
-  if (verbose .or. test_reintegrate) then
-    write(stdout,'(2a)') ' Test: ',msg
-    write(stdout,'(a3,3(a24))') 'k','uh_result','uh_true','error'
-    do k=1,ndest
-      error = uh_dest(k)-uh_true(k)
-      if (error==0.) then
-        write(stdout,'(i3,3(1pe24.16))') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k)
+
+  ! If either being verbose, or an error was measured then display results
+  if (this_test .or. this%verbose) then
+    write(this%stdout,'(a4,2a24,1x,a)') 'k','Calculated value','Correct value',label
+    if (this_test) write(this%stderr,'(a4,2a24,1x,a)') 'k','Calculated value','Correct value',label
+    do k = 1, n
+      err = u_test(k) - u_true(k)
+      if (abs(err) > tolerance) then
+        write(this%stdout,'(i4,1p2e24.16,a,1pe24.16,a)') k, u_test(k), u_true(k), &
+                         ' err=', err, ' <--- WRONG'
+        write(this%stderr,'(i4,1p2e24.16,a,1pe24.16,a)') k, u_test(k), u_true(k), &
+                         ' err=', err, ' <--- WRONG'
       else
-        write(stdout,'(i3,3(1pe24.16),1x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
-        write(stderr,'(i3,3(1pe24.16),1x,a)') k,uh_dest(k),uh_true(k),uh_dest(k)-uh_true(k),'<--- WRONG!'
+        write(this%stdout,'(i4,1p2e24.16)') k, u_test(k), u_true(k)
       endif
     enddo
   endif
-end function test_reintegrate
 
-!> Convenience function for printing grid to screen
-subroutine dumpGrid(n,h,x,u)
-  integer, intent(in) :: n !< Number of cells
-  real, dimension(:), intent(in) :: h !< Cell thickness [H]
-  real, dimension(:), intent(in) :: x !< Interface delta [H]
-  real, dimension(:), intent(in) :: u !< Cell average values [A]
-  integer :: i
-  write(stdout,'("i=",20i10)') (i,i=1,n+1)
-  write(stdout,'("x=",20es10.2)') (x(i),i=1,n+1)
-  write(stdout,'("i=",5x,20i10)') (i,i=1,n)
-  write(stdout,'("h=",5x,20es10.2)') (h(i),i=1,n)
-  write(stdout,'("u=",5x,20es10.2)') (u(i),i=1,n)
-end subroutine dumpGrid
+  call this%test( this_test, label ) ! Updates state and counters in this
+end subroutine real_arr
+
+!> Compare i_test to i_true and report and return true if a difference is found
+!!
+!! If in verbose mode, display results to stdout
+!! If a difference is measured, display results to stdout and stderr
+subroutine int_arr(this, n, i_test, i_true, label)
+  class(testing),     intent(inout) :: this   !< This testing class
+  integer,               intent(in) :: n      !< Number of cells in u
+  integer, dimension(n), intent(in) :: i_test !< Values to test [A]
+  integer, dimension(n), intent(in) :: i_true !< Values to test against (correct answer) [A]
+  character(len=*),      intent(in) :: label  !< Message
+  ! Local variables
+  integer :: k
+  logical :: this_test
+
+  this_test = .false.
+
+  ! Scan for any mismatch between u_test and u_true
+  do k = 1, n
+    if (i_test(k) .ne. i_true(k)) this_test = .true.
+  enddo
+
+  if (this%verbose) then
+     write(this%stdout,'(a12," : calculated =",30i3)') label, i_test
+     write(this%stdout,'(12x,"      correct =",30i3)') i_true
+     if (this_test) write(this%stdout,'(3x,a,8x,"error =",30i3)') 'FAIL --->', i_test(:) - i_true(:)
+   endif
+   if (this_test) then
+     write(this%stderr,'(a12," : calculated =",30i3)') label, i_test
+     write(this%stderr,'(12x,"      correct =",30i3)') i_true
+     write(this%stderr,'("   FAIL --->        error =",30i3)') i_test(:) - i_true(:)
+   endif
+
+  call this%test( this_test, label ) ! Updates state and counters in this
+end subroutine int_arr
 
 end module MOM_remapping
