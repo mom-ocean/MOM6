@@ -322,7 +322,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
                                                      !! interpreted [a] then [A ~> a]
   real, dimension(:,:),  allocatable   :: mask_in    ! A 2-d mask for extended input grid [nondim]
 
-  real :: PI_180  ! A conversion factor from degrees to radians
+  real :: PI_180  ! A conversion factor from degrees to radians [radians degree-1]
   integer :: id, jd, kd, jdp ! Input dataset data sizes
   integer :: i, j, k
   integer, dimension(4) :: start, count
@@ -670,7 +670,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
                                                      !! on the original grid [a]
   real, dimension(:,:),  allocatable   :: mask_in    !< A 2-d mask for extended input grid [nondim]
 
-  real :: PI_180  ! A conversion factor from degrees to radians
+  real :: PI_180  ! A conversion factor from degrees to radians [radians degree-1]
   integer :: id, jd, kd, jdp ! Input dataset data sizes
   integer :: i, j, k
   real, dimension(:,:), allocatable :: x_in ! Input file longitudes [radians]

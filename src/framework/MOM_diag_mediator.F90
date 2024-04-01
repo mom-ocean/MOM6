@@ -86,8 +86,8 @@ end interface downsample_diag_field
 
 !> Contained for down sampled masks
 type, private :: diag_dsamp
-  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
-  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
+  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes [nondim]
+  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes [nondim]
 end type diag_dsamp
 
 !> A group of 1D axes that comprise a 1D/2D/3D mesh
@@ -130,8 +130,8 @@ type, public :: axes_grp
   integer :: id_volume = -1 !< The diag_manager id for volume to be used for cell_measure of variables
                             !! with this axes_grp.
   ! For masking
-  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes
-  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes
+  real, pointer, dimension(:,:)   :: mask2d => null() !< Mask for 2d (x-y) axes [nondim]
+  real, pointer, dimension(:,:,:) :: mask3d => null() !< Mask for 3d axes [nondim]
   type(diag_dsamp), dimension(2:MAX_DSAMP_LEV) :: dsamp !< Downsample container
 end type axes_grp
 
@@ -183,7 +183,8 @@ type, private :: diag_type
   character(64) :: debug_str = '' !< For FATAL errors and debugging.
   type(axes_grp), pointer :: axes => null() !< The axis group for this diagnostic
   type(diag_type), pointer :: next => null() !< Pointer to the next diagnostic
-  real :: conversion_factor = 0. !< A factor to multiply data by before posting to FMS, if non-zero.
+  real :: conversion_factor = 0. !< If non-zero, a factor to multiply data by before posting to FMS,
+                                 !! often including factors to undo internal scaling in units of [a A-1 ~> 1]
   logical :: v_extensive = .false. !< True for vertically extensive fields (vertically integrated).
                                    !! False for intensive (concentrations).
   integer :: xyz_method = 0 !< A 3 digit integer encoding the diagnostics cell method
@@ -217,11 +218,11 @@ type diagcs_dsamp
   type(axes_grp), dimension(:), allocatable :: remap_axesTi, remap_axesBi, remap_axesCui, remap_axesCvi
   !>@}
 
-  real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
-  real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
-  real, dimension(:,:),   pointer :: mask2dCu  => null() !< 2D mask array for east-face points
-  real, dimension(:,:),   pointer :: mask2dCv  => null() !< 2D mask array for north-face points
-  !>@{ 3D mask arrays for diagnostics at layers (mask...L) and interfaces (mask...i)
+  real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points [nondim]
+  real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points [nondim]
+  real, dimension(:,:),   pointer :: mask2dCu  => null() !< 2D mask array for east-face points [nondim]
+  real, dimension(:,:),   pointer :: mask2dCv  => null() !< 2D mask array for north-face points [nondim]
+  !>@{ 3D mask arrays for diagnostics at layers (mask...L) and interfaces (mask...i), all [nondim]
   real, dimension(:,:,:), pointer :: mask3dTL  => null()
   real, dimension(:,:,:), pointer :: mask3dBL  => null()
   real, dimension(:,:,:), pointer :: mask3dCuL => null()
@@ -269,11 +270,11 @@ type, public :: diag_ctrl
   type(axes_grp) :: axesZL !< A 1-D z-space axis at layer centers
   type(axes_grp) :: axesNull !< An axis group for scalars
 
-  real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points
-  real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points
-  real, dimension(:,:),   pointer :: mask2dCu  => null() !< 2D mask array for east-face points
-  real, dimension(:,:),   pointer :: mask2dCv  => null() !< 2D mask array for north-face points
-  !>@{ 3D mask arrays for diagnostics at layers (mask...L) and interfaces (mask...i)
+  real, dimension(:,:),   pointer :: mask2dT   => null() !< 2D mask array for cell-center points [nondim]
+  real, dimension(:,:),   pointer :: mask2dBu  => null() !< 2D mask array for cell-corner points [nondim]
+  real, dimension(:,:),   pointer :: mask2dCu  => null() !< 2D mask array for east-face points [nondim]
+  real, dimension(:,:),   pointer :: mask2dCv  => null() !< 2D mask array for north-face points [nondim]
+  !>@{ 3D mask arrays for diagnostics at layers (mask...L) and interfaces (mask...i) all [nondim]
   real, dimension(:,:,:), pointer :: mask3dTL  => null()
   real, dimension(:,:,:), pointer :: mask3dBL  => null()
   real, dimension(:,:,:), pointer :: mask3dCuL => null()
@@ -293,7 +294,7 @@ type, public :: diag_ctrl
   type(diag_type), dimension(:), allocatable :: diags !< The list of diagnostics
   integer :: next_free_diag_id !< The next unused diagnostic ID
 
-  !> default missing value to be sent to ALL diagnostics registrations
+  !> default missing value to be sent to ALL diagnostics registrations [various]
   real :: missing_value = -1.0e+34
 
   !> Number of diagnostic vertical coordinates (remapped)
@@ -358,10 +359,13 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh, id_null
   integer :: id_zl_native, id_zi_native
   integer :: i, j, nz
-  real :: zlev(GV%ke), zinter(GV%ke+1)
+  real :: zlev(GV%ke)     ! Numerical values for layer vertical coordinates, in unscaled units
+                          ! that might be [m], [kg m-3] or [nondim], depending on the coordinate.
+  real :: zinter(GV%ke+1) ! Numerical values for interface vertical coordinates, in unscaled units
+                          ! that might be [m], [kg m-3] or [nondim], depending on the coordinate.
   logical :: set_vert
-  real, allocatable, dimension(:) :: IaxB,iax
-  real, allocatable, dimension(:) :: JaxB,jax
+  real, allocatable, dimension(:) :: IaxB, iax ! Index-based integer and half-integer i-axis labels [nondim]
+  real, allocatable, dimension(:) :: JaxB, jax ! Index-based integer and half-integer j-axis labels [nondim]
 
 
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
@@ -596,10 +600,19 @@ subroutine set_axes_info_dsamp(G, GV, param_file, diag_cs, id_zl_native, id_zi_n
   ! Local variables
   integer :: id_xq, id_yq, id_zl, id_zi, id_xh, id_yh
   integer :: i, j, nz, dl
-  real, dimension(:), pointer :: gridLonT_dsamp =>NULL()
-  real, dimension(:), pointer :: gridLatT_dsamp =>NULL()
-  real, dimension(:), pointer :: gridLonB_dsamp =>NULL()
-  real, dimension(:), pointer :: gridLatB_dsamp =>NULL()
+  real, dimension(:), pointer :: gridLonT_dsamp =>NULL() ! The longitude of downsampled T points for labeling
+                                                         ! the output axes, often in units of [degrees_N] or
+                                                         ! [km] or [m] or [gridpoints].
+  real, dimension(:), pointer :: gridLatT_dsamp =>NULL() ! The latitude of downsampled T points for labeling
+                                                         ! the output axes, often in units of [degrees_N] or
+                                                         ! [km] or [m] or [gridpoints].
+  real, dimension(:), pointer :: gridLonB_dsamp =>NULL() ! The longitude of downsampled B points for labeling
+                                                         ! the output axes, often in units of [degrees_N] or
+                                                         ! [km] or [m] or [gridpoints].
+  real, dimension(:), pointer :: gridLatB_dsamp =>NULL() ! The latitude of downsampled B points for labeling
+                                                         ! the output axes, often in units of [degrees_N] or
+                                                         ! [km] or [m] or [gridpoints].
+
 
   id_zl = id_zl_native ; id_zi = id_zi_native
   !Axes group for native downsampled diagnostics
@@ -1263,11 +1276,12 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
   integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
                                                  !! previous call to register_diag_field.
   real,              intent(in) :: field         !< real value being offered for output or averaging
+                                                 !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
   ! Local variables
-  real :: locfield
+  real :: locfield ! The field being offered in arbitrary unscaled units [a]
   logical :: used, is_stat
   type(diag_type), pointer :: diag => null()
 
@@ -1303,12 +1317,13 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
                                                  !! previous call to register_diag_field.
   real, target,      intent(in) :: field(:)      !< 1-d array being offered for output or averaging
+                                                 !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
 
   ! Local variables
   logical :: used  ! The return value of send_data is not used for anything.
-  real, dimension(:), pointer :: locfield => NULL()
+  real, dimension(:), pointer :: locfield => NULL() ! The field being offered in arbitrary unscaled units [a]
   logical :: is_stat
   integer :: k, ks, ke
   type(diag_type), pointer :: diag => null()
@@ -1357,9 +1372,10 @@ subroutine post_data_2d(diag_field_id, field, diag_cs, is_static, mask)
   integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
                                                  !! previous call to register_diag_field.
   real,              intent(in) :: field(:,:)    !< 2-d array being offered for output or averaging
+                                                 !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
-  real,    optional, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
+  real,    optional, intent(in) :: mask(:,:) !< If present, use this real array as the data mask [nondim]
 
   ! Local variables
   type(diag_type), pointer :: diag => null()
@@ -1383,19 +1399,20 @@ end subroutine post_data_2d
 subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   real,    target,   intent(in) :: field(:,:) !< 2-d array being offered for output or averaging
+                                              !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
-  real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
+  real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask [nondim]
 
   ! Local variables
-  real, dimension(:,:), pointer :: locfield
-  real, dimension(:,:), pointer :: locmask
+  real, dimension(:,:), pointer :: locfield ! The field being offered in arbitrary unscaled units [a]
+  real, dimension(:,:), pointer :: locmask  ! A pointer to the data mask to use [nondim]
   character(len=300) :: mesg
   logical :: used, is_stat
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, i, j, isv_o,jsv_o
-  real, dimension(:,:), allocatable, target :: locfield_dsamp
-  real, dimension(:,:), allocatable, target :: locmask_dsamp
+  real, dimension(:,:), allocatable, target :: locfield_dsamp ! A downsampled version of locfield [a]
+  real, dimension(:,:), allocatable, target :: locmask_dsamp  ! A downsampled version of locmask [nondim]
   integer :: dl
 
   locfield => NULL()
@@ -1529,18 +1546,21 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
   integer,           intent(in) :: diag_field_id !< The id for an output variable returned by a
                                                  !! previous call to register_diag_field.
   real,              intent(in) :: field(:,:,:)  !< 3-d array being offered for output or averaging
+                                                 !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl), target, intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
-  real,    optional, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
+  real,    optional, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
   real, dimension(:,:,:), &
          target, optional, intent(in) :: alt_h  !< An alternate thickness to use for vertically
                                                 !! remapping this diagnostic [H ~> m or kg m-2].
 
   ! Local variables
   type(diag_type), pointer :: diag => null()
-  real, dimension(:,:,:), allocatable :: remapped_field
+  real, dimension(:,:,:), allocatable :: remapped_field !< The vertically remapped diagnostic [A ~> a]
   logical :: staggered_in_x, staggered_in_y, dz_diag_needed, dz_begin_needed
-  real, dimension(:,:,:), pointer :: h_diag => NULL()
+  real, dimension(:,:,:), pointer :: h_diag => NULL() !< A pointer to the thickness to use for vertically
+                                                !! remapping this diagnostic [H ~> m or kg m-2].
+
   real, dimension(diag_cs%G%isd:diag_cS%G%ied, diag_cs%G%jsd:diag_cS%G%jed, diag_cs%GV%ke) :: &
     dz_diag, &  ! Layer vertical extents for remapping [Z ~> m]
     dz_begin    ! Layer vertical extents for remapping extensive quantities [Z ~> m]
@@ -1697,21 +1717,22 @@ end subroutine post_data_3d
 subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   type(diag_type),   intent(in) :: diag       !< A structure describing the diagnostic to post
   real,    target,   intent(in) :: field(:,:,:) !< 3-d array being offered for output or averaging
+                                                !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
-  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
+  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
 
   ! Local variables
-  real, dimension(:,:,:), pointer :: locfield
-  real, dimension(:,:,:), pointer :: locmask
+  real, dimension(:,:,:), pointer :: locfield ! The field being offered in arbitrary unscaled units [a]
+  real, dimension(:,:,:), pointer :: locmask  ! A pointer to the data mask to use [nondim]
   character(len=300) :: mesg
   logical :: used  ! The return value of send_data is not used for anything.
   logical :: staggered_in_x, staggered_in_y
   logical :: is_stat
   integer :: cszi, cszj, dszi, dszj
   integer :: isv, iev, jsv, jev, ks, ke, i, j, k, isv_c, jsv_c, isv_o,jsv_o
-  real, dimension(:,:,:), allocatable, target :: locfield_dsamp
-  real, dimension(:,:,:), allocatable, target :: locmask_dsamp
+  real, dimension(:,:,:), allocatable, target :: locfield_dsamp ! A downsampled version of locfield [a]
+  real, dimension(:,:,:), allocatable, target :: locmask_dsamp  ! A downsampled version of locmask [nondim]
   integer :: dl
 
   locfield => NULL()
@@ -1969,10 +1990,10 @@ end subroutine post_product_sum_v
 !> Post the horizontally area-averaged diagnostic
 subroutine post_xy_average(diag_cs, diag, field)
   type(diag_type),   intent(in) :: diag !< This diagnostic
-  real,    target,   intent(in) :: field(:,:,:) !< Diagnostic field
+  real,    target,   intent(in) :: field(:,:,:) !< Diagnostic field in arbitrary units [A ~> a]
   type(diag_ctrl),   intent(in) :: diag_cs !< Diagnostics mediator control structure
   ! Local variable
-  real, dimension(size(field,3)) :: averaged_field
+  real, dimension(size(field,3)) :: averaged_field ! The horizontally averaged field [A ~> a]
   logical, dimension(size(field,3)) :: averaged_mask
   logical :: staggered_in_x, staggered_in_y, used
   integer :: nz, remap_nz, coord
@@ -2102,8 +2123,10 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
-  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values in
+                                                          !! output files, in unscaled arbitrary units [a]
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+                                                     !! in arbitrary units [a]
   logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with
                                                          !! post_data calls (not used in MOM?)
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
@@ -2127,11 +2150,13 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
                                                          !! Use '' have no method.
   character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction.
                                                          !! Use '' have no method.
-  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
-  logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to files,
+                                                       !! often including factors to undo internal scaling and
+                                                       !! in units of [a A-1 ~> 1]
+  logical,          optional, intent(in) :: v_extensive  !< True for vertically extensive fields (vertically
                                                          !! integrated). Default/absent for intensive.
   ! Local variables
-  real :: MOM_missing_value
+  real :: MOM_missing_value ! A value used to indicate missing values in output files, in arbitrary units [a]
   type(diag_ctrl), pointer :: diag_cs
   type(axes_grp), pointer :: remap_axes
   type(axes_grp), pointer :: axes
@@ -2394,8 +2419,10 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
-  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values in
+                                                          !! output files, in unscaled arbitrary units [a]
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+                                                     !! in arbitrary units [a]
   logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided
                                                          !! with post_data calls (not used in MOM?)
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
@@ -2419,11 +2446,13 @@ logical function register_diag_field_expand_cmor(dm_id, module_name, field_name,
                                                          !! Use '' have no method.
   character(len=*), optional, intent(in) :: v_cell_method !< Specifies the cell method for the vertical direction.
                                                          !! Use '' have no method.
-  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to files,
+                                                       !! often including factors to undo internal scaling and
+                                                       !! in units of [a A-1 ~> 1]
   logical,          optional, intent(in) :: v_extensive !< True for vertically extensive fields (vertically
                                                          !! integrated). Default/absent for intensive.
   ! Local variables
-  real :: MOM_missing_value
+  real :: MOM_missing_value ! A value used to indicate missing values in output files, in arbitrary units [a]
   type(diag_ctrl), pointer :: diag_cs => null()
   type(diag_type), pointer :: this_diag => null()
   integer :: fms_id, fms_xyave_id
@@ -2535,8 +2564,10 @@ integer function register_diag_field_expand_axes(module_name, field_name, axes, 
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
-  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values in
+                                                          !! output files, in unscaled arbitrary units [a]
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+                                                     !! in arbitrary units [a]
   logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided
                                                          !! with post_data calls (not used in MOM?)
   logical,          optional, intent(in) :: verbose !< If true, FMS is verbose (not used in MOM?)
@@ -2845,8 +2876,10 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
-  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values in
+                                                          !! output files, in unscaled arbitrary units [a]
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+                                                     !! in arbitrary units [a]
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
   character(len=*), optional, intent(out):: err_msg !< String into which an error message might be
                                                          !! placed (not used in MOM?)
@@ -2856,10 +2889,12 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   character(len=*), optional, intent(in) :: cmor_long_name !< CMOR long name of a field
   character(len=*), optional, intent(in) :: cmor_units !< CMOR units of a field
   character(len=*), optional, intent(in) :: cmor_standard_name !< CMOR standardized name associated with a field
-  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to files,
+                                                       !! often including factors to undo internal scaling and
+                                                       !! in units of [a A-1 ~> 1]
 
   ! Local variables
-  real :: MOM_missing_value
+  real :: MOM_missing_value ! A value used to indicate missing values in output files, in arbitrary units [a]
   integer :: dm_id, fms_id
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
@@ -2953,8 +2988,10 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: long_name !< Long name of a field.
   character(len=*), optional, intent(in) :: units !< Units of a field.
   character(len=*), optional, intent(in) :: standard_name !< Standardized name associated with a field
-  real,             optional, intent(in) :: missing_value !< A value that indicates missing values.
+  real,             optional, intent(in) :: missing_value !< A value that indicates missing values in
+                                                          !! output files, in unscaled arbitrary units [a]
   real,             optional, intent(in) :: range(2) !< Valid range of a variable (not used in MOM?)
+                                                     !! in arbitrary units [a]
   logical,          optional, intent(in) :: mask_variant !< If true a logical mask must be provided with
                                                          !! post_data calls (not used in MOM?)
   logical,          optional, intent(in) :: do_not_log !< If true, do not log something (not used in MOM?)
@@ -2969,10 +3006,12 @@ function register_static_field(module_name, field_name, axes, &
   character(len=*), optional, intent(in) :: x_cell_method !< Specifies the cell method for the x-direction.
   character(len=*), optional, intent(in) :: y_cell_method !< Specifies the cell method for the y-direction.
   character(len=*), optional, intent(in) :: area_cell_method !< Specifies the cell method for area
-  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to file
+  real,             optional, intent(in) :: conversion !< A value to multiply data by before writing to files,
+                                                       !! often including factors to undo internal scaling and
+                                                       !! in units of [a A-1 ~> 1]
 
   ! Local variables
-  real :: MOM_missing_value
+  real :: MOM_missing_value ! A value used to indicate missing values in output files, in arbitrary units [a]
   type(diag_ctrl), pointer :: diag_cs => null()
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   integer :: dm_id, fms_id
@@ -4115,8 +4154,8 @@ end subroutine downsample_diag_indices_get
 !! It also determines the diagnostics-compurte indices for the downsampled array
 !! 3d interface
 subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag, isv, iev, jsv, jev, mask)
-  real, dimension(:,:,:), pointer :: locfield  !< Input array pointer
-  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_dsamp !< Output (downsampled) array
+  real, dimension(:,:,:), pointer :: locfield  !< Input array pointer in arbitrary units [A ~> a]
+  real, dimension(:,:,:), allocatable, intent(inout) :: locfield_dsamp !< Output (downsampled) array [A ~> a]
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
   integer, intent(in) :: dl                !< Level of down sampling
@@ -4124,9 +4163,9 @@ subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag,
   integer, intent(inout) :: iev            !< i-end index for diagnostics
   integer, intent(inout) :: jsv            !< j-start index for diagnostics
   integer, intent(inout) :: jev            !< j-end index for diagnostics
-  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask.
+  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
   ! Locals
-  real, dimension(:,:,:), pointer :: locmask
+  real, dimension(:,:,:), pointer :: locmask ! A pointer to the mask [nondim]
   integer :: f1,f2,isv_o,jsv_o
 
   locmask => NULL()
@@ -4156,8 +4195,8 @@ end subroutine downsample_diag_field_3d
 !! It also determines the diagnostics-compurte indices for the downsampled array
 !! 2d interface
 subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag, isv, iev, jsv, jev, mask)
-  real, dimension(:,:), pointer :: locfield !< Input array pointer
-  real, dimension(:,:), allocatable, intent(inout) :: locfield_dsamp !< Output (downsampled) array
+  real, dimension(:,:), pointer :: locfield !< Input array pointer in arbitrary units [A ~> a]
+  real, dimension(:,:), allocatable, intent(inout) :: locfield_dsamp !< Output (downsampled) array [A ~> a]
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
   integer, intent(in) :: dl                !< Level of down sampling
@@ -4165,9 +4204,9 @@ subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,
   integer, intent(inout) :: iev            !< i-end index for diagnostics
   integer, intent(inout) :: jsv            !< j-start index for diagnostics
   integer, intent(inout) :: jev            !< j-end index for diagnostics
-  real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask.
+  real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask [nondim].
   ! Locals
-  real, dimension(:,:), pointer :: locmask
+  real, dimension(:,:), pointer :: locmask ! A pointer to the mask [nondim]
   integer :: f1,f2,isv_o,jsv_o
 
   locmask => NULL()
@@ -4231,11 +4270,11 @@ end subroutine downsample_diag_field_2d
 !! The down sample method is based on the "cell_methods" for the diagnostics as explained
 !! in the above table
 subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, diag,isv_o,jsv_o,isv_d,iev_d,jsv_d,jev_d)
-  real, dimension(:,:,:), pointer :: field_in      !< Original field to be down sampled
-  real, dimension(:,:,:), allocatable :: field_out !< down sampled field
+  real, dimension(:,:,:), pointer :: field_in      !< Original field to be downsampled in arbitrary units [A ~> a]
+  real, dimension(:,:,:), allocatable :: field_out !< Downsampled field in the same arbtrary units [A ~> a]
   integer, intent(in) :: dl                !< Level of down sampling
   integer,  intent(in) :: method           !< Sampling method
-  real,  dimension(:,:,:), pointer :: mask !< Mask for field
+  real,  dimension(:,:,:), pointer :: mask !< Mask for field [nondim]
   type(diag_ctrl), intent(in) :: diag_CS   !< Structure used to regulate diagnostic output
   type(diag_type), intent(in) :: diag      !< A structure describing the diagnostic to post
   integer, intent(in) :: isv_o             !< Original i-start index
@@ -4248,7 +4287,12 @@ subroutine downsample_field_3d(field_in, field_out, dl, method, mask, diag_cs, d
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
   integer :: k,ks,ke
-  real :: ave,total_weight,weight
+  real :: ave       ! The running sum of the average, in [A ~> a], [A L2 ~> a m2],
+                    ! [A H L ~> a m2 or a kg m-1] or [A H L2 ~> a m3 or a kg]
+  real :: weight    ! The nondimensional, area-, volume- or mass--based weight for an input
+                    ! value [nondim], [L2 ~> m2], [H L ~> m2 or kg m-1] or [H L2 ~> m3 or kg]
+  real :: total_weight ! The sum of weights contributing to a point [nondim], [L2 ~> m2],
+                    ! [H L ~> m2 or kg m-1] or [H L2 ~> m3 or kg]
   real :: eps_vol   ! A negligibly small volume or mass [H L2 ~> m3 or kg]
   real :: eps_area  ! A negligibly small area [L2 ~> m2]
   real :: eps_face  ! A negligibly small face area [H L ~> m2 or kg m-1]
@@ -4388,11 +4432,11 @@ end subroutine downsample_field_3d
 !! in the above table
 subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, diag, &
                                isv_o, jsv_o, isv_d, iev_d, jsv_d, jev_d)
-  real, dimension(:,:), pointer :: field_in      !< Original field to be down sampled
-  real, dimension(:,:), allocatable :: field_out !< Down sampled field
+  real, dimension(:,:), pointer :: field_in      !< Original field to be downsampled in arbitrary units [A ~> a]
+  real, dimension(:,:), allocatable :: field_out !< Downsampled field in the same arbtrary units [A ~> a]
   integer, intent(in) :: dl                !< Level of down sampling
   integer,  intent(in) :: method           !< Sampling method
-  real, dimension(:,:), pointer :: mask    !< Mask for field
+  real, dimension(:,:), pointer :: mask    !< Mask for field [nondim]
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   type(diag_type),   intent(in) :: diag    !< A structure describing the diagnostic to post
   integer, intent(in) :: isv_o             !< Original i-start index
@@ -4404,7 +4448,9 @@ subroutine downsample_field_2d(field_in, field_out, dl, method, mask, diag_cs, d
   ! Locals
   character(len=240) :: mesg
   integer :: i,j,ii,jj,i0,j0,f1,f2,f_in1,f_in2
-  real :: ave, total_weight, weight
+  real :: ave       ! The running sum of the average, in [A ~> a] or [A L2 ~> a m2]
+  real :: weight    ! The nondimensional or area-weighted weight for an input value [nondim] or [L2 ~> m2]
+  real :: total_weight ! The sum of weights contributing to a point [nondim] or [L2 ~> m2]
   real :: eps_area  ! A negligibly small area [L2 ~> m2]
   real :: eps_len   ! A negligibly small horizontal length [L ~> m]
 

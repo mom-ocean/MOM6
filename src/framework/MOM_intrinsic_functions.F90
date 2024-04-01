@@ -222,7 +222,7 @@ logical function Test_cuberoot(verbose, val)
   logical, intent(in) :: verbose !< If true, write results to stdout
   real, intent(in) :: val  !< The real value to test, in arbitrary units [A]
   ! Local variables
-  real :: diff ! The difference between val and the cube root of its cube.
+  real :: diff ! The difference between val and the cube root of its cube [A].
 
   diff = val - cuberoot(val)**3
   Test_cuberoot = (abs(diff) > 2.0e-15*abs(val))
