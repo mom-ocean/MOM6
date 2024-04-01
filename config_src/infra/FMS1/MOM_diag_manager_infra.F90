@@ -57,6 +57,7 @@ public get_MOM_diag_axis_name
 public MOM_diag_manager_init
 public MOM_diag_manager_end
 public send_data_infra
+public diag_send_complete_infra
 public MOM_diag_field_add_attribute
 public register_diag_field_infra
 public register_static_field_infra
@@ -450,5 +451,10 @@ subroutine MOM_diag_field_add_attribute_i1d(diag_field_id, att_name, att_value)
   call FMS_diag_field_add_attribute(diag_field_id, att_name, att_value)
 
 end subroutine MOM_diag_field_add_attribute_i1d
+
+!> Finishes the diag manager reduction methods as needed for the time_step
+!! Needed for backwards compatibility, does nothing
+subroutine diag_send_complete_infra ()
+end subroutine diag_send_complete_infra
 
 end module MOM_diag_manager_infra
