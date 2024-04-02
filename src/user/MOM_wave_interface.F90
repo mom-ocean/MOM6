@@ -717,8 +717,8 @@ subroutine Update_Surface_Waves(G, GV, US, Time_present, dt, CS, forces)
         do i=G%isc,G%iec
           !CS%Omega_w2x(i,j)   = forces%omega_w2x(i,j)
           do b=1,CS%NumBands
-            CS%UStk_Hb(i,j,b) = US%m_s_to_L_T*forces%UStkb(i,j,b)
-            CS%VStk_Hb(i,j,b) = US%m_s_to_L_T*forces%VStkb(i,j,b)
+            CS%UStk_Hb(i,j,b) = forces%UStkb(i,j,b)
+            CS%VStk_Hb(i,j,b) = forces%VStkb(i,j,b)
           enddo
         enddo
       enddo
