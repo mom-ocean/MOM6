@@ -491,7 +491,6 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
   integer, optional, intent(out)   :: aise(n0) !< isrc_ens
   ! Local variables
   integer :: i_sub ! Index of sub-cell
-  integer :: i0 ! Index into h0(1:n0), source column
   integer :: i1 ! Index into h1(1:n1), target column
   real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
   real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
@@ -501,32 +500,16 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
   integer, dimension(n0) :: isrc_end ! Index of last sub-cell within each source cell
   integer, dimension(n0) :: isrc_max ! Index of thickest sub-cell within each source cell
   real, dimension(n0) :: h0_eff ! Effective thickness of source cells [H]
-  real, dimension(n0) :: u0_min ! Minimum value of reconstructions in source cell [A]
-  real, dimension(n0) :: u0_max ! Minimum value of reconstructions in source cell [A]
   integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
   integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
-  real :: xa, xb ! Non-dimensional position within a source cell (0..1) [nondim]
   real :: dh ! The width of the sub-cell [H]
   real :: duh ! The total amount of accumulated stuff (u*h)  [A H]
-  real :: dh0_eff ! Running sum of source cell thickness [H]
   ! For error checking/debugging
   logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
-  logical, parameter :: debug_bounds = .false. ! For debugging overshoots etc.
-  integer :: k, i0_last_thick_cell
-  real :: h0tot, h1tot, h2tot ! Summed thicknesses used for debugging [H]
-  real :: h0err, h1err, h2err ! Estimates of round-off errors used for debugging [H]
-  real :: u02_err, u0err, u1err, u2err  ! Integrated reconstruction error estimates [H A]
-  real :: u0tot, u1tot, u2tot ! Integrated reconstruction values [H A]
+  real :: u02_err ! Integrated reconstruction error estimates [H A]
   real :: u_orig              ! The original value of the reconstruction in a cell [A]
-  real :: u0min, u0max, u1min, u1max, u2min, u2max ! Minimum and maximum values of reconstructions [A]
-
-  i0_last_thick_cell = 0
-  do i0 = 1, n0
-    u0_min(i0) = min(ppoly0_E(i0,1), ppoly0_E(i0,2))
-    u0_max(i0) = max(ppoly0_E(i0,1), ppoly0_E(i0,2))
-    if (h0(i0)>0.) i0_last_thick_cell = i0
-  enddo
+  real :: u1min, u1max ! Minimum and maximum values of reconstructions [A]
 
   ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
   call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
@@ -574,82 +557,6 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
       u1(i1) = u_sub(itgt_start(i1))
     endif
   enddo
-
-  ! Check errors and bounds
-  if (debug_bounds) then
-    call measure_input_bounds( n0, h0, u0, ppoly0_E, h0tot, h0err, u0tot, u0err, u0min, u0max )
-    call measure_output_bounds( n1, h1, u1, h1tot, h1err, u1tot, u1err, u1min, u1max )
-    call measure_output_bounds( n0+n1+1, h_sub, u_sub, h2tot, h2err, u2tot, u2err, u2min, u2max )
-    if (method<5) then ! We except PQM until we've debugged it
-    if (     (abs(u1tot-u0tot)>(u0err+u1err)+uh_err+u02_err .and. abs(h1tot-h0tot)<h0err+h1err) &
-        .or. (abs(u2tot-u0tot)>u0err+u2err+u02_err .and. abs(h2tot-h0tot)<h0err+h2err) &
-        .or. (u1min<u0min .or. u1max>u0max) ) then
-      write(0,*) 'method = ',method
-      write(0,*) 'Source to sub-cells:'
-      write(0,*) 'H: h0tot=',h0tot,'h2tot=',h2tot,'dh=',h2tot-h0tot,'h0err=',h0err,'h2err=',h2err
-      if (abs(h2tot-h0tot)>h0err+h2err) &
-        write(0,*) 'H non-conservation difference=',h2tot-h0tot,'allowed err=',h0err+h2err,' <-----!'
-      write(0,*) 'UH: u0tot=',u0tot,'u2tot=',u2tot,'duh=',u2tot-u0tot,'u0err=',u0err,'u2err=',u2err,&
-                 'adjustment err=',u02_err
-      if (abs(u2tot-u0tot)>u0err+u2err) &
-        write(0,*) 'U non-conservation difference=',u2tot-u0tot,'allowed err=',u0err+u2err,' <-----!'
-      write(0,*) 'Sub-cells to target:'
-      write(0,*) 'H: h2tot=',h2tot,'h1tot=',h1tot,'dh=',h1tot-h2tot,'h2err=',h2err,'h1err=',h1err
-      if (abs(h1tot-h2tot)>h2err+h1err) &
-        write(0,*) 'H non-conservation difference=',h1tot-h2tot,'allowed err=',h2err+h1err,' <-----!'
-      write(0,*) 'UH: u2tot=',u2tot,'u1tot=',u1tot,'duh=',u1tot-u2tot,'u2err=',u2err,'u1err=',u1err,'uh_err=',uh_err
-      if (abs(u1tot-u2tot)>u2err+u1err) &
-        write(0,*) 'U non-conservation difference=',u1tot-u2tot,'allowed err=',u2err+u1err,' <-----!'
-      write(0,*) 'Source to target:'
-      write(0,*) 'H: h0tot=',h0tot,'h1tot=',h1tot,'dh=',h1tot-h0tot,'h0err=',h0err,'h1err=',h1err
-      if (abs(h1tot-h0tot)>h0err+h1err) &
-        write(0,*) 'H non-conservation difference=',h1tot-h0tot,'allowed err=',h0err+h1err,' <-----!'
-      write(0,*) 'UH: u0tot=',u0tot,'u1tot=',u1tot,'duh=',u1tot-u0tot,'u0err=',u0err,'u1err=',u1err,'uh_err=',uh_err
-      if (abs(u1tot-u0tot)>(u0err+u1err)+uh_err) &
-        write(0,*) 'U non-conservation difference=',u1tot-u0tot,'allowed err=',u0err+u1err+uh_err,' <-----!'
-      write(0,*) 'U: u0min=',u0min,'u1min=',u1min,'u2min=',u2min
-      if (u1min<u0min) write(0,*) 'U minimum overshoot=',u1min-u0min,' <-----!'
-      if (u2min<u0min) write(0,*) 'U2 minimum overshoot=',u2min-u0min,' <-----!'
-      write(0,*) 'U: u0max=',u0max,'u1max=',u1max,'u2max=',u2max
-      if (u1max>u0max) write(0,*) 'U maximum overshoot=',u1max-u0max,' <-----!'
-      if (u2max>u0max) write(0,*) 'U2 maximum overshoot=',u2max-u0max,' <-----!'
-      write(0,'(a3,6a24,2a3)') 'k','h0','left edge','u0','right edge','h1','u1','is','ie'
-      do k = 1, max(n0,n1)
-        if (k<=min(n0,n1)) then
-          write(0,'(i3,1p6e24.16,2i3)') k,h0(k),ppoly0_E(k,1),u0(k),ppoly0_E(k,2),h1(k),u1(k),itgt_start(k),itgt_end(k)
-        elseif (k>n0) then
-          write(0,'(i3,96x,1p2e24.16,2i3)') k,h1(k),u1(k),itgt_start(k),itgt_end(k)
-        else
-          write(0,'(i3,1p4e24.16)') k,h0(k),ppoly0_E(k,1),u0(k),ppoly0_E(k,2)
-        endif
-      enddo
-      write(0,'(a3,2a24)') 'k','u0','Polynomial coefficients'
-      do k = 1, n0
-        write(0,'(i3,1p6e24.16)') k,u0(k),ppoly0_coefs(k,:)
-      enddo
-      write(0,'(a3,3a24,a3,2a24)') 'k','Sub-cell h','Sub-cell u','Sub-cell hu','i0','xa','xb'
-      xa = 0.
-      dh0_eff = 0.
-      do k = 1, n0+n1+1
-        dh = h_sub(k)
-        i0 = isub_src(k)
-        dh0_eff = dh0_eff + dh ! Cumulative thickness within the source cell
-        xb = dh0_eff / h0_eff(i0) ! This expression yields xa <= xb <= 1.0
-        xb = min(1., xb) ! This is only needed when the total target column is wider than the source column
-        write(0,'(i3,1p3e24.16,i3,1p2e24.16)') k,h_sub(k),u_sub(k),uh_sub(k),i0,xa,xb
-        if (k<=n0+n1) then
-          if (isub_src(k+1) /= i0) then
-            dh0_eff = 0.; xa = 0.
-          else
-            xa = xb
-          endif
-        endif
-      enddo
-      call MOM_error( FATAL, 'MOM_remapping, remap_via_sub_cells: '//&
-             'Remapping result is inconsistent!' )
-    endif
-    endif ! method<5
-  endif ! debug_bounds
 
   ! Include the error remapping from source to sub-cells in the estimate of total remapping error
   uh_err = uh_err + u02_err
@@ -707,7 +614,6 @@ subroutine intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
   real :: dh0_eff ! Running sum of source cell thickness [H]
   ! For error checking/debugging
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
-  logical, parameter :: debug_bounds = .false. ! For debugging overshoots etc.
   integer :: i0_last_thick_cell
   logical :: src_has_volume !< True if h0 has not been consumed
   logical :: tgt_has_volume !< True if h1 has not been consumed
@@ -879,7 +785,6 @@ subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, 
   ! For error checking/debugging
   logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
-  logical, parameter :: debug_bounds = .false. ! For debugging overshoots etc.
   integer :: i0_last_thick_cell
   real :: u_orig              ! The original value of the reconstruction in a cell [A]
 
@@ -917,19 +822,6 @@ subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, 
     else ! Vanished cell
       xb = 1.
       u_sub(i_sub) = u0(i0)
-    endif
-    if (debug_bounds) then
-      if (method<5 .and.(u_sub(i_sub)<u0_min(i0) .or. u_sub(i_sub)>u0_max(i0))) then
-        write(0,*) 'Sub cell average is out of bounds',i_sub,'method=',method
-        write(0,*) 'xa,xb: ',xa,xb
-        write(0,*) 'Edge values: ',ppoly0_E(i0,:),'mean',u0(i0)
-        write(0,*) 'a_c: ',(u0(i0)-ppoly0_E(i0,1))+(u0(i0)-ppoly0_E(i0,2))
-        write(0,*) 'Polynomial coeffs: ',ppoly0_coefs(i0,:)
-        write(0,*) 'Bounds min=',u0_min(i0),'max=',u0_max(i0)
-        write(0,*) 'Average: ',u_sub(i_sub),'rel to min=',u_sub(i_sub)-u0_min(i0),'rel to max=',u_sub(i_sub)-u0_max(i0)
-        call MOM_error( FATAL, 'MOM_remapping, remap_via_sub_cells: '//&
-             'Sub-cell average is out of bounds!' )
-      endif
     endif
     if (force_bounds_in_subcell) then
       ! These next two lines should not be needed but when using PQM we found roundoff
