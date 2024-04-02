@@ -10,7 +10,8 @@ import re
 import sys
 
 
-# Pre-compile re searches
+# Fortran tokenization
+
 re_module = re.compile(r"^ *module +([a-z_0-9]+)")
 re_use = re.compile(r"^ *use +([a-z_0-9]+)")
 re_cpp_define = re.compile(r"^ *# *define +[_a-zA-Z][_a-zA-Z0-9]")
@@ -30,6 +31,80 @@ re_procedure = re.compile(
     r"^[^!]*(?<![a-z_])(function|subroutine)(?![a-z_])",
     re.IGNORECASE
 )
+
+
+# Preprocessor expression tokenization
+cpp_scanner = re.Scanner([
+  (r'defined', lambda scanner, token: token),
+  (r'[_A-Za-z][_0-9a-zA-Z]*', lambda scanner, token: token),
+  (r'[0-9]+', lambda scanner, token: token),
+  (r'\(', lambda scanner, token: token),
+  (r'\)', lambda scanner, token: token),
+  (r'\*', lambda scanner, token: token),
+  (r'/', lambda scanner, token: token),
+  (r'\+', lambda scanner, token: token),
+  (r'-', lambda scanner, token: token),
+  (r'!', lambda scanner, token: token),
+  (r'>>', lambda scanner, token: token),
+  (r'>=', lambda scanner, token: token),
+  (r'>', lambda scanner, token: token),
+  (r'<<', lambda scanner, token: token),
+  (r'<=', lambda scanner, token: token),
+  (r'<', lambda scanner, token: token),
+  (r'==', lambda scanner, token: token),
+  (r'&&', lambda scanner, token: token),
+  (r'&', lambda scanner, token: token),
+  (r'\|\|', lambda scanner, token: token),
+  (r'\|', lambda scanner, token: token),
+  (r'^\#if', None),
+  (r'\s+', None),
+])
+
+
+cpp_operate = {
+    '!': lambda x: not x,
+    '*': lambda x, y: x * y,
+    '/': lambda x, y: x // y,
+    '+': lambda x, y: x + y,
+    '-': lambda x, y: x - y,
+    '>>': lambda x, y: x >> y,
+    '<<': lambda x, y: x << y,
+    '==': lambda x, y: x == y,
+    '>': lambda x, y: x > y,
+    '>=': lambda x, y: x >= y,
+    '<': lambda x, y: x < y,
+    '<=': lambda x, y: x <= y,
+    '&': lambda x, y: x & y,
+    '^': lambda x, y: x ^ y,
+    '|': lambda x, y: x | y,
+    '&&': lambda x, y: x and y,
+    '||': lambda x, y: x or y,
+}
+
+
+cpp_op_rank = {
+    '(': 13,
+    '!': 12,
+    '*': 11,
+    '/': 11,
+    '+': 10,
+    '-': 10,
+    '>>': 9,
+    '<<': 9,
+    '>': 8,
+    '>=': 8,
+    '<': 8,
+    '<=': 8,
+    '==': 7,
+    '&': 6,
+    '^': 5,
+    '|': 4,
+    '&&': 2,
+    '||': 2,
+    ')': 1,
+    '$': 1,
+    None: 0,
+}
 
 
 def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
@@ -105,7 +180,7 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
         all_modules += mods
 
     for f in c_files:
-        _, _, cpp, inc, _, _ = scan_fortran_file(f)
+        _, _, cpp, inc, _, _ = scan_fortran_file(f, defines)
         # maps object file to .h files included
         o2h[object_file(f)] = cpp
         externals.append(object_file(f))
@@ -158,7 +233,7 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
             ]
             missing_mods = [m for m in o2uses[o] if m not in all_modules]
 
-            incs, inc_used = nested_inc(o2h[o] + o2inc[o], f2F)
+            incs, inc_used = nested_inc(o2h[o] + o2inc[o], f2F, defines)
             inc_mods = [u for u in inc_used if u not in found_mods and u in all_modules]
 
             incdeps = sorted(set([f2F[f] for f in incs if f in f2F]))
@@ -250,7 +325,7 @@ def link_obj(obj, o2uses, mod2o, all_modules):
     return sorted(set(olst))
 
 
-def nested_inc(inc_files, f2F):
+def nested_inc(inc_files, f2F, defines):
     """List of all files included by "inc_files", either by #include or F90
     include."""
     hlst = []
@@ -260,7 +335,7 @@ def nested_inc(inc_files, f2F):
         if hfile not in f2F.keys():
             return
 
-        _, used, cpp, inc, _, _ = scan_fortran_file(f2F[hfile])
+        _, used, cpp, inc, _, _ = scan_fortran_file(f2F[hfile], defines)
 
         # Record any module updates inside of include files
         used_mods.update(used)
@@ -286,7 +361,8 @@ def scan_fortran_file(src_file, defines=None):
 
     cpp_defines = defines if defines is not None else []
 
-    cpp_macros = [define.split('=')[0] for define in cpp_defines]
+    #cpp_macros = [define.split('=')[0] for define in cpp_defines]
+    cpp_macros = dict([t.split('=') for t in cpp_defines])
     cpp_group_stack = []
 
     with io.open(src_file, 'r', errors='replace') as file:
@@ -328,9 +404,9 @@ def scan_fortran_file(src_file, defines=None):
             if match:
                 cpp_group_stack.append(cpp_exclude)
 
-                # XXX: Don't attempt to parse #if statements, but store the state.
-                # if/endif stack.  For now, assume that these always fail.
-                cpp_exclude = False
+                cpp_expr_value = cpp_expr_eval(line, cpp_macros)
+
+                cpp_exclude = not cpp_expr_value
 
             # Complement #else condition group
             match = re_cpp_else.match(line)
@@ -351,8 +427,14 @@ def scan_fortran_file(src_file, defines=None):
             # Activate a new macro (ignoring the value)
             match = re_cpp_define.match(line)
             if match:
-                new_macro = line.lstrip()[1:].split()[1]
-                cpp_macros.append(new_macro)
+                tokens = line.strip()[1:].split(maxsplit=2)
+                macro = tokens[1]
+                value = tokens[2] if tokens[2:] else None
+                if '(' in macro:
+                    # TODO: Actual handling of function macros
+                    macro, arg = macro.split('(', maxsplit=1)
+                    value = '(' + arg + value
+                cpp_macros[macro] = value
 
             # Deactivate a macro
             match = re_cpp_undef.match(line)
@@ -439,6 +521,107 @@ def find_files(src_dirs, skip_dirs):
 def add_suff(lst, suff):
     """Add "suff" to each item in the list"""
     return [f + suff for f in lst]
+
+
+def cpp_expr_eval(expr, macros=None):
+    if macros is None:
+        macros = {}
+
+    results, remainder = cpp_scanner.scan(expr)
+
+    # Abort if any characters are not tokenized
+    if remainder:
+        print('There are untokenized characters!')
+        print('Expression:', repr(expr))
+        print('Tokens:', results)
+        print('Unscanned:', remainder)
+        raise
+
+    # Add an "end of line" character to force evaluation of the final tokens.
+    results.append('$')
+
+    stack = []
+    prior_op = None
+
+    tokens = iter(results)
+    for tok in tokens:
+        # Evaluate "defined()" statements
+        if tok == 'defined':
+            tok = next(tokens)
+
+            parens = tok == '('
+            if parens:
+                tok = next(tokens)
+
+            # NOTE: Any key in `macros` is considered to be set, even if the
+            # value is None.
+            value = tok in macros
+
+            # Negation
+            while prior_op == '!':
+                op = stack.pop()
+                assert op == '!'
+                value = cpp_operate[op](value)
+                prior_op = stack[-1] if stack else None
+
+            stack.append(value)
+
+            if parens:
+                tok = next(tokens)
+                assert tok == ')'
+
+        elif tok.isdigit():
+            value = int(tok)
+            stack.append(value)
+
+        elif tok.isidentifier():
+            # "Identifiers that are not macros, which are all considered to be
+            # the number zero." (CPP manual, 4.2.2)
+            value = macros.get(tok, '0')
+            if value.isdigit():
+                value = int(value)
+            stack.append(value)
+
+        elif tok in cpp_op_rank.keys():
+            while cpp_op_rank[tok] <= cpp_op_rank[prior_op]:
+
+                # Skip unary prefix operators (only '!' at the moment)
+                if tok == '!':
+                    break
+
+                second = stack.pop()
+                op = stack.pop()
+                first = stack.pop()
+
+                value = cpp_operate[op](first, second)
+                prior_op = stack[-1] if stack else None
+
+                if prior_op == '(':
+                    prior_op = None
+                    if tok == ')':
+                        stack.pop()
+
+                stack.append(value)
+
+            if tok == ')':
+                prior_op = stack[-2] if stack and len(stack) > 1 else None
+            else:
+                stack.append(tok)
+                prior_op = tok
+
+                if prior_op in ('(',):
+                    prior_op = None
+
+        else:
+            print("Unsupported token:", tok)
+            raise
+
+    # Remove the tail value
+    eol = stack.pop()
+    assert eol == '$'
+    value = stack.pop()
+
+    return value
 
 
 # Parse arguments
