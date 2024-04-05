@@ -218,6 +218,8 @@ function register_netcdf_field(handle, label, axes, longname, units) &
   allocate(dimids(size(axes)))
   dimids(:) = [(axes(i)%dimid, i = 1, size(axes))]
 
+  field%label = label
+
   ! Determine the corresponding netCDF data type
   ! TODO: Support a `pack`-like argument
   select case (kind(1.0))
@@ -226,7 +228,7 @@ function register_netcdf_field(handle, label, axes, longname, units) &
     case (real64)
       xtype = NF90_DOUBLE
     case default
-      call MOM_error(FATAL, "register_netcdf_axis: Unknown kind(real).")
+      call MOM_error(FATAL, "register_netcdf_field: Unknown kind(real).")
   end select
 
   ! Register the field variable
@@ -293,6 +295,8 @@ function register_netcdf_axis(handle, label, units, longname, points, &
     call MOM_error(FATAL, &
         "Axis must either have explicit points or be a time axis ('T').")
   endif
+
+  axis%label = label
 
   if (present(points)) then
     axis_size = size(points)

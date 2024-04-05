@@ -16,7 +16,7 @@ use mpp_domains_mod, only : mpp_start_update_domains, mpp_complete_update_domain
 use mpp_domains_mod, only : mpp_create_group_update, mpp_do_group_update
 use mpp_domains_mod, only : mpp_reset_group_update_field, mpp_group_update_initialized
 use mpp_domains_mod, only : mpp_start_group_update, mpp_complete_group_update
-use mpp_domains_mod, only : mpp_compute_block_extent
+use mpp_domains_mod, only : mpp_compute_block_extent, mpp_compute_extent
 use mpp_domains_mod, only : mpp_broadcast_domain, mpp_redistribute, mpp_global_field
 use mpp_domains_mod, only : AGRID, BGRID_NE, CGRID_NE, SCALAR_PAIR, BITWISE_EXACT_SUM
 use mpp_domains_mod, only : CYCLIC_GLOBAL_DOMAIN
@@ -39,7 +39,7 @@ implicit none ; private
 public :: domain2D, domain1D, group_pass_type
 ! These interfaces are actually implemented or have explicit interfaces in this file.
 public :: create_MOM_domain, clone_MOM_domain, get_domain_components, get_domain_extent
-public :: deallocate_MOM_domain, get_global_shape, compute_block_extent
+public :: deallocate_MOM_domain, get_global_shape, compute_block_extent, compute_extent
 public :: pass_var, pass_vector, fill_symmetric_edges, rescale_comp_data
 public :: pass_var_start, pass_var_complete, pass_vector_start, pass_vector_complete
 public :: create_group_pass, do_group_pass, start_group_pass, complete_group_pass
@@ -1958,7 +1958,7 @@ subroutine get_global_shape(domain, niglobal, njglobal)
   njglobal = domain%njglobal
 end subroutine get_global_shape
 
-!> Get the array ranges in one dimension for the divisions of a global index space
+!> Get the array ranges in one dimension for the divisions of a global index space (alternative to compute_extent)
 subroutine compute_block_extent(isg, ieg, ndivs, ibegin, iend)
   integer,               intent(in)  :: isg    !< The starting index of the global index space
   integer,               intent(in)  :: ieg    !< The ending index of the global index space
@@ -1968,6 +1968,17 @@ subroutine compute_block_extent(isg, ieg, ndivs, ibegin, iend)
 
   call mpp_compute_block_extent(isg, ieg, ndivs, ibegin, iend)
 end subroutine compute_block_extent
+
+!> Get the array ranges in one dimension for the divisions of a global index space
+subroutine compute_extent(isg, ieg, ndivs, ibegin, iend)
+  integer,               intent(in)  :: isg    !< The starting index of the global index space
+  integer,               intent(in)  :: ieg    !< The ending index of the global index space
+  integer,               intent(in)  :: ndivs  !< The number of divisions
+  integer, dimension(:), intent(out) :: ibegin !< The starting index of each division
+  integer, dimension(:), intent(out) :: iend   !< The ending index of each division
+
+  call mpp_compute_extent(isg, ieg, ndivs, ibegin, iend)
+end subroutine compute_extent
 
 !> Broadcast a 2-d domain from the root PE to the other PEs
 subroutine broadcast_domain(domain)
