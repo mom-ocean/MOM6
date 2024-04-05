@@ -58,9 +58,16 @@ def parse_perf_report(perf_data_path):
 
             # get per-symbol count
             else:
-                tokens = line.split()
-                symbol = tokens[2]
-                period = int(tokens[3])
+                try:
+                    tokens = line.split()
+                    symbol = tokens[2]
+                    period = int(tokens[3])
+                except ValueError:
+                    print("parse_perf.py: Error extracting symbol count",
+                            file=sys.stderr)
+                    print("line:", repr(line), file=sys.stderr)
+                    print("tokens:", tokens, file=sys.stderr)
+                    raise
 
                 profile[event_name]['symbol'][symbol] = period
 
