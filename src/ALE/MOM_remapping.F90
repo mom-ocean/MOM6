@@ -490,8 +490,6 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
   integer, optional, intent(out)   :: aiss(n0) !< isrc_start
   integer, optional, intent(out)   :: aise(n0) !< isrc_ens
   ! Local variables
-  integer :: i_sub ! Index of sub-cell
-  integer :: i1 ! Index into h1(1:n1), target column
   real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
   real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
   real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell [A]
@@ -502,61 +500,27 @@ subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, meth
   real, dimension(n0) :: h0_eff ! Effective thickness of source cells [H]
   integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
   integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
-  real :: dh ! The width of the sub-cell [H]
-  real :: duh ! The total amount of accumulated stuff (u*h)  [A H]
   ! For error checking/debugging
   logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
   real :: u02_err ! Integrated reconstruction error estimates [H A]
-  real :: u_orig              ! The original value of the reconstruction in a cell [A]
-  real :: u1min, u1max ! Minimum and maximum values of reconstructions [A]
 
   ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
   call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
                                 isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
-  ! Uses: h_sub, h0_eff, isub_src, h0_eff
+  ! Uses: h_sub, h0_eff, isub_src
   ! Sets: u_sub, uh_sub
   call remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, &
                              h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
                              method, force_bounds_in_subcell, u_sub, uh_sub, u02_err)
 
   ! Loop over each target cell summing the integrals from sub-cells within the target cell.
-  ! Uses: itgt_start, itgt_end, h_sub, uh_sub, u_sub
-  ! Sets: u1
-  uh_err = 0.
-  do i1 = 1, n1
-    if (h1(i1) > 0.) then
-      duh = 0. ; dh = 0.
-      i_sub = itgt_start(i1)
-      if (force_bounds_in_target) then
-        u1min = u_sub(i_sub)
-        u1max = u_sub(i_sub)
-      endif
-      do i_sub = itgt_start(i1), itgt_end(i1)
-        if (force_bounds_in_target) then
-          u1min = min(u1min, u_sub(i_sub))
-          u1max = max(u1max, u_sub(i_sub))
-        endif
-        dh = dh + h_sub(i_sub)
-        duh = duh + uh_sub(i_sub)
-        ! This accumulates the contribution to the error bound for the sum of u*h
-        uh_err = uh_err + max(abs(duh),abs(uh_sub(i_sub)))*epsilon(duh)
-      enddo
-      u1(i1) = duh / dh
-      ! This is the contribution from the division to the error bound for the sum of u*h
-      uh_err = uh_err + abs(duh)*epsilon(duh)
-      if (force_bounds_in_target) then
-        u_orig = u1(i1)
-        u1(i1) = max(u1min, min(u1max, u1(i1)))
-        ! Adjusting to be bounded contributes to the error for the sum of u*h
-        uh_err = uh_err + dh*abs( u1(i1)-u_orig )
-      endif
-    else
-      u1(i1) = u_sub(itgt_start(i1))
-    endif
-  enddo
+  ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
+  ! Sets: u1, uh_err
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             force_bounds_in_target, u1, uh_err)
 
   ! Include the error remapping from source to sub-cells in the estimate of total remapping error
   uh_err = uh_err + u02_err
@@ -868,6 +832,69 @@ subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, 
   endif
 
 end subroutine remap_src_to_sub_grid
+
+!> Remaps column of n0+n1+1 values usub on sub-grid h_sub to targets on grid h1
+subroutine remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, &
+                                 itgt_start, itgt_end, force_bounds_in_target, u1, uh_err)
+  integer, intent(in)  :: n0     !< Number of cells in source grid
+  integer, intent(in)  :: n1     !< Number of cells in target grid
+  real,    intent(in)  :: h1(n1) !< Target grid widths (size n1) [H]
+  real,    intent(in)  :: h_sub(n0+n1+1) !< Overlapping sub-cell thicknesses, h_sub [H]
+  real,    intent(in)  :: u_sub(n0+n1+1) !< Sub-cell cell averages (size n1) [A]
+  real,    intent(in)  :: uh_sub(n0+n1+1) !< Sub-cell cell integrals (size n1) [A H]
+  integer, intent(in)  :: itgt_start(n1) !< Index of first sub-cell within each target cell
+  integer, intent(in)  :: itgt_end(n1) !< Index of last sub-cell within each target cell
+  logical, intent(in)  :: force_bounds_in_target !< Force sub-cell values to be bounded
+  real,    intent(out) :: u1(n1) !< Target cell averages (size n1) [A]
+  real,    intent(out) :: uh_err !< Estimate of bound on error in sum of u*h [A H]
+  ! Local variables
+  integer :: i1 ! tgt loop index
+  integer :: i_sub ! index to sub-layer
+  real :: dh ! The width of the sub-cell [H]
+  real :: duh ! The total amount of accumulated stuff (u*h)  [A H]
+  real :: u1min, u1max ! Minimum and maximum values of reconstructions [A]
+  real :: u_orig ! The original value of the reconstruction in a cell prior to bounding [A]
+
+  u1min = 0. ! Not necessary, but avoids an overzealous compiler ...
+  u1max = 0. ! ... warning about uninitialized variables
+
+  ! Loop over each target cell summing the integrals from sub-cells within the target cell.
+  ! Uses: itgt_start, itgt_end, h_sub, uh_sub, u_sub
+  ! Sets: u1, uh_err
+  uh_err = 0.
+  do i1 = 1, n1
+    if (h1(i1) > 0.) then
+      duh = 0. ; dh = 0.
+      i_sub = itgt_start(i1)
+      if (force_bounds_in_target) then
+        u1min = u_sub(i_sub)
+        u1max = u_sub(i_sub)
+      endif
+      do i_sub = itgt_start(i1), itgt_end(i1)
+        if (force_bounds_in_target) then
+          u1min = min(u1min, u_sub(i_sub))
+          u1max = max(u1max, u_sub(i_sub))
+        endif
+        dh = dh + h_sub(i_sub)
+        duh = duh + uh_sub(i_sub)
+        ! This accumulates the contribution to the error bound for the sum of u*h
+        uh_err = uh_err + max(abs(duh),abs(uh_sub(i_sub)))*epsilon(duh)
+      enddo
+      u1(i1) = duh / dh
+      ! This is the contribution from the division to the error bound for the sum of u*h
+      uh_err = uh_err + abs(duh)*epsilon(duh)
+      if (force_bounds_in_target) then
+        u_orig = u1(i1)
+        u1(i1) = max(u1min, min(u1max, u1(i1)))
+        ! Adjusting to be bounded contributes to the error for the sum of u*h
+        uh_err = uh_err + dh*abs( u1(i1)-u_orig )
+      endif
+    else
+      u1(i1) = u_sub(itgt_start(i1))
+    endif
+  enddo
+
+end subroutine remap_sub_to_tgt_grid
 
 !> Linearly interpolate interface data, u_src, from grid h_src to a grid h_dest
 subroutine interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, mask_edges)
@@ -1438,16 +1465,14 @@ logical function remapping_unit_tests(verbose)
                             3, (/2.25,1.5,1./), INTEGRATION_PPM, .false., u2, err )
   call test%real_arr(3, u2, (/3.,-10.5,-12./), 'remap_via_sub_cells() 4')
 
-  deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs)
+  deallocate(h0, u0, h1, u1, h2, u2, ppoly0_E, ppoly0_S, ppoly0_coefs)
 
   ! ===============================================
   ! This section tests the reconstruction functions
   ! ===============================================
   if (verbose) write(stdout,*) '  - - - - - reconstruction tests - - - - -'
 
-  allocate(ppoly0_coefs(5,6))
-  allocate(ppoly0_E(5,2))
-  allocate(ppoly0_S(5,2))
+  allocate( ppoly0_coefs(5,6), ppoly0_E(5,2), ppoly0_S(5,2), u2(2) )
 
   call PCM_reconstruction(3, (/1.,2.,4./), &
                           ppoly0_E(1:3,:), ppoly0_coefs(1:3,:) )
@@ -1535,7 +1560,7 @@ logical function remapping_unit_tests(verbose)
                             2, (/1.,1./), INTEGRATION_PLM, .false., u2, err )
   call test%real_arr(2, u2, (/4.,2./), 'PLM: remapped  h=0110->h=11')
 
-  deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs)
+  deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs, u2)
 
   if (verbose) write(stdout,*) '  - - - - - interpolation tests - - - - -'
 
@@ -1596,19 +1621,23 @@ logical function remapping_unit_tests(verbose)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! Test 3: n0=2, n1=3  With aligned interfaces that lead to implicitly-vanished interior sub-layers
-  ! h_src =     |     2     |         4         |
-  ! h_tgt =     |     2     |    2    |    2    |
-  ! h_sub =     |0|   2     |0|  2    |    2  |0|
-  ! isrc_start  |1          |3                  |
-  ! isrc_end    |     2     |              5    |
-  ! isrc_max    |     2     |              5    |
-  ! itgt_start  |1          |    4    |    5    |
-  ! itgt_end    |            3|  4    |        6|
-  ! isub_src    |1|   1     |2|  2    |    2  |2|
-  allocate( h_sub(6), h0_eff(2), isrc_start(2), isrc_end(2), isrc_max(2), itgt_start(3), itgt_end(3), isub_src(6) )
-  call intersect_src_tgt_grids( 2, (/2., 4./), &  ! n0, h0
-                                3, (/2., 2., 2./), &  ! n1, h1
-                                h_sub, h0_eff, &
+  n0 = 2 ; n1 = 3
+  allocate( h0_eff(n0), isrc_start(n0), isrc_end(n0), isrc_max(n0), h0(n0), u0(n0) )
+  allocate( itgt_start(n1), itgt_end(n1), h1(n1), u1(n1) )
+  allocate( h_sub(n0+n1+1), isub_src(n0+n1+1) )
+  u0 =         (/     2.    ,          5.         /)
+  h0 =         (/     2.    ,          4.         /)
+  h1 =         (/     2.    ,     2.   ,    2.    /)
+  ! h_src =     |<-   2   ->|<-        4        ->|
+  ! h_tgt =     |<-   2   ->|<-   2  ->|<-  2   ->|
+  ! h_sub =    |0|<-  2  ->|0|<-  2  ->|<-  2  ->|0|
+  ! isrc_start  |1          |3                    |
+  ! isrc_end    |     2     |               5     |
+  ! isrc_max    |     2     |               5     |
+  ! itgt_start  |1          |     4    |    5     |
+  ! itgt_end    |            3|   4    |         6|
+  ! isub_src    |1|   1     |2|   2    |    2   |2|
+  call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
                                 isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
   if (verbose) write(stdout,*) "intersect_src_tgt_grids test 3: n0=2, n1=3"
   if (verbose) write(stdout,*) "  h_src =     |   2   |       4       |"
@@ -1621,36 +1650,50 @@ logical function remapping_unit_tests(verbose)
   call test%int_arr(3, itgt_start, (/1,4,5/), 'itgt_start')
   call test%int_arr(3, itgt_end, (/3,4,6/), 'itgt_end')
   call test%int_arr(6, isub_src, (/1,1,2,2,2,2/), 'isub_src')
-  allocate(ppoly0_coefs(2,2), ppoly0_E(2,2), ppoly0_S(2,2))
-  ! h_src =     |<-   2   ->|<-       4         ->|
-  ! h_sub =     |0|<- 2   ->|0|<- 2 ->|<-  2  ->|0|
-  ! u_src =     |     2     |         5           |
+  allocate(ppoly0_coefs(n0,2), ppoly0_E(n0,2), ppoly0_S(n0,2))
+  ! h_src =     |<-   2   ->|<-        4        ->|
+  ! h_sub =    |0|<-  2  ->|0|<-  2  ->|<-  2  ->|0|
+  ! u_src =     |     2     |          5          |
   !  edge =     |1         3|3                   7|
-  ! u_sub =     |1|   2     |3|   4   |    6    |7|
-  call PLM_reconstruction(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect )
-  call PLM_boundary_extrapolation(2, (/2.,4./),(/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect)
-  allocate(u_sub(6), uh_sub(6))
-  call remap_src_to_sub_grid(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, &
-                             3, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+  ! u_sub =    |1|    2    |3|    4    |    6    |7|
+  call PLM_reconstruction(n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
+  call PLM_boundary_extrapolation(n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect)
+  allocate(u_sub(n0+n1+1), uh_sub(n0+n1+1))
+  call remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, &
+                             n1, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
                              INTEGRATION_PLM, .false., u_sub, uh_sub, u02_err)
+  ! h_sub =    |0|<-  2  ->|0|<-  2  ->|<-  2  ->|0|
+  ! u_sub =    |1|    2    |3|    4    |    6    |7|
+  ! h_tgt =     |<-   2   ->|<-   2  ->|<-  2   ->|
+  ! u_tgt =     |     2     |     4    |    6     |
   call test%real_arr(6, u_sub, (/1.,2.,3.,4.,6.,7./), 'u_sub')
-  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub)
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             .false., u1, u02_err)
+  call test%real_arr(3, u1, (/2.,4.,6./), 'u1')
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             .true., u1, u02_err)
+  call test%real_arr(3, u1, (/2.,4.,6./), 'u1.b')
+  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub, h0, u0, h1, u1)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! Test 4: n0=2, n1=3  Incomplete target column, sum(h_tgt)<sum(h_src), useful for diagnostics
-  ! h_src =     |     2     |         4           |
-  ! h_tgt =     |     2     |    2    |  1  |
-  ! h_sub =     |0|   2     |0|  2    |  1  |  1  |
-  ! isrc_start  |1          |3                    |
-  ! isrc_end    |     2     |                  6  |
-  ! isrc_max    |     2     |    4                |
-  ! itgt_start  |1          |    4    |  5  |
-  ! itgt_end    |            3|  4    |  5  |
-  ! isub_src    |1|   1     |2|  2    |  2  |  2  |
-  allocate( h_sub(6), h0_eff(2), isrc_start(2), isrc_end(2), isrc_max(2), itgt_start(3), itgt_end(3), isub_src(6) )
-  call intersect_src_tgt_grids( 2, (/2., 4./), &  ! n0, h0
-                                3, (/2., 2., 1./), &  ! n1, h1
-                                h_sub, h0_eff, &
+  n0 = 2 ; n1 = 3
+  allocate( h0_eff(n0), isrc_start(n0), isrc_end(n0), isrc_max(n0), h0(n0), u0(n0) )
+  allocate( itgt_start(n1), itgt_end(n1), h1(n1), u1(n1) )
+  allocate( h_sub(n0+n1+1), isub_src(n0+n1+1) )
+  u0 =         (/     2.    ,           5.         /)
+  h0 =         (/     2.    ,           4.         /)
+  h1 =         (/     2.    ,     2.   ,   1. /)
+  ! h_src =     |<-   2   ->|<-         4         ->|
+  ! h_tgt =     |<-   2   ->|<-   2   ->|< 1 >|
+  ! h_sub =    |0|<-  2  ->|0|<-  2   ->|< 1 >|< 1 >|
+  ! isrc_start  |1          |3                      |
+  ! isrc_end    |     2     |                    6  |
+  ! isrc_max    |     2     |     4                 |
+  ! itgt_start  |1          |     4     |  5  |
+  ! itgt_end    |          3|     4     |  5  |
+  ! isub_src   |1|    1    |2|    2     |  2  |  2  |
+  call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
                                 isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
   if (verbose) write(stdout,*) "intersect_src_tgt_grids test 4: n0=2, n1=3"
   if (verbose) write(stdout,*) "  h_src =     |   2   |       4       |"
@@ -1663,36 +1706,40 @@ logical function remapping_unit_tests(verbose)
   call test%int_arr(3, itgt_start, (/1,4,5/), 'itgt_start')
   call test%int_arr(3, itgt_end, (/3,4,5/), 'itgt_end')
   call test%int_arr(6, isub_src, (/1,1,2,2,2,2/), 'isub_src')
-! allocate(ppoly0_coefs(2,2), ppoly0_E(2,2), ppoly0_S(2,2))
+  allocate(ppoly0_coefs(n0,2), ppoly0_E(n0,2), ppoly0_S(n0,2))
 ! ! h_src =     |<-   2   ->|<-       4         ->|
 ! ! h_sub =     |0|<- 2   ->|0|<- 2 ->|<-1->|<-1->|
 ! ! u_src =     |     2     |         5           |
 ! !  edge =     |1         3|3                   7|
 ! ! u_sub =     |1|   2     |3|   4   | 5.5 | 6.5 |
-! call PLM_reconstruction(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect )
-! call PLM_boundary_extrapolation(2, (/2.,4./),(/2.,5./), ppoly0_E, ppoly0_coefs, h_neglect)
-! allocate(u_sub(6), uh_sub(6))
+! call PLM_reconstruction(n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
+! call PLM_boundary_extrapolation(n0, h0, u0, poly0_E, ppoly0_coefs, h_neglect)
+  allocate(u_sub(n0+n1+1), uh_sub(n0+n1+1))
 ! call remap_src_to_sub_grid(2, (/2.,4./), (/2.,5./), ppoly0_E, ppoly0_coefs, &
 !                            3, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
 !                            INTEGRATION_PLM, .false., u_sub, uh_sub, u02_err)
 ! call test%real_arr(6, u_sub, (/1.,2.,3.,4.,5.5,6.5/), 'u_sub')
-! deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub)
+  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub, h0, u0, h1, u1)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
-  ! Test 5: n0=2, n1=3  Target column exceeds source column, sum(h_tgt)>sum(h_src), useful for diagnostics
-  ! h_src =     |     2     |    2    |  1  |
-  ! h_tgt =     |     2     |         4           |
-  ! h_sub =     |0|   2     |0|  2    |  1  |  1  |
-  ! isrc_start  |1          |3        |  5        |
-  ! isrc_end    |     2     |    4    |  5        |
-  ! isrc_max    |     2     |    4    |  5  |     |
-  ! itgt_start  |1          |    4                |
+  ! Test 5: n0=3, n1=2  Target column exceeds source column, sum(h_tgt)>sum(h_src), useful for diagnostics
+  n0 = 3 ; n1 = 2
+  allocate( h0_eff(n0), isrc_start(n0), isrc_end(n0), isrc_max(n0), h0(n0), u0(n0) )
+  allocate( itgt_start(n1), itgt_end(n1), h1(n1), u1(n1) )
+  allocate( h_sub(n0+n1+1), isub_src(n0+n1+1) )
+  u0 =         (/     2.    ,     4.   ,  5.5 /)
+  h0 =         (/     2.    ,     2.   ,   1. /)
+  h1 =         (/     2.    ,           4.         /)
+  ! h_src =     |<-   2   ->|<-   2   ->|< 1 >|
+  ! h_tgt =     |<-   2   ->|<-         4         ->|
+  ! h_sub =    |0|<-  2  ->|0|<-  2   ->|< 1 >|< 1 >|
+  ! isrc_start  |1          |3          |  5  |
+  ! isrc_end    |     2     |     4     |  5  |
+  ! isrc_max    |     2     |     4     |  5  |
+  ! itgt_start  |1          |     4                 |
   ! itgt_end    |            3|                6  |
   ! isub_src    |1|   1     |2|  2    |  3  |  3  |
-  allocate( h_sub(6), h0_eff(3), isrc_start(3), isrc_end(3), isrc_max(3), itgt_start(3), itgt_end(3), isub_src(6) )
-  call intersect_src_tgt_grids( 3, (/2., 2., 1./), &  ! n0, h0
-                                2, (/2., 4./), &  ! n1, h1
-                                h_sub, h0_eff, &
+  call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
                                 isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
   if (verbose) write(stdout,*) "intersect_src_tgt_grids test 5: n0=3, n1=2"
   if (verbose) write(stdout,*) "  h_src =     |   2   |   2   | 1 |"
@@ -1705,36 +1752,50 @@ logical function remapping_unit_tests(verbose)
   call test%int_arr(2, itgt_start, (/1,4/), 'itgt_start')
   call test%int_arr(2, itgt_end, (/3,6/), 'itgt_end')
   call test%int_arr(6, isub_src, (/1,1,2,2,3,3/), 'isub_src')
-  allocate(ppoly0_coefs(3,2), ppoly0_E(3,2), ppoly0_S(3,2))
-  ! h_src =     |     2     |    2    |  1  |
-  ! h_sub =     |0|   2     |0|  2    |  1  |  1  |
-  ! u_src =     |     2     |    4    | 5.5 |
-  !  edge =     |1         3|3       5|5   6|
-  ! u_sub =     |1|   2     |3|  4    | 5.5 |  6  |
-  call PLM_reconstruction(3, (/2.,2.,1./), (/2.,4.,5.5/), ppoly0_E, ppoly0_coefs, h_neglect )
-  call PLM_boundary_extrapolation(3, (/2.,2.,1./),(/2.,4.,5.5/), ppoly0_E, ppoly0_coefs, h_neglect)
-  allocate(u_sub(6), uh_sub(6))
-  call remap_src_to_sub_grid(3, (/2.,2.,1./), (/2.,4.,5.5/), ppoly0_E, ppoly0_coefs, &
-                             2, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+  allocate(ppoly0_coefs(n0,2), ppoly0_E(n0,2), ppoly0_S(n0,2))
+  ! h_src =     |<-   2   ->|<-   2   ->|< 1 >|
+  ! h_sub =    |0|<-  2  ->|0|<-  2   ->|< 1 >|< 1 >|
+  ! u_src =     |     2     |     4     | 5.5 |
+  !  edge =     |1         3|3         5|5   6|
+  ! u_sub =    |1|   2     |3|    4     | 5.5 |  6  |
+  call PLM_reconstruction(n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
+  call PLM_boundary_extrapolation(n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect)
+  allocate(u_sub(n0+n1+1), uh_sub(n0+n1+1))
+  call remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, &
+                             n1, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
                              INTEGRATION_PLM, .false., u_sub, uh_sub, u02_err)
+  ! h_sub =    |0|<-  2  ->|0|<-  2   ->|< 1 >|< 1 >|
+  ! u_sub =    |1|   2     |3|    4     | 5.5 |  6  |
+  ! h_tgt =     |<-   2   ->|<-         4         ->|
+  ! u_tgt =     |     2     |          4 7/8        |
   call test%real_arr(6, u_sub, (/1.,2.,3.,4.,5.5,6./), 'u_sub')
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             .false., u1, u02_err)
+  call test%real_arr(2, u1, (/2.,4.875/), 'u1')
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             .true., u1, u02_err)
+  call test%real_arr(2, u1, (/2.,4.875/), 'u1.b')
+  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub, h0, u0, h1, u1)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
-  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub)
 
   ! Test 6: n0=3, n1=5  Source and targets with vanished layers
-  ! h_src =     |      2      |0|      2      |
-  ! h_tgt =     |  1  |0|  1  |0|      2      |
-  ! h_sub =     |0| 1 |0|  1  |0|0|0|   2   |0|
-  ! isrc_start  |1            |5|6            |
-  ! isrc_end    |          4  |5|       8     |
-  ! isrc_max    |          4  |5|       8     |
-  ! itgt_start  |1    |3|  4      |7|   8     |
-  ! itgt_end    |   2 |3|        6|7|        9|
-  ! isub_src    |1| 1 |1|  1  |2|3|3|  3    |3|
-  allocate( h_sub(9), h0_eff(3), isrc_start(3), isrc_end(3), isrc_max(3), itgt_start(5), itgt_end(5), isub_src(9) )
-  call intersect_src_tgt_grids( 3, (/2., 0., 2./), &  ! n0, h0
-                                5, (/1., 0., 1., 0., 2./), &  ! n1, h1
-                                h_sub, h0_eff, &
+  n0 = 3 ; n1 = 5
+  allocate( h0_eff(n0), isrc_start(n0), isrc_end(n0), isrc_max(n0), h0(n0), u0(n0) )
+  allocate( itgt_start(n1), itgt_end(n1), h1(n1), u1(n1) )
+  allocate( h_sub(n0+n1+1), isub_src(n0+n1+1) )
+  u0 =         (/        2.       ,3.,        4.        /)
+  h0 =         (/        2.       ,0.,        2.        /)
+  h1 =         (/   1.  ,0.,  1.  ,0.,        2.        /)
+  ! h_src =     |<-      2      ->|0|<-       2       ->|
+  ! h_tgt =     |<- 1 ->|0|<- 1 ->|0|<-       2       ->|
+  ! h_sub =    |0|< 1 ->|0|< 1 >|0|0|0|<-     2      ->|0|
+  ! isrc_start  |1                |5|6                  |
+  ! isrc_end    |            4    |5|         8         |
+  ! isrc_max    |            4    |5|         8         |
+  ! itgt_start  |1      |3|  4    |7|         8         |
+  ! itgt_end    |   2   |3|      6|7|                  9|
+  ! isub_src   |1|  1   |1|  1  |2|3|3|       3        |3|
+  call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
                                 isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
   if (verbose) write(stdout,*) "intersect_src_tgt_grids test 6: n0=3, n1=5"
   if (verbose) write(stdout,*) "  h_src =     |    2    |0|    2    |"
@@ -1747,6 +1808,30 @@ logical function remapping_unit_tests(verbose)
   call test%int_arr(5, itgt_start, (/1,3,4,7,8/), 'itgt_start')
   call test%int_arr(5, itgt_end, (/2,3,6,7,9/), 'itgt_end')
   call test%int_arr(9, isub_src, (/1,1,1,1,2,3,3,3,3/), 'isub_src')
+  allocate(ppoly0_coefs(n0,2), ppoly0_E(n0,2), ppoly0_S(n0,2))
+  ! h_src =     |<-      2      ->|0|<-       2       ->|
+  ! h_sub =    |0|< 1 ->|0|< 1 >|0|0|0|<-     2      ->|0|
+  ! u_src =     |        2        |3|         4         |
+  !  edge =     |1               3|3|3                 5|
+  ! u_sub =    |1| 1.5  |2| 2.5 |3|3|3|       4        |5|
+  call PLM_reconstruction(n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
+  call PLM_boundary_extrapolation(n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect)
+  allocate(u_sub(n0+n1+1), uh_sub(n0+n1+1))
+  call remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, &
+                             n1, h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                             INTEGRATION_PLM, .false., u_sub, uh_sub, u02_err)
+  ! h_sub =    |0|< 1 ->|0|< 1 >|0|0|0|<-     2      ->|0|
+  ! u_sub =    |1| 1.5  |2| 2.5 |3|3|3|       4        |5|
+  ! h_tgt =     |<- 1 ->|0|<- 1 ->|0|<-       2       ->|
+  ! u_tgt =     |  1.5  |2|  2.5  |3|         4         |
+  call test%real_arr(9, u_sub, (/1.,1.5,2.,2.5,3.,3.,3.,4.,5./), 'u_sub')
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             .false., u1, u02_err)
+  call test%real_arr(5, u1, (/1.5,2.,2.5,3.,4./), 'u1')
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             .true., u1, u02_err)
+  call test%real_arr(5, u1, (/1.5,2.,2.5,3.,4./), 'u1.b')
+  deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub, h0, u0, h1, u1)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! ============================================================
