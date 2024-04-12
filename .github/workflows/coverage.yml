@@ -31,14 +31,7 @@ jobs:
     - name: Run (single processor) unit tests
       run: make run.unit
 
-    - name: Report unit test coverage to CI (PR)
-      if: github.event_name == 'pull_request'
-      run: make report.cov.unit REQUIRE_COVERAGE_UPLOAD=true
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-    - name: Report unit test coverage to CI (Push)
-      if: github.event_name != 'pull_request'
+    - name: Report unit test coverage to CI
       run: make report.cov.unit
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
@@ -49,14 +42,7 @@ jobs:
     - name: Run coverage tests
       run: make -j -k run.cov
 
-    - name: Report coverage to CI (PR)
-      if: github.event_name == 'pull_request'
-      run: make report.cov REQUIRE_COVERAGE_UPLOAD=true
-      env:
-        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-    - name: Report coverage to CI (Push)
-      if: github.event_name != 'pull_request'
+    - name: Report coverage to CI
       run: make report.cov
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
