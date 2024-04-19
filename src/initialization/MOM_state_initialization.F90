@@ -343,7 +343,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                   just_read=just_read)
       case ("dumbbell"); call dumbbell_initialize_thickness(dz, depth_tot, G, GV, US, PF, &
                                   just_read=just_read)
-      case ("soliton"); call soliton_initialize_thickness(dz, depth_tot, G, GV, US)
+      case ("soliton"); call soliton_initialize_thickness(dz, depth_tot, G, GV, US, PF, &
+                                  just_read=just_read)
       case ("phillips"); call Phillips_initialize_thickness(dz, depth_tot, G, GV, US, PF, &
                                   just_read=just_read)
       case ("rossby_front")
@@ -508,7 +509,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     case ("phillips"); call Phillips_initialize_velocity(u, v, G, GV, US, PF, just_read)
     case ("rossby_front"); call Rossby_front_initialize_velocity(u, v, h, &
                                      G, GV, US, PF, just_read)
-    case ("soliton"); call soliton_initialize_velocity(u, v, G, GV, US)
+    case ("soliton"); call soliton_initialize_velocity(u, v, G, GV, US, PF, just_read)
     case ("USER"); call user_initialize_velocity(u, v, G, GV, US, PF, just_read)
     case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
           "Unrecognized velocity configuration "//trim(config))
