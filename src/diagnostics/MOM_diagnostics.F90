@@ -999,7 +999,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     call post_data(CS%id_dKEdt, KE_term, CS%diag)
@@ -1018,7 +1018,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     if (CS%id_PE_to_KE > 0) call post_data(CS%id_PE_to_KE, KE_term, CS%diag)
@@ -1037,7 +1037,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     call post_data(CS%id_KE_BT, KE_term, CS%diag)
@@ -1056,13 +1056,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -KE(i,j,k) * G%IareaT(i,j) &
-            * (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
+            * ((uh(I,j,k) - uh(I-1,j,k)) + (vh(i,J,k) - vh(i,J-1,k)))
       enddo ; enddo
       if (.not.G%symmetric) &
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     call post_data(CS%id_KE_Coradv, KE_term, CS%diag)
@@ -1085,13 +1085,13 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
       enddo ; enddo
       do j=js,je ; do i=is,ie
         KE_h(i,j) = -KE(i,j,k) * G%IareaT(i,j) &
-            * (uh(I,j,k) - uh(I-1,j,k) + vh(i,J,k) - vh(i,J-1,k))
+            * ((uh(I,j,k) - uh(I-1,j,k)) + (vh(i,J,k) - vh(i,J-1,k)))
       enddo ; enddo
       if (.not.G%symmetric) &
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     call post_data(CS%id_KE_adv, KE_term, CS%diag)
@@ -1110,7 +1110,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     call post_data(CS%id_KE_visc, KE_term, CS%diag)
@@ -1167,7 +1167,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     call post_data(CS%id_KE_horvisc, KE_term, CS%diag)
@@ -1189,7 +1189,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
         call do_group_pass(CS%pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = KE_h(i,j) + 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
     call post_data(CS%id_KE_dia, KE_term, CS%diag)
