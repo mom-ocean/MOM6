@@ -98,6 +98,7 @@ use MOM_grid,                  only : set_first_direction
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_index,             only : rotate_hor_index
 use MOM_interface_heights,     only : find_eta, calc_derived_thermo, thickness_to_dz
+use MOM_interface_heights,     only : convert_MLD_to_ML_thickness
 use MOM_interface_filter,      only : interface_filter, interface_filter_init, interface_filter_end
 use MOM_interface_filter,      only : interface_filter_CS
 use MOM_internal_tides,        only : int_tide_CS
@@ -1327,7 +1328,11 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                     CS%uhtr, CS%vhtr, G%HI, haloshift=0, scale=GV%H_to_MKS*US%L_to_m**2)
     endif
     call cpu_clock_begin(id_clock_ml_restrat)
-    call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, &
+    if (associated(CS%visc%MLD)) then
+      call safe_alloc_ptr(CS%visc%h_ML, G%isd, G%ied, G%jsd, G%jed)
+      call convert_MLD_to_ML_thickness(CS%visc%MLD, h, CS%visc%h_ML, CS%tv, G, GV, halo=1)
+    endif
+    call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, CS%visc%h_ML, &
                             CS%visc%sfc_buoy_flx, CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
     call cpu_clock_end(id_clock_ml_restrat)
     call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))

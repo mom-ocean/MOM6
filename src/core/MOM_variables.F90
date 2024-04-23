@@ -263,7 +263,8 @@ type, public :: vertvisc_type
     Ray_v       !< The Rayleigh drag velocity to be applied to each layer at v-points [H T-1 ~> m s-1 or Pa s m-1].
 
   ! The following elements are pointers so they can be used as targets for pointers in the restart registry.
-  real, pointer, dimension(:,:) :: MLD => NULL() !< Instantaneous active mixing layer depth [Z ~> m].
+  real, pointer, dimension(:,:) :: MLD => NULL()  !< Instantaneous active mixing layer depth [Z ~> m].
+  real, pointer, dimension(:,:) :: h_ML => NULL() !< Instantaneous active mixing layer thickness [H ~> m or kg m-2].
   real, pointer, dimension(:,:) :: sfc_buoy_flx => NULL() !< Surface buoyancy flux (derived) [Z2 T-3 ~> m2 s-3].
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
