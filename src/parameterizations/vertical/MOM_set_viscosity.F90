@@ -30,7 +30,7 @@ use MOM_restart,       only : register_restart_field_as_obsolete, register_resta
 use MOM_safe_alloc,    only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, porous_barrier_type
-use MOM_verticalGrid,  only : verticalGrid_type
+use MOM_verticalGrid,  only : verticalGrid_type, get_thickness_units
 
 implicit none ; private
 
@@ -2767,10 +2767,15 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
   if (hfreeze >= 0.0 .or. MLE_use_PBL_MLD) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
   endif
+  if (hfreeze >= 0.0 .or. MLE_use_PBL_MLD) then
+    call safe_alloc_ptr(visc%h_ML, isd, ied, jsd, jed)
+  endif
 
   if (MLE_use_PBL_MLD) then
     call register_restart_field(visc%MLD, "MLD", .false., restart_CS, &
                   "Instantaneous active mixing layer depth", units="m", conversion=US%Z_to_m)
+    call register_restart_field(visc%h_ML, "h_ML", .false., restart_CS, &
+                  "Instantaneous active mixing layer thickness", units=get_thickness_units(GV), conversion=GV%H_to_mks)
   endif
 
   ! visc%sfc_buoy_flx is used to communicate the state of the (e)PBL or KPP to the rest of the model

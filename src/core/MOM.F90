@@ -98,7 +98,6 @@ use MOM_grid,                  only : set_first_direction
 use MOM_hor_index,             only : hor_index_type, hor_index_init
 use MOM_hor_index,             only : rotate_hor_index
 use MOM_interface_heights,     only : find_eta, calc_derived_thermo, thickness_to_dz
-use MOM_interface_heights,     only : convert_MLD_to_ML_thickness
 use MOM_interface_filter,      only : interface_filter, interface_filter_init, interface_filter_end
 use MOM_interface_filter,      only : interface_filter_CS
 use MOM_internal_tides,        only : int_tide_CS
@@ -212,8 +211,8 @@ type, public :: MOM_control_struct ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_av_bc
                     !< free surface height or column mass time averaged over the last
                     !! baroclinic dynamics time step [H ~> m or kg m-2]
-  real, dimension(:,:), pointer :: &
-    Hml => NULL()   !< active mixed layer depth [Z ~> m]
+  real, dimension(:,:), pointer :: Hml => NULL()
+                    !< active mixed layer depth, or 0 if there is no boundary layer scheme [Z ~> m]
   real :: time_in_cycle !< The running time of the current time-stepping cycle
                     !! in calls that step the dynamics, and also the length of
                     !! the time integral of ssh_rint [T ~> s].
@@ -1328,10 +1327,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                     CS%uhtr, CS%vhtr, G%HI, haloshift=0, scale=GV%H_to_MKS*US%L_to_m**2)
     endif
     call cpu_clock_begin(id_clock_ml_restrat)
-    if (associated(CS%visc%MLD)) then
-      call safe_alloc_ptr(CS%visc%h_ML, G%isd, G%ied, G%jsd, G%jed)
-      call convert_MLD_to_ML_thickness(CS%visc%MLD, h, CS%visc%h_ML, CS%tv, G, GV, halo=1)
-    endif
     call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, CS%visc%h_ML, &
                             CS%visc%sfc_buoy_flx, CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
     call cpu_clock_end(id_clock_ml_restrat)
@@ -2129,6 +2124,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   logical :: Boussinesq        ! If true, this run is fully Boussinesq
   logical :: semi_Boussinesq   ! If true, this run is partially non-Boussinesq
   logical :: use_KPP           ! If true, diabatic is using KPP vertical mixing
+  logical :: MLE_use_PBL_MLD   ! If true, use stored boundary layer depths for submesoscale restratification.
   integer :: nkml, nkbl, verbosity, write_geom
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
@@ -2733,7 +2729,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   if (use_frazil) allocate(CS%tv%frazil(isd:ied,jsd:jed), source=0.0)
   if (bound_salinity) allocate(CS%tv%salt_deficit(isd:ied,jsd:jed), source=0.0)
 
-  if (bulkmixedlayer .or. use_temperature) allocate(CS%Hml(isd:ied,jsd:jed), source=0.0)
+  allocate(CS%Hml(isd:ied,jsd:jed), source=0.0)
 
   if (bulkmixedlayer) then
     GV%nkml = nkml ; GV%nk_rho_varies = nkml + nkbl
@@ -3275,11 +3271,23 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, &
                                                   CS%mixedlayer_restrat_CSp, restart_CSp)
   if (CS%mixedlayer_restrat) then
+    if (GV%Boussinesq .and. associated(CS%visc%h_ML)) then
+      ! This is here to allow for a transition of restart files between model versions.
+      call get_param(param_file, "MOM", "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
+                     default=.false., do_not_log=.true.)
+      if (MLE_use_PBL_MLD .and. .not.query_initialized(CS%visc%h_ML, "h_ML", restart_CSp) .and. &
+          associated(CS%visc%MLD)) then
+        do j=js,je ; do i=is,ie ; CS%visc%h_ML(i,j) = GV%Z_to_H * CS%visc%MLD(i,j) ; enddo ; enddo
+      endif
+    endif
+
     if (.not.(bulkmixedlayer .or. CS%use_ALE_algorithm)) &
       call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
     ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
     if (.not. CS%diabatic_first .and. associated(CS%visc%MLD)) &
       call pass_var(CS%visc%MLD, G%domain, halo=1)
+    if (.not. CS%diabatic_first .and. associated(CS%visc%h_ML)) &
+      call pass_var(CS%visc%h_ML, G%domain, halo=1)
   endif
 
   call MOM_diagnostics_init(MOM_internal_state, CS%ADp, CS%CDp, Time, G, GV, US, &
@@ -3571,7 +3579,7 @@ subroutine set_restart_fields(GV, US, param_file, CS, restart_CSp)
   ! hML is needed when using the ice shelf module
   call get_param(param_file, '', "ICE_SHELF", use_ice_shelf, default=.false., &
                  do_not_log=.true.)
-  if (use_ice_shelf .and. associated(CS%Hml)) then
+  if (use_ice_shelf) then
     call register_restart_field(CS%Hml, "hML", .false., restart_CSp, &
                                 "Mixed layer thickness", "m", conversion=US%Z_to_m)
   endif
@@ -3711,11 +3719,9 @@ subroutine extract_surface_state(CS, sfc_state_in)
   enddo ; enddo ; endif
 
   ! copy Hml into sfc_state, so that caps can access it
-  if (associated(CS%Hml)) then
-    do j=js,je ; do i=is,ie
-      sfc_state%Hml(i,j) = CS%Hml(i,j)
-    enddo ; enddo
-  endif
+  do j=js,je ; do i=is,ie
+    sfc_state%Hml(i,j) = CS%Hml(i,j)
+  enddo ; enddo
 
   if (CS%Hmix < 0.0) then  ! A bulk mixed layer is in use, so layer 1 has the properties
     if (use_temperature) then ; do j=js,je ; do i=is,ie
@@ -3880,7 +3886,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
       do k=1,nz
         call calculate_TFreeze(CS%tv%S(is:ie,j,k), pres(is:ie), T_freeze(is:ie), CS%tv%eqn_of_state)
         do i=is,ie
-          depth_ml = min(CS%HFrz, (US%Z_to_m*GV%m_to_H)*CS%visc%MLD(i,j))
+          depth_ml = min(CS%HFrz, CS%visc%h_ML(i,j))
           if (depth(i) + h(i,j,k) < depth_ml) then
             dh = h(i,j,k)
           elseif (depth(i) < depth_ml) then
