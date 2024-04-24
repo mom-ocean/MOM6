@@ -1064,7 +1064,7 @@ end subroutine diagnoseMLDbyEnergy
 subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, tv, &
                                     aggregate_FW_forcing, evap_CFL_limit, &
                                     minimum_forcing_depth, cTKE, dSV_dT, dSV_dS, &
-                                    SkinBuoyFlux, MLD)
+                                    SkinBuoyFlux, MLD_h)
   type(diabatic_aux_CS),   pointer       :: CS !< Control structure for diabatic_aux
   type(ocean_grid_type),   intent(in)    :: G  !< Grid structure
   type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
@@ -1094,7 +1094,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                                                !! salinity [R-1 S-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out)   :: SkinBuoyFlux !< Buoyancy flux at surface [Z2 T-3 ~> m2 s-3].
-  real, pointer, dimension(:,:), optional :: MLD !< Mixed layer depth for brine plumes [Z ~> m]
+  real, dimension(:,:), &
+                 optional, pointer       :: MLD_h !< Mixed layer thickness for brine plumes [H ~> m or kg m-2]
 
   ! Local variables
   integer, parameter :: maxGroundings = 5
@@ -1137,8 +1138,6 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
                      ! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     netMassInOut_rate, & ! netmassinout but for dt=1 [H T-1 ~> m s-1 or kg m-2 s-1]
     mixing_depth, &  ! The mixing depth for brine plumes [H ~> m or kg m-2]
-    MLD_H, &         ! The mixed layer depth for brine plumes in thickness units [H ~> m or kg m-2]
-    MLD_Z, &         ! Running sum of distance from the surface for finding MLD_H [Z ~> m]
     total_h          ! Total thickness of the water column [H ~> m or kg m-2]
   real, dimension(SZI_(G), SZK_(GV)) :: &
     h2d, &           ! A 2-d copy of the thicknesses [H ~> m or kg m-2]
@@ -1204,10 +1203,14 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
   endif
 
-  if (CS%do_brine_plume .and. .not. associated(MLD)) then
+  if (CS%do_brine_plume .and. .not.present(MLD_h)) then
     call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
-                   "Brine plume parameterization requires a mixed-layer depth,\n"//&
+                   "Brine plume parameterization requires a mixed-layer depth argument,\n"//&
                    "currently coming from the energetic PBL scheme.")
+  endif
+  if (CS%do_brine_plume .and. .not.associated(MLD_h)) then
+    call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
+                   "Brine plume parameterization requires an associated mixed-layer depth.")
   endif
   if (CS%do_brine_plume .and. .not. associated(fluxes%salt_left_behind)) then
     call MOM_error(FATAL, "MOM_diabatic_aux.F90, applyBoundaryFluxesInOut(): "//&
@@ -1232,7 +1235,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  minimum_forcing_depth,evap_CFL_limit,dt,EOSdom,   &
   !$OMP                                  calculate_buoyancy,netPen_rate,SkinBuoyFlux,GoRho,&
   !$OMP                                  calculate_energetics,dSV_dT,dSV_dS,cTKE,g_Hconv2, &
-  !$OMP                                  EnthalpyConst,MLD)                                &
+  !$OMP                                  EnthalpyConst,MLD_h)                              &
   !$OMP                          private(opacityBand,h2d,T2d,netMassInOut,netMassOut,      &
   !$OMP                                  netHeat,netSalt,Pen_SW_bnd,fractionOfForcing,     &
   !$OMP                                  IforcingDepthScale,g_conv,dSpV_dT,dSpV_dS,        &
@@ -1242,7 +1245,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   !$OMP                                  drhodt,drhods,pen_sw_bnd_rate,                    &
   !$OMP                                  pen_TKE_2d,Temp_in,Salin_in,RivermixConst,        &
   !$OMP                                  mixing_depth,A_brine,fraction_left_brine,         &
-  !$OMP                                  plume_fraction,dK,MLD_H,MLD_Z,total_h)                     &
+  !$OMP                                  plume_fraction,dK,total_h)                        &
   !$OMP                     firstprivate(SurfPressure,plume_flux)
   do j=js,je
   ! Work in vertical slices for efficiency
@@ -1368,24 +1371,10 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     ! C/ update temp due to penetrative SW
     if (CS%do_brine_plume) then
       ! Find the plume mixing depth.
-      if (GV%Boussinesq .or. .not.allocated(tv%SpV_avg)) then
-        do i=is,ie ; MLD_H(i) = GV%Z_to_H * MLD(i,j) ; total_h(i) = 0.0 ; enddo
-        do k=1,nz ; do i=is,ie ; total_h(i) = total_h(i) + h(i,j,k) ; enddo ; enddo
-      else
-        do i=is,ie ; MLD_H(i) = 0.0 ; MLD_Z(i) = 0.0 ; total_h(i) = 0.0 ; enddo
-        do k=1,nz ; do i=is,ie
-          total_h(i) = total_h(i) + h(i,j,k)
-          if (MLD_Z(i) + GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k) < MLD(i,j)) then
-            MLD_H(i) = MLD_H(i) + h(i,j,k)
-            MLD_Z(i) = MLD_Z(i) + GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
-          elseif (MLD_Z(i) < MLD(i,j)) then  ! This is the last layer in the mixed layer
-            MLD_H(i) = MLD_H(i) + GV%RZ_to_H * (MLD(i,j) - MLD_Z(i)) / tv%SpV_avg(i,j,k)
-            MLD_Z(i) = MLD(i,j)
-          endif
-        enddo ; enddo
-      endif
+      do i=is,ie ; total_h(i) = 0.0 ; enddo
+      do k=1,nz ; do i=is,ie ; total_h(i) = total_h(i) + h(i,j,k) ; enddo ; enddo
       do i=is,ie
-        mixing_depth(i) = min( max(MLD_H(i) - minimum_forcing_depth, minimum_forcing_depth), &
+        mixing_depth(i) = min( max(MLD_h(i,j) - minimum_forcing_depth, minimum_forcing_depth), &
                                max(total_h(i), GV%angstrom_h) ) + GV%H_subroundoff
         A_brine(i) = (CS%brine_plume_n + 1) / (mixing_depth(i) ** (CS%brine_plume_n + 1))
       enddo

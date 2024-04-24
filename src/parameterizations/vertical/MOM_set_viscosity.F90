@@ -2694,6 +2694,7 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
   logical :: adiabatic, useKPP, useEPBL
+  logical :: do_brine_plume, use_hor_bnd_diff, use_neutral_diffusion, use_fpmix
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, MLE_use_Bodner, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   real :: hfreeze !< If hfreeze > 0 [Z ~> m], melt potential will be computed.
@@ -2757,25 +2758,43 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
     call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
   endif
 
-  ! visc%MLD is used to communicate the state of the (e)PBL or KPP to the rest of the model
+  ! visc%MLD and visc%h_ML are used to communicate the state of the (e)PBL or KPP to the rest of the model
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
                  default=.false., do_not_log=.true.)
-  ! visc%MLD needs to be allocated when melt potential is computed (HFREEZE>0)
+  ! visc%h_ML needs to be allocated when melt potential is computed (HFREEZE>0) or one of
+  ! several other parameterizations are in use.
   call get_param(param_file, mdl, "HFREEZE", hfreeze, &
                  units="m", default=-1.0, scale=US%m_to_Z, do_not_log=.true.)
+  call get_param(param_file, mdl, "DO_BRINE_PLUME", do_brine_plume, &
+                 "If true, use a brine plume parameterization from Nguyen et al., 2009.", &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_HORIZONTAL_BOUNDARY_DIFFUSION", use_hor_bnd_diff, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_NEUTRAL_DIFFUSION", use_neutral_diffusion, &
+                 default=.false., do_not_log=.true.)
+  if (use_neutral_diffusion) &
+    call get_param(param_file, mdl, "NDIFF_INTERIOR_ONLY", use_neutral_diffusion, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "FPMIX", use_fpmix, &
+                 default=.false., do_not_log=.true.)
 
-  if (hfreeze >= 0.0 .or. MLE_use_PBL_MLD) then
+  if (MLE_use_PBL_MLD) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
   endif
-  if (hfreeze >= 0.0 .or. MLE_use_PBL_MLD) then
+  if ((hfreeze >= 0.0) .or. MLE_use_PBL_MLD .or. do_brine_plume .or. use_fpmix .or. &
+      use_neutral_diffusion .or. use_hor_bnd_diff) then
     call safe_alloc_ptr(visc%h_ML, isd, ied, jsd, jed)
   endif
 
   if (MLE_use_PBL_MLD) then
     call register_restart_field(visc%MLD, "MLD", .false., restart_CS, &
                   "Instantaneous active mixing layer depth", units="m", conversion=US%Z_to_m)
+  endif
+  if (MLE_use_PBL_MLD .or. do_brine_plume .or. use_fpmix .or. &
+      use_neutral_diffusion .or. use_hor_bnd_diff) then
     call register_restart_field(visc%h_ML, "h_ML", .false., restart_CS, &
-                  "Instantaneous active mixing layer thickness", units=get_thickness_units(GV), conversion=GV%H_to_mks)
+                  "Instantaneous active mixing layer thickness", &
+                  units=get_thickness_units(GV), conversion=GV%H_to_mks)
   endif
 
   ! visc%sfc_buoy_flx is used to communicate the state of the (e)PBL or KPP to the rest of the model

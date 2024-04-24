@@ -27,7 +27,7 @@ use MOM_hor_bnd_diffusion,        only : hbd_CS, hor_bnd_diffusion_init
 use MOM_hor_bnd_diffusion,        only : hor_bnd_diffusion, hor_bnd_diffusion_end
 use MOM_tracer_registry,          only : tracer_registry_type, tracer_type, MOM_tracer_chksum
 use MOM_unit_scaling,             only : unit_scale_type
-use MOM_variables,                only : thermo_var_ptrs
+use MOM_variables,                only : thermo_var_ptrs, vertvisc_type
 use MOM_verticalGrid,             only : verticalGrid_type
 
 implicit none ; private
@@ -113,7 +113,7 @@ contains
 !! using the diffusivity in CS%KhTr, or using space-dependent diffusivity.
 !! Multiple iterations are used (if necessary) so that there is no limit
 !! on the acceptable time increment.
-subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
+subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_online_flag, read_khdt_x, read_khdt_y)
   type(ocean_grid_type),      intent(inout) :: G       !< Grid type
   type(verticalGrid_type),    intent(in)    :: GV      !< ocean vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -121,6 +121,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
   real,                       intent(in)    :: dt      !< time step [T ~> s]
   type(MEKE_type),            intent(in)    :: MEKE    !< MEKE fields
   type(VarMix_CS),            intent(in)    :: VarMix  !< Variable mixing type
+  type(vertvisc_type),        intent(in)    :: visc    !< Structure with vertical viscosities,
+                                                       !! boundary layer properties and related fields
   type(unit_scale_type),      intent(in)    :: US      !< A dimensional unit scaling type
   type(tracer_hor_diff_CS),   pointer       :: CS      !< module control structure
   type(tracer_registry_type), pointer       :: Reg     !< registered tracers
@@ -442,7 +444,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
       if (itt>1) then ! Update halos for subsequent iterations
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
       endif
-      call hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, &
+      call hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, I_numitts*dt, Reg, visc, &
                              CS%hor_bnd_diffusion_CSp)
     enddo ! itt
   endif
@@ -457,9 +459,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
     ! would be inside the itt-loop. -AJA
 
     if (associated(tv%p_surf)) then
-      call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp, p_surf=tv%p_surf)
+      call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, visc, CS%neutral_diffusion_CSp, p_surf=tv%p_surf)
     else
-      call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
+      call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, visc, CS%neutral_diffusion_CSp)
     endif
 
     do k=1,nz+1
@@ -499,9 +501,10 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, G, GV, US, CS, Reg, tv, do_online
         call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
         if (CS%recalc_neutral_surf) then
           if (associated(tv%p_surf)) then
-            call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp, p_surf=tv%p_surf)
+            call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, visc, CS%neutral_diffusion_CSp, &
+                                               p_surf=tv%p_surf)
           else
-            call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, CS%neutral_diffusion_CSp)
+            call neutral_diffusion_calc_coeffs(G, GV, US, h, tv%T, tv%S, visc, CS%neutral_diffusion_CSp)
           endif
         endif
       endif

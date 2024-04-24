@@ -1433,7 +1433,7 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
                      CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_first)
   if (CS%debug) call MOM_tracer_chksum("Post-advect ", CS%tracer_Reg, G)
-  call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, G, GV, US, &
+  call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, CS%visc, G, GV, US, &
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
   if (CS%debug) call MOM_tracer_chksum("Post-diffuse ", CS%tracer_Reg, G)
   if (showCallTree) call callTree_waypoint("finished tracer advection/diffusion (step_MOM)")
@@ -1882,7 +1882,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
-          call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
+          call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, CS%visc, G, GV, US, &
                               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1909,7 +1909,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
             call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
-          call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
+          call tracer_hordiff(CS%h, dt_offline, CS%MEKE, CS%VarMix, CS%visc, G, GV, US, &
               CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
         endif
       endif
@@ -1966,7 +1966,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
                                  CS%h, eatr, ebtr, uhtr, vhtr)
     ! Perform offline diffusion if requested
     if (.not. skip_diffusion) then
-      call tracer_hordiff(h_end, dt_offline, CS%MEKE, CS%VarMix, G, GV, US, &
+      call tracer_hordiff(h_end, dt_offline, CS%MEKE, CS%VarMix, CS%visc, G, GV, US, &
                           CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
     endif
 

@@ -20,6 +20,7 @@ use MOM_remapping,             only : extract_member_remapping_CS, build_reconst
 use MOM_remapping,             only : average_value_ppoly, remappingSchemesDoc, remappingDefaultScheme
 use MOM_tracer_registry,       only : tracer_registry_type, tracer_type
 use MOM_unit_scaling,          only : unit_scale_type
+use MOM_variables,             only : vertvisc_type
 use MOM_verticalGrid,          only : verticalGrid_type
 use polynomial_functions,      only : evaluation_polynomial, first_derivative_polynomial
 use PPM_functions,             only : PPM_reconstruction, PPM_boundary_extrapolation
@@ -142,7 +143,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   type(diag_ctrl), target,    intent(inout) :: diag       !< Diagnostics control structure
   type(param_file_type),      intent(in)    :: param_file !< Parameter file structure
   type(EOS_type),  target,    intent(in)    :: EOS        !< Equation of state
-  type(diabatic_CS),          pointer       :: diabatic_CSp!< KPP control structure needed to get BLD
+  type(diabatic_CS),          pointer       :: diabatic_CSp!< diabatic control structure needed to get BLD
   type(neutral_diffusion_CS), pointer       :: CS         !< Neutral diffusion control structure
 
   ! Local variables
@@ -333,13 +334,15 @@ end function neutral_diffusion_init
 
 !> Calculate remapping factors for u/v columns used to map adjoining columns to
 !! a shared coordinate space.
-subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
+subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, visc, CS, p_surf)
   type(ocean_grid_type),                     intent(in) :: G   !< Ocean grid structure
   type(verticalGrid_type),                   intent(in) :: GV  !< ocean vertical grid structure
   type(unit_scale_type),                     intent(in) :: US  !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h   !< Layer thickness [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: T   !< Potential temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: S   !< Salinity [S ~> ppt]
+  type(vertvisc_type),                       intent(in) :: visc !< Structure with vertical viscosities,
+                                                               !! boundary layer properties and related fields
   type(neutral_diffusion_CS),                pointer    :: CS  !< Neutral diffusion control structure
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in) :: p_surf !< Surface pressure to include in pressures used
                                                               !! for equation of state calculations [R L2 T-2 ~> Pa]
@@ -369,10 +372,13 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, CS, p_surf)
 
   ! Check if hbl needs to be extracted
   if (CS%interior_only) then
-    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, CS%hbl, G, US, m_to_BLD_units=GV%m_to_H)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, CS%hbl, G, US, &
-                                                                     m_to_MLD_units=GV%m_to_H)
-    call pass_var(CS%hbl,G%Domain)
+    if (associated(visc%h_ML)) then
+      CS%hbl(:,:) = visc%h_ML(:,:)
+    else
+      call MOM_error(FATAL, "hor_bnd_diffusion requires that visc%h_ML is associated.")
+    endif
+    call pass_var(CS%hbl, G%Domain, halo=1)
+
     ! get k-indices and zeta
     do j=G%jsc-1, G%jec+1 ; do i=G%isc-1,G%iec+1
       if (G%mask2dT(i,j) > 0.0) then

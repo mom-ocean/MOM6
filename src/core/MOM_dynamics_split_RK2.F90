@@ -71,9 +71,6 @@ use MOM_vert_friction,         only : updateCFLtruncationValue, vertFPmix
 use MOM_verticalGrid,          only : verticalGrid_type, get_thickness_units
 use MOM_verticalGrid,          only : get_flux_units, get_tr_flux_units
 use MOM_wave_interface,        only : wave_parameters_CS, Stokes_PGF
-use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
-use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
-use MOM_diabatic_driver,       only : diabatic_CS, extract_diabatic_member
 
 implicit none ; private
 
@@ -139,8 +136,6 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce   !< pbce times eta gives the baroclinic pressure
                                                                   !! anomaly in each layer due to free surface height
                                                                   !! anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
-  type(KPP_CS),           pointer :: KPP_CSp => NULL() !< KPP control structure needed to ge
-  type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure
 
   real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean
                                                       !! to the seafloor [R L Z T-2 ~> Pa]
@@ -717,9 +712,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   if (CS%fpmix) then
     hbl(:,:) = 0.0
-    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
-    if (ASSOCIATED(CS%energetic_PBL_CSp)) &
-      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, m_to_MLD_units=GV%m_to_H)
+    if (associated(visc%h_ML)) hbl(:,:) = visc%h_ML(:,:)
     call vertFPmix(up, vp, uold, vold, hbl, h, forces, &
                    dt_pred, G, GV, US, CS%vertvisc_CSp, CS%OBC)
     call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
