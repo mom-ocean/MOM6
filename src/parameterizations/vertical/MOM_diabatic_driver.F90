@@ -1073,7 +1073,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
                               KPP_CSp=CS%KPP_CSp, &
                               nonLocalTrans=KPP_NLTscalar, &
                               evap_CFL_limit=CS%evap_CFL_limit, &
-                              minimum_forcing_depth=CS%minimum_forcing_depth)
+                              minimum_forcing_depth=CS%minimum_forcing_depth, h_BL=visc%h_ML)
 
   call cpu_clock_end(id_clock_tracers)
 
@@ -1587,7 +1587,7 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
                               KPP_CSp=CS%KPP_CSp, &
                               nonLocalTrans=KPP_NLTscalar, &
                               evap_CFL_limit=CS%evap_CFL_limit, &
-                              minimum_forcing_depth=CS%minimum_forcing_depth)
+                              minimum_forcing_depth=CS%minimum_forcing_depth, h_BL=visc%h_ML)
 
   call cpu_clock_end(id_clock_tracers)
 
@@ -2381,8 +2381,7 @@ subroutine layered_diabatic(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_e
 
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, BLD, dt, G, GV, US, tv, &
                               CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                              KPP_CSp=CS%KPP_CSp, &
-                              nonLocalTrans=KPP_NLTscalar)
+                              KPP_CSp=CS%KPP_CSp, nonLocalTrans=KPP_NLTscalar, h_BL=visc%h_ML)
 
   elseif (CS%double_diffuse) then  ! extra diffusivity for passive tracers
 
@@ -2403,14 +2402,12 @@ subroutine layered_diabatic(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_e
 
     call call_tracer_column_fns(hold, h, eatr, ebtr, fluxes, BLD, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                KPP_CSp=CS%KPP_CSp, &
-                                nonLocalTrans=KPP_NLTscalar)
+                                KPP_CSp=CS%KPP_CSp, nonLocalTrans=KPP_NLTscalar, h_BL=visc%h_ML)
 
   else
     call call_tracer_column_fns(hold, h, ea, eb, fluxes, BLD, dt, G, GV, US, tv, &
                                 CS%optics, CS%tracer_flow_CSp, CS%debug, &
-                                KPP_CSp=CS%KPP_CSp, &
-                                nonLocalTrans=KPP_NLTscalar)
+                                KPP_CSp=CS%KPP_CSp, nonLocalTrans=KPP_NLTscalar, h_BL=visc%h_ML)
 
   endif  ! (CS%mix_boundary_tracers)
 

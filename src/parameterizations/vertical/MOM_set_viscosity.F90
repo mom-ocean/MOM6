@@ -2693,7 +2693,7 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
   logical,                 intent(in) :: use_ice_shelf !< if true, register tau_shelf restarts
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
-  logical :: adiabatic, useKPP, useEPBL
+  logical :: adiabatic, useKPP, useEPBL, use_ideal_age
   logical :: do_brine_plume, use_hor_bnd_diff, use_neutral_diffusion, use_fpmix
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, MLE_use_Bodner, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
@@ -2777,12 +2777,14 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "FPMIX", use_fpmix, &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_IDEAL_AGE_TRACER", use_ideal_age, &
+                 default=.false., do_not_log=.true.)
 
   if (MLE_use_PBL_MLD) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
   endif
   if ((hfreeze >= 0.0) .or. MLE_use_PBL_MLD .or. do_brine_plume .or. use_fpmix .or. &
-      use_neutral_diffusion .or. use_hor_bnd_diff) then
+      use_neutral_diffusion .or. use_hor_bnd_diff .or. use_ideal_age) then
     call safe_alloc_ptr(visc%h_ML, isd, ied, jsd, jed)
   endif
 

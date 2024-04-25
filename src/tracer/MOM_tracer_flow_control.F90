@@ -429,7 +429,7 @@ end subroutine call_tracer_set_forcing
 
 !> This subroutine calls all registered tracer column physics subroutines.
 subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, mld, dt, G, GV, US, tv, optics, CS, &
-                                  debug, KPP_CSp, nonLocalTrans, evap_CFL_limit, minimum_forcing_depth)
+                                  debug, KPP_CSp, nonLocalTrans, evap_CFL_limit, minimum_forcing_depth, h_BL)
   type(ocean_grid_type),                 intent(in) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),               intent(in) :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h_old !< Layer thickness before entrainment
@@ -464,9 +464,11 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, mld, dt, G, GV, 
                                                               !! of the top layer in a timestep [nondim]
   real,                        optional, intent(in) :: minimum_forcing_depth !< The smallest depth over
                                                               !! which fluxes can be applied [H ~> m or kg m-2]
+  real, dimension(:,:),        optional, pointer    :: h_BL   !< Thickness of active mixing layer [H ~> m or kg m-2]
 
   ! Local variables
   real :: Hbl(SZI_(G),SZJ_(G))    !< Boundary layer thickness [H ~> m or kg m-2]
+  logical :: use_h_BL
 
   if (.not. associated(CS)) call MOM_error(FATAL, "call_tracer_column_fns: "// &
          "Module must be initialized via call_tracer_register before it is used.")
@@ -493,7 +495,12 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, mld, dt, G, GV, 
                                         evap_CFL_limit=evap_CFL_limit, &
                                         minimum_forcing_depth=minimum_forcing_depth)
     if (CS%use_ideal_age) then
-      call convert_MLD_to_ML_thickness(mld, h_new, Hbl, tv, G, GV)
+      use_h_BL = .false. ; if (present(h_BL)) use_h_BL = associated(h_BL)
+      if (present(h_BL)) then
+        Hbl(:,:) = h_BL(:,:)
+      else  ! This option is here mostly to support the offline tracers.
+        call convert_MLD_to_ML_thickness(mld, h_new, Hbl, tv, G, GV)
+      endif
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                            G, GV, US, CS%ideal_age_tracer_CSp, &
                                            evap_CFL_limit=evap_CFL_limit, &
@@ -573,7 +580,12 @@ subroutine call_tracer_column_fns(h_old, h_new, ea, eb, fluxes, mld, dt, G, GV, 
       call RGC_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                       G, GV, US, CS%RGC_tracer_CSp)
     if (CS%use_ideal_age) then
-      call convert_MLD_to_ML_thickness(mld, h_new, Hbl, tv, G, GV)
+      use_h_BL = .false. ; if (present(h_BL)) use_h_BL = associated(h_BL)
+      if (present(h_BL)) then
+        Hbl(:,:) = h_BL(:,:)
+      else  ! This option is here mostly to support the offline tracers.
+        call convert_MLD_to_ML_thickness(mld, h_new, Hbl, tv, G, GV)
+      endif
       call ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, &
                                            G, GV, US, CS%ideal_age_tracer_CSp, Hbl=Hbl)
     endif
