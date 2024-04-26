@@ -317,7 +317,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:) = -1_real32
+    data(:) = -1.
   end function unpack_tensor_float_1d
 
   !> Unpack a 32-bit real 2d tensor from the database
@@ -329,7 +329,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:,:) = -1_real32
+    data(:,:) = -1.
   end function unpack_tensor_float_2d
 
   !> Unpack a 32-bit real 3d tensor from the database
@@ -341,7 +341,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:,:,:) = -1_real32
+    data(:,:,:) = -1.
   end function unpack_tensor_float_3d
 
   !> Unpack a 32-bit real 4d tensor from the database
@@ -353,7 +353,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:,:,:,:) = -1_real32
+    data(:,:,:,:) = -1.
   end function unpack_tensor_float_4d
 
   !> Unpack a 64-bit real 1d tensor from the database
@@ -365,7 +365,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:) = -1_real64
+    data(:) = -1.
   end function unpack_tensor_double_1d
 
   !> Unpack a 64-bit real 2d tensor from the database
@@ -377,7 +377,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:,:) = -1_real64
+    data(:,:) = -1.
   end function unpack_tensor_double_2d
 
   !> Unpack a 64-bit real 3d tensor from the database
@@ -389,7 +389,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:,:,:) = -1_real64
+    data(:,:,:) = -1.
   end function unpack_tensor_double_3d
 
   !> Unpack a 64-bit real 4d tensor from the database
@@ -401,7 +401,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
-    data(:,:,:,:) = -1_real64
+    data(:,:,:,:) = -1.
   end function unpack_tensor_double_4d
 
   !> Unpack a 32-bit integer 1d tensor from the database
