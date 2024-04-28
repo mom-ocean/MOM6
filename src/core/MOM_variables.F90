@@ -31,11 +31,11 @@ public rotate_surface_state
 
 !> A structure for creating arrays of pointers to 3D arrays
 type, public :: p3d
-  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array
+  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array [various]
 end type p3d
 !> A structure for creating arrays of pointers to 2D arrays
 type, public :: p2d
-  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array [various]
 end type p2d
 
 !> Pointers to various fields which may be used describe the surface state of MOM, and which

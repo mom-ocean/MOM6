@@ -119,7 +119,7 @@ type, public :: ODA_CS ; private
   logical :: use_basin_mask !< If true, use a basin file to delineate weakly coupled ocean basins
   logical :: do_bias_adjustment !< If true, use spatio-temporally varying climatological tendency
                                 !! adjustment for Temperature and Salinity
-  real :: bias_adjustment_multiplier !< A scaling for the bias adjustment
+  real :: bias_adjustment_multiplier !< A scaling for the bias adjustment [nondim]
   integer :: assim_method !< Method: NO_ASSIM,EAKF_ASSIM or OI_ASSIM
   integer :: ensemble_size !< Size of the ensemble
   integer :: ensemble_id = 0 !< id of the current ensemble member
@@ -734,13 +734,17 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
 
 end subroutine apply_oda_tracer_increments
 
+!> Set up the grid of thicknesses at tracer points throughout the global domain
   subroutine set_up_global_tgrid(T_grid, CS, G)
     type(grid_type), pointer :: T_grid !< global tracer grid
     type(ODA_CS), pointer, intent(in) :: CS !< A pointer to DA control structure.
     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
 
     ! local variables
-    real, dimension(:,:), allocatable :: global2D, global2D_old
+    real, dimension(:,:), allocatable :: &
+      global2D, &  ! A layer thickness in the entire global domain [H ~> m or kg m-2]
+      global2D_old ! The thickness of the layer above the one in global2D in the entire
+                   ! global domain [H ~> m or kg m-2]
     integer :: i, j, k
 
     !    get global grid information from ocean_model
@@ -769,6 +773,8 @@ end subroutine apply_oda_tracer_increments
     do k = 1, CS%nk
       call global_field(G%Domain%mpp_domain, CS%h(:,:,k), global2D)
       do i=1,CS%ni ; do j=1,CS%nj
+        ! ###Does the next line need to be revised?  Perhaps it should be
+        ! if ( global2D(i,j) > 1.0*GV%H_to_m ) then
         if ( global2D(i,j) > 1 ) then
            T_grid%mask(i,j,k) = 1.0
         endif

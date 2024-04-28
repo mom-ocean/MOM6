@@ -643,7 +643,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     call pass_vector(u, v, G%Domain)
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, depth_tot, bottomFac2, barotrFac2, LmixScale)
     call ML_MEKE_calculate_features(G, GV, US, CS, MEKE%Rd_dx_h, u, v, tv, h, dt, features_array)
-    call predict_meke(G, CS, SIZE(h), Time, features_array, MEKE%MEKE)
+    call predict_MEKE(G, CS, SIZE(h), Time, features_array, MEKE%MEKE)
   case default
     call MOM_error(FATAL,"Invalid method specified for calculating EKE")
   end select
@@ -1665,12 +1665,14 @@ subroutine predict_MEKE(G, CS, npts, Time, features_array, MEKE)
   type(time_type),                                       intent(in   ) :: Time !< The current model time
   real(kind=real32), dimension(npts,num_features),       intent(in   ) :: features_array
                                                                           !< The array of features needed for machine
-                                                                          !! learning inference
+                                                                          !! learning inference, with different units
+                                                                          !! for the various subarrays [various]
   real, dimension(SZI_(G),SZJ_(G)),                      intent(  out) :: MEKE !< Eddy kinetic energy [L2 T-2 ~> m2 s-2]
   integer :: db_return_code
   character(len=255), dimension(1) :: model_out, model_in
   character(len=255) :: time_suffix
-  real(kind=real32), dimension(SIZE(MEKE)) :: MEKE_vec
+  real(kind=real32), dimension(SIZE(MEKE)) :: MEKE_vec ! A one-dimensional array of eddy kinetic
+                                                       ! energy [L2 T-2 ~> m2 s-2]
 
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1692,6 +1694,8 @@ subroutine predict_MEKE(G, CS, npts, Time, features_array, MEKE)
   db_return_code = CS%client%unpack_tensor( model_out(1), MEKE_vec, shape(MEKE_vec) )
   call cpu_clock_end(CS%id_unpack_tensor)
 
+  !### Does MEKE_vec need to be rescaled from [m2 s-2] to [L2 T-2 ~> m2 s-2] by
+  !    multiplying MEKE_vec by US%m_s_to_L_T**2 here?
   MEKE = reshape(MEKE_vec, shape(MEKE))
   do j=js,je; do i=is,ie
     MEKE(i,j) = MIN(MAX(exp(MEKE(i,j)),0.),CS%eke_max)

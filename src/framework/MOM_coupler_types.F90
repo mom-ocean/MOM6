@@ -246,11 +246,15 @@ end subroutine CT_copy_data_2d_3d
 !> Increment data in all elements of one coupler_2d_bc_type with the data from another. Both
 !! must have the same array sizes.
 subroutine CT_increment_data_2d(var_in, var, halo_size, scale_factor, scale_prev)
-  type(coupler_2d_bc_type),   intent(in)    :: var_in  !< coupler_type structure with the data to add to the other type
-  type(coupler_2d_bc_type),   intent(inout) :: var     !< The coupler_type structure whose fields are being incremented
+  type(coupler_2d_bc_type),   intent(in)    :: var_in   !< A coupler_type structure with data in arbitrary
+                                                        !! arbitrary units [A] to add to the other type
+  type(coupler_2d_bc_type),   intent(inout) :: var      !< A coupler_type structure with data in arbitrary
+                                                        !! units [B] whose fields are being incremented
   integer,          optional, intent(in)    :: halo_size !< The extent of the halo to increment; 0 by default
   real,             optional, intent(in)    :: scale_factor  !< A scaling factor for the data that is being added
+                                                             !! in arbitrary units [C A-1]
   real,             optional, intent(in)    :: scale_prev    !< A scaling factor for the data that is already here
+                                                             !! in arbitrary units [C B-1]
 
   call CT_increment_data(var_in, var, halo_size=halo_size, scale_factor=scale_factor, &
                          scale_prev=scale_prev)
@@ -260,11 +264,15 @@ end subroutine CT_increment_data_2d
 !> Increment data in all elements of one coupler_3d_bc_type with the data from another. Both
 !! must have the same array sizes.
 subroutine CT_increment_data_3d(var_in, var, halo_size, scale_factor, scale_prev, exclude_flux_type, only_flux_type)
-  type(coupler_3d_bc_type),   intent(in)    :: var_in  !< coupler_type structure with the data to add to the other type
-  type(coupler_3d_bc_type),   intent(inout) :: var     !< The coupler_type structure whose fields are being incremented
+  type(coupler_3d_bc_type),   intent(in)    :: var_in   !< A coupler_type structure with data in arbitrary
+                                                        !! arbitrary units [A] to add to the other type
+  type(coupler_3d_bc_type),   intent(inout) :: var      !< A coupler_type structure with data in arbitrary
+                                                        !! units [B] whose fields are being incremented
   integer,          optional, intent(in)    :: halo_size !< The extent of the halo to increment; 0 by default
   real,             optional, intent(in)    :: scale_factor  !< A scaling factor for the data that is being added
+                                                             !! in arbitrary units [C A-1]
   real,             optional, intent(in)    :: scale_prev    !< A scaling factor for the data that is already here
+                                                             !! in arbitrary units [C B-1]
   character(len=*), optional, intent(in)    :: exclude_flux_type !< A string describing which types
                                                          !! of fluxes to exclude from this increment.
   character(len=*), optional, intent(in)    :: only_flux_type    !< A string describing which types
@@ -281,7 +289,7 @@ end subroutine CT_increment_data_3d
 subroutine CT_increment_data_2d_3d(var_in, weights, var, halo_size)
   type(coupler_3d_bc_type),   intent(in)    :: var_in  !< coupler_type structure with the data to add to the other type
   real, dimension(:,:,:),     intent(in)    :: weights !< An array of normalized weights for the 3d-data to
-                                                       !! increment the 2d-data.  There is no renormalization,
+                                                       !! increment the 2d-data [nondim].  There is no renormalization,
                                                        !! so if the weights do not sum to 1 in the 3rd dimension
                                                        !! there may be adverse consequences!
   type(coupler_2d_bc_type),   intent(inout) :: var     !< The coupler_type structure whose fields are being incremented
@@ -294,8 +302,11 @@ end subroutine CT_increment_data_2d_3d
 !> Rescales the fields in the elements of a coupler_2d_bc_type by multiplying by a factor scale.
 !! If scale is 0, this is a direct assignment to 0, so that NaNs will not persist.
 subroutine CT_rescale_data_2d(var, scale)
-  type(coupler_2d_bc_type),   intent(inout) :: var   !< The BC_type structure whose fields are being rescaled
-  real,                       intent(in)    :: scale !< A scaling factor to multiply fields by
+  type(coupler_2d_bc_type),   intent(inout) :: var   !< The BC_type structure whose fields are being rescaled,
+                                                     !! with the internal data units perhaps changing from
+                                                     !! arbitrary units [A] to other arbitrary units [B]
+  real,                       intent(in)    :: scale !< A scaling factor to multiply fields by in
+                                                     !! arbitrary units [B A-1]
 
   call CT_rescale_data(var, scale)
 
@@ -304,8 +315,11 @@ end subroutine CT_rescale_data_2d
 !> Rescales the fields in the elements of a coupler_3d_bc_type by multiplying by a factor scale.
 !! If scale is 0, this is a direct assignment to 0, so that NaNs will not persist.
 subroutine CT_rescale_data_3d(var, scale)
-  type(coupler_3d_bc_type),   intent(inout) :: var   !< The BC_type structure whose fields are being rescaled
-  real,                       intent(in)    :: scale !< A scaling factor to multiply fields by
+  type(coupler_3d_bc_type),   intent(inout) :: var   !< The BC_type structure whose fields are being rescaled,
+                                                     !! with the internal data units perhaps changing from
+                                                     !! arbitrary units [A] to other arbitrary units [B]
+  real,                       intent(in)    :: scale !< A scaling factor to multiply fields by in
+                                                     !! arbitrary units [B A-1]
 
   call CT_rescale_data(var, scale)
 
@@ -351,12 +365,15 @@ end subroutine coupler_type_data_override
 subroutine extract_coupler_type_data(var_in, bc_index, array_out, scale_factor, &
                                      halo_size, idim, jdim, field_index)
   type(coupler_2d_bc_type),   intent(in)    :: var_in    !< BC_type structure with the data to extract
+                                                         !! The internal data has arbitrary units [B].
   integer,                    intent(in)    :: bc_index  !< The index of the boundary condition
                                                          !! that is being copied
-  real, dimension(1:,1:),     intent(out)   :: array_out !< The recipient array for the field; its size
+  real, dimension(1:,1:),     intent(out)   :: array_out !< The recipient array for the field in
+                                                         !! arbitrary units [A]; the size of this array
                                                          !! must match the size of the data being copied
                                                          !! unless idim and jdim are supplied.
-  real,             optional, intent(in)    :: scale_factor !< A scaling factor for the data that is being added
+  real,             optional, intent(in)    :: scale_factor !< A scaling factor for the data that is being
+                                                         !! extracted, in arbitrary units [A B-1]
   integer,          optional, intent(in)    :: halo_size !< The extent of the halo to copy; 0 by default
   integer, dimension(4), optional, intent(in) :: idim    !< The data and computational domain extents of
                                                          !! the first dimension of the output array
@@ -382,16 +399,19 @@ end subroutine extract_coupler_type_data
 !! MOM-specific interface.
 subroutine set_coupler_type_data(array_in, bc_index, var, solubility, scale_factor, &
                                  halo_size, idim, jdim, field_index)
-  real, dimension(1:,1:),     intent(in)   :: array_in   !< The source array for the field; its size
+  real, dimension(1:,1:),     intent(in)   :: array_in   !< The source array for the field in
+                                                         !! arbitrary units [A]; the size of this array
                                                          !! must match the size of the data being copied
                                                          !! unless idim and jdim are supplied.
   integer,                    intent(in)    :: bc_index  !< The index of the boundary condition
                                                          !! that is being copied
   type(coupler_2d_bc_type),   intent(inout) :: var       !< BC_type structure with the data to set
+                                                         !! The internal data has arbitrary units [B].
   logical,          optional, intent(in)    :: solubility !< If true and field index is missing, set
                                                          !! the solubility field.  Otherwise set the
                                                          !! surface concentration (the default).
-  real,             optional, intent(in)    :: scale_factor !< A scaling factor for the data that is being added
+  real,             optional, intent(in)    :: scale_factor !< A scaling factor for the data that is being
+                                                         !! set, in arbitrary units [B A-1]
   integer,          optional, intent(in)    :: halo_size !< The extent of the halo to copy; 0 by default
   integer, dimension(4), optional, intent(in) :: idim    !< The data and computational domain extents of
                                                          !! the first dimension of the output array
