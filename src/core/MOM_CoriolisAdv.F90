@@ -886,16 +886,16 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = - 0.25* &
-              (q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k)) + &
-               q2(I,j)*(uh(I,j,k) + uh(I,j+1,k))) * G%IdyCv(i,J)
+              ((q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
+               (q2(I,j)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
           enddo ; enddo
         endif
 
         if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = 0.25 * &
-              (q2(I,j) * (vh(i+1,J,k) + vh(i,J,k)) + &
-               q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k))) * G%IdxCu(I,j)
+              ((q2(I,j) * (vh(i+1,J,k) + vh(i,J,k))) + &
+               (q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
           enddo ; enddo
         endif
       else
