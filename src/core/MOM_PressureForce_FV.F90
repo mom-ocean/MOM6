@@ -15,7 +15,7 @@ use MOM_tidal_forcing, only : calc_tidal_forcing_legacy
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
-use MOM_EOS, only : calculate_density, calculate_density_derivs, EOS_domain
+use MOM_EOS, only : calculate_density, calculate_spec_vol, EOS_domain
 use MOM_density_integrals, only : int_density_dz, int_specific_vol_dp
 use MOM_density_integrals, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
 use MOM_density_integrals, only : int_spec_vol_dp_generic_plm
@@ -48,6 +48,7 @@ type, public :: PressureForce_FV_CS ; private
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                             !! timing of diagnostic output.
   integer :: MassWghtInterp !< A flag indicating whether and how to use mass weighting in T/S interpolation
+  logical :: correction_intxpa !< If true, apply a correction to surface intxpa under ice.
   logical :: use_inaccurate_pgf_rho_anom !< If true, uses the older and less accurate
                             !! method to calculate density anomalies, as used prior to
                             !! March 2018.
@@ -152,12 +153,19 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
                 ! interfaces, divided by the grid spacing [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     inty_dza    ! The change in inty_za through a layer [L2 T-2 ~> m2 s-2].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    SpV_top     ! Specific volume anomaly of top layer used with correction_intxpa [R-1 ~> m3 kg-1]
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    intx_za_cor ! Correction for curvature in intx_za [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    inty_za_cor ! Correction for curvature in inty_za [L2 T-2 ~> m2 s-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
     MassWt_u    ! The fractional mass weighting at a u-point [nondim].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     MassWt_v    ! The fractional mass weighting at a v-point [nondim].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
+  real :: dp_sfc             ! The change in surface pressure between adjacent cells [R L2 T-2 ~> Pa]
 
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [R L2 T-2 ~> Pa].
@@ -178,6 +186,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
                         ! units [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1].
 !  real :: oneatm       ! 1 standard atmosphere of pressure in [R L2 T-2 ~> Pa]
   real, parameter :: C1_6 = 1.0/6.0  ! [nondim]
+  real, parameter :: C1_12 = 1.0/12.0  ! A rational constant [nondim]
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k
@@ -375,28 +384,76 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     enddo ; enddo
   enddo
 
-  !   This order of integrating upward and then downward again is necessary with
-  ! a nonlinear equation of state, so that the surface geopotentials will go
-  ! linearly between the values at thickness points, but the bottom geopotentials
-  ! will not now be linear at the sub-grid-scale.  Doing this ensures no motion
-  ! with flat isopycnals, even with a nonlinear equation of state.
   !   With an ice-shelf or icebergs, this linearity condition might need to be applied
   ! to a sub-surface interface.
-  !$OMP parallel do default(shared)
-  do j=js,je ; do I=Isq,Ieq
-    intx_za(I,j,1) = 0.5*(za(i,j,1) + za(i+1,j,1))
-  enddo ; enddo
+  if (CS%correction_intxpa) then
+    ! Determine surface specific volume for use in the pressure gradient corrections
+    if (use_ALE .and. (CS%Recon_Scheme > 0)) then
+      do j=Jsq,Jeq+1
+        call calculate_spec_vol(tv%T(:,j,1), tv%S(:,j,1), p(:,j,1), SpV_top(:,j), &
+                                tv%eqn_of_state, EOSdom, spv_ref=alpha_ref)
+      enddo
+    elseif (use_EOS) then
+      do j=Jsq,Jeq+1
+        call calculate_spec_vol(tv%T(:,j,1), tv%S(:,j,1), p(:,j,1), SpV_top(:,j), &
+                                tv%eqn_of_state, EOSdom, spv_ref=alpha_ref)
+      enddo
+    else
+      alpha_anom = 1.0 / GV%Rlay(k) - alpha_ref
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        SpV_top(i,j) = alpha_anom
+      enddo ; enddo
+    endif
+
+    ! This version attempts to correct for hydrostatic variations in surface pressure under ice.
+    !$OMP parallel do default(shared) private(dp_sfc)
+    do j=js,je ; do I=Isq,Ieq
+      intx_za_cor(I,j) = 0.0
+      dp_sfc = (p(i+1,j,1) - p(i,j,1))
+      ! If the changes in pressure and height anomaly were explicable by just a hydrostatic balance,
+      ! the implied specific volume would be   SpV_implied = alpha_ref - (dza_x / dp_x)
+      if (dp_sfc * (alpha_ref*dp_sfc - (za(i+1,j,1)-za(i,j,1))) > 0.0) then
+        ! The pressure/depth relationship has a positive implied specific volume.
+        ! In non-Bousinesq mode, no other restrictions seem to be needed, and even the test
+        ! above might be unnecessary, but a test for the implied specific volume being at least
+        ! half the average specific volume would be:
+        ! if ((alpha_ref - dza / dp) > 0.25*((SpV_top(i+1,j)+SpV_top(i,j)) + 2.0*alpha_ref)) &
+        intx_za_cor(I,j) = C1_12 * (SpV_top(i+1,j)-SpV_top(i,j)) * dp_sfc
+      endif
+      intx_za(I,j,1) = 0.5*(za(i,j,1) + za(i+1,j,1)) + intx_za_cor(I,j)
+    enddo ; enddo
+    !$OMP parallel do default(shared) private(dp_sfc)
+    do J=Jsq,Jeq ; do i=is,ie
+      inty_za_cor(i,J) = 0.0
+      dp_sfc = (p(i,j+1,1) - p(i,j,1))
+      if (dp_sfc * (alpha_ref*dp_sfc - (za(i,j+1,1)-za(i,j,1))) > 0.0) then
+        ! The pressure/depth relationship has a positive implied specific volume.
+        inty_za_cor(i,J) = C1_12 * (SpV_top(i,j+1)-SpV_top(i,j)) * dp_sfc
+      endif
+      inty_za(i,J,1) = 0.5*(za(i,j,1) + za(i,j+1,1)) + inty_za_cor(i,J)
+    enddo ; enddo
+  else
+    !   This order of integrating upward and then downward again is necessary with
+    ! a nonlinear equation of state, so that the surface geopotentials will go
+    ! linearly between the values at thickness points, but the bottom geopotentials
+    ! will not now be linear at the sub-grid-scale.  Doing this ensures no motion
+    ! with flat isopycnals, even with a nonlinear equation of state.
+    !$OMP parallel do default(shared)
+    do j=js,je ; do I=Isq,Ieq
+      intx_za(I,j,1) = 0.5*(za(i,j,1) + za(i+1,j,1))
+    enddo ; enddo
+    !$OMP parallel do default(shared)
+    do J=Jsq,Jeq ; do i=is,ie
+      inty_za(i,J,1) = 0.5*(za(i,j,1) + za(i,j+1,1))
+    enddo ; enddo
+  endif
+
   do k=1,nz
     !$OMP parallel do default(shared)
     do j=js,je ; do I=Isq,Ieq
       intx_za(I,j,K+1) = intx_za(I,j,K) - intx_dza(I,j,k)
     enddo ; enddo
   enddo
-
-  !$OMP parallel do default(shared)
-  do J=Jsq,Jeq ; do i=is,ie
-    inty_za(i,J,1) = 0.5*(za(i,j,1) + za(i,j+1,1))
-  enddo ; enddo
   do k=1,nz
     !$OMP parallel do default(shared)
     do J=Jsq,Jeq ; do i=is,ie
@@ -552,6 +609,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                 ! interface atop a layer, divided by the grid spacing [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     inty_dpa    ! The change in inty_pa through a layer [R L2 T-2 ~> Pa].
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    intx_pa_cor ! Correction for curvature in intx_pa [R L2 T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    inty_pa_cor ! Correction for curvature in inty_pa [R L2 T-2 ~> Pa]
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
@@ -567,6 +628,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     MassWt_u    ! The fractional mass weighting at a u-point [nondim].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     MassWt_v    ! The fractional mass weighting at a v-point [nondim].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    rho_top     ! Density anomaly of top layer used in calculating intx_pa_cor and inty_pa_cor
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     rho_pgf, rho_stanley_pgf ! Density [R ~> kg m-3] from EOS with and without SGS T variance
                              ! in Stanley parameterization.
@@ -576,7 +639,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
+  real :: p_surf_EOS(SZI_(G))  ! The pressure at the ocean surface determined from the surface height,
+                             ! consistent with what is used in the density integral routines [R L2 T-2 ~> Pa]
   real :: p0(SZI_(G))        ! An array of zeros to use for pressure [R L2 T-2 ~> Pa].
+  real :: dz_geo_sfc         ! The change in surface geopotential height between adjacent cells [L2 T-2 ~> m2 s-2]
+  real :: GxRho              ! The gravitational acceleration times density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: h_neglect          ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [H ~> m].
   real :: I_Rho0             ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1].
@@ -590,11 +657,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
-  real, parameter :: C1_6 = 1.0/6.0 ! [nondim]
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer, dimension(2) :: EOSdom_h ! The i-computational domain for the equation of state at tracer points
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k
+  real, parameter :: C1_6 = 1.0/6.0    ! A rational constant [nondim]
+  real, parameter :: C1_12 = 1.0/12.0  ! A rational constant [nondim]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   nkmb=GV%nk_rho_varies
@@ -838,25 +906,86 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo ; enddo
   enddo
 
-  ! Set the surface boundary conditions on the horizontally integrated pressure anomaly,
-  ! assuming that the surface pressure anomaly varies linearly in x and y.
-  ! If there is an ice-shelf or icebergs, this linear variation would need to be applied
-  ! to an interior interface.
-  !$OMP parallel do default(shared)
-  do j=js,je ; do I=Isq,Ieq
-    intx_pa(I,j,1) = 0.5*(pa(i,j,1) + pa(i+1,j,1))
-  enddo ; enddo
+  if (CS%correction_intxpa) then
+
+    ! Determine surface density for use in the pressure gradient corrections
+    GxRho = GV%g_Earth * CS%rho0
+    if (use_ALE .and. CS%Recon_Scheme > 0) then
+      !$OMP parallel do default(shared) private(p_surf_EOS)
+      do j=Jsq,Jeq+1
+        ! P_surf_EOS here is consistent with the pressure that is used in the int_density_dz routines.
+        do i=Isq,Ieq+1 ; p_surf_EOS(i) = -GxRho*(e(i,j,1) - G%Z_ref) ; enddo
+        call calculate_density(T_t(:,j,1), S_t(:,j,1), p_surf_EOS, rho_top(:,j), &
+                               tv%eqn_of_state, EOSdom, rho_ref=rho_ref)
+      enddo
+    elseif (use_EOS) then
+      !$OMP parallel do default(shared) private(p_surf_EOS)
+      do j=Jsq,Jeq+1
+        ! P_surf_EOS here is consistent with the pressure that is used in the int_density_dz routines.
+        do i=Isq,Ieq+1 ; p_surf_EOS(i) = -GxRho*(e(i,j,1) - G%Z_ref) ; enddo
+        call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_surf_EOS, rho_top(:,j), &
+                               tv%eqn_of_state, EOSdom, rho_ref=rho_ref)
+      enddo
+    else  ! T and S are not state variables.
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        rho_top(i,j) = GV%Rlay(1) - rho_ref
+      enddo ; enddo
+    endif
+
+    ! This version attempts to correct for hydrostatic variations in surface pressure under ice.
+    !$OMP parallel do default(shared) private(dz_geo_sfc)
+    do j=js,je ; do I=Isq,Ieq
+      intx_pa_cor(I,j) = 0.0
+      dz_geo_sfc = GV%g_Earth * (e(i+1,j,1)-e(i,j,1))
+      if (dz_geo_sfc * (rho_ref - (pa(i+1,j,1)-pa(i,j,1))*dz_geo_sfc) > 0.0) then
+        ! The pressure/depth relationship has a positive implied density given by
+        !   rho_implied = rho_ref - (pa(i+1,j,1)-pa(i,j,1)) / dz_geo_sfc
+        if (-dz_geo_sfc * (pa(i+1,j,1)-pa(i,j,1)) > &
+            0.25*((rho_top(i+1,j)+rho_top(i,j))-2.0*rho_ref) * dz_geo_sfc**2) then
+          ! The pressure difference is at least half the size of the difference expected by hydrostatic
+          ! balance.  This test gets rid of pressure differences that are small, e.g. open ocean.
+          intx_pa_cor(I,j) = C1_12 * (rho_top(i+1,j)-rho_top(i,j)) * dz_geo_sfc
+        endif
+      endif
+      intx_pa(I,j,1) = 0.5*(pa(i,j,1) + pa(i+1,j,1)) + intx_pa_cor(I,j)
+    enddo ; enddo
+    !$OMP parallel do default(shared) private(dz_geo_sfc)
+    do J=Jsq,Jeq ; do i=is,ie
+      inty_pa_cor(i,J) = 0.0
+      dz_geo_sfc = GV%g_Earth * (e(i,j+1,1)-e(i,j,1))
+      if (dz_geo_sfc * (rho_ref - (pa(i,j+1,1)-pa(i,j,1))*dz_geo_sfc) > 0.0) then
+        ! The pressure/depth relationship has a positive implied density
+        if (-dz_geo_sfc * (pa(i,j+1,1)-pa(i,j,1)) > &
+            0.25*((rho_top(i,j+1)+rho_top(i,j))-2.0*rho_ref) * dz_geo_sfc**2) then
+          ! The pressure difference is at least half the size of the difference expected by hydrostatic
+          ! balance.  This test gets rid of pressure differences that are small, e.g. open ocean.
+          inty_pa_cor(i,J) = C1_12 * (rho_top(i,j+1)-rho_top(i,j)) * dz_geo_sfc
+        endif
+      endif
+      inty_pa(i,J,1) = 0.5*(pa(i,j,1) + pa(i,j+1,1)) + inty_pa_cor(i,J)
+    enddo ; enddo
+  else
+    ! Set the surface boundary conditions on the horizontally integrated pressure anomaly,
+    ! assuming that the surface pressure anomaly varies linearly in x and y.
+    ! If there is an ice-shelf or icebergs, this linear variation would need to be applied
+    ! to an interior interface.
+    !$OMP parallel do default(shared)
+    do j=js,je ; do I=Isq,Ieq
+      intx_pa(I,j,1) = 0.5*(pa(i,j,1) + pa(i+1,j,1))
+    enddo ; enddo
+    !$OMP parallel do default(shared)
+    do J=Jsq,Jeq ; do i=is,ie
+      inty_pa(i,J,1) = 0.5*(pa(i,j,1) + pa(i,j+1,1))
+    enddo ; enddo
+  endif
+
   do k=1,nz
     !$OMP parallel do default(shared)
     do j=js,je ; do I=Isq,Ieq
       intx_pa(I,j,K+1) = intx_pa(I,j,K) + intx_dpa(I,j,k)
     enddo ; enddo
   enddo
-
-  !$OMP parallel do default(shared)
-  do J=Jsq,Jeq ; do i=is,ie
-    inty_pa(i,J,1) = 0.5*(pa(i,j,1) + pa(i,j+1,1))
-  enddo ; enddo
   do k=1,nz
     !$OMP parallel do default(shared)
     do J=Jsq,Jeq ; do i=is,ie
@@ -1094,6 +1223,9 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   if ((.not.GV%Boussinesq) .and. MassWghtInterp_NonBous_bug) &
     CS%MassWghtInterp = ibset(CS%MassWghtInterp, 3) ! Same as CS%MassWghtInterp + 8
 
+  call get_param(param_file, mdl, "CORRECTION_INTXPA",CS%correction_intxpa, &
+                 "If true, use a correction for surface pressure curvature in intx_pa.", &
+                 default = .false.)
   call get_param(param_file, mdl, "USE_INACCURATE_PGF_RHO_ANOM", CS%use_inaccurate_pgf_rho_anom, &
                  "If true, use a form of the PGF that uses the reference density "//&
                  "in an inaccurate way. This is not recommended.", default=.false.)
