@@ -67,7 +67,7 @@ module MOM_generic_tracer
   public end_MOM_generic_tracer, MOM_generic_tracer_get
   public MOM_generic_tracer_stock
   public MOM_generic_flux_init
-  public MOM_generic_tracer_min_max
+  public MOM_generic_tracer_min_max, array_global_min_max
   public MOM_generic_tracer_fluxes_accumulate
   public register_MOM_generic_tracer_segments
 
@@ -206,7 +206,7 @@ contains
 
       !!nnz: MOM field is 3D. Does this affect performance? Need it be override field?
       tr_ptr => tr_field(:,:,:,1)
-      ! Register prognastic tracer for horizontal advection, diffusion, and restarts.
+      ! Register prognostic tracer for horizontal advection, diffusion, and restarts.
       if (g_tracer_is_prog(g_tracer)) then
         call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                              name=g_tracer_name, longname=longname, units=units, &
@@ -699,42 +699,49 @@ contains
 
   end function MOM_generic_tracer_stock
 
-  !> This subroutine find the global min and max of either of all
-  !! available tracer concentrations, or of a tracer that is being
-  !! requested specifically, returning the number of tracers it has gone through.
-  function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, xgmin, ygmin, zgmin, &
-                                      xgmax, ygmax, zgmax , G, CS, names, units)
+  !> This subroutine finds the global min and max of either of all available
+  !! tracer concentrations, or of a tracer that is being requested specifically,
+  !! returning the number of tracers it has evaluated.
+  !! It also optionally returns the locations of the extrema.
+  function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, G, CS, names, units, &
+                                      xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
     integer,                        intent(in)    :: ind_start !< The index of the tracer to start with
     logical, dimension(:),          intent(out)   :: got_minmax !< Indicates whether the global min and
                                                             !! max are found for each tracer
-    real, dimension(:),             intent(out)   :: gmin   !< Global minimum of each tracer, in kg
-                                                            !! times concentration units.
-    real, dimension(:),             intent(out)   :: gmax   !< Global maximum of each tracer, in kg
-                                                            !! times concentration units.
-    real, dimension(:),             intent(out)   :: xgmin  !< The x-position of the global minimum
-    real, dimension(:),             intent(out)   :: ygmin  !< The y-position of the global minimum
-    real, dimension(:),             intent(out)   :: zgmin  !< The z-position of the global minimum
-    real, dimension(:),             intent(out)   :: xgmax  !< The x-position of the global maximum
-    real, dimension(:),             intent(out)   :: ygmax  !< The y-position of the global maximum
-    real, dimension(:),             intent(out)   :: zgmax  !< The z-position of the global maximum
+    real, dimension(:),             intent(out)   :: gmin   !< Global minimum of each tracer [conc]
+    real, dimension(:),             intent(out)   :: gmax   !< Global maximum of each tracer [conc]
     type(ocean_grid_type),          intent(in)    :: G      !< The ocean's grid structure
     type(MOM_generic_tracer_CS),    pointer       :: CS     !< Pointer to the control structure for this module.
     character(len=*), dimension(:), intent(out)   :: names  !< The names of the stocks calculated.
     character(len=*), dimension(:), intent(out)   :: units  !< The units of the stocks calculated.
+    real, dimension(:),   optional, intent(out)   :: xgmin  !< The x-position of the global minimum in the
+                                                            !! units of G%geoLonT, often [degrees_E] or [km] or [m]
+    real, dimension(:),   optional, intent(out)   :: ygmin  !< The y-position of the global minimum in the
+                                                            !! units of G%geoLatT, often [degrees_N] or [km] or [m]
+    real, dimension(:),   optional, intent(out)   :: zgmin  !< The z-position of the global minimum [layer]
+    real, dimension(:),   optional, intent(out)   :: xgmax  !< The x-position of the global maximum in the
+                                                            !! units of G%geoLonT, often [degrees_E] or [km] or [m]
+    real, dimension(:),   optional, intent(out)   :: ygmax  !< The y-position of the global maximum in the
+                                                            !! units of G%geoLatT, often [degrees_N] or [km] or [m]
+    real, dimension(:),   optional, intent(out)   :: zgmax  !< The z-position of the global maximum [layer]
     integer                                       :: MOM_generic_tracer_min_max !< Return value, the
                                                             !! number of tracers done here.
 
-! Local variables
+    ! Local variables
     type(g_tracer_type), pointer  :: g_tracer, g_tracer_next
-    real, dimension(:,:,:,:), pointer   :: tr_field
-    real, dimension(:,:,:), pointer     :: tr_ptr
+    real, dimension(:,:,:,:), pointer   :: tr_field ! The tracer array whose extrema are being sought [conc]
+    real, dimension(:,:,:), pointer     :: tr_ptr   ! The tracer array whose extrema are being sought [conc]
+    real :: x_min  ! The x-position of the global minimum in the units of G%geoLonT, often [degrees_E] or [km] or [m]
+    real :: y_min  ! The y-position of the global minimum in the units of G%geoLatT, often [degrees_N] or [km] or [m]
+    real :: z_min  ! The z-position of the global minimum [layer]
+    real :: x_max  ! The x-position of the global maximum in the units of G%geoLonT, often [degrees_E] or [km] or [m]
+    real :: y_max  ! The y-position of the global maximum in the units of G%geoLatT, often [degrees_N] or [km] or [m]
+    real :: z_max  ! The z-position of the global maximum [layer]
     character(len=128), parameter :: sub_name = 'MOM_generic_tracer_min_max'
 
-    real, dimension(:,:,:),pointer :: grid_tmask
-    integer :: isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau
-
+    logical :: find_location
+    integer :: isc, iec, jsc, jec, isd, ied, jsd, jed, nk, ntau
     integer :: k, is, ie, js, je, m
-    real, allocatable, dimension(:) :: geo_z
 
     is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -743,19 +750,14 @@ contains
 
     if (.NOT. associated(CS%g_tracer_list)) return ! No stocks.
 
-
-    call g_tracer_get_common(isc,iec,jsc,jec,isd,ied,jsd,jed,nk,ntau,grid_tmask=grid_tmask)
-
-    !  Because the use of a simple z-coordinate can not be assumed, simply
-    ! use the layer index as the vertical label.
-    allocate(geo_z(nk))
-    do k=1,nk ; geo_z(k) = real(k) ; enddo
+    call g_tracer_get_common(isc, iec, jsc, jec, isd, ied, jsd, jed, nk, ntau)
+    find_location = present(xgmin) .or. present(ygmin) .or. present(zgmin) .or. &
+                    present(xgmax) .or. present(ygmax) .or. present(zgmax)
 
     m=ind_start ; g_tracer=>CS%g_tracer_list
     do
       call g_tracer_get_alias(g_tracer,names(m))
       call g_tracer_get_values(g_tracer,names(m),'units',units(m))
-      units(m) = trim(units(m))//" kg"
       call g_tracer_get_pointer(g_tracer,names(m),'field',tr_field)
 
       gmin(m) = -1.0
@@ -763,9 +765,18 @@ contains
 
       tr_ptr => tr_field(:,:,:,1)
 
-      call array_global_min_max(tr_ptr, grid_tmask, isd, jsd, isc, iec, jsc, jec, nk, gmin(m), gmax(m), &
-                                    G%geoLonT, G%geoLatT, geo_z, xgmin(m), ygmin(m), zgmin(m), &
-                                    xgmax(m), ygmax(m), zgmax(m))
+      if (find_location) then
+        call array_global_min_max(tr_ptr, G, nk, gmin(m), gmax(m), &
+                                  x_min, y_min, z_min, x_max, y_max, z_max)
+        if (present(xgmin)) xgmin(m) = x_min
+        if (present(ygmin)) ygmin(m) = y_min
+        if (present(zgmin)) zgmin(m) = z_min
+        if (present(xgmax)) xgmax(m) = x_max
+        if (present(ygmax)) ygmax(m) = y_max
+        if (present(zgmax)) zgmax(m) = z_max
+      else
+        call array_global_min_max(tr_ptr, G, nk, gmin(m), gmax(m))
+      endif
 
       got_minmax(m) = .true.
 
@@ -780,132 +791,191 @@ contains
 
   end function MOM_generic_tracer_min_max
 
-  !> Find the global maximum and minimum of a tracer array and return the locations of the extrema.
-  subroutine array_global_min_max(tr_array, tmask, isd, jsd, isc, iec, jsc, jec, nk, g_min, g_max, &
-                                  geo_x, geo_y, geo_z, xgmin, ygmin, zgmin, xgmax, ygmax, zgmax)
-    integer,                      intent(in)  :: isd   !< The starting data domain i-index
-    integer,                      intent(in)  :: jsd   !< The starting data domain j-index
-    real, dimension(isd:,jsd:,:), intent(in)  :: tr_array !< The tracer array to search for extrema
-    real, dimension(isd:,jsd:,:), intent(in)  :: tmask !< A mask that is 0 for points to exclude
-    integer,                      intent(in)  :: isc   !< The starting compute domain i-index
-    integer,                      intent(in)  :: iec   !< The ending compute domain i-index
-    integer,                      intent(in)  :: jsc   !< The starting compute domain j-index
-    integer,                      intent(in)  :: jec   !< The ending compute domain j-index
+!> Find the global maximum and minimum of a tracer array and return the locations of the extrema.
+!! When there multiple cells with the same extreme values, the reported locations are from the
+!! uppermost layer where they occur, and then from the logically northernmost and then eastermost
+!! such location on the unrotated version of the grid within that layer.  Only ocean points (as
+!! indicated by a positive value of G%mask2dT) are evaluated, and if there are no ocean points
+!! anywhere in the domain, the reported extrema and their locations are all returned as 0.
+  subroutine array_global_min_max(tr_array, G, nk, g_min, g_max, &
+                                  xgmin, ygmin, zgmin, xgmax, ygmax, zgmax, unscale)
     integer,                      intent(in)  :: nk    !< The number of vertical levels
-    real,                         intent(out) :: g_min !< The global minimum of tr_array
-    real,                         intent(out) :: g_max !< The global maximum of tr_array
-    real, dimension(isd:,jsd:),   intent(in)  :: geo_x !< The geographic x-positions of points
-    real, dimension(isd:,jsd:),   intent(in)  :: geo_y !< The geographic y-positions of points
-    real, dimension(:),           intent(in)  :: geo_z !< The vertical pseudo-positions of points
-    real,                         intent(out) :: xgmin !< The x-position of the global minimum
-    real,                         intent(out) :: ygmin !< The y-position of the global minimum
-    real,                         intent(out) :: zgmin !< The z-position of the global minimum
-    real,                         intent(out) :: xgmax !< The x-position of the global maximum
-    real,                         intent(out) :: ygmax !< The y-position of the global maximum
-    real,                         intent(out) :: zgmax !< The z-position of the global maximum
-
-    ! This subroutine is an exact transcription (bugs and all) of mpp_array_global_min_max()
-    ! from the version in FMS/mpp/mpp_utilities.F90, but with some whitespace changes to match
-    ! MOM6 code styles and to use infrastructure routines via the MOM6 framework code, and with
-    ! added comments to document its arguments.i
-
-    !### The obvious problems with this routine as currently written include:
-    !  1. It does not return exactly the maximum and minimum values.
-    !  2. The reported maximum and minimum are dependent on PE count and layout.
-    !  3. For all-zero arrays, the reported maxima scale with the PE_count
-    !  4. For arrays with a large enough offset or scaling, so that the magnitude of values exceed
-    !     1e10, the values it returns are simply wrong.
-    !  5. The results do not scale appropriately if the argument is rescaled.
-    !  6. The extrema and locations are not rotationally invariant.
-    !  7. It is inefficient because it uses 8 blocking global reduction calls when it could use just 2 or 3.
+    type(ocean_grid_type),        intent(in)  :: G     !< The ocean's grid structure
+    real, dimension(SZI_(G),SZJ_(G),nk), intent(in)  :: tr_array !< The tracer array to search for
+                                                       !! extrema in arbitrary concentration units [CU ~> conc]
+    real,                         intent(out) :: g_min !< The global minimum of tr_array, either in
+                                                       !! the same units as tr_array [CU ~> conc] or in
+                                                       !! unscaled units if unscale is present [conc]
+    real,                         intent(out) :: g_max !< The global maximum of tr_array, either in
+                                                       !! the same units as tr_array [CU ~> conc] or in
+                                                       !! unscaled units if unscale is present [conc]
+    real,               optional, intent(out) :: xgmin !< The x-position of the global minimum in the
+                                                       !! units of G%geoLonT, often [degrees_E] or [km] or [m]
+    real,               optional, intent(out) :: ygmin !< The y-position of the global minimum in the
+                                                       !! units of G%geoLatT, often [degrees_N] or [km] or [m]
+    real,               optional, intent(out) :: zgmin !< The z-position of the global minimum [layer]
+    real,               optional, intent(out) :: xgmax !< The x-position of the global maximum in the
+                                                       !! units of G%geoLonT, often [degrees_E] or [km] or [m]
+    real,               optional, intent(out) :: ygmax !< The y-position of the global maximum in the
+                                                       !! units of G%geoLatT, often [degrees_N] or [km] or [m]
+    real,               optional, intent(out) :: zgmax !< The z-position of the global maximum [layer]
+    real,               optional, intent(in)  :: unscale !< A factor to use to undo any scaling of
+                                                       !! the input tracer array [conc CU-1 ~> 1]
 
     ! Local variables
-    real    :: tmax, tmin   ! Maximum and minimum tracer values, in the same units as tr_array
-    real    :: tmax0, tmin0 ! First-guest values of tmax and tmin.
+    real    :: tmax, tmin      ! Maximum and minimum tracer values, in the same units as tr_array [CU ~> conc]
+    integer :: ijk_min_max(2)  ! Integers encoding the global grid positions of the global minimum and maximum values
+    real    :: xyz_min_max(6)  ! A single array with the x-, y- and z-positions of the minimum and
+                               ! maximum values in units that vary between the array elements [various]
+    logical :: valid_PE        ! True if there are any valid points on the local PE.
+    logical :: find_location   ! If true, report the locations of the extrema
+    integer :: ijk_loc_max     ! An integer encoding the global grid position of the maximum tracer value on this PE
+    integer :: ijk_loc_min     ! An integer encoding the global grid position of the minimum tracer value on this PE
+    integer :: ijk_loc_here    ! An integer encoding the global grid position of the current grid point
     integer :: itmax, jtmax, ktmax, itmin, jtmin, ktmin
-    real    :: fudge ! A factor that is close to 1 that is used to find the location of the extrema [nondim].
+    integer :: i, j, k, isc, iec, jsc, jec
 
-     ! arrays to enable vectorization
-    integer :: iminarr(3), imaxarr(3)
+    isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
 
-    !### These dimensional constant values mean that the results can not be guaranteed to be rescalable.
-    g_min = -88888888888.0 ; g_max = -999999999.0
-    tmax = -1.e10 ; tmin = 1.e10
-    itmax = 0 ; jtmax = 0 ; ktmax = 0
-    itmin = 0 ; jtmin = 0 ; ktmin = 0
+    find_location = (present(xgmin) .or. present(ygmin) .or. present(zgmin) .or. &
+                     present(xgmax) .or. present(ygmax) .or. present(zgmax))
 
-    if (ANY(tmask(isc:iec,jsc:jec,:) > 0.)) then
-      ! Vectorized using maxloc() and minloc() intrinsic functions by Russell.Fiedler@csiro.au.
-      iminarr = minloc(tr_array(isc:iec,jsc:jec,:), (tmask(isc:iec,jsc:jec,:) > 0.))
-      imaxarr = maxloc(tr_array(isc:iec,jsc:jec,:), (tmask(isc:iec,jsc:jec,:) > 0.))
-      itmin = iminarr(1)+isc-1
-      jtmin = iminarr(2)+jsc-1
-      ktmin = iminarr(3)
-      itmax = imaxarr(1)+isc-1
-      jtmax = imaxarr(2)+jsc-1
-      ktmax = imaxarr(3)
-      tmin = tr_array(itmin,jtmin,ktmin)
-      tmax = tr_array(itmax,jtmax,ktmax)
-    end if
+    ! The initial values set here are never used if there are any valid points.
+    tmax = -huge(tmax) ; tmin = huge(tmin)
 
-    ! use "fudge" to distinguish processors when tracer extreme is independent of processor
-    !### This fudge factor is not independent of PE layout, and while it mostly works for finding
-    !    a positive maximum or a negative minimum, it could miss the true extrema in the opposite
-    !    cases, for which the fudge factor should be slightly reduced.  The fudge factor should
-    !    be based on global index-space conventions, which are decomposition invariant, and
-    !    not the PE-number!
-    fudge = 1.0 + 1.e-12*real(PE_here() )
-    tmax = tmax*fudge
-    tmin = tmin*fudge
-    if (tmax == 0.0) then
-      tmax = tmax + 1.e-12*real(PE_here() )
-    endif
-    if (tmin == 0.0) then
-      tmin = tmin + 1.e-12*real(PE_here() )
-    endif
-
-    tmax0 = tmax ; tmin0 = tmin
-
-    call max_across_PEs(tmax)
-    call min_across_PEs(tmin)
-
-    g_max = tmax
-    g_min = tmin
-
-    ! Now find the location of the global extrema.
-    !
-    ! Note that the fudge factor above guarantees that the location of max (min) is unique,
-    ! since tmax0 (tmin0) has slightly different values on each processor.
-    ! Otherwise, the function tr_array(i,j,k) could be equal to global max (min) at more
-    ! than one point in space and this would be a much more difficult problem to solve.
-    !
-    !-999 on all current PE's
-    xgmax = -999. ; ygmax = -999. ; zgmax = -999.
-    xgmin = -999. ; ygmin = -999. ; zgmin = -999.
-
-    if (tmax0 == tmax) then !This happens ONLY on ONE processor because of fudge factor above.
-      xgmax = geo_x(itmax,jtmax)
-      ygmax = geo_y(itmax,jtmax)
-      zgmax = geo_z(ktmax)
+    if (find_location) then
+      ! Find the maximum and minimum tracer values on this PE and their locations.
+      valid_PE = .false.
+      itmax = 0 ; jtmax = 0 ; ktmax = 0 ; ijk_loc_max = 0
+      itmin = 0 ; jtmin = 0 ; ktmin = 0 ; ijk_loc_min = 0
+      do k=1,nk ; do j=jsc,jec ; do i=isc,iec ; if (G%mask2dT(i,j) > 0.0) then
+        valid_PE = .true.
+        if (tr_array(i,j,k) > tmax) then
+          tmax = tr_array(i,j,k)
+          itmax = i ; jtmax = j ; ktmax = k
+          ijk_loc_max = ijk_loc(i, j, k, nk, G%HI)
+        elseif ((tr_array(i,j,k) == tmax) .and. (k <= ktmax)) then
+          ijk_loc_here = ijk_loc(i, j, k, nk, G%HI)
+          if (ijk_loc_here > ijk_loc_max) then
+            itmax = i ; jtmax = j ; ktmax = k
+            ijk_loc_max = ijk_loc_here
+          endif
+        endif
+        if (tr_array(i,j,k) < tmin) then
+          tmin = tr_array(i,j,k)
+          itmin = i ; jtmin = j ; ktmin = k
+          ijk_loc_min = ijk_loc(i, j, k, nk, G%HI)
+        elseif ((tr_array(i,j,k) == tmin) .and. (k <= ktmin)) then
+          ijk_loc_here = ijk_loc(i, j, k, nk, G%HI)
+          if (ijk_loc_here > ijk_loc_min) then
+            itmin = i ; jtmin = j ; ktmin = k
+            ijk_loc_min = ijk_loc_here
+          endif
+        endif
+      endif ; enddo ; enddo ; enddo
+    else
+      ! Only the maximum and minimum values are needed, and not their positions.
+      do k=1,nk ; do j=jsc,jec ; do i=isc,iec ; if (G%mask2dT(i,j) > 0.0) then
+        if (tr_array(i,j,k) > tmax) tmax = tr_array(i,j,k)
+        if (tr_array(i,j,k) < tmin) tmin = tr_array(i,j,k)
+      endif ; enddo ; enddo ; enddo
     endif
 
-    !### These three calls and the three calls that follow in about 10 lines should be combined
-    !    into a single call for efficiency.
-    call max_across_PEs(xgmax)
-    call max_across_PEs(ygmax)
-    call max_across_PEs(zgmax)
+    ! Find the global maximum and minimum tracer values.
+    g_max = tmax ; g_min = tmin
+    call max_across_PEs(g_max)
+    call min_across_PEs(g_min)
 
-    if (tmin0 == tmin) then !This happens ONLY on ONE processor because of fudge factor above.
-      xgmin = geo_x(itmin,jtmin)
-      ygmin = geo_y(itmin,jtmin)
-      zgmin = geo_z(ktmin)
+    if (find_location) then
+      if (g_max < g_min) then
+        ! This only occurs if there are no unmasked points anywhere in the domain.
+        xyz_min_max(:) = 0.0
+      else
+        ! Find the global indices of the maximum and minimum locations.  This can
+        ! occur on multiple PEs.
+        ijk_min_max(1:2) = 0
+        if (valid_PE) then
+          if (g_min == tmin) ijk_min_max(1) = ijk_loc_min
+          if (g_max == tmax) ijk_min_max(2) = ijk_loc_max
+        endif
+        ! If MOM6 supported taking maxima on arrays of integers, these could be combined as:
+        ! call max_across_PEs(ijk_min_max, 2)
+        call max_across_PEs(ijk_min_max(1))
+        call max_across_PEs(ijk_min_max(2))
+
+        ! Set the positions of the extrema if they occur on this PE.  This will only
+        ! occur on a single PE.
+        xyz_min_max(1:6) = -huge(xyz_min_max)  ! These huge negative values are never selected by max_across_PEs.
+        if (valid_PE) then
+          if (ijk_min_max(1) == ijk_loc_min) then
+            xyz_min_max(1) = G%geoLonT(itmin,jtmin)
+            xyz_min_max(2) = G%geoLatT(itmin,jtmin)
+            xyz_min_max(3) = real(ktmin)
+          endif
+          if (ijk_min_max(2) == ijk_loc_max) then
+            xyz_min_max(4) = G%geoLonT(itmax,jtmax)
+            xyz_min_max(5) = G%geoLatT(itmax,jtmax)
+            xyz_min_max(6) = real(ktmax)
+          endif
+        endif
+
+        call max_across_PEs(xyz_min_max, 6)
+      endif
+
+      if (present(xgmin)) xgmin = xyz_min_max(1)
+      if (present(ygmin)) ygmin = xyz_min_max(2)
+      if (present(zgmin)) zgmin = xyz_min_max(3)
+      if (present(xgmax)) xgmax = xyz_min_max(4)
+      if (present(ygmax)) ygmax = xyz_min_max(5)
+      if (present(zgmax)) zgmax = xyz_min_max(6)
     endif
 
-    call max_across_PEs(xgmin)
-    call max_across_PEs(ygmin)
-    call max_across_PEs(zgmin)
+    if (g_max < g_min) then
+      ! There are no unmasked points anywhere in the domain.
+      g_max = 0.0 ; g_min = 0.0
+    endif
+
+    if (present(unscale)) then
+      ! Rescale g_min and g_max, perhaps changing their units from [CU ~> conc] to [conc]
+      g_max = unscale * g_max
+      g_min = unscale * g_min
+    endif
 
   end subroutine array_global_min_max
+
+  ! Return a positive integer encoding the rotationally invariant global position of a tracer cell
+  function ijk_loc(i, j, k, nk, HI)
+    integer,              intent(in) :: i   !< Local i-index
+    integer,              intent(in) :: j   !< Local j-index
+    integer,              intent(in) :: k   !< Local k-index
+    integer,              intent(in) :: nk  !< Range of k-index, used to pick out a low-k position.
+    type(hor_index_type), intent(in) :: HI  !< Horizontal index ranges
+    integer :: ijk_loc  ! An integer encoding the cell position in the global grid.
+
+    ! Local variables
+    integer :: ig, jg  ! Global index values with a global computational domain start value of 1.
+    integer :: ij_loc  ! The encoding of the horizontal position
+    integer :: qturns  ! The number of counter-clockwise quarter turns of the grid that have to be undone
+
+    ! These global i-grid positions run from 1 to HI%niglobal, and analogously for jg.
+    ig = i + HI%idg_offset + (1 - HI%isg)
+    jg = j + HI%jdg_offset + (1 - HI%jsg)
+
+    ! Compensate for the rotation of the model grid to give a rotationally invariant encoding.
+    qturns = modulo(HI%turns, 4)
+    if (qturns == 0) then
+      ij_loc = ig + HI%niglobal * jg
+    elseif (qturns == 1) then
+      ij_loc = jg + HI%njglobal * ((HI%niglobal+1)-ig)
+    elseif (qturns == 2) then
+      ij_loc = ((HI%niglobal+1)-ig) + HI%niglobal * ((HI%njglobal+1)-jg)
+    elseif (qturns == 3) then
+      ij_loc = ((HI%njglobal+1)-jg) + HI%njglobal * ig
+    endif
+
+    ijk_loc = ij_loc + (HI%niglobal*HI%njglobal) * (nk-k)
+
+  end function ijk_loc
 
   !> This subroutine calculates the surface state and sets coupler values for
   !! those generic tracers that have flux exchange with atmosphere.
@@ -983,7 +1053,7 @@ contains
     g_tracer=>g_tracer_list
     do
 
-      call g_tracer_flux_init(g_tracer) !, verbosity=verbosity) !### Add this after ocean shared is updated.
+      call g_tracer_flux_init(g_tracer, verbosity=verbosity)
 
       ! traverse the linked list till hit NULL
       call g_tracer_get_next(g_tracer, g_tracer_next)
