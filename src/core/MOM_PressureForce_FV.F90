@@ -1028,6 +1028,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
                            ! temperature variance [nondim]
   integer :: default_answer_date ! Global answer date
   logical :: useMassWghtInterp ! If true, use near-bottom mass weighting for T and S
+  logical :: MassWghtInterpTop ! If true, use near-surface mass weighting for T and S under ice shelves
   logical :: MassWghtInterp_NonBous_bug ! If true, use a buggy mass weighting when non-Boussinesq
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1072,9 +1073,14 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
                  "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", useMassWghtInterp, &
-                 "If true, use mass weighting when interpolating T/S for "//&
-                 "integrals near the bathymetry in FV pressure gradient "//&
-                 "calculations.", default=.false.)
+                 "If true, use mass weighting when interpolating T/S for integrals "//&
+                 "near the bathymetry in FV pressure gradient calculations.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT_TOP", MassWghtInterpTop, &
+                 "If true and MASS_WEIGHT_IN_PRESSURE_GRADIENT is true, use mass weighting when "//&
+                 "interpolating T/S for integrals near the top of the water column in FV "//&
+                 "pressure gradient calculations. ", &
+                 default=.false.) !### Change Default to MASS_WEIGHT_IN_PRESSURE_GRADIENT?
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PGF_NONBOUS_BUG", MassWghtInterp_NonBous_bug, &
                  "If true, use a masking bug in non-Boussinesq calculations with mass weighting "//&
                  "when interpolating T/S for integrals near the bathymetry in FV pressure "//&
@@ -1083,8 +1089,11 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   CS%MassWghtInterp = 0
   if (useMassWghtInterp) &
     CS%MassWghtInterp = ibset(CS%MassWghtInterp, 0) ! Same as CS%MassWghtInterp + 1
+  if (MassWghtInterpTop) &
+    CS%MassWghtInterp = ibset(CS%MassWghtInterp, 1) ! Same as CS%MassWghtInterp + 2
   if ((.not.GV%Boussinesq) .and. MassWghtInterp_NonBous_bug) &
     CS%MassWghtInterp = ibset(CS%MassWghtInterp, 3) ! Same as CS%MassWghtInterp + 8
+
   call get_param(param_file, mdl, "USE_INACCURATE_PGF_RHO_ANOM", CS%use_inaccurate_pgf_rho_anom, &
                  "If true, use a form of the PGF that uses the reference density "//&
                  "in an inaccurate way. This is not recommended.", default=.false.)
