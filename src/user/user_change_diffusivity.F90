@@ -11,6 +11,7 @@ use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, p3d
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : calculate_density, EOS_domain
+use MOM_forcing_type,  only : forcing
 
 implicit none ; private
 
@@ -26,15 +27,20 @@ public user_change_diff, user_change_diff_init, user_change_diff_end
 !> Control structure for user_change_diffusivity
 type, public :: user_change_diff_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
-  real :: Kd_add        !< The scale of a diffusivity that is added everywhere without
-                        !! any filtering or scaling [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+  real :: Kd_add        !< The scale of a diffusivity that is added everywhere
+                        !! without any filtering or scaling [Z2 T-1 ~> m2 s-1].
   real :: lat_range(4)  !< 4 values that define the latitude range over which
                         !! a diffusivity scaled by Kd_add is added [degrees_N].
   real :: rho_range(4)  !< 4 values that define the coordinate potential
                         !! density range over which a diffusivity scaled by
                         !! Kd_add is added [R ~> kg m-3].
+  real :: dep_range(4)  !< 4 values that define the coordinate depth range [L ~> m]
+                        !! over which a diffusivity scaled by 
+                        !! Kd_add is added [R ~> kg m-3].
   logical :: use_abs_lat  !< If true, use the absolute value of latitude when
                           !! setting lat_range.
+  logical :: use_dep_range  !< If true, use the actual value of depth when
+                          !! setting dep_range.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                           !! regulate the timing of diagnostic output.
 end type user_change_diff_CS
@@ -45,7 +51,7 @@ contains
 !! main code to alter the diffusivities as needed.  The specific example
 !! implemented here augments the diffusivity for a specified range of latitude
 !! and coordinate potential density.
-subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
+subroutine user_change_diff(fluxes, h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_int_add)
   type(ocean_grid_type),                    intent(in)    :: G   !< The ocean's grid structure.
   type(verticalGrid_type),                  intent(in)    :: GV  !< The ocean's vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)   :: h   !< Layer thickness [H ~> m or kg m-2].
@@ -54,21 +60,23 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
                                                                  !! fields. Absent fields have NULL ptrs.
   type(unit_scale_type),                    intent(in)    :: US  !< A dimensional unit scaling type
   type(user_change_diff_CS),                pointer       :: CS  !< This module's control structure.
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of each
-                                                                  !! layer [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at each
-                                                                  !! interface [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+  type(forcing),                            intent(in)    :: fluxes !< Surface fluxes container
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(inout) :: Kd_lay !< The diapycnal diffusivity of
+                                                                  !! each layer [Z2 T-1 ~> m2 s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), optional, intent(inout) :: Kd_int !< The diapycnal diffusivity
+                                                                  !! at each interface [Z2 T-1 ~> m2 s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(in)    :: T_f !< Temperature with massless
                                                                   !! layers filled in vertically [C ~> degC].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),   optional, intent(in)    :: S_f !< Salinity with massless
                                                                   !! layers filled in vertically [S ~> ppt].
   real, dimension(:,:,:),                      optional, pointer       :: Kd_int_add !< The diapycnal
                                                                   !! diffusivity that is being added at
-                                                                  !! each interface [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+                                                                  !! each interface [Z2 T-1 ~> m2 s-1].
   ! Local variables
   real :: Rcv(SZI_(G),SZK_(GV)) ! The coordinate density in layers [R ~> kg m-3].
   real :: p_ref(SZI_(G))       ! An array of tv%P_Ref pressures [R L2 T-2 ~> Pa].
   real :: rho_fn      ! The density dependence of the input function, 0-1 [nondim].
+  real :: dep_fn      ! The depth dependence of the input function, 0-1 [nondim].
   real :: lat_fn      ! The latitude dependence of the input function, 0-1 [nondim].
   logical :: use_EOS  ! If true, density is calculated from T & S using an
                       ! equation of state.
@@ -76,11 +84,21 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz
   integer :: isd, ied, jsd, jed
+  real :: zmom(SZI_(G),SZJ_(G),SZK_(GV)) ! An array of vertical grid depth [L ~> m]
 
   character(len=200) :: mesg
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+!!Vertical Grid Depth (zmom) using layer thickness value (h)
+
+  do k=1,nz
+    if ( k .eq. 1 ) then
+       zmom(:,:,k) = 0.5*h(:,:,k)
+    else
+       zmom(:,:,k) = zmom(:,:,k-1) + 0.5*(h(:,:,k-1)+h(:,:,k))
+    endif
+  enddo
 
   if (.not.associated(CS)) call MOM_error(FATAL,"user_set_diffusivity: "//&
          "Module must be initialized before it is used.")
@@ -103,12 +121,19 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
     call MOM_error(FATAL, "user_set_diffusivity: bad density range: \n  "//&
                     trim(mesg))
   endif
+  if (.not.range_OK(CS%dep_range)) then
+    write(mesg, '(4(1pe15.6))') CS%dep_range(1:4)
+    call MOM_error(FATAL, "user_set_diffusivity: bad depth range: \n  "//&
+                    trim(mesg))
+  endif
+
 
   if (store_Kd_add) Kd_int_add(:,:,:) = 0.0
 
   do i=is,ie ; p_ref(i) = tv%P_Ref ; enddo
   EOSdom(:) = EOS_domain(G%HI)
-  do j=js,je
+  do j=js,je     !! J loop starts
+
     if (present(T_f) .and. present(S_f)) then
       do k=1,nz
         call calculate_density(T_f(:,j,k), S_f(:,j,k), p_ref, Rcv(:,k), tv%eqn_of_state, EOSdom)
@@ -127,10 +152,18 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
           lat_fn = val_weights(G%geoLatT(i,j), CS%lat_range)
         endif
         rho_fn = val_weights(Rcv(i,k), CS%rho_range)
-        if (rho_fn * lat_fn > 0.0) &
-          Kd_lay(i,j,k) = Kd_lay(i,j,k) + CS%Kd_add * rho_fn * lat_fn
-      enddo ; enddo
+
+        if ((CS%use_dep_range) .and. (associated(fluxes%lrunoff))) then
+           if ((zmom(i,j,k) .lt. maxval(CS%dep_range)) .and. (fluxes%lrunoff(i,j) .ne. 0.0)) then
+               Kd_lay(i,j,k) = max(Kd_lay(i,j,k),CS%Kd_add)
+           endif
+        else
+           if (rho_fn * lat_fn > 0.0) &
+               Kd_lay(i,j,k) = Kd_lay(i,j,k) + CS%Kd_add * rho_fn * lat_fn
+        endif
+      enddo     ; enddo
     endif
+
     if (present(Kd_int)) then
       do K=2,nz ; do i=is,ie
         if (CS%use_abs_lat) then
@@ -139,13 +172,23 @@ subroutine user_change_diff(h, tv, G, GV, US, CS, Kd_lay, Kd_int, T_f, S_f, Kd_i
           lat_fn = val_weights(G%geoLatT(i,j), CS%lat_range)
         endif
         rho_fn = val_weights( 0.5*(Rcv(i,k-1) + Rcv(i,k)), CS%rho_range)
-        if (rho_fn * lat_fn > 0.0) then
-          Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add * rho_fn * lat_fn
-          if (store_Kd_add) Kd_int_add(i,j,K) = CS%Kd_add * rho_fn * lat_fn
+        dep_fn = val_weights(zmom(i,j,k-1),CS%dep_range)
+
+        if ((CS%use_dep_range) .and. (associated(fluxes%lrunoff))) then
+           if ((zmom(i,j,k) .lt. maxval(CS%dep_range)) .and. (fluxes%lrunoff(i,j) .ne. 0.0)) then
+              Kd_int(i,j,k) = max(Kd_int(i,j,k),CS%Kd_add)
+              if (store_Kd_add) Kd_int_add(i,j,K) = CS%Kd_add * dep_fn * lat_fn
+           endif
+        else
+           if (rho_fn * lat_fn > 0.0) then
+              Kd_int(i,j,K) = Kd_int(i,j,K) + CS%Kd_add * rho_fn * lat_fn
+              if (store_Kd_add) Kd_int_add(i,j,K) = CS%Kd_add * rho_fn * lat_fn
+           endif
         endif
       enddo ; enddo
     endif
-  enddo
+
+  enddo  !! J loop ends
 
 end subroutine user_change_diff
 
@@ -222,7 +265,7 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USER_KD_ADD", CS%Kd_add, &
                  "A user-specified additional diffusivity over a range of "//&
-                 "latitude and density.", default=0.0, units="m2 s-1", scale=GV%m2_s_to_HZ_T)
+                 "latitude and density.", default=0.0, units="m2 s-1", scale=US%m2_s_to_Z2_T)
   if (CS%Kd_add /= 0.0) then
     call get_param(param_file, mdl, "USER_KD_ADD_LAT_RANGE", CS%lat_range(:), &
                  "Four successive values that define a range of latitudes "//&
@@ -238,9 +281,20 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
                  "which the extra diffusivity starts to increase from 0, "//&
                  "hits its full value, starts to decrease again, and is "//&
                  "back to 0.", units="kg m-3", default=-1.0e9, scale=US%kg_m3_to_R)
+    call get_param(param_file, mdl, "USER_KD_ADD_DEP_RANGE", CS%dep_range(:), &
+                 "Four successive values that define a range of depth "//&
+                 "over which the user-given extra diffusivity "//&
+                 "is applied.  The four values specify the depth at "//&
+                 "which the extra diffusivity starts to increase from 0, "//&
+                 "hits its full value, starts to decrease again, and is "//&
+                 "back to 0.", units="m", default=-1.0e9, scale=US%m_to_Z)
     call get_param(param_file, mdl, "USER_KD_ADD_USE_ABS_LAT", CS%use_abs_lat, &
                  "If true, use the absolute value of latitude when "//&
                  "checking whether a point fits into range of latitudes.", &
+                 default=.false.)
+    call get_param(param_file, mdl, "USER_KD_ADD_USE_DEPTH_RANGE", CS%use_dep_range, &
+                 "If true, use the actual value of depth when "//&
+                 "checking whether a point fits into range of depths.", &
                  default=.false.)
   endif
 
@@ -252,6 +306,11 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
   if (.not.range_OK(CS%rho_range)) then
     write(mesg, '(4(1pe15.6))') CS%rho_range(1:4)
     call MOM_error(FATAL, "user_set_diffusivity: bad density range: \n  "//&
+                    trim(mesg))
+  endif
+  if (.not.range_OK(CS%dep_range)) then
+    write(mesg, '(4(1pe15.6))') CS%dep_range(1:4)
+    call MOM_error(FATAL, "user_set_diffusivity: bad depth range: \n  "//&
                     trim(mesg))
   endif
 
