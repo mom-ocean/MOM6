@@ -56,6 +56,7 @@ use MOM_ALE,                   only : ALE_updateVerticalGridType, ALE_remap_init
 use MOM_ALE,                   only : ALE_remap_tracers, ALE_remap_velocities
 use MOM_ALE,                   only : ALE_remap_set_h_vel, ALE_remap_set_h_vel_via_dz
 use MOM_ALE,                   only : ALE_update_regrid_weights, pre_ALE_diagnostics, ALE_register_diags
+use MOM_ALE,                   only : ALE_set_extrap_boundaries
 use MOM_ALE_sponge,            only : rotate_ALE_sponge, update_ALE_sponge_field
 use MOM_barotropic,            only : Barotropic_CS
 use MOM_boundary_update,       only : call_OBC_register, OBC_register_end, update_OBC_CS
@@ -3120,8 +3121,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       endif
     endif
   endif
-  if ( CS%use_ALE_algorithm ) call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
-
+  if ( CS%use_ALE_algorithm ) then
+   call ALE_set_extrap_boundaries (param_file, CS%ALE_CSp)
+   call callTree_waypoint("returned from ALE_init() (initialize_MOM)")
+   call ALE_updateVerticalGridType( CS%ALE_CSp, GV )
+  endif
   ! The basic state variables have now been fully initialized, so update their halos and
   ! calculate any derived thermodynmics quantities.
 

@@ -40,7 +40,7 @@ use MOM_remapping,        only : initialize_remapping, end_remapping
 use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : interpolate_column, reintegrate_column
-use MOM_remapping,        only : remapping_CS, dzFromH1H2
+use MOM_remapping,        only : remapping_CS, dzFromH1H2, remapping_set_param
 use MOM_string_functions, only : uppercase, extractWord, extract_integer
 use MOM_tracer_registry,  only : tracer_registry_type, tracer_type, MOM_tracer_chkinv
 use MOM_unit_scaling,     only : unit_scale_type
@@ -147,6 +147,7 @@ public pre_ALE_diagnostics
 public pre_ALE_adjustments
 public ALE_remap_init_conds
 public ALE_register_diags
+public ALE_set_extrap_boundaries
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -176,6 +177,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   logical           :: force_bounds_in_subcell
   logical           :: local_logical
   logical           :: remap_boundary_extrap
+  logical           :: init_boundary_extrap
   type(hybgen_regrid_CS), pointer :: hybgen_regridCS => NULL() ! Control structure for hybgen regridding
                                                          ! for sharing parameters.
 
@@ -225,6 +227,10 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call get_param(param_file, mdl, "REMAP_BOUNDARY_EXTRAP", remap_boundary_extrap, &
                  "If true, values at the interfaces of boundary cells are "//&
                  "extrapolated instead of piecewise constant", default=.false.)
+  call get_param(param_file, mdl, "INIT_BOUNDARY_EXTRAP", init_boundary_extrap, &
+                 "If true, values at the interfaces of boundary cells are "//&
+                 "extrapolated instead of piecewise constant during initialization."//&
+                 "Defaults to REMAP_BOUNDARY_EXTRAP.", default=remap_boundary_extrap)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
@@ -237,13 +243,13 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call initialize_remapping( CS%remapCS, string, &
-                             boundary_extrapolation=remap_boundary_extrap, &
+                             boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
                              answer_date=CS%answer_date)
   call initialize_remapping( CS%vel_remapCS, vel_string, &
-                             boundary_extrapolation=remap_boundary_extrap, &
+                             boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
@@ -307,6 +313,18 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
 
   if (CS%show_call_tree) call callTree_leave("ALE_init()")
 end subroutine ALE_init
+
+!> Sets the boundary extrapolation set for the remapping type.
+subroutine ALE_set_extrap_boundaries( param_file, CS)
+  type(param_file_type),   intent(in) :: param_file !< Parameter file
+  type(ALE_CS),            pointer    :: CS         !< Module control structure
+
+  logical :: remap_boundary_extrap
+  call get_param(param_file, "MOM_ALE", "REMAP_BOUNDARY_EXTRAP", remap_boundary_extrap, &
+                 "If true, values at the interfaces of boundary cells are "//&
+                 "extrapolated instead of piecewise constant", default=.false.)
+  call remapping_set_param(CS%remapCS, boundary_extrapolation=remap_boundary_extrap)
+end subroutine ALE_set_extrap_boundaries
 
 !> Initialize diagnostics for the ALE module.
 subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
