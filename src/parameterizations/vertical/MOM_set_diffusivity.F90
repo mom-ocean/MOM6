@@ -575,11 +575,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   enddo ! j-loop
 
   if (CS%user_change_diff) then
-    !!call user_change_diff(h, tv, G, GV, US, CS%user_change_diff_CSp, Kd_lay, Kd_int, &
-    !!                      T_f, S_f, dd%Kd_user)
-    !! Above two lines are the original call and commented.
-    !! Bellow lines represents new call after adding fluxes.
-    call user_change_diff(fluxes, h, tv, G, GV, US, CS%user_change_diff_CSp, Kd_lay, Kd_int, &     !! added line by subrat
+    call user_change_diff(fluxes, h, tv, G, GV, US, CS%user_change_diff_CSp, Kd_lay, Kd_int, &
                           T_f, S_f, dd%Kd_user)
   endif
 
