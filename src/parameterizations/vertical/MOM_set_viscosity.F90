@@ -2265,6 +2265,13 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 
           if (.not.CS%linear_drag) then
             v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
+            ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
+            if (CS%BBL_use_tidal_bg) then
+              u2_bg(I) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                               G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
+            else
+              u2_bg(I) = CS%drag_bg_vel * CS%drag_bg_vel
+            endif
             hutot = hutot + hweight * sqrt(u(I,j,k)**2 + v_at_u**2 + u2_bg(I))
           endif
           if (use_EOS) then
@@ -2537,6 +2544,13 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 
           if (.not.CS%linear_drag) then
             u_at_v = set_u_at_v(u, h, G, GV, i, J, k, mask_u, OBC)
+            ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
+            if (CS%BBL_use_tidal_bg) then
+              u2_bg(i) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                               G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
+            else
+              u2_bg(i) = CS%drag_bg_vel * CS%drag_bg_vel
+            endif
             hutot = hutot + hweight * sqrt(v(i,J,k)**2 + u_at_v**2 + u2_bg(i))
           endif
           if (use_EOS) then
