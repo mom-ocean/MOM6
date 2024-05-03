@@ -2117,6 +2117,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   type(ocean_internal_state)      :: MOM_internal_state
   type(MOM_domain_type), pointer  :: MOM_dom_unmasked => null() ! Unmasked MOM domain instance
                                                                 ! (To be used for writing out ocean geometry)
+  character(len=240) :: geom_file ! Name of the ocean geometry file
 
   CS%Time => Time
 
@@ -2464,6 +2465,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                  "vertical grid files. Other values are invalid.", default=1)
   if (write_geom<0 .or. write_geom>2) call MOM_error(FATAL,"MOM: "//&
          "WRITE_GEOM must be equal to 0, 1 or 2.")
+  call get_param(param_file, "MOM", "GEOM_FILE", geom_file, &
+                 "The file into which to write the ocean geometry.", &
+                 default="ocean_geometry")
   call get_param(param_file, "MOM", "USE_DBCLIENT", CS%use_dbclient, &
                  "If true, initialize a client to a remote database that can "//&
                  "be used for online analysis and machine-learning inference.",&
@@ -2853,11 +2857,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       call create_dyn_horgrid(dG_unmasked_in, HI_in_unmasked, bathymetry_at_vel=bathy_at_vel)
       call clone_MOM_domain(MOM_dom_unmasked, dG_unmasked_in%Domain)
       call MOM_initialize_fixed(dG_unmasked_in, US, OBC_in, param_file, .false., dirs%output_directory)
-      call write_ocean_geometry_file(dG_unmasked_in, param_file, dirs%output_directory, US=US)
+      call write_ocean_geometry_file(dG_unmasked_in, param_file, dirs%output_directory, US=US, geom_file=geom_file)
       call deallocate_MOM_domain(MOM_dom_unmasked)
       call destroy_dyn_horgrid(dG_unmasked_in)
     else
-      call write_ocean_geometry_file(dG_in, param_file, dirs%output_directory, US=US)
+      call write_ocean_geometry_file(dG_in, param_file, dirs%output_directory, US=US, geom_file=geom_file)
     endif
   endif
   call destroy_dyn_horgrid(dG_in)
