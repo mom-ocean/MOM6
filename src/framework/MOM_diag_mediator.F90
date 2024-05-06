@@ -419,9 +419,9 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
 
   if (diag_cs%grid_space_axes) then
     id_xh = diag_axis_init('ih', iax(G%isg:G%ieg), 'none', 'x', &
-        'h point grid-space longitude', G%Domain, position=EAST)
+        'h point grid-space longitude', G%Domain)
     id_yh = diag_axis_init('jh', jax(G%jsg:G%jeg), 'none', 'y', &
-        'h point grid space latitude', G%Domain, position=NORTH)
+        'h point grid space latitude', G%Domain)
   else
     id_xh = diag_axis_init('xh', G%gridLonT(G%isg:G%ieg), G%x_axis_units, 'x', &
         'h point nominal longitude', G%Domain)
