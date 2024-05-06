@@ -4218,7 +4218,7 @@ subroutine MOM_end(CS)
   if (associated(CS%tv%internal_heat)) deallocate(CS%tv%internal_heat)
   if (associated(CS%tv%TempxPmE)) deallocate(CS%tv%TempxPmE)
 
-  DEALLOC_(CS%ave_ssh_ibc) ; DEALLOC_(CS%ssh_rint)
+  DEALLOC_(CS%ave_ssh_ibc) ; DEALLOC_(CS%ssh_rint) ; DEALLOC_(CS%eta_av_bc)
 
   ! TODO: debug_truncations deallocation
 
