@@ -34,6 +34,8 @@ re_procedure = re.compile(
 
 
 # Preprocessor expression tokenization
+# NOTE: Labels and attributes could be assigned here, but for now we just use
+#   the token string as the label.
 cpp_scanner = re.Scanner([
   (r'defined', lambda scanner, token: token),
   (r'[_A-Za-z][_0-9a-zA-Z]*', lambda scanner, token: token),
@@ -56,13 +58,15 @@ cpp_scanner = re.Scanner([
   (r'&', lambda scanner, token: token),
   (r'\|\|', lambda scanner, token: token),
   (r'\|', lambda scanner, token: token),
-  (r'^\#if', None),
+  (r'^ *\# *if', None),
   (r'\s+', None),
 ])
 
 
 cpp_operate = {
+    '(': lambda x: x,
     '!': lambda x: not x,
+    'defined': lambda x, y: x in y,
     '*': lambda x, y: x * y,
     '/': lambda x, y: x // y,
     '+': lambda x, y: x + y,
@@ -85,6 +89,7 @@ cpp_operate = {
 cpp_op_rank = {
     '(': 13,
     '!': 12,
+    'defined': 12,
     '*': 11,
     '/': 11,
     '+': 10,
@@ -527,7 +532,7 @@ def cpp_expr_eval(expr, macros=None):
     if macros is None:
         macros = {}
 
-    results, remainder = cpp_scanner.scan(expr)
+    results, remainder = cpp_scanner.scan(expr.strip())
 
     # Abort if any characters are not tokenized
     if remainder:
@@ -545,72 +550,59 @@ def cpp_expr_eval(expr, macros=None):
 
     tokens = iter(results)
     for tok in tokens:
-        # Evaluate "defined()" statements
-        if tok == 'defined':
-            tok = next(tokens)
-
-            parens = tok == '('
-            if parens:
-                tok = next(tokens)
-
-            # NOTE: Any key in `macros` is considered to be set, even if the
-            # value is None.
-            value = tok in macros
-
-            # Negation
-            while prior_op == '!':
-                op = stack.pop()
-                assert op == '!'
-                value = cpp_operate[op](value)
-                prior_op = stack[-1] if stack else None
-
-            stack.append(value)
-
-            if parens:
-                tok = next(tokens)
-                assert tok == ')'
-
-        elif tok.isdigit():
-            value = int(tok)
-            stack.append(value)
-
-        elif tok.isidentifier():
-            # "Identifiers that are not macros, which are all considered to be
-            # the number zero." (CPP manual, 4.2.2)
-            value = macros.get(tok, '0')
-            if value.isdigit():
-                value = int(value)
-            stack.append(value)
-
-        elif tok in cpp_op_rank.keys():
+        if tok in cpp_op_rank.keys():
             while cpp_op_rank[tok] <= cpp_op_rank[prior_op]:
 
-                # Skip unary prefix operators (only '!' at the moment)
-                if tok == '!':
+                # Unary operators are "look ahead" so we always skip them.
+                # (However, `op` below could be a unary operator.)
+                if tok in ('!', 'defined', '('):
                     break
 
                 second = stack.pop()
                 op = stack.pop()
-                first = stack.pop()
 
-                value = cpp_operate[op](first, second)
+                if op == '(':
+                    value = second
+
+                elif op == '!':
+                    if isinstance(second, str):
+                        if second.isidentifier():
+                            second = macros.get(second, '0')
+                        if second.isdigit():
+                            second = int(second)
+
+                    value = cpp_operate[op](second)
+
+                elif op == 'defined':
+                    value = cpp_operate[op](second, macros)
+
+                else:
+                    first = stack.pop()
+
+                    if isinstance(first, str):
+                        if first.isidentifier():
+                            first = macros.get(first, '0')
+                        if first.isdigit():
+                            first = int(first)
+
+                    if isinstance(second, str):
+                        if second.isidentifier():
+                            second = macros.get(second, '0')
+                        if second.isdigit():
+                            second = int(second)
+
+                    value = cpp_operate[op](first, second)
+
                 prior_op = stack[-1] if stack else None
-
-                if prior_op == '(':
-                    prior_op = None
-                    if tok == ')':
-                        stack.pop()
-
                 stack.append(value)
 
-            if tok == ')':
-                prior_op = stack[-2] if stack and len(stack) > 1 else None
-            else:
+            # The ) "operator" has already been applied, so it can be dropped.
+            if tok != ')':
                 stack.append(tok)
                 prior_op = tok
 
-                if prior_op in ('(',):
-                    prior_op = None
+        elif tok.isdigit() or tok.isidentifier():
+            stack.append(tok)
 
         else:
             print("Unsupported token:", tok)
