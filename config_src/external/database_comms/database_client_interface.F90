@@ -317,6 +317,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:) = -1.
   end function unpack_tensor_float_1d
 
   !> Unpack a 32-bit real 2d tensor from the database
@@ -328,6 +329,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:) = -1.
   end function unpack_tensor_float_2d
 
   !> Unpack a 32-bit real 3d tensor from the database
@@ -339,6 +341,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:,:) = -1.
   end function unpack_tensor_float_3d
 
   !> Unpack a 32-bit real 4d tensor from the database
@@ -350,6 +353,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:,:,:) = -1.
   end function unpack_tensor_float_4d
 
   !> Unpack a 64-bit real 1d tensor from the database
@@ -361,6 +365,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:) = -1.
   end function unpack_tensor_double_1d
 
   !> Unpack a 64-bit real 2d tensor from the database
@@ -372,6 +377,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:) = -1.
   end function unpack_tensor_double_2d
 
   !> Unpack a 64-bit real 3d tensor from the database
@@ -383,6 +389,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:,:) = -1.
   end function unpack_tensor_double_3d
 
   !> Unpack a 64-bit real 4d tensor from the database
@@ -394,6 +401,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:,:,:) = -1.
   end function unpack_tensor_double_4d
 
   !> Unpack a 32-bit integer 1d tensor from the database
@@ -405,6 +413,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:) = -1_int32
   end function unpack_tensor_int32_1d
 
   !> Unpack a 32-bit integer 2d tensor from the database
@@ -416,6 +425,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:) = -1_int32
   end function unpack_tensor_int32_2d
 
   !> Unpack a 32-bit integer 3d tensor from the database
@@ -427,6 +437,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:,:) = -1_int32
   end function unpack_tensor_int32_3d
 
   !> Unpack a 32-bit integer 4d tensor from the database
@@ -438,6 +449,7 @@ module database_client_interface
     integer                           :: code
 
     code = -1
+    data(:,:,:,:) = -1_int32
   end function unpack_tensor_int32_4d
 
   !> Move a tensor to a new name
@@ -479,6 +491,7 @@ module database_client_interface
     integer                        :: code
 
     code = -1
+    model = ""
   end function get_model
 
   !> Load the machine learning model from a file and set the configuration
@@ -621,6 +634,7 @@ module database_client_interface
     integer          :: code
 
     code = -1
+    script = ""
   end function get_script
 
   !> Set a script (from file) in the database for future execution
@@ -735,7 +749,12 @@ module database_client_interface
     type(dataset_type), intent( out) :: dataset !< receives the dataset
     integer          :: code
 
+    type(dataset_type) :: dataset_out
+      ! Placeholder dataset to prevent compiler warnings
+      ! Since dataset_type contains no data, any declared instance should work.
+
     code = -1
+    dataset = dataset_out
   end function get_dataset
 
   !> Rename a dataset stored in the database

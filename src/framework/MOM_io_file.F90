@@ -1702,6 +1702,8 @@ subroutine read_field_chksum_nc(handle, field, chksum, valid_chksum)
     !< If true, chksum has been successfully read
 
   call MOM_error(FATAL, 'read_field_chksum over netCDF is not yet implemented.')
+  chksum = -1_int64
+  valid_chksum = .false.
 end subroutine read_field_chksum_nc
 
 

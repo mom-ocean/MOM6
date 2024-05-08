@@ -22,6 +22,8 @@ subroutine extract_coupler_values(BC_struc, BC_index, BC_element, array_out, ilb
   integer,        optional,  intent(in)  :: js !< The j- limits of array_out to be filled
   integer,        optional,  intent(in)  :: je !< The j- limits of array_out to be filled
   real,           optional,  intent(in)  :: conversion !< A number that every element is multiplied by
+
+  array_out(:,:) = -1.
 end subroutine extract_coupler_values
 
 !> Set element and index of a boundary condition
