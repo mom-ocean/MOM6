@@ -82,6 +82,7 @@ type, public :: MEKE_CS ; private
                         !! first baroclinic deformation radius.
   logical :: use_old_lscale !< Use the old formula for mixing length scale.
   logical :: use_min_lscale !< Use simple minimum for mixing l >= 0.
+  logical :: MEKE_positive  !< If true, it guarantees that MEKE will always be >= 0.
   real :: lscale_maxval !< The ceiling on the MEKE mixing length scale when use_min_lscale is true [L ~> m].
   real :: cdrag         !< The bottom drag coefficient for MEKE, times rescaling factors [H L-1 ~> nondim or kg m-3]
   real :: MEKE_BGsrc    !< Background energy source for MEKE [L2 T-3 ~> W kg-1] (= m2 s-3).
