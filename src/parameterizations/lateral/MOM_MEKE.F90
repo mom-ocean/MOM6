@@ -81,7 +81,7 @@ type, public :: MEKE_CS ; private
   logical :: Rd_as_max_scale !< If true the length scale can not exceed the
                         !! first baroclinic deformation radius.
   logical :: use_old_lscale !< Use the old formula for mixing length scale.
-  logical :: use_min_lscale !< Use simple minimum for mixing l >= 0.
+  logical :: use_min_lscale !< Use simple minimum for mixing length scale.
   logical :: MEKE_positive  !< If true, it guarantees that MEKE will always be >= 0.
   real :: lscale_maxval !< The ceiling on the MEKE mixing length scale when use_min_lscale is true [L ~> m].
   real :: cdrag         !< The bottom drag coefficient for MEKE, times rescaling factors [H L-1 ~> nondim or kg m-3]
