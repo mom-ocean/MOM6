@@ -126,9 +126,8 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     netMassIn     => NULL(), & !< Sum of water mass fluxes into the ocean integrated over a
                                !! forcing timestep [H ~> m or kg m-2]
-    netMassOut    => NULL(), & !< Net water mass flux out of the ocean integrated over a forcing timestep,
+    netMassOut    => NULL()    !< Net water mass flux out of the ocean integrated over a forcing timestep,
                                !! with negative values for water leaving the ocean [H ~> m or kg m-2]
-    KPP_salt_flux => NULL()    !< KPP effective salt flux [ppt m s-1]
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
