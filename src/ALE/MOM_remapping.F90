@@ -393,9 +393,9 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
   real, dimension(n0),      intent(in)  :: u0 !< Cell averages on source grid [A]
   integer,                  intent(in)  :: deg !< Degree of polynomial reconstruction
   logical,                  intent(in)  :: boundary_extrapolation !< Extrapolate at boundaries if true
-  real, dimension(n0,deg+1),intent(out) :: ppoly_r_coefs !< Coefficients of polynomial [A]
-  real, dimension(n0,2),    intent(out) :: ppoly_r_E !< Edge value of polynomial [A]
-  real, dimension(n0,2),    intent(out) :: ppoly_r_S !< Edge slope of polynomial [A H-1]
+  real, dimension(n0,deg+1),intent(in) :: ppoly_r_coefs !< Coefficients of polynomial [A]
+  real, dimension(n0,2),    intent(in) :: ppoly_r_E !< Edge value of polynomial [A]
+  real, dimension(n0,2),    intent(in) :: ppoly_r_S !< Edge slope of polynomial [A H-1]
   ! Local variables
   integer :: i0, n
   real :: u_l, u_c, u_r ! Cell averages [A]

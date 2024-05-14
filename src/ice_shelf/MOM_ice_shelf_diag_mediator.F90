@@ -514,9 +514,9 @@ function register_MOM_IS_diag_field(module_name, field_name, axes, init_time, &
 end function register_MOM_IS_diag_field
 
 !> Registers a static diagnostic, returning an integer handle
-integer function register_MOM_IS_static_field(module_name, field_name, axes, &
-            long_name, units, missing_value, range, mask_variant, standard_name, &
-            do_not_log, interp_method, tile_count)
+function register_MOM_IS_static_field(module_name, field_name, axes, &
+    long_name, units, missing_value, range, mask_variant, standard_name, &
+    do_not_log, interp_method, tile_count) result(register_static_field)
   integer :: register_static_field !< The returned diagnostic handle
   character(len=*), intent(in) :: module_name !< Name of this module, usually "ice_model"
   character(len=*), intent(in) :: field_name !< Name of the diagnostic field
