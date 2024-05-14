@@ -15,6 +15,7 @@ use diag_data_mod,    only : null_axis_id
 use diag_manager_mod, only : fms_diag_manager_init => diag_manager_init
 use diag_manager_mod, only : fms_diag_manager_end => diag_manager_end
 use diag_manager_mod, only : diag_send_complete
+use diag_manager_mod, only : diag_manager_set_time_end
 use diag_manager_mod, only : send_data_fms => send_data
 use diag_manager_mod, only : fms_diag_field_add_attribute => diag_field_add_attribute
 use diag_manager_mod, only : DIAG_FIELD_NOT_FOUND
@@ -59,6 +60,7 @@ public MOM_diag_manager_init
 public MOM_diag_manager_end
 public send_data_infra
 public diag_send_complete_infra
+public diag_manager_set_time_end_infra
 public MOM_diag_field_add_attribute
 public register_diag_field_infra
 public register_static_field_infra
@@ -460,5 +462,12 @@ subroutine diag_send_complete_infra ()
   !! It won't have any impact when diag_manager_nml::use_modern_diag=.false.
   call diag_send_complete (set_time(0))
 end subroutine diag_send_complete_infra
+
+!> Sets the time that the simulation ends in the diag manager
+subroutine diag_manager_set_time_end_infra(time)
+  type(time_type),           optional, intent(in) :: time  !< The time the simulation ends
+
+  call diag_manager_set_time_end(time)
+end subroutine diag_manager_set_time_end_infra
 
 end module MOM_diag_manager_infra
