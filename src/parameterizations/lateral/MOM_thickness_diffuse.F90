@@ -1041,10 +1041,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_x) then
               Slope = slope_x(I,j,k)
             else
-              Slope = ((e(i,j,K)-e(i+1,j,K))*G%IdxCu(I,j)) * G%OBCmaskCu(I,j)
+              Slope = ((e(i+1,j,K)-e(i,j,K))*G%IdxCu(I,j)) * G%OBCmaskCu(I,j)
             endif
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
-            Sfn_unlim_u(I,K) = ((KH_u(I,j,K)*G%dy_Cu(I,j))*Slope)
+            Sfn_unlim_u(I,K) = -(KH_u(I,j,K)*G%dy_Cu(I,j))*Slope
             dzN2_u(I,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -1361,10 +1361,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
             if (present_slope_y) then
               Slope = slope_y(i,J,k)
             else
-              Slope = ((e(i,j,K)-e(i,j+1,K))*G%IdyCv(i,J)) * G%OBCmaskCv(i,J)
+              Slope = ((e(i,j+1,K)-e(i,j,K))*G%IdyCv(i,J)) * G%OBCmaskCv(i,J)
             endif
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
-            Sfn_unlim_v(i,K) = ((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope)
+            Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope)
             dzN2_v(i,K) = GV%g_prime(K)
           endif ! if (use_EOS)
         else ! if (k > nk_linear)
@@ -2451,19 +2451,19 @@ end subroutine thickness_diffuse_end
 !! to the potential density slope
 !! \f[
 !! \vec{\psi} = - \kappa_h \frac{\nabla_z \rho}{\partial_z \rho}
-!! = \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} = \kappa_h \frac{M^2}{N^2}
+!! = \frac{g\kappa_h}{\rho_o} \frac{\nabla \rho}{N^2} = -\kappa_h \frac{M^2}{N^2}
 !! \f]
 !! but for robustness the scheme is implemented as
 !! \f[
-!! \vec{\psi} = \kappa_h \frac{M^2}{\sqrt{N^4 + M^4}}
+!! \vec{\psi} = -\kappa_h \frac{M^2}{\sqrt{N^4 + M^4}}
 !! \f]
-!! since the quantity \f$\frac{M^2}{\sqrt{N^2 + M^2}}\f$ is bounded between $-1$ and $1$ and does not change sign
+!! since the quantity \f$\frac{M^2}{\sqrt{N^4 + M^4}}\f$ is bounded between $-1$ and $1$ and does not change sign
 !! if \f$N^2<0\f$.
 !!
 !! Optionally, the method of Ferrari et al, 2010, can be used to obtain the streamfunction which solves the
 !! vertically elliptic equation:
 !! \f[
-!! \gamma_F \partial_z c^2 \partial_z \psi - N_*^2 \psi  = ( 1 + \gamma_F ) \kappa_h N_*^2 \frac{M^2}{\sqrt{N^4+M^4}}
+!! \gamma_F \partial_z c^2 \partial_z \psi - N_*^2 \psi  = -( 1 + \gamma_F ) \kappa_h N_*^2 \frac{M^2}{\sqrt{N^4+M^4}}
 !! \f]
 !! which recovers the previous streamfunction relation in the limit that \f$ c \rightarrow 0 \f$.
 !! Here, \f$c=\max(c_{min},c_g)\f$ is the maximum of either \f$c_{min}\f$ and either the first baroclinic mode
