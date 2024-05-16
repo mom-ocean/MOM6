@@ -1753,7 +1753,7 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   real :: F_guess, F_l, F_r  ! Fractional positions [nondim]
   real :: GxRho ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: Pa, Pa_left, Pa_right, Pa_tol ! Pressure anomalies, P = integral of g*(rho-rho_ref) dz [R L2 T-2 ~> Pa]
-  integer :: m  ! A counter for how many iterations have been done in the while loop [nondim]
+  integer :: m  ! A counter for how many iterations have been done in the while loop
   character(len=240) :: msg
 
   GxRho = G_e * rho_ref
@@ -1785,9 +1785,9 @@ subroutine find_depth_of_pressure_in_cell(T_t, T_b, S_t, S_b, z_t, z_b, P_t, P_t
   do while ( abs(Pa) > Pa_tol )
 
     m = m + 1
-    if (m > 30) then !Call an error, because convergence to the tolerance has not been achieved
+    if (m > 30) then ! Call an error, because convergence to the tolerance has not been achieved
      write(msg,*) Pa_left,Pa,Pa_right,P_t-P_tgt,P_b-P_tgt
-     call MOM_error(FATAL, 'find_depth_of_pressure_in_cell completes too many iterations: /n'//msg)
+     call MOM_error(FATAL, 'find_depth_of_pressure_in_cell completes too many iterations: '//msg)
     endif
     z_out = z_t + ( z_b - z_t ) * F_guess
     Pa = frac_dp_at_pos(T_t, T_b, S_t, S_b, z_t, z_b, rho_ref, G_e, F_guess, EOS) - ( P_tgt - P_t )
