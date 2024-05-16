@@ -211,6 +211,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   real :: tmpReal  ! A temporary variable used in setting other variables [various]
   real :: P_Ref    ! The coordinate variable reference pression [R L2 T-2 ~> Pa]
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
+  real :: dz_extra      ! The thickness of an added layer to append to the woa09_dz profile when
+                        ! maximum_depth is large [m] (not in Z).
   real :: adaptTimeRatio, adaptZoomCoeff ! Temporary variables for input parameters [nondim]
   real :: adaptBuoyCoeff, adaptAlpha     ! Temporary variables for input parameters [nondim]
   real :: adaptZoom  ! The thickness of the near-surface zooming region with the adaptive coordinate [H ~> m or kg m-2]
@@ -311,7 +313,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     param_name = create_coord_param(param_prefix, "DEF", param_suffix)
     coord_res_param = create_coord_param(param_prefix, "RES", param_suffix)
     string2 = 'UNIFORM'
-    if (maximum_depth>3000.) string2='WOA09' ! For convenience
+    if ((maximum_depth>3000.) .and. (maximum_depth<9250.)) string2='WOA09' ! For convenience
   endif
   call get_param(param_file, mdl, param_name, string, &
                  "Determines how to specify the coordinate "//&
@@ -458,20 +460,27 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
   elseif (index(trim(string),'WOA09')==1) then
     if (len_trim(string)==5) then
-      tmpReal = 0. ; ke = 0
+      tmpReal = 0. ; ke = 0 ; dz_extra = 0.
       do while (tmpReal<maximum_depth)
         ke = ke + 1
+        if (ke > size(woa09_dz)) then
+          dz_extra = maximum_depth - tmpReal
+          exit
+        endif
         tmpReal = tmpReal + woa09_dz(ke)
       enddo
     elseif (index(trim(string),'WOA09:')==1) then
       if (len_trim(string)==6) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
                  'Expected string of form "WOA09:N" but got "'//trim(string)//'".')
       ke = extract_integer(string(7:len_trim(string)),'',1)
+      if (ke>40 .or. ke<1) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+                   'For "WOA05:N" N must 0<N<41 but got "'//trim(string)//'".')
     endif
-    if (ke>40 .or. ke<1) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
-                 'For "WOA05:N" N must 0<N<41 but got "'//trim(string)//'".')
     allocate(dz(ke))
-    dz(1:ke) = woa09_dz(1:ke)
+    do k=1,min(ke, size(woa09_dz))
+      dz(k) = woa09_dz(k)
+    enddo
+    if (ke > size(woa09_dz)) dz(ke) = dz_extra
   else
     call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
       "Unrecognized coordinate configuration"//trim(string))
