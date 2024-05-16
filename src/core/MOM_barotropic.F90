@@ -4614,8 +4614,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
   call get_param(param_file, mdl, "BAROTROPIC_VERTICAL_WEIGHT_FIX", CS%wt_uv_fix, &
                  "If true, use a normalized weight function for vertical averages of "//&
-                 "baroclinic velocity and forcing.", &
-                 default=.false.)
+                 "baroclinic velocity and forcing. This flag should be used with "//&
+                 "VISC_REM_TIMESTEP_FIX.", default=.false.)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
