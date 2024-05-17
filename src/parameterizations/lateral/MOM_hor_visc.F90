@@ -2062,7 +2062,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
   call get_param(param_file, mdl, "USE_CONT_THICKNESS", CS%use_cont_thick, &
-                 "If true, use thickness at velocity points from continuity solver. This option"//&
+                 "If true, use thickness at velocity points from continuity solver. This option "//&
                  "currently only works with split mode.", default=.false.)
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
