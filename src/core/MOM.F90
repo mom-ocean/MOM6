@@ -624,7 +624,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     call rotate_mech_forcing(forces_in, turns, forces)
 
     allocate(fluxes)
-    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes, turns=turns)
     call rotate_forcing(fluxes_in, fluxes, turns)
   else
     forces => forces_in
@@ -1044,6 +1044,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   ! Do diagnostics that only occur at the end of a complete forcing step.
   if (cycle_end) then
+    if (showCallTree) call callTree_waypoint("Do cycle end diagnostics (step_MOM)")
     if (CS%rotate_index) then
       allocate(sfc_state_diag)
       call rotate_surface_state(sfc_state, sfc_state_diag, G, turns)
@@ -1063,6 +1064,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
+    if (CS%rotate_index) then
+      call deallocate_surface_state(sfc_state_diag)
+    endif
+    if (showCallTree) call callTree_waypoint("Done with end cycle diagnostics (step_MOM)")
   endif
 
   ! Accumulate the surface fluxes for assessing conservation
@@ -3710,8 +3715,8 @@ subroutine extract_surface_state(CS, sfc_state_in)
   if (CS%rotate_index) then
     allocate(sfc_state)
     call allocate_surface_state(sfc_state, G, use_temperature, &
-         do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),&
-         use_iceshelves=use_iceshelves)
+              do_integrals=.true., omit_frazil=.not.associated(CS%tv%frazil),&
+              use_iceshelves=use_iceshelves, sfc_state_in=sfc_state_in, turns=turns)
   else
     sfc_state => sfc_state_in
   endif

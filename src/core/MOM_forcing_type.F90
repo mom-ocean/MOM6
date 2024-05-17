@@ -6,7 +6,7 @@ module MOM_forcing_type
 use MOM_array_transform, only : rotate_array, rotate_vector, rotate_array_pair
 use MOM_coupler_types, only : coupler_2d_bc_type, coupler_type_destructor
 use MOM_coupler_types, only : coupler_type_increment_data, coupler_type_initialized
-use MOM_coupler_types, only : coupler_type_copy_data
+use MOM_coupler_types, only : coupler_type_copy_data, coupler_type_spawn
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
@@ -2627,7 +2627,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
   if (turns /= 0) then
     G => diag%G
     allocate(fluxes)
-    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes, turns=turns)
     call rotate_forcing(fluxes_in, fluxes, turns)
   else
     G => G_in
@@ -3308,13 +3308,16 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
 end subroutine allocate_forcing_by_group
 
 !> Allocate elements of a new forcing type based on their status in an existing type.
-subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes)
+subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes, turns)
   type(forcing),         intent(in)  :: fluxes_ref !< Reference fluxes
   type(ocean_grid_type), intent(in)  :: G          !< Grid metric of target fluxes
   type(forcing),         intent(out) :: fluxes     !< Target fluxes
+  integer,     optional, intent(in)  :: turns      !< If present, the number of counterclockwise
+                                                   !! quarter turns to use on the new grid.
 
   logical :: do_ustar, do_taumag, do_water, do_heat, do_salt, do_press, do_shelf
   logical :: do_iceberg, do_heat_added, do_buoy
+  logical :: even_turns  ! True if turns is absent or even
 
   call get_forcing_groups(fluxes_ref, do_water, do_heat, do_ustar, do_taumag, do_press, &
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
@@ -3353,6 +3356,19 @@ subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes)
   ! This flag would normally be set by a control flag in allocate_forcing_type.
   ! Here we copy the flag from the reference forcing.
   fluxes%gustless_accum_bug = fluxes_ref%gustless_accum_bug
+
+  if (coupler_type_initialized(fluxes_ref%tr_fluxes)) then
+    ! The data fields in the coupler_2d_bc_type are never rotated.
+    even_turns = .true. ; if (present(turns)) even_turns = (modulo(turns, 2) == 0)
+    if (even_turns) then
+      call coupler_type_spawn(fluxes_ref%tr_fluxes, fluxes%tr_fluxes, &
+                (/G%isc,G%isc,G%iec,G%iec/), (/G%jsc,G%jsc,G%jec,G%jec/))
+    else
+      call coupler_type_spawn(fluxes_ref%tr_fluxes, fluxes%tr_fluxes, &
+                (/G%jsc,G%jsc,G%jec,G%jec/), (/G%isc,G%isc,G%iec,G%iec/))
+    endif
+  endif
+
 end subroutine allocate_forcing_by_ref
 
 

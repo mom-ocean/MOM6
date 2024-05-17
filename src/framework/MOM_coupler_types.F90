@@ -3,6 +3,7 @@ module MOM_coupler_types
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use MOM_array_transform,   only : allocate_rotated_array, rotate_array
 use MOM_couplertype_infra, only : CT_spawn, CT_initialized, CT_destructor, atmos_ocn_coupler_flux
 use MOM_couplertype_infra, only : CT_set_diags, CT_send_data, CT_write_chksums, CT_data_override
 use MOM_couplertype_infra, only : CT_copy_data, CT_increment_data, CT_rescale_data
@@ -363,7 +364,7 @@ end subroutine coupler_type_data_override
 !> Extract a 2d field from a coupler_2d_bc_type into a two-dimensional array, using a
 !! MOM-specific interface.
 subroutine extract_coupler_type_data(var_in, bc_index, array_out, scale_factor, &
-                                     halo_size, idim, jdim, field_index)
+                                     halo_size, idim, jdim, field_index, turns)
   type(coupler_2d_bc_type),   intent(in)    :: var_in    !< BC_type structure with the data to extract
                                                          !! The internal data has arbitrary units [B].
   integer,                    intent(in)    :: bc_index  !< The index of the boundary condition
@@ -384,13 +385,35 @@ subroutine extract_coupler_type_data(var_in, bc_index, array_out, scale_factor, 
   integer,          optional, intent(in)    :: field_index !< The index of the field in the boundary
                                                          !! condition that is being copied, or the
                                                          !! surface flux by default.
+  integer,          optional, intent(in)    :: turns     !< The number of quarter-turns from the unrotated
+                                                         !! coupler_2d_bt_type to model grid
 
-  if (present(field_index)) then
-    call CT_extract_data(var_in, bc_index, field_index, array_out, &
+  ! Local variables
+  real, allocatable :: array_unrot(:,:)  ! Array on the unrotated grid in arbitrary units [A]
+  integer :: q_turns ! The number of quarter turns through which array_out is to be rotated
+  integer :: index, is, ie, js, je, halo
+
+  index = ind_flux ; if (present(field_index)) index = field_index
+  q_turns = 0 ; if (present(turns)) q_turns = modulo(turns, 4)
+  halo = 0 ; if (present(halo_size)) halo = halo_size
+
+  ! The case with non-trivial grid rotation is complicated by the fact that the data fields
+  ! in the coupler_2d_bc_type are never rotated, so they need to be handled separately.
+  if (q_turns == 0) then
+    call CT_extract_data(var_in, bc_index, index, array_out, &
                     scale_factor=scale_factor, halo_size=halo_size, idim=idim, jdim=jdim)
+  elseif (present(idim) .and. present(jdim)) then
+    ! Work only on the computational domain plus symmetric halos.
+    is = idim(2)-halo ; ie = idim(3)+halo ; js = jdim(2)-halo ; je = jdim(3)+halo
+    call allocate_rotated_array(array_out(is:ie,js:je), [1,1], -q_turns, array_unrot)
+    call CT_extract_data(var_in, bc_index, index, array_unrot, scale_factor=scale_factor, halo_size=halo)
+    call rotate_array(array_unrot, q_turns, array_out(is:ie,js:je))
+    deallocate(array_unrot)
   else
-    call CT_extract_data(var_in, bc_index, ind_flux, array_out, &
-                    scale_factor=scale_factor, halo_size=halo_size, idim=idim, jdim=jdim)
+    call allocate_rotated_array(array_out, [1,1], -q_turns, array_unrot)
+    call CT_extract_data(var_in, bc_index, index, array_unrot, scale_factor=scale_factor, halo_size=halo)
+    call rotate_array(array_unrot, q_turns, array_out)
+    deallocate(array_unrot)
   endif
 
 end subroutine extract_coupler_type_data
@@ -398,7 +421,7 @@ end subroutine extract_coupler_type_data
 !> Set single 2d field in coupler_2d_bc_type from a two-dimensional array, using a
 !! MOM-specific interface.
 subroutine set_coupler_type_data(array_in, bc_index, var, solubility, scale_factor, &
-                                 halo_size, idim, jdim, field_index)
+                                 halo_size, idim, jdim, field_index, turns)
   real, dimension(1:,1:),     intent(in)   :: array_in   !< The source array for the field in
                                                          !! arbitrary units [A]; the size of this array
                                                          !! must match the size of the data being copied
@@ -422,15 +445,43 @@ subroutine set_coupler_type_data(array_in, bc_index, var, solubility, scale_fact
   integer,          optional, intent(in)    :: field_index !< The index of the field in the
                                                          !! boundary condition that is being set. The
                                                          !! surface concentration is set by default.
+  integer,          optional, intent(in)    :: turns     !< The number of quarter-turns from the unrotated
+                                                         !! coupler_2d_bt_type to model grid
 
+  ! Local variables
+  real, allocatable :: array_unrot(:,:)  ! Array on the unrotated grid in the same arbitrary units
+                                         ! as array_in [A]
   integer :: subfield ! An integer indicating which field to set.
+  integer :: q_turns ! The number of quarter turns through which array_in is rotated
+  integer :: is, ie, js, je, halo
+
+  q_turns = 0 ; if (present(turns)) q_turns = modulo(turns, 4)
 
   subfield = ind_csurf
   if (present(solubility)) then ; if (solubility) subfield = ind_alpha ; endif
   if (present(field_index)) subfield = field_index
+  halo = 0 ; if (present(halo_size)) halo = halo_size
 
-  call CT_set_data(array_in, bc_index, subfield, var, &
-                   scale_factor=scale_factor, halo_size=halo_size, idim=idim, jdim=jdim)
+  ! The case with non-trivial grid rotation is complicated by the fact that the data fields
+  ! in the coupler_2d_bc_type are never rotated, so they need to be handled separately.
+  if (q_turns == 0) then
+    call CT_set_data(array_in, bc_index, subfield, var, &
+                     scale_factor=scale_factor, halo_size=halo_size, idim=idim, jdim=jdim)
+  elseif (present(idim) .and. present(jdim)) then
+    ! Work only on the computational domain plus symmetric halos.
+    is = idim(2)-halo ; ie = idim(3)+halo ; js = jdim(2)-halo ; je = jdim(3)+halo
+    call allocate_rotated_array(array_in(is:ie,js:je), [1,1], -q_turns, array_unrot)
+    call rotate_array(array_in, -q_turns, array_unrot)
+    call CT_set_data(array_unrot, bc_index, subfield, var, &
+                     scale_factor=scale_factor, halo_size=halo_size)
+    deallocate(array_unrot)
+  else
+    call allocate_rotated_array(array_in, [1,1], -q_turns, array_unrot)
+    call rotate_array(array_in, -q_turns, array_unrot)
+    call CT_set_data(array_in, bc_index, subfield, var, &
+                     scale_factor=scale_factor, halo_size=halo_size)
+    deallocate(array_unrot)
+  endif
 
 end subroutine set_coupler_type_data
 

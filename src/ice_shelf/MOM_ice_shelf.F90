@@ -41,9 +41,9 @@ use MOM_time_manager, only : time_type, time_type_to_real, real_to_time, operato
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
 use MOM_transcribe_grid,       only : rotate_dyngrid
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init, fix_restart_unit_scaling
-use MOM_variables, only : surface, allocate_surface_state
+use MOM_variables, only : surface, allocate_surface_state, deallocate_surface_state
 use MOM_variables, only : rotate_surface_state
-use MOM_forcing_type, only : forcing, allocate_forcing_type, MOM_forcing_chksum
+use MOM_forcing_type, only : forcing, allocate_forcing_type, deallocate_forcing_type, MOM_forcing_chksum
 use MOM_forcing_type, only : mech_forcing, allocate_mech_forcing, MOM_mech_forcing_chksum
 use MOM_forcing_type, only : copy_common_forcing_fields, rotate_forcing, rotate_mech_forcing
 use MOM_get_input, only : directories, Get_MOM_input
@@ -378,7 +378,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
     allocate(sfc_state)
     call rotate_surface_state(sfc_state_in, sfc_state, CS%Grid, CS%turns)
     allocate(fluxes)
-    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes, turns=CS%turns)
     call rotate_forcing(fluxes_in, fluxes, CS%turns)
   else
     sfc_state => sfc_state_in
@@ -916,13 +916,16 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
 
   call cpu_clock_end(id_clock_shelf)
 
+  if (CS%debug) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, CS%US, haloshift=0)
+
   if (CS%rotate_index) then
 !   call rotate_surface_state(sfc_state, sfc_state_in, CS%Grid_in, -CS%turns)
-    call rotate_forcing(fluxes,fluxes_in,-CS%turns)
+    call rotate_forcing(fluxes, fluxes_in, -CS%turns)
+    call deallocate_surface_state(sfc_state)
+    deallocate(sfc_state)
+    call deallocate_forcing_type(fluxes)
+    deallocate(fluxes)
   endif
-
-
-  if (CS%debug) call MOM_forcing_chksum("End of shelf calc flux", fluxes, G, CS%US, haloshift=0)
 
 end subroutine shelf_calc_flux
 
@@ -1723,14 +1726,14 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
                  "buoyancy iteration.", units="nondim", default=1.0e-4)
 
   if (PRESENT(sfc_state_in)) then
-    allocate(sfc_state)
     ! assuming frazil is enabled in ocean. This could break some configurations?
     call allocate_surface_state(sfc_state_in, CS%Grid_in, use_temperature=.true., &
           do_integrals=.true., omit_frazil=.false., use_iceshelves=.true.)
     if (CS%rotate_index) then
-      call rotate_surface_state(sfc_state_in, sfc_state,CS%Grid, CS%turns)
+      allocate(sfc_state)
+      call rotate_surface_state(sfc_state_in, sfc_state, CS%Grid, CS%turns)
     else
-      sfc_state=>sfc_state_in
+      sfc_state => sfc_state_in
     endif
   endif
 
@@ -2103,14 +2106,14 @@ subroutine initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
   else
     call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating fluxes in solo mode.")
     call allocate_forcing_type(CS%Grid_in, fluxes_in, ustar=.true., shelf=.true., &
-         press=.true., shelf_sfc_accumulation = CS%active_shelf_dynamics, tau_mag=.true.)
+         press=.true., shelf_sfc_accumulation=CS%active_shelf_dynamics, tau_mag=.true.)
   endif
   if (CS%rotate_index) then
     allocate(fluxes)
-    call allocate_forcing_type(fluxes_in, CS%Grid, fluxes)
+    call allocate_forcing_type(fluxes_in, CS%Grid, fluxes, turns=CS%turns)
     call rotate_forcing(fluxes_in, fluxes, CS%turns)
   else
-    fluxes=>fluxes_in
+    fluxes => fluxes_in
   endif
 
   do j=jsd,jed ; do i=isd,ied
@@ -2119,8 +2122,11 @@ subroutine initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
   if (CS%debug) call hchksum(fluxes%frac_shelf_h, "IS init: frac_shelf_h", G%HI, haloshift=0)
   call add_shelf_pressure(ocn_grid, US, CS, fluxes)
 
-  if (CS%rotate_index) &
+  if (CS%rotate_index) then
     call rotate_forcing(fluxes, fluxes_in, -CS%turns)
+    call deallocate_forcing_type(fluxes)
+    deallocate(fluxes)
+  endif
 
 end subroutine initialize_ice_shelf_fluxes
 
