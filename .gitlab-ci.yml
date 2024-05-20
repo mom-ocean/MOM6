@@ -32,6 +32,8 @@ p:clone:
   tags:
     - ncrc5
   script:
+    # NOTE: We could sweep any builds older than 3 days here if needed
+    #- find $HOME/ci/[0-9]* -mtime +3 -delete 2> /dev/null || true
     - .gitlab/pipeline-ci-tool.sh create-job-dir
 #.gitlab/pipeline-ci-tool.sh clean-job-dir
 
@@ -353,4 +355,5 @@ cleanup:
   before_script:
     - echo Skipping usual preamble
   script:
+    - rm -rf $HOME/ci/$CI_PIPELINE_ID
     - rm -rf $JOB_DIR
