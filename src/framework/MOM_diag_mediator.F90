@@ -243,7 +243,7 @@ type, public :: diag_ctrl
                                           !! This file is open if available_diag_doc_unit is > 0.
   logical :: diag_as_chksum  !< If true, log chksums in a text file instead of posting diagnostics
   logical :: show_call_tree  !< Display the call tree while running. Set by VERBOSITY level.
-  logical :: grid_space_axes !< If true, diagnostic horizontal coordinates axes are in grid space.
+  logical :: index_space_axes !< If true, diagnostic horizontal coordinates axes are in index space.
 ! The following fields are used for the output of the data.
   integer :: is  !< The start i-index of cell centers within the computational domain
   integer :: ie  !< The end i-index of cell centers within the computational domain
@@ -371,7 +371,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
   set_vert = .true. ; if (present(set_vertical)) set_vert = set_vertical
 
 
-  if (diag_cs%grid_space_axes) then
+  if (diag_cs%index_space_axes) then
     allocate(IaxB(G%IsgB:G%IegB))
     do i=G%IsgB, G%IegB
       Iaxb(i)=real(i)
@@ -392,7 +392,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
 
   ! Horizontal axes for the native grids
   if (G%symmetric) then
-    if (diag_cs%grid_space_axes) then
+    if (diag_cs%index_space_axes) then
       id_xq = diag_axis_init('iq', IaxB(G%isgB:G%iegB), 'none', 'x', &
           'q point grid-space longitude', G%Domain, position=EAST)
       id_yq = diag_axis_init('jq', JaxB(G%jsgB:G%jegB), 'none', 'y', &
@@ -404,7 +404,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
           'q point nominal latitude', G%Domain, position=NORTH)
     endif
   else
-    if (diag_cs%grid_space_axes) then
+    if (diag_cs%index_space_axes) then
       id_xq = diag_axis_init('Iq', IaxB(G%isg:G%ieg), 'none', 'x', &
           'q point grid-space longitude', G%Domain, position=EAST)
       id_yq = diag_axis_init('Jq', JaxB(G%jsg:G%jeg), 'none', 'y', &
@@ -417,7 +417,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
     endif
   endif
 
-  if (diag_cs%grid_space_axes) then
+  if (diag_cs%index_space_axes) then
     id_xh = diag_axis_init('ih', iax(G%isg:G%ieg), 'none', 'x', &
         'h point grid-space longitude', G%Domain)
     id_yh = diag_axis_init('jh', jax(G%jsg:G%jeg), 'none', 'y', &
@@ -579,7 +579,7 @@ subroutine set_axes_info(G, GV, US, param_file, diag_cs, set_vertical)
     endif
   enddo
 
-  if (diag_cs%grid_space_axes) then
+  if (diag_cs%index_space_axes) then
     deallocate(IaxB, iax, JaxB, jax)
   endif
   !Define the downsampled axes
@@ -3287,7 +3287,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                  "robust and accurate forms of mathematically equivalent expressions.", &
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
-  call get_param(param_file, mdl, 'USE_GRID_SPACE_DIAGNOSTIC_AXES', diag_cs%grid_space_axes, &
+  call get_param(param_file, mdl, 'USE_INDEX_DIAGNOSTIC_AXES', diag_cs%index_space_axes, &
                  'If true, use a grid index coordinate convention for diagnostic axes. ',&
                  default=.false.)
 

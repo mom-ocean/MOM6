@@ -152,6 +152,9 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "VERT_FRICTION_2018_ANSWERS", &
                         hint="Instead use VERT_FRICTION_ANSWER_DATE.")
 
+  call obsolete_logical(param_file, "USE_GRID_SPACE_DIAGNOSTIC_AXES", &
+                        hint="Instead use USE_INDEX_DIAGNOSTIC_AXIS.")
+
   ! Write the file version number to the model log.
   call log_version(param_file, mdl, version)
 
