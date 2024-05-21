@@ -694,7 +694,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
 
   call get_time(day, seconds, days)
-  time_lev_daily = days - 365*floor(real(days) / 365.0)
+  time_lev_daily = days - CS%wind_nlev*floor(real(days) / CS%wind_nlev)
 
   if (time_lev_daily < 31) then ; time_lev_monthly = 0
   elseif (time_lev_daily < 59)  then ; time_lev_monthly = 1
@@ -714,9 +714,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   time_lev_monthly = time_lev_monthly+1
 
   select case (CS%wind_nlev)
-    case (12) ; time_lev = time_lev_monthly
-    case (365) ; time_lev = time_lev_daily
-    case default ; time_lev = 1
+    case (2:12) ; time_lev = time_lev_monthly
+    case default ; time_lev = time_lev_daily
   end select
 
   if (time_lev /= CS%wind_last_lev) then
