@@ -4612,7 +4612,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
-  call get_param(param_file, mdl, "BAROTROPIC_VERTICAL_WEIGHT_FIX", CS%wt_uv_fix, &
+  call get_param(param_file, mdl, "VISC_REM_BT_WEIGHT_FIX", CS%wt_uv_fix, &
                  "If true, use a normalized weight function for vertical averages of "//&
                  "baroclinic velocity and forcing. This flag should be used with "//&
                  "VISC_REM_TIMESTEP_FIX.", default=.false.)

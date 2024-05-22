@@ -64,6 +64,9 @@ type, public :: continuity_PPM_CS ; private
                              !! continuity solver for use as the weights in the
                              !! barotropic solver.  Otherwise use the transport
                              !! averaged areas.
+  logical :: visc_rem_hvel_fix = .False. !< If true, thickness at velocity points
+                             !! h_[uv] (used by barotropic solver) is not multiplied
+                             !! by visc_rem_[uv].
 end type continuity_PPM_CS
 
 !> A container for loop bounds
@@ -806,12 +809,22 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   endif
 
   if  (set_BT_cont) then ; if (allocated(BT_cont%h_u)) then
-    if (present(u_cor)) then
-      call zonal_flux_thickness(u_cor, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
+    if (CS%visc_rem_hvel_fix) then
+      if (present(u_cor)) then
+        call zonal_flux_thickness(u_cor, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
+                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU)
+      else
+        call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
+                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU)
+      endif
     else
-      call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
+      if (present(u_cor)) then
+        call zonal_flux_thickness(u_cor, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
+                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
+      else
+        call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
+                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
+      endif
     endif
   endif ; endif
 
@@ -1696,12 +1709,22 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   endif
 
   if (set_BT_cont) then ; if (allocated(BT_cont%h_v)) then
-    if (present(v_cor)) then
-      call meridional_flux_thickness(v_cor, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
-                                     CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
+    if (CS%visc_rem_hvel_fix) then
+      if (present(v_cor)) then
+        call meridional_flux_thickness(v_cor, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
+                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV)
+      else
+        call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
+                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV)
+      endif
     else
-      call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
-                                     CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
+      if (present(v_cor)) then
+        call meridional_flux_thickness(v_cor, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
+                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
+      else
+        call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
+                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
+      endif
     endif
   endif ; endif
 
@@ -2750,7 +2773,9 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the marginal face areas from the continuity "//&
                  "solver for use as the weights in the barotropic solver. "//&
                  "Otherwise use the transport averaged areas.", default=.true.)
-
+  call get_param(param_file, mdl, "VISC_REM_CONT_HVEL_FIX", CS%visc_rem_hvel_fix, &
+                 "If true, velocity cell thickness h_[uv] from the continuity solver "//&
+                 "is not multiplied by visc_rem_[uv].", default=.false.)
   CS%diag => diag
 
   id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)
