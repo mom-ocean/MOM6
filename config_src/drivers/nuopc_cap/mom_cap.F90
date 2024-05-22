@@ -383,7 +383,8 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   endif
 
   ! Read end of run restart config option
-  call NUOPC_CompAttributeGet(gcomp, name="write_restart_at_endofrun", value=value, isPresent=isPresent, isSet=isSet, rc=rc)
+  call NUOPC_CompAttributeGet(gcomp, name="write_restart_at_endofrun", value=value, &
+                              isPresent=isPresent, isSet=isSet, rc=rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
      if (trim(value) .eq. '.true.') restart_eor = .true.
