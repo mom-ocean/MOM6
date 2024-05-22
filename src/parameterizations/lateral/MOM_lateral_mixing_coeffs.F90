@@ -1190,6 +1190,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                               ! mode wave speed as the starting point for iterations.
   real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
                            ! temperature variance [nondim]
+  logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for calculating the EBT structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
@@ -1593,10 +1594,14 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
+    call get_param(param_file, mdl, "EBT_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for calculating EBT structure. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
+                 "We recommend setting this option to false.", default=.true.)
     call wave_speed_init(CS%wave_speed, use_ebt_mode=CS%Resoln_use_ebt, &
                          mono_N2_depth=N2_filter_depth, remap_answer_date=remap_answer_date, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
-                         wave_speed_tol=wave_speed_tol)
+                         om4_remap_via_sub_cells=om4_remap_via_sub_cells, wave_speed_tol=wave_speed_tol)
   endif
 
   ! Leith parameters

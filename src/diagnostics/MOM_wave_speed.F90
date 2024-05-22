@@ -1611,7 +1611,8 @@ end subroutine tridiag_det
 
 !> Initialize control structure for MOM_wave_speed
 subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_depth, remap_answers_2018, &
-                           remap_answer_date, better_speed_est, min_speed, wave_speed_tol, c1_thresh)
+                           remap_answer_date, better_speed_est, om4_remap_via_sub_cells, &
+                           min_speed, wave_speed_tol, c1_thresh)
   type(wave_speed_CS), intent(inout) :: CS  !< Wave speed control struct
   logical, optional, intent(in) :: use_ebt_mode  !< If true, use the equivalent
                                      !! barotropic mode instead of the first baroclinic mode.
@@ -1630,6 +1631,8 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
                                       !! forms of the same remapping expressions.
   logical, optional, intent(in) :: better_speed_est !< If true, use a more robust estimate of the first
                                      !! mode speed as the starting point for iterations.
+  logical, optional, intent(in) :: om4_remap_via_sub_cells !< Use the OM4-era ramap_via_sub_cells
+                                     !! for calculating the EBT structure
   real,    optional, intent(in) :: min_speed !< If present, set a floor in the first mode speed
                                      !! below which 0 is returned [L T-1 ~> m s-1].
   real,    optional, intent(in) :: wave_speed_tol !< The fractional tolerance for finding the
@@ -1656,6 +1659,7 @@ subroutine wave_speed_init(CS, use_ebt_mode, mono_N2_column_fraction, mono_N2_de
 
   ! The remap_answers_2018 argument here is irrelevant, because remapping is hard-coded to use PLM.
   call initialize_remapping(CS%remapping_CS, 'PLM', boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                             answer_date=CS%remap_answer_date)
 
 end subroutine wave_speed_init

@@ -143,6 +143,8 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   real    :: dt, dt_therm  ! Model timesteps [T ~> s]
   character(len=256) :: mesg
   character(len=64)  :: remapScheme
+  logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
+
   if (.not.associated(CS)) then
     call MOM_error(WARNING, "initialize_oda_incupd called without an associated "// &
                             "control structure.")
@@ -195,6 +197,8 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
                  "When defined, the incoming oda_incupd data are "//&
                  "assumed to be on the model horizontal grid " , &
                  default=.true.)
+  call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 do_not_log=.true., default=.true.)
 
   CS%nz = GV%ke
 
@@ -236,7 +240,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   ! Call the constructor for remapping control structure
   !### Revisit this hard-coded answer_date.
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
-                            answer_date=20190101)
+                            om4_remap_via_sub_cells=om4_remap_via_sub_cells, answer_date=20190101)
 end subroutine initialize_oda_incupd
 
 

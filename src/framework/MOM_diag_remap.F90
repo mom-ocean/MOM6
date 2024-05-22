@@ -92,6 +92,7 @@ type :: diag_remap_ctrl
                                       !! vertical extents in [Z ~> m] for remapping extensive variables
   integer :: interface_axes_id = 0 !< Vertical axes id for remapping at interfaces
   integer :: layer_axes_id = 0 !< Vertical axes id for remapping on layers
+  logical :: om4_remap_via_sub_cells !< Use the OM4-era ramap_via_sub_cells
   integer :: answer_date      !< The vintage of the order of arithmetic and expressions
                               !! to use for remapping.  Values below 20190101 recover
                               !! the answers from 2018, while higher values use more
@@ -102,10 +103,11 @@ end type diag_remap_ctrl
 contains
 
 !> Initialize a diagnostic remapping type with the given vertical coordinate.
-subroutine diag_remap_init(remap_cs, coord_tuple, answer_date, GV)
+subroutine diag_remap_init(remap_cs, coord_tuple, om4_remap_via_sub_cells, answer_date, GV)
   type(diag_remap_ctrl), intent(inout) :: remap_cs    !< Diag remapping control structure
   character(len=*),      intent(in)    :: coord_tuple !< A string in form of
                                                       !! MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME
+  logical,               intent(in)    :: om4_remap_via_sub_cells !< Use the OM4-era ramap_via_sub_cells
   integer,               intent(in)    :: answer_date !< The vintage of the order of arithmetic and expressions
                                                       !! to use for remapping.  Values below 20190101 recover
                                                       !! the answers from 2018, while higher values use more
@@ -127,6 +129,7 @@ subroutine diag_remap_init(remap_cs, coord_tuple, answer_date, GV)
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
   remap_cs%used = .false.
+  remap_cs%om4_remap_via_sub_cells = om4_remap_via_sub_cells
   remap_cs%answer_date = answer_date
   remap_cs%nz = 0
 
@@ -309,6 +312,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
   if (.not. remap_cs%initialized) then
     ! Initialize remapping and regridding on the first call
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false., &
+                              om4_remap_via_sub_cells=remap_cs%om4_remap_via_sub_cells, &
                               answer_date=remap_cs%answer_date)
     remap_cs%initialized = .true.
   endif

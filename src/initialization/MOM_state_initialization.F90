@@ -2504,6 +2504,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
   character(len=64) :: remappingScheme
   real :: tempAvg  ! Spatially averaged temperatures on a layer [C ~> degC]
   real :: saltAvg  ! Spatially averaged salinities on a layer [S ~> ppt]
+  logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm (only used if useALEremapping)
   logical :: do_conv_adj, ignore
   integer :: nPoints
   integer :: id_clock_routine, id_clock_ALE
@@ -2583,6 +2584,10 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
                  "robust and accurate forms of mathematically equivalent expressions.", &
                  default=default_answer_date, do_not_log=just_read.or.(.not.GV%Boussinesq))
+    call get_param(PF, mdl, "Z_INIT_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for initialization. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
+                 "We recommend setting this option to false.", default=.true.)
     if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
   endif
   call get_param(PF, mdl, "HOR_REGRID_ANSWER_DATE", hor_regrid_answer_date, &
@@ -2753,7 +2758,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     ! Build the target grid (and set the model thickness to it)
 
     call ALE_initRegridding( GV, US, G%max_depth, PF, mdl, regridCS ) ! sets regridCS
-    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., answer_date=remap_answer_date )
+    call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., &
+                               om4_remap_via_sub_cells=om4_remap_via_sub_cells, answer_date=remap_answer_date )
 
     ! Now remap from source grid to target grid, first setting reconstruction parameters
     if (remap_general) then

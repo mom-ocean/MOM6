@@ -152,6 +152,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   logical :: debug                ! If true, write verbose checksums for debugging purposes.
   logical :: boundary_extrap      ! Indicate whether high-order boundary
                                   !! extrapolation should be used within boundary cells.
+  logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
 
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
@@ -232,8 +233,13 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
                  "robust and accurate forms of mathematically equivalent expressions.", &
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
+    call get_param(param_file, mdl, "NDIFF_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for neutral diffusion. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
+                 "We recommend setting this option to false.", default=.true.)
     if (.not.GV%Boussinesq) CS%remap_answer_date = max(CS%remap_answer_date, 20230701)
     call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=boundary_extrap, &
+                               om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                                answer_date=CS%remap_answer_date )
     call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
     call get_param(param_file, mdl, "NEUTRAL_POS_METHOD", CS%neutral_pos_method,   &

@@ -1580,6 +1580,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
   logical :: split            ! True if using the barotropic-baroclinic split algorithm
+  logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for calculating the EBT structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
@@ -1617,6 +1618,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
+  call get_param(param_file, mdl, "INTWAVE_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for calculating EBT structure. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
+                 "We recommend setting this option to false.", default=.true.)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
@@ -1858,7 +1863,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
       (CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
     call wave_speed_init(CS%wave_speed, remap_answer_date=remap_answer_date, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
-                         wave_speed_tol=wave_speed_tol)
+                         wave_speed_tol=wave_speed_tol, om4_remap_via_sub_cells=om4_remap_via_sub_cells)
   endif
 
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time, &

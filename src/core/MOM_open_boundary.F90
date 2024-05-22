@@ -441,6 +441,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
+  logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
   character(len=64)  :: remappingScheme
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -695,10 +696,15 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
                  "robust and accurate forms of mathematically equivalent expressions.", &
                  default=default_answer_date)
+    call get_param(param_file, mdl, "OBC_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for neutral diffusion. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
+                 "We recommend setting this option to false.", default=.true.)
 
     allocate(OBC%remap_CS)
     call initialize_remapping(OBC%remap_CS, remappingScheme, boundary_extrapolation = .false., &
                check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
+               om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                force_bounds_in_subcell=force_bounds_in_subcell, answer_date=OBC%remap_answer_date)
 
   endif ! OBC%number_of_segments > 0

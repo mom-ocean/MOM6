@@ -183,6 +183,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
 
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
@@ -320,8 +321,10 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   call get_param(PF, 'oda_driver', "REGRIDDING_COORDINATE_MODE", coord_mode, &
        "Coordinate mode for vertical regridding.", &
        default="ZSTAR", fail_if_missing=.false.)
+  call get_param(PF, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 do_not_log=.true., default=.true.)
   call initialize_regridding(CS%regridCS, CS%GV, CS%US, dG%max_depth,PF,'oda_driver',coord_mode,'','')
-  call initialize_remapping(CS%remapCS,remap_scheme)
+  call initialize_remapping(CS%remapCS, remap_scheme, om4_remap_via_sub_cells=om4_remap_via_sub_cells)
   call set_regrid_params(CS%regridCS, min_thickness=0.)
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
 

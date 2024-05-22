@@ -178,6 +178,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   logical           :: local_logical
   logical           :: remap_boundary_extrap
   logical           :: init_boundary_extrap
+  logical           :: om4_remap_via_sub_cells
   type(hybgen_regrid_CS), pointer :: hybgen_regridCS => NULL() ! Control structure for hybgen regridding
                                                          ! for sharing parameters.
 
@@ -234,6 +235,11 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
+  call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "This selects the remapping algorithm used in OM4 that does not use "//&
+                 "the full reconstruction for the top- and lower-most sub-layers, but instead "//&
+                 "assumes they are always vanished (untrue) and so just uses their edge values. "//&
+                 "We recommend setting this option to false.", default=.true.)
   call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
@@ -247,12 +253,14 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
+                             om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                              answer_date=CS%answer_date)
   call initialize_remapping( CS%vel_remapCS, vel_string, &
                              boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
+                             om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                              answer_date=CS%answer_date)
 
   call get_param(param_file, mdl, "PARTIAL_CELL_VELOCITY_REMAP", CS%partial_cell_vel_remap, &
@@ -325,6 +333,21 @@ subroutine ALE_set_extrap_boundaries( param_file, CS)
                  "extrapolated instead of piecewise constant", default=.false.)
   call remapping_set_param(CS%remapCS, boundary_extrapolation=remap_boundary_extrap)
 end subroutine ALE_set_extrap_boundaries
+
+!> Sets the remapping algorithm to that of OM4
+!!
+!! The remapping aglorithm used in OM4 made poor assumptions about the reconstructions
+!! in the top/bottom layers, namely that they were always vanished and could be
+!! represented solely by their upper/lower edge value respectively.
+!! Passing .false. here uses the full reconstruction of those top and bottom layers
+!! and properly sample those layers.
+subroutine ALE_set_OM4_remap_algorithm( CS, om4_remap_via_sub_cells )
+  type(ALE_CS), pointer :: CS !< Module control structure
+  logical, intent(in)   :: om4_remap_via_sub_cells !< If true, use OM4 remapping algorithm
+
+  call remapping_set_param(CS%remapCS, om4_remap_via_sub_cells =om4_remap_via_sub_cells )
+
+end subroutine ALE_set_OM4_remap_algorithm
 
 !> Initialize diagnostics for the ALE module.
 subroutine ALE_register_diags(Time, G, GV, US, diag, CS)

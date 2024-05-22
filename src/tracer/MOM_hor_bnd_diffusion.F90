@@ -89,6 +89,7 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
   ! local variables
   character(len=80)  :: string ! Temporary strings
   logical :: boundary_extrap   ! controls if boundary extrapolation is used in the HBD code
+  logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for HBD
   logical :: debug             !< If true, write verbose checksums for debugging purposes
 
   if (ASSOCIATED(CS)) then
@@ -142,10 +143,15 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
+  call get_param(param_file, mdl, "HBD_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for horizontal boundary diffusion. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
+                 "We recommend setting this option to false.", default=.true.)
 
   ! GMM, TODO: add HBD params to control optional arguments in initialize_remapping.
-  call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
-       check_reconstruction=.false., check_remapping=.false.)
+  call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=boundary_extrap, &
+                             om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
+                             check_reconstruction=.false., check_remapping=.false.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   call get_param(param_file, mdl, "DEBUG", debug, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "HBD_DEBUG", CS%debug, &
@@ -849,8 +855,9 @@ logical function near_boundary_unit_tests( verbose )
   allocate(CS)
   ! fill required fields in CS
   CS%linear=.false.
-  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation=.true. ,&
-       check_reconstruction=.true., check_remapping=.true.)
+  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation=.true., &
+                             om4_remap_via_sub_cells=.true., & ! ### see fail below when using fixed remapping alg.
+                             check_reconstruction=.true., check_remapping=.true.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   CS%H_subroundoff = 1.0E-20
   CS%debug=.false.
@@ -1040,6 +1047,7 @@ logical function near_boundary_unit_tests( verbose )
   call hbd_grid_test(SURFACE, hbl_L, hbl_R, h_L, h_R, CS)
   call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
                            khtr_u, F_layer, 1., 1., CS%hbd_u_kmax(1,1), CS%hbd_grd_u(1,1,:), CS)
+ ! ### This test fails when om4_remap_via_sub_cells=.false.
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.0,-4.0/) )
 
