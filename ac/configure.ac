@@ -79,18 +79,6 @@ AS_IF([test "x$with_driver" != "x"],
 # used to configure a header based on a template.
 #AC_CONFIG_HEADERS(["$MEM_LAYOUT/MOM_memory.h"])
 
-# Select the model framework (default: FMS1)
-# NOTE: We can phase this out after the FMS1 I/O has been removed from FMS and
-#   replace with a detection test.  For now, it is a user-defined switch.
-MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2
-AC_ARG_WITH([framework],
-  AS_HELP_STRING([--with-framework=fms1|fms2], [Select the model framework]))
-AS_CASE(["$with_framework"],
-  [fms1], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1],
-  [fms2], [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2],
-  [MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2]
-)
-
 
 # Explicitly assume free-form Fortran
 AC_LANG(Fortran)
@@ -220,7 +208,6 @@ AX_FC_CHECK_LIB([FMS], [fms_init], [fms_mod],
   ]
 )
 
-
 # Verify that FMS is at least 2019.01.02
 # NOTE: 2019.01.02 introduced two changes:
 #   - diag_axis_init supports an optional domain_position argument
@@ -235,6 +222,14 @@ AC_COMPILE_IFELSE(
     AC_MSG_ERROR([diag_axis_mod in MOM6 requires FMS 2019.01.02 or newer.])
   ]
 )
+
+# Determine the FMS IO implementation.
+AX_FC_CHECK_MODULE([fms2_io_mod], [
+  MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS2
+],[
+  MODEL_FRAMEWORK=${srcdir}/config_src/infra/FMS1
+])
+
 
 # Python interpreter test
 

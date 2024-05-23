@@ -286,7 +286,6 @@ $(BUILD)/unit/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
 $(BUILD)/timing/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 
 # Configure script flags
-MOM_ACFLAGS := --with-framework=$(FRAMEWORK)
 $(BUILD)/openmp/Makefile: MOM_ACFLAGS += --enable-openmp
 $(BUILD)/coupled/Makefile: MOM_ACFLAGS += --with-driver=FMS_cap
 $(BUILD)/nuopc/Makefile: MOM_ACFLAGS += --with-driver=nuopc_cap
