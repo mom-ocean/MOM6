@@ -50,13 +50,6 @@ real elemental function density_elem_TEOS10(this, T, S, pressure)
   real,              intent(in) :: S        !< Absolute salinity [g kg-1].
   real,              intent(in) :: pressure !< pressure [Pa].
 
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-! if (S < -1.0e-10) then ! Can we assume safely that this is a missing value?
-!   density_elem_TEOS10 = 1000.0
-! else
-!   density_elem_TEOS10 = gsw_rho(S, T, pressure * Pa2db)
-! endif
-
   density_elem_TEOS10 = gsw_rho(S, T, pressure * Pa2db)
 
 end function density_elem_TEOS10
@@ -68,13 +61,6 @@ real elemental function density_anomaly_elem_TEOS10(this, T, S, pressure, rho_re
   real,              intent(in) :: S        !< Absolute salinity [g kg-1].
   real,              intent(in) :: pressure !< pressure [Pa].
   real,              intent(in) :: rho_ref  !< A reference density [kg m-3].
-
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-! if (S < -1.0e-10) then ! Can we assume safely that this is a missing value?
-!   density_elem_TEOS10 = 1000.0
-! else
-!   density_elem_TEOS10 = gsw_rho(S, T, pressure * Pa2db)
-! endif
 
   density_anomaly_elem_TEOS10 = gsw_rho(S, T, pressure * Pa2db)
   density_anomaly_elem_TEOS10 = density_anomaly_elem_TEOS10 - rho_ref
@@ -88,13 +74,6 @@ real elemental function spec_vol_elem_TEOS10(this, T, S, pressure)
   real,              intent(in) :: S        !< Absolute salinity [g kg-1].
   real,              intent(in) :: pressure !< pressure [Pa].
 
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-! if (S < -1.0e-10) then ! Can we assume safely that this is a missing value?
-!   spec_vol_elem_TEOS10 = 0.001
-! else
-!   spec_vol_elem_TEOS10 = gsw_rho(S, T, pressure * Pa2db)
-! endif
-
   spec_vol_elem_TEOS10 = gsw_specvol(S, T, pressure * Pa2db)
 
 end function spec_vol_elem_TEOS10
@@ -107,13 +86,6 @@ real elemental function spec_vol_anomaly_elem_TEOS10(this, T, S, pressure, spv_r
   real,              intent(in) :: pressure !< pressure [Pa].
   real,              intent(in) :: spv_ref  !< A reference specific volume [m3 kg-1].
 
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-! if (S < -1.0e-10) then ! Can we assume safely that this is a missing value?
-!   spec_vol_elem_TEOS10 = 0.001
-! else
-!   spec_vol_elem_TEOS10 = gsw_rho(S, T, pressure * Pa2db)
-! endif
-
   spec_vol_anomaly_elem_TEOS10 = gsw_specvol(S, T, pressure * Pa2db) - spv_ref
 
 end function spec_vol_anomaly_elem_TEOS10
@@ -122,28 +94,27 @@ end function spec_vol_anomaly_elem_TEOS10
 !! temperature and absolute salinity, using the TEOS10 expressions.
 elemental subroutine calculate_density_derivs_elem_TEOS10(this, T, S, pressure, drho_dT, drho_dS)
   class(TEOS10_EOS), intent(in)  :: this     !< This EOS
-  real,              intent(in)  :: T        !< Potential temperature relative to the surface [degC]
-  real,              intent(in)  :: S        !< Salinity [PSU]
+  real,              intent(in)  :: T        !< Conservative temperature [degC]
+  real,              intent(in)  :: S        !< Absolute salinity [g kg-1] = [ppt]
   real,              intent(in)  :: pressure !< Pressure [Pa]
-  real,              intent(out) :: drho_dT  !< The partial derivative of density with potential
+  real,              intent(out) :: drho_dT  !< The partial derivative of density with conservative
                                              !! temperature [kg m-3 degC-1]
   real,              intent(out) :: drho_dS  !< The partial derivative of density with salinity,
-                                             !! in [kg m-3 PSU-1]
+                                             !! in [kg m-3 ppt-1]
   ! Local variables
   real :: zs  ! Absolute salinity [g kg-1]
   real :: zt  ! Conservative temperature [degC]
   real :: zp  ! Pressure converted to decibars [dbar]
 
-  !Conversions
-  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
-  zt = T !gsw_ct_from_pt(S,T)  !Convert potential temp to conservative temp
-  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-  !if (S < -1.0e-10) then   !Can we assume safely that this is a missing value?
-  !  drho_dT = 0.0 ; drho_dS = 0.0
-  !else
-    call gsw_rho_first_derivatives(zs, zt, zp, drho_dsa=drho_dS, drho_dct=drho_dT)
-  !endif
+  ! Conversions
+  zs = S
+  zt = T
+  zp = pressure * Pa2db      ! Convert pressure from Pascal to decibar
+  ! The following conversions are unnecessary because the arguments are already the right variables.
+  ! zs = gsw_sr_from_sp(S)   ! Uncomment to convert practical salinity to absolute salinity
+  ! zt = gsw_ct_from_pt(S,T) ! Uncomment to convert potential temp to conservative temp
+
+  call gsw_rho_first_derivatives(zs, zt, zp, drho_dsa=drho_dS, drho_dct=drho_dT)
 
 end subroutine calculate_density_derivs_elem_TEOS10
 
@@ -151,17 +122,17 @@ end subroutine calculate_density_derivs_elem_TEOS10
 elemental subroutine calculate_density_second_derivs_elem_TEOS10(this, T, S, pressure, &
                        drho_dS_dS, drho_dS_dT, drho_dT_dT, drho_dS_dP, drho_dT_dP)
   class(TEOS10_EOS), intent(in)    :: this !< This EOS
-  real,              intent(in)    :: T !< Potential temperature referenced to 0 dbar [degC]
-  real,              intent(in)    :: S !< Salinity [PSU]
+  real,              intent(in)    :: T        !< Conservative temperature [degC]
+  real,              intent(in)    :: S        !< Absolute salinity [g kg-1] = [ppt]
   real,              intent(in)    :: pressure !< Pressure [Pa]
   real,              intent(inout) :: drho_ds_ds !< Partial derivative of beta with respect
-                                                 !! to S [kg m-3 PSU-2]
+                                                 !! to S [kg m-3 ppt-2]
   real,              intent(inout) :: drho_ds_dt !< Partial derivative of beta with respect
-                                                 !! to T [kg m-3 PSU-1 degC-1]
+                                                 !! to T [kg m-3 ppt-1 degC-1]
   real,              intent(inout) :: drho_dt_dt !< Partial derivative of alpha with respect
                                                  !! to T [kg m-3 degC-2]
   real,              intent(inout) :: drho_ds_dp !< Partial derivative of beta with respect
-                                                 !! to pressure [kg m-3 PSU-1 Pa-1] = [s2 m-2 PSU-1]
+                                                 !! to pressure [kg m-3 ppt-1 Pa-1] = [s2 m-2 ppt-1]
   real,              intent(inout) :: drho_dt_dp !< Partial derivative of alpha with respect
                                                  !! to pressure [kg m-3 degC-1 Pa-1] = [s2 m-2 degC-1]
   ! Local variables
@@ -169,18 +140,16 @@ elemental subroutine calculate_density_second_derivs_elem_TEOS10(this, T, S, pre
   real :: zt  ! Conservative temperature [degC]
   real :: zp  ! Pressure converted to decibars [dbar]
 
-  !Conversions
-  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
-  zt = T !gsw_ct_from_pt(S,T)  !Convert potential temp to conservative temp
-  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-  !if (S < -1.0e-10) then   !Can we assume safely that this is a missing value?
-  !  drho_dS_dS = 0.0 ; drho_dS_dT = 0.0 ; drho_dT_dT = 0.0
-  !  drho_dS_dP = 0.0 ; drho_dT_dP = 0.0
-  !else
-    call gsw_rho_second_derivatives(zs, zt, zp, rho_sa_sa=drho_dS_dS, rho_sa_ct=drho_dS_dT, &
-                                    rho_ct_ct=drho_dT_dT, rho_sa_p=drho_dS_dP, rho_ct_p=drho_dT_dP)
-  !endif
+  ! Conversions
+  zs = S
+  zt = T
+  zp = pressure * Pa2db      ! Convert pressure from Pascal to decibar
+  ! The following conversions are unnecessary because the arguments are already the right variables.
+  ! zs = gsw_sr_from_sp(S)   ! Uncomment to convert practical salinity to absolute salinity
+  ! zt = gsw_ct_from_pt(S,T) ! Uncomment to convert potential temp to conservative temp
+
+  call gsw_rho_second_derivatives(zs, zt, zp, rho_sa_sa=drho_dS_dS, rho_sa_ct=drho_dS_dT, &
+                                  rho_ct_ct=drho_dT_dT, rho_sa_p=drho_dS_dP, rho_ct_p=drho_dT_dP)
 
 end subroutine calculate_density_second_derivs_elem_TEOS10
 
@@ -188,28 +157,27 @@ end subroutine calculate_density_second_derivs_elem_TEOS10
 !! temperature and absolute salinity, using the TEOS10 expressions.
 elemental subroutine calculate_specvol_derivs_elem_TEOS10(this, T, S, pressure, dSV_dT, dSV_dS)
   class(TEOS10_EOS),  intent(in)    :: this     !< This EOS
-  real,               intent(in)    :: T        !< Potential temperature [degC]
-  real,               intent(in)    :: S        !< Salinity [PSU]
+  real,               intent(in)    :: T        !< Conservative temperature [degC]
+  real,               intent(in)    :: S        !< Absolute salinity [g kg-1] = [ppt]
   real,               intent(in)    :: pressure !< Pressure [Pa]
   real,               intent(inout) :: dSV_dT   !< The partial derivative of specific volume with
-                                                !! potential temperature [m3 kg-1 degC-1]
+                                                !! conservative temperature [m3 kg-1 degC-1]
   real,               intent(inout) :: dSV_dS   !< The partial derivative of specific volume with
-                                                !! salinity [m3 kg-1 PSU-1]
+                                                !! absolute salinity [m3 kg-1 ppt-1]
   ! Local variables
   real :: zs  ! Absolute salinity [g kg-1]
   real :: zt  ! Conservative temperature [degC]
   real :: zp  ! Pressure converted to decibars [dbar]
 
-  !Conversions
-  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
-  zt = T !gsw_ct_from_pt(S,T)  !Convert potential temp to conservative temp
-  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-  !if (S < -1.0e-10) then   !Can we assume safely that this is a missing value?
-  !  dSV_dT = 0.0 ; dSV_dS = 0.0
-  !else
-    call gsw_specvol_first_derivatives(zs,zt,zp, v_sa=dSV_dS, v_ct=dSV_dT)
-  !endif
+  ! Conversions
+  zs = S
+  zt = T
+  zp = pressure * Pa2db      ! Convert pressure from Pascal to decibar
+  ! The following conversions are unnecessary because the arguments are already the right variables.
+  ! zs = gsw_sr_from_sp(S)   ! Uncomment to convert practical salinity to absolute salinity
+  ! zt = gsw_ct_from_pt(S,T) ! Uncomment to convert potential temp to conservative temp
+
+  call gsw_specvol_first_derivatives(zs, zt, zp, v_sa=dSV_dS, v_ct=dSV_dT)
 
 end subroutine calculate_specvol_derivs_elem_TEOS10
 
@@ -220,8 +188,8 @@ end subroutine calculate_specvol_derivs_elem_TEOS10
 !! subroutines from TEOS10 website
 elemental subroutine calculate_compress_elem_TEOS10(this, T, S, pressure, rho, drho_dp)
   class(TEOS10_EOS),  intent(in)  :: this     !< This EOS
-  real,               intent(in)  :: T        !< Potential temperature relative to the surface [degC]
-  real,               intent(in)  :: S        !< Salinity [PSU]
+  real,               intent(in)  :: T        !< Conservative temperature [degC]
+  real,               intent(in)  :: S        !< Absolute salinity [g kg-1]
   real,               intent(in)  :: pressure !< Pressure [Pa]
   real,               intent(out) :: rho      !< In situ density [kg m-3]
   real,               intent(out) :: drho_dp  !< The partial derivative of density with pressure
@@ -233,17 +201,16 @@ elemental subroutine calculate_compress_elem_TEOS10(this, T, S, pressure, rho, d
   real :: zt  ! Conservative temperature [degC]
   real :: zp  ! Pressure converted to decibars [dbar]
 
-  !Conversions
-  zs = S !gsw_sr_from_sp(S)       !Convert practical salinity to absolute salinity
-  zt = T !gsw_ct_from_pt(S,T)  !Convert potential temp to conservative temp
-  zp = pressure* Pa2db         !Convert pressure from Pascal to decibar
-  !!! #### This code originally had this "masking" line. The answer to the question below is "no" -AJA
-  !if (S < -1.0e-10) then   !Can we assume safely that this is a missing value?
-  !  rho = 1000.0 ; drho_dp = 0.0
-  !else
-    rho = gsw_rho(zs,zt,zp)
-    call gsw_rho_first_derivatives(zs,zt,zp, drho_dp=drho_dp)
-  !endif
+  ! Conversions
+  zs = S
+  zt = T
+  zp = pressure * Pa2db      ! Convert pressure from Pascal to decibar
+  ! The following conversions are unnecessary because the arguments are already the right variables.
+  ! zs = gsw_sr_from_sp(S)   ! Uncomment to convert practical salinity to absolute salinity
+  ! zt = gsw_ct_from_pt(S,T) ! Uncomment to convert potential temp to conservative temp
+
+  rho = gsw_rho(zs, zt, zp)
+  call gsw_rho_first_derivatives(zs, zt, zp, drho_dp=drho_dp)
 
 end subroutine calculate_compress_elem_TEOS10
 
