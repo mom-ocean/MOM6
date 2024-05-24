@@ -97,6 +97,9 @@ type, public :: ALE_CS ; private
                             !! values result in the use of more robust and accurate forms of
                             !! mathematically equivalent expressions.
 
+  logical :: conserve_ke    !< Apply a correction to the baroclinic velocity after remapping to
+                            !! conserve KE.
+
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
   logical :: show_call_tree !< For debugging
 
@@ -117,6 +120,8 @@ type, public :: ALE_CS ; private
   integer :: id_e_preale = -1 !< diagnostic id for interface heights before ALE.
   integer :: id_vert_remap_h = -1      !< diagnostic id for layer thicknesses used for remapping
   integer :: id_vert_remap_h_tendency = -1 !< diagnostic id for layer thickness tendency due to ALE
+  integer :: id_remap_delta_integ_u2 = -1  !< Change in depth-integrated rho0*u**2/2
+  integer :: id_remap_delta_integ_v2 = -1  !< Change in depth-integrated rho0*v**2/2
 
 end type
 
@@ -298,6 +303,11 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   if (CS%use_hybgen_unmix) &
     call init_hybgen_unmix(CS%hybgen_unmixCS, GV, US, param_file, hybgen_regridCS)
 
+  call get_param(param_file, mdl, "REMAP_VEL_CONSERVE_KE", CS%conserve_ke, &
+                 "If true, a correction is applied to the baroclinic component of velocity "//&
+                 "after remapping so that total KE is conserved. KE may not be conserved "//&
+                 "when (CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)", &
+                 default=.false.)
   call get_param(param_file, "MOM", "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
@@ -341,13 +351,23 @@ subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
 
   CS%id_dzRegrid = register_diag_field('ocean_model', 'dzRegrid', diag%axesTi, Time, &
       'Change in interface height due to ALE regridding', 'm', conversion=GV%H_to_m)
-  cs%id_vert_remap_h = register_diag_field('ocean_model', 'vert_remap_h', diag%axestl, Time, &
+  CS%id_vert_remap_h = register_diag_field('ocean_model', 'vert_remap_h', diag%axestl, Time, &
       'layer thicknesses after ALE regridding and remapping', &
       thickness_units, conversion=GV%H_to_MKS, v_extensive=.true.)
-  cs%id_vert_remap_h_tendency = register_diag_field('ocean_model', &
+  CS%id_vert_remap_h_tendency = register_diag_field('ocean_model', &
       'vert_remap_h_tendency', diag%axestl, Time, &
       'Layer thicknesses tendency due to ALE regridding and remapping', &
       trim(thickness_units)//" s-1", conversion=GV%H_to_MKS*US%s_to_T, v_extensive=.true.)
+  CS%id_remap_delta_integ_u2 = register_diag_field('ocean_model', 'ale_u2', diag%axesCu1, Time, &
+      'Rate of change in half rho0 times depth integral of squared zonal'//&
+      ' velocity by remapping. If REMAP_VEL_CONSERVE_KE is .true. then '//&
+      ' this measures the change before the KE-conserving correction is applied.', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2 * US%L_to_Z**2)
+  CS%id_remap_delta_integ_v2 = register_diag_field('ocean_model', 'ale_v2', diag%axesCv1, Time, &
+      'Rate of change in half rho0 times depth integral of squared meridional'//&
+      ' velocity by remapping. If REMAP_VEL_CONSERVE_KE is .true. then '//&
+      ' this measures the change before the KE-conserving correction is applied.', &
+      'W m-2', conversion=US%RZ3_T3_to_W_m2 * US%L_to_Z**2)
 
 end subroutine ALE_register_diags
 
@@ -1020,7 +1040,8 @@ end subroutine ALE_remap_set_h_vel_OBC
 !! This routine may be called during initialization of the model at time=0, to
 !! remap initial conditions to the model grid.  It is also called during a
 !! time step to update the state.
-subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u, v, debug)
+subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u, v, debug, &
+                                dt, allow_preserve_variance)
   type(ALE_CS),                              intent(in)    :: CS        !< ALE control structure
   type(ocean_grid_type),                     intent(in)    :: G         !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV        !< Ocean vertical grid structure
@@ -1041,6 +1062,9 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                                              intent(inout) :: v         !< Meridional velocity [L T-1 ~> m s-1]
   logical,                         optional, intent(in)    :: debug     !< If true, show the call tree
+  real,                            optional, intent(in)    :: dt        !< time step for diagnostics [T ~> s]
+  logical,                         optional, intent(in)    :: allow_preserve_variance !< If true, enables ke-conserving
+                                                                                      !! correction
 
   ! Local variables
   real :: h_mask_vel ! A depth below which the thicknesses at a velocity point are masked out [H ~> m or kg m-2]
@@ -1051,12 +1075,33 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
   real :: h1(GV%ke)     ! A column of source grid layer thicknesses [H ~> m or kg m-2]
   real :: h2(GV%ke)     ! A column of target grid layer thicknesses [H ~> m or kg m-2]
   real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
+  real :: rescale_coef  ! Factor that scales the baroclinic velocity to conserve ke [nondim]
+  real :: u_bt, v_bt    ! Depth-averaged velocity components [L T-1 ~> m s-1]
+  real :: ke_c_src, ke_c_tgt ! \int [u_c or v_c]^2 dz on src and tgt grids [H L2 T-2 ~> m3 s-2]
+  real, dimension(SZIB_(G),SZJ_(G)) :: du2h_tot  ! The rate of change of vertically integrated
+                                                 ! 0.5 * rho0 *  u**2 [R Z L2 T-3 ~> W m-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: dv2h_tot  ! The rate of change of vertically integrated
+                                                 ! 0.5 * rho0 *  v**2 [R Z L2 T-3 ~> W m-2]
+  real :: u2h_tot, v2h_tot   ! The vertically integrated u**2 and v**2 [H L2 T-2 ~> m3 s-2 or kg s-2]
+  real :: I_dt               ! 1 / dt [T-1 ~> s-1]
+  logical :: variance_option ! Contains the value of allow_preserve_variance when present, else false
   logical :: show_call_tree
   integer :: i, j, k, nz
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_remap_velocities()")
+
+  ! Setup related to KE conservation
+  variance_option = .false.
+  if (present(allow_preserve_variance)) variance_option=allow_preserve_variance
+  if (present(dt)) I_dt = 1.0 / dt
+
+  if (CS%id_remap_delta_integ_u2>0) du2h_tot(:,:) = 0.
+  if (CS%id_remap_delta_integ_v2>0) dv2h_tot(:,:) = 0.
+
+  if (((CS%id_remap_delta_integ_u2>0) .or. (CS%id_remap_delta_integ_v2>0)) .and. .not.present(dt))&
+    call MOM_error(FATAL, "ALE KE diagnostics requires passing dt into ALE_remap_velocities")
 
   if (CS%answer_date >= 20190101) then
     h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
@@ -1070,7 +1115,9 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
 
   ! --- Remap u profiles from the source vertical grid onto the new target grid.
 
-  !$OMP parallel do default(shared) private(h1,h2,u_src,h_mask_vel,u_tgt)
+  !$OMP parallel do default(shared) private(h1,h2,u_src,h_mask_vel,u_tgt, &
+  !$OMP                                     u_bt,ke_c_src,ke_c_tgt,rescale_coef, &
+  !$OMP                                     u2h_tot,v2h_tot)
   do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (G%mask2dCu(I,j)>0.) then
     ! Make a 1-d copy of the start and final grids and the source velocity
     do k=1,nz
@@ -1079,8 +1126,46 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
       u_src(k) = u(I,j,k)
     enddo
 
+    if (CS%id_remap_delta_integ_u2>0) then
+      u2h_tot = 0.
+      do k=1,nz
+        u2h_tot = u2h_tot - h1(k) * (u_src(k)**2)
+      enddo
+    endif
+
     call remapping_core_h(CS%vel_remapCS, nz, h1, u_src, nz, h2, u_tgt, &
                           h_neglect, h_neglect_edge)
+
+    if (variance_option .and. CS%conserve_ke) then
+    ! Conserve ke_u by correcting baroclinic component.
+    ! Assumes total depth doesn't change during remap, and
+    ! that \int u(z) dz doesn't change during remap.
+      ! First get barotropic component
+      u_bt = 0.0
+      do k=1,nz
+        u_bt = u_bt + h2(k) * u_tgt(k) ! Dimensions [H L T-1]
+      enddo
+      u_bt = u_bt / (sum(h2(1:nz)) + h_neglect) ! Dimensions return to [L T-1]
+      ! Next get baroclinic ke = \int (u-u_bt)^2 from source and target
+      ke_c_src = 0.0
+      ke_c_tgt = 0.0
+      do k=1,nz
+        ke_c_src = ke_c_src + h1(k) * (u_src(k) - u_bt)**2
+        ke_c_tgt = ke_c_tgt + h2(k) * (u_tgt(k) - u_bt)**2
+      enddo
+      ! Next rescale baroclinic component on target grid to conserve ke
+      rescale_coef = min(1.25, sqrt(ke_c_src / (ke_c_tgt + 1.E-19)))
+      do k=1,nz
+        u_tgt(k) = u_bt + rescale_coef * (u_tgt(k) - u_bt)
+      enddo
+    endif
+
+    if (CS%id_remap_delta_integ_u2>0) then
+      do k=1,nz
+        u2h_tot = u2h_tot + h2(k) * (u_tgt(k)**2)
+      enddo
+      du2h_tot(I,j) = GV%H_to_RZ * u2h_tot * I_dt
+    endif
 
     if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) &
       call mask_near_bottom_vel(u_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
@@ -1091,12 +1176,16 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
     enddo !k
   endif ; enddo ; enddo
 
+  if (CS%id_remap_delta_integ_u2>0) call post_data(CS%id_remap_delta_integ_u2, du2h_tot, CS%diag)
+
   if (show_call_tree) call callTree_waypoint("u remapped (ALE_remap_velocities)")
 
 
   ! --- Remap v profiles from the source vertical grid onto the new target grid.
 
-  !$OMP parallel do default(shared) private(h1,h2,v_src,h_mask_vel,v_tgt)
+  !$OMP parallel do default(shared) private(h1,h2,v_src,h_mask_vel,v_tgt, &
+  !$OMP                                     v_bt,ke_c_src,ke_c_tgt,rescale_coef, &
+  !$OMP                                     u2h_tot,v2h_tot)
   do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (G%mask2dCv(i,J)>0.) then
 
     do k=1,nz
@@ -1105,8 +1194,46 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
       v_src(k) = v(i,J,k)
     enddo
 
+    if (CS%id_remap_delta_integ_v2>0) then
+      v2h_tot = 0.
+      do k=1,nz
+        v2h_tot = v2h_tot - h1(k) * (v_src(k)**2)
+      enddo
+    endif
+
     call remapping_core_h(CS%vel_remapCS, nz, h1, v_src, nz, h2, v_tgt, &
                           h_neglect, h_neglect_edge)
+
+    if (variance_option .and. CS%conserve_ke) then
+    ! Conserve ke_v by correcting baroclinic component.
+    ! Assumes total depth doesn't change during remap, and
+    ! that \int v(z) dz doesn't change during remap.
+      ! First get barotropic component
+      v_bt = 0.0
+      do k=1,nz
+        v_bt = v_bt + h2(k) * v_tgt(k) ! Dimensions [H L T-1]
+      enddo
+      v_bt = v_bt / (sum(h2(1:nz)) + h_neglect) ! Dimensions return to [L T-1]
+      ! Next get baroclinic ke = \int (u-u_bt)^2 from source and target
+      ke_c_src = 0.0
+      ke_c_tgt = 0.0
+      do k=1,nz
+        ke_c_src = ke_c_src + h1(k) * (v_src(k) - v_bt)**2
+        ke_c_tgt = ke_c_tgt + h2(k) * (v_tgt(k) - v_bt)**2
+      enddo
+      ! Next rescale baroclinic component on target grid to conserve ke
+      rescale_coef = min(1.25, sqrt(ke_c_src / (ke_c_tgt + 1.E-19)))
+      do k=1,nz
+        v_tgt(k) = v_bt + rescale_coef * (v_tgt(k) - v_bt)
+      enddo
+    endif
+
+    if (CS%id_remap_delta_integ_v2>0) then
+      do k=1,nz
+        v2h_tot = v2h_tot + h2(k) * (v_tgt(k)**2)
+      enddo
+      dv2h_tot(I,j) = GV%H_to_RZ * v2h_tot * I_dt
+    endif
 
     if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) then
       call mask_near_bottom_vel(v_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
@@ -1117,6 +1244,8 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
       v(i,J,k) = v_tgt(k)
     enddo !k
   endif ; enddo ; enddo
+
+  if (CS%id_remap_delta_integ_v2>0) call post_data(CS%id_remap_delta_integ_v2, dv2h_tot, CS%diag)
 
   if (show_call_tree) call callTree_waypoint("v remapped (ALE_remap_velocities)")
   if (show_call_tree) call callTree_leave("ALE_remap_velocities()")
