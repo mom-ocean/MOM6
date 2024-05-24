@@ -133,9 +133,6 @@ TIME ?= time
 WORKSPACE ?= .
 
 # Set directories for build/ and work/
-#BUILD ?= $(WORKSPACE)build
-#DEPS ?= $(BUILD)/deps
-#WORK ?= $(WORKSPACE)work
 BUILD ?= $(WORKSPACE)/build
 DEPS ?= $(BUILD)/deps
 WORK ?= $(WORKSPACE)/work
@@ -207,34 +204,6 @@ else
 endif
 
 
-# List of source files to link this Makefile's dependencies to model Makefiles
-# Assumes a depth of two, and the following extensions: F90 inc c h
-# (1): Root directory
-# NOTE: extensions could be a second variable
-SOURCE = \
-  $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
-
-MOM_SOURCE = \
-  $(call SOURCE,../src) \
-  $(wildcard ../config_src/drivers/solo_driver/*.F90) \
-  $(wildcard ../config_src/ext*/*/*.F90)
-
-TARGET_SOURCE = \
-  $(call SOURCE,$(BUILD)/target_codebase/src) \
-  $(wildcard $(BUILD)/target_codebase/config_src/drivers/solo_driver/*.F90) \
-  $(wildcard $(BUILD)target_codebase/config_src/ext*/*.F90)
-
-ifeq ($(FRAMEWORK), fms1)
-  MOM_SOURCE += $(wildcard ../config_src/infra/FMS1/*.F90)
-  TARGET_SOURCE += $(wildcard $(BUILD)/target_codebase/config_src/infra/FMS1/*.F90)
-else
-  MOM_SOURCE +=$(wildcard ../config_src/infra/FMS2/*.F90)
-  TARGET_SOURCE += $(wildcard $(BUILD)/target_codebase/config_src/infra/FMS2/*.F90)
-endif
-
-FMS_SOURCE = $(call SOURCE,$(DEPS)/fms/src)
-
-
 ## Rules
 
 .PHONY: all build.regressions build.prof
@@ -297,11 +266,21 @@ $(BUILD)/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 $(BUILD)/unit/test_%: $(BUILD)/unit/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
 $(BUILD)/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
+
 $(BUILD)/timing/time_%: $(BUILD)/timing/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
 $(BUILD)/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
+
 $(BUILD)/%/MOM6: $(BUILD)/%/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+
+# Target codebase should use its own build system
+$(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
+	$(MAKE) -C $(TARGET_CODEBASE)/.testing build/symmetric/MOM6
+
+$(BUILD)/target: | $(TARGET_CODEBASE)
+	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/symmetric $@
+
 FORCE:
 
 
@@ -333,27 +312,12 @@ $(BUILD)/%/configure.ac: ../ac/configure.ac | $(BUILD)/%/
 $(BUILD)/%/m4/: ../ac/m4/ | $(BUILD)/%/
 	cp -r ../ac/m4 $(@D)
 
-ALL_EXECS = symmetric asymmetric repro openmp target opt opt_target coupled \
-  nuopc cov unit timing
+ALL_EXECS = symmetric asymmetric repro openmp opt opt_target coupled nuopc \
+  cov unit timing
 $(foreach b,$(ALL_EXECS),$(BUILD)/$(b)/):
 	mkdir -p $@
 
 # Fetch the regression target codebase
-
-$(BUILD)/target/config.status: $(BUILD)/target/configure $(DEPS)/lib/libFMS.a
-	cd $(@D) && $(MOM_ENV) ./configure -n \
-	  --srcdir=$(abspath $(BUILD))/target_codebase/ac $(MOM_ACFLAGS) \
-	|| (cat config.log && false)
-
-$(BUILD)/target/Makefile.in: | $(TARGET_CODEBASE) $(BUILD)/target/
-	cp $(TARGET_CODEBASE)/ac/Makefile.in $(@D)
-
-$(BUILD)/target/configure.ac: | $(TARGET_CODEBASE) $(BUILD)/target/
-	cp $(TARGET_CODEBASE)/ac/configure.ac $(@D)
-
-$(BUILD)/target/m4/: | $(TARGET_CODEBASE) $(BUILD)/target/
-	cp -r $(TARGET_CODEBASE)/ac/m4 $(@D)
-
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
 	cd $@ && git checkout --recurse-submodules $(MOM_TARGET_BRANCH)
