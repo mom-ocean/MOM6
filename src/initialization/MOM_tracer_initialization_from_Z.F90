@@ -200,8 +200,10 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
     enddo ; enddo
 
     if (h_is_in_Z_units) then
+      ! Because h is in units of [Z ~> m], dzSrc is already in the right units, but we need to
+      ! specify negligible thickness values with the right units.
       dz_neglect = set_dz_neglect(GV, US, remap_answer_date, dz_neglect_edge)
-      call ALE_remap_scalar(remapCS, G, GV, kd, hSrc, tr_z, h, tr, all_cells=.false., answer_date=remap_answer_date, &
+      call ALE_remap_scalar(remapCS, G, GV, kd, dzSrc, tr_z, h, tr, all_cells=.false., answer_date=remap_answer_date, &
                             H_neglect=dz_neglect, H_neglect_edge=dz_neglect_edge)
     else
       ! Equation of state data is not available, so a simpler rescaling will have to suffice,
