@@ -20,7 +20,6 @@
 #
 # General test configuration:
 #   MPIRUN                  MPI job launcher (mpirun, srun, etc)
-#   FRAMEWORK               Model framework (fms1 or fms2)
 #   DO_REPRO_TESTS          Enable production ("repro") testing equivalence
 #   DO_REGRESSION_TESTS     Enable regression tests (usually dev/gfdl)
 #   DO_COVERAGE             Enable code coverage and generate .gcov reports
@@ -74,8 +73,11 @@ AC_SRCDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../ac
 # User-defined configuration
 -include config.mk
 
-# Set the infra framework
-FRAMEWORK ?= fms2
+# Set the FMS library
+FMS_COMMIT ?= 2023.03
+FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
+export FMS_COMMIT
+export FMS_URL
 
 # Set the MPI launcher here
 # TODO: This needs more automated configuration

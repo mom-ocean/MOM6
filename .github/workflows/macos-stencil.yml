@@ -11,7 +11,6 @@ jobs:
       CC: gcc
       FC: gfortran
       FMS_COMMIT: 2019.01.03
-      FRAMEWORK: fms1
 
     defaults:
       run:
