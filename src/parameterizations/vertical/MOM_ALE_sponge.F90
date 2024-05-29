@@ -23,6 +23,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer
 use MOM_interpolate,   only : init_external_field, get_external_field_info, time_interp_external_init
 use MOM_interpolate,   only : external_field
+use MOM_io,            only : axis_info
 use MOM_remapping,     only : remapping_cs, remapping_core_h, initialize_remapping
 use MOM_spatial_means, only : global_i_mean
 use MOM_time_manager,  only : time_type
@@ -86,6 +87,7 @@ type :: p2d ; private
   character(len=:), allocatable  :: name  !< The name of the input field
   character(len=:), allocatable  :: long_name !< The long name of the input field
   character(len=:), allocatable  :: unit !< The unit of the input field
+  type(axis_info),  allocatable  :: axes_data(:) !< Axis types for the input field
 end type p2d
 
 !> ALE sponge control structure
@@ -770,7 +772,7 @@ subroutine set_up_ALE_sponge_field_varying(filename, fieldname, Time, G, GV, US,
   CS%Ref_val(CS%fldno)%long_name = long_name
   CS%Ref_val(CS%fldno)%unit = unit
   fld_sz(1:4) = -1
-  call get_external_field_info(CS%Ref_val(CS%fldno)%field, size=fld_sz)
+  call get_external_field_info(CS%Ref_val(CS%fldno)%field, size=fld_sz, axes=CS%Ref_val(CS%fldno)%axes_data)
   nz_data = fld_sz(3)
   CS%Ref_val(CS%fldno)%nz_data = nz_data !< individual sponge fields may reside on a different vertical grid
   CS%Ref_val(CS%fldno)%num_tlevs = fld_sz(4)
@@ -868,7 +870,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
     CS%Ref_val_u%field = init_external_field(filename_u, fieldname_u)
   endif
   fld_sz(1:4) = -1
-  call get_external_field_info(CS%Ref_val_u%field, size=fld_sz)
+  call get_external_field_info(CS%Ref_val_u%field, size=fld_sz, axes=CS%Ref_val_u%axes_data)
   CS%Ref_val_u%nz_data = fld_sz(3)
   CS%Ref_val_u%num_tlevs = fld_sz(4)
   CS%Ref_val_u%scale = US%m_s_to_L_T ; if (present(scale)) CS%Ref_val_u%scale = scale
@@ -879,7 +881,7 @@ subroutine set_up_ALE_sponge_vel_field_varying(filename_u, fieldname_u, filename
     CS%Ref_val_v%field = init_external_field(filename_v, fieldname_v)
   endif
   fld_sz(1:4) = -1
-  call get_external_field_info(CS%Ref_val_v%field, size=fld_sz)
+  call get_external_field_info(CS%Ref_val_v%field, size=fld_sz, axes=CS%Ref_val_v%axes_data)
   CS%Ref_val_v%nz_data = fld_sz(3)
   CS%Ref_val_v%num_tlevs = fld_sz(4)
   CS%Ref_val_v%scale = US%m_s_to_L_T ; if (present(scale)) CS%Ref_val_v%scale = scale
@@ -963,7 +965,7 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
       call horiz_interp_and_extrap_tracer(CS%Ref_val(m)%field, Time, G, sp_val, &
                 mask_z, z_in, z_edges_in, missing_value, &
                 scale=CS%Ref_val(m)%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
-                answer_date=CS%hor_regrid_answer_date)
+                answer_date=CS%hor_regrid_answer_date, axes=CS%Ref_val(m)%axes_data)
       allocate( dz_src(nz_data) )
       allocate( tmpT1d(nz_data) )
       do c=1,CS%num_col
@@ -1053,7 +1055,7 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
       call horiz_interp_and_extrap_tracer(CS%Ref_val_u%field, Time, G, sp_val, &
                 mask_z, z_in, z_edges_in, missing_value, &
                 scale=CS%Ref_val_u%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z, &
-                answer_date=CS%hor_regrid_answer_date)
+                answer_date=CS%hor_regrid_answer_date, axes=CS%Ref_val_u%axes_data)
 
       ! Initialize mask_z halos to zero before pass_var, in case of no update
       mask_z(G%isc-1, G%jsc:G%jec, :) = 0.
@@ -1101,7 +1103,7 @@ subroutine apply_ALE_sponge(h, tv, dt, G, GV, US, CS, Time)
       call horiz_interp_and_extrap_tracer(CS%Ref_val_v%field, Time, G, sp_val, &
                 mask_z, z_in, z_edges_in, missing_value, &
                 scale=CS%Ref_val_v%scale, spongeOnGrid=CS%SpongeDataOngrid, m_to_Z=US%m_to_Z,&
-                answer_date=CS%hor_regrid_answer_date)
+                answer_date=CS%hor_regrid_answer_date, axes=CS%Ref_val_v%axes_data)
       ! Initialize mask_z halos to zero before pass_var, in case of no update
       mask_z(G%isc:G%iec, G%jsc-1, :) = 0.
       mask_z(G%isc:G%iec, G%jec+1, :) = 0.

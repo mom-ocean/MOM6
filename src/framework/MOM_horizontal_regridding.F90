@@ -627,7 +627,8 @@ end subroutine horiz_interp_and_extrap_tracer_record
 subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
                                                  z_in, z_edges_in, missing_value, scale, &
                                                  homogenize, spongeOngrid, m_to_Z, &
-                                                 answers_2018, tr_iter_tol, answer_date)
+                                                 answers_2018, tr_iter_tol, answer_date, &
+                                                 axes)
 
   type(external_field), intent(in)     :: field      !< Handle for the time interpolated field
   type(time_type),       intent(in)    :: Time       !< A FMS time type
@@ -663,6 +664,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
                                                      !! Dates before 20190101 give the same  answers
                                                      !! as the code did in late 2018, while later versions
                                                      !! add parentheses for rotational symmetry.
+  type(axis_info), allocatable, dimension(:), optional, intent(inout) :: axes !< Axis types for the input data
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units of the
@@ -742,7 +744,16 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
 
   call cpu_clock_begin(id_clock_read)
 
-  call get_external_field_info(field, size=fld_sz, axes=axes_data, missing=missing_val_in)
+  if (present(axes) .and. allocated(axes)) then
+    call get_external_field_info(field, size=fld_sz, missing=missing_val_in)
+    axes_data = axes
+  else
+    call get_external_field_info(field, size=fld_sz, axes=axes_data, missing=missing_val_in)
+    if (present(axes)) then
+      allocate(axes(4))
+      axes = axes_data
+    endif
+  endif
   missing_value = scale*missing_val_in
 
   verbosity = MOM_get_verbosity()
