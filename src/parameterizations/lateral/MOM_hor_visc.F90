@@ -60,6 +60,12 @@ type, public :: hor_visc_CS ; private
                              !! the viscosity bounds to the theoretical maximum
                              !! for stability without considering other terms [nondim].
                              !! The default is 0.8.
+  logical :: backscatter_underbound !< If true, the bounds on the biharmonic viscosity are allowed
+                             !! to increase where the Laplacian viscosity is negative (due to
+                             !! backscatter parameterizations) beyond the largest timestep-dependent
+                             !! stable values of biharmonic viscosity when no Laplacian viscosity is
+                             !! applied.  The default is true for historical reasons, but this option
+                             !! probably should not be used as it can lead to numerical instabilities.
   logical :: Smagorinsky_Kh  !< If true, use Smagorinsky nonlinear eddy
                              !! viscosity. KH is the background value.
   logical :: Smagorinsky_Ah  !< If true, use a biharmonic form of Smagorinsky
@@ -382,6 +388,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   real :: h_neglect  ! thickness so small it can be lost in roundoff and so neglected [H ~> m or kg m-2]
   real :: h_neglect3 ! h_neglect^3 [H3 ~> m3 or kg3 m-6]
   real :: h_min      ! Minimum h at the 4 neighboring velocity points [H ~> m]
+  real :: Kh_max_here ! The local maximum Laplacian viscosity for stability [L2 T-1 ~> m2 s-1]
   real :: RoScl     ! The scaling function for MEKE source term [nondim]
   real :: FatH      ! abs(f) at h-point for MEKE source term [T-1 ~> s-1]
   real :: local_strain ! Local variable for interpolating computed strain rates [T-1 ~> s-1].
@@ -628,8 +635,8 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
   !$OMP   vort_xy, vort_xy_dx, vort_xy_dy, div_xx, div_xx_dx, div_xx_dy, &
   !$OMP   grad_div_mag_h, grad_div_mag_q, grad_vort_mag_h, grad_vort_mag_q, &
   !$OMP   grad_vort, grad_vort_qg, grad_vort_mag_h_2d, grad_vort_mag_q_2d, &
-  !$OMP   sh_xx_sq, sh_xy_sq, &
-  !$OMP   meke_res_fn, Shear_mag, Shear_mag_bc, vert_vort_mag, h_min, hrat_min, visc_bound_rem, &
+  !$OMP   sh_xx_sq, sh_xy_sq, meke_res_fn, Shear_mag, Shear_mag_bc, vert_vort_mag, &
+  !$OMP   h_min, hrat_min, visc_bound_rem, Kh_max_here, &
   !$OMP   grid_Ah, grid_Kh, d_Del2u, d_Del2v, d_str, &
   !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
   !$OMP   dDel2vdx, dDel2udy, Del2vort_q, Del2vort_h, KE, &
@@ -1064,12 +1071,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         h_min = min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1))
         hrat_min(i,j) = min(1.0, h_min / (h(i,j,k) + h_neglect))
       enddo ; enddo
-
-      if (CS%better_bound_Kh) then
-        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
-          visc_bound_rem(i,j) = 1.0
-        enddo ; enddo
-      endif
     endif
 
     if (CS%Laplacian) then
@@ -1153,14 +1154,20 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       endif
 
       ! Newer method of bounding for stability
-      if (CS%better_bound_Kh) then
+      if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
-          if (Kh(i,j) >= hrat_min(i,j) * CS%Kh_Max_xx(i,j)) then
+          visc_bound_rem(i,j) = 1.0
+          Kh_max_here = hrat_min(i,j) * CS%Kh_Max_xx(i,j)
+          if (Kh(i,j) >= Kh_max_here) then
             visc_bound_rem(i,j) = 0.0
-            Kh(i,j) = hrat_min(i,j) * CS%Kh_Max_xx(i,j)
-          else ! if (Kh(i,j) > 0.0) then !### Change this to avoid a zero denominator.
-            visc_bound_rem(i,j) = 1.0 - Kh(i,j) / (hrat_min(i,j) * CS%Kh_Max_xx(i,j))
+            Kh(i,j) = Kh_max_here
+          elseif ((Kh(i,j) > 0.0) .or. (CS%backscatter_underbound .and. (Kh_max_here > 0.0))) then
+            visc_bound_rem(i,j) = 1.0 - Kh(i,j) / Kh_max_here
           endif
+        enddo ; enddo
+      elseif (CS%better_bound_Kh) then
+        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+          Kh(i,j) = min(Kh(i,j), hrat_min(i,j) * CS%Kh_Max_xx(i,j))
         enddo ; enddo
       endif
 
@@ -1428,11 +1435,6 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
         hrat_min(I,J) = min(1.0, h_min / (hq(I,J) + h_neglect))
       enddo ; enddo
 
-      if (CS%better_bound_Kh) then
-        do J=js-1,Jeq ; do I=is-1,Ieq
-          visc_bound_rem(I,J) = 1.0
-        enddo ; enddo
-      endif
     endif
 
     if (CS%no_slip) then
@@ -1543,13 +1545,17 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
           Kh(I,J) = Kh(I,J) + CS%Kh_aniso * CS%n1n2_q(I,J)**2
 
         ! Newer method of bounding for stability
-        if (CS%better_bound_Kh) then
-          if (Kh(I,J) >= hrat_min(I,J) * CS%Kh_Max_xy(I,J)) then
+        if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
+          visc_bound_rem(I,J) = 1.0
+          Kh_max_here = hrat_min(I,J) * CS%Kh_Max_xy(I,J)
+          if (Kh(I,J) >= Kh_max_here) then
             visc_bound_rem(I,J) = 0.0
-            Kh(I,J) = hrat_min(I,J) * CS%Kh_Max_xy(I,J)
-          elseif (hrat_min(I,J)*CS%Kh_Max_xy(I,J)>0.) then !### Change to elseif (Kh(I,J) > 0.0) then
-            visc_bound_rem(I,J) = 1.0 - Kh(I,J) / (hrat_min(I,J) * CS%Kh_Max_xy(I,J))
+            Kh(I,J) = Kh_max_here
+          elseif ((Kh(I,J) > 0.0) .or. (CS%backscatter_underbound .and. (Kh_max_here > 0.0))) then
+            visc_bound_rem(I,J) = 1.0 - Kh(I,J) / Kh_max_here
           endif
+        elseif (CS%better_bound_Kh) then
+          Kh(I,J) = min(Kh(I,J), hrat_min(I,J) * CS%Kh_Max_xy(I,J))
         endif
 
         ! Leith+E doesn't recompute Kh at q points, it just interpolates it from h to q points
@@ -2207,6 +2213,16 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If nonzero, the biharmonic coefficient is scaled "//&
                  "so that the biharmonic Reynolds number is equal to this.", &
                  units="nondim", default=0.0, do_not_log=.not.CS%biharmonic)
+
+  call get_param(param_file, mdl, "BACKSCATTER_UNDERBOUND", CS%backscatter_underbound, &
+                 "If true, the bounds on the biharmonic viscosity are allowed to "//&
+                 "increase where the Laplacian viscosity is negative (due to backscatter "//&
+                 "parameterizations) beyond the largest timestep-dependent stable values of "//&
+                 "biharmonic viscosity when no Laplacian viscosity is applied.  The default "//&
+                 "is true for historical reasons, but this option probably should not be used "//&
+                 "because it can contribute to numerical instabilities.", &
+                 default=.true., do_not_log=.not.((CS%better_bound_Kh).and.(CS%better_bound_Ah)))
+                 !### The default for BACKSCATTER_UNDERBOUND should be false.
 
   call get_param(param_file, mdl, "SMAG_BI_CONST",Smag_bi_const, &
                  "The nondimensional biharmonic Smagorinsky constant, "//&
