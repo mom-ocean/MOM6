@@ -2007,7 +2007,8 @@ end subroutine step_offline
 !! initializing the ocean state variables, and initializing subsidiary modules
 subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                           Time_in, offline_tracer_mode, input_restart_file, diag_ptr, &
-                          count_calls, tracer_flow_CSp,  ice_shelf_CSp, waves_CSp, ensemble_num)
+                          count_calls, tracer_flow_CSp,  ice_shelf_CSp, waves_CSp, ensemble_num, &
+                          calve_ice_shelf_bergs)
   type(time_type), target,   intent(inout) :: Time        !< model time, set in this routine
   type(time_type),           intent(in)    :: Time_init   !< The start time for the coupled model's calendar
   type(param_file_type),     intent(out)   :: param_file  !< structure indicating parameter file to parse
@@ -2030,6 +2031,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                    optional, pointer       :: Waves_CSp   !< An optional pointer to a wave property CS
   integer, optional :: ensemble_num                       !< Ensemble index provided by the cap (instead of FMS
                                                           !! ensemble manager)
+  logical, optional :: calve_ice_shelf_bergs !< If true, will add point iceberg calving variables to the ice
+                                             !! shelf restart
   ! local variables
   type(ocean_grid_type),  pointer :: G => NULL()    ! A pointer to the metric grid use for the run
   type(ocean_grid_type),  pointer :: G_in => NULL() ! Pointer to the input grid
@@ -2043,6 +2046,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   type(MOM_restart_CS),   pointer :: restart_CSp => NULL()
   character(len=4), parameter :: vers_num = 'v2.0'
   integer :: turns   ! Number of grid quarter-turns
+  logical :: point_calving
 
   ! Initial state on the input index map
   real, allocatable         :: u_in(:,:,:) ! Initial zonal velocities [L T-1 ~> m s-1]
@@ -2903,6 +2907,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! Consider removing this later?
   G%ke = GV%ke
 
+  if (use_ice_shelf) then
+    point_calving=.false.; if (present(calve_ice_shelf_bergs)) point_calving=calve_ice_shelf_bergs
+  endif
+
   if (CS%rotate_index) then
     G_in%ke = GV%ke
 
@@ -2928,7 +2936,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       ! when using an ice shelf. Passing the ice shelf diagnostics CS from MOM
       ! for legacy reasons. The actual ice shelf diag CS is internal to the ice shelf
       call initialize_ice_shelf(param_file, G_in, Time, ice_shelf_CSp, diag_ptr, &
-                                Time_init, dirs%output_directory)
+                                Time_init, dirs%output_directory, calve_ice_shelf_bergs=point_calving)
       allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
       allocate(mass_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed), source=0.0)
@@ -2987,7 +2995,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       deallocate(frac_shelf_in,mass_shelf_in)
   else
     if (use_ice_shelf) then
-      call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr, Time_init, dirs%output_directory)
+      call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr, Time_init, &
+                               dirs%output_directory, calve_ice_shelf_bergs=point_calving)
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed), source=0.0)
       allocate(CS%mass_shelf(isd:ied, jsd:jed), source=0.0)
       call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h, CS%mass_shelf)
