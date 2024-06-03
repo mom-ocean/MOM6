@@ -1353,6 +1353,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   type(group_pass_type) :: pass_av_h_uvh
   logical :: debug_truncations
   logical :: read_uv, read_h2
+  logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
@@ -1420,11 +1421,18 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   call get_param(param_file, mdl, "DEBUG_OBC", CS%debug_OBC, default=.false.)
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
+  call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, &
+                 "If true, visc_rem_[uv] in split mode is incorrectly calculated or accounted "//&
+                 "for in three places. This parameter controls the defaults of three individual "//&
+                 "flags, VISC_REM_TIMESTEP_FIX in MOM_dynamics_split_RK2(b), "//&
+                 "VISC_REM_BT_WEIGHT_FIX in MOM_barotropic, and VISC_REM_CONT_HVEL_FIX in "//&
+                 "MOM_continuity_PPM. Eventually, the three individual flags should be removed "//&
+                 "after tests and the default of VISC_REM_BUG should be to False.", default=.true.)
   call get_param(param_file, mdl, "VISC_REM_TIMESTEP_FIX", CS%visc_rem_dt_fix, &
                  "If true, use dt rather than dt_pred in vertvisc_remnant() at the end of "//&
                  "predictor stage for the following continuity() call and btstep() call "//&
                  "in the corrector step. This flag should be used with "//&
-                 "VISC_REM_BT_WEIGHT_FIX.", default=.false.)
+                 "VISC_REM_BT_WEIGHT_FIX.", default=.not.visc_rem_bug)
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source=0.0)
   allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source=0.0)

@@ -1062,7 +1062,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       Iwt_u_tot(I,j) = Iwt_u_tot(I,j) + wt_u(I,j,k)
     enddo ; enddo ; enddo
     do j=js,je ; do I=is-1,ie
-      Iwt_u_tot(I,j) = G%mask2dCu(I,j) / (Iwt_u_tot(I,j) + h_neglect)
+      if (abs(Iwt_u_tot(I,j)) > 0.0 ) Iwt_u_tot(I,j) = G%mask2dCu(I,j) / Iwt_u_tot(I,j)
     enddo ; enddo
     do k=1,nz ; do j=js,je ; do I=is-1,ie
       wt_u(I,j,k) = wt_u(I,j,k) * Iwt_u_tot(I,j)
@@ -1073,7 +1073,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       Iwt_v_tot(i,J) = Iwt_v_tot(i,J) + wt_v(i,J,k)
     enddo ; enddo ; enddo
     do J=js-1,je ; do i=is,ie
-      Iwt_v_tot(i,J) = G%mask2dCv(i,J) / (Iwt_v_tot(i,J) + h_neglect)
+      if (abs(Iwt_v_tot(i,J)) > 0.0 ) Iwt_v_tot(i,J) = G%mask2dCv(i,J) / Iwt_v_tot(i,J)
     enddo ; enddo
     do k=1,nz ; do J=js-1,je ; do i=is,ie
       wt_v(i,J,k) = wt_v(i,J,k) * Iwt_v_tot(i,J)
@@ -4464,6 +4464,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: use_BT_cont_type
   logical :: use_tides
+  logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -4612,10 +4613,12 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
+  call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, default=.true., do_not_log=.true.)
   call get_param(param_file, mdl, "VISC_REM_BT_WEIGHT_FIX", CS%wt_uv_fix, &
                  "If true, use a normalized weight function for vertical averages of "//&
-                 "baroclinic velocity and forcing. This flag should be used with "//&
-                 "VISC_REM_TIMESTEP_FIX.", default=.false.)
+                 "baroclinic velocity and forcing. Default of this flag is set by "//&
+                 "VISC_REM_BUG. This flag should be used with VISC_REM_TIMESTEP_FIX.", &
+                 default=.not.visc_rem_bug)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &

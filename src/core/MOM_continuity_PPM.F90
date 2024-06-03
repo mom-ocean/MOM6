@@ -2713,6 +2713,7 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
   !> This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
+  logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
 
   CS%initialized = .true.
 
@@ -2773,9 +2774,11 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the marginal face areas from the continuity "//&
                  "solver for use as the weights in the barotropic solver. "//&
                  "Otherwise use the transport averaged areas.", default=.true.)
+  call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, default=.true., do_not_log=.true.)
   call get_param(param_file, mdl, "VISC_REM_CONT_HVEL_FIX", CS%visc_rem_hvel_fix, &
                  "If true, velocity cell thickness h_[uv] from the continuity solver "//&
-                 "is not multiplied by visc_rem_[uv].", default=.false.)
+                 "is not multiplied by visc_rem_[uv]. Default of this flag is set by "//&
+                 "VISC_REM_BUG.", default=.not.visc_rem_bug)
   CS%diag => diag
 
   id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)
