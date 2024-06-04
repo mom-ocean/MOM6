@@ -176,7 +176,7 @@ pure function descale(x, e_a, s_a) result(a)
     ! Biased exponent of x
 
   ! Apply the corrected exponent and sign to x.
-  xb = transfer(x, 1_8)
+  xb = transfer(x, 1_int64)
   e_x = ibits(xb, expbit, explen)
   call mvbits(e_a + e_x, 0, explen, xb, expbit)
   call mvbits(s_a, 0, 1, xb, signbit)
