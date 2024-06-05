@@ -337,8 +337,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   enddo ! end of j-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI, scale=GV%HZ_T_to_m2_s)
-    call hchksum(tke_io, "tke", G%HI, scale=US%Z_to_m**2*US%s_to_T**2)
+    call hchksum(kappa_io, "kappa", G%HI, unscale=GV%HZ_T_to_m2_s)
+    call hchksum(tke_io, "tke", G%HI, unscale=US%Z_to_m**2*US%s_to_T**2)
   endif
 
   if (CS%id_Kd_shear > 0) call post_data(CS%id_Kd_shear, kappa_io, CS%diag)
@@ -621,8 +621,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   enddo ! end of J-loop
 
   if (CS%debug) then
-    call hchksum(kappa_io, "kappa", G%HI, scale=GV%HZ_T_to_m2_s)
-    call Bchksum(tke_io, "tke", G%HI, scale=US%Z_to_m**2*US%s_to_T**2)
+    call hchksum(kappa_io, "kappa", G%HI, unscale=GV%HZ_T_to_m2_s)
+    call Bchksum(tke_io, "tke", G%HI, unscale=US%Z_to_m**2*US%s_to_T**2)
   endif
 
   if (CS%id_Kd_shear > 0) call post_data(CS%id_Kd_shear, kappa_io, CS%diag)

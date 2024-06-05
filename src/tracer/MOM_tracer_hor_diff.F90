@@ -660,7 +660,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
 
   if (CS%debug) then
     call uvchksum("After tracer diffusion khdt_[xy]", khdt_x, khdt_y, &
-                  G%HI, haloshift=0, symmetric=.true., scale=US%L_to_m**2, &
+                  G%HI, haloshift=0, symmetric=.true., unscale=US%L_to_m**2, &
                   scalar_pair=.true.)
   endif
 

@@ -906,7 +906,7 @@ subroutine sum_En(G, US, CS, En, label)
 
   En_sum = 0.0
   do a=1,CS%nAngle
-    En_sum = En_sum + global_area_integral(En(:,:,a), G, scale=US%RZ3_T3_to_W_m2*US%T_to_s)
+    En_sum = En_sum + global_area_integral(En(:,:,a), G, unscale=US%RZ3_T3_to_W_m2*US%T_to_s)
   enddo
   CS%En_sum = En_sum
   !En_sum_diff = En_sum - CS%En_sum

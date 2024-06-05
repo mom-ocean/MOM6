@@ -421,12 +421,12 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
 
   if (CS%debug) then
     call hchksum(fluxes_in%frac_shelf_h, "frac_shelf_h before apply melting", CS%Grid_in%HI, haloshift=0)
-    call hchksum(sfc_state_in%sst, "sst before apply melting", CS%Grid_in%HI, haloshift=0, scale=US%C_to_degC)
-    call hchksum(sfc_state_in%sss, "sss before apply melting", CS%Grid_in%HI, haloshift=0, scale=US%S_to_ppt)
+    call hchksum(sfc_state_in%sst, "sst before apply melting", CS%Grid_in%HI, haloshift=0, unscale=US%C_to_degC)
+    call hchksum(sfc_state_in%sss, "sss before apply melting", CS%Grid_in%HI, haloshift=0, unscale=US%S_to_ppt)
     call uvchksum("[uv]_ml before apply melting", sfc_state_in%u, sfc_state_in%v, &
-                  CS%Grid_in%HI, haloshift=0, scale=US%L_T_to_m_s)
+                  CS%Grid_in%HI, haloshift=0, unscale=US%L_T_to_m_s)
     call hchksum(sfc_state_in%ocean_mass, "ocean_mass before apply melting", CS%Grid_in%HI, haloshift=0, &
-                 scale=US%RZ_to_kg_m2)
+                 unscale=US%RZ_to_kg_m2)
   endif
 
   ! Calculate the friction velocity under ice shelves, using taux_shelf and tauy_shelf if possible.
@@ -774,9 +774,9 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
     if (bmb_diag) dh_bdott(is:ie,js:je) = ISS%h_shelf(is:ie,js:je) - dh_bdott(is:ie,js:je)
 
     if (CS%debug) then
-      call hchksum(ISS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0, scale=US%Z_to_m)
+      call hchksum(ISS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0, unscale=US%Z_to_m)
       call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using melt", G%HI, haloshift=0, &
-                   scale=US%RZ_to_kg_m2)
+                   unscale=US%RZ_to_kg_m2)
     endif
   endif
 
@@ -790,9 +790,9 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
     if (bmb_diag) dh_bdott(is:ie,js:je) = ISS%h_shelf(is:ie,js:je) - dh_bdott(is:ie,js:je)
 
     if (CS%debug) then
-      call hchksum(ISS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0, scale=US%Z_to_m)
+      call hchksum(ISS%h_shelf, "h_shelf after change thickness using melt", G%HI, haloshift=0, unscale=US%Z_to_m)
       call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using melt", G%HI, haloshift=0, &
-                   scale=US%RZ_to_kg_m2)
+                   unscale=US%RZ_to_kg_m2)
     endif
 
     if (smb_diag) dh_adott(is:ie,js:je) = ISS%h_shelf(is:ie,js:je)
@@ -800,9 +800,9 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
     if (smb_diag) dh_adott(is:ie,js:je) = ISS%h_shelf(is:ie,js:je) - dh_adott(is:ie,js:je)
 
     if (CS%debug) then
-      call hchksum(ISS%h_shelf, "h_shelf after change thickness using surf acc", G%HI, haloshift=0, scale=US%Z_to_m)
+      call hchksum(ISS%h_shelf, "h_shelf after change thickness using surf acc", G%HI, haloshift=0, unscale=US%Z_to_m)
       call hchksum(ISS%mass_shelf, "mass_shelf after change thickness using surf acc", G%HI, haloshift=0, &
-                   scale=US%RZ_to_kg_m2)
+                   unscale=US%RZ_to_kg_m2)
     endif
 
     update_ice_vel = .false.
@@ -1119,7 +1119,7 @@ subroutine add_shelf_forces(Ocn_grid, US, CS, forces, do_shelf_area, external_ca
   if (CS%debug) then
     call uvchksum("rigidity_ice_[uv]", forces%rigidity_ice_u, &
         forces%rigidity_ice_v, CS%Grid%HI, symmetric=.true., &
-        scale=US%L_to_m**3*US%L_to_Z*US%s_to_T, scalar_pair=.true.)
+        unscale=US%L_to_m**3*US%L_to_Z*US%s_to_T, scalar_pair=.true.)
     call uvchksum("frac_shelf_[uv]", forces%frac_shelf_u, &
         forces%frac_shelf_v, CS%Grid%HI, symmetric=.true., &
         scalar_pair=.true.)
@@ -1218,7 +1218,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes, time_step)
   if (CS%debug) then
     if (allocated(sfc_state%taux_shelf) .and. allocated(sfc_state%tauy_shelf)) then
       call uvchksum("tau[xy]_shelf", sfc_state%taux_shelf, sfc_state%tauy_shelf, &
-                    G%HI, haloshift=0, scale=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
+                    G%HI, haloshift=0, unscale=US%RZ_T_to_kg_m2s*US%L_T_to_m_s)
     endif
   endif
 
@@ -1263,8 +1263,8 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes, time_step)
   endif ; enddo ; enddo
 
   if (CS%debug) then
-    call hchksum(ISS%water_flux, "water_flux add shelf fluxes", G%HI, haloshift=0, scale=US%RZ_T_to_kg_m2s)
-    call hchksum(ISS%tflux_ocn, "tflux_ocn add shelf fluxes", G%HI, haloshift=0, scale=US%QRZ_T_to_W_m2)
+    call hchksum(ISS%water_flux, "water_flux add shelf fluxes", G%HI, haloshift=0, unscale=US%RZ_T_to_kg_m2s)
+    call hchksum(ISS%tflux_ocn, "tflux_ocn add shelf fluxes", G%HI, haloshift=0, unscale=US%QRZ_T_to_W_m2)
     call MOM_forcing_chksum("After adding shelf fluxes", fluxes, G, CS%US, haloshift=0)
   endif
 
@@ -1920,8 +1920,8 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
       endif
     enddo ; enddo
     if (CS%debug) then
-      call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, scale=US%RZ_to_kg_m2)
-      call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
+      call hchksum(ISS%mass_shelf, "IS init: mass_shelf", G%HI, haloshift=0, unscale=US%RZ_to_kg_m2)
+      call hchksum(ISS%area_shelf_h, "IS init: area_shelf", G%HI, haloshift=0, unscale=US%L_to_m*US%L_to_m)
       call hchksum(ISS%hmask, "IS init: hmask", G%HI, haloshift=0)
     endif
 
@@ -1956,7 +1956,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
   enddo ; enddo
 
   if (CS%debug) then
-    call hchksum(ISS%area_shelf_h, "IS init: area_shelf_h", G%HI, haloshift=0, scale=US%L_to_m*US%L_to_m)
+    call hchksum(ISS%area_shelf_h, "IS init: area_shelf_h", G%HI, haloshift=0, unscale=US%L_to_m*US%L_to_m)
   endif
 
   CS%Time = Time

@@ -612,7 +612,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
     tr_prev(:,:) = tr_z(:,:,k)
 
     if (debug) then
-      call hchksum(tr_prev, 'field after fill ', G%HI, scale=I_scale)
+      call hchksum(tr_prev, 'field after fill ', G%HI, unscale=I_scale)
     endif
 
   enddo ! kd
@@ -921,7 +921,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
       call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, dtr_iter_stop, answer_date=ans_date)
 
 !     if (debug) then
-!       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI, scale=I_scale)
+!       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI, unscale=I_scale)
 !       call myStats(tr_outf, missing_value, G, k, 'field from fill_miss_2d()', unscale=I_scale)
 !     endif
 
@@ -930,7 +930,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
       tr_prev(:,:) = tr_z(:,:,k)
 
       if (debug) then
-        call hchksum(tr_prev, 'field after fill ', G%HI, scale=I_scale)
+        call hchksum(tr_prev, 'field after fill ', G%HI, unscale=I_scale)
       endif
 
     enddo ! kd

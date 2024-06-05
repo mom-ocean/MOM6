@@ -594,7 +594,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     call pass_vector(KH_u_GME, KH_v_GME, G%domain, To_All+Scalar_Pair)
 
     if (CS%debug) &
-    call uvchksum("GME KH[u,v]_GME", KH_u_GME, KH_v_GME, G%HI, haloshift=2, scale=US%L_to_m**2*US%s_to_T)
+      call uvchksum("GME KH[u,v]_GME", KH_u_GME, KH_v_GME, G%HI, haloshift=2, unscale=US%L_to_m**2*US%s_to_T)
 
   endif ! use_GME
 
@@ -1996,11 +1996,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   if (CS%debug) then
     if (CS%Laplacian) then
-      call hchksum(Kh_h, "Kh_h", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
-      call Bchksum(Kh_q, "Kh_q", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
+      call hchksum(Kh_h, "Kh_h", G%HI, haloshift=0, unscale=US%L_to_m**2*US%s_to_T)
+      call Bchksum(Kh_q, "Kh_q", G%HI, haloshift=0, unscale=US%L_to_m**2*US%s_to_T)
     endif
-    if (CS%biharmonic) call hchksum(Ah_h, "Ah_h", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
-    if (CS%biharmonic) call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
+    if (CS%biharmonic) call hchksum(Ah_h, "Ah_h", G%HI, haloshift=0, unscale=US%L_to_m**4*US%s_to_T)
+    if (CS%biharmonic) call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, unscale=US%L_to_m**4*US%s_to_T)
   endif
 
   if (CS%id_FrictWorkIntz > 0) then
@@ -2722,8 +2722,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         CS%Kh_Max_xy(I,J) = CS%bound_coef * 0.25 * Idt / denom
     enddo ; enddo
     if (CS%debug) then
-      call hchksum(CS%Kh_Max_xx, "Kh_Max_xx", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
-      call Bchksum(CS%Kh_Max_xy, "Kh_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T)
+      call hchksum(CS%Kh_Max_xx, "Kh_Max_xx", G%HI, haloshift=0, unscale=US%L_to_m**2*US%s_to_T)
+      call Bchksum(CS%Kh_Max_xy, "Kh_Max_xy", G%HI, haloshift=0, unscale=US%L_to_m**2*US%s_to_T)
     endif
   endif
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
@@ -2778,8 +2778,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         CS%Ah_Max_xy(I,J) = CS%bound_coef * 0.5 * Idt / denom
     enddo ; enddo
     if (CS%debug) then
-      call hchksum(CS%Ah_Max_xx, "Ah_Max_xx", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
-      call Bchksum(CS%Ah_Max_xy, "Ah_Max_xy", G%HI, haloshift=0, scale=US%L_to_m**4*US%s_to_T)
+      call hchksum(CS%Ah_Max_xx, "Ah_Max_xx", G%HI, haloshift=0, unscale=US%L_to_m**4*US%s_to_T)
+      call Bchksum(CS%Ah_Max_xy, "Ah_Max_xy", G%HI, haloshift=0, unscale=US%L_to_m**4*US%s_to_T)
     endif
   endif
   ! Register fields for output from this module.

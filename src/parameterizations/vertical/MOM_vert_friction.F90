@@ -1886,12 +1886,12 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
 
   if (CS%debug) then
     call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
-                  scale=GV%H_to_m, scalar_pair=.true.)
+                  unscale=GV%H_to_m, scalar_pair=.true.)
     call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, &
-                  scale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
+                  unscale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(hML_u) .and. allocated(hML_v)) &
       call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, &
-                    haloshift=0, scale=US%Z_to_m, scalar_pair=.true.)
+                    haloshift=0, unscale=US%Z_to_m, scalar_pair=.true.)
   endif
 
 ! Offer diagnostic fields for averaging.

@@ -214,7 +214,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   if (.not.associated(CS%ps)) return
 
   if (debug) then
-    call hchksum(tv%S,"salt pre pseudo-salt vertdiff", G%HI, scale=US%S_to_ppt)
+    call hchksum(tv%S,"salt pre pseudo-salt vertdiff", G%HI, unscale=US%S_to_ppt)
     call hchksum(CS%ps,"pseudo_salt pre pseudo-salt vertdiff", G%HI)
   endif
 
@@ -267,7 +267,7 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   endif
 
   if (debug) then
-    call hchksum(tv%S, "salt post pseudo-salt vertdiff", G%HI, scale=US%S_to_ppt)
+    call hchksum(tv%S, "salt post pseudo-salt vertdiff", G%HI, unscale=US%S_to_ppt)
     call hchksum(CS%ps, "pseudo_salt post pseudo-salt vertdiff", G%HI)
   endif
 

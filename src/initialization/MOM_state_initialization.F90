@@ -450,7 +450,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
            "DEPRESS_INITIAL_SURFACE and TRIM_IC_FOR_P_SURF are exclusive and cannot both be True")
 
   if (new_sim .and. debug .and. (depress_sfc .or. trim_ic_for_p_surf)) &
-    call hchksum(h, "Pre-depress: h ", G%HI, haloshift=1, scale=GV%H_to_MKS)
+    call hchksum(h, "Pre-depress: h ", G%HI, haloshift=1, unscale=GV%H_to_MKS)
 
   ! Remove the mass that would be displaced by an ice shelf or inverse barometer.
   if (depress_sfc) then
@@ -479,7 +479,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                      units="s", scale=US%s_to_T, fail_if_missing=.true.)
 
       if (new_sim .and. debug) &
-        call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, scale=GV%H_to_MKS)
+        call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, unscale=GV%H_to_MKS)
       call ALE_regrid_accelerated(ALE_CSp, G, GV, US, h, tv, regrid_iterations, u, v, OBC, tracer_Reg, &
                                   dt=dt, initial=.true.)
     endif
@@ -517,7 +517,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
   if (new_sim) call pass_vector(u, v, G%Domain)
   if (debug .and. new_sim) then
-    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, scale=US%L_T_to_m_s)
+    call uvchksum("MOM_initialize_state [uv]", u, v, G%HI, haloshift=1, unscale=US%L_T_to_m_s)
   endif
 
   ! This is the end of the block of code that might have initialized fields
@@ -552,14 +552,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   call pass_var(h, G%Domain)
 
   if (debug) then
-    call hchksum(h, "MOM_initialize_state: h ", G%HI, haloshift=1, scale=GV%H_to_MKS)
-    if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G%HI, haloshift=1, scale=US%C_to_degC)
-    if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G%HI, haloshift=1, scale=US%S_to_ppt)
+    call hchksum(h, "MOM_initialize_state: h ", G%HI, haloshift=1, unscale=GV%H_to_MKS)
+    if ( use_temperature ) call hchksum(tv%T, "MOM_initialize_state: T ", G%HI, haloshift=1, unscale=US%C_to_degC)
+    if ( use_temperature ) call hchksum(tv%S, "MOM_initialize_state: S ", G%HI, haloshift=1, unscale=US%S_to_ppt)
     if ( use_temperature .and. debug_layers) then ; do k=1,nz
       write(mesg,'("MOM_IS: T[",I2,"]")') k
-      call hchksum(tv%T(:,:,k), mesg, G%HI, haloshift=1, scale=US%C_to_degC)
+      call hchksum(tv%T(:,:,k), mesg, G%HI, haloshift=1, unscale=US%C_to_degC)
       write(mesg,'("MOM_IS: S[",I2,"]")') k
-      call hchksum(tv%S(:,:,k), mesg, G%HI, haloshift=1, scale=US%S_to_ppt)
+      call hchksum(tv%S(:,:,k), mesg, G%HI, haloshift=1, unscale=US%S_to_ppt)
     enddo ; endif
   endif
 
@@ -2310,7 +2310,7 @@ subroutine initialize_oda_incupd_file(G, GV, US, use_temperature, tv, h, u, v, p
             call MOM_error(FATAL, " initialize_oda_incupd_uv: Unable to open "//trim(filename))
     allocate(tmp_u(G%IsdB:G%IedB,jsd:jed,nz_data), source=0.0)
     allocate(tmp_v(isd:ied,G%JsdB:G%JedB,nz_data), source=0.0)
-    call MOM_read_vector(filename, uinc_var, vinc_var, tmp_u, tmp_v, G%Domain,scale=US%m_s_to_L_T)
+    call MOM_read_vector(filename, uinc_var, vinc_var, tmp_u, tmp_v, G%Domain, scale=US%m_s_to_L_T)
     call set_up_oda_incupd_vel_field(tmp_u, tmp_v, G, GV, oda_incupd_CSp)
     deallocate(tmp_u, tmp_v)
   endif

@@ -179,9 +179,9 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
   endif
 
   if (CS%debug) then
-    call hchksum(N2_bot,"N2_bot",G%HI,haloshift=0, scale=US%s_to_T**2)
-    call hchksum(CS%TKE_itidal_input,"TKE_itidal_input",G%HI,haloshift=0, &
-                 scale=US%RZ3_T3_to_W_m2)
+    call hchksum(N2_bot, "N2_bot", G%HI, haloshift=0, unscale=US%s_to_T**2)
+    call hchksum(CS%TKE_itidal_input,"TKE_itidal_input", G%HI, haloshift=0, &
+                 unscale=US%RZ3_T3_to_W_m2)
   endif
 
   call enable_averages(dt, time_end, CS%diag)

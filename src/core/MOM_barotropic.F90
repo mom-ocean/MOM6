@@ -1725,23 +1725,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   if (CS%debug) then
     call uvchksum("BT [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=0, &
-                  scale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
-    call uvchksum("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0, scale=US%L_T_to_m_s)
-    call hchksum(eta, "BT Initial eta", CS%debug_BT_HI, haloshift=0, scale=GV%H_to_MKS)
+                  unscale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
+    call uvchksum("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0, unscale=US%L_T_to_m_s)
+    call hchksum(eta, "BT Initial eta", CS%debug_BT_HI, haloshift=0, unscale=GV%H_to_MKS)
     call uvchksum("BT BT_force_[uv]", BT_force_u, BT_force_v, &
-                  CS%debug_BT_HI, haloshift=0, scale=US%L_T2_to_m_s2)
+                  CS%debug_BT_HI, haloshift=0, unscale=US%L_T2_to_m_s2)
     if (interp_eta_PF) then
-      call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_MKS)
-      call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_MKS)
+      call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, unscale=GV%H_to_MKS)
+      call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, unscale=GV%H_to_MKS)
     else
-      call hchksum(eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0, scale=GV%H_to_MKS)
-      call hchksum(eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0, scale=GV%H_to_MKS)
+      call hchksum(eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0, unscale=GV%H_to_MKS)
+      call hchksum(eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0, unscale=GV%H_to_MKS)
     endif
-    call uvchksum("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, CS%debug_BT_HI, haloshift=0, scale=US%L_T2_to_m_s2)
+    call uvchksum("BT Cor_ref_[uv]", Cor_ref_u, Cor_ref_v, CS%debug_BT_HI, haloshift=0, unscale=US%L_T2_to_m_s2)
     call uvchksum("BT [uv]hbt0", uhbt0, vhbt0, CS%debug_BT_HI, haloshift=0, &
-                  scale=US%L_to_m**2*US%s_to_T*GV%H_to_m)
+                  unscale=US%L_to_m**2*US%s_to_T*GV%H_to_m)
     if (.not. use_BT_cont) then
-      call uvchksum("BT Dat[uv]", Datu, Datv, CS%debug_BT_HI, haloshift=1, scale=US%L_to_m*GV%H_to_m)
+      call uvchksum("BT Dat[uv]", Datu, Datv, CS%debug_BT_HI, haloshift=1, unscale=US%L_to_m*GV%H_to_m)
     endif
     call uvchksum("BT wt_[uv]", wt_u, wt_v, G%HI, haloshift=0, &
                   symmetric=.true., omit_corners=.true., scalar_pair=.true.)
@@ -1749,9 +1749,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   symmetric=.true., omit_corners=.true., scalar_pair=.true.)
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=0, &
                   symmetric=.true., omit_corners=.true., scalar_pair=.true.)
-    call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, G%HI, haloshift=0, scale=US%L_T2_to_m_s2)
+    call uvchksum("BT bc_accel_[uv]", bc_accel_u, bc_accel_v, G%HI, haloshift=0, unscale=US%L_T2_to_m_s2)
     call uvchksum("BT IDat[uv]", CS%IDatu, CS%IDatv, G%HI, haloshift=0, &
-                  scale=GV%m_to_H, scalar_pair=.true.)
+                  unscale=GV%m_to_H, scalar_pair=.true.)
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, &
                   haloshift=1, scalar_pair=.true.)
   endif
@@ -2324,22 +2324,22 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%debug_bt) then
       write(mesg,'("BT vel update ",I4)') n
       call uvchksum(trim(mesg)//" PF[uv]", PFu, PFv, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%L_T_to_m_s*US%s_to_T)
+                    unscale=US%L_T_to_m_s*US%s_to_T)
       call uvchksum(trim(mesg)//" Cor_[uv]", Cor_u, Cor_v, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%L_T_to_m_s*US%s_to_T)
+                    unscale=US%L_T_to_m_s*US%s_to_T)
       call uvchksum(trim(mesg)//" BT_force_[uv]", BT_force_u, BT_force_v, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%L_T_to_m_s*US%s_to_T)
+                    unscale=US%L_T_to_m_s*US%s_to_T)
       call uvchksum(trim(mesg)//" BT_rem_[uv]", BT_rem_u, BT_rem_v, CS%debug_BT_HI, &
                     haloshift=iev-ie, scalar_pair=.true.)
       call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%L_T_to_m_s)
+                    unscale=US%L_T_to_m_s)
       call uvchksum(trim(mesg)//" [uv]bt_trans", ubt_trans, vbt_trans, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%L_T_to_m_s)
+                    unscale=US%L_T_to_m_s)
       call uvchksum(trim(mesg)//" [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
+                    unscale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
       if (integral_BT_cont) &
         call uvchksum(trim(mesg)//" [uv]hbt_int", uhbt_int, vhbt_int, CS%debug_BT_HI, haloshift=iev-ie, &
-                      scale=US%L_to_m**2*GV%H_to_m)
+                      unscale=US%L_to_m**2*GV%H_to_m)
     endif
 
     if (find_PF) then
@@ -2426,10 +2426,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (CS%debug_bt) then
       call uvchksum("BT [uv]hbt just after OBC", uhbt, vhbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
+                    unscale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
       if (integral_BT_cont) &
         call uvchksum("BT [uv]hbt_int just after OBC", uhbt_int, vhbt_int, CS%debug_BT_HI, &
-                      haloshift=iev-ie, scale=US%L_to_m**2*GV%H_to_m)
+                      haloshift=iev-ie, unscale=US%L_to_m**2*GV%H_to_m)
     endif
 
     if (integral_BT_cont) then
@@ -2463,8 +2463,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%debug_bt) then
       write(mesg,'("BT step ",I4)') n
       call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    scale=US%L_T_to_m_s)
-      call hchksum(eta, trim(mesg)//" eta", CS%debug_BT_HI, haloshift=iev-ie, scale=GV%H_to_MKS)
+                    unscale=US%L_T_to_m_s)
+      call hchksum(eta, trim(mesg)//" eta", CS%debug_BT_HI, haloshift=iev-ie, unscale=GV%H_to_MKS)
     endif
 
     if (GV%Boussinesq) then
@@ -2947,8 +2947,8 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
   CS%dtbt_max = dtbt_max
 
   if (CS%debug) then
-    call chksum0(CS%dtbt, "End set_dtbt dtbt", scale=US%T_to_s)
-    call chksum0(CS%dtbt_max, "End set_dtbt dtbt_max", scale=US%T_to_s)
+    call chksum0(CS%dtbt, "End set_dtbt dtbt", unscale=US%T_to_s)
+    call chksum0(CS%dtbt_max, "End set_dtbt dtbt_max", unscale=US%T_to_s)
   endif
 
 end subroutine set_dtbt
@@ -3698,9 +3698,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
                   scalar_pair=.true.)
     if (present(h_u) .and. present(h_v)) &
       call uvchksum("btcalc h_[uv]", h_u, h_v, G%HI, haloshift=0, &
-                    symmetric=.true., omit_corners=.true., scale=GV%H_to_MKS, &
+                    symmetric=.true., omit_corners=.true., unscale=GV%H_to_MKS, &
                     scalar_pair=.true.)
-    call hchksum(h, "btcalc h",G%HI, haloshift=1, scale=GV%H_to_MKS)
+    call hchksum(h, "btcalc h",G%HI, haloshift=1, unscale=GV%H_to_MKS)
   endif
 
 end subroutine btcalc

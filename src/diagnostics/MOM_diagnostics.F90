@@ -1375,7 +1375,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     do j=js,je ; do i=is,ie
       work_2d(i,j) = G%mask2dT(i,j) * (ssh(i,j) + G%bathyT(i,j))
     enddo ; enddo
-    volo = global_area_integral(work_2d, G, scale=US%Z_to_m)
+    volo = global_area_integral(work_2d, G, unscale=US%Z_to_m)
     call post_data(IDs%id_volo, volo, diag)
   endif
 

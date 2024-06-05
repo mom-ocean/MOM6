@@ -570,7 +570,7 @@ contains
       surface_field(i,j) = tv%S(i,j,1)
       dz_ml(i,j) = US%Z_to_m * Hml(i,j)
     enddo ; enddo
-    sosga = global_area_mean(surface_field, G, scale=US%S_to_ppt)
+    sosga = global_area_mean(surface_field, G, unscale=US%S_to_ppt)
 
     !
     !Calculate tendencies (i.e., field changes at dt) from the sources / sinks
@@ -1003,7 +1003,7 @@ contains
 
     dzt(:,:,:) = GV%H_to_m * h(:,:,:)
 
-    sosga = global_area_mean(sfc_state%SSS, G, scale=G%US%S_to_ppt)
+    sosga = global_area_mean(sfc_state%SSS, G, unscale=G%US%S_to_ppt)
 
     if ((G%US%C_to_degC == 1.0) .and. (G%US%S_to_ppt == 1.0)) then
       call generic_tracer_coupler_set(sfc_state%tr_fields, &

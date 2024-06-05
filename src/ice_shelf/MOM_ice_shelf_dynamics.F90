@@ -1441,8 +1441,8 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
                                ISS%hmask, conv_flag, iters, time, CS%Phi, CS%Phisub)
 
     if (CS%debug) then
-      call qchksum(u_shlf, "u shelf", G%HI, haloshift=2, scale=US%L_T_to_m_s)
-      call qchksum(v_shlf, "v shelf", G%HI, haloshift=2, scale=US%L_T_to_m_s)
+      call qchksum(u_shlf, "u shelf", G%HI, haloshift=2, unscale=US%L_T_to_m_s)
+      call qchksum(v_shlf, "v shelf", G%HI, haloshift=2, unscale=US%L_T_to_m_s)
     endif
 
     write(mesg,*) "ice_shelf_solve_outer: linear solve done in ",iters," iterations"
@@ -3790,7 +3790,7 @@ subroutine ice_shelf_temp(CS, ISS, G, US, time_step, melt_rate, Time)
   call pass_var(CS%tmask, G%domain, complete=.true.)
 
   if (CS%debug) then
-    call hchksum(CS%t_shelf, "temp after front", G%HI, haloshift=3, scale=US%C_to_degC)
+    call hchksum(CS%t_shelf, "temp after front", G%HI, haloshift=3, unscale=US%C_to_degC)
   endif
 
 end subroutine ice_shelf_temp

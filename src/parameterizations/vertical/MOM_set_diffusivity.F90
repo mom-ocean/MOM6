@@ -348,7 +348,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
 
   if (CS%useKappaShear) then
     if (CS%debug) then
-      call hchksum_pair("before calc_KS [uv]_h", u_h, v_h, G%HI, scale=US%L_T_to_m_s)
+      call hchksum_pair("before calc_KS [uv]_h", u_h, v_h, G%HI, unscale=US%L_T_to_m_s)
     endif
     call cpu_clock_begin(id_clock_kappaShear)
     if (CS%Vertex_shear) then
@@ -359,18 +359,18 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
                                    visc%TKE_turb, visc%Kv_shear_Bu, dt, G, GV, US, CS%kappaShear_CSp)
       if (associated(visc%Kv_shear)) visc%Kv_shear(:,:,:) = 0.0 ! needed for other parameterizations
       if (CS%debug) then
-        call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear", G%HI, scale=GV%HZ_T_to_m2_s)
-        call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu", G%HI, scale=GV%HZ_T_to_m2_s)
-        call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb", G%HI, scale=US%Z_to_m**2*US%s_to_T**2)
+        call hchksum(visc%Kd_shear, "after calc_KS_vert visc%Kd_shear", G%HI, unscale=GV%HZ_T_to_m2_s)
+        call Bchksum(visc%Kv_shear_Bu, "after calc_KS_vert visc%Kv_shear_Bu", G%HI, unscale=GV%HZ_T_to_m2_s)
+        call Bchksum(visc%TKE_turb, "after calc_KS_vert visc%TKE_turb", G%HI, unscale=US%Z_to_m**2*US%s_to_T**2)
       endif
     else
       ! Changes: visc%Kd_shear ;  Sets: visc%Kv_shear and visc%TKE_turb
       call calculate_kappa_shear(u_h, v_h, h, tv, fluxes%p_surf, visc%Kd_shear, visc%TKE_turb, &
                                  visc%Kv_shear, dt, G, GV, US, CS%kappaShear_CSp)
       if (CS%debug) then
-        call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear", G%HI, scale=GV%HZ_T_to_m2_s)
-        call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear", G%HI, scale=GV%HZ_T_to_m2_s)
-        call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb", G%HI, scale=US%Z_to_m**2*US%s_to_T**2)
+        call hchksum(visc%Kd_shear, "after calc_KS visc%Kd_shear", G%HI, unscale=GV%HZ_T_to_m2_s)
+        call hchksum(visc%Kv_shear, "after calc_KS visc%Kv_shear", G%HI, unscale=GV%HZ_T_to_m2_s)
+        call hchksum(visc%TKE_turb, "after calc_KS visc%TKE_turb", G%HI, unscale=US%Z_to_m**2*US%s_to_T**2)
       endif
     endif
     call cpu_clock_end(id_clock_kappaShear)
@@ -379,8 +379,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear, G, GV, US, CS%CVMix_shear_CSp)
     if (CS%debug) then
-      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear", G%HI, scale=GV%HZ_T_to_m2_s)
-      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear", G%HI, scale=GV%HZ_T_to_m2_s)
+      call hchksum(visc%Kd_shear, "after CVMix_shear visc%Kd_shear", G%HI, unscale=GV%HZ_T_to_m2_s)
+      call hchksum(visc%Kv_shear, "after CVMix_shear visc%Kv_shear", G%HI, unscale=GV%HZ_T_to_m2_s)
     endif
   elseif (associated(visc%Kv_shear)) then
     visc%Kv_shear(:,:,:) = 0.0 ! needed if calculate_kappa_shear is not enabled
@@ -389,15 +389,15 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   ! Smooth the properties through massless layers.
   if (use_EOS) then
     if (CS%debug) then
-      call hchksum(tv%T, "before vert_fill_TS tv%T", G%HI, scale=US%C_to_degC)
-      call hchksum(tv%S, "before vert_fill_TS tv%S", G%HI, scale=US%S_to_ppt)
-      call hchksum(h, "before vert_fill_TS h",G%HI, scale=GV%H_to_m)
+      call hchksum(tv%T, "before vert_fill_TS tv%T", G%HI, unscale=US%C_to_degC)
+      call hchksum(tv%S, "before vert_fill_TS tv%S", G%HI, unscale=US%S_to_ppt)
+      call hchksum(h, "before vert_fill_TS h",G%HI, unscale=GV%H_to_m)
     endif
     call vert_fill_TS(h, tv%T, tv%S, kappa_dt_fill, T_f, S_f, G, GV, US, larger_h_denom=.true.)
     if (CS%debug) then
-      call hchksum(tv%T, "after vert_fill_TS tv%T", G%HI, scale=US%C_to_degC)
-      call hchksum(tv%S, "after vert_fill_TS tv%S", G%HI, scale=US%S_to_ppt)
-      call hchksum(h, "after vert_fill_TS h",G%HI, scale=GV%H_to_m)
+      call hchksum(tv%T, "after vert_fill_TS tv%T", G%HI, unscale=US%C_to_degC)
+      call hchksum(tv%S, "after vert_fill_TS tv%S", G%HI, unscale=US%S_to_ppt)
+      call hchksum(h, "after vert_fill_TS h",G%HI, unscale=GV%H_to_m)
     endif
   endif
 
@@ -596,30 +596,30 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   endif
 
   if (CS%debug) then
-    if (present(Kd_lay)) call hchksum(Kd_lay, "Kd_lay", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
+    if (present(Kd_lay)) call hchksum(Kd_lay, "Kd_lay", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
 
-    if (CS%useKappaShear) call hchksum(visc%Kd_shear, "Turbulent Kd", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
+    if (CS%useKappaShear) call hchksum(visc%Kd_shear, "Turbulent Kd", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
 
     if (CS%use_CVMix_ddiff) then
-      call hchksum(Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
-      call hchksum(Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
+      call hchksum(Kd_extra_T, "MOM_set_diffusivity: Kd_extra_T", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
+      call hchksum(Kd_extra_S, "MOM_set_diffusivity: Kd_extra_S", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
     endif
 
     if (allocated(visc%kv_bbl_u) .and. allocated(visc%kv_bbl_v)) then
       call uvchksum("BBL Kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
-                    haloshift=0, symmetric=.true., scale=GV%HZ_T_to_m2_s, &
+                    haloshift=0, symmetric=.true., unscale=GV%HZ_T_to_m2_s, &
                     scalar_pair=.true.)
     endif
 
     if (allocated(visc%bbl_thick_u) .and. allocated(visc%bbl_thick_v)) then
       call uvchksum("BBL bbl_thick_[uv]", visc%bbl_thick_u, visc%bbl_thick_v, &
-                    G%HI, haloshift=0, symmetric=.true., scale=US%Z_to_m, &
+                    G%HI, haloshift=0, symmetric=.true., unscale=US%Z_to_m, &
                     scalar_pair=.true.)
     endif
 
     if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) then
       call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, &
-          symmetric=.true., scale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
+          symmetric=.true., unscale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
     endif
 
   endif

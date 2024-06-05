@@ -307,11 +307,11 @@ subroutine calc_derived_thermo(tv, h, G, GV, US, halo, debug)
     tv%valid_SpV_halo = halos
 
     if (do_debug) then
-      call hchksum(h, "derived_thermo h", G%HI, haloshift=halos, scale=GV%H_to_MKS)
+      call hchksum(h, "derived_thermo h", G%HI, haloshift=halos, unscale=GV%H_to_MKS)
       if (associated(tv%p_surf)) call hchksum(tv%p_surf, "derived_thermo p_surf", G%HI, &
-                                              haloshift=halos, scale=US%RL2_T2_to_Pa)
-      call hchksum(tv%T, "derived_thermo T", G%HI, haloshift=halos, scale=US%C_to_degC)
-      call hchksum(tv%S, "derived_thermo S", G%HI, haloshift=halos, scale=US%S_to_ppt)
+                                              haloshift=halos, unscale=US%RL2_T2_to_Pa)
+      call hchksum(tv%T, "derived_thermo T", G%HI, haloshift=halos, unscale=US%C_to_degC)
+      call hchksum(tv%S, "derived_thermo S", G%HI, haloshift=halos, unscale=US%S_to_ppt)
     endif
   elseif (allocated(tv%Spv_avg)) then
     do k=1,nz ; SpV_lay(k) = 1.0 / GV%Rlay(k) ; enddo

@@ -455,9 +455,9 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS)
   endif
 
   if (CS%debug) then
-    call hchksum(CS%cg1, "calc_resoln_fn cg1", G%HI, haloshift=1, scale=US%L_T_to_m_s)
+    call hchksum(CS%cg1, "calc_resoln_fn cg1", G%HI, haloshift=1, unscale=US%L_T_to_m_s)
     call uvchksum("Res_fn_[uv]", CS%Res_fn_u, CS%Res_fn_v, G%HI, haloshift=0, &
-                  scale=1.0, scalar_pair=.true.)
+                  unscale=1.0, scalar_pair=.true.)
   endif
 
 end subroutine calc_resoln_function
@@ -656,11 +656,11 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
 
   if (CS%debug) then
     call uvchksum("calc_Visbeck_coeffs_old slope_[xy]", slope_x, slope_y, G%HI, &
-                  scale=US%Z_to_L, haloshift=1)
+                  unscale=US%Z_to_L, haloshift=1)
     call uvchksum("calc_Visbeck_coeffs_old N2_u, N2_v", N2_u, N2_v, G%HI, &
-                  scale=US%L_to_Z**2*US%s_to_T**2, scalar_pair=.true.)
+                  unscale=US%L_to_Z**2*US%s_to_T**2, scalar_pair=.true.)
     call uvchksum("calc_Visbeck_coeffs_old SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
-                  scale=US%s_to_T, scalar_pair=.true.)
+                  unscale=US%s_to_T, scalar_pair=.true.)
   endif
 
 end subroutine calc_Visbeck_coeffs_old
@@ -700,9 +700,9 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN,
   crop = CS%cropping_distance>=0. ! Only filter out in-/out-cropped interface is parameter if non-negative
 
   if (CS%debug) then
-    call uvchksum("calc_Eady_growth_rate_2D dz[uv]", dzu, dzv, G%HI, scale=US%Z_to_m, scalar_pair=.true.)
+    call uvchksum("calc_Eady_growth_rate_2D dz[uv]", dzu, dzv, G%HI, unscale=US%Z_to_m, scalar_pair=.true.)
     call uvchksum("calc_Eady_growth_rate_2D dzS2N2[uv]", dzSxN, dzSyN, G%HI, &
-                  scale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
+                  unscale=US%Z_to_m*US%s_to_T, scalar_pair=.true.)
   endif
 
   !$OMP parallel do default(shared)
@@ -813,7 +813,7 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN,
 
   if (CS%debug) then
     call uvchksum("calc_Eady_growth_rate_2D SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
-                  scale=US%s_to_T, scalar_pair=.true.)
+                  unscale=US%s_to_T, scalar_pair=.true.)
   endif
 
 end subroutine calc_Eady_growth_rate_2D

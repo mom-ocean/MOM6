@@ -345,8 +345,8 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   ! Apply time filter (to remove diurnal cycle)
   if (CS%MLE_MLD_decay_time>0.) then
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered, 'mixed_layer_restrat: MLD_filtered', G%HI, haloshift=1, scale=GV%H_to_mks)
-      call hchksum(h_MLD, 'mixed_layer_restrat: MLD in', G%HI, haloshift=1, scale=GV%H_to_mks)
+      call hchksum(CS%MLD_filtered, 'mixed_layer_restrat: MLD_filtered', G%HI, haloshift=1, unscale=GV%H_to_mks)
+      call hchksum(h_MLD, 'mixed_layer_restrat: MLD in', G%HI, haloshift=1, unscale=GV%H_to_mks)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
@@ -362,8 +362,9 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   ! Apply slower time filter (to remove seasonal cycle) on already filtered MLD_fast
   if (CS%MLE_MLD_decay_time2>0.) then
     if (CS%debug) then
-      call hchksum(CS%MLD_filtered_slow, 'mixed_layer_restrat: MLD_filtered_slow', G%HI, haloshift=1, scale=GV%H_to_mks)
-      call hchksum(MLD_fast, 'mixed_layer_restrat: MLD fast', G%HI, haloshift=1, scale=GV%H_to_mks)
+      call hchksum(CS%MLD_filtered_slow, 'mixed_layer_restrat: MLD_filtered_slow', G%HI, &
+                   haloshift=1, unscale=GV%H_to_mks)
+      call hchksum(MLD_fast, 'mixed_layer_restrat: MLD fast', G%HI, haloshift=1, unscale=GV%H_to_mks)
     endif
     aFac = CS%MLE_MLD_decay_time2 / ( dt + CS%MLE_MLD_decay_time2 )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time2 )
@@ -490,11 +491,11 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   endif
 
   if (CS%debug) then
-    call hchksum(h, 'mixed_layer_restrat: h', G%HI, haloshift=1, scale=GV%H_to_mks)
-    call hchksum(U_star_2d, 'mixed_layer_restrat: u*', G%HI, haloshift=1, scale=GV%H_to_m*US%s_to_T)
-    call hchksum(MLD_fast, 'mixed_layer_restrat: MLD', G%HI, haloshift=1, scale=GV%H_to_mks)
+    call hchksum(h, 'mixed_layer_restrat: h', G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(U_star_2d, 'mixed_layer_restrat: u*', G%HI, haloshift=1, unscale=GV%H_to_m*US%s_to_T)
+    call hchksum(MLD_fast, 'mixed_layer_restrat: MLD', G%HI, haloshift=1, unscale=GV%H_to_mks)
     call hchksum(Rml_av_fast, 'mixed_layer_restrat: rml', G%HI, haloshift=1, &
-                 scale=GV%m_to_H*US%L_T_to_m_s**2)
+                 unscale=GV%m_to_H*US%L_T_to_m_s**2)
   endif
 
 ! TO DO:
@@ -871,16 +872,16 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   call find_ustar(forces, tv, U_star_2d, G, GV, US, halo=1)
 
   if (CS%debug) then
-    call hchksum(h,'mixed_Bodner: h', G%HI, haloshift=1, scale=GV%H_to_mks)
-    call hchksum(BLD, 'mle_Bodner: BLD', G%HI, haloshift=1, scale=US%Z_to_m)
-    call hchksum(h_MLD, 'mle_Bodner: h_MLD', G%HI, haloshift=1, scale=GV%H_to_mks)
+    call hchksum(h,'mixed_Bodner: h', G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(BLD, 'mle_Bodner: BLD', G%HI, haloshift=1, unscale=US%Z_to_m)
+    call hchksum(h_MLD, 'mle_Bodner: h_MLD', G%HI, haloshift=1, unscale=GV%H_to_mks)
     if (associated(bflux)) &
-      call hchksum(bflux, 'mle_Bodner: bflux', G%HI, haloshift=1, scale=US%Z_to_m**2*US%s_to_T**3)
-    call hchksum(U_star_2d, 'mle_Bodner: u*', G%HI, haloshift=1, scale=US%Z_to_m*US%s_to_T)
+      call hchksum(bflux, 'mle_Bodner: bflux', G%HI, haloshift=1, unscale=US%Z_to_m**2*US%s_to_T**3)
+    call hchksum(U_star_2d, 'mle_Bodner: u*', G%HI, haloshift=1, unscale=US%Z_to_m*US%s_to_T)
     call hchksum(CS%MLD_filtered, 'mle_Bodner: MLD_filtered 1', &
-                 G%HI, haloshift=1, scale=GV%H_to_mks)
+                 G%HI, haloshift=1, unscale=GV%H_to_mks)
     call hchksum(CS%MLD_filtered_slow,'mle_Bodner: MLD_filtered_slow 1', &
-                 G%HI, haloshift=1, scale=GV%H_to_mks)
+                 G%HI, haloshift=1, unscale=GV%H_to_mks)
   endif
 
   ! Apply time filter to h_MLD (to remove diurnal cycle) to obtain "little h".
@@ -977,13 +978,13 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   endif
 
   if (CS%debug) then
-    call hchksum(little_h,'mle_Bodner: little_h', G%HI, haloshift=1, scale=GV%H_to_mks)
-    call hchksum(big_H,'mle_Bodner: big_H', G%HI, haloshift=1, scale=GV%H_to_mks)
+    call hchksum(little_h,'mle_Bodner: little_h', G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(big_H,'mle_Bodner: big_H', G%HI, haloshift=1, unscale=GV%H_to_mks)
     call hchksum(CS%MLD_filtered,'mle_Bodner: MLD_filtered 2', &
-                 G%HI, haloshift=1, scale=GV%H_to_mks)
+                 G%HI, haloshift=1, unscale=GV%H_to_mks)
     call hchksum(CS%MLD_filtered_slow,'mle_Bodner: MLD_filtered_slow 2', &
-                 G%HI, haloshift=1, scale=GV%H_to_mks)
-    call hchksum(wpup,'mle_Bodner: wpup', G%HI, haloshift=1, scale=US%L_to_m*GV%H_to_mks*US%s_to_T**2)
+                 G%HI, haloshift=1, unscale=GV%H_to_mks)
+    call hchksum(wpup,'mle_Bodner: wpup', G%HI, haloshift=1, unscale=US%L_to_m*GV%H_to_mks*US%s_to_T**2)
   endif
 
   ! Calculate the average density in the "mixed layer".
@@ -1047,10 +1048,10 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   enddo
 
   if (CS%debug) then
-    call hchksum(htot,'mle_Bodner: htot', G%HI, haloshift=1, scale=GV%H_to_mks)
+    call hchksum(htot,'mle_Bodner: htot', G%HI, haloshift=1, unscale=GV%H_to_mks)
     call hchksum(vol_dt_avail,'mle_Bodner: vol_dt_avail', G%HI, haloshift=1, &
-                 scale=US%L_to_m**2*GV%H_to_mks*US%s_to_T)
-    call hchksum(buoy_av,'mle_Bodner: buoy_av', G%HI, haloshift=1, scale=GV%m_to_H*US%L_T_to_m_s**2)
+                 unscale=US%L_to_m**2*GV%H_to_mks*US%s_to_T)
+    call hchksum(buoy_av,'mle_Bodner: buoy_av', G%HI, haloshift=1, unscale=GV%m_to_H*US%L_T_to_m_s**2)
   endif
 
   ! U - Component

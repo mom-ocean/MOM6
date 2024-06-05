@@ -253,17 +253,17 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
   case(EKE_PROG)
     if (CS%debug) then
       if (allocated(MEKE%mom_src)) &
-        call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+        call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%GME_snk)) &
-        call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+        call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%GM_src)) &
-        call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+        call hchksum(MEKE%GM_src, 'MEKE GM_src', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%MEKE)) &
-        call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, scale=US%L_T_to_m_s**2)
-      call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, scale=US%s_to_T, &
+        call hchksum(MEKE%MEKE, 'MEKE MEKE', G%HI, unscale=US%L_T_to_m_s**2)
+      call uvchksum("MEKE SN_[uv]", SN_u, SN_v, G%HI, unscale=US%s_to_T, &
                     scalar_pair=.true.)
       call uvchksum("MEKE h[uv]", hu, hv, G%HI, haloshift=0, symmetric=.true., &
-                    scale=GV%H_to_m*(US%L_to_m**2))
+                    unscale=GV%H_to_m*US%L_to_m**2)
     endif
 
     sdt = dt*CS%MEKE_dtScale ! Scaled dt to use for time-stepping
@@ -375,12 +375,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     if (CS%debug) then
       if (CS%visc_drag) &
         call uvchksum("MEKE drag_vel_[uv]", drag_vel_u, drag_vel_v, G%HI, &
-                      scale=GV%H_to_mks*US%s_to_T, scalar_pair=.true.)
-      call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, scale=US%RZ_to_kg_m2)
-      call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, scale=GV%H_to_mks*US%s_to_T)
+                      unscale=GV%H_to_mks*US%s_to_T, scalar_pair=.true.)
+      call hchksum(mass, 'MEKE mass',G%HI,haloshift=1, unscale=US%RZ_to_kg_m2)
+      call hchksum(drag_rate_visc, 'MEKE drag_rate_visc', G%HI, unscale=GV%H_to_mks*US%s_to_T)
       call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
       call hchksum(barotrFac2, 'MEKE barotrFac2', G%HI)
-      call hchksum(LmixScale, 'MEKE LmixScale', G%HI,scale=US%L_to_m)
+      call hchksum(LmixScale, 'MEKE LmixScale', G%HI, unscale=US%L_to_m)
     endif
 
     ! Aggregate sources of MEKE (background, frictional and GM)
@@ -427,7 +427,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif
 
     if (CS%debug) then
-      call hchksum(src, "MEKE src", G%HI, haloshift=0, scale=US%L_to_m**2*US%s_to_T**3)
+      call hchksum(src, "MEKE src", G%HI, haloshift=0, unscale=US%L_to_m**2*US%s_to_T**3)
     endif
 
     ! Increase EKE by a full time-steps worth of source
@@ -630,7 +630,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     endif ! MEKE_KH>=0
 
     if (CS%debug) then
-      call hchksum(MEKE%MEKE, "MEKE post-update MEKE", G%HI, haloshift=0, scale=US%L_T_to_m_s**2)
+      call hchksum(MEKE%MEKE, "MEKE post-update MEKE", G%HI, haloshift=0, unscale=US%L_T_to_m_s**2)
     endif
 
   case(EKE_FILE)

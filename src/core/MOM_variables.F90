@@ -597,15 +597,15 @@ subroutine MOM_thermovar_chksum(mesg, tv, G, US)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(tv%T)) &
-    call hchksum(tv%T, mesg//" tv%T", G%HI, scale=US%C_to_degC)
+    call hchksum(tv%T, mesg//" tv%T", G%HI, unscale=US%C_to_degC)
   if (associated(tv%S)) &
-    call hchksum(tv%S, mesg//" tv%S", G%HI, scale=US%S_to_ppt)
+    call hchksum(tv%S, mesg//" tv%S", G%HI, unscale=US%S_to_ppt)
   if (associated(tv%frazil)) &
-    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
+    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, unscale=US%Q_to_J_kg*US%RZ_to_kg_m2)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=US%RZ_to_kg_m2*US%S_to_ppt)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, unscale=US%RZ_to_kg_m2*US%S_to_ppt)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=US%RZ_to_kg_m2*US%C_to_degC)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, unscale=US%RZ_to_kg_m2*US%C_to_degC)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

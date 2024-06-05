@@ -3318,22 +3318,22 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
     sym = G%Domain%symmetric
     if (OBC%radiation_BCs_exist_globally) then
       call uvchksum("radiation_OBCs: OBC%r[xy]_normal", OBC%rx_normal, OBC%ry_normal, G%HI, &
-                  haloshift=0, symmetric=sym, scale=1.0)
+                  haloshift=0, symmetric=sym, unscale=1.0)
     endif
     if (OBC%oblique_BCs_exist_globally) then
       call uvchksum("radiation_OBCs: OBC%r[xy]_oblique_[uv]", OBC%rx_oblique_u, OBC%ry_oblique_v, G%HI, &
-                  haloshift=0, symmetric=sym, scale=1.0/US%L_T_to_m_s**2)
+                  haloshift=0, symmetric=sym, unscale=1.0/US%L_T_to_m_s**2)
       call uvchksum("radiation_OBCs: OBC%r[yx]_oblique_[uv]", OBC%ry_oblique_u, OBC%rx_oblique_v, G%HI, &
-                  haloshift=0, symmetric=sym, scale=1.0/US%L_T_to_m_s**2)
+                  haloshift=0, symmetric=sym, unscale=1.0/US%L_T_to_m_s**2)
       call uvchksum("radiation_OBCs: OBC%cff_normal_[uv]", OBC%cff_normal_u, OBC%cff_normal_v, G%HI, &
-                  haloshift=0, symmetric=sym, scale=1.0/US%L_T_to_m_s**2)
+                  haloshift=0, symmetric=sym, unscale=1.0/US%L_T_to_m_s**2)
     endif
     if (OBC%ntr == 0) return
     if (.not. allocated (OBC%tres_x) .or. .not. allocated (OBC%tres_y)) return
     do m=1,OBC%ntr
       write(var_num,'(I3.3)') m
       call uvchksum("radiation_OBCs: OBC%tres_[xy]_"//var_num, OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%HI, &
-                    haloshift=0, symmetric=sym, scale=1.0)
+                    haloshift=0, symmetric=sym, unscale=1.0)
     enddo
   endif
 

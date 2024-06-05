@@ -101,7 +101,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   call open_boundary_impose_land_mask(OBC, G, G%areaCu, G%areaCv, US)
 
   if (debug) then
-    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1, scale=US%Z_to_m)
+    call hchksum(G%bathyT, 'MOM_initialize_fixed: depth ', G%HI, haloshift=1, unscale=US%Z_to_m)
     call hchksum(G%mask2dT, 'MOM_initialize_fixed: mask2dT ', G%HI)
     call uvchksum('MOM_initialize_fixed: mask2dC[uv]', G%mask2dCu, &
                   G%mask2dCv, G%HI)
@@ -157,9 +157,9 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
 !   Calculate the components of grad f (beta)
   call MOM_calculate_grad_Coriolis(G%dF_dx, G%dF_dy, G, US=US)
   if (debug) then
-    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI, scale=US%s_to_T)
-    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI, scale=US%m_to_L*US%s_to_T)
-    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI, scale=US%m_to_L*US%s_to_T)
+    call qchksum(G%CoriolisBu, "MOM_initialize_fixed: f ", G%HI, unscale=US%s_to_T)
+    call hchksum(G%dF_dx, "MOM_initialize_fixed: dF_dx ", G%HI, unscale=US%m_to_L*US%s_to_T)
+    call hchksum(G%dF_dy, "MOM_initialize_fixed: dF_dy ", G%HI, unscale=US%m_to_L*US%s_to_T)
   endif
 
   call initialize_grid_rotation_angle(G, PF)
