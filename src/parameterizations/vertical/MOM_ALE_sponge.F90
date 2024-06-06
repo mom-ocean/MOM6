@@ -1315,11 +1315,13 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, US, turns, param_fi
 
   ! Second part: Provide rotated fields for which relaxation is applied
 
-  sponge%fldno = sponge_in%fldno
-
   if (fixed_sponge) then
     allocate(sp_val_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed, nz_data))
     allocate(sp_val(G%isd:G%ied, G%jsd:G%jed, nz_data))
+    ! For a fixed sponge, sponge%fldno is incremented from 0 in the calls to set_up_ALE_sponge_field.
+    sponge%fldno = 0
+  else
+    sponge%fldno = sponge_in%fldno
   endif
 
   do n=1,sponge_in%fldno
@@ -1372,8 +1374,7 @@ subroutine rotate_ALE_sponge(sponge_in, G_in, sponge, G, GV, US, turns, param_fi
 
   ! TODO: var_u and var_v sponge damping is not yet supported.
   if (associated(sponge_in%var_u%p) .or. associated(sponge_in%var_v%p)) &
-    call MOM_error(FATAL, "Rotation of ALE sponge velocities is not yet " &
-      // "implemented.")
+    call MOM_error(FATAL, "Rotation of ALE sponge velocities is not yet implemented.")
 
   ! Transfer any existing diag_CS reference pointer
   sponge%diag => sponge_in%diag
