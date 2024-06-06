@@ -1513,19 +1513,19 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr3d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr2d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr4d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv)
+                             restart_time, unscale=CS%restart_field(m)%conv)
       elseif (associated(CS%var_ptr0d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv)
+                             restart_time, unscale=CS%restart_field(m)%conv)
       endif
     enddo
 

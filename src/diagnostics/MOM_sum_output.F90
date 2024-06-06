@@ -1269,9 +1269,9 @@ subroutine write_depth_list(G, US, DL, filename)
 
   call create_MOM_file(IO_handle, filename, vars, 3, fields, SINGLE_FILE, &
       extra_axes=extra_axes, global_atts=global_atts)
-  call MOM_write_field(IO_handle, fields(1), DL%depth, scale=US%Z_to_m)
-  call MOM_write_field(IO_handle, fields(2), DL%area, scale=US%L_to_m**2)
-  call MOM_write_field(IO_handle, fields(3), DL%vol_below, scale=US%Z_to_m*US%L_to_m**2)
+  call MOM_write_field(IO_handle, fields(1), DL%depth, unscale=US%Z_to_m)
+  call MOM_write_field(IO_handle, fields(2), DL%area, unscale=US%L_to_m**2)
+  call MOM_write_field(IO_handle, fields(3), DL%vol_below, unscale=US%Z_to_m*US%L_to_m**2)
 
   call delete_axis_info(extra_axes)
   call delete_attribute_info(global_atts)
