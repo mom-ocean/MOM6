@@ -44,14 +44,15 @@ end interface
 contains
 
 !> Write to the terminal some basic statistics about the k-th level of an array
-subroutine myStats(array, missing, G, k, mesg, scale, full_halo)
+subroutine myStats(array, missing, G, k, mesg, unscale, full_halo)
   type(ocean_grid_type), intent(in) :: G     !< Ocean grid type
   real, dimension(SZI_(G),SZJ_(G)), &
                          intent(in) :: array !< input array in arbitrary units [A ~> a]
   real,                  intent(in) :: missing !< missing value in arbitrary units [A ~> a]
   integer,               intent(in) :: k     !< Level to calculate statistics for
   character(len=*),      intent(in) :: mesg  !< Label to use in message
-  real,        optional, intent(in) :: scale !< A scaling factor for output [a A-1 ~> 1]
+  real,        optional, intent(in) :: unscale !< A scaling factor for output that countacts
+                                             !! any internal dimesional scaling [a A-1 ~> 1]
   logical,     optional, intent(in) :: full_halo !< If present and true, test values on the whole
                                              !! array rather than just the computational domain.
   ! Local variables
@@ -62,7 +63,7 @@ subroutine myStats(array, missing, G, k, mesg, scale, full_halo)
   logical :: found
   character(len=120) :: lMesg
 
-  scl = 1.0 ; if (present(scale)) scl = scale
+  scl = 1.0 ; if (present(unscale)) scl = unscale
   minA = 9.E24 / scl ; maxA = -9.E24 / scl ; found = .false.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -557,7 +558,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
       endif
 
       if (debug) then
-        call myStats(tr_inp, missing_value, G, k, 'Tracer from file', scale=I_scale, full_halo=.true.)
+        call myStats(tr_inp, missing_value, G, k, 'Tracer from file', unscale=I_scale, full_halo=.true.)
       endif
 
       call run_horiz_interp(Interp, tr_inp, tr_out(is:ie,js:je), missing_value=missing_value)
@@ -585,7 +586,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
     call pass_var(good, G%Domain)
 
     if (debug) then
-      call myStats(tr_out, missing_value, G, k, 'variable from horiz_interp()', scale=I_scale)
+      call myStats(tr_out, missing_value, G, k, 'variable from horiz_interp()', unscale=I_scale)
     endif
 
     ! Horizontally homogenize data to produce perfectly "flat" initial conditions
@@ -602,7 +603,7 @@ subroutine horiz_interp_and_extrap_tracer_record(filename, varnam, recnum, G, tr
 
     call fill_miss_2d(tr_outf, good2, fill2, tr_prev, G, dtr_iter_stop, answer_date=ans_date)
     if (debug) then
-      call myStats(tr_outf, missing_value, G, k, 'field from fill_miss_2d()', scale=I_scale)
+      call myStats(tr_outf, missing_value, G, k, 'field from fill_miss_2d()', unscale=I_scale)
     endif
 
     tr_z(:,:,k) = tr_outf(:,:) * G%mask2dT(:,:)
@@ -874,7 +875,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
       endif
 
       if (debug) then
-        call myStats(tr_inp, missing_value, G, k, 'Tracer from file', scale=I_scale, full_halo=.true.)
+        call myStats(tr_inp, missing_value, G, k, 'Tracer from file', unscale=I_scale, full_halo=.true.)
       endif
 
       tr_out(:,:) = 0.0
@@ -902,7 +903,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
       call pass_var(good, G%Domain)
 
       if (debug) then
-        call myStats(tr_out, missing_value, G, k, 'variable from horiz_interp()', scale=I_scale)
+        call myStats(tr_out, missing_value, G, k, 'variable from horiz_interp()', unscale=I_scale)
       endif
 
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
@@ -921,7 +922,7 @@ subroutine horiz_interp_and_extrap_tracer_fms_id(field, Time, G, tr_z, mask_z, &
 
 !     if (debug) then
 !       call hchksum(tr_outf, 'field from fill_miss_2d ', G%HI, scale=I_scale)
-!       call myStats(tr_outf, missing_value, G, k, 'field from fill_miss_2d()', scale=I_scale)
+!       call myStats(tr_outf, missing_value, G, k, 'field from fill_miss_2d()', unscale=I_scale)
 !     endif
 
       tr_z(:,:,k) = tr_outf(:,:) * G%mask2dT(:,:)
