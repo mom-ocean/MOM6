@@ -9,6 +9,8 @@ use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
+use MOM_harmonic_analysis, &
+                       only : HA_init, HA_register, harmonic_analysis_CS
 use MOM_io,            only : field_exists, file_exists, MOM_read_data
 use MOM_time_manager,  only : set_date, time_type, time_type_to_real, operator(-)
 use MOM_unit_scaling,  only : unit_scale_type
@@ -231,12 +233,13 @@ end subroutine nodal_fu
 !! while fields like the background viscosities are 2-D arrays.
 !! ALLOC is a macro defined in MOM_memory.h for allocate or nothing with
 !! static memory.
-subroutine tidal_forcing_init(Time, G, US, param_file, CS)
+subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
   type(time_type),        intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure.
   type(unit_scale_type),  intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters.
   type(tidal_forcing_CS), intent(inout) :: CS   !< Tidal forcing control structure
+  type(harmonic_analysis_CS), optional, intent(out) :: HA_CS !< Control structure for harmonic analysis
 
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: &
@@ -251,6 +254,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   logical :: use_M2, use_S2, use_N2, use_K2, use_K1, use_O1, use_P1, use_Q1
   logical :: use_MF, use_MM
   logical :: tides      ! True if a tidal forcing is to be used.
+  logical :: HA_ssh, HA_ubt, HA_vbt
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
@@ -521,6 +525,19 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS)
         CS%sinphase_prev(i,j,c) = sin(phase(i,j)*deg_to_rad)
       enddo ; enddo
     enddo
+  endif
+
+  if (present(HA_CS)) then
+    call HA_init(Time, US, param_file, CS%time_ref, CS%nc, CS%freq, CS%phase0, CS%const_name, HA_CS)
+    call get_param(param_file, mdl, "HA_SSH", HA_ssh, &
+                   "If true, perform harmonic analysis of sea serface height.", default=.false.)
+    if (HA_ssh) call HA_register('ssh', 'h', HA_CS)
+    call get_param(param_file, mdl, "HA_UBT", HA_ubt, &
+                   "If true, perform harmonic analysis of zonal barotropic velocity.", default=.false.)
+    if (HA_ubt) call HA_register('ubt', 'u', HA_CS)
+    call get_param(param_file, mdl, "HA_VBT", HA_vbt, &
+                   "If true, perform harmonic analysis of meridional barotropic velocity.", default=.false.)
+    if (HA_vbt) call HA_register('vbt', 'v', HA_CS)
   endif
 
   id_clock_tides = cpu_clock_id('(Ocean tides)', grain=CLOCK_MODULE)

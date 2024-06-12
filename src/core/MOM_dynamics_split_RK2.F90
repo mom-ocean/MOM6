@@ -47,6 +47,7 @@ use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_CS
 use MOM_CoriolisAdv,           only : CoriolisAdv_init, CoriolisAdv_end
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
+use MOM_harmonic_analysis,     only : harmonic_analysis_CS
 use MOM_hor_index,             only : hor_index_type
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_CS
 use MOM_hor_visc,              only : hor_visc_init, hor_visc_end
@@ -242,6 +243,8 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   type(SAL_CS) :: SAL_CSp
   !> A pointer to the tidal forcing control structure
   type(tidal_forcing_CS) :: tides_CSp
+  !> A pointer to the harmonic analysis control structure
+  type(harmonic_analysis_CS) :: HA_CSp
   !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 
@@ -481,7 +484,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
   call cpu_clock_end(id_clock_pass)
   !--- end set up for group halo pass
-
 
 ! PFu = d/dx M(h,T,S)
 ! pbce = dM/deta
@@ -1308,7 +1310,7 @@ end subroutine remap_dyn_split_RK2_aux_vars
 !> This subroutine initializes all of the variables that are used by this
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, param_file, &
-                      diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
+                      diag, CS, HA_CSp, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, thickness_diffuse_CSp,                  &
                       OBC, update_OBC_CSp, ALE_CSp, set_visc, &
                       visc, dirs, ntrunc, pbv, calc_dtbt, cont_stencil)
@@ -1331,6 +1333,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2_CS),       pointer       :: CS         !< module control structure
+  type(harmonic_analysis_CS),       pointer       :: HA_CSp     !< A pointer to the control structure of the
+                                                                !! harmonic analysis module
   type(MOM_restart_CS),             intent(inout) :: restart_CS !< MOM restart control structure
   real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
@@ -1504,7 +1508,12 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
   if (CS%calculate_SAL) call SAL_init(G, US, param_file, CS%SAL_CSp)
-  if (CS%use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
+  if (CS%use_tides) then
+    call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp, CS%HA_CSp)
+    HA_CSp => CS%HA_CSp
+  else
+    HA_CSp => NULL()
+  endif
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%SAL_CSp, CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
@@ -1538,7 +1547,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
   call barotropic_init(u, v, h, CS%eta, Time, G, GV, US, param_file, diag, &
-                       CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, CS%SAL_CSp)
+                       CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, CS%SAL_CSp, CS%HA_CSp)
 
   if (.not. query_initialized(CS%diffu, "diffu", restart_CS) .or. &
       .not. query_initialized(CS%diffv, "diffv", restart_CS)) then

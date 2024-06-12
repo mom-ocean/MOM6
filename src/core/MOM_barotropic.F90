@@ -16,6 +16,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type, only : mech_forcing
 use MOM_grid, only : ocean_grid_type
+use MOM_harmonic_analysis, only : HA_accum_FtSSH, harmonic_analysis_CS
 use MOM_hor_index, only : hor_index_type
 use MOM_io, only : vardesc, var_desc, MOM_read_data, slasher
 use MOM_open_boundary, only : ocean_OBC_type, OBC_NONE, open_boundary_query
@@ -289,6 +290,7 @@ type, public :: barotropic_CS ; private
   type(MOM_domain_type), pointer :: BT_Domain => NULL()  !< Barotropic MOM domain
   type(hor_index_type), pointer :: debug_BT_HI => NULL() !< debugging copy of horizontal index_type
   type(SAL_CS), pointer :: SAL_CSp => NULL() !< Control structure for SAL
+  type(harmonic_analysis_CS), pointer :: HA_CSp => NULL() !< Control structure for harmonic analysis
   logical :: module_is_initialized = .false.  !< If true, module has been initialized
 
   integer :: isdw !< The lower i-memory limit for the wide halo arrays.
@@ -2551,6 +2553,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     eta_out(i,j) = eta_wtd(i,j) * I_sum_wt_eta
   enddo ; enddo
 
+  ! Accumulator is updated at the end of every baroclinic time step.
+  ! Harmonic analysis will not be performed of a field that is not registered.
+  if (associated(CS%HA_CSp) .and. find_etaav) then
+    call HA_accum_FtSSH('ubt', ubt, CS%Time, G, CS%HA_CSp)
+    call HA_accum_FtSSH('vbt', vbt, CS%Time, G, CS%HA_CSp)
+  endif
+
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
   if (id_clock_pass_post > 0) call cpu_clock_begin(id_clock_pass_post)
   if (G%nonblocking_updates) then
@@ -4402,7 +4411,7 @@ end subroutine bt_mass_source
 !! barotropic calculation and initializes any barotropic fields that have not
 !! already been initialized.
 subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, &
-                           restart_CS, calc_dtbt, BT_cont, SAL_CSp)
+                           restart_CS, calc_dtbt, BT_cont, SAL_CSp, HA_CSp)
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
@@ -4428,6 +4437,8 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                                                  !! barotropic flow.
   type(SAL_CS), target, optional :: SAL_CSp      !< A pointer to the control structure of the
                                                  !! SAL module.
+  type(harmonic_analysis_CS), target, optional :: HA_CSp !< A pointer to the control structure of the
+                                                 !! harmonic analysis module
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -4488,6 +4499,9 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   CS%diag => diag ; CS%Time => Time
   if (present(SAL_CSp)) then
     CS%SAL_CSp => SAL_CSp
+  endif
+  if (present(HA_CSp)) then
+    CS%HA_CSp  => HA_CSp
   endif
 
   ! Read all relevant parameters and write them to the model log.
