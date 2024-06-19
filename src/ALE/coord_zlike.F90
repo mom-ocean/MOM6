@@ -67,13 +67,15 @@ subroutine build_zstar_column(CS, depth, total_thickness, zInterface, &
                                                    !! output units), units may be [Z ~> m] or [H ~> m or kg m-2]
   real,                     intent(in)    :: total_thickness !< Column thickness (positive definite in the same
                                                    !! units as depth) [Z ~> m] or [H ~> m or kg m-2]
-  real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces
+  real, dimension(CS%nk+1), intent(inout) :: zInterface !< Absolute positions of interfaces (in the same
+                                                   !! units as depth) [Z ~> m] or [H ~> m or kg m-2]
   real, optional,           intent(in)    :: z_rigid_top !< The height of a rigid top (positive upward in the same
                                                    !! units as depth) [Z ~> m] or [H ~> m or kg m-2]
-  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top in the same
+  real, optional,           intent(in)    :: eta_orig !< The actual original height of the top (in the same
                                                    !! units as depth) [Z ~> m] or [H ~> m or kg m-2]
   real, optional,           intent(in)    :: zScale !< Scaling factor from the target coordinate resolution
-                                                    !! in Z to desired units for zInterface, perhaps Z_to_H
+                                                    !! in Z to desired units for zInterface, perhaps Z_to_H,
+                                                    !! often [nondim] or [H Z-1 ~> 1 or kg m-3]
   ! Local variables
   real :: eta   ! Free surface height [Z ~> m] or [H ~> m or kg m-2]
   real :: stretching ! A stretching factor for the coordinate [nondim]

@@ -47,9 +47,11 @@ Several of the following may require configuration for particular systems.
    Name of the MPI launcher.  Often this is ``mpirun`` or ``mpiexec`` but may
    all need to run through a scheduler, e.g. ``srun`` if using Slurm.
 
-``FRAMEWORK`` (*default:* ``fms1``)
-   Select either the legacy FMS framework (``fms1``) or an FMS2 I/O compatible
-   version (``fms2``).
+``FMS_COMMIT`` (*default:* ``2023.03``)
+   Set the FMS version, either by tag or commit (as defined in ``FMS_URL``).
+
+``FMS_URL`` (*default*: ``https://github.com/NOAA-GFDL/FMS.git``)
+   Set the URL of the FMS repository.
 
 ``DO_REPRO_TESTS`` (*default:* *none*)
    Set to ``true`` to test the REPRO build and confirm equivalence of DEBUG and

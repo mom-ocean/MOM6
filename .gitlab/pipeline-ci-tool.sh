@@ -94,6 +94,13 @@ create-job-dir () {
     make -f tools/MRS/Makefile.clone clone_gfdl -j # Extras and link to datasets
     bash tools/MRS/generate_manifest.sh . tools/MRS/excluded-expts.txt > manifest.mk
     mkdir -p results
+    # Temporarily move build directory to $HOME to circumvent poor F5 performance
+    mkdir -p $HOME/ci/$CI_PIPELINE_ID/build
+    ln -s $HOME/ci/$CI_PIPELINE_ID/build build
+    # Builds need non-mangled access to src/.
+    ln -s "$(pwd)"/src $HOME/ci/$CI_PIPELINE_ID/src
+    # Static builds need access to ocean_only/
+    ln -s "$(pwd)"/ocean_only $HOME/ci/$CI_PIPELINE_ID/ocean_only
   fi
   section-end create-job-dir
 }

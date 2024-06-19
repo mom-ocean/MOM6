@@ -35,9 +35,9 @@ type, public:: stochastic_CS
   integer :: id_epbl2_wts = -1 !< Diagnostic id for epbl dissipation perturbation
   ! stochastic patterns
   real, allocatable :: sppt_wts(:,:)  !< Random pattern for ocean SPPT
-                                     !! tendencies with a number between 0 and 2
-  real, allocatable :: epbl1_wts(:,:) !< Random pattern for K.E. generation
-  real, allocatable :: epbl2_wts(:,:) !< Random pattern for K.E. dissipation
+                                      !! tendencies with a number between 0 and 2 [nondim]
+  real, allocatable :: epbl1_wts(:,:) !< Random pattern for K.E. generation [nondim]
+  real, allocatable :: epbl2_wts(:,:) !< Random pattern for K.E. dissipation [nondim]
   type(diag_ctrl), pointer :: diag   !< structure used to regulate timing of diagnostic output
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
 end type stochastic_CS

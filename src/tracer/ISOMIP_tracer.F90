@@ -45,8 +45,8 @@ type, public :: ISOMIP_tracer_CS ; private
   character(len = 200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the MOM tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in g m-3?
-  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out.
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in [conc] (g m-3)?
+  real :: land_val(NTR) = -1.0 !< The value of tr used where land is masked out [conc].
   logical :: use_sponge    !< If true, sponges may be applied somewhere in the domain.
 
   integer, dimension(NTR) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux
@@ -80,7 +80,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=200) :: inputdir
   character(len=48)  :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [conc]
   logical :: register_ISOMIP_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke

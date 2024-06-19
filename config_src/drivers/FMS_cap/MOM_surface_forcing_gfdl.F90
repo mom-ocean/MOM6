@@ -137,7 +137,7 @@ type, public :: surface_forcing_CS ; private
                                 !! gustiness calculations.  Values below 20190101 recover the answers
                                 !! from the end of 2018, while higher values use a simpler expression
                                 !! to calculate gustiness.
-  logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
+  logical :: ustar_gustless_bug             !< If true, include a bug in the time-averaging of the
                                             !! gustless wind friction velocity.
   logical :: check_no_land_fluxes           !< Return warning if IOB flux over land is non-zero
 
@@ -284,7 +284,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
     call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.not.CS%nonBous, press=.true., &
-                               fix_accum_bug=CS%fix_ustar_gustless_bug, tau_mag=CS%nonBous)
+                               fix_accum_bug=.not.CS%ustar_gustless_bug, tau_mag=CS%nonBous)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -1298,6 +1298,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   logical :: new_sim              ! False if this simulation was started from a restart file
                                   ! or other equivalent files.
   logical :: iceberg_flux_diags   ! If true, diagnostics of fluxes from icebergs are available.
+  logical :: fix_ustar_gustless_bug  ! If false, include a bug using an older run-time parameter.
+  logical :: test_value  ! This is used to determine whether a logical parameter is being set explicitly.
+  logical :: explicit_bug, explicit_fix ! These indicate which parameters are set explicitly.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   type(time_type)    :: Time_frc
   type(directories)  :: dirs      ! A structure containing relevant directory paths and input filenames.
@@ -1522,7 +1525,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   endif
   call get_param(param_file, mdl, "SPEAR_DTFREEZE_DS", CS%SPEAR_dTf_dS, &
                  "The derivative of the freezing temperature with salinity.", &
-                 units="deg C PSU-1", default=-0.054, scale=US%degC_to_C*US%S_to_ppt, &
+                 units="degC ppt-1", default=-0.054, scale=US%degC_to_C*US%S_to_ppt, &
                  do_not_log=.not.CS%trestore_SPEAR_ECDA)
   call get_param(param_file, mdl, "RESTORE_FLUX_RHO", CS%rho_restore, &
                  "The density that is used to convert piston velocities into salt or heat "//&
@@ -1611,9 +1614,32 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "of 2018, while higher values use a simpler expression to calculate gustiness.", &
                  default=default_answer_date)
 
-  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
+  call get_param(param_file, mdl, "USTAR_GUSTLESS_BUG", CS%ustar_gustless_bug, &
+                 "If true include a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false., do_not_log=.true.)
+  ! This is used to test whether USTAR_GUSTLESS_BUG is being actively set.
+  call get_param(param_file, mdl, "USTAR_GUSTLESS_BUG", test_value, default=.true., do_not_log=.true.)
+  explicit_bug = CS%ustar_gustless_bug .eqv. test_value
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", fix_ustar_gustless_bug, &
                  "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
-                 default=.true.)
+                 default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", test_value, default=.false., do_not_log=.true.)
+  explicit_fix = fix_ustar_gustless_bug .eqv. test_value
+
+  if (explicit_bug .and. explicit_fix .and. (fix_ustar_gustless_bug .eqv. CS%ustar_gustless_bug)) then
+    ! USTAR_GUSTLESS_BUG is being explicitly set, and should not be changed.
+    call MOM_error(FATAL, "USTAR_GUSTLESS_BUG and FIX_USTAR_GUSTLESS_BUG are both being set "//&
+                   "with inconsistent values.  FIX_USTAR_GUSTLESS_BUG is an obsolete "//&
+                   "parameter and should be removed.")
+  elseif (explicit_fix) then
+    call MOM_error(WARNING, "FIX_USTAR_GUSTLESS_BUG is an obsolete parameter.  "//&
+                   "Use USTAR_GUSTLESS_BUG instead (noting that it has the opposite sense).")
+    CS%ustar_gustless_bug = .not.fix_ustar_gustless_bug
+  endif
+  call log_param(param_file, mdl, "USTAR_GUSTLESS_BUG", CS%ustar_gustless_bug, &
+                 "If true include a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false.)
+
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
   call get_param(param_file, mdl, "USE_RIGID_SEA_ICE", CS%rigid_sea_ice, &

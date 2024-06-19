@@ -64,7 +64,7 @@ use MOM_domains, only : pass_vector, pass_vector_start, pass_vector_complete
 use MOM_domains, only : To_South, To_West, To_All, CGRID_NE, SCALAR_PAIR
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
-use MOM_file_parser, only : get_param, log_version, param_file_type
+use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_time_manager, only : time_type, time_type_to_real, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
@@ -114,18 +114,18 @@ type, public :: MOM_dyn_unsplit_RK2_CS ; private
   real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
                                                       !! to the seafloor [R L Z T-2 ~> Pa]
 
-  real    :: be      !< A nondimensional number from 0.5 to 1 that controls
-                     !! the backward weighting of the time stepping scheme [nondim].
-  real    :: begw    !< A nondimensional number from 0 to 1 that controls
-                     !! the extent to which the treatment of gravity waves
-                     !! is forward-backward (0) or simulated backward
-                     !! Euler (1) [nondim].  0 is often used.
-  logical :: use_correct_dt_visc !< If true, use the correct timestep in the calculation of the
-                                 !! turbulent mixed layer properties for viscosity.
-                                 !! The default should be true, but it is false.
-  logical :: debug   !< If true, write verbose checksums for debugging purposes.
-  logical :: calculate_SAL        !< If true, calculate self-attraction and loading.
-  logical :: use_tides            !< If true, tidal forcing is enabled.
+  real    :: be             !< A nondimensional number from 0.5 to 1 that controls
+                            !! the backward weighting of the time stepping scheme [nondim].
+  real    :: begw           !< A nondimensional number from 0 to 1 that controls
+                            !! the extent to which the treatment of gravity waves
+                            !! is forward-backward (0) or simulated backward
+                            !! Euler (1) [nondim].  0 is often used.
+  logical :: dt_visc_bug    !< If false, use the correct timestep in the calculation of the
+                            !! turbulent mixed layer properties for viscosity.  Otherwise if
+                            !! this is true, an older incorrect setting is used.
+  logical :: debug          !< If true, write verbose checksums for debugging purposes.
+  logical :: calculate_SAL  !< If true, calculate self-attraction and loading.
+  logical :: use_tides      !< If true, tidal forcing is enabled.
 
   logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
 
@@ -276,7 +276,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call enable_averages(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_in, v_in, h_in, CS%diffu, CS%diffv, MEKE, VarMix, &
-                            G, GV, US, CS%hor_visc)
+                            G, GV, US, CS%hor_visc, tv, dt)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
   call pass_vector(CS%diffu, CS%diffv, G%Domain, clock=id_clock_pass)
@@ -344,7 +344,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
  ! up[n-1/2] <- up*[n-1/2] + dt/2 d/dz visc d/dz up[n-1/2]
   call cpu_clock_begin(id_clock_vertvisc)
   call enable_averages(dt, Time_local, CS%diag)
-  dt_visc = dt_pred ; if (CS%use_correct_dt_visc) dt_visc = dt
+  dt_visc = dt ; if (CS%dt_visc_bug) dt_visc = dt_pred
   call set_viscous_ML(u_in, v_in, h_av, tv, forces, visc, dt_visc, G, GV, US, CS%set_visc_CSp)
   call disable_averaging(CS%diag)
 
@@ -578,6 +578,9 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   character(len=48) :: flux_units
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
+  logical :: use_correct_dt_visc
+  logical :: test_value  ! This is used to determine whether a logical parameter is being set explicitly.
+  logical :: explicit_bug, explicit_fix ! These indicate which parameters are set explicitly.
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -610,11 +613,41 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
                  "If SPLIT is false and USE_RK2 is true, BEGW can be "//&
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
-  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", CS%use_correct_dt_visc, &
+
+  call get_param(param_file, mdl, "UNSPLIT_DT_VISC_BUG", CS%dt_visc_bug, &
+                 "If false, use the correct timestep in the viscous terms applied in the first "//&
+                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
+                 "of the turbulent mixed layer properties for viscosity with unsplit or "//&
+                 "unsplit_RK2.  If true, an older incorrect value is used.", &
+                 default=.false., do_not_log=.true.)
+  ! This is used to test whether UNSPLIT_DT_VISC_BUG is being explicitly set.
+  call get_param(param_file, mdl, "UNSPLIT_DT_VISC_BUG", test_value, default=.true., do_not_log=.true.)
+  explicit_bug = CS%dt_visc_bug .eqv. test_value
+  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", use_correct_dt_visc, &
                  "If true, use the correct timestep in the viscous terms applied in the first "//&
                  "predictor step with the unsplit time stepping scheme, and in the calculation "//&
                  "of the turbulent mixed layer properties for viscosity with unsplit or "//&
-                 "unsplit_RK2.", default=.true.)
+                 "unsplit_RK2.", default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", test_value, default=.false., do_not_log=.true.)
+  explicit_fix = use_correct_dt_visc .eqv. test_value
+
+  if (explicit_bug .and. explicit_fix .and. (use_correct_dt_visc .eqv. CS%dt_visc_bug)) then
+    ! UNSPLIT_DT_VISC_BUG is being explicitly set, and should not be changed.
+    call MOM_error(FATAL, "UNSPLIT_DT_VISC_BUG and FIX_UNSPLIT_DT_VISC_BUG are both being set "//&
+                   "with inconsistent values.  FIX_UNSPLIT_DT_VISC_BUG is an obsolete "//&
+                   "parameter and should be removed.")
+  elseif (explicit_fix) then
+    call MOM_error(WARNING, "FIX_UNSPLIT_DT_VISC_BUG is an obsolete parameter.  "//&
+                   "Use UNSPLIT_DT_VISC_BUG instead (noting that it has the opposite sense).")
+    CS%dt_visc_bug = .not.use_correct_dt_visc
+  endif
+  call log_param(param_file, mdl, "UNSPLIT_DT_VISC_BUG", CS%dt_visc_bug, &
+                 "If false, use the correct timestep in the viscous terms applied in the first "//&
+                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
+                 "of the turbulent mixed layer properties for viscosity with unsplit or "//&
+                 "unsplit_RK2.  If true, an older incorrect value is used.", &
+                 default=.false.)
+
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)

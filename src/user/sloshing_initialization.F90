@@ -201,17 +201,17 @@ subroutine sloshing_initialize_temperature_salinity ( T, S, h, G, GV, US, param_
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference value for salinity', &
-                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+                 default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference value for temperature', &
                  units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
 
   ! The default is to assume an increase by 2 ppt for the salinity and a uniform temperature.
   call get_param(param_file, mdl, "S_RANGE", S_range, 'Initial salinity range.', &
-                 units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='degC', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "INITIAL_SSS", S_surf, "Initial surface salinity", &
-                 units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=34.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "SLOSHING_T_PERT", T_pert, &
                  'A mid-column temperature perturbation in the sloshing test case', &
                  units='degC', default=1.0, scale=US%degC_to_C, do_not_log=just_read)

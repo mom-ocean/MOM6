@@ -305,7 +305,7 @@ subroutine interpolate_grid( n0, h0, x0, ppoly0_E, ppoly0_coefs, &
 
   ! Local variables
   integer        :: k ! loop index
-  real           :: t ! current interface target density
+  real           :: t ! current interface target density [A]
 
   ! Make sure boundary coordinates of new grid coincide with boundary
   ! coordinates of previous grid
@@ -385,10 +385,10 @@ function get_polynomial_coordinate( N, h, x_g, edge_values, ppoly_coefs, &
   ! Local variables
   real                        :: xi0         ! normalized target coordinate [nondim]
   real, dimension(DEGREE_MAX) :: a           ! polynomial coefficients [A]
-  real                        :: numerator
-  real                        :: denominator
+  real                        :: numerator   ! The numerator of an expression [A]
+  real                        :: denominator ! The denominator of an expression [A]
   real                        :: delta       ! Newton-Raphson increment [nondim]
-!   real                        :: x           ! global target coordinate
+!   real                        :: x           ! global target coordinate [nondim]
   real                        :: eps         ! offset used to get away from boundaries [nondim]
   real                        :: grad        ! gradient during N-R iterations [A]
   integer :: i, k, iter  ! loop indices

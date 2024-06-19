@@ -221,10 +221,10 @@ subroutine dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  "Initial surface salinity", &
-                 units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                  "Initial salinity range (bottom - surface)", &
-                 units="1e-3", default=2., scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=2., scale=US%ppt_to_S, do_not_log=.true.)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&

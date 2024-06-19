@@ -35,8 +35,12 @@ type, public :: verticalGrid_type
   character(len=40) :: zAxisUnits !< The units that vertical coordinates are written in
   character(len=40) :: zAxisLongName !< Coordinate name to appear in files,
                                   !! e.g. "Target Potential Density" or "Height"
-  real, allocatable, dimension(:) :: sLayer !< Coordinate values of layer centers
-  real, allocatable, dimension(:) :: sInterface !< Coordinate values on interfaces
+  real, allocatable, dimension(:) :: sLayer !< Coordinate values of layer centers, in unscaled
+                        !! units that depend on the vertical coordinate, such as [kg m-3] for an
+                        !! isopycnal or some hybrid coordinates, [m] for a Z* coordinate,
+                        !! or [nondim] for a sigma coordinate.
+  real, allocatable, dimension(:) :: sInterface !< Coordinate values on interfaces, in the same
+                        !! unscale units as sLayer [various].
   integer :: direction = 1 !< Direction defaults to 1, positive up.
 
   ! The following variables give information about the vertical grid.
@@ -326,9 +330,11 @@ end function get_tr_flux_units
 
 !> This sets the coordinate data for the "layer mode" of the isopycnal model.
 subroutine setVerticalGridAxes( Rlay, GV, scale )
-  type(verticalGrid_type), intent(inout) :: GV   !< The container for vertical grid data
-  real, dimension(GV%ke),  intent(in)    :: Rlay !< The layer target density [R ~> kg m-3]
-  real,                    intent(in)    :: scale !< A unit scaling factor for Rlay
+  type(verticalGrid_type), intent(inout) :: GV    !< The container for vertical grid data
+  real, dimension(GV%ke),  intent(in)    :: Rlay  !< The layer target density [R ~> kg m-3]
+  real,                    intent(in)    :: scale !< A unit scaling factor for Rlay to convert
+                                                  !! it into the units of sInterface, usually
+                                                  !! [kg m-3 R-1 ~> 1] when used in layer mode.
   ! Local variables
   integer :: k, nk
 

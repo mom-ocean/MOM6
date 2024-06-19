@@ -57,6 +57,8 @@ public get_MOM_diag_axis_name
 public MOM_diag_manager_init
 public MOM_diag_manager_end
 public send_data_infra
+public diag_send_complete_infra
+public diag_manager_set_time_end_infra
 public MOM_diag_field_add_attribute
 public register_diag_field_infra
 public register_static_field_infra
@@ -450,5 +452,14 @@ subroutine MOM_diag_field_add_attribute_i1d(diag_field_id, att_name, att_value)
   call FMS_diag_field_add_attribute(diag_field_id, att_name, att_value)
 
 end subroutine MOM_diag_field_add_attribute_i1d
+
+!> Needed for backwards compatibility, does nothing
+subroutine diag_send_complete_infra ()
+end subroutine diag_send_complete_infra
+
+!> Needed for backwards compatibility, does nothing
+subroutine diag_manager_set_time_end_infra(time)
+  type(time_type), intent(in) :: time !< The model time that simulation ends
+end subroutine diag_manager_set_time_end_infra
 
 end module MOM_diag_manager_infra

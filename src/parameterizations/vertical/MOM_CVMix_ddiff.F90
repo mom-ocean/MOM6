@@ -245,8 +245,8 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
       iFaceHeight(k+1) = iFaceHeight(k) - dh
     enddo
 
-    ! gets index of the level and interface above hbl
-    !kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, GV%Z_to_H*hbl(i,j))
+    ! gets index of the level and interface above hbl in [H ~> m or kg m-2]
+    !kOBL = CVmix_kpp_compute_kOBL_depth(iFaceHeight, cellHeight, hbl(i,j))
 
     Kd1_T(:) = 0.0 ; Kd1_S(:) = 0.0
     call CVMix_coeffs_ddiff(Tdiff_out=Kd1_T(:), &

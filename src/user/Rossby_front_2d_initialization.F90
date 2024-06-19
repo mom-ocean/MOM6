@@ -68,7 +68,7 @@ subroutine Rossby_front_initialize_thickness(h, G, GV, US, param_file, just_read
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
-                 units='C', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
+                 units="degC", default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "DRHO_DT", dRho_dT, &
                  units="kg m-3 degC-1", default=-0.2, scale=US%kg_m3_to_R*US%C_to_degC, do_not_log=.true.)
   call get_param(param_file, mdl, "MAXIMUM_DEPTH", max_depth, &
@@ -155,11 +155,11 @@ subroutine Rossby_front_initialize_temperature_salinity(T, S, h, G, GV, US, &
   call get_param(param_file, mdl,"REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+                 default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
-                 units='C', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
+                 units="degC", scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
-                 units='C', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
+                 units="degC", default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "MAXIMUM_DEPTH", max_depth, &
                  units="m", default=-1.e9, scale=GV%m_to_H, do_not_log=.true.)
 
@@ -231,11 +231,11 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   call get_param(param_file, mdl, "REGRIDDING_COORDINATE_MODE", verticalCoordinate, &
                  default=DEFAULT_COORDINATE_MODE, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
-                 units='C', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
+                 units="degC", default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=.true.)
+                 default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
-                 units='C', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=.true.)
+                 units="degC", scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=.true.)
   call get_param(param_file, mdl, "RHO_T0_S0", Rho_T0_S0, &
                  units="kg m-3", default=1000.0, scale=US%kg_m3_to_R, do_not_log=.true.)
   call get_param(param_file, mdl, "DRHO_DT", dRho_dT, &

@@ -28,6 +28,7 @@ program MOM6
   use MOM_cpu_clock,       only : CLOCK_COMPONENT
   use MOM_data_override,   only : data_override_init
   use MOM_diag_mediator,   only : diag_mediator_end, diag_ctrl, diag_mediator_close_registration
+  use MOM_diag_manager_infra, only : diag_manager_set_time_end_infra
   use MOM,                 only : initialize_MOM, step_MOM, MOM_control_struct, MOM_end
   use MOM,                 only : extract_surface_state, finish_MOM_initialization
   use MOM,                 only : get_MOM_state_elements, MOM_state_is_synchronized
@@ -374,6 +375,8 @@ program MOM6
                  timeunit=Time_unit, fail_if_missing=.true.)
     Time_end = daymax
   endif
+
+  call diag_manager_set_time_end_infra(Time_end)
 
   call get_param(param_file, mod_name, "SINGLE_STEPPING_CALL", single_step_call, &
                  "If true, advance the state of MOM with a single step "//&

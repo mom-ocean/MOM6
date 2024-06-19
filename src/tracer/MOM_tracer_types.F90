@@ -68,7 +68,7 @@ type, public :: tracer_type
   real                            :: conc_underflow = 0.0     !< A magnitude of tracer concentrations below
                                                               !! which values should be set to 0. [CU ~> conc]
   real                            :: conc_scale = 1.0         !< A scaling factor used to convert the concentrations
-                                                              !! of this tracer to its desired units.
+                                                              !! of this tracer to its desired units [conc CU ~> 1]
   character(len=64)               :: cmor_name                !< CMOR name of this tracer
   character(len=64)               :: cmor_units               !< CMOR physical dimensions of the tracer
   character(len=240)              :: cmor_longname            !< CMOR long name of the tracer
@@ -79,11 +79,13 @@ type, public :: tracer_type
   real                            :: flux_scale = 1.0         !< A scaling factor used to convert the fluxes
                                                               !! of this tracer to its desired units,
                                                               !! including a factor compensating for H scaling.
+                                                              !! [conc m CU-1 H-1 ~> 1] or [conc kg m-2 CU-1 H-1 ~> 1]
   character(len=48)               :: flux_units = ""          !< The units for fluxes of this variable.
   character(len=48)               :: conv_units = ""          !< The units for the flux convergence of this tracer.
   real                            :: conv_scale = 1.0         !< A scaling factor used to convert the flux
                                                               !! convergence of this tracer to its desired units,
                                                               !! including a factor compensating for H scaling.
+                                                              !! [conc m CU-1 H-1 ~> 1] or [conc kg m-2 CU-1 H-1 ~> 1]
   character(len=48)               :: cmor_tendprefix = ""     !< The CMOR variable prefix for tendencies of this
                                                               !! tracer, required because CMOR does not follow any
                                                               !! discernable pattern for these names.

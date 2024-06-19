@@ -49,11 +49,11 @@ type, public :: regridding_CS ; private
   !> This array is set by function setCoordinateResolution()
   !! It contains the "resolution" or delta coordinate of the target
   !! coordinate.  It has the units of the target coordinate, e.g.
-  !! [Z ~> m] for z*, non-dimensional for sigma, etc.
+  !! [Z ~> m] for z*, [nondim] for sigma, etc.
   real, dimension(:), allocatable :: coordinateResolution
 
   !> This is a scaling factor that restores coordinateResolution to values in
-  !! the natural units for output.
+  !! the natural units for output, perhaps [nondim]
   real :: coord_scale = 1.0
 
   !> This array is set by function set_target_densities()
@@ -102,16 +102,12 @@ type, public :: regridding_CS ; private
   real :: depth_of_time_filter_deep = 0.
 
   !> Fraction (between 0 and 1) of compressibility to add to potential density
-  !! profiles when interpolating for target grid positions. [nondim]
+  !! profiles when interpolating for target grid positions [nondim]
   real :: compressibility_fraction = 0.
 
   !> If true, each interface is given a maximum depth based on a rescaling of
   !! the indexing of coordinateResolution.
   logical :: set_maximum_depths = .false.
-
-  !> A scaling factor (> 1) of the rate at which the coordinateResolution list
-  !! is traversed to set the minimum depth of interfaces.
-  real :: max_depth_index_scale = 2.0
 
   !> If true, integrate for interface positions from the top downward.
   !! If false, integrate from the bottom upward, as does the rest of the model.
@@ -144,6 +140,7 @@ public set_regrid_max_depths, set_regrid_max_thickness
 public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
+public set_h_neglect, set_dz_neglect
 public get_zlike_CS, get_sigma_CS, get_rho_CS
 
 !> Documentation for coordinate options
@@ -214,7 +211,9 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   real :: tmpReal  ! A temporary variable used in setting other variables [various]
   real :: P_Ref    ! The coordinate variable reference pression [R L2 T-2 ~> Pa]
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
-  real :: adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha
+  real :: adaptTimeRatio, adaptZoomCoeff ! Temporary variables for input parameters [nondim]
+  real :: adaptBuoyCoeff, adaptAlpha     ! Temporary variables for input parameters [nondim]
+  real :: adaptZoom  ! The thickness of the near-surface zooming region with the adaptive coordinate [H ~> m or kg m-2]
   real :: adaptDrho0 ! Reference density difference for stratification-dependent diffusion. [R ~> kg m-3]
   integer :: k, nzf(4)
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate, which may be [m]
@@ -225,7 +224,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths
                                             ! [H ~> m or kg m-2] or other units
   real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode [kg m-3]
-  ! Thicknesses [m] that give level centers corresponding to table 2 of WOA09
+  !> Thicknesses [m] that give level centers corresponding to table 2 of WOA09
   real, dimension(40) :: woa09_dz = (/ 5.,  10.,  10.,  15.,  22.5, 25., 25.,  25.,  &
                                       37.5, 50.,  50.,  75., 100., 100., 100., 100., &
                                      100., 100., 100., 100., 100., 100., 100., 175., &
@@ -803,7 +802,6 @@ subroutine regridding_main( remapCS, CS, G, GV, US, h, tv, h_new, dzInterface, &
   real :: tot_dz(SZI_(G),SZJ_(G)) !< The total distance between the top and bottom of the water column [Z ~> m]
   real :: Z_to_H  ! A conversion factor used by some routines to convert coordinate
                   ! parameters to depth units [H Z-1 ~> nondim or kg m-3]
-  real :: trickGnuCompiler
   character(len=128) :: mesg    ! A string for error messages
   integer :: i, j, k
 
@@ -966,11 +964,14 @@ end subroutine calc_h_new_by_dz
 subroutine check_grid_column( nk, h, dzInterface, msg )
   integer,               intent(in) :: nk !< Number of cells
   real, dimension(nk),   intent(in) :: h  !< Cell thicknesses [Z ~> m] or arbitrary units
-  real, dimension(nk+1), intent(in) :: dzInterface !< Change in interface positions (same units as h)
+  real, dimension(nk+1), intent(in) :: dzInterface !< Change in interface positions (same units as h), often [Z ~> m]
   character(len=*),      intent(in) :: msg !< Message to append to errors
   ! Local variables
   integer :: k
-  real    :: eps, total_h_old, total_h_new, h_new
+  real :: eps          ! A tiny relative thickness [nondim]
+  real :: total_h_old  ! The total thickness in the old column, in [Z ~> m] or arbitrary units
+  real :: total_h_new  ! The total thickness in the updated column, in [Z ~> m] or arbitrary units
+  real :: h_new        ! A thickness in the updated column, in [Z ~> m] or arbitrary units
 
   eps =1. ; eps = epsilon(eps)
 
@@ -1022,17 +1023,31 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   type(regridding_CS),      intent(in)    :: CS !< Regridding control structure
   integer,                  intent(in)    :: nk !< Number of cells in source grid
   real, dimension(nk+1),    intent(in)    :: z_old !< Old grid position [H ~> m or kg m-2]
-  real, dimension(CS%nk+1), intent(in)    :: z_new !< New grid position [H ~> m or kg m-2]
-  real, dimension(CS%nk+1), intent(inout) :: dz_g !< Change in interface positions [H ~> m or kg m-2]
+  real, dimension(CS%nk+1), intent(in)    :: z_new !< New grid position before filtering [H ~> m or kg m-2]
+  real, dimension(CS%nk+1), intent(inout) :: dz_g  !< Change in interface positions including
+                                                   !! the effects of filtering [H ~> m or kg m-2]
   ! Local variables
-  real :: sgn  ! The sign convention for downward.
-  real :: dz_tgt, zr1, z_old_k
-  real :: Aq, Bq, dz0, z0, F0
-  real :: zs, zd, dzwt, Idzwt
-  real :: wtd, Iwtd
-  real :: Int_zs, Int_zd, dInt_zs_zd
+  real :: sgn     ! The sign convention for downward [nondim].
+  real :: dz_tgt  ! The target grid movement of the unfiltered grid [H ~> m or kg m-2]
+  real :: zr1     ! The old grid position of an interface relative to the surface [H ~> m or kg m-2]
+  real :: z_old_k ! The corrected position of the old grid [H ~> m or kg m-2]
+  real :: Aq      ! A temporary variable related to the grid weights [nondim]
+  real :: Bq      ! A temporary variable used in the linear term in the quadratic expression for the
+                  ! filtered grid movement [H ~> m or kg m-2]
+  real :: z0, dz0 ! Together these give the position of an interface relative to a reference hieght
+                  ! that may be adjusted for numerical accuracy in a solver [H ~> m or kg m-2]
+  real :: F0      ! An estimated grid movement  [H ~> m or kg m-2]
+  real :: zs      ! The depth at which the shallow filtering timescale applies [H ~> m or kg m-2]
+  real :: zd      ! The depth at which the deep filtering timescale applies [H ~> m or kg m-2]
+  real :: dzwt    ! The depth range over which the transition in the filtering timescale occurs [H ~> m or kg m-2]
+  real :: Idzwt   ! The Adcroft reciprocal of dzwt [H-1 ~> m-1 or m2 kg-1]
+  real :: wtd     ! The weight given to the new grid when time filtering [nondim]
+  real :: Iwtd    ! The inverse of wtd [nondim]
+  real :: Int_zs  ! A depth integral of the weights in [H ~> m or kg m-2]
+  real :: Int_zd  ! A depth integral of the weights in [H ~> m or kg m-2]
+  real :: dInt_zs_zd ! The depth integral of the weights between the deep and shallow depths in [H ~> m or kg m-2]
 ! For debugging:
-  real, dimension(nk+1) :: z_act
+  real, dimension(nk+1) :: z_act ! The final grid positions after the filtered movement [H ~> m or kg m-2]
 !  real, dimension(nk+1) :: ddz_g_s, ddz_g_d
   logical :: debug = .false.
   integer :: k
@@ -1416,13 +1431,7 @@ subroutine build_rho_grid( G, GV, US, h, nom_depth_H, tv, dzInterface, remapCS, 
 #endif
   logical :: ice_shelf
 
-  if (CS%remap_answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
-  endif
+  h_neglect = set_h_neglect(GV, CS%remap_answer_date, h_neglect_edge)
 
   nz = GV%ke
   ice_shelf = present(frac_shelf_h)
@@ -1557,8 +1566,9 @@ subroutine build_grid_HyCOM1( G, GV, US, h, nom_depth_H, tv, h_new, dzInterface,
   type(regridding_CS),                       intent(in)    :: CS !< Regridding control structure
   real, dimension(SZI_(G),SZJ_(G),CS%nk),    intent(inout) :: h_new !< New layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),  intent(inout) :: dzInterface !< Changes in interface position
+                                                                 !! in thickness units [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G)), optional, intent(in)   :: frac_shelf_h !< Fractional ice shelf
-                                                                    !! coverage [nondim]
+                                                                 !! coverage [nondim]
   real,                            optional, intent(in)    :: zScale !< Scaling factor from the target coordinate
                                                                  !! resolution in Z to desired units for zInterface,
                                                                  !! usually Z_to_H in which case it is in
@@ -1569,19 +1579,15 @@ subroutine build_grid_HyCOM1( G, GV, US, h, nom_depth_H, tv, h_new, dzInterface,
   real, dimension(SZK_(GV))   :: p_col  ! Layer center pressure in the input column [R L2 T-2 ~> Pa]
   real, dimension(CS%nk+1) :: z_col_new ! New interface positions relative to the surface [H ~> m or kg m-2]
   real, dimension(CS%nk+1) :: dz_col    ! The realized change in z_col [H ~> m or kg m-2]
-  integer   :: i, j, k, nki
-  real :: nominalDepth
-  real :: h_neglect, h_neglect_edge
-  real :: z_top_col, totalThickness
+  real :: nominalDepth    ! The nominal depth of the seafloor in thickness units [H ~> m or kg m-2]
+  real :: h_neglect, h_neglect_edge ! Negligible thicknesses used for remapping [H ~> m or kg m-2]
+  real :: z_top_col       ! The nominal height of the sea surface or ice-ocean interface
+                          ! in thickness units [H ~> m or kg m-2]
+  real :: totalThickness  ! The total thickness of the water column [H ~> m or kg m-2]
   logical :: ice_shelf
+  integer :: i, j, k, nki
 
-  if (CS%remap_answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
-  endif
+  h_neglect = set_h_neglect(GV, CS%remap_answer_date, h_neglect_edge)
 
   if (.not.CS%target_density_set) call MOM_error(FATAL, "build_grid_HyCOM1 : "//&
         "Target densities must be set before build_grid_HyCOM1 is called.")
@@ -1707,11 +1713,16 @@ end subroutine build_grid_adaptive
 subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
   type(regridding_CS),      intent(in)    :: CS !< Regridding control structure
   integer,                  intent(in)    :: nk !< Number of layers in h_old
-  real, dimension(nk),      intent(in)    :: h_old !< Minimum allowed thickness of h [H ~> m or kg m-2]
-  real, dimension(CS%nk+1), intent(inout) :: dz_int !< Minimum allowed thickness of h [H ~> m or kg m-2]
+  real, dimension(nk),      intent(in)    :: h_old  !< Layer thicknesses on the old grid [H ~> m or kg m-2]
+  real, dimension(CS%nk+1), intent(inout) :: dz_int !< Interface movements, adjusted to keep the thicknesses
+                                                    !! thicker than their minimum value [H ~> m or kg m-2]
   ! Local variables
+  real :: h_new   ! A layer thickness on the new grid [H ~> m or kg m-2]
+  real :: eps     ! A tiny relative thickness [nondim]
+  real :: h_total ! The total thickness of the old grid [H ~> m or kg m-2]
+  real :: h_err   ! An error tolerance that use used to flag unacceptably large negative layer thicknesses
+                  ! that can not be explained by roundoff errors [H ~> m or kg m-2]
   integer :: k
-  real :: h_new, eps, h_total, h_err
 
   eps = 1. ; eps = epsilon(eps)
 
@@ -1764,8 +1775,9 @@ end subroutine adjust_interface_motion
 
 
 !------------------------------------------------------------------------------
-! Check grid integrity
-!------------------------------------------------------------------------------
+!> make sure all layers are at least as thick as the minimum thickness allowed
+!! for regridding purposes by inflating thin layers.  This breaks mass conservation
+!! and adds mass to the model when there are excessively thin layers.
 subroutine inflate_vanished_layers_old( CS, G, GV, h )
 !------------------------------------------------------------------------------
 ! This routine is called when initializing the regridding options. The
@@ -1776,14 +1788,14 @@ subroutine inflate_vanished_layers_old( CS, G, GV, h )
 !------------------------------------------------------------------------------
 
   ! Arguments
-  type(regridding_CS),                    intent(in)    :: CS   !< Regridding control structure
-  type(ocean_grid_type),                  intent(in)    :: G    !< The ocean's grid structure
-  type(verticalGrid_type),                intent(in)    :: GV   !< The ocean's vertical grid structure
-  real, dimension(SZI_(G),SZJ_(G), SZK_(GV)), intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  type(regridding_CS),                       intent(in)    :: CS   !< Regridding control structure
+  type(ocean_grid_type),                     intent(in)    :: G    !< The ocean's grid structure
+  type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2]
 
   ! Local variables
   integer :: i, j, k
-  real    :: hTmp(GV%ke)
+  real    :: hTmp(GV%ke) ! A copy of a 1-d column of h [H ~> m or kg m-2]
 
   do i = G%isc-1,G%iec+1
     do j = G%jsc-1,G%jec+1
@@ -1883,11 +1895,15 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
   character(len=*), intent(in) :: coordMode !< A string indicating the coordinate mode.
                                             !! See the documentation for regrid_consts
                                             !! for the recognized values.
-  real,             intent(in) :: maxDepth  !< The range of the grid values in some modes
-  real,             intent(in) :: rhoLight  !< The minimum value of the grid in RHO mode
-  real,             intent(in) :: rhoHeavy  !< The maximum value of the grid in RHO mode
+  real,             intent(in) :: maxDepth  !< The range of the grid values in some modes, in coordinate
+                                            !! dependent units that might be [m] or [kg m-3] or [nondim]
+                                            !! or something else.
+  real,             intent(in) :: rhoLight  !< The minimum value of the grid in RHO mode [kg m-3]
+  real,             intent(in) :: rhoHeavy  !< The maximum value of the grid in RHO mode [kg m-3]
 
-  real                         :: uniformResolution(nk) !< The returned uniform resolution grid.
+  real                         :: uniformResolution(nk) !< The returned uniform resolution grid, in
+                                            !! coordinate dependent units that might be [m] or
+                                            !! [kg m-3] or [nondim] or something else.
 
   ! Local variables
   integer :: scheme
@@ -1946,9 +1962,14 @@ end subroutine initCoord
 !------------------------------------------------------------------------------
 !> Set the fixed resolution data
 subroutine setCoordinateResolution( dz, CS, scale )
-  real, dimension(:),  intent(in)    :: dz !< A vector of vertical grid spacings
+  real, dimension(:),  intent(in)    :: dz !< A vector of vertical grid spacings, in arbitrary coordinate
+                                           !! dependent units, such as [m] for a z-coordinate or [kg m-3]
+                                           !! for a density coordinate.
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
-  real,      optional, intent(in)    :: scale !< A scaling factor converting dz to coordRes
+  real,      optional, intent(in)    :: scale !< A scaling factor converting dz to the internal represetation
+                                           !! of coordRes, in various units that depend on the coordinate,
+                                           !! such as [Z m-1 ~> 1 for a z-coordinate or [R m3 kg-1 ~> 1] for
+                                           !! a density coordinate.
 
   if (size(dz)/=CS%nk) call MOM_error( FATAL, &
       'setCoordinateResolution: inconsistent number of levels' )
@@ -2001,10 +2022,12 @@ end subroutine set_target_densities
 !> Set maximum interface depths based on a vector of input values.
 subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
-  real, dimension(CS%nk+1), intent(in)    :: max_depths !< Maximum interface depths, in arbitrary units
-  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_depths into H units
+  real, dimension(CS%nk+1), intent(in)    :: max_depths !< Maximum interface depths, in arbitrary units, often [m]
+  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_depths into H units,
+                                                        !! often in [H m-1 ~> 1 or kg m-3]
   ! Local variables
-  real :: val_to_H
+  real :: val_to_H ! A conversion factor from the units for max_depths into H units, often [H m-1 ~> 1 or kg m-3]
+                   ! if units_to_H is present, or [nondim] if it is absent.
   integer :: K
 
   if (.not.allocated(CS%max_interface_depths)) allocate(CS%max_interface_depths(1:CS%nk+1))
@@ -2037,11 +2060,13 @@ end subroutine set_regrid_max_depths
 !> Set maximum layer thicknesses based on a vector of input values.
 subroutine set_regrid_max_thickness( CS, max_h, units_to_H )
   type(regridding_CS),      intent(inout) :: CS !< Regridding control structure
-  real, dimension(CS%nk+1), intent(in)    :: max_h !< Maximum interface depths, in arbitrary units
-  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_h into H units
+  real, dimension(CS%nk+1), intent(in)    :: max_h !< Maximum layer thicknesses, in arbitrary units, often [m]
+  real, optional,           intent(in)    :: units_to_H !< A conversion factor for max_h into H units,
+                                                        !! often [H m-1 ~> 1 or kg m-3]
   ! Local variables
-  real :: val_to_H
-  integer :: K
+  real :: val_to_H ! A conversion factor from the units for max_h into H units, often [H m-1 ~> 1 or kg m-3]
+                   ! if units_to_H is present, or [nondim] if it is absent.
+  integer :: k
 
   if (.not.allocated(CS%max_layer_thickness)) allocate(CS%max_layer_thickness(1:CS%nk))
 
@@ -2070,7 +2095,9 @@ subroutine write_regrid_file( CS, GV, filepath )
   type(vardesc)      :: vars(2)
   type(MOM_field)    :: fields(2)
   type(MOM_netCDF_file) :: IO_handle ! The I/O handle of the fileset
-  real               :: ds(GV%ke), dsi(GV%ke+1)
+  real               :: ds(GV%ke), dsi(GV%ke+1)  ! The labeling layer and interface coordinates for output
+                                                 ! in axes in files, in coordinate-dependent units that can
+                                                 ! be obtained from getCoordinateUnits [various]
 
   if (CS%regridding_scheme == REGRIDDING_HYBGEN) then
     call write_Hybgen_coord_file(GV, CS%hybgen_CS, filepath)
@@ -2095,6 +2122,49 @@ subroutine write_regrid_file( CS, GV, filepath )
 
 end subroutine write_regrid_file
 
+!> Set appropriate values for the negligible thicknesses used for remapping based on an answer date.
+function set_h_neglect(GV, remap_answer_date, h_neglect_edge) result(h_neglect)
+  type(verticalGrid_type), intent(in)  :: GV   !< Ocean vertical grid structure
+  integer,                 intent(in)  :: remap_answer_date !< The vintage of the expressions to use
+                                               !! for remapping.  Values below 20190101 recover the
+                                               !! remapping answers from 2018. Higher values use more
+                                               !! robust forms of the same remapping algorithms.
+  real,                    intent(out) :: h_neglect_edge !< A negligibly small thickness used in
+                                               !! remapping edge value calculations [H ~> m or kg m-2]
+  real                                 :: h_neglect !< A negligibly small thickness used in
+                                               !! remapping cell reconstructions [H ~> m or kg m-2]
+
+  if (remap_answer_date >= 20190101) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+  endif
+end function set_h_neglect
+
+!> Set appropriate values for the negligible vertical layer extents used for remapping based on an answer date.
+function set_dz_neglect(GV, US, remap_answer_date, dz_neglect_edge) result(dz_neglect)
+  type(verticalGrid_type), intent(in)  :: GV   !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
+  integer,                 intent(in)  :: remap_answer_date !< The vintage of the expressions to use
+                                               !! for remapping.  Values below 20190101 recover the
+                                               !! remapping answers from 2018. Higher values use more
+                                               !! robust forms of the same remapping algorithms.
+  real,                    intent(out) :: dz_neglect_edge !< A negligibly small vertical layer extent
+                                               !! used in remapping edge value calculations [Z ~> m]
+  real                                 :: dz_neglect !< A negligibly small vertical layer extent
+                                               !! used in remapping cell reconstructions [Z ~> m]
+
+  if (remap_answer_date >= 20190101) then
+    dz_neglect = GV%dZ_subroundoff ; dz_neglect_edge = GV%dZ_subroundoff
+  elseif (GV%Boussinesq) then
+    dz_neglect = US%m_to_Z*1.0e-30 ; dz_neglect_edge = US%m_to_Z*1.0e-10
+  else
+    dz_neglect = GV%kg_m2_to_H * (GV%H_to_m*US%m_to_Z) * 1.0e-30
+    dz_neglect_edge = GV%kg_m2_to_H * (GV%H_to_m*US%m_to_Z) * 1.0e-10
+  endif
+end function set_dz_neglect
 
 !------------------------------------------------------------------------------
 !> Query the fixed resolution data
@@ -2102,7 +2172,8 @@ function getCoordinateResolution( CS, undo_scaling )
   type(regridding_CS), intent(in) :: CS !< Regridding control structure
   logical,   optional, intent(in) :: undo_scaling !< If present and true, undo any internal
                                         !! rescaling of the resolution data.
-  real, dimension(CS%nk)          :: getCoordinateResolution
+  real, dimension(CS%nk)          :: getCoordinateResolution !< The resolution or delta of the target coordinate,
+                                                             !! in units that depend on the coordinate [various]
 
   logical :: unscale
   unscale = .false. ; if (present(undo_scaling)) unscale = undo_scaling
@@ -2120,7 +2191,8 @@ function getCoordinateInterfaces( CS, undo_scaling )
   type(regridding_CS), intent(in) :: CS                      !< Regridding control structure
   logical,   optional, intent(in) :: undo_scaling            !< If present and true, undo any internal
                                                              !! rescaling of the resolution data.
-  real, dimension(CS%nk+1)        :: getCoordinateInterfaces !< Interface positions in target coordinate
+  real, dimension(CS%nk+1)        :: getCoordinateInterfaces !< Interface positions in target coordinate,
+                                                             !! in units that depend on the coordinate [various]
 
   integer :: k
   logical :: unscale
@@ -2226,7 +2298,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the
                                                     !! new grid [H ~> m or kg m-2]
-  real,    optional, intent(in) :: old_grid_weight  !< Weight given to old coordinate when time-filtering grid
+  real,    optional, intent(in) :: old_grid_weight  !< Weight given to old coordinate when time-filtering grid [nondim]
   character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
   real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic [H ~> m or kg m-2]
   real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic [H ~> m or kg m-2]
@@ -2347,9 +2419,10 @@ end function get_rho_CS
 !> Return coordinate-derived thicknesses for fixed coordinate systems
 function getStaticThickness( CS, SSH, depth )
   type(regridding_CS), intent(in) :: CS !< Regridding control structure
-  real,                intent(in) :: SSH   !< The sea surface height, in the same units as depth
+  real,                intent(in) :: SSH   !< The sea surface height, in the same units as depth, often [Z ~> m]
   real,                intent(in) :: depth !< The maximum depth of the grid, often [Z ~> m]
-  real, dimension(CS%nk)          :: getStaticThickness !< The returned thicknesses in the units of depth
+  real, dimension(CS%nk)          :: getStaticThickness !< The returned thicknesses in the units of
+                                           !! depth, often [Z ~> m]
   ! Local
   integer :: k
   real :: z, dz  ! Vertical positions and grid spacing [Z ~> m]
@@ -2444,7 +2517,14 @@ integer function rho_function1( string, rho_target )
   real, dimension(:), allocatable, intent(inout) :: rho_target !< Profile of interface densities [kg m-3]
   ! Local variables
   integer :: nki, k, nk
-  real    :: ddx, dx, rho_1, rho_2, rho_3, drho, rho_4, drho_min
+  real    :: dx   ! Fractional distance from interface nki [nondim]
+  real    :: ddx  ! Change in dx between interfaces [nondim]
+  real    :: rho_1, rho_2 ! Density of the top two layers in a profile [kg m-3]
+  real    :: rho_3    ! Density in the third layer, below which the density increase linearly
+                      ! in subsequent layers [kg m-3]
+  real    :: drho     ! Change in density over the linear region [kg m-3]
+  real    :: rho_4    ! The densest density in this profile [kg m-3], which might be very large.
+  real    :: drho_min ! A minimal fractional density difference [nondim]?
 
   read( string, *) nk, rho_1, rho_2, rho_3, drho, rho_4, drho_min
   allocate(rho_target(nk+1))

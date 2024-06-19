@@ -902,20 +902,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         if (associated(AD%rv_x_u)) then
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
-              ((q2(I,J) + q2(I-1,J) + q2(I-1,J-1)) * uh(I-1,j,k) + &
-               (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * uh(I,j,k) + &
-               (q2(I-1,J) + q2(I,J+1) + q2(I,J)) * uh(I,j+1,k) + &
-               (q2(I,J) + q2(I-1,J+1) + q2(I-1,J)) * uh(I-1,j+1,k))
+              (((((q2(I,J) + q2(I-1,J-1)) + q2(I-1,J)) * uh(I-1,j,k)) + &
+                (((q2(I-1,J) + q2(I,J+1)) + q2(I,J)) * uh(I,j+1,k))) + &
+               ((((q2(I-1,J) + q2(I,J-1)) + q2(I,J)) * uh(I,j,k))+ &
+                (((q2(I,J) + q2(I-1,J+1)) + q2(I-1,J)) * uh(I-1,j+1,k))))
           enddo ; enddo
         endif
 
         if (associated(AD%rv_x_v)) then
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
-              ((q2(I+1,J) + q2(I,J) + q2(I,J-1)) * vh(i+1,J,k) + &
-               (q2(I-1,J) + q2(I,J) + q2(I,J-1)) * vh(i,J,k) + &
-               (q2(I-1,J-1) + q2(I,J) + q2(I,J-1)) * vh(i,J-1,k) + &
-               (q2(I+1,J-1) + q2(I,J) + q2(I,J-1)) * vh(i+1,J-1,k))
+              (((((q2(I+1,J) + q2(I,J-1)) + q2(I,J)) * vh(i+1,J,k)) + &
+                (((q2(I-1,J-1) + q2(I,J)) + q2(I,J-1)) * vh(i,J-1,k))) + &
+               ((((q2(I-1,J) + q2(I,J-1)) + q2(I,J)) * vh(i,J,k)) + &
+                (((q2(I+1,J-1) + q2(I,J)) + q2(I,J-1)) * vh(i+1,J-1,k))))
           enddo ; enddo
         endif
       endif

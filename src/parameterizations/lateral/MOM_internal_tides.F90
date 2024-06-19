@@ -146,15 +146,20 @@ type, public :: int_tide_CS ; private
                         !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
                         !! integrated within an angular and frequency band [R Z3 T-2 ~> J m-2]
   real, allocatable :: En_restart_mode1(:,:,:,:)
-                        !< The internal wave energy density as a function of (i,j,angle,freq) for mode 1
+                        !< The internal wave energy density as a function of (i,j,angle,freq)
+                        !! for mode 1 [R Z3 T-2 ~> J m-2]
   real, allocatable :: En_restart_mode2(:,:,:,:)
-                        !< The internal wave energy density as a function of (i,j,angle,freq) for mode 2
+                        !< The internal wave energy density as a function of (i,j,angle,freq)
+                        !! for mode 2 [R Z3 T-2 ~> J m-2]
   real, allocatable :: En_restart_mode3(:,:,:,:)
-                        !< The internal wave energy density as a function of (i,j,angle,freq) for mode 3
+                        !< The internal wave energy density as a function of (i,j,angle,freq)
+                        !! for mode 3 [R Z3 T-2 ~> J m-2]
   real, allocatable :: En_restart_mode4(:,:,:,:)
-                        !< The internal wave energy density as a function of (i,j,angle,freq) for mode 4
+                        !< The internal wave energy density as a function of (i,j,angle,freq)
+                        !! for mode 4 [R Z3 T-2 ~> J m-2]
   real, allocatable :: En_restart_mode5(:,:,:,:)
-                        !< The internal wave energy density as a function of (i,j,angle,freq) for mode 5
+                        !< The internal wave energy density as a function of (i,j,angle,freq)
+                        !! for mode 5 [R Z3 T-2 ~> J m-2]
 
   real, allocatable, dimension(:) :: frequency  !< The frequency of each band [T-1 ~> s-1].
 
@@ -1795,9 +1800,9 @@ subroutine propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, Nangle, CS, LB, res
   real, dimension(G%isd:G%ied,G%JsdB:G%JedB),      &
                            intent(in)    :: speed_y !< The magnitude of the group velocity at the
                                                !! Cv points [L T-1 ~> m s-1].
-  real, dimension(Nangle), intent(in)    :: Cgy_av !< The average y-projection in each angular band.
+  real, dimension(Nangle), intent(in)    :: Cgy_av !< The average y-projection in each angular band [nondim]
   real, dimension(Nangle), intent(in)    :: dCgy !< The difference in y-projections between the
-                                               !! edges of each angular band.
+                                               !! edges of each angular band [nondim]
   real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(int_tide_CS),       intent(in)    :: CS !< Internal tide control structure
@@ -2425,7 +2430,7 @@ subroutine register_int_tide_restarts(G, US, param_file, CS, restart_CS)
   character(64) :: var_name, cfr
 
   type(axis_info) :: axes_inttides(2)
-  real, dimension(:), allocatable :: angles, freqs
+  real, dimension(:), allocatable :: angles, freqs ! Lables for angles and frequencies [nondim]
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 

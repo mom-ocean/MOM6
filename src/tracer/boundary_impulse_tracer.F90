@@ -41,13 +41,13 @@ type, public :: boundary_impulse_tracer_CS ; private
   logical :: coupled_tracers = .false. !< These tracers are not offered to the  coupler.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
+  real, pointer :: tr(:,:,:,:) => NULL() !< The array of tracers used in this subroutine, in [CU ~> conc] (g m-3)?
   logical :: tracers_may_reinit  !< If true, boundary_impulse can be initialized if not found in restart file
   integer, dimension(NTR_MAX) :: ind_tr  !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                          !! surface tracer concentrations are to be provided to the coupler.
 
   integer :: nkml !< Number of layers in mixed layer
-  real, dimension(NTR_MAX)  :: land_val = -1.0 !< A value to use to fill in tracers over land
+  real, dimension(NTR_MAX)  :: land_val = -1.0 !< A value to use to fill in tracers over land [CU ~> conc]
   real :: remaining_source_time !< How much longer (same units as the timestep) to
                                 !! inject the tracer at the surface [T ~> s]
 
@@ -80,8 +80,8 @@ function register_boundary_impulse_tracer(HI, GV, US, param_file, CS, tr_Reg, re
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  real, pointer :: tr_ptr(:,:,:) => NULL()
-  real, pointer :: rem_time_ptr => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [CU ~> conc]
+  real, pointer :: rem_time_ptr => NULL() ! The ramaining injection time [T ~> s]
   logical :: register_boundary_impulse_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -235,7 +235,7 @@ subroutine boundary_impulse_tracer_column_physics(h_old, h_new, ea, eb, fluxes, 
 
   ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, m
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 

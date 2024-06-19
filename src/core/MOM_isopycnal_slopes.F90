@@ -70,7 +70,10 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
                   ! in massless layers filled vertically by diffusion.
   real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
     pres          ! The pressure at an interface [R L2 T-2 ~> Pa].
-  real, dimension(SZI_(G)) :: scrap ! An array to pass to calculate_density_second_derivs() that will be ingored.
+  real, dimension(SZI_(G)) :: scrap ! An array to pass to calculate_density_second_derivs() that is
+                  ! set there but will be ignored, it is used simultaneously with four different
+                  ! inconsistent units of [R S-1 C-1 ~> kg m-3 degC-1 ppt-1], [R S-2 ~> kg m-3 ppt-2],
+                  ! [T2 S-1 L-2 ~> kg m-3 ppt-1 Pa-1] and [T2 C-1 L-2 ~> kg m-3 degC-1 Pa-1].
   real, dimension(SZIB_(G)) :: &
     drho_dT_u, &  ! The derivative of density with temperature at u points [R C-1 ~> kg m-3 degC-1].
     drho_dS_u     ! The derivative of density with salinity at u points [R S-1 ~> kg m-3 ppt-1].

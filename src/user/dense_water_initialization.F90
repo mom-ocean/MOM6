@@ -9,7 +9,6 @@ use MOM_dyn_horgrid,   only : dyn_horgrid_type
 use MOM_EOS,           only : EOS_type
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser,   only : get_param, param_file_type
-use MOM_interface_heights, only : dz_to_thickness, dz_to_thickness_simple
 use MOM_grid,          only : ocean_grid_type
 use MOM_sponge,        only : sponge_CS
 use MOM_unit_scaling,  only : unit_scale_type
@@ -122,11 +121,11 @@ subroutine dense_water_initialize_TS(G, GV, US, param_file, T, S, h, just_read)
        "Depth of unstratified mixed layer as a fraction of the water column.", &
        units="nondim", default=default_mld, do_not_log=just_read)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 default=35.0, units='1e-3', scale=US%ppt_to_S, do_not_log=just_read)
+                 default=35.0, units="ppt", scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl,"T_REF", T_ref, 'Reference temperature', &
                 units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl,"S_RANGE", S_range, 'Initial salinity range', &
-                units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
+                units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
@@ -174,7 +173,6 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
 
   real, dimension(SZI_(G),SZJ_(G)) :: Idamp ! inverse damping timescale [T-1 ~> s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: dz ! sponge layer thicknesses in height units [Z ~> m]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h  ! sponge layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: T  ! sponge temperature [C ~> degC]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: S  ! sponge salinity [S ~> ppt]
   real, dimension(SZK_(GV)+1) :: e0, eta1D ! interface positions for ALE sponge [Z ~> m]
@@ -204,7 +202,7 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
                  units="nondim", default=0.1)
   call get_param(param_file, mdl, "DENSE_WATER_EAST_SPONGE_SALT", S_dense, &
                  "Salt anomaly of the dense water being formed in the overflow region.", &
-                 units="1e-3", default=4.0, scale=US%ppt_to_S)
+                 units="ppt", default=4.0, scale=US%ppt_to_S)
 
   call get_param(param_file, mdl, "DENSE_WATER_MLD", mld, &
                  units="nondim", default=default_mld, do_not_log=.true.)
@@ -212,9 +210,9 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
                  units="nondim", default=default_sill, do_not_log=.true.)
 
   call get_param(param_file, mdl, "S_REF", S_ref, &
-                 units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl, "S_RANGE", S_range, &
-                 units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl, "T_REF", T_ref, &
                  units='degC', scale=US%degC_to_C, fail_if_missing=.true., do_not_log=.true.)
 
@@ -293,15 +291,8 @@ subroutine dense_water_initialize_sponges(G, GV, US, tv, depth_tot, param_file, 
       enddo
     enddo
 
-    ! Convert thicknesses from height units to thickness units
-    if (associated(tv%eqn_of_state)) then
-      call dz_to_thickness(dz, T, S, tv%eqn_of_state, h, G, GV, US)
-    else
-      call dz_to_thickness_simple(dz, h, G, GV, US, layer_mode=.true.)
-    endif
-
     ! This call sets up the damping rates and interface heights in the sponges.
-    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, dz, nz, data_h_is_Z=.true.)
 
     if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp, 'temp', &
         sp_long_name='temperature', sp_unit='degC s-1')

@@ -9,7 +9,7 @@ public :: evaluation_polynomial, integration_polynomial, first_derivative_polyno
 
 contains
 
-!> Pointwise evaluation of a polynomial at x
+!> Pointwise evaluation of a polynomial in arbitrary units [A] at x
 !!
 !! The polynomial is defined by the coefficients contained in the
 !! array of the same name, as follows: C(1) + C(2)x + C(3)x^2 + C(4)x^3 + ...
@@ -17,12 +17,14 @@ contains
 !! The number of coefficients is given by ncoef and x
 !! is the coordinate where the polynomial is to be evaluated.
 real function evaluation_polynomial( coeff, ncoef, x )
-  real, dimension(:), intent(in) :: coeff !< The coefficients of the polynomial
+  real, dimension(:), intent(in) :: coeff !< The coefficients of the polynomial, in units that
+                                          !! vary with the index k as [A H^(k-1)]
   integer,            intent(in) :: ncoef !< The number of polynomial coefficients
   real,               intent(in) :: x     !< The position at which to evaluate the polynomial
+                                          !! in arbitrary thickness units [H]
   ! Local variables
   integer :: k
-  real    :: f    ! value of polynomial at x
+  real    :: f    ! value of polynomial at x in arbitrary units [A]
 
   f = 0.0
   do k = 1,ncoef
@@ -33,7 +35,8 @@ real function evaluation_polynomial( coeff, ncoef, x )
 
 end function evaluation_polynomial
 
-!> Calculates the first derivative of a polynomial evaluated at a point x
+!> Calculates the first derivative of a polynomial evaluated in arbitrary units of [A H-1]
+!! at a point x
 !!
 !! The polynomial is defined by the coefficients contained in the
 !! array of the same name, as follows: C(1) + C(2)x + C(3)x^2 + C(4)x^3 + ...
@@ -41,12 +44,14 @@ end function evaluation_polynomial
 !! The number of coefficients is given by ncoef and x
 !! is the coordinate where the polynomial's derivative is to be evaluated.
 real function first_derivative_polynomial( coeff, ncoef, x )
-  real, dimension(:), intent(in) :: coeff !< The coefficients of the polynomial
+  real, dimension(:), intent(in) :: coeff !< The coefficients of the polynomial, in units that
+                                          !! vary with the index k as [A H^(k-1)]
   integer,            intent(in) :: ncoef !< The number of polynomial coefficients
   real, intent(in)               :: x     !< The position at which to evaluate the derivative
+                                          !! in arbitrary thickness units [H]
   ! Local variables
   integer                               :: k
-  real                                  :: f    ! value of polynomial at x
+  real                                  :: f    ! value of the derivative at x in [A H-1]
 
   f = 0.0
   do k = 2,ncoef
@@ -57,17 +62,20 @@ real function first_derivative_polynomial( coeff, ncoef, x )
 
 end function first_derivative_polynomial
 
-!> Exact integration of polynomial of degree npoly
+!> Exact integration of polynomial of degree npoly in arbitrary units of [A H]
 !!
 !! The array of coefficients (Coeff) must be of size npoly+1.
 real function integration_polynomial( xi0, xi1, Coeff, npoly )
-  real,               intent(in) :: xi0   !< The lower bound of the integral
-  real,               intent(in) :: xi1   !< The lower bound of the integral
-  real, dimension(:), intent(in) :: Coeff !< The coefficients of the polynomial
+  real,               intent(in) :: xi0   !< The lower bound of the integral in arbitrary
+                                          !! thickness units [H]
+  real,               intent(in) :: xi1   !< The upper bound of the integral in arbitrary
+                                          !! thickness units [H]
+  real, dimension(:), intent(in) :: Coeff !< The coefficients of the polynomial, in units that
+                                          !! vary with the index k as [A H^(k-1)]
   integer,            intent(in) :: npoly !< The degree of the polynomial
   ! Local variables
-  integer                           :: k
-  real                              :: integral
+  integer :: k
+  real    :: integral  ! The integral of the polynomial over the specified range in [A H]
 
   integral = 0.0
 

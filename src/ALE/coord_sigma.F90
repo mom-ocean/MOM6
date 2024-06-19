@@ -13,10 +13,10 @@ type, public :: sigma_CS ; private
   !> Number of levels
   integer :: nk
 
-  !> Minimum thickness allowed for layers
+  !> Minimum thickness allowed for layers [H ~> m or kg m-2]
   real :: min_thickness
 
-  !> Target coordinate resolution, nondimensional
+  !> Target coordinate resolution [nondim]
   real, allocatable, dimension(:) :: coordinateResolution
 end type sigma_CS
 

@@ -29,7 +29,7 @@ subroutine check_MOM6_scaling_factors(GV, US)
 
   ! Local variables
   integer, parameter :: ndims = 8 ! The number of rescalable dimensional factors.
-  real,    dimension(ndims) :: scales ! An array of scaling factors for each of the basic units.
+  real,    dimension(ndims) :: scales ! An array of scaling factors for each of the basic units [various].
   integer, dimension(ndims) :: scale_pow2 ! The powers of 2 that give each element of scales.
   character(len=2), dimension(ndims) :: key
   integer, allocatable :: weights(:)

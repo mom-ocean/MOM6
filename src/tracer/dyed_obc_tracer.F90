@@ -34,7 +34,7 @@ type, public :: dyed_obc_tracer_CS ; private
   character(len=200) :: tracer_IC_file !< The full path to the IC file, or " " to initialize internally.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this subroutine, in g m-3?
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this subroutine in [conc]
 
   integer, allocatable, dimension(:) :: ind_tr !< Indices returned by atmos_ocn_coupler_flux if it is used and the
                                                !! surface tracer concentrations are to be provided to the coupler.
@@ -66,7 +66,7 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=200) :: inputdir
   character(len=48)  :: flux_units ! The units for tracer fluxes, usually
                             ! kg(tracer) kg(water)-1 m3 s-1 or kg(tracer) s-1.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [conc]
   logical :: register_dyed_obc_tracer
   integer :: isd, ied, jsd, jed, nz, m
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke

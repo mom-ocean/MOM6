@@ -234,11 +234,15 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: omega_tau2w_u !< angle between mtm flux and wind at u-pts [rad]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: omega_tau2w_v !< angle between mtm flux and wind at v-pts [rad]
 
-  real :: pi, Cemp_CG, tmp, cos_tmp, sin_tmp, omega_tmp !< constants and dummy variables
-  real :: du, dv, depth, sigma, Wind_x, Wind_y          !< intermediate variables
-  real :: taux, tauy, tauxDG, tauyDG, tauxDGup, tauyDGup, ustar2, tauh !< intermediate variables
-  real :: tauNLup, tauNLdn, tauNL_CG, tauNL_DG, tauNL_X, tauNL_Y, tau_MAG !< intermediate variables
-  real :: omega_w2s, omega_tau2s, omega_s2x, omega_tau2x, omega_tau2w, omega_s2w !< intermediate angles
+  real :: pi, Cemp_CG, tmp, cos_tmp, sin_tmp  !< constants and dummy variables [nondim]
+  real :: omega_tmp        !< A dummy angle [radians]
+  real :: du, dv           !< Velocity increments [L T-1 ~> m s-1]
+  real :: depth            !< Cumulative layer thicknesses [H ~> m or kg m=2]
+  real :: sigma            !< Fractional depth in the mixed layer [nondim]
+  real :: Wind_x, Wind_y   !< intermediate wind stress componenents [L2 T-2 ~> m2 s-2]
+  real :: taux, tauy, tauxDG, tauyDG, tauxDGup, tauyDGup, ustar2, tauh !< intermediate variables [L2 T-2 ~> m2 s-2]
+  real :: tauNLup, tauNLdn, tauNL_CG, tauNL_DG, tauNL_X, tauNL_Y, tau_MAG !< intermediate variables [L2 T-2 ~> m2 s-2]
+  real :: omega_w2s, omega_tau2s, omega_s2x, omega_tau2x, omega_tau2w, omega_s2w !< intermediate angles [radians]
   integer :: kblmin, kbld, kp1, k, nz !< vertical indices
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq ! horizontal indices
 
@@ -321,6 +325,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
   enddo
 
   if (CS%debug) then
+    !### These checksum calls are missing necessary dimensional scaling factors.
     call uvchksum("surface tau[xy]_[uv] ", taux_u, tauy_v, G%HI, haloshift=1, scalar_pair=.true.)
     call uvchksum("ustar2", ustar2_u, ustar2_v, G%HI, haloshift=0, scalar_pair=.true.)
     call uvchksum(" hbl", hbl_u ,   hbl_v , G%HI, haloshift=0, scalar_pair=.true.)
@@ -427,6 +432,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
         kbld  = min( (kbl_u(I,j)) , (nz-2) )
         if ( tau_u(I,j,kbld+2) > tau_u(I,j,kbld+1) ) kbld = kbld + 1
 
+        !### This expression is dimensionally inconsistent.
         tauh  =  tau_u(I,j,kbld+1) + GV%H_subroundoff
         ! surface boundary conditions
         depth   = 0.
@@ -437,6 +443,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
           ! linear stress mag
           tau_MAG   = (ustar2_u(I,j) * (1.-sigma) )  + (tauh * sigma )
+          !### The following expressions are dimensionally inconsistent.
           cos_tmp   = tauxDG_u(I,j,k+1) / (tau_u(I,j,k+1) + GV%H_subroundoff)
           sin_tmp   = tauyDG_u(I,j,k+1) / (tau_u(I,j,k+1) + GV%H_subroundoff)
 
@@ -457,6 +464,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           tauNLdn  = tauNL_X
 
           ! nonlocal increment and update to uold
+          !### The following expression is dimensionally inconsistent and missing parentheses.
           du = (tauNLup - tauNLdn) * (dt/CS%h_u(I,j,k) + GV%H_subroundoff)
           ui(I,j,k)    = uold(I,j,k)  + du
           uold(I,j,k)  = du
@@ -496,6 +504,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
           ! linear stress
           tau_MAG   = (ustar2_v(i,J) * (1.-sigma))  + (tauh * sigma)
+          !### The following expressions are dimensionally inconsistent.
           cos_tmp   = tauxDG_v(i,J,k+1) / (tau_v(i,J,k+1)  + GV%H_subroundoff)
           sin_tmp   = tauyDG_v(i,J,k+1) / (tau_v(i,J,k+1)  + GV%H_subroundoff)
 
@@ -514,6 +523,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
           tauNL_X  = (tauNL_DG * cos_tmp - tauNL_CG * sin_tmp)
           tauNL_Y  = (tauNL_DG * sin_tmp + tauNL_CG * cos_tmp)
           tauNLdn  = tauNL_Y
+          !### The following expression is dimensionally inconsistent, [L T-1] vs. [L2 H-1 T-1] on the right,
+          !    and it is inconsistent with the counterpart expression for du.
           dv            = (tauNLup - tauNLdn) * (dt/(CS%h_v(i,J,k)) )
           vi(i,J,k)    = vold(i,J,k) + dv
           vold(i,J,k)  = dv
@@ -551,12 +562,12 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
 end subroutine vertFPmix
 
-!> Returns the empirical shape-function given sigma.
+!> Returns the empirical shape-function given sigma [nondim]
 real function G_sig(sigma)
-  real , intent(in) :: sigma   !< non-dimensional normalized boundary layer depth [m]
+  real , intent(in) :: sigma    !< Normalized boundary layer depth [nondim]
 
   ! local variables
-  real :: p1, c2, c3  !< parameters used to fit and match empirycal shape-functions.
+  real :: p1, c2, c3  !< Parameters used to fit and match empirical shape-functions [nondim]
 
   ! parabola
   p1 = 0.287
@@ -2634,7 +2645,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_vert_friction" ! This module's name.
   character(len=40)  :: thickness_units
-  real :: Kv_mks ! KVML in MKS
+  real :: Kv_mks ! KVML in MKS [m2 s-1]
 
   if (associated(CS)) then
     call MOM_error(WARNING, "vertvisc_init called with an associated "// &

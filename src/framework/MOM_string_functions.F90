@@ -86,7 +86,7 @@ end function left_ints
 
 !> Returns a left-justified string with a real formatted like '(G)'
 function left_real(val)
-  real, intent(in)  :: val !< The real variable to convert to a string
+  real, intent(in)  :: val !< The real variable to convert to a string, in arbitrary units [A]
   character(len=32) :: left_real !< The output string
 
   integer :: l, ind
@@ -139,7 +139,7 @@ end function left_real
 !> Returns a character string of a comma-separated, compact formatted, reals
 !! e.g. "1., 2., 5*3., 5.E2"
 function left_reals(r,sep)
-  real, intent(in) :: r(:) !< The array of real variables to convert to a string
+  real, intent(in) :: r(:) !< The array of real variables to convert to a string, in arbitrary units [A]
   character(len=*), optional, intent(in) :: sep !< The separator between
                                     !! successive values, by default it is ', '.
   character(len=:), allocatable :: left_reals !< The output string
@@ -179,10 +179,10 @@ end function left_reals
 !> Returns True if the string can be read/parsed to give the exact value of "val"
 function isFormattedFloatEqualTo(str, val)
   character(len=*), intent(in) :: str !< The string to parse
-  real,             intent(in) :: val !< The real value to compare with
+  real,             intent(in) :: val !< The real value to compare with, in arbitrary units [A]
   logical                      :: isFormattedFloatEqualTo
   ! Local variables
-  real :: scannedVal
+  real :: scannedVal ! The value extraced from str, in arbitrary units [A]
 
   isFormattedFloatEqualTo=.false.
   read(str(1:),*,err=987) scannedVal
@@ -263,12 +263,12 @@ integer function extract_integer(string, separators, n, missing_value)
 
 end function extract_integer
 
-!> Returns the real corresponding to the nth word in the argument.
+!> Returns the real corresponding to the nth word in the argument, in arbitrary units [A].
 real function extract_real(string, separators, n, missing_value)
   character(len=*), intent(in) :: string     !< String to scan
   character(len=*), intent(in) :: separators !< Characters to use for delineation
   integer,          intent(in) :: n          !< Number of word to extract
-  real, optional,   intent(in) :: missing_value !< Value to assign if word is missing
+  real, optional,   intent(in) :: missing_value !< Value to assign if word is missing, in arbitrary units [A]
   ! Local variables
   character(len=20) :: word
 
@@ -314,6 +314,7 @@ logical function string_functions_unit_tests(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   integer :: i(5) = (/ -1, 1, 3, 3, 0 /)
+  ! This is an array of real test values, in arbitrary units [A]
   real :: r(8) = (/ 0., 1., -2., 1.3, 3.E-11, 3.E-11, 3.E-11, -5.1E12 /)
   logical :: fail, v
   fail = .false.
@@ -387,8 +388,8 @@ end function localTestI
 !> True if r1 is not equal to r2. False otherwise.
 logical function localTestR(verbose,r1,r2)
   logical, intent(in) :: verbose !< If true, write results to stdout
-  real, intent(in) :: r1 !< Float
-  real, intent(in) :: r2 !< Float
+  real, intent(in) :: r1 !< The first value to compare, in arbitrary units [A]
+  real, intent(in) :: r2 !< The first value to compare, in arbitrary units [A]
   localTestR=.false.
   if (r1/=r2) localTestR=.true.
   if (localTestR .or. verbose) then

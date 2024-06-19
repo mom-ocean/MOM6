@@ -13,6 +13,7 @@ use MOM_file_parser,     only : get_param, log_param, log_version, param_file_ty
 use MOM_file_parser,     only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,    only : forcing
 use MOM_grid,            only : ocean_grid_type
+use MOM_interface_heights, only : thickness_to_dz
 use MOM_unit_scaling,    only : unit_scale_type
 use MOM_verticalGrid,    only : verticalGrid_type
 use MOM_variables,       only : thermo_var_ptrs,  vertvisc_type
@@ -58,6 +59,8 @@ type, public :: bkgnd_mixing_cs ; private
   real    :: N0_2Omega              !< ratio of the typical Buoyancy frequency to
                                     !! twice the Earth's rotation period, used with the
                                     !! Henyey scaling from the mixing [nondim]
+  real    :: Henyey_max_lat         !< A latitude poleward of which the Henyey profile
+                                    !! is returned to the minimum diffusivity [degN]
   real    :: prandtl_bkgnd          !< Turbulent Prandtl number used to convert
                                     !! vertical background diffusivity into viscosity [nondim]
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of
@@ -281,6 +284,10 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
     call get_param(param_file, mdl, "OMEGA", CS%omega, &
                  "The rotation rate of the earth.", &
                  units="s-1", default=7.2921e-5, scale=US%T_to_s)
+    call get_param(param_file, mdl, "HENYEY_MAX_LAT", CS%Henyey_max_lat, &
+                  "A latitude poleward of which the Henyey profile "//&
+                  "is returned to the minimum diffusivity", &
+                  units="degN", default=95.0)
   endif
 
   call get_param(param_file, mdl, "KD_TANH_LAT_FN", CS%Kd_tanh_lat_fn, &
@@ -338,6 +345,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   real, dimension(SZK_(GV)+1) :: Kv_col     !< Viscosities at the interfaces [m2 s-1]
   real, dimension(SZI_(G))    :: Kd_sfc     !< Surface value of the diffusivity [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZI_(G))    :: depth      !< Distance from surface of an interface [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZK_(GV)) :: dz   !< Height change across layers [Z ~> m]
   real :: depth_c    !< depth of the center of a layer [H ~> m or kg m-2]
   real :: I_Hmix     !< inverse of fixed mixed layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: I_2Omega   !< 1/(2 Omega) [T ~> s]
@@ -364,10 +372,12 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
   ! Set up the background diffusivity.
   if (CS%Bryan_Lewis_diffusivity) then
 
+    call thickness_to_dz(h, tv, dz, j, G, GV)
+
     do i=is,ie
       depth_int(1) = 0.0
       do k=2,nz+1
-        depth_int(k) = depth_int(k-1) + GV%H_to_m*h(i,j,k-1)
+        depth_int(k) = depth_int(k-1) + US%Z_to_m*dz(i,k-1)
       enddo
 
       call CVMix_init_bkgnd(max_nlev=nz, &
@@ -443,6 +453,7 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       I_x30 = 2.0 / invcosh(CS%N0_2Omega*2.0) ! This is evaluated at 30 deg.
       do i=is,ie
         abs_sinlat = abs(sin(G%geoLatT(i,j)*deg_to_rad))
+        if (abs(G%geoLatT(i,j))>CS%Henyey_max_lat) abs_sinlat = min_sinlat
         Kd_sfc(i) = max(CS%Kd_min, CS%Kd * &
              ((abs_sinlat * invcosh(CS%N0_2Omega / max(min_sinlat, abs_sinlat))) * I_x30) )
       enddo

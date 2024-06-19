@@ -872,10 +872,8 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
 
   ! Local variables
 
-  ! Remaining zonal mass transports [H L2 ~> m3 or kg]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV))   :: uhtr_sub
-  ! Remaining meridional mass transports [H L2 ~> m3 or kg]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV))   :: vhtr_sub
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uhtr_sub ! Remaining zonal mass transports [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vhtr_sub ! Remaining meridional mass transports [H L2 ~> m3 or kg]
 
   real, dimension(SZI_(G),SZJB_(G)) :: rem_col_flux ! The summed absolute value of the remaining
                          ! fluxes through the faces of a column or within a column, in mks units [kg]

@@ -18,15 +18,19 @@ contains
 !! The matrix A must be square, with the first index varing down the column.
 subroutine solve_linear_system( A, R, X, N, answer_date )
   integer,              intent(in)    :: N  !< The size of the system
-  real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted [nondim]
-  real, dimension(N),   intent(inout) :: R  !< system right-hand side [A]
-  real, dimension(N),   intent(inout) :: X  !< solution vector [A]
+  real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted in arbitrary units [A] on
+                                            !! input, but internally modified to become nondimensional
+                                            !! during the solver.
+  real, dimension(N),   intent(inout) :: R  !< system right-hand side in arbitrary units [A B] on
+                                            !! input, but internally modified to have units of [B]
+                                            !! during the solver
+  real, dimension(N),   intent(inout) :: X  !< solution vector in arbitrary units [B]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
   ! Local variables
-  real, parameter       :: eps = 0.0        ! Minimum pivot magnitude allowed
-  real    :: factor       ! The factor that eliminates the leading nonzero element in a row.
-  real    :: pivot, I_pivot ! The pivot value and its reciprocal [nondim]
-  real    :: swap_a, swap_b
+  real, parameter       :: eps = 0.0        ! Minimum pivot magnitude allowed [A]
+  real    :: factor       ! The factor that eliminates the leading nonzero element in a row [A-1]
+  real    :: pivot, I_pivot ! The pivot value and its reciprocal, in [A] and [A-1]
+  real    :: swap_a, swap_b ! Swap space in various units [various]
   logical :: found_pivot  ! If true, a pivot has been found
   logical :: old_answers  ! If true, use expressions that give the original (2008 through 2018) MOM6 answers
   integer :: i, j, k
@@ -110,15 +114,18 @@ end subroutine solve_linear_system
 !! The matrix A must be square, with the first index varing along the row.
 subroutine linear_solver( N, A, R, X )
   integer,              intent(in)    :: N  !< The size of the system
-  real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted [nondim]
-  real, dimension(N),   intent(inout) :: R  !< system right-hand side [A]
-  real, dimension(N),   intent(inout) :: X  !< solution vector [A]
+  real, dimension(N,N), intent(inout) :: A  !< The matrix being inverted in arbitrary units [A] on
+                                            !! input, but internally modified to become nondimensional
+                                            !! during the solver.
+  real, dimension(N),   intent(inout) :: R  !< system right-hand side in [A B] on input, but internally
+                                            !! modified to have units of [B] during the solver
+  real, dimension(N),   intent(inout) :: X  !< solution vector [B]
 
   ! Local variables
-  real, parameter :: eps = 0.0   ! Minimum pivot magnitude allowed
-  real    :: factor       ! The factor that eliminates the leading nonzero element in a row.
-  real    :: I_pivot      ! The reciprocal of the pivot value [inverse of the input units of a row of A]
-  real    :: swap
+  real, parameter :: eps = 0.0   ! Minimum pivot magnitude allowed [A]
+  real    :: factor       ! The factor that eliminates the leading nonzero element in a row [A-1].
+  real    :: I_pivot      ! The reciprocal of the pivot value [A-1]
+  real    :: swap         ! Swap space used in various units [various]
   integer :: i, j, k
 
   ! Loop on rows to transform the problem into multiplication by an upper-right matrix.
@@ -175,16 +182,17 @@ end subroutine linear_solver
 !! (A is made up of lower, middle and upper diagonals)
 subroutine solve_tridiagonal_system( Al, Ad, Au, R, X, N, answer_date )
   integer,            intent(in)  :: N   !< The size of the system
-  real, dimension(N), intent(in)  :: Ad  !< Matrix center diagonal
-  real, dimension(N), intent(in)  :: Al  !< Matrix lower diagonal
-  real, dimension(N), intent(in)  :: Au  !< Matrix upper diagonal
-  real, dimension(N), intent(in)  :: R   !< system right-hand side
-  real, dimension(N), intent(out) :: X   !< solution vector
+  real, dimension(N), intent(in)  :: Ad  !< Matrix center diagonal in arbitrary units [A]
+  real, dimension(N), intent(in)  :: Al  !< Matrix lower diagonal [A]
+  real, dimension(N), intent(in)  :: Au  !< Matrix upper diagonal [A]
+  real, dimension(N), intent(in)  :: R   !< system right-hand side in arbitrary units [A B]
+  real, dimension(N), intent(out) :: X   !< solution vector in arbitrary units [B]
   integer,  optional, intent(in)  :: answer_date  !< The vintage of the expressions to use
   ! Local variables
-  real, dimension(N) :: pivot, Al_piv
-  real, dimension(N) :: c1       ! Au / pivot for the backward sweep
-  real    :: I_pivot  ! The inverse of the most recent pivot
+  real, dimension(N) :: pivot    ! The pivot value [A]
+  real, dimension(N) :: Al_piv   ! The lower diagonal divided by the pivot value [nondim]
+  real, dimension(N) :: c1       ! Au / pivot for the backward sweep [nondim]
+  real    :: I_pivot  ! The inverse of the most recent pivot [A-1]
   integer :: k        ! Loop index
   logical :: old_answers  ! If true, use expressions that give the original (2008 through 2018) MOM6 answers
 
@@ -237,16 +245,16 @@ end subroutine solve_tridiagonal_system
 !! roundoff compared with (Al+Au), the answers are prone to inaccuracy.
 subroutine solve_diag_dominant_tridiag( Al, Ac, Au, R, X, N )
   integer,            intent(in)  :: N   !< The size of the system
-  real, dimension(N), intent(in)  :: Ac  !< Matrix center diagonal offset from Al + Au
-  real, dimension(N), intent(in)  :: Al  !< Matrix lower diagonal
-  real, dimension(N), intent(in)  :: Au  !< Matrix upper diagonal
-  real, dimension(N), intent(in)  :: R   !< system right-hand side
-  real, dimension(N), intent(out) :: X   !< solution vector
+  real, dimension(N), intent(in)  :: Ac  !< Matrix center diagonal offset from Al + Au in arbitrary units [A]
+  real, dimension(N), intent(in)  :: Al  !< Matrix lower diagonal [A]
+  real, dimension(N), intent(in)  :: Au  !< Matrix upper diagonal [A]
+  real, dimension(N), intent(in)  :: R   !< system right-hand side in arbitrary units [A B]
+  real, dimension(N), intent(out) :: X   !< solution vector in arbitrary units [B]
   ! Local variables
-  real, dimension(N) :: c1       ! Au / pivot for the backward sweep
-  real               :: d1       ! The next value of 1.0 - c1
-  real               :: I_pivot  ! The inverse of the most recent pivot
-  real               :: denom_t1 ! The first term in the denominator of the inverse of the pivot.
+  real, dimension(N) :: c1       ! Au / pivot for the backward sweep [nondim]
+  real               :: d1       ! The next value of 1.0 - c1 [nondim]
+  real               :: I_pivot  ! The inverse of the most recent pivot [A-1]
+  real               :: denom_t1 ! The first term in the denominator of the inverse of the pivot [A]
   integer            :: k        ! Loop index
 
   ! Factorization and forward sweep, in a form that will never give a division by a

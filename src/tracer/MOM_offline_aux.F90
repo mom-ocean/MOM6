@@ -783,7 +783,7 @@ subroutine update_offline_from_arrays(G, GV, nk_input, ridx_sum, mean_file, sum_
   real, dimension(:,:,:,:), allocatable,     intent(inout) :: salt_all  !< Salinity array [S ~> ppt]
 
   integer :: i, j, k, is, ie, js, je, nz
-  real, parameter :: fill_value = 0.
+  real, parameter :: fill_value = 0. ! The fill value for input arrays [various]
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   ! Check that all fields are allocated (this is a redundant check)

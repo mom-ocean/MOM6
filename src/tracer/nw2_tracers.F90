@@ -33,7 +33,7 @@ type, public :: nw2_tracers_CS ; private
   integer :: ntr = 0  !< The number of tracers that are actually used.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
-  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in g m-3?
+  real, pointer :: tr(:,:,:,:) => NULL()   !< The array of tracers used in this package, in [conc] (g m-3)?
   real, allocatable , dimension(:) :: restore_rate !< The rate at which the tracer is damped toward
                                              !! its target profile [T-1 ~> s-1]
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
@@ -60,7 +60,7 @@ logical function register_nw2_tracers(HI, GV, US, param_file, CS, tr_Reg, restar
 # include "version_variable.h"
   character(len=40)  :: mdl = "nw2_tracers" ! This module's name.
   character(len=8)  :: var_name ! The variable's name.
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [conc]
   integer :: isd, ied, jsd, jed, nz, m, ig
   integer :: n_groups ! Number of groups of three tracers (i.e. # tracers/3)
   real, allocatable, dimension(:) :: timescale_in_days ! Damping timescale [days]
@@ -216,7 +216,7 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   integer :: i, j, k, m
   real :: dt_x_rate ! dt * restoring rate [nondim]
   real :: rscl ! z* scaling factor [nondim]
-  real :: target_value ! tracer value
+  real :: target_value ! tracer target value for damping [conc]
 
 ! if (.not.associated(CS)) return
 
