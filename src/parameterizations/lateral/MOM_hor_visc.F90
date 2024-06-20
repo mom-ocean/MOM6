@@ -94,6 +94,8 @@ type, public :: hor_visc_CS ; private
                              !! in setting the corner-point viscosities when USE_KH_BG_2D=True.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
                              !! viscosity [L2 T-1 ~> m2 s-1]. The default is 0.0.
+  logical :: FrictWork_bug    !< If true, retain an answer-changing bug in calculating FrictWork,
+                             !! which cancels the h in thickness flux and the h at velocity point.
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
@@ -247,7 +249,7 @@ contains
 !!   u(is-2:ie+2,js-2:je+2)
 !!   v(is-2:ie+2,js-2:je+2)
 !!   h(is-1:ie+1,js-1:je+1) or up to h(is-2:ie+2,js-2:je+2) with some Leith options.
-subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, &
+subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, GV, US, &
                                 CS, tv, dt, OBC, BT, TD, ADp, hu_cont, hv_cont)
   type(ocean_grid_type),         intent(in)  :: G      !< The ocean's grid structure.
   type(verticalGrid_type),       intent(in)  :: GV     !< The ocean's vertical grid structure.
@@ -257,6 +259,10 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                                  intent(in)  :: v      !< The meridional velocity [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                  intent(inout) :: h    !< Layer thicknesses [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                 intent(in)  :: uh      !< The zonal volume transport [H L2 T-1 ~> m3 s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                 intent(in)  :: vh      !< The meridional volume transport [H L2 T-1 ~> m3 s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                                  intent(out) :: diffu  !< Zonal acceleration due to convergence of
                                                        !! along-coordinate stress tensor [L T-2 ~> m s-2]
@@ -615,7 +621,7 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
 
   !$OMP parallel do default(none) &
   !$OMP shared( &
-  !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, &
+  !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, uh, vh, &
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
   !$OMP   is_vort, ie_vort, js_vort, je_vort, &
   !$OMP   is_Kh, ie_Kh, js_Kh, je_Kh, &
@@ -1787,10 +1793,11 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
       enddo
     endif
 
-    if (find_FrictWork) then ; do j=js,je ; do i=is,ie
+    if (find_FrictWork) then
+      if (CS%FrictWork_bug) then ; do j=js,je ; do i=is,ie
       ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
       ! This is the old formulation that includes energy diffusion
-      FrictWork(i,j,k) = GV%H_to_RZ * ( &
+        FrictWork(i,j,k) = GV%H_to_RZ * ( &
               (str_xx(i,j) * (u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)    &
              - str_xx(i,j) * (v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))   &
           + 0.25*((str_xy(I,J) *                                  &
@@ -1805,12 +1812,44 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                  + str_xy(I,J-1) *                                &
                    ((u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
                   + (v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1)) ) ) )
-    enddo ; enddo ; endif
+          enddo ; enddo
+      else ; do j=js,je ; do i=is,ie
+        FrictWork(i,j,k) = GV%H_to_RZ * G%IareaT(i,j) * ( &
+            ((str_xx(i,j)*CS%dy2h(i,j) * ( &
+                  (uh(I,j,k)*G%dxCu(I,j)*G%IdyCu(I,j)*G%IareaCu(I,j)/(h_u(I,j)+h_neglect)) &
+                - (uh(I-1,j,k)*G%dxCu(I-1,j)*G%IdyCu(I-1,j)*G%IareaCu(I-1,j)/(h_u(I-1,j)+h_neglect)) ) ) &
+           - (str_xx(i,j)*CS%dx2h(i,j) * ( &
+                  (vh(i,J,k)*G%dyCv(i,J)*G%IdxCv(i,J)*G%IareaCv(i,J)/(h_v(i,J)+h_neglect)) &
+                - (vh(i,J-1,k)*G%dyCv(i,J-1)*G%IdxCv(i,J-1)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)) ) )) &
+       + (0.25*(((str_xy(I,J)*(                                     &
+                     (CS%dx2q(I,J)*((uh(I,j+1,k)*G%IareaCu(I,j+1)/(h_u(I,j+1)+h_neglect)) &
+                                  - (uh(I,j,k)*G%IareaCu(I,j)/(h_u(I,j)+h_neglect))))            &
+                   + (CS%dy2q(I,J)*((vh(i+1,J,k)*G%IareaCv(i+1,J)/(h_v(i+1,J)+h_neglect)) &
+                                  - (vh(i,J,k)*G%IareaCv(i,J)/(h_v(i,J)+h_neglect)))) ))          &
+                +(str_xy(I-1,J-1)*(                                 &
+                     (CS%dx2q(I-1,J-1)*((uh(I-1,j,k)*G%IareaCu(I-1,j)/(h_u(I-1,j)+h_neglect)) &
+                                      - (uh(I-1,j-1,k)*G%IareaCu(I-1,j-1)/(h_u(I-1,j-1)+h_neglect))))    &
+                   + (CS%dy2q(I-1,J-1)*((vh(i,J-1,k)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)) &
+                                      - (vh(i-1,J-1,k)*G%IareaCv(i-1,J-1)/(h_v(i-1,J-1)+h_neglect)))) )) ) &
+               +((str_xy(I-1,J)*(                                   &
+                     (CS%dx2q(I-1,J)*((uh(I-1,j+1,k)*G%IareaCu(I-1,j+1)/(h_u(I-1,j+1)+h_neglect)) &
+                                    - (uh(I-1,j,k)*G%IareaCu(I-1,j)/(h_u(I-1,j)+h_neglect))))      &
+                   + (CS%dy2q(I-1,J)*((vh(i,J,k)*G%IareaCv(i,J)/(h_v(i,J)+h_neglect)) &
+                                    - (vh(i-1,J,k)*G%IareaCv(i-1,J)/(h_v(i-1,J)+h_neglect)))) ))        &
+                +(str_xy(I,J-1)*(                                   &
+                     (CS%dx2q(I,J-1)*((uh(I,j,k)*G%IareaCu(I,j)/(h_u(I,j)+h_neglect)) &
+                                    - (uh(I,j-1,k)*G%IareaCu(I,j-1)/(h_u(I,j-1)+h_neglect))))          &
+                   + (CS%dy2q(I,J-1)*((vh(i+1,J-1,k)*G%IareaCv(i+1,J-1)/(h_v(i+1,J-1)+h_neglect)) &
+                                    - (vh(i,J-1,k)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)))) )) ) )) )
+      enddo ; enddo ; endif
+    endif
 
-    if (CS%use_GME) then ; do j=js,je ; do i=is,ie
+
+    if (CS%use_GME) then
+      if (CS%FrictWork_bug) then ; do j=js,je ; do i=is,ie
       ! Diagnose   str_xx_GME*d_x u - str_yy_GME*d_y v + str_xy_GME*(d_y u + d_x v)
       ! This is the old formulation that includes energy diffusion
-      FrictWork_GME(i,j,k) = GV%H_to_RZ * ( &
+        FrictWork_GME(i,j,k) = GV%H_to_RZ * ( &
               (str_xx_GME(i,j)*(u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)     &
              - str_xx_GME(i,j)*(v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))    &
             + 0.25*((str_xy_GME(I,J) *                               &
@@ -1825,7 +1864,38 @@ subroutine horizontal_viscosity(u, v, h, diffu, diffv, MEKE, VarMix, G, GV, US, 
                    + str_xy_GME(I,J-1) *                             &
                      ((u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)           &
                     + (v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1)) ) ) )
-    enddo ; enddo ; endif
+        enddo ; enddo
+      else ; do j=js,je ; do i=is,ie
+        FrictWork_GME(i,j,k) = GV%H_to_RZ * G%IareaT(i,j) * ( &
+            ((str_xx_GME(i,j)*CS%dy2h(i,j) * ( &
+                  (uh(I,j,k)*G%dxCu(I,j)*G%IdyCu(I,j)*G%IareaCu(I,j)/(h_u(I,j)+h_neglect)) &
+                - (uh(I-1,j,k)*G%dxCu(I-1,j)*G%IdyCu(I-1,j)*G%IareaCu(I-1,j)/(h_u(I-1,j)+h_neglect)) ) ) &
+           - (str_xx_GME(i,j)*CS%dx2h(i,j) * ( &
+                  (vh(i,J,k)*G%dyCv(i,J)*G%IdxCv(i,J)*G%IareaCv(i,J)/(h_v(i,J)+h_neglect)) &
+                - (vh(i,J-1,k)*G%dyCv(i,J-1)*G%IdxCv(i,J-1)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)) ) )) &
+       + (0.25*(((str_xy_GME(I,J)*(                                     &
+                     (CS%dx2q(I,J)*((uh(I,j+1,k)*G%IareaCu(I,j+1)/(h_u(I,j+1)+h_neglect)) &
+                                  - (uh(I,j,k)*G%IareaCu(I,j)/(h_u(I,j)+h_neglect))))            &
+                   + (CS%dy2q(I,J)*((vh(i+1,J,k)*G%IareaCv(i+1,J)/(h_v(i+1,J)+h_neglect)) &
+                                  - (vh(i,J,k)*G%IareaCv(i,J)/(h_v(i,J)+h_neglect)))) ))          &
+                +(str_xy_GME(I-1,J-1)*(                                 &
+                     (CS%dx2q(I-1,J-1)*((uh(I-1,j,k)*G%IareaCu(I-1,j)/(h_u(I-1,j)+h_neglect)) &
+                                      - (uh(I-1,j-1,k)*G%IareaCu(I-1,j-1)/(h_u(I-1,j-1)+h_neglect))))    &
+                   + (CS%dy2q(I-1,J-1)*((vh(i,J-1,k)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)) &
+                                      - (vh(i-1,J-1,k)*G%IareaCv(i-1,J-1)/(h_v(i-1,J-1)+h_neglect)))) )) ) &
+               +((str_xy_GME(I-1,J)*(                                   &
+                     (CS%dx2q(I-1,J)*((uh(I-1,j+1,k)*G%IareaCu(I-1,j+1)/(h_u(I-1,j+1)+h_neglect)) &
+                                    - (uh(I-1,j,k)*G%IareaCu(I-1,j)/(h_u(I-1,j)+h_neglect))))      &
+                   + (CS%dy2q(I-1,J)*((vh(i,J,k)*G%IareaCv(i,J)/(h_v(i,J)+h_neglect)) &
+                                    - (vh(i-1,J,k)*G%IareaCv(i-1,J)/(h_v(i-1,J)+h_neglect)))) ))        &
+                +(str_xy_GME(I,J-1)*(                                   &
+                     (CS%dx2q(I,J-1)*((uh(I,j,k)*G%IareaCu(I,j)/(h_u(I,j)+h_neglect)) &
+                                    - (uh(I,j-1,k)*G%IareaCu(I,j-1)/(h_u(I,j-1)+h_neglect))))          &
+                   + (CS%dy2q(I,J-1)*((vh(i+1,J-1,k)*G%IareaCv(i+1,J-1)/(h_v(i+1,J-1)+h_neglect)) &
+                                    - (vh(i,J-1,k)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)))) )) ) )) )
+
+      enddo ; enddo ; endif
+    endif
 
     ! Make a similar calculation as for FrictWork above but accumulating into
     ! the vertically integrated MEKE source term, and adjusting for any
@@ -2298,6 +2368,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If true, retain an answer-changing horizontal indexing bug in setting "//&
                  "the corner-point viscosities when USE_KH_BG_2D=True.  This is "//&
                  "not recommended.", default=.false., do_not_log=.not.CS%use_Kh_bg_2d)
+  call get_param(param_file, mdl, "FRICTWORK_BUG", CS%FrictWork_bug, &
+                 "If true, retain an answer-changing bug in calculating "//&
+                 "the FrictWork, which cancels the h in thickness flux and the h at velocity point. This is"//&
+                 "not recommended.", default=.true.)
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&

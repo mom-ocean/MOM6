@@ -553,7 +553,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, &
+  call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, &
                             tv, dt, OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, ADp=CS%AD_pred)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with predictor horizontal_viscosity (step_MOM_dyn_split_RK2b)")
@@ -843,8 +843,8 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, &
-                            OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, ADp=CS%ADp)
+  call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, &
+                            tv, dt, OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, ADp=CS%ADp)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2b)")
 
