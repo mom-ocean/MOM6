@@ -18,6 +18,7 @@ use MOM_interface_heights,     only : find_eta, thickness_to_dz
 use MOM_isopycnal_slopes,      only : vert_fill_TS
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_MEKE_types,            only : MEKE_type
+use MOM_stochastics,           only : stochastic_CS
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_variables,             only : thermo_var_ptrs, cont_diag_ptrs
 use MOM_verticalGrid,          only : verticalGrid_type
@@ -119,7 +120,7 @@ contains
 !> Calculates isopycnal height diffusion coefficients and applies isopycnal height diffusion
 !! by modifying to the layer thicknesses, h. Diffusivities are limited to ensure stability.
 !! Also returns along-layer mass fluxes used in the continuity equation.
-subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp, CS)
+subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp, CS, STOCH)
   type(ocean_grid_type),                      intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV     !< Vertical grid structure
   type(unit_scale_type),                      intent(in)    :: US     !< A dimensional unit scaling type
@@ -134,6 +135,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   type(VarMix_CS), target,                    intent(in)    :: VarMix !< Variable mixing coefficients
   type(cont_diag_ptrs),                       intent(inout) :: CDp    !< Diagnostics for the continuity equation
   type(thickness_diffuse_CS),                 intent(inout) :: CS     !< Control structure for thickness_diffuse
+  type(stochastic_CS),                        intent(inout) :: STOCH !< Stochastic control structure
   ! Local variables
   real :: e(SZI_(G),SZJ_(G),SZK_(GV)+1) ! heights of interfaces, relative to mean
                                          ! sea level [Z ~> m], positive up.
@@ -477,12 +479,23 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
   ! Calculate uhD, vhD from h, e, KH_u, KH_v, tv%T/S
-  if (use_stored_slopes) then
-    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
-                                int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y)
+  if (STOCH%skeb_use_gm) then
+    if (use_stored_slopes) then
+      call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
+                                  int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y, &
+                                  STOCH=STOCH, VarMix=VarMix)
+    else
+      call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
+                                  int_slope_u, int_slope_v, STOCH=STOCH, VarMix=VarMix)
+    endif
   else
-    call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
-                                int_slope_u, int_slope_v)
+    if (use_stored_slopes) then
+      call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
+                                  int_slope_u, int_slope_v, VarMix%slope_x, VarMix%slope_y)
+    else
+      call thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, CS, &
+                                  int_slope_u, int_slope_v)
+    endif
   endif
 
   if (VarMix%use_variable_mixing) then
@@ -593,7 +606,7 @@ end subroutine thickness_diffuse
 !! Fluxes are limited to give positive definite thicknesses.
 !! Called by thickness_diffuse().
 subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV, US, MEKE, &
-                                  CS, int_slope_u, int_slope_v, slope_x, slope_y)
+                                  CS, int_slope_u, int_slope_v, slope_x, slope_y, STOCH, VarMix)
   type(ocean_grid_type),                        intent(in)  :: G     !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)  :: GV    !< Vertical grid structure
   type(unit_scale_type),                        intent(in)  :: US    !< A dimensional unit scaling type
@@ -622,6 +635,8 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                                                      !! density gradients [nondim].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1), optional, intent(in)  :: slope_x !< Isopyc. slope at u [Z L-1 ~> nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1), optional, intent(in)  :: slope_y !< Isopyc. slope at v [Z L-1 ~> nondim]
+  type(stochastic_CS),                       optional, intent(inout)  :: STOCH !< Stochastic control structure
+  type(VarMix_CS), target,                      optional, intent(in)  :: VarMix !< Variable mixing coefficents
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -759,6 +774,11 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                                         ! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real :: diag_sfn_unlim_y(SZI_(G),SZJB_(G),SZK_(GV)+1) ! Diagnostic of the y-face streamfunction before
                                                         ! applying limiters [Z L2 T-1 ~> m3 s-1]
+                                                        ! applying limiters [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, allocatable :: skeb_gm_work(:,:)                ! Temp array to hold GM work for SKEB
+  real, allocatable :: skeb_ebt_norm2(:,:)              ! Used to normalize EBT for SKEB
+  real :: h_tot ! total depth [H ~> m]
+
   logical :: present_slope_x, present_slope_y, calc_derivatives
   integer, dimension(2) :: EOSdom_u  ! The shifted I-computational domain to use for equation of
                                      ! state calculations at u-points.
@@ -766,7 +786,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                                      ! state calculations at v-points.
   integer, dimension(2) :: EOSdom_h1 ! The shifted i-computational domain to use for equation of
                                      ! state calculations at h points with 1 extra halo point
-  logical :: use_stanley
+  logical :: use_stanley, skeb_use_gm
   integer :: is, ie, js, je, nz, IsdB, halo
   integer :: i, j, k
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke ; IsdB = G%IsdB
@@ -786,6 +806,13 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
   use_stanley = CS%use_stanley_gm
 
+  skeb_use_gm = .false.
+  if (present(STOCH)) skeb_use_gm = STOCH%skeb_use_gm
+  if (skeb_use_gm) then
+    allocate(skeb_gm_work(is:ie,js:je), source=0.)
+    allocate(skeb_ebt_norm2(is:ie,js:je), source=0.)
+  endif
+
   nk_linear = max(GV%nkml, 1)
 
   Slope_x_PE(:,:,:) = 0.0
@@ -795,6 +822,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
   find_work = allocated(MEKE%GM_src)
   find_work = (allocated(CS%GMwork) .or. find_work)
+  find_work = (skeb_use_gm .or. find_work)
 
   if (use_EOS) then
     halo = 1 ! Default halo to fill is 1
@@ -1548,7 +1576,22 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
     if (.not. CS%GM_src_alt) then ; if (allocated(MEKE%GM_src)) then
       MEKE%GM_src(i,j) = MEKE%GM_src(i,j) + Work_h
     endif ; endif
+    if (skeb_use_gm) then
+      h_tot = sum(h(i,j,1:nz))
+      skeb_gm_work(i,j)   = STOCH%skeb_gm_coef * Work_h
+      skeb_ebt_norm2(i,j) = GV%H_to_RZ * &
+                                     (sum(h(i,j,1:nz) * VarMix%ebt_struct(i,j,1:nz)**2) + h_neglect)
+    endif
   enddo ; enddo ; endif
+
+  if (skeb_use_gm) then
+    ! This block spreads the GM work down through the column using the ebt vertical structure, squared.
+    ! Note the sign convention.
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      STOCH%skeb_diss(i,j,k) = STOCH%skeb_diss(i,j,k) - skeb_gm_work(i,j) * &
+                               VarMix%ebt_struct(i,j,k)**2 / skeb_ebt_norm2(i,j)
+    enddo ; enddo ; enddo
+  endif
 
   if (find_work .and. CS%GM_src_alt) then ; if (allocated(MEKE%GM_src)) then
     do j=js,je ; do i=is,ie ; do k=nz,1,-1

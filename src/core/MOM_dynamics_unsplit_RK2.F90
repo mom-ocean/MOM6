@@ -87,6 +87,7 @@ use MOM_open_boundary, only : open_boundary_zero_normal_flow
 use MOM_PressureForce, only : PressureForce, PressureForce_init, PressureForce_CS
 use MOM_set_visc, only : set_viscous_ML, set_visc_CS
 use MOM_self_attr_load, only : SAL_init, SAL_end, SAL_CS
+use MOM_stochastics,   only : stochastic_CS
 use MOM_tidal_forcing, only : tidal_forcing_init, tidal_forcing_end, tidal_forcing_CS
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_vert_friction, only : vertvisc, vertvisc_coef, vertvisc_init, vertvisc_CS
@@ -192,7 +193,7 @@ contains
 !> Step the MOM6 dynamics using an unsplit quasi-2nd order Runge-Kutta scheme
 subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, &
-                  VarMix, MEKE, pbv)
+                  VarMix, MEKE, pbv, STOCH)
   type(ocean_grid_type),             intent(inout) :: G       !< The ocean's grid structure.
   type(verticalGrid_type),           intent(in)    :: GV      !< The ocean's vertical grid structure.
   type(unit_scale_type),             intent(in)    :: US      !< A dimensional unit scaling type
@@ -237,6 +238,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
                                                               !! fields related to the Mesoscale
                                                               !! Eddy Kinetic Energy.
   type(porous_barrier_type), intent(in) :: pbv                !< porous barrier fractional cell metrics
+  type(stochastic_CS),   intent(inout) :: STOCH               !< Stochastic control structure
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: h_av ! Averaged layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: hp ! Predicted layer thicknesses [H ~> m or kg m-2]
@@ -276,7 +278,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call enable_averages(dt,Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
   call horizontal_viscosity(u_in, v_in, h_in, CS%diffu, CS%diffv, MEKE, VarMix, &
-                            G, GV, US, CS%hor_visc)
+                            G, GV, US, CS%hor_visc, STOCH=STOCH)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
   call pass_vector(CS%diffu, CS%diffv, G%Domain, clock=id_clock_pass)
