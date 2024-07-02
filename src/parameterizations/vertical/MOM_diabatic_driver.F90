@@ -676,6 +676,14 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
     call cpu_clock_begin(id_clock_kpp)
     ! total vertical viscosity in the interior is represented via visc%Kv_shear
 
+    ! NOTE: The following do not require initialization, but their checksums do
+    !   require initialization, and past versions were initialized to zero.
+    KPP_NLTheat(:,:,:) = 0.
+    KPP_NLTscalar(:,:,:) = 0.
+    KPP_buoy_flux(:,:,:) = 0.
+    KPP_temp_flux(:,:) = 0.
+    KPP_salt_flux(:,:) = 0.
+
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.
     ! Sets: KPP_buoy_flux, KPP_temp_flux, KPP_salt_flux
@@ -1288,6 +1296,14 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
       visc%Kv_shear(i,j,k) = visc%Kv_shear(i,j,k) + visc%Kv_slow(i,j,k)
     enddo ; enddo ; enddo
 
+    ! NOTE: The following do not require initialization, but their checksums do
+    !   require initialization, and past versions were initialized to zero.
+    KPP_NLTheat(:,:,:) = 0.
+    KPP_NLTscalar(:,:,:) = 0.
+    KPP_buoy_flux(:,:,:) = 0.
+    KPP_temp_flux(:,:) = 0.
+    KPP_salt_flux(:,:) = 0.
+
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.
     ! Sets: KPP_buoy_flux, KPP_temp_flux, KPP_salt_flux
@@ -1885,6 +1901,15 @@ subroutine layered_diabatic(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_e
 
   if (CS%useKPP) then
     call cpu_clock_begin(id_clock_kpp)
+
+    ! NOTE: The following do not require initialization, but their checksums do
+    !   require initialization, and past versions were initialized to zero.
+    KPP_NLTheat(:,:,:) = 0.
+    KPP_NLTscalar(:,:,:) = 0.
+    KPP_buoy_flux(:,:,:) = 0.
+    KPP_temp_flux(:,:) = 0.
+    KPP_salt_flux(:,:) = 0.
+
     ! KPP needs the surface buoyancy flux but does not update state variables.
     ! We could make this call higher up to avoid a repeat unpacking of the surface fluxes.
     ! Sets: KPP_buoy_flux, KPP_temp_flux, KPP_salt_flux
