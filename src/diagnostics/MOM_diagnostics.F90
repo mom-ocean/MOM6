@@ -970,9 +970,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
 
   if (.not.(CS%KE_term_on .or. (CS%id_KE > 0))) return
 
-  do j=js-1,je ; do i=is-1,ie
-    KE_u(I,j) = 0.0 ; KE_v(i,J) = 0.0
-  enddo ; enddo
+  KE_u(:,:) = 0. ; KE_v(:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
     KE(i,j,k) = ((u(I,j,k) * u(I,j,k) + u(I-1,j,k) * u(I-1,j,k)) &

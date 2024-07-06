@@ -395,7 +395,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   !$OMP                                  drho_dT_dT_hr,pres_hr,T_hr,S_hr,             &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
   !$OMP                                  drdy,mag_grad2,slope,l_seg)
-  do j=js-1,je ; do K=nz,2,-1
+  do J=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
       drdjA = 0.0 ; drdjB = 0.0
       drdkL = GV%Rlay(k)-GV%Rlay(k-1) ; drdkR = GV%Rlay(k)-GV%Rlay(k-1)

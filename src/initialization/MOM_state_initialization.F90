@@ -2045,7 +2045,7 @@ subroutine initialize_sponges_file(G, GV, US, use_temperature, tv, u, v, depth_t
       ! This call to set_up_sponge_ML_density registers the target values of the
       ! mixed layer density, which is used in determining which layers can be
       ! inflated without causing static instabilities.
-      do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
+      do i=is,ie ; pres(i) = tv%P_Ref ; enddo
       EOSdom(:) = EOS_domain(G%HI)
 
       call MOM_read_data(filename, potemp_var, tmp(:,:,:), G%Domain, scale=US%degC_to_C)

@@ -703,7 +703,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
 
     if (CS%id_uml > 0) then
-      do J=js,je ; do i=is-1,ie
+      do j=js,je ; do I=is-1,ie
         h_vel = 0.5*((htot_fast(i,j) + htot_fast(i+1,j)) + h_neglect)
         uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (mu(0.,0.)-mu(-.01,0.))
       enddo ; enddo
@@ -1164,7 +1164,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
     if (CS%id_lfbod  > 0) call post_data(CS%id_lfbod, lf_bodner_diag, CS%diag)
 
     if (CS%id_uml > 0) then
-      do J=js,je ; do i=is-1,ie
+      do j=js,je ; do I=is-1,ie
         h_vel = 0.5*((htot(i,j) + htot(i+1,j)) + h_neglect)
         uDml_diag(I,j) = uDml_diag(I,j) / (0.01*h_vel) * G%IdyCu(I,j) * (mu(0.,0.)-mu(-.01,0.))
       enddo ; enddo

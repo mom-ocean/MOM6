@@ -2533,7 +2533,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
       !GOMP parallel do default(shared)
-      do J=js-1,je ; do I=is,ie
+      do J=js-1,je ; do i=is,ie
         l_seg = OBC%segnum_v(i,J)
         if (l_seg == OBC_NONE) cycle
 

@@ -221,7 +221,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
       (dt * (G%IdxCu(I,j)*G%IdxCu(I,j) + G%IdyCu(I,j)*G%IdyCu(I,j)))
   enddo ; enddo
   !$OMP parallel do default(shared)
-  do j=js-1,je ; do I=is,ie
+  do J=js-1,je ; do i=is,ie
     KH_v_CFL(i,J) = (0.25*CS%max_Khth_CFL) / &
       (dt * (G%IdxCv(i,J)*G%IdxCv(i,J) + G%IdyCv(i,J)*G%IdyCv(i,J)))
   enddo ; enddo
@@ -426,7 +426,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     if (CS%MEKE_GEOMETRIC) then
       if (CS%MEKE_GEOM_answer_date < 20190101) then
         !$OMP do
-        do j=js,je ; do I=is,ie
+        do j=js,je ; do i=is,ie
           ! This does not give bitwise rotational symmetry.
           MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
                          (0.25*(VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j) + &
@@ -435,7 +435,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
         enddo ; enddo
       else
         !$OMP do
-        do j=js,je ; do I=is,ie
+        do j=js,je ; do i=is,ie
           ! With the additional parentheses this gives bitwise rotational symmetry.
           MEKE%Kh(i,j) = CS%MEKE_GEOMETRIC_alpha * MEKE%MEKE(i,j) / &
                          (0.25*((VarMix%SN_u(I,j)+VarMix%SN_u(I-1,j)) + &

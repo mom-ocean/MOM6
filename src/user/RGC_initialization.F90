@@ -183,7 +183,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
     !   This call to set_up_sponge_ML_density registers the target values of the
     ! mixed layer density, which is used in determining which layers can be
     ! inflated without causing static instabilities.
-      do i=is-1,ie ; pres(i) = tv%P_Ref ; enddo
+      do i=is,ie ; pres(i) = tv%P_Ref ; enddo
       EOSdom(:) = EOS_domain(G%HI)
       do j=js,je
         call calculate_density(T(:,j,1), S(:,j,1), pres, rho(:,j), tv%eqn_of_state, EOSdom)

@@ -103,7 +103,7 @@ function global_area_mean_v(var, G, tmp_scale)
   scalefac = G%US%L_to_m**2*temp_scale
 
   tmpForSumming(:,:) = 0.
-  do J=js,je ; do i=is,ie
+  do j=js,je ; do i=is,ie
     tmpForSumming(i,j) = G%areaT(i,j) * scalefac * &
              (var(i,J) * G%mask2dCv(i,J) + var(i,J-1) * G%mask2dCv(i,J-1)) / &
              max(1.e-20, G%mask2dCv(i,J)+G%mask2dCv(i,J-1))
