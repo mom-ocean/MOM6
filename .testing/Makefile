@@ -651,7 +651,7 @@ $(WORK)/%/restart/ocean.stats: $(BUILD)/symmetric/MOM6 | preproc
 # Not a true rule; only call this after `make test` to summarize test results.
 .PHONY: test.summary
 test.summary:
-	@./tools/report_test_results.sh $(WORK)/results
+	./tools/report_test_results.sh $(WORK)/results
 
 
 #---
