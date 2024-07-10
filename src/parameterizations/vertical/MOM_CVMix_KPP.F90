@@ -1342,47 +1342,60 @@ subroutine KPP_smooth_BLD(CS, G, GV, US, dz)
   type(unit_scale_type),                  intent(in)    :: US   !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: dz   !< Layer thicknesses [Z ~> m]
 
-  ! local
+  ! local variables
   real, dimension(SZI_(G),SZJ_(G)) :: OBLdepth_prev     ! OBLdepth before s.th smoothing iteration [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)) :: total_depth       ! The total depth of the water column, adjusted
+                                                        ! for the minimum layer thickness [Z ~> m]
   real, dimension( GV%ke )         :: cellHeight        ! Cell center heights referenced to surface [Z ~> m]
                                                         ! (negative in the ocean)
   real, dimension( GV%ke+1 )       :: iFaceHeight       ! Interface heights referenced to surface [Z ~> m]
                                                         ! (negative in the ocean)
   real :: wc, ww, we, wn, ws ! averaging weights for smoothing [nondim]
   real :: dh                 ! The local thickness used for calculating interface positions [Z ~> m]
+  real :: h_cor(SZI_(G))     ! A cumulative correction arising from inflation of vanished layers [Z ~> m]
   real :: hcorr              ! A cumulative correction arising from inflation of vanished layers [Z ~> m]
-  integer :: i, j, k, s
+  integer :: i, j, k, s, halo
 
   call cpu_clock_begin(id_clock_KPP_smoothing)
 
-  ! Update halos
+  ! Find the total water column thickness first, as it is reused for each smoothing pass.
+  total_depth(:,:) = 0.0
+
+  !$OMP parallel do default(shared) private(dh, h_cor)
+  do j = G%jsc, G%jec
+    h_cor(:) = 0.
+    do k=1,GV%ke
+      do i=G%isc,G%iec ; if (G%mask2dT(i,j) > 0.0) then
+        ! This code replicates the interface height calculations below.  It could be simpler, as shown below.
+        dh = dz(i,j,k)   ! Nominal thickness to use for increment
+        dh = dh + h_cor(i) ! Take away the accumulated error (could temporarily make dh<0)
+        h_cor(i) = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+        dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+        total_depth(i,j) = total_depth(i,j) + dh
+      endif ; enddo
+    enddo
+  enddo
+  ! A much simpler (but answer changing) version of the total_depth calculation would be
+  ! do k=1,GV%ke ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+  !   total_depth(i,j) = total_depth(i,j) + dz(i,j,k)
+  ! enddo ; enddo ; enddo
+
+  ! Update halos once, then march inward for each iteration
+  if (CS%n_smooth > 1) call pass_var(total_depth, G%Domain, halo=CS%n_smooth, complete=.false.)
   call pass_var(CS%OBLdepth, G%Domain, halo=CS%n_smooth)
 
-  if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original = CS%OBLdepth
+  if (CS%id_OBLdepth_original > 0) CS%OBLdepth_original(:,:) = CS%OBLdepth(:,:)
 
   do s=1,CS%n_smooth
 
-    OBLdepth_prev = CS%OBLdepth
+    OBLdepth_prev(:,:) = CS%OBLdepth(:,:)
+    halo = CS%n_smooth - s
 
     ! apply smoothing on OBL depth
-    !$OMP parallel do default(none) shared(G, GV, US, CS, dz, OBLdepth_prev) &
-    !$OMP                           private(wc, ww, we, wn, ws, dh, hcorr, cellHeight, iFaceHeight)
-    do j = G%jsc, G%jec
-      do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
-
-        iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
-        hcorr = 0.
-        do k=1,GV%ke
-
-          ! cell center and cell bottom in meters (negative values in the ocean)
-          dh = dz(i,j,k)   ! Nominal thickness to use for increment
-          dh = dh + hcorr ! Take away the accumulated error (could temporarily make dh<0)
-          hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
-          dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
-          cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
-          iFaceHeight(k+1) = iFaceHeight(k) - dh
-        enddo
-
+    !$OMP parallel do default(none) shared(G, GV, CS, OBLdepth_prev, total_depth, halo) &
+    !$OMP                           private(wc, ww, we, wn, ws)
+    do j = G%jsc-halo, G%jec+halo
+      do i = G%isc-halo, G%iec+halo ; if (G%mask2dT(i,j) > 0.0) then
         ! compute weights
         ww = 0.125 * G%mask2dT(i-1,j)
         we = 0.125 * G%mask2dT(i+1,j)
@@ -1400,17 +1413,35 @@ subroutine KPP_smooth_BLD(CS, G, GV, US, dz)
         if (CS%deepen_only) CS%OBLdepth(i,j) = max(CS%OBLdepth(i,j), OBLdepth_prev(i,j))
 
         ! prevent OBL depths deeper than the bathymetric depth
-        CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), -iFaceHeight(GV%ke+1) ) ! no deeper than bottom
-        CS%kOBL(i,j)     = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
+        CS%OBLdepth(i,j) = min( CS%OBLdepth(i,j), total_depth(i,j) ) ! no deeper than bottom
       endif ; enddo
     enddo
 
   enddo ! s-loop
 
+  ! Determine the fractional index of the bottom of the boundary layer.
+  !$OMP parallel do default(none) shared(G, GV, CS, dz) &
+  !$OMP                           private(dh, hcorr, cellHeight, iFaceHeight)
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (G%mask2dT(i,j) > 0.0) then
+
+    iFaceHeight(1) = 0.0 ! BBL is all relative to the surface
+    hcorr = 0.
+    do k=1,GV%ke
+      ! cell center and cell bottom in meters (negative values in the ocean)
+      dh = dz(i,j,k)   ! Nominal thickness to use for increment
+      dh = dh + hcorr  ! Take away the accumulated error (could temporarily make dh<0)
+      hcorr = min( dh - CS%min_thickness, 0. ) ! If inflating then hcorr<0
+      dh = max( dh, CS%min_thickness ) ! Limit increment dh>=min_thickness
+      cellHeight(k)    = iFaceHeight(k) - 0.5 * dh
+      iFaceHeight(k+1) = iFaceHeight(k) - dh
+    enddo
+
+    CS%kOBL(i,j) = CVMix_kpp_compute_kOBL_depth( iFaceHeight, cellHeight, CS%OBLdepth(i,j) )
+  endif ; enddo ; enddo
+
   call cpu_clock_end(id_clock_KPP_smoothing)
 
 end subroutine KPP_smooth_BLD
-
 
 
 !> Copies KPP surface boundary layer depth into BLD, in units of [Z ~> m] unless other units are specified.
