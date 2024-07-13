@@ -48,7 +48,7 @@ use MOM_CoriolisAdv,           only : CoriolisAdv_init, CoriolisAdv_end
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
 use MOM_hor_index,             only : hor_index_type
-use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_CS
+use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_CS, hor_visc_vel_stencil
 use MOM_hor_visc,              only : hor_visc_init, hor_visc_end
 use MOM_interface_heights,     only : thickness_to_dz, find_col_avg_SpV
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -401,7 +401,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   logical :: showCallTree, sym
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: cont_stencil, obc_stencil
+  integer :: cont_stencil, obc_stencil, vel_stencil
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -468,19 +468,20 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
   if (associated(CS%OBC)) then
     if (CS%OBC%oblique_BCs_exist_globally) obc_stencil = 3
   endif
+  vel_stencil = max(2, obc_stencil, hor_visc_vel_stencil(CS%hor_visc))
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_hp_uv, hp, G%Domain, halo=2)
-  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
-  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=vel_stencil)
+  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=vel_stencil)
 
   call create_group_pass(CS%pass_uv, u, v, G%Domain, halo=max(2,cont_stencil))
   call create_group_pass(CS%pass_h, h, G%Domain, halo=max(2,cont_stencil))
-  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
-  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=vel_stencil)
+  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=vel_stencil)
   call cpu_clock_end(id_clock_pass)
   !--- end set up for group halo pass
 
@@ -841,7 +842,7 @@ subroutine step_MOM_dyn_split_RK2(u, v, h, tv, visc, Time_local, dt, forces, p_s
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, US, symmetric=sym)
-    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
+    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=vel_stencil, symmetric=sym, scale=US%L_T_to_m_s)
     call hchksum(h_av, "Predictor avg h", G%HI, haloshift=0, scale=GV%H_to_MKS)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
     call check_redundant("Predictor up ", up, vp, G, unscale=US%L_T_to_m_s)
