@@ -32,7 +32,7 @@ public near_boundary_unit_tests, hor_bnd_diffusion, hor_bnd_diffusion_init
 public boundary_k_range, hor_bnd_diffusion_end
 
 ! Private parameters to avoid doing string comparisons for bottom or top boundary layer
-integer, public, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface bopundary
+integer, public, parameter :: SURFACE = -1 !< Set a value that corresponds to the surface boundary
 integer, public, parameter :: BOTTOM  = 1  !< Set a value that corresponds to the bottom boundary
 #include <MOM_memory.h>
 
@@ -146,10 +146,11 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
        check_reconstruction=.false., check_remapping=.false.)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
-  call get_param(param_file, mdl, "DEBUG", debug, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "DEBUG", debug, &
+                 default=.false., debuggingParam=.true., do_not_log=.true.)
   call get_param(param_file, mdl, "HBD_DEBUG", CS%debug, &
                  "If true, write out verbose debugging data in the HBD module.", &
-                 default=debug)
+                 default=debug, debuggingParam=.true.)
 
   id_clock_hbd = cpu_clock_id('(Ocean HBD)', grain=CLOCK_MODULE)
 
@@ -208,7 +209,7 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     tracer => Reg%tr(m)
 
     if (CS%debug) then
-      call hchksum(tracer%t, "before HBD "//tracer%name,G%HI)
+      call hchksum(tracer%t, "before HBD "//tracer%name, G%HI, scale=tracer%conc_scale)
     endif
 
     ! for diagnostics
@@ -264,10 +265,10 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, CS)
     endif
 
     if (CS%debug) then
-      call hchksum(tracer%t, "after HBD "//tracer%name,G%HI)
+      call hchksum(tracer%t, "after HBD "//tracer%name, G%HI, scale=tracer%conc_scale)
       ! tracer (native grid) integrated tracer amounts before and after HBD
-      tracer_int_prev = global_mass_integral(h, G, GV, tracer_old)
-      tracer_int_end = global_mass_integral(h, G, GV, tracer%t)
+      tracer_int_prev = global_mass_integral(h, G, GV, tracer_old, scale=tracer%conc_scale)
+      tracer_int_end = global_mass_integral(h, G, GV, tracer%t, scale=tracer%conc_scale)
       write(mesg,*) 'Total '//tracer%name//' before/after HBD:', tracer_int_prev, tracer_int_end
       call MOM_mesg(mesg)
     endif
@@ -1213,7 +1214,7 @@ end subroutine hor_bnd_diffusion_end
 !!
 !! \subsection section_harmonic_mean Harmonic Mean
 !!
-!! The harmonic mean (HM) betwen h1 and h2 is defined as:
+!! The harmonic mean (HM) between h1 and h2 is defined as:
 !!
 !! \f[ HM = \frac{2 \times h1 \times h2}{h1 + h2} \f]
 !!
