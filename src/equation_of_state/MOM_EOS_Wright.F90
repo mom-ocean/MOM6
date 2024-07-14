@@ -12,6 +12,7 @@ implicit none ; private
 public buggy_Wright_EOS
 public int_density_dz_wright, int_spec_vol_dp_wright
 public avg_spec_vol_buggy_Wright
+public set_params_buggy_Wright
 
 !>@{ Parameters in the Wright equation of state using the reduced range formula, which is a fit to the UNESCO
 !    equation of state for the restricted range: -2 < theta < 30 [degC], 28 < S < 38 [PSU], 0  < p < 5e7 [Pa].
@@ -39,6 +40,8 @@ real, parameter :: c5 = -3.079464    ! A parameter in the Wright lambda fit [m2 
 !> The EOS_base implementation of the Wright 1997 equation of state with some bugs
 type, extends (EOS_base) :: buggy_Wright_EOS
 
+  real :: three = 3.0 !< A constant that can be adjusted to recreate some bugs [nondim]
+
 contains
   !> Implementation of the in-situ density as an elemental function [kg m-3]
   procedure :: density_elem => density_elem_buggy_Wright
@@ -58,6 +61,9 @@ contains
   procedure :: calculate_compress_elem => calculate_compress_elem_buggy_Wright
   !> Implementation of the range query function
   procedure :: EOS_fit_range => EOS_fit_range_buggy_Wright
+
+  !> Instance specific function to set internal parameters
+  procedure :: set_params_buggy_Wright => set_params_buggy_Wright
 
   !> Local implementation of generic calculate_density_array for efficiency
   procedure :: calculate_density_array => calculate_density_array_buggy_Wright
@@ -228,13 +234,16 @@ elemental subroutine calculate_density_second_derivs_elem_buggy_Wright(this, T, 
   real :: z11    ! A local work variable [Pa m2 s-2 PSU-1] = [kg m s-4 PSU-1]
   real :: z2_2   ! A local work variable [m4 s-4]
   real :: z2_3   ! A local work variable [m6 s-6]
+  real :: six    ! A constant that can be adjusted from 6. to 4. to recreate a bug [nondim]
 
   ! Based on the above expression with common terms factored, there probably exists a more numerically stable
   ! and/or efficient expression
 
+  six = 2.0*this%three  ! When recreating a bug from the original version of this routine, six = 4.
+
   z0 = T*(b1 + b5*S + T*(b2 + b3*T))
   z1 = (b0 + pressure + b4*S + z0)
-  z3 = (b1 + b5*S + T*(2.*b2 + 2.*b3*T)) ! BUG: This should be z3 = b1 + b5*S + T*(2.*b2 + 3.*b3*T)
+  z3 = (b1 + b5*S + T*(2.*b2 + this%three*b3*T))  ! When recreating a bug here this%three = 2.
   z4 = (c0 + c4*S + T*(c1 + c5*S + T*(c2 + c3*T)))
   z5 = (b1 + b5*S + T*(b2 + b3*T) + T*(b2 + 2.*b3*T))
   z6 = c1 + c5*S + T*(c2 + c3*T) + T*(c2 + 2.*c3*T)
@@ -249,8 +258,7 @@ elemental subroutine calculate_density_second_derivs_elem_buggy_Wright(this, T, 
 
   drho_ds_ds = (z10*(c4 + c5*T) - a2*z10*z1 - z10*z7)/z2_2 - (2.*(c4 + c5*T + z9*z10 + a2*z1)*z11)/z2_3
   drho_ds_dt = (z10*z6 - z1*(c5 + a2*z5) + b5*z4 - z5*z7)/z2_2 - (2.*(z6 + z9*z5 + a1*z1)*z11)/z2_3
-  ! BUG: In the following line: (2.*b2 + 4.*b3*T) should be (2.*b2 + 6.*b3*T)
-  drho_dt_dt = (z3*z6 - z1*(2.*c2 + 6.*c3*T + a1*z5) + (2.*b2 + 4.*b3*T)*z4 - z5*z8)/z2_2 - &
+  drho_dt_dt = (z3*z6 - z1*(2.*c2 + 6.*c3*T + a1*z5) + (2.*b2 + six*b3*T)*z4 - z5*z8)/z2_2 - &
                   (2.*(z6 + z9*z5 + a1*z1)*(z3*z4 - z1*z8))/z2_3
   drho_ds_dp = (-c4 - c5*T - 2.*a2*z1)/z2_2 - (2.*z9*z11)/z2_3
   drho_dt_dp = (-c1 - c5*S - T*(2.*c2 + 3.*c3*T) - 2.*a1*z1)/z2_2 - (2.*z9*(z3*z4 - z1*z8))/z2_3
@@ -923,6 +931,23 @@ subroutine calculate_spec_vol_array_buggy_Wright(this, T, S, pressure, specvol, 
   endif
 
 end subroutine calculate_spec_vol_array_buggy_Wright
+
+
+!> Set coefficients that can correct bugs un the buggy Wright equation of state.
+subroutine set_params_buggy_Wright(this, use_Wright_2nd_deriv_bug)
+  class(buggy_Wright_EOS), intent(inout) :: this !< This EOS
+  logical, optional, intent(in)    :: use_Wright_2nd_deriv_bug !< If true, use a buggy
+                           !! buggy version of the calculations of the second
+                           !! derivative of density with temperature and with temperature and
+                           !! pressure.  This bug is corrected in the default version.
+
+  this%three = 3.0
+  if (present(use_Wright_2nd_deriv_bug)) then
+    if (use_Wright_2nd_deriv_bug) then ; this%three = 2.0
+    else  ; this%three = 3.0 ; endif
+  endif
+
+end subroutine set_params_buggy_Wright
 
 
 !> \namespace mom_eos_wright

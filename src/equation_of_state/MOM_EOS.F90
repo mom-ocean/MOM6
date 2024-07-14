@@ -1526,6 +1526,7 @@ subroutine EOS_init(param_file, EOS, US)
                  "If true, use a bug in the calculation of the second derivatives of density "//&
                  "with temperature and with temperature and pressure that causes some terms "//&
                  "to be only 2/3 of what they should be.", default=.false.)
+    call EOS_manual_init(EOS, form_of_EOS=EOS_WRIGHT, use_Wright_2nd_deriv_bug=EOS%use_Wright_2nd_deriv_bug)
   endif
 
   EOS_quad_default = .not.((EOS%form_of_EOS == EOS_LINEAR) .or. &
@@ -1645,6 +1646,8 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
     select type (t => EOS%type)
       type is (linear_EOS)
         call t%set_params_linear(Rho_T0_S0, dRho_dT, dRho_dS)
+      type is (buggy_Wright_EOS)
+        call t%set_params_buggy_Wright(use_Wright_2nd_deriv_bug)
     end select
   endif
   if (present(form_of_TFreeze))  EOS%form_of_TFreeze = form_of_TFreeze
