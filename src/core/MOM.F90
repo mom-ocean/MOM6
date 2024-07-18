@@ -4028,7 +4028,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
     endif
   endif
 
-  if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G, US, haloshift=0)
+  if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G, US, haloshift=0, symmetric=.true.)
 
   ! Rotate sfc_state back onto the input grid, sfc_state_in
   if (CS%rotate_index) then

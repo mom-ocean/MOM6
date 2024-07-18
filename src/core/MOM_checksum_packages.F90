@@ -167,7 +167,7 @@ subroutine MOM_surface_chksum(mesg, sfc_state, G, US, haloshift, symmetric)
   logical :: sym
 
   sym = .false. ; if (present(symmetric)) sym = symmetric
-  hs = 1 ; if (present(haloshift)) hs = haloshift
+  hs = 0 ; if (present(haloshift)) hs = haloshift
 
   if (allocated(sfc_state%SST)) call hchksum(sfc_state%SST, mesg//" SST", G%HI, haloshift=hs, &
                                              scale=US%C_to_degC)
@@ -182,6 +182,14 @@ subroutine MOM_surface_chksum(mesg, sfc_state, G, US, haloshift, symmetric)
                   scale=US%L_T_to_m_s)
   if (allocated(sfc_state%frazil)) call hchksum(sfc_state%frazil, mesg//" frazil", G%HI, &
                                                 haloshift=hs, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
+  if (allocated(sfc_state%melt_potential)) call hchksum(sfc_state%melt_potential, mesg//" melt_potential", &
+                      G%HI, haloshift=hs, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
+  if (allocated(sfc_state%ocean_mass)) call hchksum(sfc_state%ocean_mass, mesg//" ocean_mass", &
+                      G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
+  if (allocated(sfc_state%ocean_heat)) call hchksum(sfc_state%ocean_heat, mesg//" ocean_heat", &
+                      G%HI, haloshift=hs, scale=US%C_to_degC*US%RZ_to_kg_m2)
+  if (allocated(sfc_state%ocean_salt)) call hchksum(sfc_state%ocean_salt, mesg//" ocean_salt", &
+                      G%HI, haloshift=hs, scale=US%S_to_ppt*US%RZ_to_kg_m2)
 
 end subroutine MOM_surface_chksum
 
