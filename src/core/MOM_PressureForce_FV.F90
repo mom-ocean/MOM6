@@ -619,6 +619,37 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   real, dimension(SZI_(G),SZJB_(G)) :: &
     inty_pa_cor ! Correction for curvature in inty_pa [R L2 T-2 ~> Pa]
 
+  ! These variables are used with reset_intxpa_integral.  The values are taken from different
+  ! interfaces as a function of position.
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    T_int_W, T_int_E, & ! Temperatures on the reference interface to the east and west of a u-point [C ~> degC]
+    S_int_W, S_int_E, & ! Salinities on the reference interface to the east and west of a u-point [S ~> ppt]
+    p_int_W, p_int_E, & ! Pressures on the reference interface to the east and west of a u-point [R L2 T-2 ~> Pa]
+    rho_x_W, rho_x_E, & ! Density anomalies on the reference interface to the east and west
+                        ! of a u-point [R ~> kg m-3]
+    intx_pa_nonlin, &   ! Deviations in the previous version of intx_pa for the reference interface
+                        ! from the value that would be obtained from assuming that pressure varies
+                        ! linearly with depth along that interface [R L2 T-2 ~> Pa].
+    dgeo_x, &           ! The change in x in geopotenial height along the reference interface [L2 T-2 ~> m2 s-2]
+    intx_pa_cor_ri      ! The correction to intx_pa based on the reference interface calculations [R L2 T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    T_int_S, T_int_N, & ! Temperatures on the reference interface to the north and south of a v-point [C ~> degC]
+    S_int_S, S_int_N, & ! Salinities on the reference interface to the north and south of a v-point [S ~> ppt]
+    p_int_S, p_int_N, & ! Pressures on the reference interface to the north and south of a v-point [R L2 T-2 ~> Pa]
+    rho_y_S, rho_y_N, & ! Density anomalies on the reference interface to the north and south
+                        ! of a v-point [R ~> kg m-3]
+    inty_pa_nonlin, &   ! Deviations in the previous version of intx_pa for the reference interface
+                        ! from the value that would be obtained from assuming that pressure varies
+                        ! linearly with depth along that interface [R L2 T-2 ~> Pa].
+    dgeo_y, &           ! The change in y in geopotenial height along the reference interface [L2 T-2 ~> m2 s-2]
+    inty_pa_cor_ri      ! The correction to inty_pa based on the reference interface calculations [R L2 T-2 ~> Pa]
+  logical, dimension(SZIB_(G),SZJ_(G)) :: &
+    seek_x_cor          ! If true, try to find a u-point interface that would provide a better estimate
+                        ! of the curvature terms in the intx_pa.
+  logical, dimension(SZI_(G),SZJB_(G)) :: &
+    seek_y_cor          ! If true, try to find a v-point interface that would provide a better estimate
+                        ! of the curvature terms in the inty_pa.
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
                 ! than the mixed layer have the mixed layer's properties [C ~> degC].
@@ -661,13 +692,18 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
+  logical :: do_more_k       ! If true, there are still points where a flatter interface remains to be found.
   type(thermo_var_ptrs) :: tv_tmp! A structure of temporary T & S.
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer, dimension(2) :: EOSdom_h ! The i-computational domain for the equation of state at tracer points
+  integer, dimension(2) :: EOSdom_u ! The i-computational domain for the equation of state at u-velocity points
+  integer, dimension(2) :: EOSdom_v ! The i-computational domain for the equation of state at v-velocity points
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k, m, k2
   real :: T5(5), S5(5) ! Temperatures and salinities at five quadrature points [C ~> degC] and [S ~> ppt]
-  real :: p5(5)        ! Pressures at five quadrature points [R L2 T-2 ~> Pa]
+  real :: p5(5)        ! Full pressures at five quadrature points for use with the equation of state [R L2 T-2 ~> Pa]
+  real :: pa5(5)       ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at five
+                       ! quadrature points [R L2 T-2 ~> Pa].
   real :: r5(5)        ! Densities at five quadrature points [R ~> kg m-3]
   real, parameter :: C1_6 = 1.0/6.0    ! A rational constant [nondim]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
@@ -679,6 +715,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   nkmb=GV%nk_rho_varies
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   EOSdom(1) = Isq - (G%isd-1) ;  EOSdom(2) = G%iec+1 - (G%isd-1)
+  EOSdom_u(1) = Isq - (G%IsdB-1) ; EOSdom_u(2) = Ieq - (G%IsdB-1)
+  EOSdom_v(1) = is - (G%isd-1)   ; EOSdom_v(2) = ie - (G%isd-1)
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
@@ -693,6 +731,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   dz_neglect = GV%dZ_subroundoff
   I_Rho0 = 1.0 / GV%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
+  GxRho = GV%g_Earth * GV%Rho0
   rho_ref = CS%Rho0
 
   if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
@@ -828,12 +867,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (use_p_atm) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      pa(i,j,1) = (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref) + p_atm(i,j)
+      pa(i,j,1) = GxRho*(e(i,j,1) - G%Z_ref) + p_atm(i,j)
     enddo ; enddo
   else
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      pa(i,j,1) = (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
+      pa(i,j,1) = GxRho*(e(i,j,1) - G%Z_ref)
     enddo ; enddo
   endif
 
@@ -920,7 +959,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (CS%correction_intxpa) then
 
     ! Determine surface density for use in the pressure gradient corrections
-    GxRho = GV%g_Earth * CS%rho0
     if (use_ALE .and. CS%Recon_Scheme > 0) then
       !$OMP parallel do default(shared) private(p_surf_EOS)
       do j=Jsq,Jeq+1
@@ -949,7 +987,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     do j=js,je ; do I=Isq,Ieq
       intx_pa_cor(I,j) = 0.0
       dz_geo_sfc = GV%g_Earth * (e(i+1,j,1)-e(i,j,1))
-      if (dz_geo_sfc * (rho_ref - (pa(i+1,j,1)-pa(i,j,1))*dz_geo_sfc) > 0.0) then
+      if ((dz_geo_sfc * rho_ref - (pa(i+1,j,1)-pa(i,j,1)))*dz_geo_sfc > 0.0) then
         ! The pressure/depth relationship has a positive implied density given by
         !   rho_implied = rho_ref - (pa(i+1,j,1)-pa(i,j,1)) / dz_geo_sfc
         if (-dz_geo_sfc * (pa(i+1,j,1)-pa(i,j,1)) > &
@@ -958,32 +996,28 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
           ! balance.  This test gets rid of pressure differences that are small, e.g. open ocean.
           if (CS%correction_intxpa_5pt) then
             ! Use 5 point quadrature to calculate intxpa
-            T5(1) = T_t(I,j,1) ; T5(5) = T_t(I+1,j,1)
-            S5(1) = S_t(I,j,1) ; S5(5) = S_t(I+1,j,1)
+            T5(1) = T_t(i,j,1) ; T5(5) = T_t(i+1,j,1)
+            S5(1) = S_t(i,j,1) ; S5(5) = S_t(i+1,j,1)
+            pa5(1) = pa(i,j,1) ; pa5(5) = pa(i+1,j,1)
             ! Pressure input to density EOS is the actual pressure not adjusted for rho_ref.
-            p5(1) = pa(i,j,1) - (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
-            p5(5) = pa(i+1,j,1) - (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
+            p5(1) = pa(i,j,1) - GxRho*(e(i,j,1) - G%Z_ref)
+            p5(5) = pa(i+1,j,1) - GxRho*(e(i+1,j,1) - G%Z_ref)
             do m=2,4
               wt_R =  0.25*real(m-1)
-              T5(m) = T5(1)+(T5(5)-T5(1))*wt_R !Quadratic: + (T5(5)-T5(1))*B*wt_R*(wt_R-1);
-              S5(m) = S5(1)+(S5(5)-S5(1))*wt_R !+ (S5(5)-S5(1))*B*wt_R*(wt_R-1);
-              p5(m) = p5(1)+(p5(5)-p5(1))*wt_R
+              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R !Quadratic: + (T5(5)-T5(1))*B*wt_R*(wt_R-1);
+              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R !+ (S5(5)-S5(1))*B*wt_R*(wt_R-1);
+              p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
             enddo !m
             call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
-            ! add rhoref back in
-            do m=1,5
-              p5(m) = p5(m) + (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
-            enddo
             do m=2,4
               ! Make pressure curvature a difference from the linear fit of pressure between the two points
               ! Do this by integrating pressure between each of the 5 points and adding up
               ! This way integration direction doesn't matter when adding up pressure from previous point
-              p5(m) = p5(m-1) + ((0.25*(p5(5)-p5(1)) + 0.125*(r5(5)+r5(1))*dz_geo_sfc) - &
-                                 0.125*(r5(m)+r5(m-1))*dz_geo_sfc)
+              pa5(m) = pa5(m-1) + ((0.25*(pa5(5)-pa5(1)) + 0.125*(r5(5)+r5(1))*dz_geo_sfc) - &
+                                   0.125*(r5(m)+r5(m-1))*dz_geo_sfc)
             enddo
-            intx_pa(I,j,1) = C1_90*(7.0*(p5(1)+p5(5)) + 32.0*(p5(2)+p5(4)) + 12.0*p5(3))
-            ! Get correction from difference between this and linear average. This is clunky and repetitive.
-            intx_pa_cor(I,j) = -0.5*(pa(i,j,1) + pa(i+1,j,1)) + intx_pa(I,j,1)
+            ! Get a correction from difference between this and linear average.
+            intx_pa_cor(I,j) = C1_90*((32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 38.0*(pa5(1) + pa5(5)))
           else ! Do not use 5-point quadrature.
             intx_pa_cor(I,j) = C1_12 * (rho_top(i+1,j)-rho_top(i,j)) * dz_geo_sfc
           endif
@@ -995,7 +1029,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     do J=Jsq,Jeq ; do i=is,ie
       inty_pa_cor(i,J) = 0.0
       dz_geo_sfc = GV%g_Earth * (e(i,j+1,1)-e(i,j,1))
-      if (dz_geo_sfc * (rho_ref - (pa(i,j+1,1)-pa(i,j,1))*dz_geo_sfc) > 0.0) then
+      if ((dz_geo_sfc * rho_ref - (pa(i,j+1,1)-pa(i,j,1)))*dz_geo_sfc > 0.0) then
         ! The pressure/depth relationship has a positive implied density
         if (-dz_geo_sfc * (pa(i,j+1,1)-pa(i,j,1)) > &
             0.25*((rho_top(i,j+1)+rho_top(i,j))-2.0*rho_ref) * dz_geo_sfc**2) then
@@ -1003,32 +1037,28 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
           ! balance.  This test gets rid of pressure differences that are small, e.g. open ocean.
           if (CS%correction_intxpa_5pt) then
             ! Use 5 point quadrature to calculate intypa
-            T5(1) = T_t(I,j,1) ; T5(5) = T_t(i,j+1,1)
-            S5(1) = S_t(I,j,1) ; S5(5) = S_t(i,j+1,1)
+            T5(1) = T_t(i,j,1) ; T5(5) = T_t(i,j+1,1)
+            S5(1) = S_t(i,j,1) ; S5(5) = S_t(i,j+1,1)
+            pa5(1) = pa(i,j,1) ; pa5(5) = pa(i,j+1,1)
             ! Pressure input to density EOS is the actual pressure not adjusted for rho_ref.
-            p5(1) = pa(i,j,1) - (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
-            p5(5) = pa(i,j+1,1) - (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
+            p5(1) = pa(i,j,1) - GxRho*(e(i,j,1) - G%Z_ref)
+            p5(5) = pa(i,j+1,1) - GxRho*(e(i,j+1,1) - G%Z_ref)
             do m=2,4
               wt_R =  0.25*real(m-1)
-              T5(m) = T5(1)+(T5(5)-T5(1))*wt_R !Quadratic: + (T5(5)-T5(1))*B*wt_R*(wt_R-1);
-              S5(m) = S5(1)+(S5(5)-S5(1))*wt_R !+ (S5(5)-S5(1))*B*wt_R*(wt_R-1);
-              p5(m) = p5(1)+(p5(5)-p5(1))*wt_R
+              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R !Quadratic: + (T5(5)-T5(1))*B*wt_R*(wt_R-1);
+              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R !+ (S5(5)-S5(1))*B*wt_R*(wt_R-1);
+              p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
             enddo !m
             call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
-            ! add rhoref back in
-            do m=1,5
-              p5(m) = p5(m) + (rho_ref*GV%g_Earth)*(e(i,j,1) - G%Z_ref)
-            enddo
             do m=2,4
               ! Make pressure curvature a difference from the linear fit of pressure between the two points
               ! Do this by integrating pressure between each of the 5 points and adding up
               ! This way integration direction doesn't matter when adding up pressure from previous point
-              p5(m) = p5(m-1) + ((0.25*(p5(5)-p5(1)) + 0.125*(r5(5)+r5(1))*dz_geo_sfc) - &
-                                 0.125*(r5(m)+r5(m-1))*dz_geo_sfc)
+              pa5(m) = pa5(m-1) + ((0.25*(pa5(5)-pa5(1)) + 0.125*(r5(5)+r5(1))*dz_geo_sfc) - &
+                                   0.125*(r5(m)+r5(m-1))*dz_geo_sfc)
             enddo
-            inty_pa(I,j,1) = C1_90*(7.0*(p5(1)+p5(5)) + 32.0*(p5(2)+p5(4)) + 12.0*p5(3))
-            ! Get correction from difference between this and linear average. This is clunky and repetitive.
-            inty_pa_cor(I,j) = -0.5*(pa(i,j,1) + pa(i,j+1,1)) + inty_pa(I,j,1)
+            ! Get a correction from difference between this and linear average.
+            inty_pa_cor(i,J) = C1_90*((32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 38.0*(pa5(1) + pa5(5)))
           else ! Do not use 5-point quadrature.
             inty_pa_cor(i,J) = C1_12 * (rho_top(i,j+1)-rho_top(i,j)) * dz_geo_sfc
           endif
@@ -1064,61 +1094,107 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo ; enddo
   enddo
 
-  ! Having stored the pressure gradient info, we can work out where the first nonvanished layers is
-  ! reset intxpa there, then adjust intxpa above and below using the same increments between interfaces as above.
-  ! Note: This currently assumes pressure varies quadratically along the bottom of the topmost non-vanished,
-  ! non-mass-weighted layer.  Possibly 5 pt quadrature should be implemented as for the surface.
   if (CS%reset_intxpa_integral) then
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      kloop: do k=1,nz-1
-        ! Check if both sides are nonvanished and mass-weighting is not activated in the subgrid interpolation.
-        if ((h(i,j,k)>CS%h_nonvanished) .and. (h(i+1,j,k)>CS%h_nonvanished)) then
-          if (.not. (max(0., e(i+1,j,K+1)-e(i,j,1), e(i,j,K+1)-e(i+1,j,1)) > 0.0)) then
-            ! Calculate pressure at the bottom of this cell (pa are known)
-            ! then we have a "good estimate" for intxpa (it might have quadratic pressure dependence if sloped)
-            ! now we recalculate intx_pa and PFu at each level working up and then down
-            call calculate_density(T_t(i,j,k+1), S_t(i,j,k+1), pa(i,j,K+1), rho_tl, &
-                                   tv%eqn_of_state, rho_ref=rho_ref)
-            call calculate_density(T_t(i+1,j,k+1), S_t(i+1,j,k+1), pa(i+1,j,K+1), rho_tr, &
-                                   tv%eqn_of_state, rho_ref=rho_ref)
-            inty_pa_cor(I,j) = C1_12 * (rho_tr-rho_tl)*GV%g_Earth * (e(i+1,j,K+1)-e(i,j,K+1))
-            intx_pa(i,j,K+1) = 0.5*(pa(i,j,K+1) + pa(i+1,j,K+1)) + inty_pa_cor(I,j)
-            do k2=1,k
-              intx_pa(I,j,K-K2+1) = intx_pa(I,j,(K-K2+2)) - intx_dpa(i,j,k-k2+1)
-            enddo
-            do k2=k+2,nz
-              intx_pa(I,j,K2) = intx_pa(I,j,K2-1) + intx_dpa(i,j,k2-1)
-            enddo
-            exit kloop
-        endif ; endif
-      enddo kloop
-    enddo ; enddo
+    ! Having stored the pressure gradient info, we can work out where the first nonvanished layers is
+    ! reset intxpa there, then adjust intxpa throughout the water column.
+    ! Note: This currently assumes pressure varies quadratically along the bottom of the topmost non-vanished,
+    ! non-mass-weighted layer.  Possibly 5 pt quadrature should be implemented as for the surface.
 
-    do J=Jsq,Jeq+1 ; do i=is,ie+1
-      kloop2: do k=1,nz-1
-        ! Check if both sides are nonvanished and mass-weighting is not activated in the subgrid interpolation.
-        if ((h(i,j,k)>CS%h_nonvanished) .and. (h(i,j+1,k)>CS%h_nonvanished)) then
-          if (.not. (max(0., e(i,j+1,K+1)-e(i,j,1), e(i,j,K+1)-e(i,j+1,1)) > 0.0)) then
-            ! calculate pressure at the bottom of this cell (pa are known)
-            ! then we have a "good estimate" for intxpa (it might have quadratic pressure dependence if sloped)
-            ! now we recalculate intx_pa and PFu at each level working up and then down
-            call calculate_density(T_t(i,j,k+1), S_t(i,j,k+1), pa(i,j,K+1), rho_tl, &
-                                   tv%eqn_of_state, rho_ref=rho_ref)
-            call calculate_density(T_t(i,j+1,k+1), S_t(i,j+1,k+1), pa(i,j+1,K+1), rho_tr, &
-                                   tv%eqn_of_state, rho_ref=rho_ref)
-            inty_pa_cor(i,J) = C1_12 * (rho_tr-rho_tl) * GV%g_Earth * (e(i,j+1,K+1)-e(i,j,K+1))
-            inty_pa(i,J,K+1) = 0.5*(pa(i,j,K+1) + pa(i,j+1,K+1)) + inty_pa_cor(i,J)
-            do k2=1,k
-              inty_pa(i,J,K-K2+1) = inty_pa(i,J,(K-K2+2)) - inty_dpa(i,J,k-k2+1)
-            enddo
-            do k2=k+2,nz
-              inty_pa(i,J,K2) = inty_pa(i,J,K2-1) + inty_dpa(i,J,k2-1)
-            enddo
-            exit kloop2
-        endif ; endif
-      enddo kloop2
+    ! Zero out the 2-d arrays that will be set from various reference interfaces.
+    T_int_W(:,:) = 0.0 ; S_int_W(:,:) = 0.0 ; p_int_W(:,:) = 0.0
+    T_int_E(:,:) = 0.0 ; S_int_E(:,:) = 0.0 ; p_int_E(:,:) = 0.0
+    intx_pa_nonlin(:,:) = 0.0 ; dgeo_x(:,:) = 0.0 ; intx_pa_cor_ri(:,:) = 0.0
+    do j=js,je ; do I=Isq,Ieq
+      seek_x_cor(I,j) = (G%mask2dCu(I,j) > 0.)
     enddo ; enddo
-  endif ! intx_pa and inty_pa are now reset and should be correct
+    do k=1,nz-1
+      do_more_k = .false.
+      do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+        ! Find the topmost layer for which both sides are nonvanished and mass-weighting is not
+        ! activated in the subgrid interpolation.
+        if (((h(i,j,k) > CS%h_nonvanished) .and. (h(i+1,j,k) > CS%h_nonvanished)) .and. &
+            (max(0., e(i+1,j,K+1)-e(i,j,1), e(i,j,K+1)-e(i+1,j,1)) <= 0.0)) then
+            ! Store properties at the bottom of this cell to get a "good estimate" for intxpa at
+            ! the interface below this cell (it might have quadratic pressure dependence if sloped)
+            T_int_W(I,j) = T_b(i,j,k) ; T_int_E(I,j) = T_b(i+1,j,k)
+            S_int_W(I,j) = S_b(i,j,k) ; S_int_E(I,j) = S_b(i+1,j,k)
+            p_int_W(I,j) = pa(i,j,K+1) - GxRho*(e(i,j,K+1) - G%Z_ref)
+            p_int_E(I,j) = pa(i+1,j,K+1) - GxRho*(e(i+1,j,K+1) - G%Z_ref)
+            intx_pa_nonlin(I,j) = intx_pa(I,j,K+1) - 0.5*(pa(i,j,K+1) + pa(i+1,j,K+1))
+            dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,K+1)-e(i,j,K+1))
+            seek_x_cor(I,j) = .false.
+        else
+          do_more_k = .true.
+        endif
+      endif ; enddo ; enddo
+      if (.not.do_more_k) exit  ! All reference interfaces have been found, so stop working downward.
+    enddo
+
+    do j=js,je
+      call calculate_density(T_int_W(:,j), S_int_W(:,j), p_int_W(:,j), rho_x_W(:,j), &
+                             tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
+      call calculate_density(T_int_E(:,j), S_int_E(:,j), p_int_E(:,j), rho_x_E(:,j), &
+                             tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
+      do I=Isq,Ieq
+        ! This expression assumes that density varies linearly with depth between the corners of the
+        ! reference interfaces found above to get a vertically uniform correction to intx_pa.
+        ! This can be used without masking because dgeo_x and intx_pa_nonlin are 0 over land.
+        intx_pa_cor_ri(I,j) = C1_12 * (rho_x_E(I,j)-rho_x_W(I,j)) * dgeo_x(I,j) - intx_pa_nonlin(I,j)
+      enddo
+    enddo
+
+    ! Repeat the calculations above for v-velocity points.
+    T_int_S(:,:) = 0.0 ; S_int_S(:,:) = 0.0 ; p_int_S(:,:) = 0.0
+    T_int_N(:,:) = 0.0 ; S_int_N(:,:) = 0.0 ; p_int_N(:,:) = 0.0
+    inty_pa_nonlin(:,:) = 0.0 ; dgeo_y(:,:) = 0.0 ; inty_pa_cor_ri(:,:) = 0.0
+    do J=Jsq,Jeq ; do i=is,ie
+      seek_y_cor(i,J) = (G%mask2dCv(i,J) > 0.)
+    enddo ; enddo
+    do k=1,nz-1
+      do_more_k = .false.
+      do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+        ! Find the topmost layer for which both sides are nonvanished and mass-weighting is not
+        ! activated in the subgrid interpolation.
+        if (((h(i,j,k) > CS%h_nonvanished) .and. (h(i,j+1,k) > CS%h_nonvanished)) .and. &
+            (max(0., e(i,j+1,K+1)-e(i,j,1), e(i,j,K+1)-e(i,j+1,1)) <= 0.0)) then
+            ! Store properties at the bottom of this cell to get a "good estimate" for intypa at
+            ! the interface below this cell (it might have quadratic pressure dependence if sloped)
+            T_int_S(i,J) = T_b(i,j,k) ; T_int_N(i,J) = T_b(i,j+1,k)
+            S_int_S(i,J) = S_b(i,j,k) ; S_int_N(i,J) = S_b(i,j+1,k)
+            p_int_S(i,J) = pa(i,j,K+1) - GxRho*(e(i,j,K+1) - G%Z_ref)
+            p_int_N(i,J) = pa(i,j+1,K+1) - GxRho*(e(i,j+1,K+1) - G%Z_ref)
+            inty_pa_nonlin(i,J) = inty_pa(i,J,K+1) - 0.5*(pa(i,j,K+1) + pa(i,j+1,K+1))
+            dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,K+1)-e(i,j,K+1))
+            seek_y_cor(i,J) = .false.
+        else
+          do_more_k = .true.
+        endif
+      endif ; enddo ; enddo
+      if (.not.do_more_k) exit  ! All reference interfaces have been found, so stop working downward.
+    enddo
+
+    do J=Jsq,Jeq
+      call calculate_density(T_int_S(:,J), S_int_S(:,J), p_int_S(:,J), rho_y_S(:,J), &
+                             tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
+      call calculate_density(T_int_N(:,J), S_int_N(:,J), p_int_N(:,J), rho_y_N(:,J), &
+                             tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
+      do i=is,ie
+        ! This expression assumes that density varies linearly with depth between the corners of the
+        ! reference interfaces found above to get a vertically uniform correction to inty_pa.
+        ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
+        inty_pa_cor_ri(i,J) = C1_12 * (rho_y_N(i,J)-rho_y_S(i,J)) * dgeo_y(i,J) - inty_pa_nonlin(i,J)
+      enddo
+    enddo
+
+    ! Correct intx_pa and inty_pa at each interface using vertically constant corrections.
+    do K=1,nz+1 ; do j=js,je ; do I=Isq,Ieq
+      intx_pa(I,j,K) = intx_pa(I,j,K) + intx_pa_cor_ri(I,j)
+    enddo ; enddo ; enddo
+
+    do K=1,nz+1 ; do J=Jsq,Jeq ; do i=is,ie
+      inty_pa(i,J,K) = inty_pa(i,J,K) + inty_pa_cor_ri(i,J)
+    enddo ; enddo ; enddo
+  endif ! intx_pa and inty_pa have now been reset to reflect the properties of an unimpeded interface.
 
   ! Compute pressure gradient in x direction
   !$OMP parallel do default(shared)
