@@ -1,0 +1,33 @@
+/*! \page Frazil_Ice Frazil Ice Formation
+
+\section section_frazil Frazil Ice Formation
+
+Frazil ice forms in the model when the in situ temperature drops below
+the local freezing point, taking into account the in situ salinity and
+pressure. Starting at the bottom and working up through the water column,
+if the water is below freezing, set it to freezing and add the heat
+required to the heat deficit. If the water above is warmer than freezing,
+use that heat to take away the heat deficit and to cool the water. If
+you get all the way to the surface with a heat deficit, that quantity
+is passed to the ice model as a heat flux it will need to provide to
+the ocean.
+
+The local freezing point code is provided by the equation of state being
+used by MOM6. See \ref section_TFREEZE for the MOM6 options.
+
+The salinity is adjusted only at the surface when frazil ice is
+formed. This happens when the ice model creates ice with the heat deficit,
+taking salt out of the surface waters. We inherit this behavior from
+older versions of MOM, but the effect of not adjusting the in situ
+salinity is thought to be small.
+
+Note that versions simply whisking all the heat deficit to the surface
+without checking for warm water above tended to produce rapidly-melting
+ice floes in warm waters. This was deemed unphysical and was corrected.
+
+A similar process that we are also omitting is the formation of salt
+crystals when the salinity becomes too high. The salt crystals should
+form and sink, leaving a layer on the bed that will be diluted when the
+salinity drops again. This process can be seen in a lake in Death Valley.
+
+*/

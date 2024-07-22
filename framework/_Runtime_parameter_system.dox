@@ -1,0 +1,82 @@
+/*! \page Runtime_Parameter_System Run-time Parameter System
+
+\brief How run-time parameters work in MOM6
+
+MOM6 has an extensive set of parameters that are set at run-time by parsing an input file.  Many parameters have default values and are not required to be in the input file, although there are a number of parameters that must be set for the model to run.  The numerous examples provided with the MOM6 code mostly differ in their run-time parameters (although some add other components, like sea-ice), and comparison between these examples is an excellent way to get a broad overview of many of MOM6's parameters and how they might be set.
+
+\section reading_params Getting parameters into MOM6
+
+Run-time parameters are provided to the model in two phases:
+
+1. A very small set of logistical parameters are read as namelist variables from the FMS parameter file `input.nml`. One of these logistical parameters is a list of ascii files that contain all the other run-time parameters.
+2. All of the above-named parameter files are scanned for MOM6 model parameters, default values assigned and replaced, conflicts detected and various parameter summaries logged to files and/or the standard output.
+
+\subsection mom6_namelist Namelist parameters (`input.nml`)
+
+All FMS derived MOM6 parameters reside in the namelist `MOM_input_nml` in the file `input.nml`. The parameters are:
+- `input_filename` - If equal to "n" will run a new run (i.e. will not read a restart file). If equal to "r" MOM6 will attempt to read a restart file.
+- `parameter_filename` - A list of file names containing the MOM6 internal run-time parameters. Typically `param_files="MOM6_input","MOM6_override"` where the file MOM6_input contains all the non-default parameters that define a "baseline" experiment and MOM6_override will be either empty (for baseline) or contain a few parameters that define a "derived" experiment (that differs from the baseline). This helps keep the parameter lists concise and enables easy comparison of parameters in related experiments.
+- `restart_input_dir`, `restart_output_dir`, and `output_directory` - These specify the directories for reading input files, writing restart files, and writing many non-restart files.
+
+\subsection fms_params Other MOM6-relevant FMS parameters
+
+The namelist ocean_solo_nml may have the integer parameters secs, hours, days, months and years, which dictate how long the FMS ocean driver will try to run the model each run-segment.
+
+\subsection param_syntax MOM6 parameter file syntax
+
+The general syntax for an entry in a MOM6 parameter file is
+\code{.unparsed}
+[!]#[override] PARAMETER_NAME = value[,value][...][!comments]
+\endcode
+
+Parameter names must be constructed from the characters `[A-Za-z0-9_]` and by soft convention are upper case. The `!` character is a remark or comment indicator; all subsequent text on that line is ignored.
+
+Parameters that are not specified in the parameter files may assume a default value. It is not an error to specify a parameter more than once with the same value. It is an error to specify different values.
+
+The keyword \#override indicates that this parameter specification takes precedence over other specifications. It is **not** an error to have two \#override specifications for a single parameter with the same values. It is an error to have two \#override statements with different values.
+
+Some illustrations:
+\code{.unparsed}
+DO_THIS = True	! Set the Boolean to .TRUE.
+DO_THAT = False	! Set the Boolean to .FALSE.
+NXYZ = 5	! Set the value to NXYZ to 5
+HALF = 0.5	! Set the value of HALF to 0.5
+NAME = "abc"	! Set the string NAME to 'abc'
+VECTOR = 1.0,2.0	! Set the array VECTOR to [1.0, 2.0]
+NAMES = 'abc','xyz'	! Set the strings NAMES to 'abc','xyz'
+#override DO_THIS = False	! Set the Boolean to .FALSE., ignoring the above specification
+#override HALF = 0.25	! Set the value of HALF to 0.25, ignoring the above value
+#override HALF = 0.25	! Same as the above value of HALF to 0.25 so is accepted
+\endcode
+
+\subsection param_logging Logging of parameters
+
+The subroutine that reads MOM6 parameters has also serves to log every parameter to a file set by DOCUMENT_FILE, usually "MOM6_parameter_doc".  In addition to the name of the variable being read,  these calls contain a brief description, along with a description of the units and the default value (if any) or an indication that there is no default and that the variable must be present. For example, `DT` is always required to be present:
+\code{.f90}
+  call get_param(param_file, module, "DT", CS%dt, &
+             	"The (baroclinic) dynamics time step.  The time-step that \n"//&
+             	"is actually used will be an integer fraction of the \n"//&
+             	"forcing time-step (DT_FORCING in ocean-only mode or the \n"//&
+             	"coupling timestep in coupled mode.)", units="s", &
+             	fail_if_missing=.true.)
+\endcode
+
+At run-time, two levels of logging are performed, depending on the value of the parameter `MINIMAL_DOCUMENTATION`:
+
+- (TRUE) The end result of the combination of default values, assignments and overrides are recorded with default and current values, description and units, for all parameters.
+- (FALSE) The minimal list of required and non-default value parameters are recorded with current values, description and units only for those parameters needed to reproduce the configuration.
+
+Either of the generated logging files can be used as inputs and yield the same configuration.
+
+In addition, there are also calls that log derived quantities (e.g., a time-step that is derived from a CFL number, or the full path to an input file) without reading anything in.
+
+\subsection param_checking Error checking of parameters and parameter files
+
+There are several techniques that are used for error checking on MOM6 parameters:
+
+- Some parameters have internal error messages if they are set to nonsensical values.
+- No parameter can be set twice inconsistently without an explicit \#override specification.
+- If the run-time parameter REPORT_UNUSED_PARAMS is true, a warning will be issued for any entries in the input parameter files that are not read in, for instance if they are misspelled.
+- Setting the run-time parameter FATAL_UNUSED_PARAMS to true causes a fatal error that will bring down the model if there are any unused entries in the input parameter files.
+
+*/

@@ -1,0 +1,54 @@
+CVMix library installation guide
+--------------------------------
+
+This document describes how to build the CVMix library. Note that the steps
+described in this document will not build any executables, it is only meant to
+produce libcvmix.a and several .mod files that should be linked to or included
+in an outside ocean model. To build one of the provided stand-alone drivers,
+see $CVMIX/README.
+
+There are two different ways to build libcvmix.a and its associated .mod files.
+
+1) If you have downloaded the entire CVMix package, you can go to
+   $CVMIX/src/shared and run
+
+   $ make
+
+   You may be prompted for information about your compiler and netCDF location.
+   The netCDF location is only used in compiling the standalone drivers (and
+   only if you want to output in netCDF format), so you can leave that field
+   blank if you wish.
+
+   This will result in files being created in three locations:
+
+   $CVMIX/lib -- libcvmix.a will be placed in here. When you link a program
+                 using the CVMix library, use -L$CVMIX/lib -lcvmix
+
+   $CVMIX/include -- a handful of .mod files while be placed here. When you
+                     build a program using the CVMix lbirary, use
+                     -I$CVMIX/include
+
+   $CVMIX/bld/obj -- a handful of .mod and .o files will be placed here. The .o
+                     files have already been placed in libcvmix.a and the .mod
+                     files have already been copied to the include/ directory,
+                     so these files are not needed any more.
+
+2) If you have just downloaded the $CVMIX/src/shared directory as an external
+   to your model, you need to specify several necessary compilation options.
+
+   FC -- your fortran compiler
+   FCFLAGS -- any compiler flags you wish to pass (default: nothing is passed)
+   OBJ_DIR -- where to put .o and .mod files when building (default: this dir)
+   LIB_DIR -- where to put libcvmix.a (default: this dir)
+   INC_DIR -- where to put the .mod files (default: this dir)
+
+   For example, if you want to keep libcvmix.a in /projects/cvmix/lib and all
+   the .mod files in /projects/cvmix/include, and you use the intel compiler
+   with O2 optimization, you can run
+
+   $ make FC=ifort FCFLAGS="-O2" LIB_DIR=/project/cvmix/lib \
+         INC_DIR=/projects/cvmix/include
+
+   Note that this will still write the .o and .mod files to the current
+   directory, so if you do not have write permissions you must also set
+   OBJ_DIR.

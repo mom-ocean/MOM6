@@ -1,0 +1,11 @@
+/*! \page Sea_Ice Sea Ice Considerations
+
+\section section_seaice Sea Ice Considerations
+
+For realistic domains, it is assumed that MOM6 will be run in a coupled mode, such that either the
+sea-ice model or the coupler will be computing atmospheric bulk fluxes and passing them to the ocean.
+Likewise, MOM6 can compute the frazil ice formation as described in \ref section_frazil, which it
+then passes to the sea-ice model, expecting to get back the rejected brine or melted fresh water in
+return.
+
+*/
