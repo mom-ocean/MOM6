@@ -1003,77 +1003,50 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
   endif
 
-  if (CS%tides_answer_date>20230630) then
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = -G%bathyT(i,j)
-    enddo ; enddo
+  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    e(i,j,nz+1) = -G%bathyT(i,j)
+  enddo ; enddo
 
-    ! Calculate and add the self-attraction and loading geopotential anomaly.
-    if (CS%calculate_SAL) then
-      !   Determine the surface height anomaly for calculating self attraction
-      ! and loading.  This should really be based on bottom pressure anomalies,
-      ! but that is not yet implemented, and the current form is correct for
-      ! barotropic tides.
-      !$OMP parallel do default(shared)
-      do j=Jsq,Jeq+1
-        do i=Isq,Ieq+1
-          SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
-        enddo
-        do k=1,nz ; do i=Isq,Ieq+1
-          SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
-        enddo ; enddo
+  ! Calculate and add the self-attraction and loading geopotential anomaly.
+  if (CS%calculate_SAL) then
+    !   Determine the surface height anomaly for calculating self attraction
+    ! and loading.  This should really be based on bottom pressure anomalies,
+    ! but that is not yet implemented, and the current form is correct for
+    ! barotropic tides.
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1
+      do i=Isq,Ieq+1
+        SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
       enddo
-      call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
+      do k=1,nz ; do i=Isq,Ieq+1
+        SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
+      enddo ; enddo
+    enddo
+    call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
+
+    if (CS%tides_answer_date>20230630) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         e(i,j,nz+1) = e(i,j,nz+1) - e_sal(i,j)
       enddo ; enddo
     endif
+  endif
 
-    ! Calculate and add the tidal geopotential anomaly.
-    if (CS%tides) then
+  ! Calculate and add the tidal geopotential anomaly.
+  if (CS%tides) then
+    if (CS%tides_answer_date>20230630) then
       call calc_tidal_forcing(CS%Time, e_tide_eq, e_tide_sal, G, US, CS%tides_CSp)
-      !$OMP parallel do default(shared)
+     !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         e(i,j,nz+1) = e(i,j,nz+1) - (e_tide_eq(i,j) + e_tide_sal(i,j))
       enddo ; enddo
-    endif
-  else  ! Old answers
-    ! Calculate and add the self-attraction and loading geopotential anomaly.
-    if (CS%calculate_SAL) then
-      !   Determine the surface height anomaly for calculating self attraction
-      ! and loading.  This should really be based on bottom pressure anomalies,
-      ! but that is not yet implemented, and the current form is correct for
-      ! barotropic tides.
-      !$OMP parallel do default(shared)
-      do j=Jsq,Jeq+1
-        do i=Isq,Ieq+1
-          SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
-        enddo
-        do k=1,nz ; do i=Isq,Ieq+1
-          SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
-        enddo ; enddo
-      enddo
-      call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
-    else
-      !$OMP parallel do default(shared)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        e_sal(i,j) = 0.0
-      enddo ; enddo
-    endif
-
-    ! Calculate and add the tidal geopotential anomaly.
-    if (CS%tides) then
+    else  ! Old answers
+      if (.not.CS%calculate_SAL) e_sal(:,:) = 0.0
       call calc_tidal_forcing_legacy(CS%Time, e_sal, e_sal_tide, e_tide_eq, e_tide_sal, &
                                      G, US, CS%tides_CSp)
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        e(i,j,nz+1) = -(G%bathyT(i,j) + e_sal_tide(i,j))
-      enddo ; enddo
-    else
-      !$OMP parallel do default(shared)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        e(i,j,nz+1) = -(G%bathyT(i,j) + e_sal(i,j))
+        e(i,j,nz+1) = e(i,j,nz+1) - e_sal_tide(i,j)
       enddo ; enddo
     endif
   endif
@@ -1640,33 +1613,28 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (present(eta)) then
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
     ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
-    if (CS%tides_answer_date>20230630) then
-      !$OMP parallel do default(shared)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        eta(i,j) = e(i,j,1)*GV%Z_to_H
-      enddo ; enddo
-      if (CS%tides) then
+    !$OMP parallel do default(shared)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      eta(i,j) = e(i,j,1)*GV%Z_to_H
+    enddo ; enddo
+    if (CS%tides) then
+      if (CS%tides_answer_date>20230630) then
         !$OMP parallel do default(shared)
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
           eta(i,j) = eta(i,j) + (e_tide_eq(i,j)+e_tide_sal(i,j))*GV%Z_to_H
         enddo ; enddo
-      endif
-      if (CS%calculate_SAL) then
-        !$OMP parallel do default(shared)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-          eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
-        enddo ; enddo
-      endif
-    else ! Old answers
-      if (CS%tides) then
-        !$OMP parallel do default(shared)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-          eta(i,j) = e(i,j,1)*GV%Z_to_H + (e_sal_tide(i,j))*GV%Z_to_H
-        enddo ; enddo
       else
         !$OMP parallel do default(shared)
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-          eta(i,j) = (e(i,j,1) + e_sal(i,j))*GV%Z_to_H
+          eta(i,j) = eta(i,j) + e_sal_tide(i,j)*GV%Z_to_H
+        enddo ; enddo
+      endif
+    endif
+    if (CS%calculate_SAL) then
+      if (CS%tides_answer_date>20230630) then
+        !$OMP parallel do default(shared)
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
         enddo ; enddo
       endif
     endif
