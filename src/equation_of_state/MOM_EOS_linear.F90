@@ -258,7 +258,7 @@ end subroutine set_params_linear
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa, &
-                 bathyT, dz_neglect, useMassWghtInterp)
+                 bathyT, dz_neglect, MassWghtInterp)
   type(hor_index_type), intent(in)  :: HI        !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -300,8 +300,8 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT    !< The depth of the bathymetry [Z ~> m].
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
-                                                 !! interpolate T/S for top and bottom integrals.
+  integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
+                                                 !! mass weighting to interpolate T/S in integrals
 
   ! Local variables
   real :: rho_anom      ! The density anomaly from rho_ref [R ~> kg m-3].
@@ -328,13 +328,13 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   js = HI%jsc ; je = HI%jec
 
   do_massWeight = .false.
-  if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
-    do_massWeight = .true.
-  ! if (.not.present(bathyT)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !     "bathyT must be present if useMassWghtInterp is present and true.")
-  ! if (.not.present(dz_neglect)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !     "dz_neglect must be present if useMassWghtInterp is present and true.")
-  endif ; endif
+  if (present(MassWghtInterp)) do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+  ! if (do_massWeight) then
+  !   if (.not.present(bathyT)) call MOM_error(FATAL, "int_density_dz_generic: "//&
+  !       "bathyT must be present if MassWghtInterp is present and true.")
+  !   if (.not.present(dz_neglect)) call MOM_error(FATAL, "int_density_dz_generic: "//&
+  !       "dz_neglect must be present if MassWghtInterp is present and true.")
+  ! endif
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     dz = z_t(i,j) - z_b(i,j)
@@ -429,7 +429,7 @@ end subroutine int_density_dz_linear
 !! model.  Specific volume is assumed to vary linearly between adjacent points.
 subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                dRho_dT, dRho_dS, dza, intp_dza, intx_dza, inty_dza, halo_size, &
-               bathyP, dP_neglect, useMassWghtInterp)
+               bathyP, dP_neglect, MassWghtInterp)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -471,8 +471,8 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
               optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
                                                  !! the same units as p_t [R L2 T-2 ~> Pa]
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
-                            !! to interpolate T/S for top and bottom integrals.
+  integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
+                                                 !! mass weighting to interpolate T/S in integrals
   ! Local variables
   real :: dRho_TS       ! The density anomaly due to T and S [R ~> kg m-3]
   real :: alpha_anom    ! The specific volume anomaly from 1/rho_ref [R-1 ~> m3 kg-1]
@@ -488,6 +488,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   real :: intp(5)    ! The integrals of specific volume with pressure at the
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
+  logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants [nondim].
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
 
@@ -497,14 +498,15 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
 
-  do_massWeight = .false.
-  if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
-    do_massWeight = .true.
+  do_massWeight = .false. ; massWeight_bug = .false.
+  if (present(MassWghtInterp)) do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+  if (present(MassWghtInterp)) massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
+!  if (do_massWeight) then
 !    if (.not.present(bathyP)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "bathyP must be present if useMassWghtInterp is present and true.")
+!        "bathyP must be present if MassWghtInterp is present and true.")
 !    if (.not.present(dP_neglect)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "dP_neglect must be present if useMassWghtInterp is present and true.")
-  endif ; endif
+!        "dP_neglect must be present if MassWghtInterp is present and true.")
+!  endif
 
   do j=jsh,jeh ; do i=ish,ieh
     dp = p_b(i,j) - p_t(i,j)
@@ -520,8 +522,11 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight) &
+    if (do_massWeight .and. massWeight_bug) then
       hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
+    elseif (do_massWeight) then
+      hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
+    endif
 
     if (hWght <= 0.0) then
       dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i+1,j) - p_t(i+1,j)
@@ -565,8 +570,11 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight) &
+    if (do_massWeight .and. massWeight_bug) then
       hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
+    elseif (do_massWeight) then
+      hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
+    endif
 
     if (hWght <= 0.0) then
       dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i,j+1) - p_t(i,j+1)

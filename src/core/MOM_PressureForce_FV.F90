@@ -20,6 +20,7 @@ use MOM_density_integrals, only : int_density_dz, int_specific_vol_dp
 use MOM_density_integrals, only : int_density_dz_generic_plm, int_density_dz_generic_ppm
 use MOM_density_integrals, only : int_spec_vol_dp_generic_plm
 use MOM_density_integrals, only : int_density_dz_generic_pcm, int_spec_vol_dp_generic_pcm
+use MOM_density_integrals, only : diagnose_mass_weight_Z, diagnose_mass_weight_p
 use MOM_ALE, only : TS_PLM_edge_values, TS_PPM_edge_values, ALE_CS
 
 implicit none ; private
@@ -46,7 +47,7 @@ type, public :: PressureForce_FV_CS ; private
   type(time_type), pointer :: Time !< A pointer to the ocean model's clock.
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                             !! timing of diagnostic output.
-  logical :: useMassWghtInterp !< Use mass weighting in T/S interpolation
+  integer :: MassWghtInterp !< A flag indicating whether and how to use mass weighting in T/S interpolation
   logical :: use_inaccurate_pgf_rho_anom !< If true, uses the older and less accurate
                             !! method to calculate density anomalies, as used prior to
                             !! March 2018.
@@ -71,6 +72,8 @@ type, public :: PressureForce_FV_CS ; private
   integer :: id_rho_pgf = -1 !< Diagnostic identifier
   integer :: id_rho_stanley_pgf = -1 !< Diagnostic identifier
   integer :: id_p_stanley = -1 !< Diagnostic identifier
+  integer :: id_MassWt_u = -1 !< Diagnostic identifier
+  integer :: id_MassWt_v = -1 !< Diagnostic identifier
   type(SAL_CS), pointer :: SAL_CSp => NULL() !< SAL control structure
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_FV_CS
@@ -146,6 +149,10 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
                 ! interfaces, divided by the grid spacing [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     inty_dza    ! The change in inty_za through a layer [L2 T-2 ~> m2 s-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+    MassWt_u    ! The fractional mass weighting at a u-point [nondim].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+    MassWt_v    ! The fractional mass weighting at a v-point [nondim].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
 
@@ -193,6 +200,10 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   dp_neglect = GV%g_Earth*GV%H_to_RZ * GV%H_subroundoff
   alpha_ref = 1.0 / CS%Rho0
   I_gEarth = 1.0 / GV%g_Earth
+
+  if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
+    MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
+  endif
 
   if (use_p_atm) then
     !$OMP parallel do default(shared)
@@ -263,7 +274,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
           call int_spec_vol_dp_generic_plm( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), S_b(:,:,k), &
                     p(:,:,K), p(:,:,K+1), alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
                     tv%eqn_of_state, US, dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), inty_dza(:,:,k), &
-                    useMassWghtInterp=CS%useMassWghtInterp)
+                    MassWghtInterp=CS%MassWghtInterp)
         elseif ( CS%Recon_Scheme == 2 ) then
           call MOM_error(FATAL, "PressureForce_FV_nonBouss: "//&
                          "int_spec_vol_dp_generic_ppm does not exist yet.")
@@ -277,8 +288,11 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
                                p(:,:,K+1), alpha_ref, G%HI, tv%eqn_of_state, &
                                US, dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
                                inty_dza(:,:,k), bathyP=p(:,:,nz+1), dP_tiny=dp_neglect, &
-                               useMassWghtInterp=CS%useMassWghtInterp)
+                               MassWghtInterp=CS%MassWghtInterp)
       endif
+      if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) &
+        call diagnose_mass_weight_p(p(:,:,K), p(:,:,K+1), dp_neglect, p(:,:,nz+1), G%HI, &
+                                    MassWt_u(:,:,k), MassWt_v(:,:,k))
     else
       alpha_anom = 1.0 / GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -468,6 +482,8 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
   if (CS%id_e_tide_eq>0) call post_data(CS%id_e_tide_eq, e_tide_eq, CS%diag)
   if (CS%id_e_tide_sal>0) call post_data(CS%id_e_tide_sal, e_tide_sal, CS%diag)
+  if (CS%id_MassWt_u>0) call post_data(CS%id_MassWt_u, MassWt_u, CS%diag)
+  if (CS%id_MassWt_v>0) call post_data(CS%id_MassWt_v, MassWt_v, CS%diag)
 
 end subroutine PressureForce_FV_nonBouss
 
@@ -543,6 +559,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                 ! of salinity within each layer [S ~> ppt].
     T_t, T_b    ! Top and bottom edge values for linear reconstructions
                 ! of temperature within each layer [C ~> degC].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+    MassWt_u    ! The fractional mass weighting at a u-point [nondim].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+    MassWt_v    ! The fractional mass weighting at a v-point [nondim].
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     rho_pgf, rho_stanley_pgf ! Density [R ~> kg m-3] from EOS with and without SGS T variance
                              ! in Stanley parameterization.
@@ -590,6 +610,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   I_Rho0 = 1.0 / GV%Rho0
   G_Rho0 = GV%g_Earth / GV%Rho0
   rho_ref = CS%Rho0
+
+  if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
+    MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
+  endif
 
   if (CS%tides_answer_date>20230630) then
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -744,20 +768,20 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, CS%use_stanley_pgf, dpa(:,:,k), intz_dpa(:,:,k), &
                     intx_dpa(:,:,k), inty_dpa(:,:,k), &
-                    useMassWghtInterp=CS%useMassWghtInterp, &
+                    MassWghtInterp=CS%MassWghtInterp, &
                     use_inaccurate_form=CS%use_inaccurate_pgf_rho_anom, Z_0p=G%Z_ref)
         elseif ( CS%Recon_Scheme == 2 ) then
           call int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, CS%use_stanley_pgf, dpa(:,:,k), intz_dpa(:,:,k), &
                     intx_dpa(:,:,k), inty_dpa(:,:,k), &
-                    useMassWghtInterp=CS%useMassWghtInterp, Z_0p=G%Z_ref)
+                    MassWghtInterp=CS%MassWghtInterp, Z_0p=G%Z_ref)
         endif
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                   rho_ref, CS%Rho0, GV%g_Earth, G%HI, tv%eqn_of_state, US, dpa(:,:,k), &
                   intz_dpa(:,:,k), intx_dpa(:,:,k), inty_dpa(:,:,k), G%bathyT, dz_neglect, &
-                  CS%useMassWghtInterp, Z_0p=G%Z_ref)
+                  CS%MassWghtInterp, Z_0p=G%Z_ref)
       endif
       if (GV%Z_to_H /= 1.0) then
         !$OMP parallel do default(shared)
@@ -765,6 +789,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
           intz_dpa(i,j,k) = intz_dpa(i,j,k)*GV%Z_to_H
         enddo ; enddo
       endif
+      if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) &
+        call diagnose_mass_weight_Z(e(:,:,K), e(:,:,K+1), dz_neglect, G%bathyT, G%HI, &
+                                    MassWt_u(:,:,k), MassWt_v(:,:,k))
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -955,6 +982,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
   if (CS%id_e_tide_eq>0) call post_data(CS%id_e_tide_eq, e_tide_eq, CS%diag)
   if (CS%id_e_tide_sal>0) call post_data(CS%id_e_tide_sal, e_tide_sal, CS%diag)
+  if (CS%id_MassWt_u>0) call post_data(CS%id_MassWt_u, MassWt_u, CS%diag)
+  if (CS%id_MassWt_v>0) call post_data(CS%id_MassWt_v, MassWt_v, CS%diag)
 
   if (CS%id_rho_pgf>0) call post_data(CS%id_rho_pgf, rho_pgf, CS%diag)
   if (CS%id_rho_stanley_pgf>0) call post_data(CS%id_rho_stanley_pgf, rho_stanley_pgf, CS%diag)
@@ -978,6 +1007,8 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
                            ! temperature variance [nondim]
   integer :: default_answer_date ! Global answer date
+  logical :: useMassWghtInterp ! If true, use near-bottom mass weighting for T and S
+  logical :: MassWghtInterp_NonBous_bug ! If true, use a buggy mass weighting when non-Boussinesq
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
@@ -1014,10 +1045,20 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &
                  "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )
-  call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", CS%useMassWghtInterp, &
+  call get_param(param_file, mdl, "MASS_WEIGHT_IN_PRESSURE_GRADIENT", useMassWghtInterp, &
                  "If true, use mass weighting when interpolating T/S for "//&
                  "integrals near the bathymetry in FV pressure gradient "//&
                  "calculations.", default=.false.)
+  call get_param(param_file, mdl, "MASS_WEIGHT_IN_PGF_NONBOUS_BUG", MassWghtInterp_NonBous_bug, &
+                 "If true, use a masking bug in non-Boussinesq calculations with mass weighting "//&
+                 "when interpolating T/S for integrals near the bathymetry in FV pressure "//&
+                 "gradient calculations.", &
+                 default=.false., do_not_log=(GV%Boussinesq .or. (.not.useMassWghtInterp)))
+  CS%MassWghtInterp = 0
+  if (useMassWghtInterp) &
+    CS%MassWghtInterp = ibset(CS%MassWghtInterp, 0) ! Same as CS%MassWghtInterp + 1
+  if ((.not.GV%Boussinesq) .and. MassWghtInterp_NonBous_bug) &
+    CS%MassWghtInterp = ibset(CS%MassWghtInterp, 3) ! Same as CS%MassWghtInterp + 8
   call get_param(param_file, mdl, "USE_INACCURATE_PGF_RHO_ANOM", CS%use_inaccurate_pgf_rho_anom, &
                  "If true, use a form of the PGF that uses the reference density "//&
                  "in an inaccurate way. This is not recommended.", default=.false.)
@@ -1067,6 +1108,11 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
     CS%id_e_tide_sal = register_diag_field('ocean_model', 'e_tide_sal', diag%axesT1, Time, &
         'Read-in tidal self-attraction and loading height anomaly', 'meter', conversion=US%Z_to_m)
   endif
+
+  CS%id_MassWt_u = register_diag_field('ocean_model', 'MassWt_u', diag%axesCuL, Time, &
+        'The fractional mass weighting at u-point PGF calculations', 'nondim')
+  CS%id_MassWt_v = register_diag_field('ocean_model', 'MassWt_v', diag%axesCvL, Time, &
+        'The fractional mass weighting at v-point PGF calculations', 'nondim')
 
   CS%GFS_scale = 1.0
   if (GV%g_prime(1) /= GV%g_Earth) CS%GFS_scale = GV%g_prime(1) / GV%g_Earth
