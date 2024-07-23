@@ -32,7 +32,8 @@ Mixed layer restratification by sub-mesoscale eddies
 ----------------------------------------------------
 
 Mixed layer restratification from :cite:`fox-kemper2008` and
-:cite:`fox-kemper2008-2` is implemented in MOM_mixed_layer_restrat.
+:cite:`fox-kemper2008-2` is implemented in MOM_mixed_layer_restrat,
+which now also contains the mixed layer restratication comes from :cite: Bodner2023.
 
 Lateral diffusion
 -----------------
