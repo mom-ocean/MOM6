@@ -362,7 +362,12 @@ end subroutine HA_write
 
 !> This subroutine computes the harmonic constants (stored in FtSSHw) using the dot products of the temporal
 !! basis functions accumulated in FtF, and the dot products of the SSH (or other fields) with the temporal basis
-!! functions accumulated in FtSSH. The system is solved by Cholesky decomposition.
+!! functions accumulated in FtSSH. The system is solved by Cholesky decomposition,
+!!
+!!     FtF * FtSSHw = FtSSH,    =>    FtFw * (FtFw' * FtSSHw) = FtSSH,
+!!
+!! where FtFw is a lower triangular matrix, and the prime denotes matrix transpose.
+!!
 subroutine HA_solver(ha1, nc, FtF, FtSSHw)
   type(HA_type), pointer,              intent(in)  :: ha1    !< Control structure for the current field
   integer,                             intent(in)  :: nc     !< Number of harmonic constituents
@@ -370,41 +375,58 @@ subroutine HA_solver(ha1, nc, FtF, FtSSHw)
   real, dimension(:,:,:), allocatable, intent(out) :: FtSSHw !< Work array for Cholesky decomposition [A]
 
   ! Local variables
-  real, dimension(:,:), allocatable :: tmp                   !< Work array for Cholesky decomposition [A]
-  real, dimension(:,:), allocatable :: FtFw                  !< Work array for Cholesky decomposition [nondim]
-  integer :: k, l, is, ie, js, je
+  real :: tmp0                              !< Temporary variable for Cholesky decomposition [nondim]
+  real, dimension(:),   allocatable :: tmp1 !< Temporary variable for Cholesky decomposition [nondim]
+  real, dimension(:,:), allocatable :: tmp2 !< Temporary variable for Cholesky decomposition [A]
+  real, dimension(:,:), allocatable :: FtFw !< Lower triangular matrix for Cholesky decomposition [nondim]
+  integer :: k, m, n, is, ie, js, je
 
   is = ha1%is ; ie = ha1%ie ; js = ha1%js ; je = ha1%je
 
-  allocate(tmp(is:ie,js:je), source=0.0)
+  allocate(tmp1(1:2*nc+1), source=0.0)
+  allocate(tmp2(is:ie,js:je), source=0.0)
   allocate(FtFw(1:2*nc+1,1:2*nc+1), source=0.0)
   allocate(FtSSHw(is:ie,js:je,2*nc+1), source=0.0)
 
+  ! Construct FtFw
   FtFw(:,:) = 0.0
-  do l=1,2*nc+1
-    FtFw(l,l) = sqrt(FtF(l,l) - dot_product(FtFw(l,1:l-1), FtFw(l,1:l-1)))
-    do k=l+1,2*nc+1
-      FtFw(k,l) = (FtF(k,l) - dot_product(FtFw(k,1:l-1), FtFw(l,1:l-1))) / FtFw(l,l)
+  do m=1,2*nc+1
+    tmp0 = 0.0
+    do k=1,m-1
+      tmp0 = tmp0 + FtFw(m,k) * FtFw(m,k)
+    enddo
+    FtFw(m,m) = sqrt(FtF(m,m) - tmp0)
+    tmp1(m) = 1 / FtFw(m,m)
+    do k=m+1,2*nc+1
+      tmp0 = 0.0
+      do n=1,m-1
+        tmp0 = tmp0 + FtFw(k,n) * FtFw(m,n)
+      enddo
+      FtFw(k,m) = (FtF(k,m) - tmp0) * tmp1(m)
     enddo
   enddo
 
+  ! Solve for (FtFw' * FtSSHw)
   FtSSHw(:,:,:) = ha1%FtSSH(:,:,:)
   do k=1,2*nc+1
-    tmp(:,:) = 0.0
-    do l=1,k-1
-      tmp(:,:) = tmp(:,:) + FtFw(k,l) * FtSSHw(:,:,l)
+    tmp2(:,:) = 0.0
+    do m=1,k-1
+      tmp2(:,:) = tmp2(:,:) + FtFw(k,m) * FtSSHw(:,:,m)
     enddo
-    FtSSHw(:,:,k) = (FtSSHw(:,:,k) - tmp(:,:)) / FtFw(k,k)
-  enddo
-  do k=2*nc+1,1,-1
-    tmp(:,:) = 0.0
-    do l=k+1,2*nc+1
-      tmp(:,:) = tmp(:,:) + FtSSHw(:,:,l) * FtFw(l,k)
-    enddo
-    FtSSHw(:,:,k) = (FtSSHw(:,:,k) - tmp(:,:)) / FtFw(k,k)
+    FtSSHw(:,:,k) = (FtSSHw(:,:,k) - tmp2(:,:)) * tmp1(k)
   enddo
 
-  deallocate(tmp)
+  ! Solve for FtSSHw
+  do k=2*nc+1,1,-1
+    tmp2(:,:) = 0.0
+    do m=k+1,2*nc+1
+      tmp2(:,:) = tmp2(:,:) + FtSSHw(:,:,m) * FtFw(m,k)
+    enddo
+    FtSSHw(:,:,k) = (FtSSHw(:,:,k) - tmp2(:,:)) * tmp1(k)
+  enddo
+
+  deallocate(tmp1)
+  deallocate(tmp2)
   deallocate(FtFw)
 
 end subroutine HA_solver
@@ -417,7 +439,7 @@ end subroutine HA_solver
 !! step, and x is a 2*nc-by-1 vector containing the constant coefficients of the sine/cosine for each constituent
 !! (i.e., the harmonic constants). At each grid point, the harmonic constants are computed using least squares,
 !!
-!!     x = (F' * F)^{-1} * (F' * SSH_in),
+!!     (F' * F) * x = F' * SSH_in,
 !!
 !! where the prime denotes matrix transpose, and SSH_in is the sea surface height (or other fields) determined by
 !! the model. The dot products (F' * F) and (F' * SSH_in) are computed by accumulating the sums as the model is
