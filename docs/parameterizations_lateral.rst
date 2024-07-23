@@ -35,6 +35,8 @@ Mixed layer restratification from :cite:`fox-kemper2008` and
 :cite:`fox-kemper2008-2` is implemented in MOM_mixed_layer_restrat,
 which now also contains the mixed layer restratication comes from :cite: Bodner2023.
 
+    :ref:`namespacemom__mixed__layer__restrat_1section_mle`
+
 Lateral diffusion
 -----------------
 
