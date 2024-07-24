@@ -2460,7 +2460,7 @@ end subroutine thickness_diffuse_end
 !! since the quantity \f$\frac{M^2}{\sqrt{N^4 + M^4}}\f$ is bounded between $-1$ and $1$ and does not change sign
 !! if \f$N^2<0\f$.
 !!
-!! Optionally, the method of Ferrari et al, 2010, can be used to obtain the streamfunction which solves the
+!! Optionally, the method of \cite ferrari2010, can be used to obtain the streamfunction which solves the
 !! vertically elliptic equation:
 !! \f[
 !! \gamma_F \partial_z c^2 \partial_z \psi - N_*^2 \psi  = -( 1 + \gamma_F ) \kappa_h N_*^2 \frac{M^2}{\sqrt{N^4+M^4}}
@@ -2478,7 +2478,7 @@ end subroutine thickness_diffuse_end
 !! \f$ r(\Delta x,L_d) \f$ is a function of the local resolution (ratio of grid-spacing, \f$\Delta x\f$,
 !! to deformation radius, \f$L_d\f$). The length \f$L_s\f$ is provided by the mom_lateral_mixing_coeffs module
 !! (enabled with <code>USE_VARIABLE_MIXING=True</code> and the term \f$<SN>\f$ is the vertical average slope
-!! times the buoyancy frequency prescribed by Visbeck et al., 1996.
+!! times the buoyancy frequency prescribed by \cite visbeck1996.
 !!
 !! The result of the above expression is subsequently bounded by minimum and maximum values, including an upper
 !! diffusivity consistent with numerical stability (\f$ \kappa_{cfl} \f$ is calculated internally).

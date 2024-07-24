@@ -3193,24 +3193,24 @@ subroutine hor_visc_end(CS)
 end subroutine hor_visc_end
 !> \namespace mom_hor_visc
 !!
+!! \section section_horizontal_viscosity Horizontal viscosity in MOM
+!!
 !! This module contains the subroutine horizontal_viscosity() that calculates the
 !! effects of horizontal viscosity, including parameterizations of the value of
 !! the viscosity itself. horizontal_viscosity() calculates the acceleration due to
 !! some combination of a biharmonic viscosity and a Laplacian viscosity. Either or
 !! both may use a coefficient that depends on the shear and strain of the flow.
 !! All metric terms are retained. The Laplacian is calculated as the divergence of
-!! a stress tensor, using the form suggested by Smagorinsky (1993). The biharmonic
+!! a stress tensor, using the form suggested by \cite Smagorinsky1993. The biharmonic
 !! is calculated by twice applying the divergence of the stress tensor that is
 !! used to calculate the Laplacian, but without the dependence on thickness in the
 !! first pass. This form permits a variable viscosity, and indicates no
 !! acceleration for either resting fluid or solid body rotation.
 !!
-!! The form of the viscous accelerations is discussed extensively in Griffies and
-!! Hallberg (2000), and the implementation here follows that discussion closely.
-!! We use the notation of Smith and McWilliams (2003) with the exception that the
+!! The form of the viscous accelerations is discussed extensively in \cite griffies2000,
+!! and the implementation here follows that discussion closely.
+!! We use the notation of \cite Smith2003 with the exception that the
 !! isotropic viscosity is \f$\kappa_h\f$.
-!!
-!! \section section_horizontal_viscosity Horizontal viscosity in MOM
 !!
 !! In general, the horizontal stress tensor can be written as
 !! \f[
@@ -3357,7 +3357,7 @@ end subroutine hor_visc_end
 !!
 !! \subsection section_anisotropic_viscosity Anisotropic viscosity
 !!
-!! Large et al., 2001, proposed enhancing viscosity in a particular direction and the
+!! \cite Large2001, proposed enhancing viscosity in a particular direction and the
 !! approach was generalized in Smith and McWilliams, 2003. We use the second form of their
 !! two coefficient anisotropic viscosity (section 4.3). We also replace their
 !! \f$A^\prime\f$ and $D$ such that \f$2A^\prime = 2 \kappa_h + D\f$ and

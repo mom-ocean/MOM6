@@ -1728,7 +1728,7 @@ end subroutine VarMix_end
 !! \f]
 !!
 !! \todo Check this reference to Bob on/off paper.
-!! The resolution function used in scaling diffusivities (Hallberg, 2010) is
+!! The resolution function used in scaling diffusivities (\cite hallberg2013) is
 !!
 !! \f[
 !! r(\Delta,L_d) = \frac{1}{1+(\alpha R)^p}

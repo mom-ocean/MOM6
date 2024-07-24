@@ -765,7 +765,7 @@ end subroutine tidal_forcing_end
 !! are provided. TIDAL_SAL_FROM_FILE can be set to read the phase and
 !! amplitude of the tidal SAL. USE_PREVIOUS_TIDES may be useful in
 !! combination with the scalar approximation to iterate the SAL to
-!! convergence (for details, see Arbic et al., 2004, DSR II). With
+!! convergence (for details, see \cite Arbic2004). With
 !! TIDAL_SAL_FROM_FILE or USE_PREVIOUS_TIDES, a list of input files
 !! must be provided to describe each constituent's properties from
 !! a previous solution. The online SAL calculations that are functions

@@ -334,6 +334,8 @@ end function order2index
 
 !> \namespace mom_spherical_harmonics
 !!
+!! \section section_spherical_harmonics Spherical harmonics
+!!
 !! This module contains the subroutines to calculate spherical harmonic transforms (SHT), namely, forward transform
 !! of a two-dimensional field into a given number of spherical harmonic modes and its inverse transform.  This module
 !! is primarily used to but not limited to calculate self-attraction and loading (SAL) term, which is mostly relevant to
@@ -341,8 +343,8 @@ end function order2index
 !! Currently, the transforms are for t-cell fields only.
 !!
 !! This module is stemmed from SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean developed by Los
-!! Alamos National Laboratory and University of Michigan [Barton et al. (2022) and Brus et al. (2023)]. The algorithm
-!! for forward and inverse transforms loosely follows Schaeffer (2013).
+!! Alamos National Laboratory and University of Michigan [\cite Barton2022 and \cite Brus2023]. The algorithm
+!! for forward and inverse transforms loosely follows \cite Schaeffer2013.
 !!
 !! In forward transform, a two-dimensional physical field can be projected into a series of spherical harmonics. The
 !! spherical harmonic coefficient of degree n and order m for a field \f$f(\theta, \phi)\f$ is calculated as follows:
