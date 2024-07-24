@@ -4257,7 +4257,7 @@ end function EF4
 !!   This file contains the subroutine (bulkmixedlayer) that
 !! implements a Kraus-Turner-like bulk mixed layer, based on the work
 !! of various people, as described in the review paper by \cite niiler1977,
-!! with particular attention to the form proposed by \cite Oberhuber1993,
+!! with particular attention to the form proposed by \cite Oberhuber1993a,
 !! with an extension to a refined bulk mixed layer as described in
 !! Hallberg (\cite muller2003). The physical processes portrayed in
 !! this subroutine include convective adjustment and mixed layer entrainment
