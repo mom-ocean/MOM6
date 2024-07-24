@@ -1226,7 +1226,7 @@ end function EOS_domain
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                               bathyP, dP_tiny, MassWghtInterp)
+                               bathyP, P_surf, dP_tiny, MassWghtInterp)
   type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [C ~> degC]
@@ -1259,6 +1259,8 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP  !< The pressure at the bathymetry [R L2 T-2 ~> Pa]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: P_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa]
   real,       optional, intent(in)  :: dP_tiny !< A miniscule pressure change with
                             !! the same units as p_t [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
@@ -1280,20 +1282,20 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
       call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%kg_m3_to_R*EOS%Rho_T0_S0, &
                                 dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, dza, &
                                 intp_dza, intx_dza, inty_dza, halo_size, &
-                                bathyP, dP_tiny, MassWghtInterp)
+                                bathyP, P_surf, dP_tiny, MassWghtInterp)
     case (EOS_WRIGHT)
       call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
-                                  inty_dza, halo_size, bathyP, dP_tiny, MassWghtInterp, &
+                                  inty_dza, halo_size, bathyP, P_surf, dP_tiny, MassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
     case (EOS_WRIGHT_FULL)
       call int_spec_vol_dp_wright_full(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
-                                  inty_dza, halo_size, bathyP, dP_tiny, MassWghtInterp, &
+                                  inty_dza, halo_size, bathyP, P_surf, dP_tiny, MassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
     case (EOS_WRIGHT_REDUCED)
       call int_spec_vol_dp_wright_red(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
-                                  inty_dza, halo_size, bathyP, dP_tiny, MassWghtInterp, &
+                                  inty_dza, halo_size, bathyP, P_surf, dP_tiny, MassWghtInterp, &
                                   SV_scale=EOS%R_to_kg_m3, pres_scale=EOS%RL2_T2_to_Pa, &
                                   temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt)
     case default
@@ -1306,7 +1308,7 @@ end subroutine analytic_int_specific_vol_dp
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
-                          intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, MassWghtInterp, Z_0p)
+                          intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p)
   type(hor_index_type), intent(in)  :: HI !< Ocean horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [C ~> degC]
@@ -1342,6 +1344,8 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                                           !! layer divided by the y grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT !< The depth of the bathymetry [Z ~> m]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: SSH !< The sea surface height [Z ~> m]
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                           !! mass weighting to interpolate T/S in integrals
@@ -1367,23 +1371,23 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
       if ((rho_scale /= 1.0) .or. (dRdT_scale /= 1.0) .or. (dRdS_scale /= 1.0)) then
         call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                          rho_scale*EOS%Rho_T0_S0, dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, &
-                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, MassWghtInterp)
+                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp)
       else
         call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                          EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, &
-                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, MassWghtInterp)
+                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp)
       endif
     case (EOS_WRIGHT)
       rho_scale = EOS%kg_m3_to_R
       pres_scale = EOS%RL2_T2_to_Pa
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0) .or. (EOS%C_to_degC /= 1.0) .or. (EOS%S_to_ppt /= 1.0)) then
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, &
                                    dz_neglect, MassWghtInterp, rho_scale, pres_scale, &
                                    temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt, Z_0p=Z_0p)
       else
         call int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, &
                                    dz_neglect, MassWghtInterp, Z_0p=Z_0p)
       endif
     case (EOS_WRIGHT_FULL)
@@ -1391,12 +1395,12 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
       pres_scale = EOS%RL2_T2_to_Pa
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0) .or. (EOS%C_to_degC /= 1.0) .or. (EOS%S_to_ppt /= 1.0)) then
         call int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, &
                                    dz_neglect, MassWghtInterp, rho_scale, pres_scale, &
                                    temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt, Z_0p=Z_0p)
       else
         call int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, &
                                    dz_neglect, MassWghtInterp, Z_0p=Z_0p)
       endif
     case (EOS_WRIGHT_REDUCED)
@@ -1404,12 +1408,12 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
       pres_scale = EOS%RL2_T2_to_Pa
       if ((rho_scale /= 1.0) .or. (pres_scale /= 1.0) .or. (EOS%C_to_degC /= 1.0) .or. (EOS%S_to_ppt /= 1.0)) then
         call int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, &
                                    dz_neglect, MassWghtInterp, rho_scale, pres_scale, &
                                    temp_scale=EOS%C_to_degC, saln_scale=EOS%S_to_ppt, Z_0p=Z_0p)
       else
         call int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, &
+                                   dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, &
                                    dz_neglect, MassWghtInterp, Z_0p=Z_0p)
       endif
     case default

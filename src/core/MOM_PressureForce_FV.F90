@@ -277,25 +277,25 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
           call int_spec_vol_dp_generic_plm( T_t(:,:,k), T_b(:,:,k), S_t(:,:,k), S_b(:,:,k), &
                     p(:,:,K), p(:,:,K+1), alpha_ref, dp_neglect, p(:,:,nz+1), G%HI, &
                     tv%eqn_of_state, US, dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), inty_dza(:,:,k), &
-                    MassWghtInterp=CS%MassWghtInterp)
+                    P_surf=p(:,:,1), MassWghtInterp=CS%MassWghtInterp)
         elseif ( CS%Recon_Scheme == 2 ) then
           call MOM_error(FATAL, "PressureForce_FV_nonBouss: "//&
                          "int_spec_vol_dp_generic_ppm does not exist yet.")
         !  call int_spec_vol_dp_generic_ppm ( tv%T(:,:,k), T_t(:,:,k), T_b(:,:,k), &
         !            tv%S(:,:,k), S_t(:,:,k), S_b(:,:,k), p(:,:,K), p(:,:,K+1), &
         !            alpha_ref, G%HI, tv%eqn_of_state, dza(:,:,k), intp_dza(:,:,k), &
-        !            intx_dza(:,:,k), inty_dza(:,:,k))
+        !            intx_dza(:,:,k), inty_dza(:,:,k), P_surf=p(:,:,1), MassWghtInterp=CS%MassWghtInterp)
         endif
       else
         call int_specific_vol_dp(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), p(:,:,K), &
                                p(:,:,K+1), alpha_ref, G%HI, tv%eqn_of_state, &
                                US, dza(:,:,k), intp_dza(:,:,k), intx_dza(:,:,k), &
-                               inty_dza(:,:,k), bathyP=p(:,:,nz+1), dP_tiny=dp_neglect, &
+                               inty_dza(:,:,k), bathyP=p(:,:,nz+1), P_surf=p(:,:,1), dP_tiny=dp_neglect, &
                                MassWghtInterp=CS%MassWghtInterp)
       endif
       if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) &
-        call diagnose_mass_weight_p(p(:,:,K), p(:,:,K+1), dp_neglect, p(:,:,nz+1), G%HI, &
-                                    MassWt_u(:,:,k), MassWt_v(:,:,k))
+        call diagnose_mass_weight_p(p(:,:,K), p(:,:,K+1), p(:,:,nz+1), p(:,:,1), dp_neglect, CS%MassWghtInterp, &
+                                    G%HI, MassWt_u(:,:,k), MassWt_v(:,:,k))
     else
       alpha_anom = 1.0 / GV%Rlay(k) - alpha_ref
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -800,7 +800,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                   rho_ref, CS%Rho0, GV%g_Earth, G%HI, tv%eqn_of_state, US, dpa(:,:,k), &
-                  intz_dpa(:,:,k), intx_dpa(:,:,k), inty_dpa(:,:,k), G%bathyT, dz_neglect, &
+                  intz_dpa(:,:,k), intx_dpa(:,:,k), inty_dpa(:,:,k), G%bathyT, e(:,:,1), dz_neglect, &
                   CS%MassWghtInterp, Z_0p=Z_0p)
       endif
       if (GV%Z_to_H /= 1.0) then
@@ -810,8 +810,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
         enddo ; enddo
       endif
       if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) &
-        call diagnose_mass_weight_Z(e(:,:,K), e(:,:,K+1), dz_neglect, G%bathyT, G%HI, &
-                                    MassWt_u(:,:,k), MassWt_v(:,:,k))
+        call diagnose_mass_weight_Z(e(:,:,K), e(:,:,K+1), G%bathyT, e(:,:,1), dz_neglect, CS%MassWghtInterp, &
+                                    G%HI, MassWt_u(:,:,k), MassWt_v(:,:,k))
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1

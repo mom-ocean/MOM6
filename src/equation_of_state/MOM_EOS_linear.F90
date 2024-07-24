@@ -258,7 +258,7 @@ end subroutine set_params_linear
 !! finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                  Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa, &
-                 bathyT, dz_neglect, MassWghtInterp)
+                 bathyT, SSH, dz_neglect, MassWghtInterp)
   type(hor_index_type), intent(in)  :: HI        !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -299,6 +299,8 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                                                  !! layer divided by the y grid spacing [R L2 T-2 ~> Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT    !< The depth of the bathymetry [Z ~> m].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: SSH       !< The sea surface height [Z ~> m]
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                                  !! mass weighting to interpolate T/S in integrals
@@ -317,6 +319,7 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   real :: intz(5)    ! The integrals of density with height at the
                      ! 5 sub-column locations [R L2 T-2 ~> Pa]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
+  logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants [nondim].
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m
 
@@ -327,14 +330,11 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   is = HI%isc ; ie = HI%iec
   js = HI%jsc ; je = HI%jec
 
-  do_massWeight = .false.
-  if (present(MassWghtInterp)) do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
-  ! if (do_massWeight) then
-  !   if (.not.present(bathyT)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !       "bathyT must be present if MassWghtInterp is present and true.")
-  !   if (.not.present(dz_neglect)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !       "dz_neglect must be present if MassWghtInterp is present and true.")
-  ! endif
+  do_massWeight = .false. ; top_massWeight = .false.
+  if (present(MassWghtInterp)) then
+    do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+    top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
+  endif
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     dz = z_t(i,j) - z_b(i,j)
@@ -350,6 +350,8 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
     hWght = 0.0
     if (do_massWeight) &
       hWght = max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
+    if (top_massWeight) &
+      hWght = max(hWght, z_b(i+1,j)-SSH(i,j), z_b(i,j)-SSH(i+1,j))
 
     if (hWght <= 0.0) then
       dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i+1,j) - z_b(i+1,j)
@@ -389,6 +391,8 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
     hWght = 0.0
     if (do_massWeight) &
       hWght = max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
+    if (top_massWeight) &
+      hWght = max(hWght, z_b(i,j+1)-SSH(i,j), z_b(i,j)-SSH(i,j+1))
 
     if (hWght <= 0.0) then
       dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i,j+1) - z_b(i,j+1)
@@ -429,7 +433,7 @@ end subroutine int_density_dz_linear
 !! model.  Specific volume is assumed to vary linearly between adjacent points.
 subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                dRho_dT, dRho_dS, dza, intp_dza, intx_dza, inty_dza, halo_size, &
-               bathyP, dP_neglect, MassWghtInterp)
+               bathyP, P_surf, dP_neglect, MassWghtInterp)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -469,6 +473,8 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   integer,    optional, intent(in)  :: halo_size !< The width of halo points on which to calculate dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: P_surf    !< The pressure at the ocean surface [R L2 T-2 ~> Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
                                                  !! the same units as p_t [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
@@ -488,6 +494,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   real :: intp(5)    ! The integrals of specific volume with pressure at the
                      ! 5 sub-column locations [L2 T-2 ~> m2 s-2]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
+  logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants [nondim].
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
@@ -498,15 +505,12 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   if (present(intx_dza)) then ; ish = MIN(Isq,ish) ; ieh = MAX(Ieq+1,ieh) ; endif
   if (present(inty_dza)) then ; jsh = MIN(Jsq,jsh) ; jeh = MAX(Jeq+1,jeh) ; endif
 
-  do_massWeight = .false. ; massWeight_bug = .false.
-  if (present(MassWghtInterp)) do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
-  if (present(MassWghtInterp)) massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
-!  if (do_massWeight) then
-!    if (.not.present(bathyP)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "bathyP must be present if MassWghtInterp is present and true.")
-!    if (.not.present(dP_neglect)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "dP_neglect must be present if MassWghtInterp is present and true.")
-!  endif
+  do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
+  if (present(MassWghtInterp)) then
+    do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+    top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
+    massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
+  endif
 
   do j=jsh,jeh ; do i=ish,ieh
     dp = p_b(i,j) - p_t(i,j)
@@ -527,6 +531,8 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
     elseif (do_massWeight) then
       hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
     endif
+    if (top_massWeight) &
+      hWght = max(hWght, P_surf(i,j)-p_b(i+1,j), P_surf(i+1,j)-p_b(i,j))
 
     if (hWght <= 0.0) then
       dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i+1,j) - p_t(i+1,j)
@@ -575,6 +581,8 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
     elseif (do_massWeight) then
       hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
     endif
+    if (top_massWeight) &
+      hWght = max(hWght, P_surf(i,j)-p_b(i,j+1), P_surf(i,j+1)-p_b(i,j))
 
     if (hWght <= 0.0) then
       dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i,j+1) - p_t(i,j+1)

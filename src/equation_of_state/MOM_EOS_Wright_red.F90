@@ -395,7 +395,7 @@ end subroutine EoS_fit_range_Wright_red
 !! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
 !! that assumes that |eps| < 0.34.
 subroutine int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                 dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, &
+                                 dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, &
                                  MassWghtInterp, rho_scale, pres_scale, temp_scale, saln_scale, Z_0p)
   type(hor_index_type), intent(in)  :: HI       !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -432,6 +432,8 @@ subroutine int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                                 !! layer divided by the y grid spacing [R L2 T-2 ~> Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT   !< The depth of the bathymetry [Z ~> m].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: SSH      !< The sea surface height [Z ~> m]
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                                 !! mass weighting to interpolate T/S in integrals
@@ -489,6 +491,7 @@ subroutine int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: c4s        ! Partly rescaled version of c4 [m2 s-2 S-1 ~> m2 s-2 PSU-1]
   real :: c5s        ! Partly rescaled version of c5 [m2 s-2 C-1 S-1 ~> m2 s-2 degC-1 PSU-1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
+  logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants [nondim]
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants [nondim]
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m
@@ -539,14 +542,11 @@ subroutine int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     c4s = c4s * saln_scale ; c5s = c5s * saln_scale
   endif ; endif
 
-  do_massWeight = .false.
-  if (present(MassWghtInterp)) do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
-  ! if (do_massWeight) then
-  !   if (.not.present(bathyT)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !       "bathyT must be present if MassWghtInterp is present and true.")
-  !   if (.not.present(dz_neglect)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !       "dz_neglect must be present if MassWghtInterp is present and true.")
-  ! endif
+  do_massWeight = .false. ; top_massWeight = .false.
+  if (present(MassWghtInterp)) then
+    do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+    top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
+  endif
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     al0_2d(i,j) = a0 + (a1s*T(i,j) + a2s*S(i,j))
@@ -578,6 +578,8 @@ subroutine int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     hWght = 0.0
     if (do_massWeight) &
       hWght = max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
+    if (top_massWeight) &
+      hWght = max(hWght, z_b(i+1,j)-SSH(i,j), z_b(i,j)-SSH(i+1,j))
     if (hWght > 0.) then
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
@@ -620,6 +622,8 @@ subroutine int_density_dz_wright_red(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     hWght = 0.0
     if (do_massWeight) &
       hWght = max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
+    if (top_massWeight) &
+      hWght = max(hWght, z_b(i,j+1)-SSH(i,j), z_b(i,j)-SSH(i,j+1))
     if (hWght > 0.) then
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
@@ -663,7 +667,7 @@ end subroutine int_density_dz_wright_red
 !! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
 !! that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
-                                  intp_dza, intx_dza, inty_dza, halo_size, bathyP, dP_neglect, &
+                                  intp_dza, intx_dza, inty_dza, halo_size, bathyP, P_surf, dP_neglect, &
                                   MassWghtInterp, SV_scale, pres_scale, temp_scale, saln_scale)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -700,6 +704,8 @@ subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
                                                  !! dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: P_surf    !< The pressure at the ocean surface [R L2 T-2 ~> Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
                                                  !! the same units as p_t [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
@@ -751,6 +757,7 @@ subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: c4s        ! Partly rescaled version of c4 [m2 s-2 S-1 ~> m2 s-2 PSU-1]
   real :: c5s        ! Partly rescaled version of c5 [m2 s-2 C-1 S-1 ~> m2 s-2 degC-1 PSU-1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
+  logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants [nondim]
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants [nondim]
@@ -788,15 +795,12 @@ subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
     c4s = c4s * saln_scale ; c5s = c5s * saln_scale
   endif ; endif
 
-  do_massWeight = .false. ; massWeight_bug = .false.
-  if (present(MassWghtInterp)) do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
-  if (present(MassWghtInterp)) massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
-!  if (do_massWeight) then
-!    if (.not.present(bathyP)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "bathyP must be present if MassWghtInterp is present and true.")
-!    if (.not.present(dP_neglect)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "dP_neglect must be present if MassWghtInterp is present and true.")
-!  endif
+  do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
+  if (present(MassWghtInterp)) then
+    do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+    top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
+    massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
+  endif
 
   !  alpha(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
   do j=jsh,jeh ; do i=ish,ieh
@@ -827,6 +831,8 @@ subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
     elseif (do_massWeight) then
       hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
     endif
+    if (top_massWeight) &
+      hWght = max(hWght, P_surf(i,j)-p_b(i+1,j), P_surf(i+1,j)-p_b(i,j))
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
@@ -872,6 +878,8 @@ subroutine int_spec_vol_dp_wright_red(T, S, p_t, p_b, spv_ref, HI, dza, &
     elseif (do_massWeight) then
       hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
     endif
+    if (top_massWeight) &
+      hWght = max(hWght, P_surf(i,j)-p_b(i,j+1), P_surf(i,j+1)-p_b(i,j))
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
