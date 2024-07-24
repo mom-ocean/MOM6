@@ -1462,8 +1462,8 @@ real, dimension(4, lmax+1), parameter :: &
 !! module is imported from SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean developed by Los Alamos
 !! National Laboratory and University of Michigan [\cite Barton2022 and \cite Brus2023]. The load Love numbers
 !! are from \cite Wang2012, which are in the center of mass of total Earth system reference frame (CM). When used,
-!! Love numbers with degree<2 should be converted to center of mass solid Earth reference frame (CF) [\cite Blewitt2003],
-!! as in subroutine calc_love_scaling in MOM_tidal_forcing module.
+!! Love numbers with degree<2 should be converted to center of mass solid Earth reference frame (CF)
+!! [\cite Blewitt2003], as in subroutine calc_love_scaling in MOM_tidal_forcing module.
 !!
 !! References:
 !!
