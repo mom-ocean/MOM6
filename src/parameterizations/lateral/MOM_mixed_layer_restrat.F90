@@ -1971,15 +1971,15 @@ end function test_answer
 !! \cite Hallberg2003, which this new parameterization surpasses, which
 !! in turn is based on the sub-inertial mixed layer theory of \cite Young1994.
 !! There is no net horizontal volume transport due to this parameterization, and
-!! no direct effect below the mixed layer. A revised of the parameterization by
-!! \cite Bodner2023, is also available as an option.
+!! no direct effect below the mixed layer. A revised version of the parameterization by
+!! \cite Bodner2023 is also available as an option.
 !!
 !! This parameterization sets the restratification timescale to agree with
 !! high-resolution studies of mixed layer restratification.
 !!
-!! The run-time parameter FOX_KEMPER_ML_RESTRAT_COEF is a non-dimensional number of
+!! The run-time parameter <code>FOX_KEMPER_ML_RESTRAT_COEF</code> is a non-dimensional number of
 !! order a few tens, proportional to the ratio of the deformation radius or the
-!! grid scale (whichever is smaller to the dominant horizontal length-scale of the
+!! grid scale (whichever is smaller) to the dominant horizontal length-scale of the
 !! sub-meso-scale mixed layer instabilities.
 !!
 !! \subsection section_mle_nutshell "Sub-meso" in a nutshell
@@ -2011,14 +2011,15 @@ end function test_answer
 !! \f$ \tau \f$ is a time-scale for mixing momentum across the mixed layer.
 !! \f$ l_f \f$ is thought to be of order hundreds of meters.
 !!
-!! The upscaling factor \f$ \frac{\Delta s}{l_f} \f$ can be a global constant, model parameter FOX_KEMPER_ML_RESTRAT,
-!! so that in practice the parameterization is:
+!! The upscaling factor \f$ \frac{\Delta s}{l_f} \f$ can be a global constant, model parameter
+!! <code>FOX_KEMPER_ML_RESTRAT</code>, so that in practice the parameterization is:
 !! \f[
 !!    {\bf \Psi} = C_e \Gamma_\Delta \frac{ H^2 \nabla \bar{b} \times \hat{\bf z} }{ \sqrt{ f^2 + \tau^{-2}} } \mu(z)
 !! \f]
 !! with non-unity \f$ \Gamma_\Delta \f$.
 !!
 !! \f$ C_e \f$ is hard-coded as 0.0625. \f$ \tau \f$ is calculated from the surface friction velocity \f$ u^* \f$.
+!!
 !! \todo Explain expression for momentum mixing time-scale.
 !!
 !! | Symbol                       | Module parameter      |
@@ -2102,7 +2103,7 @@ end function test_answer
 !! | \f$ \tau_{h+} \f$            | MLE\%BLD_GROWING_TFILTER  |
 !! | \f$ \tau_{h-} \f$            | MLE\%BLD_DECAYING_TFILTER |
 !! | \f$ \tau_{H+} \f$            | MLE\%MLD_GROWING_TFILTER  |
-!! | \f$ \tau_{H-} \f$            | MLE\%BLD_DECAYING_TFILTER |
+!! | \f$ \tau_{H-} \f$            | MLE\%MLD_DECAYING_TFILTER |
 !!
 !! \subsection section_mle_ref References
 !!

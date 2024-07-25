@@ -480,7 +480,7 @@ end subroutine interface_filter_end
 !! filter, depending on the order of the filter, or to the slope for a Laplacian
 !! filter
 !! \f[
-!! \vec{\psi} = - \kappa_h {\nabla \eta - \eta_smooth}
+!! \vec{\psi} = - \kappa_h {\nabla \eta - \eta_{smooth}}
 !! \f]
 !!
 !! The result of the above expression is subsequently bounded by minimum and maximum values, including a

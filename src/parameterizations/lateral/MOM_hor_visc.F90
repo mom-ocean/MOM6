@@ -2044,9 +2044,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
 end subroutine horizontal_viscosity
 
-!> Allocates space for and calculates static variables used by horizontal_viscosity().
+!> Allocates space for and calculates static variables used by horizontal_viscosity.
 !! hor_visc_init calculates and stores the values of a number of metric functions that
-!! are used in horizontal_viscosity().
+!! are used in horizontal_viscosity.
 subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   type(time_type),         intent(in)    :: Time !< Current model time.
   type(ocean_grid_type),   intent(inout) :: G    !< The ocean's grid structure.
@@ -3259,7 +3259,7 @@ end subroutine hor_visc_end
 !! \f}
 !!
 !! The viscosity \f$\kappa_h\f$ may either be a constant or variable. For example,
-!! \f$\kappa_h\f$ may vary with the shear, as proposed by Smagorinsky (1993).
+!! \f$\kappa_h\f$ may vary with the shear, as proposed by \cite Smagorinsky1993.
 !!
 !! The accelerations resulting form the divergence of the stress tensor are
 !! \f{eqnarray*}{
@@ -3357,8 +3357,8 @@ end subroutine hor_visc_end
 !!
 !! \subsection section_anisotropic_viscosity Anisotropic viscosity
 !!
-!! \cite Large2001, proposed enhancing viscosity in a particular direction and the
-!! approach was generalized in Smith and McWilliams, 2003. We use the second form of their
+!! \cite Large2001 proposed enhancing viscosity in a particular direction and the
+!! approach was generalized in \cite Smith2003. We use the second form of their
 !! two coefficient anisotropic viscosity (section 4.3). We also replace their
 !! \f$A^\prime\f$ and $D$ such that \f$2A^\prime = 2 \kappa_h + D\f$ and
 !! \f$\kappa_a = D\f$ so that \f$\kappa_h\f$ can be considered the isotropic

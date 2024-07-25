@@ -1734,8 +1734,8 @@ end subroutine VarMix_end
 !! r(\Delta,L_d) = \frac{1}{1+(\alpha R)^p}
 !! \f]
 !!
-!! The resolution function can be applied independently to thickness diffusion (module mom_thickness_diffuse),
-!! tracer diffusion (mom_tracer_hordiff) lateral viscosity (mom_hor_visc).
+!! The resolution function can be applied independently to thickness diffusion \(module mom_thickness_diffuse\),
+!! tracer diffusion \(mom_tracer_hordiff\) lateral viscosity \(mom_hor_visc\).
 !!
 !! Robert Hallberg, 2013: Using a resolution function to regulate parameterizations of oceanic mesoscale eddy effects.
 !! Ocean Modelling, 71, pp 92-103.  http://dx.doi.org/10.1016/j.ocemod.2013.08.007
@@ -1757,7 +1757,7 @@ end subroutine VarMix_end
 !! \section section_Vicbeck Visbeck diffusivity
 !!
 !! This module also calculates factors used in setting the thickness diffusivity similar to a Visbeck et al., 1997,
-!! scheme.  The factors are combined in mom_thickness_diffuse::thickness_diffuse() but calculated in this module.
+!! scheme.  The factors are combined in mom_thickness_diffuse::thickness_diffuse but calculated in this module.
 !!
 !! \f[
 !! \kappa_h = \alpha_s L_s^2 S N

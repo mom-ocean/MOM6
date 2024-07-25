@@ -251,12 +251,12 @@ end subroutine SAL_end
 !! (rather, it should be bottom pressure anomaly). SAL is primarily used for fast evolving processes like tides or
 !! storm surges, but the effect applies to all motions.
 !!
-!!     If SAL_SCALAR_APPROX is true, a scalar approximation is applied (\cite Accad1978) and the SAL is simply
+!! If SAL_SCALAR_APPROX is true, a scalar approximation is applied [\cite Accad1978] and the SAL is simply
 !! a fraction (set by SAL_SCALAR_VALUE, usually around 10% for global tides) of local SSH . For tides, the scalar
 !! approximation can also be used to iterate the SAL to convergence [see USE_PREVIOUS_TIDES in MOM_tidal_forcing,
 !! \cite Arbic2004].
 !!
-!!    If SAL_HARMONICS is true, a more accurate online spherical harmonic transforms are used to calculate SAL.
+!! If SAL_HARMONICS is true, a more accurate online spherical harmonic transforms are used to calculate SAL.
 !! Subroutines in module MOM_spherical_harmonics are called and the degree of spherical harmonic transforms is set by
 !! SAL_HARMONICS_DEGREE. The algorithm is based on SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean
 !! developed by Los Alamos National Laboratory and University of Michigan [\cite Barton2022 and \cite Brus2023].
