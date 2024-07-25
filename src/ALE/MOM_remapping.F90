@@ -181,8 +181,7 @@ end subroutine extract_member_remapping_CS
 !!
 !! \todo Remove h_neglect argument by moving into remapping_CS
 !! \todo Remove PCM_cell argument by adding new method in Recon1D class
-!! \todo Inline the two versions of remap_via_sub_cells() in remapping_core_h() to eliminate remap_via_sub_cells()
-subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edge, PCM_cell)
+subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edge, net_err, PCM_cell)
   type(remapping_CS),  intent(in)  :: CS !< Remapping control structure
   integer,             intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0), intent(in)  :: h0 !< Cell widths on source grid [H]
@@ -196,10 +195,24 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
   real, optional,      intent(in)  :: h_neglect_edge !< A negligibly small width
                                          !! for the purpose of edge value
                                          !! calculations in the same units as h0 [H]
+  real, optional,      intent(out) :: net_err !< Error in total column [A H]
   logical, dimension(n0), optional, intent(in) :: PCM_cell !< If present, use PCM remapping for
                                          !! cells in the source grid where this is true.
 
   ! Local variables
+  real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
+  real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
+  real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell [A]
+  integer, dimension(n0+n1+1) :: isub_src ! Index of source cell for each sub-cell
+  integer, dimension(n0) :: isrc_start ! Index of first sub-cell within each source cell
+  integer, dimension(n0) :: isrc_end ! Index of last sub-cell within each source cell
+  integer, dimension(n0) :: isrc_max ! Index of thickest sub-cell within each source cell
+  real, dimension(n0) :: h0_eff ! Effective thickness of source cells [H]
+  integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
+  integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
+  ! For error checking/debugging
+  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
+  real :: u02_err ! Integrated reconstruction error estimates [H A]
   real, dimension(n0,2)           :: ppoly_r_E     ! Edge value of polynomial [A]
   real, dimension(n0,2)           :: ppoly_r_S     ! Edge slope of polynomial [A H-1]
   real, dimension(n0,CS%degree+1) :: ppoly_r_coefs ! Coefficients of polynomial reconstructions [A]
@@ -218,19 +231,54 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, h_neglect, h_neglect_edg
     if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
                                    CS%boundary_extrapolation, ppoly_r_coefs, ppoly_r_E)
 
-    ! This calls the OM4 version of the remapmping algorithms
-    call remap_via_sub_cells_om4( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h1, iMethod, &
-                                  CS%force_bounds_in_subcell, u1, uh_err )
+    ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
+    call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
+                                isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
+
+    ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
+    ! Uses: h_sub, h0_eff, isub_src
+    ! Sets: u_sub, uh_sub
+    call remap_src_to_sub_grid_om4(n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h_sub, &
+                               h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                               iMethod, CS%force_bounds_in_subcell, u_sub, uh_sub, u02_err)
+
+    ! Loop over each target cell summing the integrals from sub-cells within the target cell.
+    ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
+    ! Sets: u1, uh_err
+    call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                               force_bounds_in_target, u1, uh_err)
+
+    ! Include the error remapping from source to sub-cells in the estimate of total remapping error
+    uh_err = uh_err + u02_err
 
     if (CS%check_remapping) call check_remapped_values(n0, h0, u0, ppoly_r_E, CS%degree, ppoly_r_coefs, &
                                                        n1, h1, u1, iMethod, uh_err, "remapping_core_h")
 
   else ! i.e. if (CS%om4_remap_via_sub_cells == .false.)
 
-    call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h1, iMethod, &
-                              CS%force_bounds_in_subcell, u1, uh_err )
+    ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
+    call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
+                                  isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
+
+    ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
+    ! Uses: h_sub, h0_eff, isub_src
+    ! Sets: u_sub, uh_sub
+    call remap_src_to_sub_grid(n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h_sub, &
+                               isrc_start, isrc_end, isrc_max, isub_src, &
+                               iMethod, CS%force_bounds_in_subcell, u_sub, uh_sub, u02_err)
+
+    ! Loop over each target cell summing the integrals from sub-cells within the target cell.
+    ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
+    ! Sets: u1, uh_err
+    call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                               force_bounds_in_target, u1, uh_err)
+
+    ! Include the error remapping from source to sub-cells in the estimate of total remapping error
+    uh_err = uh_err + u02_err
 
   endif
+
+  if (present(net_err)) net_err = uh_err
 
 end subroutine remapping_core_h
 
@@ -251,6 +299,19 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1, h_neglect, h_neglect_ed
                                            !! for the purpose of edge value
                                            !! calculations in the same units as h0 [H].
   ! Local variables
+  real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
+  real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
+  real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell [A]
+  integer, dimension(n0+n1+1) :: isub_src ! Index of source cell for each sub-cell
+  integer, dimension(n0) :: isrc_start ! Index of first sub-cell within each source cell
+  integer, dimension(n0) :: isrc_end ! Index of last sub-cell within each source cell
+  integer, dimension(n0) :: isrc_max ! Index of thickest sub-cell within each source cell
+  real, dimension(n0) :: h0_eff ! Effective thickness of source cells [H]
+  integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
+  integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
+  ! For error checking/debugging
+  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
+  real :: u02_err ! Integrated reconstruction error estimates [H A]
   real, dimension(n0,2)           :: ppoly_r_E     ! Edge value of polynomial [A]
   real, dimension(n0,2)           :: ppoly_r_S     ! Edge slope of polynomial [A H-1]
   real, dimension(n0,CS%degree+1) :: ppoly_r_coefs ! Coefficients of polynomial reconstructions [A]
@@ -277,10 +338,26 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1, h_neglect, h_neglect_ed
       h1(k) = max( 0., dx(k+1) - dx(k) )
     endif
   enddo
-  call remap_via_sub_cells( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h1, iMethod, &
-                            CS%force_bounds_in_subcell, u1, uh_err )
-! call remapByDeltaZ( n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, dx, iMethod, u1, hNeglect )
-! call remapByProjection( n0, h0, u0, CS%ppoly_r, n1, h1, iMethod, u1, hNeglect )
+
+  ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
+  call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
+                                isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
+
+  ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
+  ! Uses: h_sub, h0_eff, isub_src
+  ! Sets: u_sub, uh_sub
+  call remap_src_to_sub_grid_om4(n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h_sub, &
+                             h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                             iMethod, CS%force_bounds_in_subcell, u_sub, uh_sub, u02_err)
+
+  ! Loop over each target cell summing the integrals from sub-cells within the target cell.
+  ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
+  ! Sets: u1, uh_err
+  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             force_bounds_in_target, u1, uh_err)
+
+  ! Include the error remapping from source to sub-cells in the estimate of total remapping error
+  uh_err = uh_err + u02_err
 
   if (CS%check_remapping) call check_remapped_values(n0, h0, u0, ppoly_r_E, CS%degree, ppoly_r_coefs, &
                                                      n1, h1, u1, iMethod, uh_err, "remapping_core_w")
@@ -490,118 +567,6 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
 
 end subroutine check_reconstructions_1d
 
-!> Remaps column of n0 values u0 on grid h0 to grid h1 with n1 cells by calculating
-!! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
-!! appropriate integrals into the h1*u1 values.  h0 and h1 must have the same units.
-!!
-!! This uses a buggy remap_via_sub_cells_om4() that produces the wrong value for
-!! bottom layers that do not match the same total depth of the water column.
-subroutine remap_via_sub_cells_om4(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, method, &
-                                   force_bounds_in_subcell, u1, uh_err)
-  integer,           intent(in)    :: n0      !< Number of cells in source grid
-  real,              intent(in)    :: h0(n0)  !< Source grid widths (size n0) [H]
-  real,              intent(in)    :: u0(n0)  !< Source cell averages (size n0) [A]
-  real,              intent(in)    :: ppoly0_E(n0,2)    !< Edge value of polynomial [A]
-  real,              intent(in)    :: ppoly0_coefs(:,:) !< Coefficients of polynomial [A]
-  integer,           intent(in)    :: n1      !< Number of cells in target grid
-  real,              intent(in)    :: h1(n1)  !< Target grid widths (size n1) [H]
-  integer,           intent(in)    :: method  !< Remapping scheme to use
-  logical,           intent(in)    :: force_bounds_in_subcell !< Force sub-cell values to be bounded
-  real,              intent(out)   :: u1(n1)  !< Target cell averages (size n1) [A]
-  real,              intent(out)   :: uh_err  !< Estimate of bound on error in sum of u*h [A H]
-  ! Local variables
-  real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
-  real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
-  real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell [A]
-  integer, dimension(n0+n1+1) :: isub_src ! Index of source cell for each sub-cell
-  integer, dimension(n0) :: isrc_start ! Index of first sub-cell within each source cell
-  integer, dimension(n0) :: isrc_end ! Index of last sub-cell within each source cell
-  integer, dimension(n0) :: isrc_max ! Index of thickest sub-cell within each source cell
-  real, dimension(n0) :: h0_eff ! Effective thickness of source cells [H]
-  integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
-  integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
-  ! For error checking/debugging
-  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
-  real :: u02_err ! Integrated reconstruction error estimates [H A]
-
-  ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
-  call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
-                                isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
-
-  ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
-  ! Uses: h_sub, h0_eff, isub_src
-  ! Sets: u_sub, uh_sub
-  call remap_src_to_sub_grid_om4(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, &
-                             h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
-                             method, force_bounds_in_subcell, u_sub, uh_sub, u02_err)
-
-  ! Loop over each target cell summing the integrals from sub-cells within the target cell.
-  ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
-  ! Sets: u1, uh_err
-  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             force_bounds_in_target, u1, uh_err)
-
-  ! Include the error remapping from source to sub-cells in the estimate of total remapping error
-  uh_err = uh_err + u02_err
-
-end subroutine remap_via_sub_cells_om4
-
-!> Remaps column of n0 values u0 on grid h0 to grid h1 with n1 cells by calculating
-!! the n0+n1+1 sub-integrals of the intersection of h0 and h1, and the summing the
-!! appropriate integrals into the h1*u1 values.  h0 and h1 must have the same units.
-!!
-!! \todo Remove h0_eff which is not needed
-!! \todo Undo force_bounds_in_target when switching to Recon1D class
-subroutine remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h1, method, &
-                                force_bounds_in_subcell, u1, uh_err)
-  integer,           intent(in)    :: n0      !< Number of cells in source grid
-  real,              intent(in)    :: h0(n0)  !< Source grid widths (size n0) [H]
-  real,              intent(in)    :: u0(n0)  !< Source cell averages (size n0) [A]
-  real,              intent(in)    :: ppoly0_E(n0,2)    !< Edge value of polynomial [A]
-  real,              intent(in)    :: ppoly0_coefs(:,:) !< Coefficients of polynomial [A]
-  integer,           intent(in)    :: n1      !< Number of cells in target grid
-  real,              intent(in)    :: h1(n1)  !< Target grid widths (size n1) [H]
-  integer,           intent(in)    :: method  !< Remapping scheme to use
-  logical,           intent(in)    :: force_bounds_in_subcell !< Force sub-cell values to be bounded
-  real,              intent(out)   :: u1(n1)  !< Target cell averages (size n1) [A]
-  real,              intent(out)   :: uh_err  !< Estimate of bound on error in sum of u*h [A H]
-  ! Local variables
-  real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
-  real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
-  real, dimension(n0+n1+1) :: u_sub ! Average of u over each sub-cell [A]
-  integer, dimension(n0+n1+1) :: isub_src ! Index of source cell for each sub-cell
-  integer, dimension(n0) :: isrc_start ! Index of first sub-cell within each source cell
-  integer, dimension(n0) :: isrc_end ! Index of last sub-cell within each source cell
-  integer, dimension(n0) :: isrc_max ! Index of thickest sub-cell within each source cell
-  real, dimension(n0) :: h0_eff ! Effective thickness of source cells [H]
-  integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
-  integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
-  ! For error checking/debugging
-  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
-  real :: u02_err ! Integrated reconstruction error estimates [H A]
-
-  ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
-  call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
-                                isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
-
-  ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
-  ! Uses: h_sub, h0_eff, isub_src
-  ! Sets: u_sub, uh_sub
-  call remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, &
-                             isrc_start, isrc_end, isrc_max, isub_src, &
-                             method, force_bounds_in_subcell, u_sub, uh_sub, u02_err)
-
-  ! Loop over each target cell summing the integrals from sub-cells within the target cell.
-  ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
-  ! Sets: u1, uh_err
-  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             force_bounds_in_target, u1, uh_err)
-
-  ! Include the error remapping from source to sub-cells in the estimate of total remapping error
-  uh_err = uh_err + u02_err
-
-end subroutine remap_via_sub_cells
-
 !> Returns the intersection of source and targets grids along with and auxiliary lists or indices.
 !!
 !! For source grid with thicknesses h0(1:n0) and target grid with thicknesses  h1(1:n1) the intersection
@@ -778,7 +743,7 @@ subroutine intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
         tgt_has_volume = .false.
       endif
     else
-      stop 'remap_via_sub_cells: THIS SHOULD NEVER HAPPEN!'
+      stop 'intersect_src_tgt_grids: THIS SHOULD NEVER HAPPEN!'
     endif
 
   enddo
@@ -1666,21 +1631,16 @@ logical function remapping_unit_tests(verbose)
   ppoly0_S(:,:) = 0.0
   ppoly0_coefs(:,:) = 0.0
 
-  call edge_values_explicit_h4( n0, h0, u0, ppoly0_E, h_neglect=1e-10, answer_date=answer_date )
-  call PPM_reconstruction( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect, answer_date=answer_date )
-  call PPM_boundary_extrapolation( n0, h0, u0, ppoly0_E, ppoly0_coefs, h_neglect )
+  call initialize_remapping(CS, 'PPM_H4', force_bounds_in_subcell=.false., answer_date=answer_date)
 
-  call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
-                            n2, h2, INTEGRATION_PPM, .false., u2, err )
-  call test%real_arr(6, u2, (/10.,6.,2.,-2.,-6.,-10./), 'remap_via_sub_cells() 2')
+  call remapping_core_h( CS, n0, h0, u0, n2, h2, u2, net_err=err )
+  call test%real_arr(6, u2, (/10.,6.,2.,-2.,-6.,-10./), 'remapping_core_h() 2')
 
-  call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
-                            6, (/.125,.125,.125,.125,.125,.125/), INTEGRATION_PPM, .false., u2, err )
-  call test%real_arr(6, u2, (/11.5,10.5,9.5,8.5,7.5,6.5/), 'remap_via_sub_cells() 3')
+  call remapping_core_h( CS, n0, h0, u0, 6, (/.125,.125,.125,.125,.125,.125/), u2, net_err=err )
+  call test%real_arr(6, u2, (/11.5,10.5,9.5,8.5,7.5,6.5/), 'remapping_core_h() 3')
 
-  call remap_via_sub_cells( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
-                            3, (/2.25,1.5,1./), INTEGRATION_PPM, .false., u2, err )
-  call test%real_arr(3, u2, (/3.,-10.5,-12./), 'remap_via_sub_cells() 4')
+  call remapping_core_h( CS, n0, h0, u0, 3, (/2.25,1.5,1./), u2, net_err=err )
+  call test%real_arr(3, u2, (/3.,-10.5,-12./), 'remapping_core_h() 4')
 
   deallocate(h0, u0, h1, u1, h2, u2, ppoly0_E, ppoly0_S, ppoly0_coefs)
   call end_remapping(CS)
@@ -1768,7 +1728,7 @@ logical function remapping_unit_tests(verbose)
   deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs, u2)
 
   ! ==============================================================
-  ! This section tests the components of remap_via_sub_cells()
+  ! This section tests the components of remapping_core_h()
   ! ==============================================================
 
   if (verbose) write(test%stdout,*) '  - - - - - remapping algororithm tests - - - - -'
@@ -2056,64 +2016,49 @@ logical function remapping_unit_tests(verbose)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
 
   ! ============================================================
-  ! This section tests remap_via_sub_cells()
+  ! This section tests remapping_core_h()
   ! ============================================================
-  if (verbose) write(test%stdout,*) '- - - - - - - - - - remap_via_sub_cells() tests  - - - - - - - - -'
+  if (verbose) write(test%stdout,*) '- - - - - - - - - - remapping_core_h() tests  - - - - - - - - -'
 
-  allocate(ppoly0_E(4,2), ppoly0_S(4,2), ppoly0_coefs(4,3), u2(2))
+  allocate(u2(2))
 
-  ! These tests has vanished top and bottom layers with a linear profile
-  call PLM_reconstruction(4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, 0.)
-  ! Reconstruction has piecewise constant 5 and 1 for top and bottom layers respectively
-  ! but which are vanished so give no wieght to integrals.
-  ! Interface values are 5, 5, 3, 1, 1.
-  call test%real_arr(4, ppoly0_E(1:4,1), (/5.,5.,3.,1./), 'PPM: left edges h=0110')
-  call test%real_arr(4, ppoly0_E(1:4,2), (/5.,3.,1.,1./), 'PPM: right edges h=0110')
+  call initialize_remapping(CS, 'PLM', force_bounds_in_subcell=.false., answer_date=answer_date)
 
   ! Remapping to just the two interior layers yields the same values as u_src(2:3)
-  call remap_via_sub_cells_om4(4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/1.,1./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_core_h(CS, 4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), 2, (/1.,1./), u2)
   call test%real_arr(2, u2, (/4.,2./), 'PLM: remapped  h=0110->h=11 om4')
-  call remap_via_sub_cells(4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/1.,1./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_core_h(CS, 4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), 2, (/1.,1./), u2)
   call test%real_arr(2, u2, (/4.,2./), 'PLM: remapped  h=0110->h=11')
 
   ! Remapping to two layers that are deeper. For the bottom layer of thickness 4,
   ! the first 1/4 has average 2, the remaining 3/4 has the bottom edge value or 1
   ! yield ing and average or 1.25
-  call remap_via_sub_cells_om4(4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/1.,4./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_core_h(CS, 4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), 2, (/1.,4./), u2)
   call test%real_arr(2, u2, (/4.,1.25/), 'PLM: remapped  h=0110->h=14 om4')
-  call remap_via_sub_cells(4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/1.,4./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_core_h(CS, 4, (/0.,1.,1.,0./), (/5.,4.,2.,1./), 2, (/1.,4./), u2)
   call test%real_arr(2, u2, (/4.,1.25/), 'PLM: remapped  h=0110->h=14')
 
   ! Remapping to two layers with lowest layer not reach the bottom.
   ! Here, the bottom layer samples top half of source yeilding 2.5.
   ! Note: OM4 used the value as if the target layer was the same thickness as source.
-  call remap_via_sub_cells_om4(4, (/0.,4.,4.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/4.,2./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_set_param(CS, om4_remap_via_sub_cells=.true.)
+  call remapping_core_h(CS, 4, (/0.,4.,4.,0./), (/5.,4.,2.,1./), 2, (/4.,2./), u2)
   call test%real_arr(2, u2, (/4.,2./), 'PLM: remapped  h=0440->h=42 om4 (with known bug)')
-  call remap_via_sub_cells(4, (/0.,4.,4.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/4.,2./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_set_param(CS, om4_remap_via_sub_cells=.false.)
+  call remapping_core_h(CS, 4, (/0.,4.,4.,0./), (/5.,4.,2.,1./), 2, (/4.,2./), u2)
   call test%real_arr(2, u2, (/4.,2.5/), 'PLM: remapped  h=0440->h=42')
 
   ! Remapping to two layers with no layers sampling the bottom source layer
   ! The first layer samples the top half of u1, yielding 4.5
   ! The second layer samples the next quarter of u1, yielding 3.75
-  call remap_via_sub_cells_om4(4, (/0.,5.,5.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/2.,2./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_set_param(CS, om4_remap_via_sub_cells=.true.)
+  call remapping_core_h(CS, 4, (/0.,5.,5.,0./), (/5.,4.,2.,1./), 2, (/2.,2./), u2)
   call test%real_arr(2, u2, (/4.5,3.5/), 'PLM: remapped  h=0880->h=21 om4 (with known bug)')
-  call remap_via_sub_cells(4, (/0.,4.,4.,0./), (/5.,4.,2.,1./), ppoly0_E, ppoly0_coefs, &
-                           2, (/2.,1./), INTEGRATION_PLM, .false., u2, err)
+  call remapping_set_param(CS, om4_remap_via_sub_cells=.false.)
+  call remapping_core_h(CS, 4, (/0.,4.,4.,0./), (/5.,4.,2.,1./), 2, (/2.,1./), u2)
   call test%real_arr(2, u2, (/4.5,3.75/), 'PLM: remapped  h=0440->h=21')
 
-  deallocate(ppoly0_E, ppoly0_S, ppoly0_coefs, u2)
-
-  ! ============================================================
-  ! This section tests remapping_core_h()
-  ! ============================================================
-  if (verbose) write(test%stdout,*) '- - - - - - - - - - remapping_core_h() tests  - - - - - - - - -'
+  deallocate(u2)
 
   ! Profile 0: 8 layers, 1x top/2x bottom vanished, and the rest with thickness 1.0, total depth 5, u(z) = 1 + z
   n0 = 8
