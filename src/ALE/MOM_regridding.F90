@@ -226,12 +226,22 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths
                                             ! [H ~> m or kg m-2] or other units
   real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode [kg m-3]
-  !> Thicknesses [m] that give level centers corresponding to table 2 of WOA09
-  real, dimension(40) :: woa09_dz = (/ 5.,  10.,  10.,  15.,  22.5, 25., 25.,  25.,  &
-                                      37.5, 50.,  50.,  75., 100., 100., 100., 100., &
-                                     100., 100., 100., 100., 100., 100., 100., 175., &
-                                     250., 375., 500., 500., 500., 500., 500., 500., &
-                                     500., 500., 500., 500., 500., 500., 500., 500. /)
+  ! Thicknesses [m] that give level centers approximately corresponding to table 2 of WOA09
+  ! These are approximate because the WOA09 depths are not smoothly spaced. Levels
+  ! 1, 4, 5, 9, 12, 24, and 36 are 2.5, 2.5, 1.25 12.5, 37.5 and 62.5 m deeper than WOA09
+  ! but all others are identical.
+  real, dimension(40) :: woa09_dz_approx = (/ 5.,  10.,  10.,  15.,  22.5, 25., 25.,  25.,  &
+                                             37.5, 50.,  50.,  75., 100., 100., 100., 100., &
+                                            100., 100., 100., 100., 100., 100., 100., 175., &
+                                            250., 375., 500., 500., 500., 500., 500., 500., &
+                                            500., 500., 500., 500., 500., 500., 500., 500. /)
+  ! These are the actual spacings [m] between WOA09 depths which, if used for layer thickness, places
+  ! the interfaces at the WOA09 depths.
+  real, dimension(39) :: woa09_dzi = (/ 10.,  10.,  10.,  20.,  25.,  25.,  25.,  25.,  &
+                                        50.,  50.,  50., 100., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100., 100., 250., &
+                                       250., 500., 500., 500., 500., 500., 500., 500., &
+                                       500., 500., 500., 500., 500., 500., 500. /)
 
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -325,6 +335,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "               by a comma or space, e.g. FILE:lev.nc,dz\n"//&
                  "               or FILE:lev.nc,interfaces=zw\n"//&
                  " WOA09[:N]   - the WOA09 vertical grid (approximately)\n"//&
+                 " WOA09INT[:N] - layers spanned by the WOA09 depths\n"//&
                  " FNC1:string - FNC1:dz_min,H_total,power,precision\n"//&
                  " HYBRID:string - read from a file. The string specifies\n"//&
                  "               the filename and two variable names, separated\n"//&
@@ -458,18 +469,41 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target, &
                'HYBRID target densities for interfaces', units=coordinateUnits(coord_mode))
     endif
-  elseif (index(trim(string),'WOA09')==1) then
-    if (len_trim(string)==5) then
+  elseif (index(trim(string),'WOA09INT')==1) then
+    if (len_trim(string)==8) then ! string=='WOA09INT'
       tmpReal = 0. ; ke = 0 ; dz_extra = 0.
       do while (tmpReal<maximum_depth)
         ke = ke + 1
-        if (ke > size(woa09_dz)) then
+        if (ke > size(woa09_dzi)) then
           dz_extra = maximum_depth - tmpReal
           exit
         endif
-        tmpReal = tmpReal + woa09_dz(ke)
+        tmpReal = tmpReal + woa09_dzi(ke)
       enddo
-    elseif (index(trim(string),'WOA09:')==1) then
+    elseif (index(trim(string),'WOA09INT:')==1) then ! string starts with 'WOA09INT:'
+      if (len_trim(string)==9) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+                 'Expected string of form "WOA09INT:N" but got "'//trim(string)//'".')
+      ke = extract_integer(string(10:len_trim(string)),'',1)
+      if (ke>39 .or. ke<1) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+                   'For "WOA05INT:N" N must 0<N<40 but got "'//trim(string)//'".')
+    endif
+    allocate(dz(ke))
+    do k=1,min(ke, size(woa09_dzi))
+      dz(k) = woa09_dzi(k)
+    enddo
+    if (ke > size(woa09_dzi)) dz(ke) = dz_extra
+  elseif (index(trim(string),'WOA09')==1) then
+    if (len_trim(string)==5) then ! string=='WOA09'
+      tmpReal = 0. ; ke = 0 ; dz_extra = 0.
+      do while (tmpReal<maximum_depth)
+        ke = ke + 1
+        if (ke > size(woa09_dz_approx)) then
+          dz_extra = maximum_depth - tmpReal
+          exit
+        endif
+        tmpReal = tmpReal + woa09_dz_approx(ke)
+      enddo
+    elseif (index(trim(string),'WOA09:')==1) then ! string starts with 'WOA09:'
       if (len_trim(string)==6) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
                  'Expected string of form "WOA09:N" but got "'//trim(string)//'".')
       ke = extract_integer(string(7:len_trim(string)),'',1)
@@ -477,10 +511,10 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                    'For "WOA05:N" N must 0<N<41 but got "'//trim(string)//'".')
     endif
     allocate(dz(ke))
-    do k=1,min(ke, size(woa09_dz))
-      dz(k) = woa09_dz(k)
+    do k=1,min(ke, size(woa09_dz_approx))
+      dz(k) = woa09_dz_approx(k)
     enddo
-    if (ke > size(woa09_dz)) dz(ke) = dz_extra
+    if (ke > size(woa09_dz_approx)) dz(ke) = dz_extra
   else
     call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
       "Unrecognized coordinate configuration"//trim(string))
