@@ -3195,9 +3195,9 @@ end subroutine hor_visc_end
 !!
 !! \section section_horizontal_viscosity Horizontal viscosity in MOM
 !!
-!! This module contains the subroutine horizontal_viscosity() that calculates the
+!! This module contains the subroutine horizontal_viscosity that calculates the
 !! effects of horizontal viscosity, including parameterizations of the value of
-!! the viscosity itself. horizontal_viscosity() calculates the acceleration due to
+!! the viscosity itself. Subroutine horizontal_viscosity calculates the acceleration due to
 !! some combination of a biharmonic viscosity and a Laplacian viscosity. Either or
 !! both may use a coefficient that depends on the shear and strain of the flow.
 !! All metric terms are retained. The Laplacian is calculated as the divergence of

@@ -1892,7 +1892,7 @@ end subroutine MEKE_end
 !! \f$ U_b \f$ is a constant background bottom velocity scale and is
 !! typically not used (i.e. set to zero).
 !!
-!! Following Jansen et al., 2015, the projection of eddy energy on to the bottom
+!! Following \cite jansen2015, the projection of eddy energy on to the bottom
 !! is given by the ratio of bottom energy to column mean energy:
 !! \f[
 !! \gamma_b^2  = \frac{E_b}{E} = \gamma_{d0}
@@ -1924,12 +1924,12 @@ end subroutine MEKE_end
 !! \f[  \kappa_M = \gamma_\kappa \sqrt{ \gamma_t^2 U_e^2 A_\Delta } \f]
 !!
 !! where \f$ A_\Delta \f$ is the area of the grid cell.
-!! Following Jansen et al., 2015, we now use
+!! Following \cite jansen2015, we now use
 !!
 !! \f[  \kappa_M = \gamma_\kappa l_M \sqrt{ \gamma_t^2 U_e^2 } \f]
 !!
 !! where \f$ \gamma_\kappa \in [0,1] \f$ is a non-dimensional factor and,
-!! following Jansen et al., 2015, \f$\gamma_t^2\f$ is the ratio of barotropic
+!! following \cite jansen2015, \f$\gamma_t^2\f$ is the ratio of barotropic
 !! eddy energy to column mean eddy energy given by
 !! \f[
 !! \gamma_t^2  = \frac{E_t}{E} = \left( 1 + c_{t} \frac{L_d}{L_f} \right)^{-\frac{1}{4}}
