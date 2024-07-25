@@ -68,9 +68,6 @@ While the self attraction and loading is computed in MOM_self_attr_load:
 
     :ref:`namespaceself__attr__load_1section_SAL`
 
-Spherical Harmonics
--------------------
-
-The model needs spherical, computed in MOM_spherical_harmonics:
+The self attraction and loading needs spherical harmonics, computed in MOM_spherical_harmonics:
 
     :ref:`namespacemom__spherical__harmonics_1section_spherical_harmonics`

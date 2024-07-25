@@ -361,7 +361,7 @@ end function order2index
 !! \f[
 !!  f^m_n = \sum^{Nj}_{0}\sum^{Ni}_{0}f(i,j)Y^m_n(i,j)A(i,j)/r_e^2
 !! \f]
-!! where $A$ is the area of the cell and $r_e$ is the radius of the Earth.
+!! where \f$A\f$ is the area of the cell and \f$r_e\f$ is the radius of the Earth.
 !!
 !! In inverse transform, the first N degree spherical harmonic coefficients are used to reconstruct a two-dimensional
 !! physical field:
@@ -374,10 +374,10 @@ end function order2index
 !! array vectorization.
 !!
 !! The maximum degree of the spherical harmonics is a runtime parameter and the maximum used by all SHT applications.
-!! At the moment, it is only decided by SAL_HARMONICS_DEGREE.
+!! At the moment, it is only decided by <code>SAL_HARMONICS_DEGREE</code>.
 !!
-!! The forward transforms involve a global summation. Runtime flag SHT_REPRODUCING_SUM controls whether this is done
-!! in a bit-wise reproducing way or not.
+!! The forward transforms involve a global summation. Runtime flag <code>SHT_REPRODUCING_SUM</code> controls
+!! whether this is done in a bit-wise reproducing way or not.
 !!
 !! References:
 !!
