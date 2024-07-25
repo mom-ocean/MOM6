@@ -230,7 +230,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   ! These are approximate because the WOA09 depths are not smoothly spaced. Levels
   ! 1, 4, 5, 9, 12, 24, and 36 are 2.5, 2.5, 1.25 12.5, 37.5 and 62.5 m deeper than WOA09
   ! but all others are identical.
-  real, dimension(40) :: woa09_dz_approx = (/ 5.,  10.,  10.,  15.,  22.5, 25., 25.,  25.,  &
+  real, dimension(40) :: woa09_dz_approx = (/ 5.,  10.,  10.,  15.,  22.5, 25.,  25.,  25.,  &
                                              37.5, 50.,  50.,  75., 100., 100., 100., 100., &
                                             100., 100., 100., 100., 100., 100., 100., 175., &
                                             250., 375., 500., 500., 500., 500., 500., 500., &
@@ -242,6 +242,22 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                                        100., 100., 100., 100., 100., 100., 100., 250., &
                                        250., 500., 500., 500., 500., 500., 500., 500., &
                                        500., 500., 500., 500., 500., 500., 500. /)
+  ! These are the spacings [m] between WOA23 depths from table 3 of
+  ! https://www.ncei.noaa.gov/data/oceans/woa/WOA13/DOC/woa13documentation.pdf
+  real, dimension(136) :: woa23_dzi = (/ 5.,   5.,   5.,   5.,   5.,   5.,   5.,   5.,   5.,   5., &
+                                         5.,   5.,   5.,   5.,   5.,   5.,   5.,   5.,   5.,   5., &
+                                        25.,  25.,  25.,  25.,  25.,  25.,  25.,  25.,  25.,  25., &
+                                        25.,  25.,  25.,  25.,  25.,  25.,  50.,  50.,  50.,  50., &
+                                        50.,  50.,  50.,  50.,  50.,  50.,  50.,  50.,  50.,  50., &
+                                        50.,  50.,  50.,  50.,  50.,  50.,  50.,  50.,  50.,  50., &
+                                        50.,  50.,  50.,  50.,  50.,  50., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100., 100., 100., 100., 100., &
+                                       100., 100., 100., 100., 100., 100. /)
 
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   inputdir = slasher(inputdir)
@@ -336,6 +352,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "               or FILE:lev.nc,interfaces=zw\n"//&
                  " WOA09[:N]   - the WOA09 vertical grid (approximately)\n"//&
                  " WOA09INT[:N] - layers spanned by the WOA09 depths\n"//&
+                 " WOA23INT[:N] - layers spanned by the WOA23 depths\n"//&
                  " FNC1:string - FNC1:dz_min,H_total,power,precision\n"//&
                  " HYBRID:string - read from a file. The string specifies\n"//&
                  "               the filename and two variable names, separated\n"//&
@@ -492,6 +509,29 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       dz(k) = woa09_dzi(k)
     enddo
     if (ke > size(woa09_dzi)) dz(ke) = dz_extra
+  elseif (index(trim(string),'WOA23INT')==1) then
+    if (len_trim(string)==8) then ! string=='WOA23INT'
+      tmpReal = 0. ; ke = 0 ; dz_extra = 0.
+      do while (tmpReal<maximum_depth)
+        ke = ke + 1
+        if (ke > size(woa23_dzi)) then
+          dz_extra = maximum_depth - tmpReal
+          exit
+        endif
+        tmpReal = tmpReal + woa23_dzi(ke)
+      enddo
+    elseif (index(trim(string),'WOA23INT:')==1) then ! string starts with 'WOA23INT:'
+      if (len_trim(string)==9) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+                 'Expected string of form "WOA23INT:N" but got "'//trim(string)//'".')
+      ke = extract_integer(string(10:len_trim(string)),'',1)
+      if (ke>39 .or. ke<1) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
+                   'For "WOA05INT:N" N must 0<N<40 but got "'//trim(string)//'".')
+    endif
+    allocate(dz(ke))
+    do k=1,min(ke, size(woa23_dzi))
+      dz(k) = woa23_dzi(k)
+    enddo
+    if (ke > size(woa23_dzi)) dz(ke) = dz_extra
   elseif (index(trim(string),'WOA09')==1) then
     if (len_trim(string)==5) then ! string=='WOA09'
       tmpReal = 0. ; ke = 0 ; dz_extra = 0.
