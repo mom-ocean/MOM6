@@ -64,7 +64,7 @@ The Love numbers are stored internally in MOM_load_love_numbers:
 
     :ref:`namespacemom__load__love__numbers_1section_Love_numbers`
 
-While the self attraction and loading is computed in MOM_self_attr_load:
+while the self attraction and loading is computed in MOM_self_attr_load:
 
     :ref:`namespaceself__attr__load_1section_SAL`
 
