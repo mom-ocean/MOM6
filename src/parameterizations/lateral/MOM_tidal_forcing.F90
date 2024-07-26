@@ -744,6 +744,8 @@ end subroutine tidal_forcing_end
 
 !> \namespace tidal_forcing
 !!
+!! \section section_tides Tidal forcing
+!!
 !! Code by Robert Hallberg, August 2005, based on C-code by Harper
 !! Simmons, February, 2003, in turn based on code by Brian Arbic.
 !!
@@ -762,14 +764,14 @@ end subroutine tidal_forcing_end
 !!
 !!   In addition, approaches to calculate self-attraction and loading
 !! due to tides (harmonics of astronomical forcing frequencies)
-!! are provided. TIDAL_SAL_FROM_FILE can be set to read the phase and
-!! amplitude of the tidal SAL. USE_PREVIOUS_TIDES may be useful in
+!! are provided. <code>TIDAL_SAL_FROM_FILE</code> can be set to read the phase and
+!! amplitude of the tidal SAL. <code>USE_PREVIOUS_TIDES</code> may be useful in
 !! combination with the scalar approximation to iterate the SAL to
 !! convergence (for details, see \cite Arbic2004). With
-!! TIDAL_SAL_FROM_FILE or USE_PREVIOUS_TIDES, a list of input files
-!! must be provided to describe each constituent's properties from
+!! <code>TIDAL_SAL_FROM_FILE</code> or <code>USE_PREVIOUS_TIDES</code>, a list of input
+!! files must be provided to describe each constituent's properties from
 !! a previous solution. The online SAL calculations that are functions
 !! of SSH (rather should be bottom pressure anmoaly), either a scalar
 !! approximation or with spherical harmonic transforms, are located in
-!! MOM_self_attr_load.
+!! <code>MOM_self_attr_load</code>.
 end module MOM_tidal_forcing

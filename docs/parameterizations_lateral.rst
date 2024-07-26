@@ -56,9 +56,9 @@ See also :ref:`namespacemom__lateral__mixing__coeffs_1section_Resolution_Functio
 Tidal forcing
 -------------
 
-Astronomical tidal forcings and self-attraction and loading are implement in MOM_tidal_forcing.
-Tides can also be added via an open boundary tidal specification,
-see `OBC wiki page <https://github.com/NOAA-GFDL/MOM6-examples/wiki/Open-Boundary-Conditions>`_.
+Astronomical tidal forcings and self-attraction and loading are implement in
+
+    :ref:`namespacetidal__forcing_1section_tides`
 
 The Love numbers are stored internally in MOM_load_love_numbers:
 
@@ -71,3 +71,6 @@ while the self attraction and loading is computed in MOM_self_attr_load:
 The self attraction and loading needs spherical harmonics, computed in MOM_spherical_harmonics:
 
     :ref:`namespacemom__spherical__harmonics_1section_spherical_harmonics`
+
+Tides can also be added via an open boundary tidal specification,
+see `OBC wiki page <https://github.com/NOAA-GFDL/MOM6-examples/wiki/Open-Boundary-Conditions>`_.
