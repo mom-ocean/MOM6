@@ -22,19 +22,19 @@ type, public :: adapt_CS ; private
   !> Nominal near-surface resolution [H ~> m or kg m-2]
   real, allocatable, dimension(:) :: coordinateResolution
 
-  !> Ratio of optimisation and diffusion timescales
+  !> Ratio of optimisation and diffusion timescales [nondim]
   real :: adaptTimeRatio
 
-  !> Nondimensional coefficient determining how much optimisation to apply
+  !> Nondimensional coefficient determining how much optimisation to apply [nondim]
   real :: adaptAlpha
 
   !> Near-surface zooming depth [H ~> m or kg m-2]
   real :: adaptZoom
 
-  !> Near-surface zooming coefficient
+  !> Near-surface zooming coefficient [nondim]
   real :: adaptZoomCoeff
 
-  !> Stratification-dependent diffusion coefficient
+  !> Stratification-dependent diffusion coefficient [nondim]
   real :: adaptBuoyCoeff
 
   !> Reference density difference for stratification-dependent diffusion [R ~> kg m-3]
@@ -55,8 +55,10 @@ subroutine init_coord_adapt(CS, nk, coordinateResolution, m_to_H, kg_m3_to_R)
   integer,            intent(in) :: nk !< Number of layers in the grid
   real, dimension(:), intent(in) :: coordinateResolution !< Nominal near-surface resolution [m] or
                                        !! other units specified with m_to_H
-  real,               intent(in) :: m_to_H !< A conversion factor from m to the units of thicknesses
-  real,               intent(in) :: kg_m3_to_R !< A conversion factor from kg m-3 to the units of density
+  real,               intent(in) :: m_to_H !< A conversion factor from m to the units of thicknesses,
+                                       !! perhaps in units of [H m-1 ~> 1 or kg m-3]
+  real,               intent(in) :: kg_m3_to_R !< A conversion factor from kg m-3 to the units of density,
+                                       !! perhaps in units of [R m3 kg-1 ~> 1]
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_adapt: CS already associated")
   allocate(CS)
@@ -89,12 +91,12 @@ end subroutine end_coord_adapt
 subroutine set_adapt_params(CS, adaptTimeRatio, adaptAlpha, adaptZoom, adaptZoomCoeff, &
                             adaptBuoyCoeff, adaptDrho0, adaptDoMin)
   type(adapt_CS),    pointer    :: CS  !< The control structure for this module
-  real,    optional, intent(in) :: adaptTimeRatio !< Ratio of optimisation and diffusion timescales
+  real,    optional, intent(in) :: adaptTimeRatio !< Ratio of optimisation and diffusion timescales [nondim]
   real,    optional, intent(in) :: adaptAlpha     !< Nondimensional coefficient determining
-                                                  !! how much optimisation to apply
+                                                  !! how much optimisation to apply [nondim]
   real,    optional, intent(in) :: adaptZoom      !< Near-surface zooming depth [H ~> m or kg m-2]
-  real,    optional, intent(in) :: adaptZoomCoeff !< Near-surface zooming coefficient
-  real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient
+  real,    optional, intent(in) :: adaptZoomCoeff !< Near-surface zooming coefficient [nondim]
+  real,    optional, intent(in) :: adaptBuoyCoeff !< Stratification-dependent diffusion coefficient [nondim]
   real,    optional, intent(in) :: adaptDrho0  !< Reference density difference for
                                                !! stratification-dependent diffusion [R ~> kg m-3]
   logical, optional, intent(in) :: adaptDoMin  !< If true, form a HYCOM1-like mixed layer by
@@ -129,17 +131,25 @@ subroutine build_adapt_column(CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, nom_
                                                                      !! relative to mean sea level or another locally
                                                                      !! valid reference height, converted to thickness
                                                                      !! units [H ~> m or kg m-2]
-  real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext !< updated interface positions
+  real, dimension(SZK_(GV)+1),                 intent(inout) :: zNext !< updated interface positions [H ~> m or kg m-2]
 
   ! Local variables
   integer :: k, nz
-  real :: h_up, b1, b_denom_1, d1, depth, nominal_z, stretching
+  real :: h_up        ! The upwind source grid thickness based on the direction of the
+                      ! adjustive fluxes [H ~> m or kg m-2]
+  real :: b1          ! The inverse of the tridiagonal denominator [nondim]
+  real :: b_denom_1   ! The leading term in the tridiagonal denominator [nondim]
+  real :: d1          ! A term in the tridiagonal expressions [nondim]
+  real :: depth       ! Depth in thickness units [H ~> m or kg m-2]
+  real :: nominal_z   ! A nominal interface position in thickness units [H ~> m or kg m-2]
+  real :: stretching  ! A stretching factor for the water column [nondim]
   real :: drdz  ! The vertical density gradient [R H-1 ~> kg m-4 or m-1]
   real, dimension(SZK_(GV)+1) :: alpha ! drho/dT [R C-1 ~> kg m-3 degC-1]
   real, dimension(SZK_(GV)+1) :: beta  ! drho/dS [R S-1 ~> kg m-3 ppt-1]
   real, dimension(SZK_(GV)+1) :: del2sigma ! Laplacian of in situ density times grid spacing [R ~> kg m-3]
   real, dimension(SZK_(GV)+1) :: dh_d2s ! Thickness change in response to del2sigma [H ~> m or kg m-2]
-  real, dimension(SZK_(GV)) :: kGrid, c1 ! grid diffusivity on layers, and tridiagonal work array
+  real, dimension(SZK_(GV)) :: kGrid ! grid diffusivity on layers [nondim]
+  real, dimension(SZK_(GV)) :: c1 ! A tridiagonal work array [nondim]
 
   nz = CS%nk
 

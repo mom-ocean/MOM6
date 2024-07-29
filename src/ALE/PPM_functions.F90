@@ -28,7 +28,7 @@ contains
 subroutine PPM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect, answer_date)
   integer,              intent(in)    :: N !< Number of cells
   real, dimension(N),   intent(in)    :: h !< Cell widths [H]
-  real, dimension(N),   intent(in)    :: u !< Cell averages [A]
+  real, dimension(N),   intent(in)    :: u !< Cell averages in arbitrary coordinates [A]
   real, dimension(N,2), intent(inout) :: edge_values !< Edge values [A]
   real, dimension(N,3), intent(inout) :: ppoly_coef !< Polynomial coefficients, mainly [A]
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
@@ -36,7 +36,7 @@ subroutine PPM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect, answ
 
   ! Local variables
   integer   :: k              ! Loop index
-  real      :: edge_l, edge_r ! Edge values (left and right)
+  real      :: edge_l, edge_r ! Edge values (left and right) [A]
 
   ! PPM limiter
   call PPM_limiter_standard( N, h, u, edge_values, h_neglect, answer_date=answer_date )
@@ -69,9 +69,9 @@ subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answer_date )
 
   ! Local variables
   integer   :: k              ! Loop index
-  real      :: u_l, u_c, u_r  ! Cell averages (left, center and right)
-  real      :: edge_l, edge_r ! Edge values (left and right)
-  real      :: expr1, expr2
+  real      :: u_l, u_c, u_r  ! Cell averages (left, center and right) [A]
+  real      :: edge_l, edge_r ! Edge values (left and right) [A]
+  real      :: expr1, expr2   ! Temporary expressions [A2]
 
   ! Bound edge values
   call bound_edge_values( N, h, u, edge_values, h_neglect, answer_date=answer_date )
@@ -135,8 +135,8 @@ subroutine PPM_monotonicity( N, u, edge_values )
   real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values [A]
 
   ! Local variables
-  integer   :: k     ! Loop index
-  real      :: a6,da ! scalar temporaries
+  integer   :: k      ! Loop index
+  real      :: a6, da ! Normalized scalar curvature and slope [A]
 
   ! Loop on interior cells to impose monotonicity
   ! Eq. 1.10 of (Colella & Woodward, JCP 84)
@@ -195,14 +195,16 @@ subroutine PPM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_negle
 
   ! Local variables
   integer :: i0, i1
-  real    :: u0, u1
-  real    :: h0, h1
-  real    :: a, b, c
-  real    :: u0_l, u0_r
-  real    :: u1_l, u1_r
-  real    :: slope
-  real    :: exp1, exp2
-  real    :: hNeglect
+  real    :: u0, u1     ! Average concentrations in the two neighboring cells [A]
+  real    :: h0, h1     ! Thicknesses of the two neighboring cells [H]
+  real    :: a, b, c    ! An edge value, normalized slope and normalized curvature
+                        ! of a reconstructed distribution [A]
+  real    :: u0_l, u0_r ! Edge values of a neighboring cell [A]
+  real    :: u1_l, u1_r ! Neighboring cell slopes renormalized by the thickness of
+                        ! the cell being worked on [A]
+  real    :: slope      ! The normalized slope [A]
+  real    :: exp1, exp2 ! Temporary expressions [A2]
+  real    :: hNeglect   ! A negligibly small width used in cell reconstructions [H]
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 

@@ -95,7 +95,7 @@ function register_CFC_cap(HI, GV, param_file, CS, tr_Reg, restart_CS)
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=200) :: inputdir ! The directory where NetCDF input files are.
-  real, dimension(:,:,:), pointer :: tr_ptr => NULL()
+  real, dimension(:,:,:), pointer :: tr_ptr => NULL() ! A pointer to a CFC tracer [mol kg-1]
   character(len=200) :: CFC_BC_file           ! filename with cfc11 and cfc12 data
   character(len=30)  :: CFC_BC_var_name       ! varname of field in CFC_BC_file
   character :: m2char
@@ -285,10 +285,11 @@ subroutine init_tracer_CFC(h, tr, name, land_val, IC_val, G, GV, US, CS)
   type(verticalGrid_type),                   intent(in)  :: GV       !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)  :: US       !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)  :: h        !< Layer thicknesses [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: tr       !< The tracer concentration array
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(out) :: tr       !< The tracer concentration array [mol kg-1]
   character(len=*),                          intent(in)  :: name     !< The tracer name
-  real,                                      intent(in)  :: land_val !< A value the tracer takes over land
-  real,                                      intent(in)  :: IC_val   !< The initial condition value for the tracer
+  real,                                      intent(in)  :: land_val !< A value the tracer takes over land [mol kg-1]
+  real,                                      intent(in)  :: IC_val   !< The initial condition value for the
+                                                                     !! tracer [mol kg-1]
   type(CFC_cap_CS),                          pointer     :: CS       !< The control structure returned by a
                                                                      !! previous call to register_CFC_cap.
 
@@ -361,7 +362,6 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
-  real :: flux_scale ! A dimensional rescaling factor for fluxes [H R-1 Z-1 ~> m3 kg-1 or nondim]
   integer :: i, j, k, is, ie, js, je, nz, m
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -371,13 +371,11 @@ subroutine CFC_cap_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US, C
   ! Compute KPP nonlocal term if necessary
   if (present(KPP_CSp)) then
     if (associated(KPP_CSp) .and. present(nonLocalTrans)) then
-      flux_scale = GV%Z_to_H / GV%rho0
-
       do m=1,NTR
         call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, &
                                    CS%CFC_data(m)%sfc_flux(:,:), dt, CS%diag, &
                                    CS%CFC_data(m)%tr_ptr, CS%CFC_data(m)%conc(:,:,:), &
-                                   flux_scale=flux_scale)
+                                   flux_scale=GV%RZ_to_H)
       enddo
     endif
   endif
@@ -483,10 +481,10 @@ subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US
                          ! (saturation concentration) [mol kg-1].
     cfc11_atm, &         ! CFC11 atm mole fraction [pico mol/mol]
     cfc12_atm            ! CFC12 atm mole fraction [pico mol/mol]
-  real :: cfc11_atm_nh   ! NH value for cfc11_atm
-  real :: cfc11_atm_sh   ! SH value for cfc11_atm
-  real :: cfc12_atm_nh   ! NH value for cfc12_atm
-  real :: cfc12_atm_sh   ! SH value for cfc12_atm
+  real :: cfc11_atm_nh   ! NH value for cfc11_atm [pico mol/mol]
+  real :: cfc11_atm_sh   ! SH value for cfc11_atm [pico mol/mol]
+  real :: cfc12_atm_nh   ! NH value for cfc12_atm [pico mol/mol]
+  real :: cfc12_atm_sh   ! SH value for cfc12_atm [pico mol/mol]
   real :: ta             ! Absolute sea surface temperature [hectoKelvin]
   real :: sal            ! Surface salinity [PSU].
   real :: alpha_11       ! The solubility of CFC 11 [mol kg-1 atm-1].
@@ -673,7 +671,9 @@ logical function CFC_cap_unit_tests(verbose)
                                  !! information for debugging unit tests
 
   ! Local variables
-  real               :: dummy1, dummy2, ta, sal
+  real :: dummy1, dummy2 ! Test values of Schmidt numbers [nondim] or solubilities [mol kg-1 atm-1] for CFC11 and CFC12
+  real :: ta  ! A test value of temperature [hectoKelvin]
+  real :: sal ! A test value of salinity [ppt]
   character(len=120) :: test_name ! Title of the unit test
 
   CFC_cap_unit_tests = .false.
@@ -719,12 +719,12 @@ end function CFC_cap_unit_tests
 logical function compare_values(verbose, test_name, calc, ans, limit)
   logical,             intent(in) :: verbose   !< If true, write results to stdout
   character(len=80),   intent(in) :: test_name !< Brief description of the unit test
-  real,                intent(in) :: calc      !< computed value
-  real,                intent(in) :: ans       !< correct value
-  real,                intent(in) :: limit     !< value above which test fails
+  real,                intent(in) :: calc      !< computed value in abitrary units [A]
+  real,                intent(in) :: ans       !< correct value [A]
+  real,                intent(in) :: limit     !< value above which test fails [A]
 
   ! Local variables
-  real :: diff
+  real :: diff  ! Difference in values [A]
 
   diff = ans - calc
 

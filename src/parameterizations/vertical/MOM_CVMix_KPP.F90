@@ -119,6 +119,10 @@ type, public :: KPP_CS ; private
                                        !! enhancement with KPP [Z ~> m]
   logical :: STOKES_MIXING             !< Flag if model is mixing down Stokes gradient
                                        !! This is relevant for which current to use in RiB
+  integer :: answer_date               !< The vintage of the order of arithmetic in the CVMix KPP
+                                       !! calculations.  Values below 20240501 recover the answers
+                                       !! from early in 2024, while higher values use expressions
+                                       !! that have been refactored for rotational symmetry.
 
   !> CVMix parameters
   type(CVMix_kpp_params_type), pointer :: KPP_params => NULL()
@@ -199,6 +203,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
   character(len=20) :: langmuir_mixing_opt = 'NONE' !< Langmuir mixing option to be passed to CVMix, e.g., LWF16
   character(len=20) :: langmuir_entrainment_opt = 'NONE' !< Langmuir entrainment option to be
                                        !! passed to CVMix, e.g., LWF16
+  integer :: default_answer_date       ! The default setting for the various ANSWER_DATE flags.
   logical :: CS_IS_ONE=.false.         !< Logical for setting Cs based on Non-local
   logical :: lnoDGat1=.false.          !< True => G'(1) = 0 (shape function)
                                        !! False => compute G'(1) as in LMD94
@@ -216,6 +221,10 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
   ! Forego remainder of initialization if not using this scheme
   if (.not. KPP_init) return
   allocate(CS)
+
+  call get_param(paramFile, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231, do_not_log=.true.)
 
   call openParameterBlock(paramFile,'KPP')
   call get_param(paramFile, mdl, 'PASSIVE', CS%passiveMode,           &
@@ -470,6 +479,12 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
                    "the Langmuir number for Langmuir turbulence enhancement with KPP.", &
                    units="m", default=1.0, scale=US%m_to_Z)
   endif
+
+  call get_param(paramFile, mdl, "ANSWER_DATE", CS%answer_date, &
+                 "The vintage of the order of arithmetic in the CVMix KPP calculations.  Values "//&
+                 "below 20240501 recover the answers from early in 2024, while higher values "//&
+                 "use expressions that have been refactored for rotational symmetry.", &
+                 default=20240101) !### Change to: default=default_answer_date)
 
   call closeParameterBlock(paramFile)
 
@@ -1390,11 +1405,17 @@ subroutine KPP_smooth_BLD(CS, G, GV, US, dz)
         wn = 0.125 * G%mask2dT(i,j+1)
         wc = 1.0 - (ww+we+wn+ws)
 
-        CS%OBLdepth(i,j) =  wc * OBLdepth_prev(i,j)   &
-                          + ww * OBLdepth_prev(i-1,j) &
-                          + we * OBLdepth_prev(i+1,j) &
-                          + ws * OBLdepth_prev(i,j-1) &
-                          + wn * OBLdepth_prev(i,j+1)
+        if (CS%answer_date < 20240501) then
+          CS%OBLdepth(i,j) =  wc * OBLdepth_prev(i,j)   &
+                            + ww * OBLdepth_prev(i-1,j) &
+                            + we * OBLdepth_prev(i+1,j) &
+                            + ws * OBLdepth_prev(i,j-1) &
+                            + wn * OBLdepth_prev(i,j+1)
+        else
+          CS%OBLdepth(i,j) =  wc * OBLdepth_prev(i,j) &
+                            + ((ww * OBLdepth_prev(i-1,j) + we * OBLdepth_prev(i+1,j)) &
+                             + (ws * OBLdepth_prev(i,j-1) + wn * OBLdepth_prev(i,j+1)))
+        endif
 
         ! Apply OBLdepth smoothing at a cell only if the OBLdepth gets deeper via smoothing.
         if (CS%deepen_only) CS%OBLdepth(i,j) = max(CS%OBLdepth(i,j), OBLdepth_prev(i,j))

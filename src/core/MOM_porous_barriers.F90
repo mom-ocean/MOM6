@@ -168,9 +168,10 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
 
   if (CS%debug) then
     call uvchksum("Interface height used by porous barrier for layer weights", &
-                  eta_u, eta_v, G%HI, haloshift=0)
+                  eta_u, eta_v, G%HI, haloshift=0, scalar_pair=.true.)
     call uvchksum("Porous barrier layer-averaged weights: por_face_area[UV]", &
-                  pbv%por_face_areaU, pbv%por_face_areaV, G%HI, haloshift=0)
+                  pbv%por_face_areaU, pbv%por_face_areaV, G%HI, haloshift=0, &
+                  scalar_pair=.true.)
   endif
 
   if (CS%id_por_face_areaU > 0) call post_data(CS%id_por_face_areaU, pbv%por_face_areaU, CS%diag)
@@ -256,9 +257,10 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
 
   if (CS%debug) then
     call uvchksum("Interface height used by porous barrier for interface weights", &
-                  eta_u, eta_v, G%HI, haloshift=0)
+                  eta_u, eta_v, G%HI, haloshift=0, scalar_pair=.true.)
     call uvchksum("Porous barrier weights at the layer-interface: por_layer_width[UV]", &
-                  pbv%por_layer_widthU, pbv%por_layer_widthV, G%HI, haloshift=0)
+                  pbv%por_layer_widthU, pbv%por_layer_widthV, G%HI, &
+                  haloshift=0, scalar_pair=.true.)
   endif
 
   if (CS%id_por_layer_widthU > 0) call post_data(CS%id_por_layer_widthU, pbv%por_layer_widthU, CS%diag)

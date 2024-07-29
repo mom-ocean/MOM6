@@ -613,7 +613,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
     endif
 
     if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) then
-      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, symmetric=.true., scale=GV%H_to_m*US%s_to_T)
+      call uvchksum("Ray_[uv]", visc%Ray_u, visc%Ray_v, G%HI, 0, &
+          symmetric=.true., scale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
     endif
 
   endif

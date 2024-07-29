@@ -133,16 +133,20 @@ type, public :: dyn_horgrid_type
     IareaBu      !< IareaBu = 1/areaBu [L-2 ~> m-2].
 
   real, pointer, dimension(:) :: gridLatT => NULL()
-        !< The latitude of T points for the purpose of labeling the output axes.
+        !< The latitude of T points for the purpose of labeling the output axes,
+        !! often in units of [degrees_N] or [km] or [m] or [gridpoints].
         !! On many grids this is the same as geoLatT.
   real, pointer, dimension(:) :: gridLatB => NULL()
-        !< The latitude of B points for the purpose of labeling the output axes.
+        !< The latitude of B points for the purpose of labeling the output axes,
+        !! often in units of [degrees_N] or [km] or [m] or [gridpoints].
         !! On many grids this is the same as geoLatBu.
   real, pointer, dimension(:) :: gridLonT => NULL()
-        !< The longitude of T points for the purpose of labeling the output axes.
+        !< The longitude of T points for the purpose of labeling the output axes,
+        !! often in units of [degrees_E] or [km] or [m] or [gridpoints].
         !! On many grids this is the same as geoLonT.
   real, pointer, dimension(:) :: gridLonB => NULL()
-        !< The longitude of B points for the purpose of labeling the output axes.
+        !< The longitude of B points for the purpose of labeling the output axes,
+        !! often in units of [degrees_E] or [km] or [m] or [gridpoints].
         !! On many grids this is the same as geoLonBu.
   character(len=40) :: &
     ! Except on a Cartesian grid, these are usually some variant of "degrees".
@@ -176,10 +180,10 @@ type, public :: dyn_horgrid_type
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)
-  real :: south_lat     !< The latitude (or y-coordinate) of the first v-line
-  real :: west_lon      !< The longitude (or x-coordinate) of the first u-line
-  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain
-  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain
+  real :: south_lat     !< The latitude (or y-coordinate) of the first v-line [degrees_N] or [km] or [m]
+  real :: west_lon      !< The longitude (or x-coordinate) of the first u-line [degrees_E] or [km] or [m]
+  real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain [degrees_N] or [km] or [m]
+  real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain [degrees_E] or [km] or [m]
   real :: Rad_Earth     !< The radius of the planet [m]
   real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
   real :: max_depth     !< The maximum depth of the ocean [Z ~> m]
@@ -407,10 +411,10 @@ end subroutine rotate_dyn_horgrid
 !! grid, both rescaling the depths and recording the new internal depth units.
 subroutine rescale_dyn_horgrid_bathymetry(G, m_in_new_units)
   type(dyn_horgrid_type), intent(inout) :: G !< The dynamic horizontal grid type
-  real,                   intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth.
+  real,                   intent(in)    :: m_in_new_units !< The new internal representation of 1 m depth [m Z-1 ~> 1]
 
   ! Local variables
-  real :: rescale
+  real :: rescale ! The inverse of m_in_new_units, used in rescaling bathymetry [Z m-1 ~> 1]
   integer :: i, j, isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -485,8 +489,8 @@ end subroutine set_derived_dyn_horgrid
 
 !> Adcroft_reciprocal(x) = 1/x for |x|>0 or 0 for x=0.
 function Adcroft_reciprocal(val) result(I_val)
-  real, intent(in) :: val  !< The value being inverted.
-  real :: I_val            !< The Adcroft reciprocal of val.
+  real, intent(in) :: val  !< The value being inverted in abitrary units [A ~> a]
+  real :: I_val            !< The Adcroft reciprocal of val [A-1 ~> a-1].
 
   I_val = 0.0 ; if (val /= 0.0) I_val = 1.0/val
 end function Adcroft_reciprocal

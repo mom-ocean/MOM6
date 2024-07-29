@@ -1083,7 +1083,7 @@ subroutine compute_energy_source(u, v, h, fx, fy, G, GV, CS)
       call do_group_pass(pass_KE_uv, G%domain)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
-            * (KE_u(I,j) + KE_u(I-1,j) + KE_v(i,J) + KE_v(i,J-1))
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
 

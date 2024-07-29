@@ -197,10 +197,10 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
     enddo ; enddo ; enddo
   endif
 
-  g_Rho0 = GV%g_Earth*GV%H_to_Z / GV%Rho0
+  nonBous = .not.(GV%Boussinesq .or. GV%semi_Boussinesq)
   H_to_pres = GV%H_to_RZ * GV%g_Earth
   ! Note that g_Rho0 = H_to_pres / GV%Rho0**2
-  nonBous = .not.(GV%Boussinesq .or. GV%semi_Boussinesq)
+  if (.not.nonBous) g_Rho0 = GV%g_Earth*GV%H_to_Z / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
   better_est = CS%better_cg1_est
@@ -900,9 +900,9 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
     is = G%isc - halo ; ie = G%iec + halo ; js = G%jsc - halo ; je = G%jec + halo
   endif
 
-  g_Rho0 = GV%g_Earth * GV%H_to_Z / GV%Rho0
-  H_to_pres = GV%H_to_RZ * GV%g_Earth
   nonBous = .not.(GV%Boussinesq .or. GV%semi_Boussinesq)
+  H_to_pres = GV%H_to_RZ * GV%g_Earth
+  if (.not.nonBous) g_Rho0 = GV%g_Earth * GV%H_to_Z / GV%Rho0
   use_EOS = associated(tv%eqn_of_state)
 
   if (CS%c1_thresh < 0.0) &
@@ -1057,7 +1057,6 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
               enddo
             endif
           endif
-          cg1_est = g_Rho0 * drxh_sum
         else  ! Not use_EOS
           drxh_sum = 0.0 ; dSpVxh_sum = 0.0
           if (better_est) then
