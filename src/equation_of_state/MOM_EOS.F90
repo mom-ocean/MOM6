@@ -1345,7 +1345,8 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                           !! mass weighting to interpolate T/S in integrals
-  real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
   ! Local variables
   real :: rho_scale  ! A multiplicative factor by which to scale density from kg m-3 to the

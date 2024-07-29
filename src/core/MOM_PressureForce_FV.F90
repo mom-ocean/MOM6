@@ -63,6 +63,9 @@ type, public :: PressureForce_FV_CS ; private
                             !! for the finite volume pressure gradient calculation.
                             !! By the default (1) is for a piecewise linear method
 
+  logical :: use_SSH_in_Z0p !< If true, adjust the height at which the pressure used in the
+                            !! equation of state is 0 to account for the displacement of the sea
+                            !! surface including adjustments for atmospheric or sea-ice pressure.
   logical :: use_stanley_pgf  !< If true, turn on Stanley parameterization in the PGF
   integer :: tides_answer_date !< Recover old answers with tides in Boussinesq mode
   integer :: id_e_tide = -1 !< Diagnostic identifier
@@ -522,6 +525,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                   ! [Z ~> m].
     e_tide_sal, & ! The bottom geopotential anomaly due to harmonic self-attraction and loading
                   ! specific to tides [Z ~> m].
+    Z_0p, &       ! The height at which the pressure used in the equation of state is 0 [Z ~> m]
     SSH, &      ! The sea surface height anomaly, in depth units [Z ~> m].
     dM          ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
@@ -577,6 +581,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                              ! in roundoff and can be neglected [H ~> m].
   real :: I_Rho0             ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1].
   real :: G_Rho0             ! G_Earth / Rho0 in [L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1].
+  real :: I_g_rho            ! The inverse of the density times the gravitational acceleration [Z T2 L-2 R-1 ~> m Pa-1]
   real :: rho_ref            ! The reference density [R ~> kg m-3].
   real :: dz_neglect         ! A minimal thickness [Z ~> m], like e.
   real :: H_to_RL2_T2        ! A factor to convert from thickness units (H) to pressure
@@ -753,6 +758,21 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo ; enddo
   endif
 
+  if (CS%use_SSH_in_Z0p .and. use_p_atm) then
+    I_g_rho = 1.0 / (CS%rho0*GV%g_Earth)
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      Z_0p(i,j) = e(i,j,1) + p_atm(i,j) * I_g_rho
+    enddo ; enddo
+  elseif (CS%use_SSH_in_Z0p) then
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      Z_0p(i,j) = e(i,j,1)
+    enddo ; enddo
+  else
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      Z_0p(i,j) = G%Z_ref
+    enddo ; enddo
+  endif
+
   do k=1,nz
     ! Calculate 4 integrals through the layer that are required in the
     ! subsequent calculation.
@@ -769,19 +789,19 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
                     G%HI, GV, tv%eqn_of_state, US, CS%use_stanley_pgf, dpa(:,:,k), intz_dpa(:,:,k), &
                     intx_dpa(:,:,k), inty_dpa(:,:,k), &
                     MassWghtInterp=CS%MassWghtInterp, &
-                    use_inaccurate_form=CS%use_inaccurate_pgf_rho_anom, Z_0p=G%Z_ref)
+                    use_inaccurate_form=CS%use_inaccurate_pgf_rho_anom, Z_0p=Z_0p)
         elseif ( CS%Recon_Scheme == 2 ) then
           call int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                     rho_ref, CS%Rho0, GV%g_Earth, dz_neglect, G%bathyT, &
                     G%HI, GV, tv%eqn_of_state, US, CS%use_stanley_pgf, dpa(:,:,k), intz_dpa(:,:,k), &
                     intx_dpa(:,:,k), inty_dpa(:,:,k), &
-                    MassWghtInterp=CS%MassWghtInterp, Z_0p=G%Z_ref)
+                    MassWghtInterp=CS%MassWghtInterp, Z_0p=Z_0p)
         endif
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                   rho_ref, CS%Rho0, GV%g_Earth, G%HI, tv%eqn_of_state, US, dpa(:,:,k), &
                   intz_dpa(:,:,k), intx_dpa(:,:,k), inty_dpa(:,:,k), G%bathyT, dz_neglect, &
-                  CS%MassWghtInterp, Z_0p=G%Z_ref)
+                  CS%MassWghtInterp, Z_0p=Z_0p)
       endif
       if (GV%Z_to_H /= 1.0) then
         !$OMP parallel do default(shared)
@@ -1042,6 +1062,12 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   endif
   call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
                  "If true, calculate self-attraction and loading.", default=CS%tides)
+  call get_param(param_file, mdl, "SSH_IN_EOS_PRESSURE_FOR_PGF", CS%use_SSH_in_Z0p, &
+                 "If true, include contributions from the sea surface height in the height-based "//&
+                 "pressure used in the equation of state calculations for the Boussinesq pressure "//&
+                 "gradient forces, including adjustments for atmospheric or sea-ice pressure.", &
+                 default=.false., do_not_log=.not.GV%Boussinesq)
+
   call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &
                  "If True, use the ALE algorithm (regridding/remapping). "//&
                  "If False, use the layered isopycnal algorithm.", default=.false. )

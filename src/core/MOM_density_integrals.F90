@@ -80,7 +80,8 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa,
   real,       optional, intent(in)  :: dz_neglect !< A minuscule thickness change [Z ~> m]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                            !! mass weighting to interpolate T/S in integrals
-  real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
   if (EOS_quadrature(EOS)) then
     call int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa, &
@@ -139,7 +140,8 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                            !! mass weighting to interpolate T/S in integrals
   logical,    optional, intent(in)  :: use_inaccurate_form !< If true, uses an inaccurate form of
                                           !! density anomalies, as was used prior to March 2018.
-  real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: Z_0p  !< The height at which the pressure is 0 [Z ~> m]
 
   ! Local variables
   real :: T5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Temperatures along a line of subgrid locations [C ~> degC]
@@ -157,7 +159,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: dz         ! The layer thickness [Z ~> m]
   real :: dz_x(5,HI%iscB:HI%iecB) ! Layer thicknesses along an x-line of subgrid locations [Z ~> m]
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subgrid locations [Z ~> m]
-  real :: z0pres     ! The height at which the pressure is zero [Z ~> m]
+  real :: z0pres(HI%isd:HI%ied,HI%jsd:HI%jed) ! The height at which the pressure is zero [Z ~> m]
   real :: hWght      ! A pressure-thickness below topography [Z ~> m]
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m]
   real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2]
@@ -184,7 +186,13 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
-  z0pres = 0.0 ; if (present(Z_0p)) z0pres = Z_0p
+  if (present(Z_0p)) then
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      z0pres(i,j) = Z_0p(i,j)
+    enddo ; enddo
+  else
+    z0pres(:,:) = 0.0
+  endif
   use_rho_ref = .true.
   if (present(use_inaccurate_form)) then
     if (use_inaccurate_form) use_rho_ref = .not. use_inaccurate_form
@@ -209,7 +217,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       dz = z_t(i,j) - z_b(i,j)
       do n=1,5
         T5(i*5+n) = T(i,j) ; S5(i*5+n) = S(i,j)
-        p5(i*5+n) = -GxRho*((z_t(i,j) - z0pres) - 0.25*real(n-1)*dz)
+        p5(i*5+n) = -GxRho*((z_t(i,j) - z0pres(i,j)) - 0.25*real(n-1)*dz)
       enddo
     enddo
 
@@ -260,7 +268,8 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         pos = i*15+(m-2)*5
         T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i+1,j))
         S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i+1,j))
-        p15(pos+1) = -GxRho*(((wt_L*z_t(i,j)) + (wt_R*z_t(i+1,j))) - z0pres)
+        p15(pos+1) = -GxRho * ( ((wt_L*z_t(i,j)) + (wt_R*z_t(i+1,j))) - &
+                                ((wt_L*z0pres(i,j)) + (wt_R*z0pres(i+1,j))) )
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m,i)
@@ -326,7 +335,8 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         pos = i*15+(m-2)*5
         T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i,j+1))
         S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i,j+1))
-        p15(pos+1) = -GxRho*(((wt_L*z_t(i,j)) + (wt_R*z_t(i,j+1))) - z0pres)
+        p15(pos+1) = -GxRho * ( ((wt_L*z_t(i,j)) + (wt_R*z_t(i,j+1))) - &
+                                ((wt_L*z0pres(i,j)) + (wt_R*z0pres(i,j+1))) )
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i)
@@ -414,7 +424,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
                                            !! mass weighting to interpolate T/S in integrals
   logical,    optional, intent(in)  :: use_inaccurate_form !< If true, uses an inaccurate form of
                                            !! density anomalies, as was used prior to March 2018.
-  real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
@@ -464,7 +475,7 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real :: massWeightToggle          ! A non-dimensional toggle factor (0 or 1) [nondim]
   real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [C ~> degC]
   real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [S ~> ppt]
-  real :: z0pres                    ! The height at which the pressure is zero [Z ~> m]
+  real :: z0pres(HI%isd:HI%ied,HI%jsd:HI%jed) ! The height at which the pressure is zero [Z ~> m]
   real :: hWght                     ! A topographically limited thickness weight [Z ~> m]
   real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m]
   real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
@@ -480,7 +491,13 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
-  z0pres = 0.0 ; if (present(Z_0p)) z0pres = Z_0p
+  if (present(Z_0p)) then
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      z0pres(i,j) = Z_0p(i,j)
+    enddo ; enddo
+  else
+    z0pres(:,:) = 0.0
+  endif
   massWeightToggle = 0.
   if (present(MassWghtInterp)) then ; if (BTEST(MassWghtInterp, 0)) massWeightToggle = 1. ; endif
   use_rho_ref = .true.
@@ -517,7 +534,7 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
     do i = Isq,Ieq+1
       dz(i) = e(i,j,K) - e(i,j,K+1)
       do n=1,5
-        p5(i*5+n) = -GxRho*((e(i,j,K) - z0pres) - 0.25*real(n-1)*dz(i))
+        p5(i*5+n) = -GxRho*((e(i,j,K) - z0pres(i,j)) - 0.25*real(n-1)*dz(i))
         ! Salinity and temperature points are linearly interpolated
         S5(i*5+n) = wt_t(n) * S_t(i,j,k) + wt_b(n) * S_b(i,j,k)
         T5(i*5+n) = wt_t(n) * T_t(i,j,k) + wt_b(n) * T_b(i,j,k)
@@ -610,7 +627,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         S15(pos+1) = (w_left*Stl) + (w_right*Str)
         S15(pos+5) = (w_left*Sbl) + (w_right*Sbr)
 
-        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - z0pres)
+        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - &
+                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i+1,j))) )
 
         ! Pressure
         do n=2,5
@@ -706,7 +724,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         S15(pos+1) = (w_left*Stl) + (w_right*Str)
         S15(pos+5) = (w_left*Sbl) + (w_right*Sbr)
 
-        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - z0pres)
+        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - &
+                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i,j+1))) )
 
         ! Pressure
         do n=2,5
@@ -812,7 +831,8 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                                            !! divided by the y grid spacing [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                            !! mass weighting to interpolate T/S in integrals
-  real,       optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
 ! This subroutine calculates (by numerical quadrature) integrals of
 ! pressure anomalies across layers, which are required for calculating the
@@ -864,7 +884,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: t6 ! PPM curvature coefficient for T [C ~> degC]
   real :: T_top, T_mn, T_bot ! Left edge, cell mean and right edge values used in PPM reconstructions of T [C ~> degC]
   real :: S_top, S_mn, S_bot ! Left edge, cell mean and right edge values used in PPM reconstructions of S [S ~> ppt]
-  real :: z0pres ! The height at which the pressure is zero [Z ~> m]
+  real :: z0pres(HI%isd:HI%ied,HI%jsd:HI%jed) ! The height at which the pressure is zero [Z ~> m]
   real :: hWght  ! A topographically limited thickness weight [Z ~> m]
   real :: hL, hR ! Thicknesses to the left and right [Z ~> m]
   real :: iDenom ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
@@ -879,7 +899,13 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
 
   GxRho = G_e * rho_0
   I_Rho = 1.0 / rho_0
-  z0pres = 0.0 ; if (present(Z_0p)) z0pres = Z_0p
+  if (present(Z_0p)) then
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      z0pres(i,j) = Z_0p(i,j)
+    enddo ; enddo
+  else
+    z0pres(:,:) = 0.0
+  endif
   massWeightToggle = 0.
   if (present(MassWghtInterp)) then ; if (BTEST(MassWghtInterp, 0)) massWeightToggle = 1. ; endif
 
@@ -924,7 +950,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       endif
       dz = e(i,j,K) - e(i,j,K+1)
       do n=1,5
-        p5(I*5+n) = -GxRho*((e(i,j,K) - z0pres) - 0.25*real(n-1)*dz)
+        p5(I*5+n) = -GxRho*((e(i,j,K) - z0pres(i,j)) - 0.25*real(n-1)*dz)
         ! Salinity and temperature points are reconstructed with PPM
         S5(I*5+n) = wt_t(n) * S_t(i,j,k) + wt_b(n) * ( S_b(i,j,k) + s6 * wt_t(n) )
         T5(I*5+n) = wt_t(n) * T_t(i,j,k) + wt_b(n) * ( T_b(i,j,k) + t6 * wt_t(n) )
@@ -1011,7 +1037,8 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         dz_x(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i+1,j,K) - e(i+1,j,K+1)))
 
         pos = i*15+(m-2)*5
-        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - z0pres)
+        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - &
+                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i+1,j))) )
         do n=2,5
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m,i)
         enddo
@@ -1116,7 +1143,8 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         dz_y(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i,j+1,K) - e(i,j+1,K+1)))
 
         pos = i*15+(m-2)*5
-        p15(pos+1) = -GxRho*(((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - z0pres)
+        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - &
+                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i,j+1))) )
         do n=2,5
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i)
         enddo
