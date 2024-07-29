@@ -123,6 +123,7 @@ type, public :: hor_visc_CS ; private
   real    :: min_grid_Ah     !< Minimun horizontal biharmonic viscosity used to
                              !! limit grid Reynolds number [L4 T-1 ~> m4 s-1]
   logical :: use_cont_thick  !< If true, thickness at velocity points adopts h[uv] in BT_cont from continuity solver.
+  logical :: use_cont_thick_bug  !< If true, retain an answer-changing bug for thickness at velocity points.
   type(ZB2020_CS) :: ZB2020  !< Zanna-Bolton 2020 control structure.
   logical :: use_ZB2020      !< If true, use Zanna-Bolton 2020 parameterization.
 
@@ -282,9 +283,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   type(thickness_diffuse_CS), optional, intent(in) :: TD !< Thickness diffusion control structure
   type(accel_diag_ptrs), optional, intent(in)  :: ADp  !< Acceleration diagnostics
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
-                        optional, intent(in) :: hu_cont !< Layer thickness at u-points [H ~> m or kg m-2].
+                    optional, intent(inout) :: hu_cont !< Layer thickness at u-points [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                        optional, intent(in) :: hv_cont !< Layer thickness at v-points [H ~> m or kg m-2].
+                    optional, intent(inout) :: hv_cont !< Layer thickness at v-points [H ~> m or kg m-2].
 
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) :: &
@@ -477,6 +478,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   use_MEKE_Au = allocated(MEKE%Au)
 
   use_cont_huv = CS%use_cont_thick .and. present(hu_cont) .and. present(hv_cont)
+  if (use_cont_huv .and. .not.CS%use_cont_thick_bug) then
+    call pass_vector(hu_cont, hv_cont, G%domain, To_All+Scalar_Pair, halo=2)
+  endif
 
   rescale_Kh = .false.
   if (VarMix%use_variable_mixing) then
@@ -709,7 +713,14 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! in OBCs, which are not ordinarily be necessary, and might not be necessary
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
-    if (CS%use_land_mask) then
+    if (use_cont_huv) then
+      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
+        h_u(I,j) = hu_cont(I,j,k)
+      enddo ; enddo
+      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
+        h_v(i,J) = hv_cont(i,J,k)
+      enddo ; enddo
+    elseif (CS%use_land_mask) then
       do j=js-2,je+2 ; do I=is-2,Ieq+1
         h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
       enddo ; enddo
@@ -722,16 +733,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
       do J=js-2,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
-      enddo ; enddo
-    endif
-
-    ! The following should obviously be combined with the previous block if adopted.
-    if (use_cont_huv) then
-      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
-        h_u(I,j) = hu_cont(I,j,k)
-      enddo ; enddo
-      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
-        h_v(i,J) = hv_cont(i,J,k)
       enddo ; enddo
     endif
 
@@ -2140,6 +2141,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "USE_CONT_THICKNESS", CS%use_cont_thick, &
                  "If true, use thickness at velocity points from continuity solver. This option "//&
                  "currently only works with split mode.", default=.false.)
+  call get_param(param_file, mdl, "USE_CONT_THICKNESS_BUG", CS%use_cont_thick_bug, &
+                   "If true, retain an answer-changing halo update bug when "//&
+                   "USE_CONT_THICKNESS=True.  This is not recommended.", &
+                   default=.false., do_not_log=.not.CS%use_cont_thick)
+
   call get_param(param_file, mdl, "LAPLACIAN", CS%Laplacian, &
                  "If true, use a Laplacian horizontal viscosity.", &
                  default=.false.)
