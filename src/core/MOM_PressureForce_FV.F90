@@ -963,7 +963,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       !$OMP parallel do default(shared) private(p_surf_EOS)
       do j=Jsq,Jeq+1
         ! P_surf_EOS here is consistent with the pressure that is used in the int_density_dz routines.
-        do i=Isq,Ieq+1 ; p_surf_EOS(i) = -GxRho*(e(i,j,1) - G%Z_ref) ; enddo
+        do i=Isq,Ieq+1 ; p_surf_EOS(i) = -GxRho*(e(i,j,1) - Z_0p(i,j)) ; enddo
         call calculate_density(T_t(:,j,1), S_t(:,j,1), p_surf_EOS, rho_top(:,j), &
                                tv%eqn_of_state, EOSdom, rho_ref=rho_ref)
       enddo
@@ -971,7 +971,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       !$OMP parallel do default(shared) private(p_surf_EOS)
       do j=Jsq,Jeq+1
         ! P_surf_EOS here is consistent with the pressure that is used in the int_density_dz routines.
-        do i=Isq,Ieq+1 ; p_surf_EOS(i) = -GxRho*(e(i,j,1) - G%Z_ref) ; enddo
+        do i=Isq,Ieq+1 ; p_surf_EOS(i) = -GxRho*(e(i,j,1) - Z_0p(i,j)) ; enddo
         call calculate_density(tv%T(:,j,1), tv%S(:,j,1), p_surf_EOS, rho_top(:,j), &
                                tv%eqn_of_state, EOSdom, rho_ref=rho_ref)
       enddo
@@ -999,25 +999,23 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
             T5(1) = T_t(i,j,1) ; T5(5) = T_t(i+1,j,1)
             S5(1) = S_t(i,j,1) ; S5(5) = S_t(i+1,j,1)
             pa5(1) = pa(i,j,1) ; pa5(5) = pa(i+1,j,1)
-            ! Pressure input to density EOS is the actual pressure not adjusted for rho_ref.
-            p5(1) = pa(i,j,1) - GxRho*(e(i,j,1) - G%Z_ref)
-            p5(5) = pa(i+1,j,1) - GxRho*(e(i+1,j,1) - G%Z_ref)
+            ! Pressure input to density EOS is consistent with the pressure used in the int_density_dz routines.
+            p5(1) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+            p5(5) = -GxRho*(e(i+1,j,1) - Z_0p(i,j))
             do m=2,4
               wt_R =  0.25*real(m-1)
-              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R !Quadratic: + (T5(5)-T5(1))*B*wt_R*(wt_R-1);
-              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R !+ (S5(5)-S5(1))*B*wt_R*(wt_R-1);
+              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
+              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
               p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
             enddo !m
             call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
-            do m=2,4
-              ! Make pressure curvature a difference from the linear fit of pressure between the two points
-              ! Do this by integrating pressure between each of the 5 points and adding up
-              ! This way integration direction doesn't matter when adding up pressure from previous point
-              pa5(m) = pa5(m-1) + ((0.25*(pa5(5)-pa5(1)) + 0.125*(r5(5)+r5(1))*dz_geo_sfc) - &
-                                   0.125*(r5(m)+r5(m-1))*dz_geo_sfc)
-            enddo
-            ! Get a correction from difference between this and linear average.
-            intx_pa_cor(I,j) = C1_90*((32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 38.0*(pa5(1) + pa5(5)))
+
+            ! Use a trapezoidal rule integral of the hydrostatic equation to determine the pressure
+            ! anomalies at 5 equally spaced points along the interface, and then use Boole's rule
+            ! quadrature to find the integrated correction to the integral of pressure along the interface.
+            ! The derivation for this expression is shown below in the y-direction version.
+            intx_pa_cor(I,j) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dz_geo_sfc
+            ! Note that (4.75 + 5.5/2) / 90 = 1/12, so this is consistent with the linear result below.
           else ! Do not use 5-point quadrature.
             intx_pa_cor(I,j) = C1_12 * (rho_top(i+1,j)-rho_top(i,j)) * dz_geo_sfc
           endif
@@ -1040,25 +1038,64 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
             T5(1) = T_t(i,j,1) ; T5(5) = T_t(i,j+1,1)
             S5(1) = S_t(i,j,1) ; S5(5) = S_t(i,j+1,1)
             pa5(1) = pa(i,j,1) ; pa5(5) = pa(i,j+1,1)
-            ! Pressure input to density EOS is the actual pressure not adjusted for rho_ref.
-            p5(1) = pa(i,j,1) - GxRho*(e(i,j,1) - G%Z_ref)
-            p5(5) = pa(i,j+1,1) - GxRho*(e(i,j+1,1) - G%Z_ref)
+            ! Pressure input to density EOS is consistent with the pressure used in the int_density_dz routines.
+            p5(1) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+            p5(5) = -GxRho*(e(i,j+1,1) - Z_0p(i,j))
+
             do m=2,4
               wt_R =  0.25*real(m-1)
-              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R !Quadratic: + (T5(5)-T5(1))*B*wt_R*(wt_R-1);
-              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R !+ (S5(5)-S5(1))*B*wt_R*(wt_R-1);
+              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
+              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
               p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
             enddo !m
             call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
-            do m=2,4
-              ! Make pressure curvature a difference from the linear fit of pressure between the two points
-              ! Do this by integrating pressure between each of the 5 points and adding up
-              ! This way integration direction doesn't matter when adding up pressure from previous point
-              pa5(m) = pa5(m-1) + ((0.25*(pa5(5)-pa5(1)) + 0.125*(r5(5)+r5(1))*dz_geo_sfc) - &
-                                   0.125*(r5(m)+r5(m-1))*dz_geo_sfc)
-            enddo
-            ! Get a correction from difference between this and linear average.
-            inty_pa_cor(i,J) = C1_90*((32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 38.0*(pa5(1) + pa5(5)))
+
+            ! Use a trapezoidal rule integral of the hydrostatic equation to determine the pressure
+            ! anomalies at 5 equally spaced points along the interface, and then use Boole's rule
+            ! quadrature to find the integrated correction to the integral of pressure along the interface.
+            inty_pa_cor(i,J) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dz_geo_sfc
+
+            ! The derivation of this correction follows:
+
+            ! Make pressure curvature a difference from the linear fit of pressure between the two points
+            ! (which is equivalent to taking 4 trapezoidal rule integrals of the hydrostatic equation on
+            ! sub-segments), with a constant slope that is chosen so that the pressure anomalies at the
+            ! two ends of the segment agree with their known values.
+            ! d_geo_8 = 0.125*dz_geo_sfc
+            ! dpa_subseg = 0.25*(pa5(5)-pa5(1)) + &
+            !              0.25*d_geo_8 * ((r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3)))
+            ! do m=2,4
+            !   pa5(m) = pa5(m-1) + dpa_subseg - d_geo_8*(r5(m)+r5(m-1)))
+            ! enddo
+
+            ! Explicitly finding expressions for the incremental pressures from the recursion relation above:
+            ! pa5(2) = 0.25*(3.*pa5(1) + pa5(5)) + 0.25*d_geo_8 * ( (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) )
+            ! ! pa5(3) = 0.5*(pa5(1) + pa5(5)) + 0.25*d_geo_8 * &
+            ! !   ( (r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3)) + &
+            ! !     (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) - 4.*(r5(3)+r5(2)) )
+            ! pa5(3) = 0.5*(pa5(1) + pa5(5)) + d_geo_8 * (0.5*(r5(5)-r5(1)) + (r5(4)-r5(2)) )
+            ! ! pa5(4) = 0.25*(pa5(1) + 3.0*pa5(5)) + 0.25*d_geo_8 * &
+            ! !   (2.0*(r5(5)-r5(1)) + 4.0*(r5(4)-r5(2)) + (r5(5)+r5(1)) + &
+            ! !    2.0*(r5(4)+r5(2)) + 2.0*r5(3) - 4.*(r5(4)+r5(3)))
+            ! pa5(4) = 0.25*(pa5(1) + 3.0*pa5(5)) + 0.25*d_geo_8 * ( (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3)) )
+            ! ! pa5(5) = pa5(5) + 0.25*d_geo_8 * &
+            ! !     ( (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3)) + &
+            ! !      ((r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3))) - 4.*(r5(5)+r5(4)) )
+            ! pa5(5) = pa5(5)  ! As it should.
+
+            ! From these:
+            ! pa5(2) + pa5(4) = (pa5(1) + pa5(5)) + 0.25*d_geo_8 * &
+            !     ( (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) + (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3))
+            ! pa5(2) + pa5(4) = (pa5(1) + pa5(5)) + d_geo_8 * ( (r5(5)-r5(1)) + (r5(4)-r5(2)) )
+
+            ! Get the correction from the difference between the 5-point quadrature integral of pa5 and
+            ! its trapezoidal rule integral as:
+            ! inty_pa_cor(i,J) = C1_90*(7.0*(pa5(1)+pa5(5)) + 32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 0.5*(pa5(1)+pa5(5)))
+            ! inty_pa_cor(i,J) = C1_90*((32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 38.0*(pa5(1)+pa5(5)))
+            ! inty_pa_cor(i,J) = C1_90*d_geo_8 * ((32.0*( (r5(5)-r5(1)) + (r5(4)-r5(2)) ) + &
+            !                                      (6.*(r5(5)-r5(1)) + 12.0*(r5(4)-r5(2)) ))
+            ! inty_pa_cor(i,J) = C1_90*d_geo_8 * ( 38.0*(r5(5)-r5(1)) + 44.0*(r5(4)-r5(2)) )
+
           else ! Do not use 5-point quadrature.
             inty_pa_cor(i,J) = C1_12 * (rho_top(i,j+1)-rho_top(i,j)) * dz_geo_sfc
           endif
@@ -1118,8 +1155,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
             ! the interface below this cell (it might have quadratic pressure dependence if sloped)
             T_int_W(I,j) = T_b(i,j,k) ; T_int_E(I,j) = T_b(i+1,j,k)
             S_int_W(I,j) = S_b(i,j,k) ; S_int_E(I,j) = S_b(i+1,j,k)
-            p_int_W(I,j) = pa(i,j,K+1) - GxRho*(e(i,j,K+1) - G%Z_ref)
-            p_int_E(I,j) = pa(i+1,j,K+1) - GxRho*(e(i+1,j,K+1) - G%Z_ref)
+            ! These pressures are only used for the equation of state, and are only a function of
+            ! height, consistent with the expressions in the int_density_dz routines.
+            p_int_W(I,j) = -GxRho*(e(i,j,K+1) - Z_0p(i,j))
+            p_int_E(I,j) = -GxRho*(e(i+1,j,K+1) - Z_0p(i,j))
+
             intx_pa_nonlin(I,j) = intx_pa(I,j,K+1) - 0.5*(pa(i,j,K+1) + pa(i+1,j,K+1))
             dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,K+1)-e(i,j,K+1))
             seek_x_cor(I,j) = .false.
@@ -1161,8 +1201,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
             ! the interface below this cell (it might have quadratic pressure dependence if sloped)
             T_int_S(i,J) = T_b(i,j,k) ; T_int_N(i,J) = T_b(i,j+1,k)
             S_int_S(i,J) = S_b(i,j,k) ; S_int_N(i,J) = S_b(i,j+1,k)
-            p_int_S(i,J) = pa(i,j,K+1) - GxRho*(e(i,j,K+1) - G%Z_ref)
-            p_int_N(i,J) = pa(i,j+1,K+1) - GxRho*(e(i,j+1,K+1) - G%Z_ref)
+            ! These pressures are only used for the equation of state, and are only a function of
+            ! height, consistent with the expressions in the int_density_dz routines.
+            p_int_S(i,J) = -GxRho*(e(i,j,K+1) - Z_0p(i,j))
+            p_int_N(i,J) = -GxRho*(e(i,j+1,K+1) - Z_0p(i,j))
             inty_pa_nonlin(i,J) = inty_pa(i,J,K+1) - 0.5*(pa(i,j,K+1) + pa(i,j+1,K+1))
             dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,K+1)-e(i,j,K+1))
             seek_y_cor(i,J) = .false.
