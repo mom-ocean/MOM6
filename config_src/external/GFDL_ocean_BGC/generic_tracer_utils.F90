@@ -143,6 +143,17 @@ contains
     integer, optional, dimension(:,:),  pointer :: grid_mask_coast !< Unknown
     integer, optional, dimension(:,:),  pointer :: grid_kmt !< Unknown
     type(g_diag_ctrl), optional,        pointer :: diag_CS !< Unknown
+
+    isc = -1
+    iec = -1
+    jsc = -1
+    jec = -1
+    isd = -1
+    ied = -1
+    jsd = -1
+    jed = -1
+    nk = -1
+    ntau = -1
   end subroutine g_tracer_get_common
 
   !> Unknown
@@ -177,6 +188,8 @@ contains
     integer,                  intent(in) :: isd !< Unknown
     integer,                  intent(in) :: jsd !< Unknown
     real, dimension(isd:,jsd:,:,:), intent(out):: array !< Unknown
+
+    array(:,:,:,:) = -1.
   end subroutine g_tracer_get_4D_val
 
   !> Unknown
@@ -190,6 +203,8 @@ contains
     logical, optional,        intent(in) :: positive !< Unknown
     real, dimension(isd:,jsd:,:), intent(out):: array !< Unknown
     character(len=fm_string_len), parameter :: sub_name = 'g_tracer_get_3D_val'
+
+    array(:,:,:) = -1.
   end subroutine g_tracer_get_3D_val
 
   !> Unknown
@@ -200,6 +215,8 @@ contains
     integer,                  intent(in) :: isd !< Unknown
     integer,                  intent(in) :: jsd !< Unknown
     real, dimension(isd:,jsd:), intent(out):: array !< Unknown
+
+    array(:,:) = -1.
   end subroutine g_tracer_get_2D_val
 
   !> Unknown
@@ -208,6 +225,8 @@ contains
     character(len=*),         intent(in) :: member !< Unknown
     type(g_tracer_type),      pointer    :: g_tracer_list !< Unknown
     real,                     intent(out):: value !< Unknown
+
+    value = -1
   end subroutine g_tracer_get_real
 
   !> Unknown
@@ -216,6 +235,8 @@ contains
     character(len=*),         intent(in) :: member !< Unknown
     type(g_tracer_type),      pointer    :: g_tracer_list !< Unknown
     character(len=fm_string_len), intent(out) :: string !< Unknown
+
+    string = ""
   end subroutine g_tracer_get_string
 
   !> Unknown
@@ -268,18 +289,24 @@ contains
   subroutine g_tracer_get_name(g_tracer,string)
     type(g_tracer_type),    pointer    :: g_tracer !< Unknown
     character(len=*),        intent(out) :: string !< Unknown
+
+    string = ""
   end subroutine g_tracer_get_name
 
   !> Unknown
   subroutine g_tracer_get_alias(g_tracer,string)
     type(g_tracer_type), pointer  :: g_tracer !< Unknown
     character(len=*), intent(out) :: string !< Unknown
+
+    string = ""
   end subroutine g_tracer_get_alias
 
   !> Is the tracer prognostic?
   function g_tracer_is_prog(g_tracer)
     logical :: g_tracer_is_prog
     type(g_tracer_type), pointer :: g_tracer !< Pointer to tracer node
+
+    g_tracer_is_prog = .false.
   end function g_tracer_is_prog
 
   !> get the next tracer in the list
@@ -297,6 +324,8 @@ contains
     real,            optional,intent(out):: lfac_out      !< OBC reservoir inverse lengthscale factor
     character(len=*),optional,intent(out):: src_file      !< OBC source file
     character(len=*),optional,intent(out):: src_var_name  !< OBC source variable in file
+
+    obc_has = .false.
   end subroutine g_tracer_get_obc_segment_props
 
   !>Vertical Diffusion of a tracer node

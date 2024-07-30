@@ -73,7 +73,7 @@ function register_pseudo_salt_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   character(len=48)  :: var_name ! The variable's name.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! The tracer concentration [ppt]
   logical :: register_pseudo_salt_tracer
   integer :: isd, ied, jsd, jed, nz
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
@@ -196,6 +196,8 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
   !     h_new(k) = h_old(k) + ea(k) - eb(k-1) + eb(k) - ea(k+1)
 
   ! Local variables
+  real :: net_salt_rate(SZI_(G),SZJ_(G)) ! Net salt flux into the ocean
+                              ! [ppt H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
   real :: net_salt(SZI_(G),SZJ_(G)) ! Net salt flux into the ocean integrated over
                               ! a timestep [ppt H ~> ppt m or ppt kg m-2]
   real :: htot(SZI_(G))       ! Total ocean depth [H ~> m or kg m-2]
@@ -216,11 +218,27 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
     call hchksum(CS%ps,"pseudo_salt pre pseudo-salt vertdiff", G%HI)
   endif
 
+  FluxRescaleDepth = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
+  Ih_limit  = 0.0 ; if (FluxRescaleDepth > 0.0) Ih_limit  = 1.0 / FluxRescaleDepth
+
   ! Compute KPP nonlocal term if necessary
   if (present(KPP_CSp)) then
-    if (associated(KPP_CSp) .and. present(nonLocalTrans)) &
-      call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, fluxes%KPP_salt_flux(:,:), &
+    if (associated(KPP_CSp) .and. present(nonLocalTrans)) then
+      ! Determine the salt flux, including limiting for small total ocean depths.
+      net_salt_rate(:,:) = 0.0
+      if (associated(fluxes%salt_flux)) then
+        do j=js,je
+          do i=is,ie ; htot(i) = h_old(i,j,1) ; enddo
+          do k=2,nz ; do i=is,ie ; htot(i) = htot(i) + h_old(i,j,k) ; enddo ; enddo
+          do i=is,ie
+            scale = 1.0 ; if ((Ih_limit > 0.0) .and. (htot(i)*Ih_limit < 1.0)) scale = htot(i)*Ih_limit
+            net_salt_rate(i,j) = (scale * (1000.0 * fluxes%salt_flux(i,j))) * GV%RZ_to_H
+          enddo
+        enddo
+      endif
+      call KPP_NonLocalTransport(KPP_CSp, G, GV, h_old, nonLocalTrans, net_salt_rate, &
                                  dt, CS%diag, CS%tr_ptr, CS%ps(:,:,:))
+    endif
   endif
 
   ! This uses applyTracerBoundaryFluxesInOut, usually in ALE mode
@@ -229,8 +247,6 @@ subroutine pseudo_salt_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G
 
     ! Determine the time-integrated salt flux, including limiting for small total ocean depths.
     net_Salt(:,:) = 0.0
-    FluxRescaleDepth = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
-    Ih_limit  = 0.0 ; if (FluxRescaleDepth > 0.0) Ih_limit  = 1.0 / FluxRescaleDepth
     do j=js,je
       do i=is,ie ; htot(i) = h_old(i,j,1) ; enddo
       do k=2,nz ; do i=is,ie ; htot(i) = htot(i) + h_old(i,j,k) ; enddo ; enddo

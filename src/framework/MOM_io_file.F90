@@ -34,6 +34,7 @@ use MOM_netcdf, only : write_netcdf_axis
 use MOM_netcdf, only : write_netcdf_attribute
 use MOM_netcdf, only : get_netcdf_size
 use MOM_netcdf, only : get_netcdf_fields
+use MOM_netcdf, only : get_netcdf_filename
 use MOM_netcdf, only : read_netcdf_field
 
 use MOM_error_handler, only : MOM_error, FATAL
@@ -1326,7 +1327,13 @@ subroutine open_file_nc(handle, filename, action, MOM_domain, threading, fileset
 
   if (present(MOM_domain)) then
     handle%domain_decomposed = .true.
-    call hor_index_init(MOM_domain, handle%HI)
+
+    ! Input files use unrotated indexing.
+    if (associated(MOM_domain%domain_in)) then
+      call hor_index_init(MOM_domain%domain_in, handle%HI)
+    else
+      call hor_index_init(MOM_domain, handle%HI)
+    endif
   endif
 
   call handle%axes%init()
@@ -1702,6 +1709,8 @@ subroutine read_field_chksum_nc(handle, field, chksum, valid_chksum)
     !< If true, chksum has been successfully read
 
   call MOM_error(FATAL, 'read_field_chksum over netCDF is not yet implemented.')
+  chksum = -1_int64
+  valid_chksum = .false.
 end subroutine read_field_chksum_nc
 
 
@@ -1751,8 +1760,9 @@ subroutine get_field_nc(handle, label, values, rescale)
   ! NOTE: Data on face and vertex points is not yet supported.  This is a
   ! temporary check to detect such cases, but may be removed in the future.
   if (.not. (compute_domain .or. data_domain)) &
-    call MOM_error(FATAL, 'get_field_nc: Only compute and data domains ' // &
-        'are currently supported.')
+    call MOM_error(FATAL, 'get_field_nc trying to read '//trim(label)//' from '//&
+                   trim(get_netcdf_filename(handle%handle_nc))//&
+                   ': Only compute and data domains are currently supported.')
 
   field_nc = handle%fields%get(label)
 

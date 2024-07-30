@@ -9,7 +9,6 @@ use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
 use MOM_get_input, only : directories
 use MOM_grid, only : ocean_grid_type
-use MOM_interface_heights, only : dz_to_thickness, dz_to_thickness_simple
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs
@@ -261,15 +260,15 @@ subroutine DOME2d_initialize_temperature_salinity ( T, S, h, G, GV, US, param_fi
   call get_param(param_file, mdl, "DOME2D_SHELF_DEPTH", dome2d_depth_bay, &
                  units="nondim", default=0.2, do_not_log=.true.)
   call get_param(param_file, mdl, "S_REF", S_ref, 'Reference salinity', &
-                 units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_REF", T_ref, 'Reference temperature', &
                  units='degC', scale=US%degC_to_C, fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "S_RANGE", S_range,' Initial salinity range', &
-                 units='1e-3', default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=2.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "T_RANGE", T_range, 'Initial temperature range', &
                  units='degC', default=0.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "INITIAL_SSS", S_surf, "Initial surface salinity", &
-                 units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=34.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "DOME2D_T_BAY", T_bay, &
                  "Temperature in the inflow embayment in the DOME2d test case", &
                  units="degC", default=1.0, scale=US%degC_to_C, do_not_log=just_read)
@@ -375,7 +374,6 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   real :: T(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for temp [C ~> degC]
   real :: S(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for salt [S ~> ppt]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! A temporary array for thickness in height units [Z ~> m]
-  real :: h(SZI_(G),SZJ_(G),SZK_(GV))  ! A temporary array for thickness [H ~> m or kg m-2]
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! A temporary array for interface heights [Z ~> m]
   real :: Idamp(SZI_(G),SZJ_(G))       ! The sponge damping rate [T-1 ~> s-1]
   real :: S_ref                        ! Reference salinity within the surface layer [S ~> ppt]
@@ -440,10 +438,10 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
   call get_param(param_file, mdl, "S_RANGE", S_range, units="ppt", default=2.0, scale=US%ppt_to_S)
   call get_param(param_file, mdl, "T_RANGE", T_range, units="degC", default=0.0, scale=US%degC_to_C)
   call get_param(param_file, mdl, "INITIAL_SSS", S_surf, "Initial surface salinity", &
-                 units="1e-3", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=34.0, scale=US%ppt_to_S, do_not_log=.true.)
   call get_param(param_file, mdl, "DOME2D_EAST_SPONGE_S_RANGE", S_range_sponge, &
                  "Range of salinities in the eastern sponge region in the DOME2D configuration", &
-                 units="1e-3", default=1.0, scale=US%ppt_to_S)
+                 units="ppt", default=1.0, scale=US%ppt_to_S)
 
   ! Set the sponge damping rate as a function of position
   Idamp(:,:) = 0.0
@@ -465,7 +463,6 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
       Idamp(i,j) = 0.
     endif
   enddo ; enddo
-
 
   if (use_ALE) then
 
@@ -502,15 +499,8 @@ subroutine DOME2d_initialize_sponges(G, GV, US, tv, depth_tot, param_file, use_A
       enddo
     enddo ; enddo
 
-    ! Convert thicknesses from height units to thickness units
-    if (associated(tv%eqn_of_state)) then
-      call dz_to_thickness(dz, T, S, tv%eqn_of_state, h, G, GV, US)
-    else
-      call dz_to_thickness_simple(dz, h, G, GV, US, layer_mode=.true.)
-    endif
-
     ! Store damping rates and the grid on which the T/S sponge data will reside
-    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, h, nz)
+    call initialize_ALE_sponge(Idamp, G, GV, param_file, ACSp, dz, nz, data_h_is_Z=.true.)
 
     if ( associated(tv%T) ) call set_up_ALE_sponge_field(T, G, GV, tv%T, ACSp, 'temp', &
         sp_long_name='temperature', sp_unit='degC s-1')

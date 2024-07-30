@@ -164,7 +164,7 @@ contains
 !> This subroutine partially steps the bulk mixed layer model.
 !! See \ref BML for more details.
 subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, CS, &
-                          optics, Hml, aggregate_FW_forcing, dt_diag, last_call)
+                          optics, BLD, H_ml, aggregate_FW_forcing, dt_diag, last_call)
   type(ocean_grid_type),      intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US     !< A dimensional unit scaling type
@@ -195,7 +195,10 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
   type(optics_type),          pointer       :: optics !< The structure that can be queried for the
                                                       !! inverse of the vertical absorption decay
                                                       !! scale for penetrating shortwave radiation.
-  real, dimension(:,:),       pointer       :: Hml    !< Active mixed layer depth [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                              intent(inout) :: BLD    !< Active mixed layer depth [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                              intent(inout) :: H_ml   !< Active mixed layer thickness [H ~> m or kg m-2].
   logical,                    intent(in)    :: aggregate_FW_forcing !< If true, the net incoming and
                                                      !! outgoing surface freshwater fluxes are
                                                      !! combined before being applied, instead of
@@ -605,25 +608,27 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
       CS%ML_depth(i,j) = h(i,0)  ! Store the diagnostic.
     enddo ; endif
 
-    if (associated(Hml)) then
-      ! Return the mixed layerd depth in [Z ~> m].
-      if (GV%Boussinesq .or. GV%semi_Boussinesq) then
-        do i=is,ie
-          Hml(i,j) = G%mask2dT(i,j) * GV%H_to_Z*h(i,0)
-        enddo
+    ! Return the mixed layer depth in [Z ~> m].
+    if (GV%Boussinesq .or. GV%semi_Boussinesq) then
+      do i=is,ie
+        BLD(i,j) = G%mask2dT(i,j) * GV%H_to_Z*h(i,0)
+      enddo
+    else
+      do i=is,ie ; dp_ml(i) = GV%g_Earth * GV%H_to_RZ * h(i,0) ; enddo
+      if (associated(tv%p_surf)) then
+        do i=is,ie ; p_sfc(i) = tv%p_surf(i,j) ; enddo
       else
-        do i=is,ie ; dp_ml(i) = GV%g_Earth * GV%H_to_RZ * h(i,0) ; enddo
-        if (associated(tv%p_surf)) then
-          do i=is,ie ; p_sfc(i) = tv%p_surf(i,j) ; enddo
-        else
-          do i=is,ie ; p_sfc(i) = 0.0 ; enddo
-        endif
-        call average_specific_vol(T(:,0), S(:,0), p_sfc, dp_ml, SpV_ml, tv%eqn_of_state)
-        do i=is,ie
-          Hml(i,j) = G%mask2dT(i,j) * GV%H_to_RZ * SpV_ml(i) *  h(i,0)
-        enddo
+        do i=is,ie ; p_sfc(i) = 0.0 ; enddo
       endif
+      call average_specific_vol(T(:,0), S(:,0), p_sfc, dp_ml, SpV_ml, tv%eqn_of_state)
+      do i=is,ie
+        BLD(i,j) = G%mask2dT(i,j) * GV%H_to_RZ * SpV_ml(i) *  h(i,0)
+      enddo
     endif
+    ! Return the mixed layer thickness in [H ~> m or kg m-2].
+    do i=is,ie
+      H_ml(i,j) = G%mask2dT(i,j) * h(i,0)
+    enddo
 
 ! At this point, return water to the original layers, but constrained to
 ! still be sorted.  After this point, all the water that is in massive
@@ -4026,14 +4031,14 @@ subroutine bulkmixedlayer_init(Time, G, GV, US, param_file, diag, CS)
                  "during detrainment.", units="K", default=0.5, scale=US%degC_to_C)
   call get_param(param_file, mdl, "ALLOWED_DETRAIN_SALT_CHG", CS%Allowed_S_chg, &
                  "The amount by which salinity is allowed to exceed previous values "//&
-                 "during detrainment.", units="PSU", default=0.1, scale=US%ppt_to_S)
+                 "during detrainment.", units="ppt", default=0.1, scale=US%ppt_to_S)
   call get_param(param_file, mdl, "ML_DT_DS_WEIGHT", CS%dT_dS_wt, &
                  "When forced to extrapolate T & S to match the layer "//&
                  "densities, this factor (in deg C / PSU) is combined "//&
                  "with the derivatives of density with T & S to determine "//&
                  "what direction is orthogonal to density contours. It "//&
                  "should be a typical value of (dR/dS) / (dR/dT) in oceanic profiles.", &
-                 units="degC PSU-1", default=6.0, scale=US%degC_to_C*US%S_to_ppt)
+                 units="degC ppt-1", default=6.0, scale=US%degC_to_C*US%S_to_ppt)
   call get_param(param_file, mdl, "BUFFER_LAYER_EXTRAP_LIMIT", CS%BL_extrap_lim, &
                  "A limit on the density range over which extrapolation "//&
                  "can occur when detraining from the buffer layers, "//&

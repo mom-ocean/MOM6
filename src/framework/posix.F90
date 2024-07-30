@@ -84,7 +84,7 @@ interface
 
     character(kind=c_char), dimension(*), intent(in) :: path
       !< Pathname of a POSIX file
-    type(stat_buf), intent(in) :: buf
+    type(stat_buf), intent(inout) :: buf
       !< Information describing the file if it exists
     integer(kind=c_int) :: rc
       !< Function return code

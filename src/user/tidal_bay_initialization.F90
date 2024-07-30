@@ -110,7 +110,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       enddo
     endif
   enddo ; enddo
-  total_area = reproducing_sum(my_area)
+  total_area = US%m_to_Z*US%m_to_L * reproducing_sum(my_area)
   my_flux = - CS%tide_flow * SIN(2.0*PI*time_sec / CS%tide_period)
 
   do n = 1, OBC%number_of_segments
@@ -118,7 +118,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
     if (.not. segment%on_pe) cycle
 
-    segment%normal_vel_bt(:,:) = my_flux / (US%m_to_Z*US%m_to_L*total_area)
+    segment%normal_vel_bt(:,:) = my_flux / total_area
     segment%SSH(:,:) = cff_eta
 
   enddo ! end segment loop

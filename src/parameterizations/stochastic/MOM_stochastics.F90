@@ -57,12 +57,12 @@ type, public:: stochastic_CS
                                         !! Index into this at h points.
   ! stochastic patterns
   real, allocatable :: sppt_wts(:,:)  !< Random pattern for ocean SPPT
-                                     !! tendencies with a number between 0 and 2
-  real, allocatable :: skeb_wts(:,:)  !< Random pattern for ocean SKEB
-  real, allocatable :: epbl1_wts(:,:) !< Random pattern for K.E. generation
-  real, allocatable :: epbl2_wts(:,:) !< Random pattern for K.E. dissipation
+                                      !! tendencies with a number between 0 and 2 [nondim]
+  real, allocatable :: skeb_wts(:,:)  !< Random pattern for ocean SKEB [nondim]
+  real, allocatable :: epbl1_wts(:,:) !< Random pattern for K.E. generation [nondim]
+  real, allocatable :: epbl2_wts(:,:) !< Random pattern for K.E. dissipation [nondim]
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
-  type(diag_ctrl), pointer :: diag=>NULL() !< A structure that is used to regulate the
+  type(diag_ctrl), pointer :: diag=>NULL() !< structure used to regulate timing of diagnostic output
 
   ! Taper array to smoothly zero out the SKEBS velocity increment near land
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: taperCu !< Taper applied to u component of
