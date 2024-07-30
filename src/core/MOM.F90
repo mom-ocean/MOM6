@@ -3299,17 +3299,18 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   CS%mixedlayer_restrat = mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, &
                                                   CS%mixedlayer_restrat_CSp, restart_CSp)
-  if (CS%mixedlayer_restrat) then
-    if (GV%Boussinesq .and. associated(CS%visc%h_ML)) then
-      ! This is here to allow for a transition of restart files between model versions.
-      call get_param(param_file, "MOM", "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
-                     default=.false., do_not_log=.true.)
-      if (MLE_use_PBL_MLD .and. .not.query_initialized(CS%visc%h_ML, "h_ML", restart_CSp) .and. &
-          associated(CS%visc%MLD)) then
-        do j=js,je ; do i=is,ie ; CS%visc%h_ML(i,j) = GV%Z_to_H * CS%visc%MLD(i,j) ; enddo ; enddo
-      endif
-    endif
 
+  if (GV%Boussinesq .and. associated(CS%visc%h_ML)) then
+    ! This is here to allow for a transition of restart files between model versions.
+    call get_param(param_file, "MOM", "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
+                   default=.false., do_not_log=.true.)
+    if (MLE_use_PBL_MLD .and. .not.query_initialized(CS%visc%h_ML, "h_ML", restart_CSp) .and. &
+        associated(CS%visc%MLD)) then
+      do j=js,je ; do i=is,ie ; CS%visc%h_ML(i,j) = GV%Z_to_H * CS%visc%MLD(i,j) ; enddo ; enddo
+    endif
+  endif
+
+  if (CS%mixedlayer_restrat) then
     if (.not.(bulkmixedlayer .or. CS%use_ALE_algorithm)) &
       call MOM_error(FATAL, "MOM: MIXEDLAYER_RESTRAT true requires a boundary layer scheme.")
     ! When DIABATIC_FIRST=False and using CS%visc%ML in mixedlayer_restrat we need to update after a restart
@@ -4056,7 +4057,7 @@ subroutine extract_surface_state(CS, sfc_state_in)
     endif
   endif
 
-  if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G, US, haloshift=0)
+  if (CS%debug) call MOM_surface_chksum("Post extract_sfc", sfc_state, G, US, haloshift=0, symmetric=.true.)
 
   ! Rotate sfc_state back onto the input grid, sfc_state_in
   if (CS%rotate_index) then

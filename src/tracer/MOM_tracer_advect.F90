@@ -34,6 +34,8 @@ type, public :: tracer_advect_CS ; private
   logical :: debug                 !< If true, write verbose checksums for debugging purposes.
   logical :: usePPM                !< If true, use PPM instead of PLM
   logical :: useHuynh              !< If true, use the Huynh scheme for PPM interface values
+  logical :: useHuynhStencilBug = .false. !< If true, use the incorrect stencil width.
+                                   !! This is provided for compatibility with legacy simuations.
   type(group_pass_type) :: pass_uhr_vhr_t_hprev !< A structure used for group passes
 end type tracer_advect_CS
 
@@ -94,6 +96,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
                                        ! can be simply discarded [H L2 ~> m3 or kg].
 
   real :: landvolfill                   ! An arbitrary? nonzero cell volume [H L2 ~> m3 or kg].
+  logical :: use_PPM_stencil            ! If true, use the correct PPM stencil width.
   real :: Idt                           ! 1/dt [T-1 ~> s-1].
   logical :: domore_u(SZJ_(G),SZK_(GV))  ! domore_u and domore_v indicate whether there is more
   logical :: domore_v(SZJB_(G),SZK_(GV)) ! advection to be done in the corresponding row or column.
@@ -112,7 +115,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
   landvolfill = 1.0e-20         ! This is arbitrary, but must be positive.
-  stencil = 2                   ! The scheme's stencil; 2 for PLM and PPM:H3
+  stencil = 2                   ! The scheme's stencil; 2 for PLM
 
   if (.not. associated(CS)) call MOM_error(FATAL, "MOM_tracer_advect: "// &
        "tracer_advect_init must be called before advect_tracer.")
@@ -123,8 +126,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   x_first = (MOD(G%first_direction,2) == 0)
 
   ! increase stencil size for Colella & Woodward PPM
-! if (CS%usePPM .and. .not. CS%useHuynh) stencil = 3
-  if (CS%usePPM) stencil = 3
+  use_PPM_stencil = CS%usePPM .and. .not. CS%useHuynhStencilBug
+  if (use_PPM_stencil) stencil = 3
 
   ntr = Reg%ntr
   Idt = 1.0 / dt
@@ -1129,6 +1132,16 @@ subroutine tracer_advect_init(Time, G, US, param_file, diag, CS)
       call MOM_error(FATAL, "MOM_tracer_advect, tracer_advect_init: "//&
            "Unknown TRACER_ADVECTION_SCHEME = "//trim(mesg))
   end select
+
+  if (CS%useHuynh) then
+    call get_param(param_file, mdl, "USE_HUYNH_STENCIL_BUG", &
+        CS%useHuynhStencilBug, &
+        desc="If true, use a stencil width of 2 in PPM:H3 tracer advection. " &
+        // "This is incorrect and will produce regressions in certain " &
+        // "configurations, but may be required to reproduce results in " &
+        // "legacy simulations.", &
+        default=.false.)
+  endif
 
   id_clock_advect = cpu_clock_id('(Ocean advect tracer)', grain=CLOCK_MODULE)
   id_clock_pass = cpu_clock_id('(Ocean tracer halo updates)', grain=CLOCK_ROUTINE)

@@ -1180,7 +1180,8 @@ subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L, GV)
 
   ! Each cell extends from x=-1/2 to 1/2, and has a topography
   ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
-  crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  !crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  crv_3 = (Dp + Dm - (2.0*D_vel)) ; crv = 3.0*crv_3
   slope = Dp - Dm
 
   ! Calculate the volume above which the entire cell is open and the volume at which the
@@ -1207,10 +1208,13 @@ subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L, GV)
       !   vol_below(K) = 0.5*L^2*(slope + crv/3*(3-4L)).
       if (a2x48_apb3*vol_below(K) < 1e-8) then ! Could be 1e-7?
         ! There is a very good approximation here for massless layers.
-        L0 = sqrt(2.0*vol_below(K)*Iapb) ; L(K) = L0*(1.0 + ax2_3apb*L0)
+        !L0 = sqrt(2.0*vol_below(K)*Iapb) ; L(K) = L0*(1.0 + ax2_3apb*L0)
+        L0 = sqrt(2.0*vol_below(K)*Iapb) ; L(K) = L0*(1.0 + (ax2_3apb*L0))
       else
+        !L(K) = apb_4a * (1.0 - &
+        !         2.0 * cos(C1_3*acos(a2x48_apb3*vol_below(K) - 1.0) - C2pi_3))
         L(K) = apb_4a * (1.0 - &
-                 2.0 * cos(C1_3*acos(a2x48_apb3*vol_below(K) - 1.0) - C2pi_3))
+                 2.0 * cos(C1_3*acos((a2x48_apb3*vol_below(K)) - 1.0) - C2pi_3))
       endif
       ! To check the answers.
       ! Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol_below(K)

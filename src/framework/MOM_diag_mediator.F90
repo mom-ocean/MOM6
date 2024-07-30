@@ -14,7 +14,6 @@ use MOM_diag_manager_infra, only : diag_axis_init=>MOM_diag_axis_init, get_MOM_d
 use MOM_diag_manager_infra, only : send_data_infra, MOM_diag_field_add_attribute, EAST, NORTH
 use MOM_diag_manager_infra, only : register_diag_field_infra, register_static_field_infra
 use MOM_diag_manager_infra, only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
-use MOM_diag_manager_infra, only : diag_send_complete_infra
 use MOM_diag_remap,       only : diag_remap_ctrl, diag_remap_update, diag_remap_calc_hmask
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
@@ -2079,10 +2078,8 @@ end subroutine enable_averages
 subroutine disable_averaging(diag_cs)
   type(diag_ctrl), intent(inout) :: diag_CS !< Structure used to regulate diagnostic output
 
-  call diag_send_complete_infra()
   diag_cs%time_int = 0.0
   diag_cs%ave_enabled = .false.
-
 end subroutine disable_averaging
 
 !> Call this subroutine to determine whether the averaging is
