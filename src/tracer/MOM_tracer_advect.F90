@@ -1133,14 +1133,16 @@ subroutine tracer_advect_init(Time, G, US, param_file, diag, CS)
            "Unknown TRACER_ADVECTION_SCHEME = "//trim(mesg))
   end select
 
-  if (CS%useHuynh) then
-    call get_param(param_file, mdl, "USE_HUYNH_STENCIL_BUG", &
+  if (CS%usePPM) then
+    if (CS%useHuynh) then
+      call get_param(param_file, mdl, "USE_HUYNH_STENCIL_BUG", &
         CS%useHuynhStencilBug, &
         desc="If true, use a stencil width of 2 in PPM:H3 tracer advection. " &
         // "This is incorrect and will produce regressions in certain " &
         // "configurations, but may be required to reproduce results in " &
         // "legacy simulations.", &
         default=.false.)
+    endif
   endif
 
   id_clock_advect = cpu_clock_id('(Ocean advect tracer)', grain=CLOCK_MODULE)
