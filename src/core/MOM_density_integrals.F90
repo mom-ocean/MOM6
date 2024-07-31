@@ -279,16 +279,16 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       if (use_rho_ref) then
         do m=2,4
           pos = i*15+(m-2)*5
-          intz(m) = G_e*dz_x(m,i)*( C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
+          intz(m) = (G_e*dz_x(m,i)*(C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
                                            32.0*(r15(pos+2)+r15(pos+4)) + &
-                                           12.0*r15(pos+3)))
+                                           12.0*r15(pos+3)) ))
         enddo
       else
         do m=2,4
           pos = i*15+(m-2)*5
-          intz(m) = G_e*dz_x(m,i)*( C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
+          intz(m) = (G_e*dz_x(m,i)*(C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
                                            32.0*(r15(pos+2)+r15(pos+4)) + &
-                                           12.0*r15(pos+3)) - rho_ref )
+                                           12.0*r15(pos+3)) - rho_ref ))
         enddo
       endif
       ! Use Boole's rule to integrate the bottom pressure anomaly values in x.
@@ -347,13 +347,13 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       do m=2,4
         pos = i*15+(m-2)*5
         if (use_rho_ref) then
-          intz(m) = G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
+          intz(m) = (G_e*dz_y(m,i)*(C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
                                           32.0*(r15(pos+2)+r15(pos+4)) + &
-                                          12.0*r15(pos+3)))
+                                          12.0*r15(pos+3)) ))
         else
-          intz(m) = G_e*dz_y(m,i)*( C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
+          intz(m) = (G_e*dz_y(m,i)*(C1_90*(7.0*(r15(pos+1)+r15(pos+5)) + &
                                           32.0*(r15(pos+2)+r15(pos+4)) + &
-                                          12.0*r15(pos+3)) - rho_ref )
+                                          12.0*r15(pos+3)) - rho_ref ))
         endif
       enddo
       ! Use Boole's rule to integrate the values.
@@ -1054,9 +1054,9 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       do m=2,4
         pos = i*15+(m-2)*5
         ! Use Boole's rule to estimate the pressure anomaly change.
-        intz(m) = G_e*dz_x(m,i)*( C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
+        intz(m) = (G_e*dz_x(m,i)*(C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
                                          32.0*(r15(pos+2)+r15(pos+4)) + &
-                                         12.0*r15(pos+3)) )
+                                         12.0*r15(pos+3)) ))
       enddo ! m
       intz(1) = dpa(i,j) ; intz(5) = dpa(i+1,j)
 
@@ -1158,9 +1158,9 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       do m=2,4
         ! Use Boole's rule to estimate the pressure anomaly change.
         pos = i*15+(m-2)*5
-        intz(m) = G_e*dz_y(m,i)*( C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
+        intz(m) = (G_e*dz_y(m,i)*(C1_90*( 7.0*(r15(pos+1)+r15(pos+5)) + &
                                          32.0*(r15(pos+2)+r15(pos+4)) + &
-                                         12.0*r15(pos+3)) )
+                                         12.0*r15(pos+3)) ))
       enddo ! m
       intz(1) = dpa(i,j) ; intz(5) = dpa(i,j+1)
 
@@ -1406,8 +1406,8 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
       ! Use Boole's rule to estimate the interface height anomaly change.
       do m=2,4
         pos = i*15+(m-2)*5
-        intp(m) = dp_x(m,I)*( C1_90*(7.0*(a15(pos+1)+a15(pos+5)) + 32.0*(a15(pos+2)+a15(pos+4)) + &
-                                  12.0*a15(pos+3)))
+        intp(m) = (dp_x(m,I)*( C1_90*(7.0*(a15(pos+1)+a15(pos+5)) + 32.0*(a15(pos+2)+a15(pos+4)) + &
+                                  12.0*a15(pos+3)) ))
       enddo
       ! Use Boole's rule to integrate the interface height anomaly values in x.
       intx_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
@@ -1461,8 +1461,8 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
       ! Use Boole's rule to estimate the interface height anomaly change.
       do m=2,4
         pos = i*15+(m-2)*5
-        intp(m) = dp_y(m,i)*( C1_90*(7.0*(a15(pos+1)+a15(pos+5)) + 32.0*(a15(pos+2)+a15(pos+4)) + &
-                                  12.0*a15(pos+3)))
+        intp(m) = (dp_y(m,i)*( C1_90*(7.0*(a15(pos+1)+a15(pos+5)) + 32.0*(a15(pos+2)+a15(pos+4)) + &
+                                     12.0*a15(pos+3)) ))
       enddo
       ! Use Boole's rule to integrate the interface height anomaly values in y.
       inty_dza(i,j) = C1_90*(7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4)) + &
@@ -1652,8 +1652,8 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
         ! Use Boole's rule to estimate the interface height anomaly change.
         ! The integrals at the ends of the segment are already known.
         pos = I*15+(m-2)*5
-        intp(m) = dp_90(m,I)*((7.0*(a15(pos+1)+a15(pos+5)) + &
-                               32.0*(a15(pos+2)+a15(pos+4))) + 12.0*a15(pos+3))
+        intp(m) = (dp_90(m,I)*((7.0*(a15(pos+1)+a15(pos+5)) + &
+                                32.0*(a15(pos+2)+a15(pos+4))) + 12.0*a15(pos+3) ))
       enddo
       ! Use Boole's rule to integrate the interface height anomaly values in x.
       intx_dza(I,j) = C1_90*((7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4))) + &
@@ -1714,8 +1714,8 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
         ! Use Boole's rule to estimate the interface height anomaly change.
         ! The integrals at the ends of the segment are already known.
         pos = i*15+(m-2)*5
-        intp(m) = dp_90(m,i) * ((7.0*(a15(pos+1)+a15(pos+5)) + &
-                                 32.0*(a15(pos+2)+a15(pos+4))) + 12.0*a15(pos+3))
+        intp(m) = (dp_90(m,i) * ((7.0*(a15(pos+1)+a15(pos+5)) + &
+                                  32.0*(a15(pos+2)+a15(pos+4))) + 12.0*a15(pos+3)))
       enddo
       ! Use Boole's rule to integrate the interface height anomaly values in x.
       inty_dza(i,J) = C1_90*((7.0*(intp(1)+intp(5)) + 32.0*(intp(2)+intp(4))) + &
