@@ -217,7 +217,7 @@ subroutine SCM_CVMix_tests_wind_forcing(sfc_state, forces, day, G, US, CS)
   enddo ; enddo
   call pass_vector(forces%taux, forces%tauy, G%Domain, To_All)
 
-  mag_tau = sqrt(CS%tau_x*CS%tau_x + CS%tau_y*CS%tau_y)
+  mag_tau = sqrt((CS%tau_x*CS%tau_x) + (CS%tau_y*CS%tau_y))
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     forces%ustar(i,j) = sqrt( US%L_to_Z * mag_tau / CS%Rho0 )
   enddo ; enddo ; endif

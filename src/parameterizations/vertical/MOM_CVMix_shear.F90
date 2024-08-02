@@ -145,7 +145,7 @@ subroutine calculate_CVMix_shear(u_H, v_H, h, tv, kd, kv, G, GV, US, CS )
         endif
         dz_int = 0.5*(dz(i,km1) + dz(i,k)) + GV%dZ_subroundoff
         N2 = DRHO / dz_int
-        S2 = US%L_to_Z**2*(DU*DU + DV*DV) / (dz_int*dz_int)
+        S2 = US%L_to_Z**2*((DU*DU) + (DV*DV)) / (dz_int*dz_int)
         Ri_Grad(k) = max(0., N2) / max(S2, 1.e-10*US%T_to_s**2)
 
         ! fill 3d arrays, if user asks for diagnostics

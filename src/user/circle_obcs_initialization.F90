@@ -102,7 +102,7 @@ subroutine circle_obcs_initialize_thickness(h, depth_tot, G, GV, US, param_file,
   latC = G%south_lat + 0.5*G%len_lat
   lonC = G%west_lon + 0.5*G%len_lon + xOffset
   do j=js,je ; do i=is,ie
-    rad = sqrt((G%geoLonT(i,j)-lonC)**2+(G%geoLatT(i,j)-latC)**2)/(diskrad)
+    rad = sqrt(((G%geoLonT(i,j)-lonC)**2) + ((G%geoLatT(i,j)-latC)**2)) / diskrad
     ! if (rad <= 6.*diskrad) h(i,j,k) = h(i,j,k)+10.0*exp( -0.5*( rad**2 ) )
     rad = min( rad, 1. ) ! Flatten outside radius of diskrad
     rad = rad*(2.*asin(1.)) ! Map 0-1 to 0-pi

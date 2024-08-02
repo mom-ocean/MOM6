@@ -574,17 +574,17 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
         b_denom_1 = h(i,j,1) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,1))
         d1(i) = b_denom_1 * b1(i)
-        u_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_e(i)*u(I,j,1) + a_w(i)*u(I-1,j,1))
-        v_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_n(i)*v(i,J,1) + a_s(i)*v(i,J-1,1))
+        u_h(i,j,1) = (h(i,j,1)*b1(i)) * ((a_e(i)*u(I,j,1)) + (a_w(i)*u(I-1,j,1)))
+        v_h(i,j,1) = (h(i,j,1)*b1(i)) * ((a_n(i)*v(i,J,1)) + (a_s(i)*v(i,J-1,1)))
       enddo
       do k=2,nz ; do i=is,ie
         c1(i,k) = eb(i,j,k-1) * b1(i)
         b_denom_1 = h(i,j,k) + d1(i)*ea(i,j,k) + h_neglect
         b1(i) = 1.0 / (b_denom_1 + eb(i,j,k))
         d1(i) = b_denom_1 * b1(i)
-        u_h(i,j,k) = (h(i,j,k) * (a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k)) + &
+        u_h(i,j,k) = (h(i,j,k) * ((a_e(i)*u(I,j,k)) + (a_w(i)*u(I-1,j,k))) + &
                       ea(i,j,k)*u_h(i,j,k-1))*b1(i)
-        v_h(i,j,k) = (h(i,j,k) * (a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k)) + &
+        v_h(i,j,k) = (h(i,j,k) * ((a_n(i)*v(i,J,k)) + (a_s(i)*v(i,J-1,k))) + &
                       ea(i,j,k)*v_h(i,j,k-1))*b1(i)
       enddo ; enddo
       do k=nz-1,1,-1 ; do i=is,ie
@@ -594,18 +594,18 @@ subroutine find_uv_at_h(u, v, h, u_h, v_h, G, GV, US, ea, eb, zero_mix)
     elseif (zero_mixing) then
       do i=is,ie
         b1(i) = 1.0 / (h(i,j,1) + h_neglect)
-        u_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_e(i)*u(I,j,1) + a_w(i)*u(I-1,j,1))
-        v_h(i,j,1) = (h(i,j,1)*b1(i)) * (a_n(i)*v(i,J,1) + a_s(i)*v(i,J-1,1))
+        u_h(i,j,1) = (h(i,j,1)*b1(i)) * ((a_e(i)*u(I,j,1)) + (a_w(i)*u(I-1,j,1)))
+        v_h(i,j,1) = (h(i,j,1)*b1(i)) * ((a_n(i)*v(i,J,1)) + (a_s(i)*v(i,J-1,1)))
       enddo
       do k=2,nz ; do i=is,ie
         b1(i) = 1.0 / (h(i,j,k) + h_neglect)
-        u_h(i,j,k) = (h(i,j,k) * (a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k))) * b1(i)
-        v_h(i,j,k) = (h(i,j,k) * (a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k))) * b1(i)
+        u_h(i,j,k) = (h(i,j,k) * ((a_e(i)*u(I,j,k)) + (a_w(i)*u(I-1,j,k)))) * b1(i)
+        v_h(i,j,k) = (h(i,j,k) * ((a_n(i)*v(i,J,k)) + (a_s(i)*v(i,J-1,k)))) * b1(i)
       enddo ; enddo
     else
       do k=1,nz ; do i=is,ie
-        u_h(i,j,k) = a_e(i)*u(I,j,k) + a_w(i)*u(I-1,j,k)
-        v_h(i,j,k) = a_n(i)*v(i,J,k) + a_s(i)*v(i,J-1,k)
+        u_h(i,j,k) = (a_e(i)*u(I,j,k)) + (a_w(i)*u(I-1,j,k))
+        v_h(i,j,k) = (a_n(i)*v(i,J,k)) + (a_s(i)*v(i,J-1,k))
       enddo ; enddo
     endif
   enddo

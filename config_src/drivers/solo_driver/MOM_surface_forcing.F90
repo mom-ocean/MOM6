@@ -533,13 +533,13 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   ! set the friction velocity
   if (CS%answer_date < 20190101) then
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-      forces%tau_mag(i,j) = CS%gust_const + sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                                                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+      forces%tau_mag(i,j) = CS%gust_const + sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                                      ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       forces%ustar(i,j) = sqrt(US%L_to_Z * ((CS%gust_const/CS%Rho0) + &
-              sqrt(0.5*(forces%tauy(i,J-1)*forces%tauy(i,J-1) + forces%tauy(i,J)*forces%tauy(i,J) + &
-                        forces%taux(I-1,j)*forces%taux(I-1,j) + forces%taux(I,j)*forces%taux(I,j)))/CS%Rho0) )
+              sqrt(0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2) + &
+                        (forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)))/CS%Rho0) )
     enddo ; enddo ; endif
   else
     call stresses_to_ustar(forces, G, US, CS)
@@ -743,19 +743,19 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       if (.not.read_Ustar) then
         if (CS%read_gust_2d) then
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-            forces%tau_mag(i,j) = CS%gust(i,j) + sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)
+            forces%tau_mag(i,j) = CS%gust(i,j) + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-            tau_mag = CS%gust(i,j) + sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)
+            tau_mag = CS%gust(i,j) + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
             forces%ustar(i,j) = sqrt(tau_mag * US%L_to_Z / CS%Rho0)
           enddo ; enddo ; endif
         else
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-            forces%tau_mag(i,j) = CS%gust_const + sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)
+            forces%tau_mag(i,j) = CS%gust_const + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
             forces%ustar(i,j) = sqrt(US%L_to_Z * (CS%gust_const/CS%Rho0 + &
-                    sqrt(temp_x(i,j)*temp_x(i,j) + temp_y(i,j)*temp_y(i,j)) / CS%Rho0) )
+                    sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) / CS%Rho0) )
           enddo ; enddo ; endif
         endif
       endif
@@ -797,25 +797,25 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
         if (CS%read_gust_2d) then
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
             forces%tau_mag(i,j) = CS%gust(i,j) + &
-                    sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                              (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+                    sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                              ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
             tau_mag = CS%gust(i,j) + &
-                    sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                              (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+                    sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                              ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
             forces%ustar(i,j) = sqrt( tau_mag * US%L_to_Z / CS%Rho0 )
           enddo ; enddo ; endif
         else
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
             forces%tau_mag(i,j) = CS%gust_const + &
-                  sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                            (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+                  sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                            ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
              forces%ustar(i,j) = sqrt(US%L_to_Z * ( (CS%gust_const/CS%Rho0) + &
-                  sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                            (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))/CS%Rho0))
+                  sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                            ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))/CS%Rho0))
           enddo ; enddo ; endif
         endif
       endif
@@ -885,21 +885,21 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   if (CS%read_gust_2d) then
     call data_override(G%Domain, 'gust', CS%gust, day, scale=US%Pa_to_RLZ_T2)
     if (associated(forces%tau_mag)) then ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      forces%tau_mag(i,j) = sqrt(temp_x(i,j)**2 + temp_y(i,j)**2) + CS%gust(i,j)
+      forces%tau_mag(i,j) = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
     enddo ; enddo ; endif
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      tau_mag = sqrt(temp_x(i,j)**2 + temp_y(i,j)**2) + CS%gust(i,j)
+      tau_mag = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
       ustar_loc(i,j) = sqrt( tau_mag * US%L_to_Z / CS%Rho0 )
     enddo ; enddo
   else
     if (associated(forces%tau_mag)) then
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        forces%tau_mag(i,j) = sqrt(temp_x(i,j)**2 + temp_y(i,j)**2) + CS%gust_const
+        forces%tau_mag(i,j) = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust_const
       ! ustar_loc(i,j) = sqrt( forces%tau_mag(i,j) * US%L_to_Z / CS%Rho0 )
       enddo ; enddo
     endif
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      ustar_loc(i,j) = sqrt(US%L_to_Z * (sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)/CS%Rho0 + &
+      ustar_loc(i,j) = sqrt(US%L_to_Z * (sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))/CS%Rho0 + &
                             CS%gust_const/CS%Rho0))
     enddo ; enddo
   endif
@@ -945,25 +945,25 @@ subroutine stresses_to_ustar(forces, G, US, CS)
   if (CS%read_gust_2d) then
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = CS%gust(i,j) + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       tau_mag = CS%gust(i,j) + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
       forces%ustar(i,j) = sqrt( tau_mag * I_rho )
     enddo ; enddo ; endif
   else
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = CS%gust_const + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       tau_mag = CS%gust_const + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
       forces%ustar(i,j) = sqrt( tau_mag * I_rho )
     enddo ; enddo ; endif
   endif

@@ -484,9 +484,9 @@ subroutine compute_c_diss(G, GV, CS)
     if (CS%Klower_shear == 0) then
       do j=js-1,je+1 ; do i=is-1,ie+1
         shear = sqrt(CS%sh_xx(i,j,k)**2 + 0.25 * (          &
-          (CS%sh_xy(I-1,J-1,k)**2 + CS%sh_xy(I,J  ,k)**2)   &
-        + (CS%sh_xy(I-1,J  ,k)**2 + CS%sh_xy(I,J-1,k)**2)   &
-        ))
+                     ((CS%sh_xy(I-1,J-1,k)**2) + (CS%sh_xy(I,J  ,k)**2)) &
+                   + ((CS%sh_xy(I-1,J  ,k)**2) + (CS%sh_xy(I,J-1,k)**2)) &
+                    ))
         CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
       enddo; enddo
 
@@ -494,11 +494,11 @@ subroutine compute_c_diss(G, GV, CS)
     elseif (CS%Klower_shear == 1) then
       do j=js-1,je+1 ; do i=is-1,ie+1
         shear = sqrt(CS%sh_xx(i,j,k)**2 + 0.25 * (             &
-          ((CS%sh_xy(I-1,J-1,k)**2 + CS%vort_xy(I-1,J-1,k)**2) &
-        +  (CS%sh_xy(I,J,k)**2     + CS%vort_xy(I,J,k)**2))    &
-        + ((CS%sh_xy(I-1,J,k)**2   + CS%vort_xy(I-1,J,k)**2)   &
-        +  (CS%sh_xy(I,J-1,k)**2   + CS%vort_xy(I,J-1,k)**2))  &
-        ))
+                     ((CS%sh_xy(I-1,J-1,k)**2 + CS%vort_xy(I-1,J-1,k)**2) &
+                   +  (CS%sh_xy(I,J,k)**2     + CS%vort_xy(I,J,k)**2))    &
+                   + ((CS%sh_xy(I-1,J,k)**2   + CS%vort_xy(I-1,J,k)**2)   &
+                   +  (CS%sh_xy(I,J-1,k)**2   + CS%vort_xy(I,J-1,k)**2))  &
+                    ))
         CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
       enddo; enddo
     endif
@@ -583,10 +583,10 @@ subroutine compute_stress(G, GV, CS)
       if (vort_sh_scheme_1) then
         ! It is assumed that B.C. is applied to sh_xy and vort_xy
         vort_sh = 0.25 * (                                                      &
-          ((G%areaBu(I-1,J-1) * CS%vort_xy(I-1,J-1,k)) * CS%sh_xy(I-1,J-1,k)  + &
-           (G%areaBu(I  ,J  ) * CS%vort_xy(I  ,J  ,k)) * CS%sh_xy(I  ,J  ,k)) + &
-          ((G%areaBu(I-1,J  ) * CS%vort_xy(I-1,J  ,k)) * CS%sh_xy(I-1,J  ,k)  + &
-           (G%areaBu(I  ,J-1) * CS%vort_xy(I  ,J-1,k)) * CS%sh_xy(I  ,J-1,k))   &
+          (((G%areaBu(I-1,J-1) * CS%vort_xy(I-1,J-1,k)) * CS%sh_xy(I-1,J-1,k))  + &
+           ((G%areaBu(I  ,J  ) * CS%vort_xy(I  ,J  ,k)) * CS%sh_xy(I  ,J  ,k))) + &
+          (((G%areaBu(I-1,J  ) * CS%vort_xy(I-1,J  ,k)) * CS%sh_xy(I-1,J  ,k))  + &
+           ((G%areaBu(I  ,J-1) * CS%vort_xy(I  ,J-1,k)) * CS%sh_xy(I  ,J-1,k)))   &
           ) * G%IareaT(i,j)
       endif
 
@@ -717,10 +717,8 @@ subroutine compute_stress_divergence(u, v, h, diffu, diffv, dx2h, dy2h, dx2q, dy
     ! but here is the discretization of div(S)
     do j=js,je ; do I=Isq,Ieq
       h_u = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k)) + h_neglect
-      fx = -((G%IdyCu(I,j)*(Mxx(i,j)                - &
-                            Mxx(i+1,j))             + &
-              G%IdxCu(I,j)*(dx2q(I,J-1)*Mxy(I,J-1)  - &
-                            dx2q(I,J)  *Mxy(I,J)))  * &
+      fx = -((G%IdyCu(I,j)*(Mxx(i,j) - Mxx(i+1,j)) + &
+              G%IdxCu(I,j)*(dx2q(I,J-1)*Mxy(I,J-1) - dx2q(I,J)*Mxy(I,J))) * &
               G%IareaCu(I,j)) / h_u
       diffu(I,j,k) = diffu(I,j,k) + fx
       if (save_ZB2020u) &
@@ -730,10 +728,8 @@ subroutine compute_stress_divergence(u, v, h, diffu, diffv, dx2h, dy2h, dx2q, dy
     ! Evaluate 1/h y.Div(h S) (Line 1517 of MOM_hor_visc.F90)
     do J=Jsq,Jeq ; do i=is,ie
       h_v = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k)) + h_neglect
-      fy = -((G%IdyCv(i,J)*(dy2q(I-1,J)*Mxy(I-1,J)  - &
-                            dy2q(I,J)  *Mxy(I,J))   + & ! NOTE this plus
-              G%IdxCv(i,J)*(Myy(i,j)                - &
-                            Myy(i,j+1)))            * &
+      fy = -((G%IdxCv(i,J)*(Myy(i,j) - Myy(i,j+1)) + &
+              G%IdyCv(i,J)*(dy2q(I-1,J)*Mxy(I-1,J) - dy2q(I,J)*Mxy(I,J))) * &
               G%IareaCv(i,J)) / h_v
       diffv(i,J,k) = diffv(i,J,k) + fy
       if (save_ZB2020v) &

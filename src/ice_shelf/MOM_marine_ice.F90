@@ -80,7 +80,7 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, time_step, CS)
   do j=js,je ; do I=is-1,ie
     if ((G%areaT(i,j) + G%areaT(i+1,j) > 0.0)) & ! .and. (G%dxdy_u(I,j) > 0.0)) &
       forces%frac_shelf_u(I,j) = forces%frac_shelf_u(I,j) + &
-           (forces%area_berg(i,j)*G%areaT(i,j) + forces%area_berg(i+1,j)*G%areaT(i+1,j)) / &
+           ((forces%area_berg(i,j)*G%areaT(i,j)) + (forces%area_berg(i+1,j)*G%areaT(i+1,j))) / &
            (G%areaT(i,j) + G%areaT(i+1,j))
     forces%rigidity_ice_u(I,j) = forces%rigidity_ice_u(I,j) + kv_rho_ice * &
                         min(forces%mass_berg(i,j), forces%mass_berg(i+1,j))
@@ -88,7 +88,7 @@ subroutine iceberg_forces(G, forces, use_ice_shelf, sfc_state, time_step, CS)
   do J=js-1,je ; do i=is,ie
     if ((G%areaT(i,j) + G%areaT(i,j+1) > 0.0)) & ! .and. (G%dxdy_v(i,J) > 0.0)) &
       forces%frac_shelf_v(i,J) = forces%frac_shelf_v(i,J) + &
-           (forces%area_berg(i,j)*G%areaT(i,j) + forces%area_berg(i,j+1)*G%areaT(i,j+1)) / &
+           ((forces%area_berg(i,j)*G%areaT(i,j)) + (forces%area_berg(i,j+1)*G%areaT(i,j+1))) / &
            (G%areaT(i,j) + G%areaT(i,j+1))
     forces%rigidity_ice_v(i,J) = forces%rigidity_ice_v(i,J) + kv_rho_ice * &
                          min(forces%mass_berg(i,j), forces%mass_berg(i,j+1))

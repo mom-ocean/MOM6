@@ -171,7 +171,8 @@ type, public :: ocean_grid_type
     Dblock_v, &   !< Topographic depths at v-points at which the flow is blocked [Z ~> m].
     Dopen_v       !< Topographic depths at v-points at which the flow is open at width dx_Cv [Z ~> m].
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    CoriolisBu    !< The Coriolis parameter at corner points [T-1 ~> s-1].
+    CoriolisBu, & !< The Coriolis parameter at corner points [T-1 ~> s-1].
+    Coriolis2Bu   !< The square of the Coriolis parameter at corner points [T-2 ~> s-2].
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
     df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
@@ -581,6 +582,7 @@ subroutine allocate_metrics(G)
 
   ALLOC_(G%bathyT(isd:ied, jsd:jed)) ; G%bathyT(:,:) = -G%Z_ref
   ALLOC_(G%CoriolisBu(IsdB:IedB, JsdB:JedB)) ; G%CoriolisBu(:,:) = 0.0
+  ALLOC_(G%Coriolis2Bu(IsdB:IedB, JsdB:JedB)) ; G%Coriolis2Bu(:,:) = 0.0
   ALLOC_(G%dF_dx(isd:ied, jsd:jed)) ; G%dF_dx(:,:) = 0.0
   ALLOC_(G%dF_dy(isd:ied, jsd:jed)) ; G%dF_dy(:,:) = 0.0
 
@@ -626,8 +628,8 @@ subroutine MOM_grid_end(G)
 
   DEALLOC_(G%dx_Cv) ; DEALLOC_(G%dy_Cu)
 
-  DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu)
-  DEALLOC_(G%dF_dx)  ; DEALLOC_(G%dF_dy)
+  DEALLOC_(G%bathyT)  ; DEALLOC_(G%CoriolisBu) ; DEALLOC_(G%Coriolis2Bu)
+  DEALLOC_(G%dF_dx)   ; DEALLOC_(G%dF_dy)
   DEALLOC_(G%sin_rot) ; DEALLOC_(G%cos_rot)
 
   DEALLOC_(G%porous_DminU) ; DEALLOC_(G%porous_DmaxU) ; DEALLOC_(G%porous_DavgU)

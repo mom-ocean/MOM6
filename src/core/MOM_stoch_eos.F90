@@ -100,7 +100,7 @@ logical function MOM_stoch_eos_init(Time, G, GV, US, param_file, diag, CS, resta
     ! fill array with approximation of grid area needed for decorrelation time-scale calculation
     do j=G%jsc,G%jec
       do i=G%isc,G%iec
-        CS%l2_inv(i,j) = 1.0/(G%dxT(i,j)**2+G%dyT(i,j)**2)
+        CS%l2_inv(i,j) = 1.0 / ( (G%dxT(i,j)**2) + (G%dyT(i,j)**2) )
       enddo
     enddo
 
@@ -173,7 +173,7 @@ subroutine MOM_stoch_eos_run(G, u, v, delt, Time, CS)
     do i=G%isc,G%iec
       ubar = 0.5*(u(I,j,1)*G%mask2dCu(I,j)+u(I-1,j,1)*G%mask2dCu(I-1,j))
       vbar = 0.5*(v(i,J,1)*G%mask2dCv(i,J)+v(i,J-1,1)*G%mask2dCv(i,J-1))
-      phi = exp(-delt*CS%tfac*sqrt((ubar**2+vbar**2)*CS%l2_inv(i,j)))
+      phi = exp(-delt*CS%tfac * sqrt(((ubar**2) + (vbar**2))*CS%l2_inv(i,j)))
       CS%pattern(i,j) = phi*CS%pattern(i,j) + CS%amplitude*sqrt(1-phi**2)*CS%rgauss(i,j)
       CS%phi(i,j) = phi
     enddo
@@ -233,12 +233,12 @@ subroutine MOM_calc_varT(G, GV, US, h, tv, CS, dt)
         hl(5) = h(i,j+1,k) * G%mask2dCv(i,J)
 
         ! SGS variance in i-direction [C2 ~> degC2]
-        dTdi2 = ( ( G%mask2dCu(I  ,j) * G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) ) &
-                  + G%mask2dCu(I-1,j) * G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) ) &
+        dTdi2 = ( ( G%mask2dCu(I  ,j) * (G%IdxCu(I  ,j) * ( T(i+1,j,k) - T(i,j,k) )) &
+                  + G%mask2dCu(I-1,j) * (G%IdxCu(I-1,j) * ( T(i,j,k) - T(i-1,j,k) )) &
                 ) * G%dxT(i,j) * 0.5 )**2
         ! SGS variance in j-direction [C2 ~> degC2]
-        dTdj2 = ( ( G%mask2dCv(i,J  ) * G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) ) &
-                  + G%mask2dCv(i,J-1) * G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) ) &
+        dTdj2 = ( ( G%mask2dCv(i,J  ) * (G%IdyCv(i,J  ) * ( T(i,j+1,k) - T(i,j,k) )) &
+                  + G%mask2dCv(i,J-1) * (G%IdyCv(i,J-1) * ( T(i,j,k) - T(i,j-1,k) )) &
                 ) * G%dyT(i,j) * 0.5 )**2
         tv%varT(i,j,k) = CS%stanley_coeff * ( dTdi2 + dTdj2 )
         ! Turn off scheme near land

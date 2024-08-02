@@ -2425,13 +2425,13 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
     do j=js,je ; do i=is,ie
       taux2 = 0.0
       if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0.0) &
-        taux2 = (G%mask2dCu(I-1,j) * forces%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j) * forces%taux(I,j)**2) / &
+        taux2 = (G%mask2dCu(I-1,j) * (forces%taux(I-1,j)**2) + &
+                 G%mask2dCu(I,j) * (forces%taux(I,j)**2)) / &
                 (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
       tauy2 = 0.0
       if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0.0) &
-        tauy2 = (G%mask2dCv(i,J-1) * forces%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
+        tauy2 = (G%mask2dCv(i,J-1) * (forces%tauy(i,J-1)**2) + &
+                 G%mask2dCv(i,J) * (forces%tauy(i,J)**2)) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (associated(fluxes%ustar_gustless)) then
@@ -3822,7 +3822,7 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
       if (G%mask2dCv(i,J) > 0.0) forces%tauy(i,J) = ty_mean
     enddo ; enddo
     if (tau2ustar) then
-      tau_mag = sqrt(tx_mean**2 + ty_mean**2)
+      tau_mag = sqrt((tx_mean**2) + (ty_mean**2))
       if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         forces%tau_mag(i,j) = tau_mag
       endif ; enddo ; enddo ; endif

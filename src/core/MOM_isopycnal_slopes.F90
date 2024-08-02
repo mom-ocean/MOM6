@@ -334,7 +334,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       wtA = hg2A*haB ; wtB = hg2B*haA
       wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
 
-      drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+      drdz = ((wtL * drdkL) + (wtR * drdkR)) / ((dzaL*wtL) + (dzaR*wtR))
       ! The expression for drdz above is mathematically equivalent to:
       !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
       !          ((hg2L/haL) + (hg2R/haR))
@@ -376,8 +376,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       endif
       slope_x(I,j,K) = slope
       if (present(dzSxN)) &
-        dzSxN(I,j,K) = sqrt( GxSpV_u(I) * max(0., wtL * ( dzaL * drdkL ) &
-                                                + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+        dzSxN(I,j,K) = sqrt( GxSpV_u(I) * max(0., (wtL * ( dzaL * drdkL )) &
+                                                + (wtR * ( dzaR * drdkR ))) / (wtL + wtR) ) & ! dz * N
                        * abs(slope) * G%mask2dCu(I,j) ! x-direction contribution to S^2
 
     enddo ! I
@@ -485,7 +485,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       wtA = hg2A*haB ; wtB = hg2B*haA
       wtL = hg2L*(haR*dzaR) ; wtR = hg2R*(haL*dzaL)
 
-      drdz = (wtL * drdkL + wtR * drdkR) / (dzaL*wtL + dzaR*wtR)
+      drdz = ((wtL * drdkL) + (wtR * drdkR)) / ((dzaL*wtL) + (dzaR*wtR))
       ! The expression for drdz above is mathematically equivalent to:
       !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
       !          ((hg2L/haL) + (hg2R/haR))
@@ -527,8 +527,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       endif
       slope_y(i,J,K) = slope
       if (present(dzSyN)) &
-        dzSyN(i,J,K) = sqrt( GxSpV_v(i) * max(0., wtL * ( dzaL * drdkL ) &
-                                                + wtR * ( dzaR * drdkR )) / (wtL + wtR) ) & ! dz * N
+        dzSyN(i,J,K) = sqrt( GxSpV_v(i) * max(0., (wtL * ( dzaL * drdkL )) &
+                                                + (wtR * ( dzaR * drdkR ))) / (wtL + wtR) ) & ! dz * N
                         * abs(slope) * G%mask2dCv(i,J) ! x-direction contribution to S^2
 
     enddo ! i

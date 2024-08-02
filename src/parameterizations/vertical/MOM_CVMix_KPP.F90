@@ -1143,7 +1143,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           Vk =  Vk + (0.5*(Waves%Us_y(i,j,k)+Waves%Us_y(i,j-1,k)) - surfVs )
         endif
 
-        deltaU2(k) = US%L_T_to_m_s**2 * (Uk**2 + Vk**2)
+        deltaU2(k) = US%L_T_to_m_s**2 * ((Uk**2) + (Vk**2))
 
         ! pressure, temperature, and salinity for calling the equation of state
         ! kk+1 = surface fields
