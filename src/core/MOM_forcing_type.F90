@@ -53,6 +53,12 @@ interface allocate_mech_forcing
   module procedure allocate_mech_forcing_from_ref
 end interface allocate_mech_forcing
 
+!> Allocate arrays if optional flag is present and true (works for 2D and 3D)
+interface myAlloc
+  module procedure myAlloc_2d
+  module procedure myAlloc_3d
+end interface myAlloc
+
 !> Determine the friction velocity from a forcing type or a mechanical forcing type.
 interface find_ustar
   module procedure find_ustar_fluxes
@@ -211,6 +217,19 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     ice_fraction  => NULL(), &  !< fraction of sea ice coverage at h-cells, from 0 to 1 [nondim].
     u10_sqr       => NULL()     !< wind magnitude at 10 m squared [L2 T-2 ~> m2 s-2]
+
+  ! Forcing fields required for MARBL
+  real, pointer, dimension(:,:) :: &
+    noy_dep => NULL(),               & !< NOy Deposition [conc Z T-1 ~> conc m s-1]
+    nhx_dep => NULL(),               & !< NHx Deposition [conc Z T-1 ~> conc m s-1]
+    atm_co2 => NULL(),               & !< Atmospheric CO2 Concentration [ppm]
+    atm_alt_co2 => NULL(),           & !< Alternate atmospheric CO2 Concentration [ppm]
+    dust_flux => NULL(),             & !< Flux of dust into the ocean [R Z T-1 ~> kgN m-2 s-1]
+    iron_flux => NULL()                !< Flux of dust into the ocean [conc Z T-1 ~> conc m s-1]
+
+  real, pointer, dimension(:,:,:) :: &
+    fracr_cat   => NULL(),           & !< per-category ice fraction
+    qsw_cat     => NULL()              !< per-category shortwave
 
   real, pointer, dimension(:,:) :: &
     lamult => NULL()            !< Langmuir enhancement factor [nondim]
@@ -3202,8 +3221,9 @@ end subroutine forcing_diagnostics
 
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
-                                  shelf, iceberg, salt, fix_accum_bug, cfc, waves, &
-                                  shelf_sfc_accumulation, lamult, hevap, tau_mag)
+                                  shelf, iceberg, salt, fix_accum_bug, cfc, marbl, &
+                                  waves, shelf_sfc_accumulation, lamult, hevap, &
+                                  ice_ncat, tau_mag)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
   logical, optional,     intent(in) :: water   !< If present and true, allocate water fluxes
@@ -3217,6 +3237,8 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
                                                !! accumulation of ustar_gustless
   logical, optional,     intent(in) :: cfc     !< If present and true, allocate fields needed
                                                !! for cfc surface fluxes
+  logical, optional,     intent(in) :: marbl   !< If present and true, allocate fields needed
+                                               !! for MARBL surface fluxes
   logical, optional,     intent(in) :: waves   !< If present and true, allocate wave fields
   logical, optional,     intent(in) :: shelf_sfc_accumulation !< If present and true, and shelf is true,
                                                !! then allocate surface flux deposition from the atmosphere
@@ -3225,6 +3247,7 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   logical, optional,     intent(in) :: hevap   !< If present and true, allocate heat content evap.
                                                !! This field must be allocated when enthalpy is provided
                                                !! via coupler.
+  integer, optional,     intent(in) :: ice_ncat !< number of ice categories
   logical, optional,     intent(in) :: tau_mag !< If present and true, allocate tau_mag and related fields
 
   ! Local variables
@@ -3291,20 +3314,37 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
     if (shelf_sfc_acc) call myAlloc(fluxes%shelf_sfc_mass_flux,isd,ied,jsd,jed, shelf_sfc_acc)
   endif; endif
 
-  !These fields should only on allocated when iceberg area is being passed through the coupler.
+  !These fields should only be allocated when iceberg area is being passed through the coupler.
   call myAlloc(fluxes%ustar_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%area_berg,isd,ied,jsd,jed, iceberg)
   call myAlloc(fluxes%mass_berg,isd,ied,jsd,jed, iceberg)
 
-  !These fields should only on allocated when USE_CFC_CAP is activated.
+  !These fields should only be allocated when USE_CFC_CAP is activated.
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, cfc)
   call myAlloc(fluxes%u10_sqr,isd,ied,jsd,jed, cfc)
 
-  !These fields should only on allocated when wave coupling is activated.
+  !These fields should only be allocated when wave coupling is activated.
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, waves)
   call myAlloc(fluxes%lamult,isd,ied,jsd,jed, lamult)
 
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
+
+  !These fields should only be allocated when USE_MARBL is activated.
+  call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%u10_sqr,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%noy_dep,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%nhx_dep,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%atm_co2,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%atm_alt_co2,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%dust_flux,isd,ied,jsd,jed, marbl)
+  call myAlloc(fluxes%iron_flux,isd,ied,jsd,jed, marbl)
+
+  ! These fields should only be allocated when receiving multiple ice categories
+  if (present(ice_ncat)) then
+    call myAlloc(fluxes%fracr_cat,isd,ied,jsd,jed,1,ice_ncat+1, ice_ncat > 0)
+    call myAlloc(fluxes%qsw_cat,isd,ied,jsd,jed,1,ice_ncat+1, ice_ncat > 0)
+  endif
+
 end subroutine allocate_forcing_by_group
 
 !> Allocate elements of a new forcing type based on their status in an existing type.
@@ -3495,7 +3535,7 @@ end subroutine get_mech_forcing_groups
 
 
 !> Allocates and zeroes-out array.
-subroutine myAlloc(array, is, ie, js, je, flag)
+subroutine myAlloc_2d(array, is, ie, js, je, flag)
   real, dimension(:,:), pointer :: array !< Array to be allocated
   integer,           intent(in) :: is !< Start i-index
   integer,           intent(in) :: ie !< End i-index
@@ -3506,7 +3546,22 @@ subroutine myAlloc(array, is, ie, js, je, flag)
   if (present(flag)) then ; if (flag) then ; if (.not.associated(array)) then
     allocate(array(is:ie,js:je), source=0.0)
   endif ; endif ; endif
-end subroutine myAlloc
+end subroutine myAlloc_2d
+
+subroutine myAlloc_3d(array, is, ie, js, je, ks, ke, flag)
+  real, dimension(:,:,:), pointer :: array !< Array to be allocated
+  integer,             intent(in) :: is !< Start i-index
+  integer,             intent(in) :: ie !< End i-index
+  integer,             intent(in) :: js !< Start j-index
+  integer,             intent(in) :: je !< End j-index
+  integer,             intent(in) :: ks !< Start k-index
+  integer,             intent(in) :: ke !< End k-index
+  logical, optional,   intent(in) :: flag !< Flag to indicate to allocate
+
+  if (present(flag)) then ; if (flag) then ; if (.not.associated(array)) then
+    allocate(array(is:ie,js:je,ks:ke), source=0.0)
+  endif ; endif ; endif
+end subroutine myAlloc_3d
 
 !> Deallocate the forcing type
 subroutine deallocate_forcing_type(fluxes)
@@ -3562,6 +3617,14 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%mass_berg))            deallocate(fluxes%mass_berg)
   if (associated(fluxes%ice_fraction))         deallocate(fluxes%ice_fraction)
   if (associated(fluxes%u10_sqr))              deallocate(fluxes%u10_sqr)
+  if (associated(fluxes%noy_dep))              deallocate(fluxes%noy_dep)
+  if (associated(fluxes%nhx_dep))              deallocate(fluxes%nhx_dep)
+  if (associated(fluxes%atm_co2))              deallocate(fluxes%atm_co2)
+  if (associated(fluxes%atm_alt_co2))          deallocate(fluxes%atm_alt_co2)
+  if (associated(fluxes%dust_flux))            deallocate(fluxes%dust_flux)
+  if (associated(fluxes%iron_flux))            deallocate(fluxes%iron_flux)
+  if (associated(fluxes%fracr_cat))            deallocate(fluxes%fracr_cat)
+  if (associated(fluxes%qsw_cat))              deallocate(fluxes%qsw_cat)
 
   call coupler_type_destructor(fluxes%tr_fluxes)
 

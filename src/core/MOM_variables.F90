@@ -57,7 +57,8 @@ type, public :: surface
     ocean_heat, &  !< The total heat content of the ocean in [C R Z ~> degC kg m-2].
     ocean_salt, &  !< The total salt content of the ocean in [1e-3 S R Z ~> kgSalt m-2].
     taux_shelf, &  !< The zonal stresses on the ocean under shelves [R L Z T-2 ~> Pa].
-    tauy_shelf     !< The meridional stresses on the ocean under shelves [R L Z T-2 ~> Pa].
+    tauy_shelf, &  !< The meridional stresses on the ocean under shelves [R L Z T-2 ~> Pa].
+    fco2           !< CO2 flux from the ocean to the atmosphere [R Z T-1 ~> kgCO2 m-2 s-1]
   logical :: T_is_conT = .false. !< If true, the temperature variable SST is actually the
                    !! conservative temperature in [C ~> degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable SSS is actually the
@@ -337,7 +338,7 @@ contains
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                   gas_fields_ocn, use_meltpot, use_iceshelves, &
-                                  omit_frazil)
+                                  omit_frazil, use_marbl_tracers)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
@@ -354,9 +355,10 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                                            !! under ice shelves.
   logical,     optional, intent(in)    :: omit_frazil      !< If present and false, do not allocate the space to
                                                            !! pass frazil fluxes to the coupler
+  logical,     optional, intent(in)    :: use_marbl_tracers  !< If true, allocate the space for CO2 flux from MARBL
 
   ! local variables
-  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves, alloc_frazil
+  logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves, alloc_frazil, alloc_fco2
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -369,6 +371,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
   alloc_iceshelves = .false. ; if (present(use_iceshelves)) alloc_iceshelves = use_iceshelves
   alloc_frazil = .true. ; if (present(omit_frazil)) alloc_frazil = .not.omit_frazil
+  alloc_fco2 = .false. ; if (present(use_marbl_tracers)) alloc_fco2 = use_marbl_tracers
 
   if (sfc_state%arrays_allocated) return
 
@@ -408,6 +411,10 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
     call coupler_type_spawn(gas_fields_ocn, sfc_state%tr_fields, &
                             (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
+  if (alloc_fco2) then
+    allocate(sfc_state%fco2(isd:ied,jsd:jed), source=0.0)
+  endif
+
   sfc_state%arrays_allocated = .true.
 
 end subroutine allocate_surface_state
@@ -429,6 +436,7 @@ subroutine deallocate_surface_state(sfc_state)
   if (allocated(sfc_state%ocean_mass)) deallocate(sfc_state%ocean_mass)
   if (allocated(sfc_state%ocean_heat)) deallocate(sfc_state%ocean_heat)
   if (allocated(sfc_state%ocean_salt)) deallocate(sfc_state%ocean_salt)
+  if (allocated(sfc_state%fco2)) deallocate(sfc_state%fco2)
   call coupler_type_destructor(sfc_state%tr_fields)
 
   sfc_state%arrays_allocated = .false.

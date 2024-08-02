@@ -4,6 +4,15 @@
 html
 
 
+# Build output
+*.o
+*.mod
+MOM6
+build/
+deps/
+pkg/MARBL
+
+
 # Autoconf output
 aclocal.m4
 autom4te.cache/
