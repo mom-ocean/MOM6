@@ -14,7 +14,6 @@ use MOM_diabatic_aux,        only : diabatic_aux_init, diabatic_aux_end, diabati
 use MOM_diabatic_aux,        only : make_frazil, adjust_salt, differential_diffuse_T_S, triDiagTS
 use MOM_diabatic_aux,        only : triDiagTS_Eulerian, find_uv_at_h
 use MOM_diabatic_aux,        only : applyBoundaryFluxesInOut, set_pen_shortwave
-use MOM_diabatic_aux,        only : diagnoseMLDbyDensityDifference, diagnoseMLDbyEnergy
 use MOM_diag_mediator,       only : post_data, register_diag_field, safe_alloc_ptr
 use MOM_diag_mediator,       only : post_product_sum_u, post_product_sum_v
 use MOM_diag_mediator,       only : diag_ctrl, time_type, diag_update_remap_grids
@@ -22,6 +21,7 @@ use MOM_diag_mediator,       only : diag_ctrl, query_averaging_enabled, enable_a
 use MOM_diag_mediator,       only : diag_grid_storage, diag_grid_storage_init, diag_grid_storage_end
 use MOM_diag_mediator,       only : diag_copy_diag_to_storage, diag_copy_storage_to_diag
 use MOM_diag_mediator,       only : diag_save_grids, diag_restore_grids
+use MOM_diagnose_mld,        only : diagnoseMLDbyDensityDifference, diagnoseMLDbyEnergy
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_init, diapyc_energy_req_end
 use MOM_diapyc_energy_req,   only : diapyc_energy_req_calc, diapyc_energy_req_test, diapyc_energy_req_CS
 use MOM_CVMix_conv,          only : CVMix_conv_init, CVMix_conv_cs
