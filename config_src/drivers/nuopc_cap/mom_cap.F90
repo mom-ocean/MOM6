@@ -294,7 +294,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   if (isPresent .and. isSet) then
     read(value,*) dbug
-  end if
+  endif
   write(logmsg,'(i6)') dbug
   call ESMF_LogWrite('MOM_cap:dbug = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
@@ -371,7 +371,7 @@ subroutine InitializeP0(gcomp, importState, exportState, clock, rc)
   write(logmsg,*) use_mommesh
   call ESMF_LogWrite('MOM_cap:use_mommesh = '//trim(logmsg), ESMF_LOGMSG_INFO)
 
-  if(use_mommesh)then
+  if (use_mommesh) then
     geomtype = ESMF_GEOMTYPE_MESH
     call NUOPC_CompAttributeGet(gcomp, name='mesh_ocn', isPresent=isPresent, isSet=isSet, rc=rc)
     if (.not. isPresent .and. .not. isSet) then
@@ -451,6 +451,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   character(len=32)                      :: calendar
   character(len=:), allocatable          :: rpointer_filename
   integer                                :: inst_index
+  logical                                :: i2o_per_cat
   real(8)                                :: MPI_Wtime, timeiads
 !--------------------------------
 
@@ -568,6 +569,34 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   time0 = set_date (YEAR,MONTH,DAY,HOUR,MINUTE,SECOND)
 
+  !-----------------
+  ! optional input from cice columns due to ice thickness categories
+  !-----------------
+
+  Ice_ocean_boundary%ice_ncat = 0
+  if (cesm_coupled) then
+    ! Note that flds_i2o_per_cat is set by the env_run.xml variable CPL_I2O_PER_CAT
+    ! This xml variable is set by MOM_interface's buildnml script; it has the same
+    ! value as USE_MARBL in the case
+    call NUOPC_CompAttributeGet(gcomp, name='flds_i2o_per_cat', value=cvalue, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    read(cvalue,*) i2o_per_cat
+    if (is_root_pe()) then
+        write(stdout,*) 'i2o_per_cat = ',i2o_per_cat
+    endif
+
+    ! Note that ice_ncat is set by the env_run.xml variable ICE_NCAT which is set
+    ! by the ice component (default is 1)
+    if (i2o_per_cat) then
+      call NUOPC_CompAttributeGet(gcomp, name='ice_ncat', value=cvalue, rc=rc)
+      if (ChkErr(rc,__LINE__,u_FILE_u)) return
+      read(cvalue,*) Ice_ocean_boundary%ice_ncat
+    endif
+    if (is_root_pe()) then
+        write(stdout,*) 'ice_ncat = ', Ice_ocean_boundary%ice_ncat
+    endif
+  end if
+
   if (is_root_pe()) then
     write(stdout,*) subname//'start time: y,m,d-',year,month,day,'h,m,s=',hour,minute,second
   endif
@@ -671,74 +700,70 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   call get_domain_extent(ocean_public%domain, isc, iec, jsc, jec)
 
-  allocate ( Ice_ocean_boundary% u_flux (isc:iec,jsc:jec),          &
-             Ice_ocean_boundary% v_flux (isc:iec,jsc:jec),          &
-             Ice_ocean_boundary% t_flux (isc:iec,jsc:jec),          &
-             Ice_ocean_boundary% q_flux (isc:iec,jsc:jec),          &
-             Ice_ocean_boundary% salt_flux (isc:iec,jsc:jec),       &
-             Ice_ocean_boundary% lw_flux (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% sw_flux_vis_dir (isc:iec,jsc:jec), &
-             Ice_ocean_boundary% sw_flux_vis_dif (isc:iec,jsc:jec), &
-             Ice_ocean_boundary% sw_flux_nir_dir (isc:iec,jsc:jec), &
-             Ice_ocean_boundary% sw_flux_nir_dif (isc:iec,jsc:jec), &
-             Ice_ocean_boundary% lprec (isc:iec,jsc:jec),           &
-             Ice_ocean_boundary% fprec (isc:iec,jsc:jec),           &
-             Ice_ocean_boundary% seaice_melt_heat (isc:iec,jsc:jec),&
-             Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
-             Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
-             Ice_ocean_boundary% ice_fraction (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% u10_sqr (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
-             Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% frunoff (isc:iec,jsc:jec))
+  allocate(Ice_ocean_boundary% u_flux (isc:iec,jsc:jec),          &
+           Ice_ocean_boundary% v_flux (isc:iec,jsc:jec),          &
+           Ice_ocean_boundary% t_flux (isc:iec,jsc:jec),          &
+           Ice_ocean_boundary% q_flux (isc:iec,jsc:jec),          &
+           Ice_ocean_boundary% salt_flux (isc:iec,jsc:jec),       &
+           Ice_ocean_boundary% lw_flux (isc:iec,jsc:jec),         &
+           Ice_ocean_boundary% sw_flux_vis_dir (isc:iec,jsc:jec), &
+           Ice_ocean_boundary% sw_flux_vis_dif (isc:iec,jsc:jec), &
+           Ice_ocean_boundary% sw_flux_nir_dir (isc:iec,jsc:jec), &
+           Ice_ocean_boundary% sw_flux_nir_dif (isc:iec,jsc:jec), &
+           Ice_ocean_boundary% lprec (isc:iec,jsc:jec),           &
+           Ice_ocean_boundary% fprec (isc:iec,jsc:jec),           &
+           Ice_ocean_boundary% seaice_melt_heat (isc:iec,jsc:jec),&
+           Ice_ocean_boundary% seaice_melt (isc:iec,jsc:jec),     &
+           Ice_ocean_boundary% mi (isc:iec,jsc:jec),              &
+           Ice_ocean_boundary% ice_fraction (isc:iec,jsc:jec),    &
+           Ice_ocean_boundary% u10_sqr (isc:iec,jsc:jec),         &
+           Ice_ocean_boundary% p (isc:iec,jsc:jec),               &
+           Ice_ocean_boundary% lrunoff (isc:iec,jsc:jec),         &
+           Ice_ocean_boundary% frunoff (isc:iec,jsc:jec),         &
+           source=0.0)
 
-  Ice_ocean_boundary%u_flux          = 0.0
-  Ice_ocean_boundary%v_flux          = 0.0
-  Ice_ocean_boundary%t_flux          = 0.0
-  Ice_ocean_boundary%q_flux          = 0.0
-  Ice_ocean_boundary%salt_flux       = 0.0
-  Ice_ocean_boundary%lw_flux         = 0.0
-  Ice_ocean_boundary%sw_flux_vis_dir = 0.0
-  Ice_ocean_boundary%sw_flux_vis_dif = 0.0
-  Ice_ocean_boundary%sw_flux_nir_dir = 0.0
-  Ice_ocean_boundary%sw_flux_nir_dif = 0.0
-  Ice_ocean_boundary%lprec           = 0.0
-  Ice_ocean_boundary%fprec           = 0.0
-  Ice_ocean_boundary%seaice_melt     = 0.0
-  Ice_ocean_boundary%seaice_melt_heat= 0.0
-  Ice_ocean_boundary%mi              = 0.0
-  Ice_ocean_boundary%ice_fraction    = 0.0
-  Ice_ocean_boundary%u10_sqr         = 0.0
-  Ice_ocean_boundary%p               = 0.0
-  Ice_ocean_boundary%lrunoff         = 0.0
-  Ice_ocean_boundary%frunoff         = 0.0
+  ! Allocate memory for fields coming from multiple ice categories
+  if (Ice_ocean_boundary%ice_ncat > 0) &
+    allocate(Ice_ocean_boundary% afracr(isc:iec,jsc:jec),       &
+             Ice_ocean_boundary% swnet_afracr(isc:iec,jsc:jec), &
+             Ice_ocean_boundary% swpen_ifrac_n(isc:iec,jsc:jec,1:Ice_ocean_boundary%ice_ncat), &
+             Ice_ocean_boundary% ifrac_n(isc:iec,jsc:jec,1:Ice_ocean_boundary%ice_ncat), &
+             source=0.0)
 
   if (cesm_coupled) then
-    allocate (Ice_ocean_boundary% hrain (isc:iec,jsc:jec),           &
-              Ice_ocean_boundary% hsnow (isc:iec,jsc:jec),           &
-              Ice_ocean_boundary% hrofl (isc:iec,jsc:jec),           &
-              Ice_ocean_boundary% hrofi (isc:iec,jsc:jec),           &
-              Ice_ocean_boundary% hevap (isc:iec,jsc:jec),           &
-              Ice_ocean_boundary% hcond (isc:iec,jsc:jec))
+    allocate(Ice_ocean_boundary% hrain (isc:iec,jsc:jec),           &
+             Ice_ocean_boundary% hsnow (isc:iec,jsc:jec),           &
+             Ice_ocean_boundary% hrofl (isc:iec,jsc:jec),           &
+             Ice_ocean_boundary% hrofi (isc:iec,jsc:jec),           &
+             Ice_ocean_boundary% hevap (isc:iec,jsc:jec),           &
+             Ice_ocean_boundary% hcond (isc:iec,jsc:jec),           &
+             source=0.0)
 
-    Ice_ocean_boundary%hrain           = 0.0
-    Ice_ocean_boundary%hsnow           = 0.0
-    Ice_ocean_boundary%hrofl           = 0.0
-    Ice_ocean_boundary%hrofi           = 0.0
-    Ice_ocean_boundary%hevap           = 0.0
-    Ice_ocean_boundary%hcond           = 0.0
+    ! Needed for MARBL
+    ! These are allocated separately to make it easier to pull out
+    ! of the cesm_coupled block if other models want to add BGC
+    allocate(Ice_ocean_boundary% nhx_dep (isc:iec,jsc:jec),         &
+             Ice_ocean_boundary% noy_dep (isc:iec,jsc:jec),         &
+             Ice_ocean_boundary% atm_fine_dust_flux (isc:iec,jsc:jec),  &
+             Ice_ocean_boundary% atm_coarse_dust_flux (isc:iec,jsc:jec),&
+             Ice_ocean_boundary% seaice_dust_flux (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% atm_bc_flux (isc:iec,jsc:jec),         &
+             Ice_ocean_boundary% seaice_bc_flux (isc:iec,jsc:jec),      &
+             Ice_ocean_boundary% atm_co2_prog (isc:iec,jsc:jec),    &
+             Ice_ocean_boundary% atm_co2_diag (isc:iec,jsc:jec),    &
+             source=0.0)
   endif
 
   call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
   if (use_waves) then
     if (wave_method == "EFACTOR") then
-      allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec) )
-      Ice_ocean_boundary%lamult          = 0.0
+      allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec), source=0.0)
     else if (wave_method == "SURFACE_BANDS") then
       call query_ocean_state(ocean_state, NumWaveBands=Ice_ocean_boundary%num_stk_bands)
-      allocate(Ice_ocean_boundary%ustkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
-      allocate(Ice_ocean_boundary%vstkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), source=0.0)
-      allocate(Ice_ocean_boundary%stk_wavenumbers(Ice_ocean_boundary%num_stk_bands), source=0.0)
+      allocate(Ice_ocean_boundary%ustkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+               Ice_ocean_boundary%vstkb(isc:iec,jsc:jec,Ice_ocean_boundary%num_stk_bands), &
+               Ice_ocean_boundary%stk_wavenumbers(Ice_ocean_boundary%num_stk_bands),       &
+               source=0.0)
       call query_ocean_state(ocean_state, WaveNumbers=Ice_ocean_boundary%stk_wavenumbers, unscale=.true.)
     else
       call MOM_error(FATAL, "Unsupported WAVE_METHOD encountered in NUOPC cap.")
@@ -784,6 +809,32 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_hrofl"     , "will provide")
   call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_hrofi"     , "will provide")
 
+  if (Ice_ocean_boundary%ice_ncat > 0) then
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sf_afracr", "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Foxx_swnet_afracr", "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_swpen_ifrac_n", "will provide", &
+                      ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%ice_ncat)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Si_ifrac_n", "will provide", &
+                      ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%ice_ncat)
+  endif
+
+  if (cesm_coupled) then
+    ! Fields needed for MARBL
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ndep"                  , "will provide", & !-> nitrogen deposition
+                      ungridded_lbound=1, ungridded_ubound=2)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstwet"                , "will provide", &
+                      ungridded_lbound=1, ungridded_ubound=4)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_dstdry"                , "will provide", &
+                      ungridded_lbound=1, ungridded_ubound=4)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_bcph"                  , "will provide", &
+                      ungridded_lbound=1, ungridded_ubound=3)
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_flxdst"                , "will provide") !-> ice runoff
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_bcphi"                 , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Fioi_bcpho"                 , "will provide")
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_co2prog"        , "will provide") !-> prognostic CO2 from atm
+    call fld_list_add(fldsToOcn_num, fldsToOcn, "Sa_co2diag"        , "will provide") !-> diagnostic CO2 from atm
+  endif
+
   if (use_waves) then
     if (wave_method == "EFACTOR") then
       call fld_list_add(fldsToOcn_num, fldsToOcn, "Sw_lamult"   , "will provide")
@@ -807,6 +858,9 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"    , "will provide")
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"     , "will provide")
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth" , "will provide")
+  if (cesm_coupled) then
+    call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Faoo_fco2_ocn", "will provide")
+  endif
 
   do n = 1,fldsToOcn_num
     call NUOPC_Advertise(importState, standardName=fldsToOcn(n)%stdname, name=fldsToOcn(n)%shortname, rc=rc)
@@ -1150,7 +1204,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
         write(err_msg, frmt)n,lonMesh(n),lon(n), diff_lon, eps_omesh
         call MOM_error(FATAL, err_msg)
-      end if
+      endif
       diff_lat = abs(latMesh(n) - lat(n))
       if (diff_lat > eps_omesh) then
         frmt = "('ERROR: Difference between ESMF Mesh and MOM6 domain coords is"//&
@@ -1158,17 +1212,18 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
                "EPS_OMESH= ',i8,2(f21.13,3x),2(d21.5))"
         write(err_msg, frmt)n,latMesh(n),lat(n), diff_lat, eps_omesh
         call MOM_error(FATAL, err_msg)
-      end if
+      endif
       if (abs(maskMesh(n) - mask(n)) > 0) then
         frmt = "('ERROR: ESMF mesh and MOM6 domain masks are inconsistent! - "//&
                "MOM n, maskMesh(n), mask(n) = ',3(i8,2x))"
         write(err_msg, frmt)n,maskMesh(n),mask(n)
         call MOM_error(FATAL, err_msg)
-      end if
+      endif
     end do
 
     ! realize the import and export fields using the mesh
-    call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", mesh=Emesh, rc=rc)
+    call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", &
+                           ice_ocean_boundary=Ice_ocean_boundary, mesh=Emesh, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", mesh=Emesh, rc=rc)
@@ -1184,10 +1239,9 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
     call ESMF_MeshGet(Emesh, numOwnedElements=numOwnedElements, spatialDim=spatialDim, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-    allocate (mod2med_areacor(numOwnedElements))
-    allocate (med2mod_areacor(numOwnedElements))
-    mod2med_areacor(:) = 1._ESMF_KIND_R8
-    med2mod_areacor(:) = 1._ESMF_KIND_R8
+    allocate(mod2med_areacor(numOwnedElements), &
+             med2mod_areacor(numOwnedElements), &
+             source=1._ESMF_KIND_R8)
 
 #ifdef CESMCOUPLED
     ! Determine model areas and flux correction factors (module variables in mom_)
@@ -1209,7 +1263,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
           model_areas(k) = ocean_grid%AreaT(i,j) / ocean_grid%Rad_Earth_L**2
           mod2med_areacor(k) = model_areas(k) / mesh_areas(k)
           med2mod_areacor(k) = mesh_areas(k) / model_areas(k)
-        end if
+        endif
       end do
     end do
     deallocate(mesh_areas)
@@ -1230,7 +1284,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
             min_areacor_glob(1), max_areacor_glob(1), 'MOM6'
       write(stdout,'(2A,2g23.15,A )') trim(subname),' :  min_med2mod_areacor, max_med2mod_areacor ',&
             min_areacor_glob(2), max_areacor_glob(2), 'MOM6'
-    end if
+    endif
 #endif
 
     deallocate(ownedElemCoords)
@@ -1417,7 +1471,7 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
         dataPtr_mask(i1,j1)  = ocean_grid%mask2dT(ig,jg)
         dataPtr_xcen(i1,j1)  = ocean_grid%geolonT(ig,jg)
         dataPtr_ycen(i1,j1)  = ocean_grid%geolatT(ig,jg)
-        if(grid_attach_area) then
+        if (grid_attach_area) then
           dataPtr_area(i1,j1) = ocean_grid%US%L_to_m**2 * ocean_grid%areaT(ig,jg)
         endif
       enddo
@@ -1459,7 +1513,8 @@ subroutine InitializeRealize(gcomp, importState, exportState, clock, rc)
 
     gridOut = gridIn ! for now out same as in
 
-    call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", grid=gridIn, rc=rc)
+    call MOM_RealizeFields(importState, fldsToOcn_num, fldsToOcn, "Ocn import", &
+         ice_ocean_boundary=Ice_ocean_boundary, grid=gridIn, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
     call MOM_RealizeFields(exportState, fldsFrOcn_num, fldsFrOcn, "Ocn export", grid=gridOut, rc=rc)
@@ -1746,7 +1801,7 @@ subroutine ModelAdvance(gcomp, rc)
     if (dbug > 0) then
       call state_diagnose(importState,subname//':IS ',rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    end if
+    endif
 
     !---------------
     ! Get ocean grid
@@ -1765,10 +1820,10 @@ subroutine ModelAdvance(gcomp, rc)
     ! Update MOM6
     !---------------
 
-    if(profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
+    if (profile_memory) call ESMF_VMLogMemInfo("Entering MOM update_ocean_model: ")
     call update_ocean_model(Ice_ocean_boundary, ocean_state, ocean_public, Time, Time_step_coupled, &
                             cesm_coupled)
-    if(profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
+    if (profile_memory) call ESMF_VMLogMemInfo("Leaving MOM update_ocean_model: ")
 
     !---------------
     ! Export Data
@@ -1780,7 +1835,7 @@ subroutine ModelAdvance(gcomp, rc)
     if (dbug > 0) then
       call state_diagnose(exportState,subname//':ES ',rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
-    end if
+    endif
   endif
 
   !---------------
@@ -2045,7 +2100,7 @@ subroutine ModelSetRunClock(gcomp, rc)
       if (isPresent .and. isSet) then
         call ESMF_LogWrite(subname//" Restart_n = "//trim(cvalue), ESMF_LOGMSG_INFO)
         read(cvalue,*) restart_n
-        if (restart_n /= 0)then
+        if (restart_n /= 0) then
           call NUOPC_CompAttributeGet(gcomp, name="restart_option", value=cvalue, &
                isPresent=isPresent, isSet=isSet, rc=rc)
           if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -2088,7 +2143,7 @@ subroutine ModelSetRunClock(gcomp, rc)
       call ESMF_AlarmSet(restart_alarm, clock=mclock, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
       call ESMF_LogWrite(subname//" Restart alarm is Created and Set", ESMF_LOGMSG_INFO)
-    end if
+    endif
 
     ! create a 1-shot alarm at the driver stop time
     stop_alarm = ESMF_AlarmCreate(mclock, ringtime=dstopTime, name = "stop_alarm", rc=rc)
@@ -2196,9 +2251,9 @@ subroutine ocean_model_finalize(gcomp, rc)
     write_restart = .true.
   else
     write_restart = .false.
-  end if
-  if (write_restart)call ESMF_LogWrite("No Restart Alarm, writing restart at Finalize ", &
-                         ESMF_LOGMSG_INFO)
+  endif
+  if (write_restart) call ESMF_LogWrite("No Restart Alarm, writing restart at Finalize ", &
+                          ESMF_LOGMSG_INFO)
 
   call ocean_model_end(ocean_public, ocean_State, Time, write_restart=write_restart)
 
@@ -2247,16 +2302,17 @@ subroutine State_SetScalar(value, scalar_id, State, mytask, scalar_name, scalar_
 end subroutine State_SetScalar
 
 !> Realize the import and export fields using either a grid or a mesh.
-subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
-  type(ESMF_State)    , intent(inout)        :: state !< ESMF_State object for
-                                                      !! import/export fields.
-  integer             , intent(in)           :: nfields !< Number of fields.
-  type(fld_list_type) , intent(inout)        :: field_defs(:) !< Structure with field's
-                                                              !! information.
-  character(len=*)    , intent(in)           :: tag !< Import or export.
-  type(ESMF_Grid)     , intent(in), optional :: grid!< ESMF grid.
-  type(ESMF_Mesh)     , intent(in), optional :: mesh!< ESMF mesh.
-  integer             , intent(inout)        :: rc  !< Return code.
+subroutine MOM_RealizeFields(state, nfields, field_defs, tag, ice_ocean_boundary, grid, mesh, rc)
+  type(ESMF_State)             , intent(inout)           :: state !< ESMF_State object for
+                                                                  !! import/export fields.
+  integer                      , intent(in)              :: nfields !< Number of fields.
+  type(fld_list_type)          , intent(inout)           :: field_defs(:) !< Structure with field's
+                                                                          !! information.
+  type(ice_ocean_boundary_type), intent(inout), optional :: ice_ocean_boundary  !< May need to nullify atm_co2
+  character(len=*)             , intent(in)              :: tag !< Import or export.
+  type(ESMF_Grid)              , intent(in)   , optional :: grid!< ESMF grid.
+  type(ESMF_Mesh)              , intent(in)   , optional :: mesh!< ESMF mesh.
+  integer                      , intent(inout)           :: rc  !< Return code.
 
   ! local variables
   integer                     :: i
@@ -2336,6 +2392,18 @@ subroutine MOM_RealizeFields(state, nfields, field_defs, tag, grid, mesh, rc)
       call ESMF_LogWrite(subname // tag // " Field "// trim(field_defs(i)%stdname) // " is not connected.", &
         ESMF_LOGMSG_INFO)
 
+      if (present(ice_ocean_boundary)) then
+        if (trim(field_defs(i)%stdname) == 'Sa_co2prog') then
+          if (is_root_pe()) write(stdout,*) subname // tag // " Nullifying ice_ocean_boundary%atm_co2_prog"
+          deallocate(ice_ocean_boundary%atm_co2_prog)
+          nullify(ice_ocean_boundary%atm_co2_prog)
+        elseif (trim(field_defs(i)%stdname) == 'Sa_co2diag') then
+          if (is_root_pe()) write(stdout,*) subname // tag // " Nullifying ice_ocean_boundary%atm_co2_diag"
+          deallocate(ice_ocean_boundary%atm_co2_diag)
+          nullify(ice_ocean_boundary%atm_co2_diag)
+        endif
+      endif
+
       ! remove a not connected Field from State
       call ESMF_StateRemove(state, (/field_defs(i)%shortname/), rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
@@ -2410,7 +2478,7 @@ subroutine fld_list_add(num, fldlist, stdname, transferOffer, shortname, ungridd
   if (present(ungridded_lbound) .and. present(ungridded_ubound)) then
     fldlist(num)%ungridded_lbound = ungridded_lbound
     fldlist(num)%ungridded_ubound = ungridded_ubound
-  end if
+  endif
 
 end subroutine fld_list_add
 

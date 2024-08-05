@@ -437,7 +437,7 @@ integer function  find_minimum(x, s, e)
     if (x(i) < minimum) then !   if x(i) less than the min?
       minimum  = x(i)   !      Yes, a new minimum found
       location = i                !      record its position
-    end if
+    endif
   enddo
   find_minimum = location          ! return the position
 end function  find_minimum
