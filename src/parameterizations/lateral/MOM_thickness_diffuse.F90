@@ -49,6 +49,9 @@ type, public :: thickness_diffuse_CS ; private
   real    :: kappa_smooth        !< Vertical diffusivity used to interpolate more sensible values
                                  !! of T & S into thin layers [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   logical :: thickness_diffuse   !< If true, interfaces heights are diffused.
+  logical :: full_depth_khth_min !< If true, KHTH_MIN is enforced throughout the whole water column.
+                                 !! Otherwise, KHTH_MIN is only enforced at the surface. This parameter
+                                 !! is only available when KHTH_USE_EBT_STRUCT=True and KHTH_MIN>0.
   logical :: use_FGNV_streamfn   !< If true, use the streamfunction formulation of
                                  !! Ferrari et al., 2010, which effectively emphasizes
                                  !! graver vertical modes by smoothing in the vertical.
@@ -301,10 +304,18 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   enddo ; enddo
 
   if (khth_use_ebt_struct) then
-    !$OMP do
-    do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
-      KH_u(I,j,K) = KH_u(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
-    enddo ; enddo ; enddo
+    if (CS%full_depth_khth_min) then
+      !$OMP do
+      do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
+        KH_u(I,j,K) = KH_u(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+        KH_u(I,j,K) = max(KH_u(I,j,K), CS%Khth_Min)
+      enddo ; enddo ; enddo
+    else
+      !$OMP do
+      do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
+        KH_u(I,j,K) = KH_u(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+      enddo ; enddo ; enddo
+    endif
   else
     !$OMP do
     do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
@@ -397,10 +408,18 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
   if (khth_use_ebt_struct) then
-    !$OMP do
-    do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
-      KH_v(i,J,K) = KH_v(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
-    enddo ; enddo ; enddo
+    if (CS%full_depth_khth_min) then
+      !$OMP do
+      do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
+        KH_v(i,J,K) = KH_v(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+        KH_v(i,J,K) = max(KH_v(i,J,K), CS%Khth_Min)
+      enddo ; enddo ; enddo
+    else
+      !$OMP do
+      do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
+        KH_v(i,J,K) = KH_v(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+      enddo ; enddo ; enddo
+    endif
   else
     !$OMP do
     do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
@@ -2169,7 +2188,11 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                        ! rotation [nondim].
   real :: Stanley_coeff ! Coefficient relating the temperature gradient and sub-gridscale
                         ! temperature variance [nondim]
-  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: khth_use_ebt_struct ! If true, uses the equivalent barotropic structure
+                                 ! as the vertical structure of thickness diffusivity.
+                                 ! Used to determine if FULL_DEPTH_KHTH_MIN should be
+                                 ! available.
+  integer :: default_answer_date ! The default setting for the various ANSWER_DATE flags.
   integer :: i, j
 
   CS%initialized = .true.
@@ -2215,6 +2238,17 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "KHTH_MIN", CS%KHTH_Min, &
                  "The minimum horizontal thickness diffusivity.", &
                  default=0.0, units="m2 s-1", scale=US%m_to_L**2*US%T_to_s)
+  call get_param(param_file, mdl, "KHTH_USE_EBT_STRUCT", khth_use_ebt_struct, &
+                 "If true, uses the equivalent barotropic structure "//&
+                 "as the vertical structure of thickness diffusivity.",&
+                 default=.false., do_not_log=.true.)
+  if (khth_use_ebt_struct .and. CS%KHTH_Min>0.0) then
+    call get_param(param_file, mdl, "FULL_DEPTH_KHTH_MIN", CS%full_depth_khth_min, &
+                   "If true, KHTH_MIN is enforced throughout the whole water column. "//&
+                   "Otherwise, KHTH_MIN is only enforced at the surface. This parameter "//&
+                   "is only available when KHTH_USE_EBT_STRUCT=True and KHTH_MIN>0.",      &
+                   default=.false.)
+  endif
   call get_param(param_file, mdl, "KHTH_MAX", CS%KHTH_Max, &
                  "The maximum horizontal thickness diffusivity.", &
                  default=0.0, units="m2 s-1", scale=US%m_to_L**2*US%T_to_s)
