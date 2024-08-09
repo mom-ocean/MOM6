@@ -88,13 +88,13 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
                  'Initial salt mixed layer depth', &
                  units='m', default=0.0, scale=US%m_to_Z, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L1_SALT", UpperLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 'Layer 2 surface salinity', units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L1_TEMP", UpperLayerTemp, &
-                 'Layer 1 surface temperature', units='C', default=20.0, scale=US%degC_to_C, do_not_log=just_read)
+                 'Layer 1 surface temperature', units="degC", default=20.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_SALT", LowerLayerSalt, &
-                 'Layer 2 surface salinity', units='1e-3', default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
+                 'Layer 2 surface salinity', units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_TEMP", LowerLayerTemp, &
-                 'Layer 2 surface temperature', units='C', default=20.0, scale=US%degC_to_C, do_not_log=just_read)
+                 'Layer 2 surface temperature', units="degC", default=20.0, scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_DTDZ", LowerLayerdTdZ,     &
                  'Initial temperature stratification in layer 2', &
                  units='C/m', default=0.0, scale=US%degC_to_C*US%Z_to_m, do_not_log=just_read)
@@ -102,7 +102,7 @@ subroutine SCM_CVMix_tests_TS_init(T, S, h, G, GV, US, param_file, just_read)
                  'Initial salinity stratification in layer 2', &
                  units='PPT/m', default=0.0, scale=US%ppt_to_S*US%Z_to_m, do_not_log=just_read)
   call get_param(param_file, mdl, "SCM_L2_MINTEMP",LowerLayerMinTemp, &
-                 'Layer 2 minimum temperature', units='C', default=4.0, scale=US%degC_to_C, do_not_log=just_read)
+                 'Layer 2 minimum temperature', units="degC", default=4.0, scale=US%degC_to_C, do_not_log=just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 

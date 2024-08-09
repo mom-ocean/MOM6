@@ -46,11 +46,13 @@ contains
 function isPosSumErrSignificant(n1, sum1, n2, sum2)
   integer, intent(in) :: n1   !< Number of values in sum1
   integer, intent(in) :: n2   !< Number of values in sum2
-  real,    intent(in) :: sum1 !< Sum of n1 values [A]
+  real,    intent(in) :: sum1 !< Sum of n1 values in arbitrary units [A]
   real,    intent(in) :: sum2 !< Sum of n2 values [A]
   logical             :: isPosSumErrSignificant !< True if difference in sums is large
   ! Local variables
-  real :: sumErr, allowedErr, eps
+  real :: sumErr      ! The absolutde difference in the sums [A]
+  real :: allowedErr  ! The tolerance for the integrated reconstruction [A]
+  real :: eps         ! A tiny fractional error [nondim]
 
   if (sum1<0.) call MOM_error(FATAL,'isPosSumErrSignificant: sum1<0 is not allowed!')
   if (sum2<0.) call MOM_error(FATAL,'isPosSumErrSignificant: sum2<0 is not allowed!')
@@ -73,22 +75,22 @@ end function isPosSumErrSignificant
 subroutine remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
                               n1, h1, method, u1, h_neglect )
   integer,       intent(in)    :: n0     !< Number of cells in source grid
-  real,          intent(in)    :: h0(:)  !< Source grid widths (size n0)
-  real,          intent(in)    :: u0(:)  !< Source cell averages (size n0)
-  real,          intent(in)    :: ppoly0_E(:,:)     !< Edge value of polynomial
-  real,          intent(in)    :: ppoly0_coefs(:,:) !< Coefficients of polynomial
+  real,          intent(in)    :: h0(:)  !< Source grid widths (size n0) in thickness units [H]
+  real,          intent(in)    :: u0(:)  !< Source cell averages (size n0) in arbitrary units [A]
+  real,          intent(in)    :: ppoly0_E(:,:)     !< Edge value of polynomial [A]
+  real,          intent(in)    :: ppoly0_coefs(:,:) !< Coefficients of polynomial [A]
   integer,       intent(in)    :: n1     !< Number of cells in target grid
-  real,          intent(in)    :: h1(:)  !< Target grid widths (size n1)
+  real,          intent(in)    :: h1(:)  !< Target grid widths (size n1) [H]
   integer,       intent(in)    :: method !< Remapping scheme to use
-  real,          intent(out)   :: u1(:)  !< Target cell averages (size n1)
+  real,          intent(out)   :: u1(:)  !< Target cell averages (size n1) [A]
   real, optional, intent(in)   :: h_neglect !< A negligibly small width for the
                                            !! purpose of cell reconstructions
-                                           !! in the same units as h.
+                                           !! in the same units as h [H].
   ! Local variables
   integer       :: iTarget
-  real          :: xL, xR       ! coordinates of target cell edges
+  real          :: xL, xR       ! coordinates of target cell edges [H]
   integer       :: jStart ! Used by integrateReconOnInterval()
-  real          :: xStart ! Used by integrateReconOnInterval()
+  real          :: xStart ! Used by integrateReconOnInterval() [H]
 
   ! Loop on cells in target grid (grid1). For each target cell, we need to find
   ! in which source cells the target cell edges lie. The associated indexes are
@@ -120,27 +122,32 @@ end subroutine remapByProjection
 subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, dx1, &
                           method, u1, h1, h_neglect )
   integer,              intent(in)  :: n0     !< Number of cells in source grid
-  real, dimension(:),   intent(in)  :: h0     !< Source grid sizes (size n0)
-  real, dimension(:),   intent(in)  :: u0     !< Source cell averages (size n0)
-  real, dimension(:,:), intent(in)  :: ppoly0_E !< Edge value of polynomial
-  real, dimension(:,:), intent(in)  :: ppoly0_coefs !< Coefficients of polynomial
+  real, dimension(:),   intent(in)  :: h0     !< Source grid sizes (size n0) in thickness units [H]
+  real, dimension(:),   intent(in)  :: u0     !< Source cell averages (size n0) in arbitrary units [A]
+  real, dimension(:,:), intent(in)  :: ppoly0_E !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(in)  :: ppoly0_coefs !< Coefficients of polynomial [A]
   integer,              intent(in)  :: n1     !< Number of cells in target grid
-  real, dimension(:),   intent(in)  :: dx1    !< Target grid edge positions (size n1+1)
+  real, dimension(:),   intent(in)  :: dx1    !< Target grid edge positions (size n1+1) [H]
   integer,              intent(in)  :: method !< Remapping scheme to use
-  real, dimension(:),   intent(out) :: u1     !< Target cell averages (size n1)
+  real, dimension(:),   intent(out) :: u1     !< Target cell averages (size n1) [A]
   real, dimension(:), &
-              optional, intent(out) :: h1     !< Target grid widths (size n1)
+              optional, intent(out) :: h1     !< Target grid widths (size n1) [H]
   real,       optional, intent(in)  :: h_neglect !< A negligibly small width for the
                                            !! purpose of cell reconstructions
-                                           !! in the same units as h.
+                                           !! in the same units as h [H].
   ! Local variables
   integer :: iTarget
-  real    :: xL, xR    ! coordinates of target cell edges
-  real    :: xOld, hOld, uOld
-  real    :: xNew, hNew, h_err
-  real    :: uhNew, hFlux, uAve, fluxL, fluxR
+  real    :: xL, xR     ! Coordinates of target cell edges [H]
+  real    :: xOld, xNew ! Edge positions on the old and new grids [H]
+  real    :: hOld, hNew ! Cell thicknesses on the old and new grids [H]
+  real    :: uOld       ! A source cell average of u [A]
+  real    :: h_err      ! An estimate of the error in the reconstructed thicknesses [H]
+  real    :: uhNew      ! Cell integrated u on the new grid [A H]
+  real    :: hFlux      ! Width of the remapped volume [H]
+  real    :: uAve       ! Target cell average of u [A]
+  real    :: fluxL, fluxR ! Fluxes of u through the two cell faces [A H]
   integer :: jStart ! Used by integrateReconOnInterval()
-  real    :: xStart ! Used by integrateReconOnInterval()
+  real    :: xStart ! Used by integrateReconOnInterval() [H]
 
   ! Loop on cells in target grid. For each cell, iTarget, the left flux is
   ! the right flux of the cell to the left, iTarget-1.
@@ -198,36 +205,35 @@ end subroutine remapByDeltaZ
 subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method, &
                                      xL, xR, hC, uAve, jStart, xStart, h_neglect )
   integer,              intent(in)    :: n0     !< Number of cells in source grid
-  real, dimension(:),   intent(in)    :: h0     !< Source grid sizes (size n0)
-  real, dimension(:),   intent(in)    :: u0     !< Source cell averages
-  real, dimension(:,:), intent(in)    :: ppoly0_E !< Edge value of polynomial
-  real, dimension(:,:), intent(in)    :: ppoly0_coefs !< Coefficients of polynomial
+  real, dimension(:),   intent(in)    :: h0     !< Source grid sizes (size n0) in thickness units [H]
+  real, dimension(:),   intent(in)    :: u0     !< Source cell averages in arbitrary units [A]
+  real, dimension(:,:), intent(in)    :: ppoly0_E !< Edge value of polynomial [A]
+  real, dimension(:,:), intent(in)    :: ppoly0_coefs !< Coefficients of polynomial [A]
   integer,              intent(in)    :: method !< Remapping scheme to use
-  real,                 intent(in)    :: xL     !< Left edges of target cell
-  real,                 intent(in)    :: xR     !< Right edges of target cell
-  real,                 intent(in)    :: hC     !< Cell width hC = xR - xL
-  real,                 intent(out)   :: uAve   !< Average value on target cell
+  real,                 intent(in)    :: xL     !< Left edges of target cell [H]
+  real,                 intent(in)    :: xR     !< Right edges of target cell [H]
+  real,                 intent(in)    :: hC     !< Cell width hC = xR - xL [H]
+  real,                 intent(out)   :: uAve   !< Average value on target cell [A]
   integer,              intent(inout) :: jStart !< The index of the cell to start searching from
                                    !< On exit, contains index of last cell used
-  real,                 intent(inout) :: xStart !< The left edge position of cell jStart
+  real,                 intent(inout) :: xStart !< The left edge position of cell jStart [H]
                                    !< On first entry should be 0.
   real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
                                           !! purpose of cell reconstructions
-                                          !! in the same units as h
+                                          !! in the same units as h [H]
   ! Local variables
   integer :: j, k
-  integer :: jL, jR       ! indexes of source cells containing target
-                          ! cell edges
-  real    :: q            ! complete integration
-  real    :: xi0, xi1     ! interval of integration (local -- normalized
-                          ! -- coordinates)
-  real    :: x0jLl, x0jLr ! Left/right position of cell jL
-  real    :: x0jRl, x0jRr ! Left/right position of cell jR
+  integer :: jL, jR       ! indexes of source cells containing target cell edges
+  real    :: q            ! complete integration [A H]
+  real    :: xi0, xi1     ! interval of integration (local -- normalized -- coordinates) [nondim]
+  real    :: x0jLl, x0jLr ! Left/right position of cell jL [H]
+  real    :: x0jRl, x0jRr ! Left/right position of cell jR [H]
   real    :: hAct         ! The distance actually used in the integration
-                          ! (notionally xR - xL) which differs due to roundoff.
-  real    :: x0_2, x1_2, x02px12, x0px1 ! Used in evaluation of integrated polynomials
-  real    :: hNeglect     ! A negligible thickness in the same units as h
-  real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials
+                          ! (notionally xR - xL) which differs due to roundoff [H].
+  real    :: x0_2, x1_2   ! Squares of normalized positions used to evaluate polynomials [nondim]
+  real    :: x0px1, x02px12 ! Sums of normalized positions and their squares [nondim]
+  real    :: hNeglect     ! A negligible thickness in the same units as h [H]
+  real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials [nondim]
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
@@ -281,7 +287,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
     if ( h0(jL) == 0.0 ) then
       uAve = 0.5 * ( ppoly0_E(jL,1) + ppoly0_E(jL,2) )
     else
-      !### WHY IS THIS NOT WRITTEN AS xi0 = ( xL - x0jLl ) / h0(jL) ---AJA
+      ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - x0jLl ) / h0(jL) ---AJA
       xi0 = xL / ( h0(jL) + hNeglect ) - x0jLl / ( h0(jL) + hNeglect )
 
       select case ( method )
@@ -540,17 +546,24 @@ logical function remapping_attic_unit_tests(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
   integer, parameter :: n0 = 4, n1 = 3, n2 = 6
-  real :: h0(n0), x0(n0+1), u0(n0)
-  real :: h1(n1), x1(n1+1), u1(n1), hn1(n1), dx1(n1+1)
-  real :: h2(n2), x2(n2+1), u2(n2), hn2(n2), dx2(n2+1)
+  real :: h0(n0), x0(n0+1) ! Test cell widths and edge coordinates [H]
+  real :: u0(n0)           ! Test values for remapping in arbitrary units [A]
+  real :: h1(n1), x1(n1+1) ! Test cell widths and edge coordinates [H]
+  real :: u1(n1)           ! Test values for remapping [A]
+  real :: h2(n2), x2(n2+1) ! Test cell widths and edge coordinates [H]
+  real :: u2(n2)           ! Test values for remapping [A]
+  real :: hn1(n1), hn2(n2) ! Updated grid thicknesses [H]
+  real :: dx1(n1+1), dx2(n2+1) ! Differences in interface positions [H]
   data u0 /9., 3., -3., -9./   ! Linear profile, 4 at surface to -4 at bottom
   data h0 /4*0.75/ ! 4 uniform layers with total depth of 3
   data h1 /3*1./   ! 3 uniform layers with total depth of 3
   data h2 /6*0.5/  ! 6 uniform layers with total depth of 3
-  real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S, ppoly0_coefs
+  real, allocatable, dimension(:,:) :: ppoly0_E, ppoly0_S ! Polynomial edge values [A]
+  real, allocatable, dimension(:,:) :: ppoly0_coefs ! Polynomial reconstruction coefficients [A]
   integer :: answer_date  ! The vintage of the expressions to test
   integer :: i, degree
-  real :: err, h_neglect, h_neglect_edge
+  real :: err  ! Difference between a remapped value and its expected value [A]
+  real :: h_neglect, h_neglect_edge ! Negligible thicknesses used in remapping [H]
   logical :: thisTest, v
 
   v = verbose

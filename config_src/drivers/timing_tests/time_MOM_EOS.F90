@@ -28,9 +28,9 @@ integer, parameter :: nic=26, halo=4, nits=10000, nsamp=400
 integer, parameter :: nic=23, halo=4, nits=1000, nsamp=400
 #endif
 
-real :: times(nsamp) ! For observing the PDF
+real :: times(nsamp) ! CPU times for observing the PDF [seconds]
 
-! Arrays to hold timings:
+! Arrays to hold timings in [seconds]:
 !  first axis corresponds to the form of EOS
 !  second axis corresponds to the function being timed
 real, dimension(:,:), allocatable :: timings, tmean, tstd, tmin, tmax
@@ -100,14 +100,18 @@ subroutine run_suite(EOS_list, nic, halo, nits, timings)
   integer, intent(in)  :: nits         !< Number of calls to sample
                                        !! (large enough that the CPU timers can resolve
                                        !! the loop)
-  real,    intent(out) :: timings(n_eos,n_fns) !< The average time taken for nits calls
+  real,    intent(out) :: timings(n_eos,n_fns) !< The average time taken for nits calls [seconds]
                                        !! First index corresponds to EOS
                                        !! Second index: 1 = scalar args,
                                        !! 2 = array args without halo,
                                        !! 3 = array args with halo and "dom".
   type(EOS_type) :: EOS
   integer :: e, i, dom(2)
-  real :: start, finish, T, S, P, rho
+  real :: start, finish  ! CPU times [seconds]
+  real :: T  ! A potential or conservative temperature [degC]
+  real :: S  ! A practical salinity or absolute salinity [ppt]
+  real :: P  ! A pressure [Pa]
+  real :: rho ! A density [kg m-3] or specific volume [m3 kg-1]
   real, dimension(nic+2*halo) :: T1, S1, P1, rho1
 
   T = 10.
@@ -171,15 +175,18 @@ subroutine run_one(EOS_list, nic, halo, nits, timing)
   integer, intent(in)  :: nits         !< Number of calls to sample
                                        !! (large enough that the CPU timers can resolve
                                        !! the loop)
-  real,    intent(out) :: timing       !< The average time taken for nits calls
+  real,    intent(out) :: timing       !< The average time taken for nits calls [seconds]
                                        !! First index corresponds to EOS
                                        !! Second index: 1 = scalar args,
                                        !! 2 = array args without halo,
                                        !! 3 = array args with halo and "dom".
   type(EOS_type) :: EOS
   integer :: i, dom(2)
-  real :: start, finish
-  real, dimension(nic+2*halo) :: T1, S1, P1, rho1
+  real :: start, finish  ! CPU times [seconds]
+  real, dimension(nic+2*halo) :: T1   ! Potential or conservative temperatures [degC]
+  real, dimension(nic+2*halo) :: S1   ! A practical salinities or absolute salinities [ppt]
+  real, dimension(nic+2*halo) :: P1   ! Pressures [Pa]
+  real, dimension(nic+2*halo) :: rho1 ! Densities [kg m-3] or specific volumes [m3 kg-1]
 
   ! Time the scalar interface
   call EOS_manual_init(EOS, form_of_EOS=EOS_list(5), &

@@ -1406,6 +1406,17 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     restartname = trim(CS%restartfile)//trim(restartname)
   endif ; endif
 
+  ! Determine if there is a filename_appendix (used for ensemble runs).
+  call get_filename_appendix(filename_appendix)
+  if (len_trim(filename_appendix) > 0) then
+    length = len_trim(restartname)
+    if (restartname(length-2:length) == '.nc') then
+      restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
+    else
+      restartname = restartname(1:length)  //'.'//trim(filename_appendix)
+    endif
+  endif
+
   next_var = 1
   do while (next_var <= CS%novars )
     start_var = next_var
@@ -1429,17 +1440,6 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
 
     enddo
     next_var = m
-
-    ! Determine if there is a filename_appendix (used for ensemble runs).
-    call get_filename_appendix(filename_appendix)
-    if (len_trim(filename_appendix) > 0) then
-      length = len_trim(restartname)
-      if (restartname(length-2:length) == '.nc') then
-        restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-      else
-        restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-      endif
-    endif
 
     restartpath = trim(directory) // trim(restartname)
 

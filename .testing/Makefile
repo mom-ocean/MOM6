@@ -20,7 +20,6 @@
 #
 # General test configuration:
 #   MPIRUN                  MPI job launcher (mpirun, srun, etc)
-#   FRAMEWORK               Model framework (fms1 or fms2)
 #   DO_REPRO_TESTS          Enable production ("repro") testing equivalence
 #   DO_REGRESSION_TESTS     Enable regression tests (usually dev/gfdl)
 #   DO_COVERAGE             Enable code coverage and generate .gcov reports
@@ -46,10 +45,10 @@
 #   LDFLAGS_USER        User-defined linker flags (used for all MOM/FMS builds)
 #
 # Experiment Configuration:
-#   BUILDS  Executables to be built by `make` or `make all`
+#   EXECS   Executables to be built by `make` or `make all`
 #   CONFIGS Model configurations to test (default: `tc*`)
-#   TESTS   Tests to run
 #   DIMS    Dimensional scaling tests
+#   TESTS   Tests to run
 #
 # Regression repository ("target") configuration:
 #   MOM_TARGET_SLUG             URL slug (minus domain) of the target repo
@@ -57,25 +56,28 @@
 #   MOM_TARGET_LOCAL_BRANCH     Target branch name
 # (NOTE: These would typically be configured by a CI.)
 #
-# Paths for stages:
-#   WORKSPACE   Location to place work/ and results/ directories (i.e. where to run the model)
-#
-#----
+# Output paths:
+#   BUILD   Compiled executables and libraries
+#   DEPS    Compiled dependencies
+#   WORK    Test model output
 
 # TODO: POSIX shell compatibility
 SHELL = bash
 
-# No implicit rules
-.SUFFIXES:
+# No implicit rules, suffixes, or variables
+MAKEFLAGS += -rR
 
-# No implicit variables
-MAKEFLAGS += -R
+# Determine the MOM6 autoconf srcdir
+AC_SRCDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../ac
 
 # User-defined configuration
 -include config.mk
 
-# Set the infra framework
-FRAMEWORK ?= fms2
+# Set the FMS library
+FMS_COMMIT ?= 2023.03
+FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
+export FMS_COMMIT
+export FMS_URL
 
 # Set the MPI launcher here
 # TODO: This needs more automated configuration
@@ -104,10 +106,7 @@ FCFLAGS_FMS ?= $(FCFLAGS_DEBUG)
 LDFLAGS_COVERAGE ?= --coverage
 LDFLAGS_USER ?=
 
-# Set to `true` to require identical results from DEBUG and REPRO builds
-# NOTE: Many compilers (Intel, GCC on ARM64) do not produce identical results
-#   across DEBUG and REPRO builds (as defined below), so we disable on
-#   default.
+# Set to verify identical DEBUG and REPRO results
 DO_REPRO_TESTS ?=
 
 # Enable profiling
@@ -116,8 +115,11 @@ DO_PROFILE ?=
 # Enable code coverage runs
 DO_COVERAGE ?=
 
-# Enable code coverage runs
+# Enable unit tests
 DO_UNIT_TESTS ?=
+
+# Check for regressions with target branch
+DO_REGRESSION_TESTS ?=
 
 # Report failure if coverage report is not uploaded
 REQUIRE_COVERAGE_UPLOAD ?=
@@ -128,52 +130,66 @@ REPORT_ERROR_LOGS ?=
 # Time measurement (configurable by the CI)
 TIME ?= time
 
+# Legacy external work directory
+#WORKSPACE ?=
+WORKSPACE ?= .
+
+# Set directories for build/ and work/
+BUILD ?= $(WORKSPACE)/build
+DEPS ?= $(BUILD)/deps
+WORK ?= $(WORKSPACE)/work
 
 # Experiment configuration
-BUILDS ?= symmetric/MOM6 asymmetric/MOM6 openmp/MOM6
+EXECS ?= symmetric/MOM6 asymmetric/MOM6 openmp/MOM6
 CONFIGS ?= $(wildcard tc*)
-TESTS ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
 DIMS ?= t l h z q r
+TESTS ?= grid layout rotate restart openmp nan $(foreach d,$(DIMS),dim.$(d))
 
-# Default is to place work/ and results/ in current directory
-WORKSPACE ?= .
+# Unit test executables
+UNIT_EXECS ?= \
+  $(basename $(notdir $(wildcard ../config_src/drivers/unit_tests/*.F90)))
+
+# Timing test executables
+TIMING_EXECS ?= \
+  $(basename $(notdir $(wildcard ../config_src/drivers/timing_tests/*.F90)))
+
 
 #---
 # Test configuration
 
-# REPRO tests enable reproducibility with optimization, and often do not match
-# the DEBUG results in older GCCs and vendor compilers, so we can optionally
-# disable them.
-ifeq ($(DO_REPRO_TESTS), true)
-  BUILDS += repro/MOM6
+# Set if either DO_COVERAGE or DO_UNIT_TESTS is set
+run_unit_tests =
+
+# REPRO and DEBUG equivalence
+ifdef DO_REPRO_TESTS
+  EXECS += repro/MOM6
   TESTS += repro
 endif
 
 # Profiling
-ifeq ($(DO_PROFILE), true)
-  BUILDS += opt/MOM6 opt_target/MOM6
+ifdef DO_PROFILE
+  EXECS += opt/MOM6 opt_target/MOM6
 endif
 
 # Coverage
-ifeq ($(DO_COVERAGE), true)
-  BUILDS += cov/MOM6
+ifdef DO_COVERAGE
+  EXECS += cov/MOM6
+  run_unit_execs = yes
 endif
 
-# Unit testing (or coverage)
-UNIT_EXECS ?= $(basename $(notdir $(wildcard ../config_src/drivers/unit_tests/*.F90) ) )
-TIMING_EXECS ?= $(basename $(notdir $(wildcard ../config_src/drivers/timing_tests/*.F90) ) )
-ifneq (X$(DO_COVERAGE)$(DO_UNIT_TESTS)X, XX)
-  BUILDS += $(foreach e, $(UNIT_EXECS), unit/$(e))
+# Unit test executables
+ifdef DO_UNIT_TESTS
+  run_unit_tests = yes
 endif
 
-ifeq ($(DO_PROFILE), false)
-  BUILDS += opt/MOM6 opt_target/MOM6
+# If either coverage or unit tests are enabled, build the unit test execs
+ifdef run_unit_tests
+  EXECS += $(foreach e, $(UNIT_EXECS), unit/$(e))
 endif
 
-
-DO_REGRESSION_TESTS ?=
-ifeq ($(DO_REGRESSION_TESTS), true)
-  BUILDS += target/MOM6
+# Regression testing
+ifdef DO_REGRESSION_TESTS
+  EXECS += target/MOM6
   TESTS += regression
 
   MOM_TARGET_SLUG ?= NOAA-GFDL/MOM6
@@ -182,52 +198,23 @@ ifeq ($(DO_REGRESSION_TESTS), true)
   MOM_TARGET_LOCAL_BRANCH ?= dev/gfdl
   MOM_TARGET_BRANCH := origin/$(MOM_TARGET_LOCAL_BRANCH)
 
-  TARGET_CODEBASE = build/target_codebase
+  TARGET_CODEBASE = $(BUILD)/target_codebase
 else
   MOM_TARGET_URL =
   MOM_TARGET_BRANCH =
   TARGET_CODEBASE =
 endif
 
-# List of source files to link this Makefile's dependencies to model Makefiles
-# Assumes a depth of two, and the following extensions: F90 inc c h
-# (1): Root directory
-# NOTE: extensions could be a second variable
-SOURCE = \
-  $(foreach ext,F90 inc c h,$(wildcard $(1)/*/*.$(ext) $(1)/*/*/*.$(ext)))
 
-MOM_SOURCE = \
-  $(call SOURCE,../src) \
-  $(wildcard ../config_src/drivers/solo_driver/*.F90) \
-  $(wildcard ../config_src/ext*/*/*.F90)
-
-TARGET_SOURCE = \
-  $(call SOURCE,build/target_codebase/src) \
-  $(wildcard build/target_codebase/config_src/drivers/solo_driver/*.F90) \
-  $(wildcard build/target_codebase/config_src/ext*/*.F90)
-
-# NOTE: Current default framework is FMS1, but this could change.
-ifeq ($(FRAMEWORK), fms2)
-  MOM_SOURCE +=$(wildcard ../config_src/infra/FMS2/*.F90)
-  TARGET_SOURCE += $(wildcard build/target_codebase/config_src/infra/FMS2/*.F90)
-else
-  MOM_SOURCE += $(wildcard ../config_src/infra/FMS1/*.F90)
-  TARGET_SOURCE += $(wildcard build/target_codebase/config_src/infra/FMS1/*.F90)
-endif
-
-FMS_SOURCE = $(call SOURCE,deps/fms/src)
-
-
-#---
-# Rules
+## Rules
 
 .PHONY: all build.regressions build.prof
-all: $(foreach b,$(BUILDS),build/$(b))
-build.regressions: $(foreach b,symmetric target,build/$(b)/MOM6)
-build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
+all: $(foreach b,$(EXECS),$(BUILD)/$(b))
+build.regressions: $(foreach b,symmetric target,$(BUILD)/$(b)/MOM6)
+build.prof: $(foreach b,opt opt_target,$(BUILD)/$(b)/MOM6)
 
 # Executable
-.PRECIOUS: $(foreach b,$(BUILDS),build/$(b))
+.PRECIOUS: $(foreach b,$(EXECS),$(BUILD)/$(b))
 
 
 # Compiler flags
@@ -235,9 +222,9 @@ build.prof: $(foreach b,opt opt_target,build/$(b)/MOM6)
 # .testing dependencies
 # TODO: We should probably build TARGET with the FMS that it was configured
 #   to use.  But for now we use the same FMS over all builds.
-FCFLAGS_DEPS = -I../../deps/include
-LDFLAGS_DEPS = -L../../deps/lib
-PATH_DEPS = PATH="${PATH}:../../deps/bin"
+FCFLAGS_DEPS = -I$(abspath $(DEPS)/include)
+LDFLAGS_DEPS = -L$(abspath $(DEPS)/lib)
+PATH_DEPS = PATH="${PATH}:$(abspath $(DEPS)/bin)"
 
 
 # Define the build targets in terms of the traditional DEBUG/REPRO/etc labels
@@ -255,82 +242,90 @@ COV_LDFLAGS := LDFLAGS="$(LDFLAGS_COVERAGE) $(LDFLAGS_DEPS) $(LDFLAGS_USER)"
 
 # Environment variable configuration
 MOM_ENV := $(PATH_FMS)
-build/symmetric/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/asymmetric/Makefile: MOM_ENV += $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
-  MOM_MEMORY=../../../config_src/memory/dynamic_nonsymmetric/MOM_memory.h
-build/repro/Makefile: MOM_ENV += $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
-build/openmp/Makefile: MOM_ENV += $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
-build/target/Makefile: MOM_ENV += $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
-build/opt/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
-build/opt_target/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
-build/coupled/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/nuopc/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
-build/cov/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
-build/unit/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
-build/timing/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/symmetric/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/asymmetric/Makefile: MOM_ENV += $(ASYMMETRIC_FCFLAGS) $(MOM_LDFLAGS) \
+  MOM_MEMORY=$(AC_SRCDIR)/../config_src/memory/dynamic_nonsymmetric/MOM_memory.h
+$(BUILD)/repro/Makefile: MOM_ENV += $(REPRO_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/openmp/Makefile: MOM_ENV += $(OPENMP_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/target/Makefile: MOM_ENV += $(TARGET_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/opt/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/opt_target/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/coupled/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/nuopc/Makefile: MOM_ENV += $(SYMMETRIC_FCFLAGS) $(MOM_LDFLAGS)
+$(BUILD)/cov/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
+$(BUILD)/unit/Makefile: MOM_ENV += $(COV_FCFLAGS) $(COV_LDFLAGS)
+$(BUILD)/timing/Makefile: MOM_ENV += $(OPT_FCFLAGS) $(MOM_LDFLAGS)
 
 # Configure script flags
-MOM_ACFLAGS := --with-framework=$(FRAMEWORK)
-build/openmp/Makefile: MOM_ACFLAGS += --enable-openmp
-build/coupled/Makefile: MOM_ACFLAGS += --with-driver=FMS_cap
-build/nuopc/Makefile: MOM_ACFLAGS += --with-driver=nuopc_cap
-build/unit/Makefile: MOM_ACFLAGS += --with-driver=unit_tests
-build/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
-
-# Fetch regression target source code
-build/target/Makefile: | $(TARGET_CODEBASE)
-build/opt_target/Makefile: | $(TARGET_CODEBASE)
-
-
-# Define source code dependencies
-build/target_codebase/configure: $(TARGET_SOURCE)
+$(BUILD)/openmp/Makefile: MOM_ACFLAGS += --enable-openmp
+$(BUILD)/coupled/Makefile: MOM_ACFLAGS += --with-driver=FMS_cap
+$(BUILD)/nuopc/Makefile: MOM_ACFLAGS += --with-driver=nuopc_cap
+$(BUILD)/unit/Makefile: MOM_ACFLAGS += --with-driver=unit_tests
+$(BUILD)/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 
 
 # Build executables
-build/unit/test_%: build/unit/Makefile FORCE
+$(BUILD)/unit/test_%: $(BUILD)/unit/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
-build/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
-build/timing/time_%: build/timing/Makefile FORCE
+$(BUILD)/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
+
+$(BUILD)/timing/time_%: $(BUILD)/timing/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
-build/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
-build/%/MOM6: build/%/Makefile FORCE
+$(BUILD)/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
+
+$(BUILD)/%/MOM6: $(BUILD)/%/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
-FORCE: ;
+
+# Target codebase should use its own build system
+$(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
+	$(MAKE) -C $(TARGET_CODEBASE)/.testing build/symmetric/MOM6
+
+$(BUILD)/target: | $(TARGET_CODEBASE)
+	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/symmetric $@
+
+FORCE:
 
 
-# Use autoconf to construct the Makefile for each target
-.PRECIOUS: build/%/Makefile
-build/%/Makefile: ../ac/configure ../ac/Makefile.in deps/lib/libFMS.a
-	mkdir -p $(@D)
-	cd $(@D) \
-	&& $(MOM_ENV) ../../../ac/configure $(MOM_ACFLAGS) \
-	|| (cat config.log && false)
+## Use autoconf to construct the Makefile for each target
+# TODO: This could all be moved to a top-level MOM6 Makefile
+.PRECIOUS: $(BUILD)/%/Makefile
+.PRECIOUS: $(BUILD)/%/Makefile.in
+.PRECIOUS: $(BUILD)/%/configure
+.PRECIOUS: $(BUILD)/%/config.status
+.PRECIOUS: $(BUILD)/%/configure.ac
+.PRECIOUS: $(BUILD)/%/m4/
 
+$(BUILD)/%/Makefile: $(BUILD)/%/Makefile.in $(BUILD)/%/config.status
+	cd $(@D) && ./config.status
 
-../ac/configure: ../ac/configure.ac ../ac/m4
-	autoreconf -i $<
+$(BUILD)/%/config.status: $(BUILD)/%/configure $(DEPS)/lib/libFMS.a
+	cd $(@D) && $(MOM_ENV) ./configure -n --srcdir=$(AC_SRCDIR) $(MOM_ACFLAGS) \
+	 || (cat config.log && false)
 
+$(BUILD)/%/Makefile.in: ../ac/Makefile.in | $(BUILD)/%/
+	cp ../ac/Makefile.in $(@D)
+
+$(BUILD)/%/configure: $(BUILD)/%/configure.ac $(BUILD)/%/m4/
+	autoreconf -if $(@D)
+
+$(BUILD)/%/configure.ac: ../ac/configure.ac | $(BUILD)/%/
+	cp ../ac/configure.ac $(@D)
+
+$(BUILD)/%/m4/: ../ac/m4/ | $(BUILD)/%/
+	cp -r ../ac/m4 $(@D)
+
+ALL_EXECS = symmetric asymmetric repro openmp opt opt_target coupled nuopc \
+  cov unit timing
+$(foreach b,$(ALL_EXECS),$(BUILD)/$(b)/):
+	mkdir -p $@
 
 # Fetch the regression target codebase
-build/target/Makefile build/opt_target/Makefile: \
-  $(TARGET_CODEBASE)/ac/configure deps/lib/libFMS.a
-	mkdir -p $(@D)
-	cd $(@D) \
-	&& $(MOM_ENV) ../../$(TARGET_CODEBASE)/ac/configure $(MOM_ACFLAGS) \
-	|| (cat config.log && false)
-
-
-$(TARGET_CODEBASE)/ac/configure: $(TARGET_CODEBASE)
-	autoreconf -i $</ac
-
-
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
 	cd $@ && git checkout --recurse-submodules $(MOM_TARGET_BRANCH)
 
 
-#---
-# FMS
+## FMS
 
 # Set up the FMS build environment variables
 FMS_ENV = \
@@ -338,47 +333,40 @@ FMS_ENV = \
   FCFLAGS="$(FCFLAGS_FMS)" \
   REPORT_ERROR_LOGS="$(REPORT_ERROR_LOGS)"
 
-deps/lib/libFMS.a: deps/Makefile deps/Makefile.fms.in deps/configure.fms.ac deps/m4
-	$(FMS_ENV) $(MAKE) -C deps lib/libFMS.a
+$(DEPS)/lib/libFMS.a: $(DEPS)/Makefile $(DEPS)/Makefile.fms.in $(DEPS)/configure.fms.ac $(DEPS)/m4
+	$(FMS_ENV) $(MAKE) -C $(DEPS) lib/libFMS.a
 
-deps/Makefile: ../ac/deps/Makefile | deps
-	cp ../ac/deps/Makefile deps/Makefile
+$(DEPS)/Makefile: ../ac/deps/Makefile | $(DEPS)
+	cp ../ac/deps/Makefile $(DEPS)/Makefile
 
-deps/Makefile.fms.in: ../ac/deps/Makefile.fms.in | deps
-	cp ../ac/deps/Makefile.fms.in deps/Makefile.fms.in
+$(DEPS)/Makefile.fms.in: ../ac/deps/Makefile.fms.in | $(DEPS)
+	cp ../ac/deps/Makefile.fms.in $(DEPS)/Makefile.fms.in
 
-deps/configure.fms.ac: ../ac/deps/configure.fms.ac | deps
-	cp ../ac/deps/configure.fms.ac deps/configure.fms.ac
+$(DEPS)/configure.fms.ac: ../ac/deps/configure.fms.ac | $(DEPS)
+	cp ../ac/deps/configure.fms.ac $(DEPS)/configure.fms.ac
 
-deps/m4: ../ac/deps/m4 | deps
-	cp -r ../ac/deps/m4 deps/
+$(DEPS)/m4: ../ac/deps/m4 | $(DEPS)
+	cp -r ../ac/deps/m4 $(DEPS)/
 
-deps:
-	mkdir -p deps
+$(DEPS):
+	mkdir -p $(DEPS)
 
 #---
-# The following block does a non-library build of a coupled driver interface to
-# MOM, along with everything below it.  This simply checks that we have not
-# broken the ability to compile.  This is not a means to build a complete
-# coupled executable.
-# TODO:
-#   - Avoid re-building FMS and MOM6 src by re-using existing object/mod files
-#   - Use autoconf rather than mkmf templates
-MK_TEMPLATE ?= ../../deps/mkmf/templates/ncrc-gnu.mk
+# Verify that the coupled model drivers can be compiled.  This does not verify
+# that they can be run, since it would require external submodels.
 
 # NUOPC driver
-build/nuopc/mom_ocean_model_nuopc.o: build/nuopc/Makefile
+$(BUILD)/nuopc/mom_ocean_model_nuopc.o: $(BUILD)/nuopc/Makefile
 	cd $(@D) && make $(@F)
-check_mom6_api_nuopc: build/nuopc/mom_ocean_model_nuopc.o
+check_mom6_api_nuopc: $(BUILD)/nuopc/mom_ocean_model_nuopc.o
 
 # GFDL coupled driver
-build/coupled/ocean_model_MOM.o: build/coupled/Makefile
+$(BUILD)/coupled/ocean_model_MOM.o: $(BUILD)/coupled/Makefile
 	cd $(@D) && make $(@F)
-check_mom6_api_coupled: build/coupled/ocean_model_MOM.o
+check_mom6_api_coupled: $(BUILD)/coupled/ocean_model_MOM.o
 
 
-#---
-# Testing
+## Testing
 
 .PHONY: test
 test: $(foreach t,$(TESTS),test.$(t))
@@ -406,11 +394,11 @@ endef
 $(foreach d,$(DIMS),$(eval $(call TEST_DIM_RULE,$(d))))
 
 .PHONY: run.symmetric run.asymmetric run.nans run.openmp run.cov
-run.symmetric: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/symmetric/ocean.stats)
-run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),$(WORKSPACE)/work/$(c)/asymmetric/ocean.stats)
-run.nan: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/nan/ocean.stats)
-run.openmp: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/openmp/ocean.stats)
-run.cov: $(foreach c,$(CONFIGS),$(WORKSPACE)/work/$(c)/cov/ocean.stats)
+run.symmetric: $(foreach c,$(CONFIGS),$(WORK)/$(c)/symmetric/ocean.stats)
+run.asymmetric: $(foreach c,$(filter-out tc3,$(CONFIGS)),$(CONFIGS),$(WORK)/$(c)/asymmetric/ocean.stats)
+run.nan: $(foreach c,$(CONFIGS),$(WORK)/$(c)/nan/ocean.stats)
+run.openmp: $(foreach c,$(CONFIGS),$(WORK)/$(c)/openmp/ocean.stats)
+run.cov: $(foreach c,$(CONFIGS),$(WORK)/$(c)/cov/ocean.stats)
 
 # Configuration test rules
 # $(1): Configuration name (tc1, tc2, &c.)
@@ -442,21 +430,21 @@ FAIL = ${RED}FAIL${RESET}
 # $(2): Test type (grid, layout, &c.)
 # $(3): Comparison targets (symmetric asymmetric, symmetric layout, &c.)
 define CMP_RULE
-.PRECIOUS: $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/ocean.stats)
-$(1).$(2): $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/ocean.stats)
-	@test "$$(shell ls -A $(WORKSPACE)/results/$(1) 2>/dev/null)" || rm -rf $(WORKSPACE)/results/$(1)
+.PRECIOUS: $(foreach b,$(3),$(WORK)/$(1)/$(b)/ocean.stats)
+$(1).$(2): $(foreach b,$(3),$(WORK)/$(1)/$(b)/ocean.stats)
+	@test "$$(shell ls -A $(WORK)/results/$(1) 2>/dev/null)" || rm -rf $(WORK)/results/$(1)
 	@cmp $$^ || !( \
-	  mkdir -p $(WORKSPACE)/results/$(1); \
-	  (diff $$^ | tee $(WORKSPACE)/results/$(1)/ocean.stats.$(2).diff | head -n 20) ; \
+	  mkdir -p $(WORK)/results/$(1); \
+	  (diff $$^ | tee $(WORK)/results/$(1)/ocean.stats.$(2).diff | head -n 20) ; \
 	  echo -e "$(FAIL): Solutions $(1).$(2) have changed." \
 	)
 	@echo -e "$(PASS): Solutions $(1).$(2) agree."
 
-.PRECIOUS: $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/chksum_diag)
-$(1).$(2).diag: $(foreach b,$(3),$(WORKSPACE)/work/$(1)/$(b)/chksum_diag)
+.PRECIOUS: $(foreach b,$(3),$(WORK)/$(1)/$(b)/chksum_diag)
+$(1).$(2).diag: $(foreach b,$(3),$(WORK)/$(1)/$(b)/chksum_diag)
 	@cmp $$^ || !( \
-	  mkdir -p $(WORKSPACE)/results/$(1); \
-	  (diff $$^ | tee $(WORKSPACE)/results/$(1)/chksum_diag.$(2).diff | head -n 20) ; \
+	  mkdir -p $(WORK)/results/$(1); \
+	  (diff $$^ | tee $(WORK)/results/$(1)/chksum_diag.$(2).diff | head -n 20) ; \
 	  echo -e "$(FAIL): Diagnostics $(1).$(2).diag have changed." \
 	)
 	@echo -e "$(PASS): Diagnostics $(1).$(2).diag agree."
@@ -474,17 +462,17 @@ $(foreach d,$(DIMS),$(eval $(call CMP_RULE,$(1),dim.$(d),symmetric dim.$(d))))
 endef
 $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 
+
 # Custom comparison rules
 
-
 # Restart tests only compare the final stat record
-.PRECIOUS: $(foreach b,symmetric restart target,$(WORKSPACE)/work/%/$(b)/ocean.stats)
-%.restart: $(foreach b,symmetric restart,$(WORKSPACE)/work/%/$(b)/ocean.stats)
-	@test "$(shell ls -A $(WORKSPACE)/results/$* 2>/dev/null)" || rm -rf $(WORKSPACE)/results/$*
+.PRECIOUS: $(foreach b,symmetric restart target,$(WORK)/%/$(b)/ocean.stats)
+%.restart: $(foreach b,symmetric restart,$(WORK)/%/$(b)/ocean.stats)
+	@test "$(shell ls -A $(WORK)/results/$* 2>/dev/null)" || rm -rf $(WORK)/results/$*
 	@cmp $(foreach f,$^,<(tr -s ' ' < $(f) | cut -d ' ' -f3- | tail -n 1)) \
 	  || !( \
-	    mkdir -p $(WORKSPACE)/results/$*; \
-	    (diff $^ | tee $(WORKSPACE)/results/$*/chksum_diag.restart.diff | head -n 20) ; \
+	    mkdir -p $(WORK)/results/$*; \
+	    (diff $^ | tee $(WORK)/results/$*/chksum_diag.restart.diff | head -n 20) ; \
 	    echo -e "$(FAIL): Solutions $*.restart have changed." \
 	  )
 	@echo -e "$(PASS): Solutions $*.restart agree."
@@ -492,21 +480,22 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # TODO: chksum_diag parsing of restart files
 
 # stats rule is unchanged, but we cannot use CMP_RULE to generate it.
-%.regression: $(foreach b,symmetric target,$(WORKSPACE)/work/%/$(b)/ocean.stats)
-	@test "$(shell ls -A $(WORKSPACE)/results/$* 2>/dev/null)" || rm -rf $(WORKSPACE)/results/$*
+%.regression: $(foreach b,symmetric target,$(WORK)/%/$(b)/ocean.stats)
+	@test "$(shell ls -A $(WORK)/results/$* 2>/dev/null)" || rm -rf $(WORK)/results/$*
 	@cmp $^ || !( \
-	  mkdir -p $(WORKSPACE)/results/$*; \
-	  (diff $^ | tee $(WORKSPACE)/results/$*/ocean.stats.regression.diff | head -n 20) ; \
+	  mkdir -p $(WORK)/results/$*; \
+	  (diff $^ | tee $(WORK)/results/$*/ocean.stats.regression.diff | head -n 20) ; \
 	  echo -e "$(FAIL): Solutions $*.regression have changed." \
 	)
 	@echo -e "$(PASS): Solutions $*.regression agree."
 
 # Regression testing only checks for changes in existing diagnostics
-%.regression.diag: $(foreach b,symmetric target,$(WORKSPACE)/work/%/$(b)/chksum_diag)
+.PRECIOUS: $(WORK)/%/target/chksum_diag
+%.regression.diag: $(foreach b,symmetric target,$(WORK)/%/$(b)/chksum_diag)
 	@! diff $^ | grep "^[<>]" | grep "^>" > /dev/null \
 	  || ! (\
-	    mkdir -p $(WORKSPACE)/results/$*; \
-	    (diff $^ | tee $(WORKSPACE)/results/$*/chksum_diag.regression.diff | head -n 20) ; \
+	    mkdir -p $(WORK)/results/$*; \
+	    (diff $^ | tee $(WORK)/results/$*/chksum_diag.regression.diff | head -n 20) ; \
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
 	@cmp $^ || ( \
@@ -535,7 +524,7 @@ tc4/configure: tc4/configure.ac
 #---
 # Test run output files
 
-# Rule to build $(WORKSPACE)/work/<tc>/{ocean.stats,chksum_diag}.<tag>
+# Rule to build $(WORK)/<tc>/{ocean.stats,chksum_diag}.<tag>
 # $(1): Test configuration name <tag>
 # $(2): Executable type
 # $(3): Enable coverage flag
@@ -544,15 +533,14 @@ tc4/configure: tc4/configure.ac
 # $(6): Number of MPI ranks
 
 define STAT_RULE
-$(WORKSPACE)/work/%/$(1)/ocean.stats $(WORKSPACE)/work/%/$(1)/chksum_diag: build/$(2)/MOM6 | preproc
+$(WORK)/%/$(1)/ocean.stats $(WORK)/%/$(1)/chksum_diag: $(BUILD)/$(2)/MOM6 | preproc
 	@echo "Running test $$*.$(1)..."
 	mkdir -p $$(@D)
 	cp -RL $$*/* $$(@D)
-	mkdir -p $$(@D)/RESTART
 	echo -e "$(4)" > $$(@D)/MOM_override
-	rm -f $(WORKSPACE)/results/$$*/std.$(1).{out,err}
+	rm -f $(WORK)/results/$$*/std.$(1).{out,err}
 	cd $$(@D) \
-	  && $(TIME) $(5) $(MPIRUN) -n $(6) $(abspath $$<) 2> std.err > std.out \
+	  && $(TIME) $(5) $(MPIRUN) -n $(6) $$(abspath $$<) 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
 	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 40 ; \
@@ -562,8 +550,8 @@ $(WORKSPACE)/work/%/$(1)/ocean.stats $(WORKSPACE)/work/%/$(1)/chksum_diag: build
 	  )
 	@echo -e "$(DONE): $$*.$(1); no runtime errors."
 	if [ $(3) ]; then \
-	  mkdir -p $(WORKSPACE)/results/$$* ; \
-	  cd build/$(2) ; \
+	  mkdir -p $(WORK)/results/$$* ; \
+	  cd $(BUILD)/$(2) ; \
 	  gcov -b *.gcda > gcov.$$*.$(1).out ; \
 	  find -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \; ; \
 	fi
@@ -586,12 +574,12 @@ codecov:
 
 .PHONY: report.cov
 report.cov: run.cov codecov
-	./codecov $(CODECOV_TOKEN_ARG) -R build/cov -Z -f "*.gcov" \
-	  > build/cov/codecov.out \
-	  2> build/cov/codecov.err \
+	./codecov $(CODECOV_TOKEN_ARG) -R $(BUILD)/cov -Z -f "*.gcov" \
+	  > $(BUILD)/cov/codecov.out \
+	  2> $(BUILD)/cov/codecov.err \
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
 	  || { \
-	    cat build/cov/codecov.err ; \
+	    cat $(BUILD)/cov/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
 	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
@@ -621,7 +609,7 @@ $(eval $(call STAT_RULE,cov,cov,true,,,1))
 #  2. Convert DAYMAX from TIMEUNIT to seconds
 #  3. Apply seconds to `ocean_solo_nml` inside input.nml.
 # NOTE: Assumes that runtime set by DAYMAX, will fail if set by input.nml
-$(WORKSPACE)/work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
+$(WORK)/%/restart/ocean.stats: $(BUILD)/symmetric/MOM6 | preproc
 	rm -rf $(@D)
 	mkdir -p $(@D)
 	cp -RL $*/* $(@D)
@@ -635,7 +623,7 @@ $(WORKSPACE)/work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
 	  && halfperiod=$$(awk -v t=$${daymax} -v dt=$${timeunit} 'BEGIN {printf "%.f", 0.5*t*dt}') \
 	  && printf "\n&ocean_solo_nml\n    seconds = $${halfperiod}\n/\n" >> input.nml
 	# Remove any previous archived output
-	rm -f $(WORKSPACE)/results/$*/std.restart{1,2}.{out,err}
+	rm -f $(WORK)/results/$*/std.restart{1,2}.{out,err}
 	# Run the first half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std1.err > std1.out \
 	  || !( \
@@ -661,7 +649,7 @@ $(WORKSPACE)/work/%/restart/ocean.stats: build/symmetric/MOM6 | preproc
 # Not a true rule; only call this after `make test` to summarize test results.
 .PHONY: test.summary
 test.summary:
-	@./tools/report_test_results.sh $(WORKSPACE)/results
+	@./tools/report_test_results.sh $(WORK)/results
 
 
 #---
@@ -669,30 +657,50 @@ test.summary:
 
 # NOTE: Using file parser gcov report as a proxy for test completion
 .PHONY: run.cov.unit
-run.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov
+run.cov.unit: $(BUILD)/unit/MOM_file_parser_tests.F90.gcov
 
 .PHONY: build.unit
-build.unit: $(foreach f, $(UNIT_EXECS), build/unit/$(f))
+build.unit: $(foreach f, $(UNIT_EXECS), $(BUILD)/unit/$(f))
 .PHONY: run.unit
 run.unit: $(foreach f, $(UNIT_EXECS), work/unit/$(f).out)
 .PHONY: build.timing
-build.timing: $(foreach f, $(TIMING_EXECS), build/timing/$(f))
+build.timing: $(foreach f, $(TIMING_EXECS), $(BUILD)/timing/$(f))
 .PHONY: run.timing
 run.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).out)
 .PHONY: show.timing
 show.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).show)
-$(WORKSPACE)/work/timing/%.show:
+$(WORK)/timing/%.show:
 	./tools/disp_timing.py $(@:.show=.out)
 
+
+# Invoke the above unit/timing rules for a "target" code
+# Invoke with appropriate macros defines, i.e.
+#   make build.timing_target MOM_TARGET_URL=... MOM_TARGET_BRANCH=... TARGET_CODEBASE=$(BUILD)/target_codebase
+#   make run.timing_target TARGET_CODEBASE=$(BUILD)/target_codebase
+
+TIMING_TARGET_EXECS ?= $(basename $(notdir $(wildcard $(TARGET_CODEBASE)/config_src/drivers/timing_tests/*.F90) ) )
+
+.PHONY: build.timing_target
+build.timing_target: $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/$(BUILD)/timing/$(f))
+.PHONY: run.timing_target
+run.timing_target: $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/work/timing/$(f).out)
+.PHONY: compare.timing
+compare.timing: $(foreach f, $(filter $(TIMING_EXECS),$(TIMING_TARGET_EXECS)), work/timing/$(f).compare)
+$(WORK)/timing/%.compare: $(TARGET_CODEBASE)
+	./tools/disp_timing.py -r $(TARGET_CODEBASE)/.testing/$(@:.compare=.out) $(@:.compare=.out)
+$(TARGET_CODEBASE)/.testing/%: | $(TARGET_CODEBASE)
+	cd $(TARGET_CODEBASE)/.testing && make $*
+
+
 # General rule to run a unit test executable
-# Pattern is to run build/unit/executable and direct output to executable.out
-$(WORKSPACE)/work/unit/%.out: build/unit/%
+# Pattern is to run $(BUILD)/unit/executable and direct output to executable.out
+$(WORK)/unit/%.out: $(BUILD)/unit/%
 	@mkdir -p $(@D)
 	cd $(@D) ; $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> >(tee $*.err) > $*.out
 
-$(WORKSPACE)/work/unit/test_MOM_file_parser.out: build/unit/test_MOM_file_parser
+$(WORK)/unit/test_MOM_file_parser.out: $(BUILD)/unit/test_MOM_file_parser
 	if [ $(REPORT_COVERAGE) ]; then \
-	  find build/unit -name *.gcda -exec rm -f '{}' \; ; \
+	  find $(BUILD)/unit -name *.gcda -exec rm -f '{}' \; ; \
 	fi
 	mkdir -p $(@D)
 	cd $(@D) \
@@ -710,31 +718,31 @@ $(WORKSPACE)/work/unit/test_MOM_file_parser.out: build/unit/test_MOM_file_parser
 	  )
 
 # NOTE: .gcov actually depends on .gcda, but .gcda is produced with std.out
-# TODO: Replace $(WORKSPACE)/work/unit/std.out with *.gcda?
-build/unit/MOM_file_parser_tests.F90.gcov: $(WORKSPACE)/work/unit/test_MOM_file_parser.out
+# TODO: Replace $(WORK)/unit/std.out with *.gcda?
+$(BUILD)/unit/MOM_file_parser_tests.F90.gcov: $(WORK)/unit/test_MOM_file_parser.out
 	cd $(@D) \
 	  && gcov -b *.gcda > gcov.unit.out
 	find $(@D) -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \;
 
 .PHONY: report.cov.unit
-report.cov.unit: build/unit/MOM_file_parser_tests.F90.gcov codecov
-	./codecov $(CODECOV_TOKEN_ARG) -R build/unit -f "*.gcov" -Z -n "Unit tests" \
-	    > build/unit/codecov.out \
-	    2> build/unit/codecov.err \
+report.cov.unit: $(BUILD)/unit/MOM_file_parser_tests.F90.gcov codecov
+	./codecov $(CODECOV_TOKEN_ARG) -R $(BUILD)/unit -f "*.gcov" -Z -n "Unit tests" \
+	    > $(BUILD)/unit/codecov.out \
+	    2> $(BUILD)/unit/codecov.err \
 	  && echo -e "${MAGENTA}Report uploaded to codecov.${RESET}" \
 	  || { \
-	    cat build/unit/codecov.err ; \
+	    cat $(BUILD)/unit/codecov.err ; \
 	    echo -e "${RED}Failed to upload report.${RESET}" ; \
 	    if [ "$(REQUIRE_COVERAGE_UPLOAD)" = true ] ; then false ; fi ; \
 	  }
 
-$(WORKSPACE)/work/timing/%.out: build/timing/% FORCE
+$(WORK)/timing/%.out: $(BUILD)/timing/% FORCE
 	@mkdir -p $(@D)
 	@echo Running $< in $(@D)
 	@cd $(@D) ; $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> $*.err > $*.out
 
-#---
-# Profiling based on FMS clocks
+
+## Profiling based on FMS clocks
 
 PCONFIGS = p0
 
@@ -742,17 +750,17 @@ PCONFIGS = p0
 profile: $(foreach p,$(PCONFIGS), prof.$(p))
 
 .PHONY: prof.p0
-prof.p0: $(WORKSPACE)/work/p0/opt/clocks.json $(WORKSPACE)/work/p0/opt_target/clocks.json
+prof.p0: $(WORK)/p0/opt/clocks.json $(WORK)/p0/opt_target/clocks.json
 	python tools/compare_clocks.py $^
 
-$(WORKSPACE)/work/p0/%/clocks.json: $(WORKSPACE)/work/p0/%/std.out
+$(WORK)/p0/%/clocks.json: $(WORK)/p0/%/std.out
 	python tools/parse_fms_clocks.py -d $(@D) $^ > $@ \
 	  || !( rm $@ )
 
-$(WORKSPACE)/work/p0/opt/std.out: build/opt/MOM6
-$(WORKSPACE)/work/p0/opt_target/std.out: build/opt_target/MOM6
+$(WORK)/p0/opt/std.out: $(BUILD)/opt/MOM6
+$(WORK)/p0/opt_target/std.out: $(BUILD)/opt_target/MOM6
 
-$(WORKSPACE)/work/p0/%/std.out:
+$(WORK)/p0/%/std.out:
 	mkdir -p $(@D)
 	cp -RL p0/* $(@D)
 	mkdir -p $(@D)/RESTART
@@ -761,8 +769,7 @@ $(WORKSPACE)/work/p0/%/std.out:
 	  && $(MPIRUN) -n 1 $(abspath $<) 2> std.err > std.out
 
 
-#---
-# Profiling based on perf output
+## Profiling based on perf output
 
 # TODO: This expects the -e flag, can I handle it in the command?
 PERF_EVENTS ?=
@@ -771,16 +778,16 @@ PERF_EVENTS ?=
 perf: $(foreach p,$(PCONFIGS), perf.$(p))
 
 .PHONY: prof.p0
-perf.p0: $(WORKSPACE)/work/p0/opt/profile.json $(WORKSPACE)/work/p0/opt_target/profile.json
+perf.p0: $(WORK)/p0/opt/profile.json $(WORK)/p0/opt_target/profile.json
 	python tools/compare_perf.py $^
 
-$(WORKSPACE)/work/p0/%/profile.json: $(WORKSPACE)/work/p0/%/perf.data
+$(WORK)/p0/%/profile.json: $(WORK)/p0/%/perf.data
 	python tools/parse_perf.py -f $< > $@
 
-$(WORKSPACE)/work/p0/opt/perf.data: build/opt/MOM6
-$(WORKSPACE)/work/p0/opt_target/perf.data: build/opt_target/MOM6
+$(WORK)/p0/opt/perf.data: $(BUILD)/opt/MOM6
+$(WORK)/p0/opt_target/perf.data: $(BUILD)/opt_target/MOM6
 
-$(WORKSPACE)/work/p0/%/perf.data:
+$(WORK)/p0/%/perf.data:
 	mkdir -p $(@D)
 	cp -RL p0/* $(@D)
 	mkdir -p $(@D)/RESTART
@@ -793,25 +800,26 @@ $(WORKSPACE)/work/p0/%/perf.data:
 	  || cat std.perf.err
 
 
-#----
+## Cleanup
 # NOTE: These tests assert that we are in the .testing directory.
 
 .PHONY: clean
 clean: clean.build clean.stats
-	@[ $$(basename $$(pwd)) = .testing ]
-	rm -rf deps
+	rm -rf $(BUILD)
 
 
 .PHONY: clean.build
 clean.build:
 	@[ $$(basename $$(pwd)) = .testing ]
-	rm -rf build
+	for b in $(ALL_EXECS); do \
+	  rm -rf $(BUILD)/$${b}; \
+	done
 
 
 .PHONY: clean.stats
 clean.stats:
 	@[ $$(basename $$(pwd)) = .testing ]
-	rm -rf $(WORKSPACE)/work $(WORKSPACE)/results
+	rm -rf $(WORK)
 
 
 .PHONY: clean.preproc

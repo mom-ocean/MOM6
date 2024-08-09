@@ -40,7 +40,7 @@ use MOM_remapping,        only : initialize_remapping, end_remapping
 use MOM_remapping,        only : remapping_core_h, remapping_core_w
 use MOM_remapping,        only : remappingSchemesDoc, remappingDefaultScheme
 use MOM_remapping,        only : interpolate_column, reintegrate_column
-use MOM_remapping,        only : remapping_CS, dzFromH1H2
+use MOM_remapping,        only : remapping_CS, dzFromH1H2, remapping_set_param
 use MOM_string_functions, only : uppercase, extractWord, extract_integer
 use MOM_tracer_registry,  only : tracer_registry_type, tracer_type, MOM_tracer_chkinv
 use MOM_unit_scaling,     only : unit_scale_type
@@ -152,6 +152,7 @@ public pre_ALE_diagnostics
 public pre_ALE_adjustments
 public ALE_remap_init_conds
 public ALE_register_diags
+public ALE_set_extrap_boundaries
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -181,6 +182,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   logical           :: force_bounds_in_subcell
   logical           :: local_logical
   logical           :: remap_boundary_extrap
+  logical           :: init_boundary_extrap
   type(hybgen_regrid_CS), pointer :: hybgen_regridCS => NULL() ! Control structure for hybgen regridding
                                                          ! for sharing parameters.
 
@@ -230,6 +232,10 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   call get_param(param_file, mdl, "REMAP_BOUNDARY_EXTRAP", remap_boundary_extrap, &
                  "If true, values at the interfaces of boundary cells are "//&
                  "extrapolated instead of piecewise constant", default=.false.)
+  call get_param(param_file, mdl, "INIT_BOUNDARY_EXTRAP", init_boundary_extrap, &
+                 "If true, values at the interfaces of boundary cells are "//&
+                 "extrapolated instead of piecewise constant during initialization."//&
+                 "Defaults to REMAP_BOUNDARY_EXTRAP.", default=remap_boundary_extrap)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
@@ -242,13 +248,13 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call initialize_remapping( CS%remapCS, string, &
-                             boundary_extrapolation=remap_boundary_extrap, &
+                             boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
                              answer_date=CS%answer_date)
   call initialize_remapping( CS%vel_remapCS, vel_string, &
-                             boundary_extrapolation=remap_boundary_extrap, &
+                             boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
@@ -317,6 +323,18 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
 
   if (CS%show_call_tree) call callTree_leave("ALE_init()")
 end subroutine ALE_init
+
+!> Sets the boundary extrapolation set for the remapping type.
+subroutine ALE_set_extrap_boundaries( param_file, CS)
+  type(param_file_type),   intent(in) :: param_file !< Parameter file
+  type(ALE_CS),            pointer    :: CS         !< Module control structure
+
+  logical :: remap_boundary_extrap
+  call get_param(param_file, "MOM_ALE", "REMAP_BOUNDARY_EXTRAP", remap_boundary_extrap, &
+                 "If true, values at the interfaces of boundary cells are "//&
+                 "extrapolated instead of piecewise constant", default=.false.)
+  call remapping_set_param(CS%remapCS, boundary_extrapolation=remap_boundary_extrap)
+end subroutine ALE_set_extrap_boundaries
 
 !> Initialize diagnostics for the ALE module.
 subroutine ALE_register_diags(Time, G, GV, US, diag, CS)
@@ -1389,16 +1407,17 @@ end subroutine mask_near_bottom_vel
 !! h_dst must be dimensioned as a model array with GV%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
 subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap, &
-                            answers_2018, answer_date )
+                            answers_2018, answer_date, h_neglect, h_neglect_edge)
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   type(verticalGrid_type),                 intent(in)    :: GV        !< Ocean vertical grid structure
   integer,                                 intent(in)    :: nk_src    !< Number of levels on source grid
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: h_src     !< Level thickness of source grid
-                                                                      !! [H ~> m or kg m-2]
+                                                                      !! [H ~> m or kg m-2] or other units
+                                                                      !! if H_neglect is provided
   real, dimension(SZI_(G),SZJ_(G),nk_src), intent(in)    :: s_src     !< Scalar on source grid, in arbitrary units [A]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)   :: h_dst     !< Level thickness of destination grid
-                                                                      !! [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(in)   :: h_dst     !< Level thickness of destination grid in the
+                                                                      !! same units as h_src, often [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),intent(inout) :: s_dst    !< Scalar on destination grid, in the same
                                                                       !! arbitrary units as s_src [A]
   logical, optional,                       intent(in)    :: all_cells !< If false, only reconstruct for
@@ -1412,10 +1431,16 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
                                                                       !! use more robust forms of the same expressions.
   integer,                       optional, intent(in)    :: answer_date !< The vintage of the expressions to use
                                                                       !! for remapping
+  real,                          optional, intent(in)    :: h_neglect !< A negligibly small thickness used in
+                                                                      !! remapping cell reconstructions, in the same
+                                                                      !! units as h_src, often [H ~> m or kg m-2]
+  real,                          optional, intent(in)    :: h_neglect_edge !< A negligibly small thickness used in
+                                                                      !! remapping edge value calculations, in the same
+                                                                      !! units as h_src, often [H ~> m or kg m-2]
   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(GV%ke+1) ! Change in interface position [H ~> m or kg m-2]
-  real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
+  real :: h_neg, h_neg_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
   logical :: ignore_vanished_layers, use_remapping_core_w, use_2018_remap
 
   ignore_vanished_layers = .false.
@@ -1426,12 +1451,17 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
   use_2018_remap = .true. ; if (present(answers_2018)) use_2018_remap = answers_2018
   if (present(answer_date)) use_2018_remap = (answer_date < 20190101)
 
-  if (.not.use_2018_remap) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  if (present(h_neglect)) then
+    h_neg = h_neglect
+    h_neg_edge = h_neg ; if (present(h_neglect_edge)) h_neg_edge = h_neglect_edge
   else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+    if (.not.use_2018_remap) then
+      h_neg = GV%H_subroundoff ; h_neg_edge = GV%H_subroundoff
+    elseif (GV%Boussinesq) then
+      h_neg = GV%m_to_H*1.0e-30 ; h_neg_edge = GV%m_to_H*1.0e-10
+    else
+      h_neg = GV%kg_m2_to_H*1.0e-30 ; h_neg_edge = GV%kg_m2_to_H*1.0e-10
+    endif
   endif
 
   !$OMP parallel do default(shared) firstprivate(n_points,dx)
@@ -1447,10 +1477,10 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
       if (use_remapping_core_w) then
         call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
         call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
-                              GV%ke, dx, s_dst(i,j,:), h_neglect, h_neglect_edge)
+                              GV%ke, dx, s_dst(i,j,:), h_neg, h_neg_edge)
       else
         call remapping_core_h(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
-                              GV%ke, h_dst(i,j,:), s_dst(i,j,:), h_neglect, h_neglect_edge)
+                              GV%ke, h_dst(i,j,:), s_dst(i,j,:), h_neg, h_neg_edge)
       endif
     else
       s_dst(i,j,:) = 0.

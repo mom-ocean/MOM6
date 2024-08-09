@@ -721,7 +721,8 @@ endif
 
       ! Set up array for thicknesses in restoring file
       call read_Z_edges(CS%restoring_file, "PO4", CS%restoring_z_edges, CS%restoring_nz, &
-          restoring_has_edges, restoring_use_missing, restoring_missing, scale=US%m_to_Z)
+          restoring_has_edges, restoring_use_missing, restoring_missing, scale=US%m_to_Z, &
+          missing_scale=1.0)
       allocate(CS%restoring_dz(CS%restoring_nz))
       do k=CS%restoring_nz,1,-1
         kbot = k + 1 ! level k is between z(k) and z(k+1)
@@ -740,7 +741,8 @@ endif
           ! Set up array for thicknesses in restoring timescale file
           call read_Z_edges(CS%restoring_I_tau_file, CS%restoring_I_tau_var_name, CS%restoring_timescale_z_edges, &
               CS%restoring_timescale_nz, restoring_timescale_has_edges, &
-              restoring_timescale_use_missing, restoring_timescale_missing, scale=US%m_to_Z)
+              restoring_timescale_use_missing, restoring_timescale_missing, scale=US%m_to_Z, &
+              missing_scale=1.0)
           allocate(CS%restoring_timescale_dz(CS%restoring_timescale_nz))
           do k=CS%restoring_timescale_nz,1,-1
             kbot = k + 1 ! level k is between z(k) and z(k+1)
@@ -1001,7 +1003,8 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
     !     -- note: read_Z_edges treats depth as positive UP => 0 at surface, negative at depth
     fesedflux_use_missing = .false.
     call read_Z_edges(CS%fesedflux_file, "FESEDFLUXIN", CS%fesedflux_z_edges, CS%fesedflux_nz, &
-        fesedflux_has_edges, fesedflux_use_missing, fesedflux_missing, scale=US%m_to_Z)
+        fesedflux_has_edges, fesedflux_use_missing, fesedflux_missing, scale=US%m_to_Z, &
+        missing_scale=1.0)
 
     ! (2) Allocate memory for fesedflux and feventflux
     allocate(CS%fesedflux_in(SZI_(G), SZJ_(G), CS%fesedflux_nz))
