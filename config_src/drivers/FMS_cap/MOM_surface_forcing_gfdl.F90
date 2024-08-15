@@ -184,10 +184,11 @@ type, public :: ice_ocean_boundary_type
   real, pointer, dimension(:,:) :: sw_flux_vis_dif =>NULL() !< diffuse visible sw radiation [W m-2]
   real, pointer, dimension(:,:) :: sw_flux_nir_dir =>NULL() !< direct Near InfraRed sw radiation [W m-2]
   real, pointer, dimension(:,:) :: sw_flux_nir_dif =>NULL() !< diffuse Near InfraRed sw radiation [W m-2]
-  real, pointer, dimension(:,:) :: lprec           =>NULL() !< mass flux of liquid precip [kg m-2 s-1]
-  real, pointer, dimension(:,:) :: fprec           =>NULL() !< mass flux of frozen precip [kg m-2 s-1]
-  real, pointer, dimension(:,:) :: runoff          =>NULL() !< mass flux of liquid runoff [kg m-2 s-1]
-  real, pointer, dimension(:,:) :: calving         =>NULL() !< mass flux of frozen runoff [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: lprec           =>NULL() !< mass flux of liquid precip  [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: fprec           =>NULL() !< mass flux of frozen precip  [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_melt     =>NULL() !< mass flux of melted sea ice [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: runoff          =>NULL() !< mass flux of liquid runoff  [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: calving         =>NULL() !< mass flux of frozen runoff  [kg m-2 s-1]
   real, pointer, dimension(:,:) :: stress_mag      =>NULL() !< The time-mean magnitude of the stress on the ocean [Pa]
   real, pointer, dimension(:,:) :: ustar_berg      =>NULL() !< frictional velocity beneath icebergs [m s-1]
   real, pointer, dimension(:,:) :: area_berg       =>NULL() !< fractional area covered by icebergs [m2 m-2]
@@ -446,6 +447,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
         call check_mask_val_consistency(IOB%fprec(i-i0,j-j0), G%mask2dT(i,j), i, j, 'fprec', G)
     endif
 
+    if (associated(IOB%seaice_melt)) then
+      fluxes%seaice_melt(i,j) = kg_m2_s_conversion * IOB%seaice_melt(i-i0,j-j0) * G%mask2dT(i,j)
+      if (CS%check_no_land_fluxes) &
+        call check_mask_val_consistency(IOB%seaice_melt(i-i0,j-j0), G%mask2dT(i,j), i, j, 'seaice_melt', G)
+    endif
+
     if (associated(IOB%q_flux)) then
       fluxes%evap(i,j) = - kg_m2_s_conversion * IOB%q_flux(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
@@ -604,7 +611,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
       net_FW(i,j) = US%RZ_T_to_kg_m2s* &
-                    (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
+                    (((fluxes%lprec(i,j)   + fluxes%fprec(i,j) + fluxes%seaice_melt(i,j)) + &
                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
                       (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * US%L_to_m**2*G%areaT(i,j)
       !   The following contribution appears to be calculating the volume flux of sea-ice
@@ -828,6 +835,8 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
         net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%lprec(i-i0,j-j0)
       if (associated(IOB%fprec)) &
         net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%fprec(i-i0,j-j0)
+      if (associated(IOB%seaice_melt)) &
+        net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%seaice_melt(i-i0,j-j0)
       if (associated(IOB%runoff)) &
         net_mass_src(i,j) = net_mass_src(i,j) + kg_m2_s_conversion * IOB%runoff(i-i0,j-j0)
       if (associated(IOB%calving)) &
@@ -1787,6 +1796,7 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   chks = field_chksum( iobt%sw_flux_nir_dif) ; if (root) write(outunit,100) 'iobt%sw_flux_nir_dif', chks
   chks = field_chksum( iobt%lprec          ) ; if (root) write(outunit,100) 'iobt%lprec          ', chks
   chks = field_chksum( iobt%fprec          ) ; if (root) write(outunit,100) 'iobt%fprec          ', chks
+  chks = field_chksum( iobt%seaice_melt    ) ; if (root) write(outunit,100) 'iobt%seaice_melt    ', chks
   chks = field_chksum( iobt%runoff         ) ; if (root) write(outunit,100) 'iobt%runoff         ', chks
   chks = field_chksum( iobt%calving        ) ; if (root) write(outunit,100) 'iobt%calving        ', chks
   chks = field_chksum( iobt%p              ) ; if (root) write(outunit,100) 'iobt%p              ', chks
