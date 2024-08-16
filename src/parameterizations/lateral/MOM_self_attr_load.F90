@@ -20,14 +20,17 @@ public calc_SAL, scalar_SAL_sensitivity, SAL_init, SAL_end
 
 !> The control structure for the MOM_self_attr_load module
 type, public :: SAL_CS ; private
-  logical :: use_sal_scalar     !< If true, use the scalar approximation to calculate SAL.
-  logical :: use_sal_sht        !< If true, use online spherical harmonics to calculate SAL
-  logical :: use_tidal_sal_prev !< If true, read the tidal SAL from the previous iteration of
-                                !! the tides to facilitate convergence.
+  logical :: use_sal_scalar = .false.
+    !< If true, use the scalar approximation to calculate SAL.
+  logical :: use_sal_sht = .false.
+    !< If true, use online spherical harmonics to calculate SAL
+  logical :: use_tidal_sal_prev = .false.
+    !< If true, read the tidal SAL from the previous iteration of the tides to
+    !! facilitate convergence.
   real    :: sal_scalar_value   !< The constant of proportionality between sea surface height
                                 !! (really it should be bottom pressure) anomalies and bottom
                                 !! geopotential anomalies [nondim].
-  type(sht_CS) :: sht           !< Spherical harmonic transforms (SHT) control structure
+  type(sht_CS), allocatable :: sht  !< Spherical harmonic transforms (SHT) control structure
   integer :: sal_sht_Nd         !< Maximum degree for SHT [nodim]
   real, allocatable :: Love_Scaling(:) !< Love number for each SHT mode [nodim]
   real, allocatable :: Snm_Re(:), &    !< Real SHT coefficient for SHT SAL [Z ~> m]
@@ -218,6 +221,8 @@ subroutine SAL_init(G, US, param_file, CS)
 
     allocate(CS%Love_Scaling(lmax)); CS%Love_Scaling(:) = 0.0
     call calc_love_scaling(CS%sal_sht_Nd, rhoW, rhoE, CS%Love_Scaling)
+
+    allocate(CS%sht)
     call spherical_harmonics_init(G, param_file, CS%sht)
   endif
 
@@ -234,6 +239,7 @@ subroutine SAL_end(CS)
     if (allocated(CS%Snm_Re)) deallocate(CS%Snm_Re)
     if (allocated(CS%Snm_Im)) deallocate(CS%Snm_Im)
     call spherical_harmonics_end(CS%sht)
+    deallocate(CS%sht)
   endif
 end subroutine SAL_end
 

@@ -20,6 +20,7 @@ use MOM_forcing_type,  only : forcing, mech_forcing, find_ustar
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
 use MOM_interface_heights, only : thickness_to_dz
+use MOM_intrinsic_functions, only : cuberoot
 use MOM_io,            only : slasher, MOM_read_data, vardesc, var_desc
 use MOM_kappa_shear,   only : kappa_shear_is_used, kappa_shear_at_vertex
 use MOM_open_boundary, only : ocean_OBC_type, OBC_segment_type, OBC_NONE, OBC_DIRECTION_E
@@ -29,7 +30,7 @@ use MOM_restart,       only : register_restart_field_as_obsolete, register_resta
 use MOM_safe_alloc,    only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, vertvisc_type, porous_barrier_type
-use MOM_verticalGrid,  only : verticalGrid_type
+use MOM_verticalGrid,  only : verticalGrid_type, get_thickness_units
 
 implicit none ; private
 
@@ -58,6 +59,7 @@ type, public :: set_visc_CS ; private
   real    :: drag_bg_vel    !< An assumed unresolved background velocity for
                             !! calculating the bottom drag [L T-1 ~> m s-1].
                             !! Runtime parameter `DRAG_BG_VEL`.
+                            !! Should not be used if BBL_USE_TIDAL_BG is True.
   real    :: BBL_thick_min  !< The minimum bottom boundary layer thickness [Z ~> m].
                             !! This might be Kv / (cdrag * drag_bg_vel) to give
                             !! Kv as the minimum near-bottom viscosity.
@@ -100,6 +102,8 @@ type, public :: set_visc_CS ; private
   real    :: omega_frac     !<   When setting the decay scale for turbulence, use this
                             !! fraction of the absolute rotation rate blended with the local
                             !! value of f, as sqrt((1-of)*f^2 + of*4*omega^2) [nondim]
+  logical :: concave_trigonometric_L  !< If true, use trigonometric expressions to determine the
+                            !! fractional open interface lengths for concave topography.
   integer :: answer_date    !< The vintage of the order of arithmetic and expressions in the set
                             !! viscosity calculations.  Values below 20190101 recover the answers
                             !! from the end of 2018, while higher values use updated and more robust
@@ -207,11 +211,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
                            ! from lateral lengths to layer thicknesses [H L-1 ~> nondim or kg m-3].
   real :: cdrag_sqrt_H_RL  ! Square root of the drag coefficient, times a unit conversion factor from
                            ! density times lateral lengths to layer thicknesses [H L-1 R-1 ~> m3 kg-1 or nondim]
-  real :: cdrag_L_to_H     ! The drag coeffient times conversion factors from lateral
+  real :: cdrag_L_to_H     ! The drag coefficient times conversion factors from lateral
                            ! distance to thickness units [H L-1 ~> nondim or kg m-3]
-  real :: cdrag_RL_to_H    ! The drag coeffient times conversion factors from density times lateral
+  real :: cdrag_RL_to_H    ! The drag coefficient times conversion factors from density times lateral
                            ! distance to thickness units [H L-1 R-1 ~> m3 kg-1 or nondim]
-  real :: cdrag_conv       ! The drag coeffient times a combination of static conversion factors and in
+  real :: cdrag_conv       ! The drag coefficient times a combination of static conversion factors and in
                            ! situ density or Boussinesq reference density [H L-1 ~> nondim or kg m-3]
   real :: oldfn            ! The integrated energy required to
                            ! entrain up to the bottom of the layer,
@@ -226,11 +230,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: BBL_thick_max    ! A huge upper bound on the boundary layer thickness [Z ~> m].
   real :: kv_bbl           ! The bottom boundary layer viscosity [H Z T-1 ~> m2 s-1 or Pa s]
   real :: C2f              ! C2f = 2*f at velocity points [T-1 ~> s-1].
-
-  real :: U_bg_sq          ! The square of an assumed background
-                           ! velocity, for calculating the mean
-                           ! magnitude near the bottom for use in the
-                           ! quadratic bottom drag [L2 T-2 ~> m2 s-2].
+  real :: u2_bg(SZIB_(G))  ! The square of an assumed background velocity, for calculating the mean
+                           ! magnitude near the bottom for use in the quadratic bottom drag [L2 T-2 ~> m2 s-2].
   real :: hwtot            ! Sum of the thicknesses used to calculate
                            ! the near-bottom velocity magnitude [H ~> m or kg m-2].
   real :: I_hwtot          ! The Adcroft reciprocal of hwtot [H-1 ~> m-1 or m2 kg-1].
@@ -257,41 +258,28 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: Dp, Dm           ! The depths at the edges of a velocity cell [Z ~> m].
   real :: crv              ! crv is the curvature of the bottom depth across a
                            ! cell, times the cell width squared [Z ~> m].
-  real :: crv_3            ! crv/3 [Z ~> m].
-  real :: C24_crv          ! 24/crv [Z-1 ~> m-1].
   real :: slope            ! The absolute value of the bottom depth slope across
                            ! a cell times the cell width [Z ~> m].
-  real :: apb_4a, ax2_3apb ! Various nondimensional ratios of crv and slope [nondim].
-  real :: a2x48_apb3, Iapb, Ibma_2 ! Combinations of crv (a) and slope (b) [Z-1 ~> m-1]
-  ! All of the following "volumes" have units of vertical heights because they are normalized
-  ! by the full horizontal area of a velocity cell.
   real :: Vol_bbl_chan     ! The volume of the bottom boundary layer as used in the channel
                            ! drag parameterization, normalized by the full horizontal area
                            ! of the velocity cell [Z ~> m].
-  real :: Vol_open         ! The cell volume above which it is open [Z ~> m].
-  real :: Vol_direct       ! With less than Vol_direct [Z ~> m], there is a direct
-                           ! solution of a cubic equation for L.
-  real :: Vol_2_reg        ! The cell volume above which there are two separate
-                           ! open areas that must be integrated [Z ~> m].
-  real :: vol              ! The volume below the interface whose normalized
-                           ! width is being sought [Z ~> m].
-  real :: vol_below        ! The volume below the interface below the one that
-                           ! is currently under consideration [Z ~> m].
-  real :: Vol_err          ! The error in the volume with the latest estimate of
-                           ! L, or the error for the interface below [Z ~> m].
-  real :: Vol_quit         ! The volume error below which to quit iterating [Z ~> m].
-  real :: Vol_tol          ! A volume error tolerance [Z ~> m].
+  real :: vol_below(SZK_(GV)+1) ! The volume below each interface, normalized by the full
+                           ! horizontal area of a velocity cell [Z ~> m].
   real :: L(SZK_(GV)+1)    ! The fraction of the full cell width that is open at
                            ! the depth of each interface [nondim].
-  real :: L_direct         ! The value of L above volume Vol_direct [nondim].
-  real :: L_max, L_min     ! Upper and lower bounds on the correct value for L [nondim].
-  real :: Vol_err_max      ! The volume error for the upper bound on the correct value for L [Z ~> m]
-  real :: Vol_err_min      ! The volume error for the lower bound on the correct value for L [Z ~> m]
-  real :: Vol_0            ! A deeper volume with known width L0 [Z ~> m].
-  real :: L0               ! The value of L above volume Vol_0 [nondim].
-  real :: dVol             ! vol - Vol_0 [Z ~> m].
-  real :: dV_dL2           ! The partial derivative of volume with L squared
-                           ! evaluated at L=L0 [Z ~> m].
+  ! The next 9 variables are only used for debugging.
+  real :: L_trig(SZK_(GV)+1) ! The fraction of the full cell width that is open at
+                           ! the depth of each interface from trigonometric expressions [nondim].
+  real :: vol_err_trig(SZK_(GV)+1) ! The error in the volume below based on L_trig [Z ~> m]
+  real :: vol_err_iter(SZK_(GV)+1) ! The error in the volume below based on L_iter [Z ~> m]
+  real :: norm_err_trig(SZK_(GV)+1) ! vol_err_trig normalized by vol_below [nondim]
+  real :: norm_err_iter(SZK_(GV)+1) ! vol_err_iter normalized by vol_below [nondim]
+  real :: dL_trig_itt(SZK_(GV)+1)  ! The difference between estimates of the fraction of the full cell
+                           ! width that is open at the depth of each interface [nondim].
+  real :: max_dL_trig_itt  ! The largest difference between L and L_trig, for debugging [nondim]
+  real :: max_norm_err_trig ! The largest magnitude value of norm_err_trig in a column [nondim]
+  real :: max_norm_err_iter ! The largest magnitude value of norm_err_iter in a column [nondim]
+
   real :: h_neglect        ! A thickness that is so small it is usually lost
                            ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: dz_neglect       ! A vertical distance that is so small it is usually lost
@@ -313,16 +301,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   real :: h_sum            ! The sum of the thicknesses of the layers below the one being
                            ! worked on [H ~> m or kg m-2].
   real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0, C1_12 = 1.0/12.0 ! Rational constants [nondim]
-  real :: C2pi_3           ! An irrational constant, 2/3 pi. [nondim]
   real :: tmp              ! A temporary variable, sometimes in [Z ~> m]
-  real :: tmp_val_m1_to_p1 ! A temporary variable [nondim]
-  real :: curv_tol         ! Numerator of curvature cubed, used to estimate
-                           ! accuracy of a single L(:) Newton iteration [Z5 ~> m5]
-  logical :: use_L0, do_one_L_iter    ! Control flags for L(:) Newton iteration
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml
-  integer :: itt, maxitt=20
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -332,8 +314,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   dz_neglect = GV%dZ_subroundoff
 
   Rho0x400_G = 400.0*(GV%H_to_RZ / (US%L_to_Z**2 * GV%g_Earth))
-  Vol_quit = (0.9*GV%Angstrom_Z + dz_neglect)
-  C2pi_3 = 8.0*atan(1.0)/3.0
 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
@@ -356,7 +336,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   use_BBL_EOS = associated(tv%eqn_of_state) .and. CS%BBL_use_EOS
   OBC => CS%OBC
 
-  U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_H = cdrag_sqrt * US%L_to_m * GV%m_to_H
   cdrag_sqrt_H_RL = cdrag_sqrt * US%L_to_Z * GV%RZ_to_H
@@ -439,11 +418,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   if (allocated(visc%Ray_v)) visc%Ray_v(:,:,:) = 0.0
 
   !$OMP parallel do default(private) shared(u,v,h,dz,tv,visc,G,GV,US,CS,Rml,nz,nkmb,nkml,K2, &
-  !$OMP                                     Isq,Ieq,Jsq,Jeq,h_neglect,dz_neglect,Rho0x400_G,C2pi_3, &
-  !$OMP                                     U_bg_sq,cdrag_sqrt,cdrag_sqrt_H,cdrag_sqrt_H_RL, &
+  !$OMP                                     Isq,Ieq,Jsq,Jeq,h_neglect,dz_neglect,Rho0x400_G, &
+  !$OMP                                     cdrag_sqrt,cdrag_sqrt_H,cdrag_sqrt_H_RL, &
   !$OMP                                     cdrag_L_to_H,cdrag_RL_to_H,use_BBL_EOS,BBL_thick_max, &
-  !$OMP                                     OBC,maxitt,D_u,D_v,mask_u,mask_v,pbv) &
-  !$OMP                              firstprivate(Vol_quit)
+  !$OMP                                     OBC,D_u,D_v,mask_u,mask_v,pbv)
   do j=Jsq,Jeq ; do m=1,2
 
     if (m==1) then
@@ -610,6 +588,19 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         htot_vel = 0.0 ; hwtot = 0.0 ; hutot = 0.0
         dztot_vel = 0.0 ; dzwtot = 0.0
         Thtot = 0.0 ; Shtot = 0.0 ; SpV_htot = 0.0
+
+        ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
+        if (CS%BBL_use_tidal_bg) then
+          if (m==1) then
+            u2_bg(I) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                             G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
+          else
+            u2_bg(i) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                              G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
+          endif
+        else
+          u2_bg(i) = CS%drag_bg_vel * CS%drag_bg_vel
+        endif
         do k=nz,1,-1
 
           if (htot_vel>=CS%Hbbl) exit ! terminate the k loop
@@ -625,18 +616,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
 
           if ((.not.CS%linear_drag) .and. (hweight >= 0.0)) then ; if (m==1) then
             v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
-            if (CS%BBL_use_tidal_bg) then
-              U_bg_sq = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
-                              G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
-            endif
-            hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + v_at_u*v_at_u + U_bg_sq)
+            hutot = hutot + hweight * sqrt(u(I,j,k)*u(I,j,k) + v_at_u*v_at_u + u2_bg(I))
           else
             u_at_v = set_u_at_v(u, h, G, GV, i, j, k, mask_u, OBC)
-            if (CS%BBL_use_tidal_bg) then
-              U_bg_sq = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
-                              G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
-            endif
-            hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + u_at_v*u_at_v + U_bg_sq)
+            hutot = hutot + hweight * sqrt(v(i,J,k)*v(i,J,k) + u_at_v*u_at_v + u2_bg(i))
           endif ; endif
 
           if (use_BBL_EOS .and. (hweight >= 0.0)) then
@@ -817,6 +800,19 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       if (m==1) then ; C2f = G%CoriolisBu(I,J-1) + G%CoriolisBu(I,J)
       else ; C2f = G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J) ; endif
 
+      ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
+      if (CS%BBL_use_tidal_bg) then
+        if (m==1) then
+          u2_bg(I) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                           G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
+        else
+          u2_bg(i) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                            G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
+        endif
+      else
+        u2_bg(i) = CS%drag_bg_vel * CS%drag_bg_vel
+      endif
+
       ! The thickness of a rotation limited BBL ignoring stratification is
       !   h_f ~ Cn u* / f        (limit of KW99 eq. 2.20 for N->0).
       ! The buoyancy limit of BBL thickness (h_N) is already in the variable htot from above.
@@ -828,7 +824,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       !   xp = 1/2 + sqrt( 1/4 + (2 f h_N/u*)^2 )
       ! To avoid dividing by zero if u*=0 then
       !   xp u* = 1/2 u* + sqrt( 1/4 u*^2 + (2 f h_N)^2 )
-      if (CS%cdrag * U_bg_sq <= 0.0) then
+      if (CS%cdrag * u2_bg(i) <= 0.0) then
         ! This avoids NaNs and overflows, and could be used in all cases,
         ! but is not bitwise identical to the current code.
         ustH = ustar(i) ; root = sqrt(0.25*ustH**2 + (htot*C2f)**2)
@@ -865,12 +861,11 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       if (CS%body_force_drag) bbl_thick = dz_bbl_drag(i)
 
       if (CS%Channel_drag) then
-        ! The drag within the bottommost Vol_bbl_chan is applied as a part of
-        ! an enhanced bottom viscosity, while above this the drag is applied
-        ! directly to the layers in question as a Rayleigh drag term.
 
-        ! Restrict the volume over which the channel drag is applied.
-        if (CS%Chan_drag_max_vol >= 0.0) Vol_bbl_chan = min(Vol_bbl_chan, CS%Chan_drag_max_vol)
+        vol_below(nz+1) = 0.0
+        do K=nz,1,-1
+          vol_below(K) = vol_below(K+1) + dz_vel(i,k)
+        enddo
 
         !### The harmonic mean edge depths here are not invariant to offsets!
         if (m==1) then
@@ -887,162 +882,62 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           Dm = 2.0 * D_vel * tmp / (D_vel + tmp)
         endif
         if (Dm > Dp) then ; tmp = Dp ; Dp = Dm ; Dm = tmp ; endif
-
-        crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+        crv = 3.0*(Dp + Dm - 2.0*D_vel)
         slope = Dp - Dm
+
         ! If the curvature is small enough, there is no reason not to assume
         ! a uniformly sloping or flat bottom.
         if (abs(crv) < 1e-2*(slope + CS%BBL_thick_min)) crv = 0.0
-        ! Each cell extends from x=-1/2 to 1/2, and has a topography
-        ! given by D(x) = crv*x^2 + slope*x + D - crv/12.
 
-        ! Calculate the volume above which the entire cell is open and the
-        ! other volumes at which the equation that is solved for L changes.
-        if (crv > 0.0) then
-          if (slope >= crv) then
-            Vol_open = D_vel - Dm ; Vol_2_reg = Vol_open
+        ! Determine the normalized open length (L) at each interface.
+        if (crv == 0.0) then
+          call find_L_open_uniform_slope(vol_below, Dp, Dm, L, GV)
+        elseif (crv > 0.0) then
+          if (CS%concave_trigonometric_L) then
+            call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L, GV)
           else
-            tmp = slope/crv
-            Vol_open = 0.25*slope*tmp + C1_12*crv
-            Vol_2_reg = 0.5*tmp**2 * (crv - C1_3*slope)
-          endif
-          ! Define some combinations of crv & slope for later use.
-          C24_crv = 24.0/crv ; Iapb = 1.0/(crv+slope)
-          apb_4a = (slope+crv)/(4.0*crv) ; a2x48_apb3 = (48.0*(crv*crv))*(Iapb**3)
-          ax2_3apb = 2.0*C1_3*crv*Iapb
-        elseif (crv == 0.0) then
-          Vol_open = 0.5*slope
-          if (slope > 0) Iapb = 1.0/slope
-        else ! crv < 0.0
-          Vol_open = D_vel - Dm
-          if (slope >= -crv) then
-            Iapb = 1.0e30*US%Z_to_m ; if (slope+crv /= 0.0) Iapb = 1.0/(crv+slope)
-            Vol_direct = 0.0 ; L_direct = 0.0 ; C24_crv = 0.0
-          else
-            C24_crv = 24.0/crv ; Iapb = 1.0/(crv+slope)
-            L_direct = 1.0 + slope/crv ! L_direct < 1 because crv < 0
-            Vol_direct = -C1_6*crv*L_direct**3
-          endif
-          Ibma_2 = 2.0 / (slope - crv)
-        endif
-
-        L(nz+1) = 0.0 ; vol = 0.0 ; Vol_err = 0.0 ; BBL_visc_frac = 0.0
-        ! Determine the normalized open length at each interface.
-        do K=nz,1,-1
-          vol_below = vol
-
-          vol = vol + dz_vel(i,k)
-          h_vel_pos = h_vel(i,k) + h_neglect
-
-          if (vol >= Vol_open) then ; L(K) = 1.0
-          elseif (crv == 0) then ! The bottom has no curvature.
-            L(K) = sqrt(2.0*vol*Iapb)
-          elseif (crv > 0) then
-            ! There may be a minimum depth, and there are
-            ! analytic expressions for L for all cases.
-            if (vol < Vol_2_reg) then
-              ! In this case, there is a contiguous open region and
-              !   vol = 0.5*L^2*(slope + crv/3*(3-4L)).
-              if (a2x48_apb3*vol < 1e-8) then ! Could be 1e-7?
-                ! There is a very good approximation here for massless layers.
-                L0 = sqrt(2.0*vol*Iapb) ; L(K) = L0*(1.0 + ax2_3apb*L0)
-              else
-                L(K) = apb_4a * (1.0 - &
-                         2.0 * cos(C1_3*acos(a2x48_apb3*vol - 1.0) - C2pi_3))
-              endif
-              ! To check the answers.
-              ! Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol
-            else ! There are two separate open regions.
-              !   vol = slope^2/4crv + crv/12 - (crv/12)*(1-L)^2*(1+2L)
-              ! At the deepest volume, L = slope/crv, at the top L = 1.
-              !L(K) = 0.5 - cos(C1_3*acos(1.0 - C24_crv*(Vol_open - vol)) - C2pi_3)
-              tmp_val_m1_to_p1 = 1.0 - C24_crv*(Vol_open - vol)
-              tmp_val_m1_to_p1 = max(-1., min(1., tmp_val_m1_to_p1))
-              L(K) = 0.5 - cos(C1_3*acos(tmp_val_m1_to_p1) - C2pi_3)
-              ! To check the answers.
-              ! Vol_err = Vol_open - 0.25*crv_3*(1.0+2.0*L(K)) * (1.0-L(K))**2 - vol
+            call find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
+            if (CS%debug) then
+              ! The tests in this block reveal that the iterative and trigonometric solutions are
+              ! mathematically equivalent, but in some cases the iterative solution is consistent
+              ! at roundoff, but that the trigonmetric solutions have errors that can be several
+              ! orders of magnitude larger in some cases.
+              call find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L_trig, GV)
+              call test_L_open_concave(vol_below, D_vel, Dp, Dm, L_trig, vol_err_trig, GV)
+              call test_L_open_concave(vol_below, D_vel, Dp, Dm, L, vol_err_iter, GV)
+              max_dL_trig_itt = 0.0 ; max_norm_err_trig = 0.0 ; max_norm_err_iter = 0.0
+              norm_err_trig(:) = 0.0 ; norm_err_iter(:) = 0.0
+              do K=1,nz+1
+                dL_trig_itt(K) = L_trig(K) - L(K)
+                if (abs(dL_trig_itt(K)) > abs(max_dL_trig_itt)) max_dL_trig_itt = dL_trig_itt(K)
+                norm_err_trig(K) = vol_err_trig(K) / (vol_below(K) + dz_neglect)
+                norm_err_iter(K) = vol_err_iter(K) / (vol_below(K) + dz_neglect)
+                if (abs(norm_err_trig(K)) > abs(max_norm_err_trig)) max_norm_err_trig = norm_err_trig(K)
+                if (abs(norm_err_iter(K)) > abs(max_norm_err_iter)) max_norm_err_iter = norm_err_iter(K)
+              enddo
+              if (abs(max_dL_trig_itt) > 1.0e-13) &
+                K = nz+1   ! This is here only to use as a break point for a debugger.
+              if (abs(max_norm_err_trig) > 1.0e-13) &
+                K = nz+1   ! This is here only to use as a break point for a debugger.
+              if (abs(max_norm_err_iter) > 1.0e-13) &
+                K = nz+1   ! This is here only to use as a break point for a debugger.
             endif
-          else ! a < 0.
-            if (vol <= Vol_direct) then
-              ! Both edges of the cell are bounded by walls.
-              L(K) = (-0.25*C24_crv*vol)**C1_3
-            else
-              ! x_R is at 1/2 but x_L is in the interior & L is found by solving
-              !   vol = 0.5*L^2*(slope + crv/3*(3-4L))
-
-              !  Vol_err = 0.5*(L(K+1)*L(K+1))*(slope + crv_3*(3.0-4.0*L(K+1))) - vol_below
-              ! Change to ...
-              !   if (min(vol_below + Vol_err, vol) <= Vol_direct) then ?
-              if (vol_below + Vol_err <= Vol_direct) then
-                L0 = L_direct ; Vol_0 = Vol_direct
-              else
-                L0 = L(K+1) ; Vol_0 = vol_below + Vol_err
-                ! Change to   Vol_0 = min(vol_below + Vol_err, vol) ?
-              endif
-
-              !   Try a relatively simple solution that usually works well
-              ! for massless layers.
-              dV_dL2 = 0.5*(slope+crv) - crv*L0 ; dVol = (vol-Vol_0)
-           !  dV_dL2 = 0.5*(slope+crv) - crv*L0 ; dVol = max(vol-Vol_0, 0.0)
-
-              use_L0 = .false.
-              do_one_L_iter = .false.
-              if (CS%answer_date < 20190101) then
-                curv_tol = GV%Angstrom_Z*dV_dL2**2 &
-                           * (0.25 * dV_dL2 * GV%Angstrom_Z - crv * L0 * dVol)
-                do_one_L_iter = (crv * crv * dVol**3) < curv_tol
-              else
-                ! The following code is more robust when GV%Angstrom_H=0, but
-                ! it changes answers.
-                use_L0 = (dVol <= 0.)
-
-                Vol_tol = max(0.5 * GV%Angstrom_Z + dz_neglect, 1e-14 * vol)
-                Vol_quit = max(0.9 * GV%Angstrom_Z + dz_neglect, 1e-14 * vol)
-
-                curv_tol = Vol_tol * dV_dL2**2 &
-                           * (dV_dL2 * Vol_tol - 2.0 * crv * L0 * dVol)
-                do_one_L_iter = (crv * crv * dVol**3) < curv_tol
-              endif
-
-              if (use_L0) then
-                L(K) = L0
-                Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol
-              elseif (do_one_L_iter) then
-                ! One iteration of Newton's method should give an estimate
-                ! that is accurate to within Vol_tol.
-                L(K) = sqrt(L0*L0 + dVol / dV_dL2)
-                Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol
-              else
-                if (dV_dL2*(1.0-L0*L0) < dVol + &
-                    dV_dL2 * (Vol_open - Vol)*Ibma_2) then
-                  L_max = sqrt(1.0 - (Vol_open - Vol)*Ibma_2)
-                else
-                  L_max = sqrt(L0*L0 + dVol / dV_dL2)
-                endif
-                L_min = sqrt(L0*L0 + dVol / (0.5*(slope+crv) - crv*L_max))
-
-                Vol_err_min = 0.5*(L_min**2)*(slope + crv_3*(3.0-4.0*L_min)) - vol
-                Vol_err_max = 0.5*(L_max**2)*(slope + crv_3*(3.0-4.0*L_max)) - vol
-           !    if ((abs(Vol_err_min) <= Vol_quit) .or. (Vol_err_min >= Vol_err_max)) then
-                if (abs(Vol_err_min) <= Vol_quit) then
-                  L(K) = L_min ; Vol_err = Vol_err_min
-                else
-                  L(K) = sqrt((L_min**2*Vol_err_max - L_max**2*Vol_err_min) / &
-                              (Vol_err_max - Vol_err_min))
-                  do itt=1,maxitt
-                    Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol
-                    if (abs(Vol_err) <= Vol_quit) exit
-                    ! Take a Newton's method iteration. This equation has proven
-                    ! robust enough not to need bracketing.
-                    L(K) = L(K) - Vol_err / (L(K)* (slope + crv - 2.0*crv*L(K)))
-                    ! This would be a Newton's method iteration for L^2:
-                    !   L(K) = sqrt(L(K)*L(K) - Vol_err / (0.5*(slope+crv) - crv*L(K)))
-                  enddo
-                endif ! end of iterative solver
-              endif ! end of 1-boundary alternatives.
-            endif ! end of a<0 cases.
           endif
+        else ! crv < 0.0
+          call find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
+        endif ! end of crv<0 cases.
 
+        ! Determine the Rayleigh drag contributions.
+
+        ! The drag within the bottommost Vol_bbl_chan is applied as a part of an enhanced bottom
+        ! viscosity, while above this the drag is applied directly to the layers in question as a
+        ! Rayleigh drag term.
+
+        ! Restrict the volume over which the channel drag is applied from the previously determined value.
+        if (CS%Chan_drag_max_vol >= 0.0) Vol_bbl_chan = min(Vol_bbl_chan, CS%Chan_drag_max_vol)
+
+        BBL_visc_frac = 0.0
+        do K=nz,1,-1
           !modify L(K) for porous barrier parameterization
           if (m==1) then ; L(K) = L(K)*pbv%por_layer_widthU(I,j,K)
           else ; L(K) = L(K)*pbv%por_layer_widthV(i,J,K); endif
@@ -1050,8 +945,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           ! Determine the drag contributing to the bottom boundary layer
           ! and the Rayleigh drag that acts on each layer.
           if (L(K) > L(K+1)) then
-            if (vol_below < Vol_bbl_chan) then
-              BBL_frac = (1.0-vol_below/Vol_bbl_chan)**2
+            if (vol_below(K+1) < Vol_bbl_chan) then
+              BBL_frac = (1.0-vol_below(K+1)/Vol_bbl_chan)**2
               BBL_visc_frac = BBL_visc_frac + BBL_frac*(L(K) - L(K+1))
             else
               BBL_frac = 0.0
@@ -1063,6 +958,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
               cdrag_conv = cdrag_L_to_H
             endif
 
+            h_vel_pos = h_vel(i,k) + h_neglect
             if (m==1) then ; Cell_width = G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)
             else ; Cell_width = G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k) ; endif
             gam = 1.0 - L(K+1)/L(K)
@@ -1076,16 +972,16 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           if (m==1) then
             if (Rayleigh > 0.0) then
               v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
-              visc%Ray_u(I,j,k) = Rayleigh * sqrt(u(I,j,k)*u(I,j,k) + v_at_u*v_at_u + U_bg_sq)
+              visc%Ray_u(I,j,k) = Rayleigh * sqrt(u(I,j,k)*u(I,j,k) + v_at_u*v_at_u + u2_bg(I))
             else ; visc%Ray_u(I,j,k) = 0.0 ; endif
           else
             if (Rayleigh > 0.0) then
               u_at_v = set_u_at_v(u, h, G, GV, i, j, k, mask_u, OBC)
-              visc%Ray_v(i,J,k) = Rayleigh * sqrt(v(i,J,k)*v(i,J,k) + u_at_v*u_at_v + U_bg_sq)
+              visc%Ray_v(i,J,k) = Rayleigh * sqrt(v(i,J,k)*v(i,J,k) + u_at_v*u_at_v + u2_bg(i))
             else ; visc%Ray_v(i,J,k) = 0.0 ; endif
           endif
 
-        enddo ! k loop to determine L(K).
+        enddo ! k loop to determine visc%Ray_[uv].
 
         ! Set the near-bottom viscosity to a value which will give
         ! the correct stress when the shear occurs over bbl_thick.
@@ -1191,7 +1087,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
 
   if (CS%debug) then
     if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) &
-        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, scale=GV%H_to_m*US%s_to_T)
+        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, &
+                      scale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(visc%kv_bbl_u) .and. allocated(visc%kv_bbl_v)) &
         call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
                       haloshift=0, scale=GV%HZ_T_to_m2_s, scalar_pair=.true.)
@@ -1201,6 +1098,707 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   endif
 
 end subroutine set_viscous_BBL
+
+!> Determine the normalized open length of each interface, given the edge depths and normalized
+!! volumes below each interface.
+subroutine find_L_open_uniform_slope(vol_below, Dp, Dm, L, GV)
+  type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
+                                                   !! the full horizontal area of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dp   !< The larger of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real, dimension(SZK_(GV)+1), intent(out) :: L    !< The fraction of the full cell width that is open at
+                                                   !! the depth of each interface [nondim]
+
+  ! Local variables
+  real :: slope     ! The absolute value of the bottom depth slope across a cell times the cell width [Z ~> m].
+  real :: I_slope   ! The inverse of the normalized slope [Z-1 ~> m-1]
+  real :: Vol_open  ! The cell volume above which it is open [Z ~> m].
+  integer :: K, nz
+
+  nz = GV%ke
+
+  slope = abs(Dp - Dm)
+  if (slope == 0.0) then
+    L(1:nz) = 1.0 ;  L(nz+1) = 0.0
+  else
+    Vol_open = 0.5*slope
+    I_slope = 1.0 / slope
+
+    L(nz+1) = 0.0
+    do K=nz,1,-1
+      if (vol_below(K) >= Vol_open) then ; L(K) = 1.0
+      else
+        ! With a uniformly sloping bottom, the calculation of L(K) is the solution of a simple quadratic equation.
+        L(K) = sqrt(2.0*vol_below(K)*I_slope)
+      endif
+    enddo
+  endif
+
+end subroutine find_L_open_uniform_slope
+
+!> Determine the normalized open length of each interface for concave bathymetry (from the ocean perspective)
+!! using trigonometric expressions.   In this case there can be two separate open regions.
+subroutine find_L_open_concave_trigonometric(vol_below, D_vel, Dp, Dm, L, GV)
+  type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
+                                                   !! the full horizontal area of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: D_vel !< The average bottom depth at a velocity point [Z ~> m]
+  real,                        intent(in)  :: Dp   !< The larger of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real, dimension(SZK_(GV)+1), intent(out) :: L    !< The fraction of the full cell width that is open at
+                                                   !! the depth of each interface [nondim]
+
+  ! Local variables
+  real :: crv              ! crv is the curvature of the bottom depth across a
+                           ! cell, times the cell width squared [Z ~> m].
+  real :: crv_3            ! crv/3 [Z ~> m].
+  real :: slope            ! The absolute value of the bottom depth slope across
+                           ! a cell times the cell width [Z ~> m].
+  ! The following "volumes" have units of vertical heights because they are normalized
+  ! by the full horizontal area of a velocity cell.
+  real :: Vol_open         ! The cell volume above which the face is fully is open [Z ~> m].
+  real :: Vol_2_reg        ! The cell volume above which there are two separate
+                           ! open areas that must be integrated [Z ~> m].
+  real :: C24_crv          ! 24/crv [Z-1 ~> m-1].
+  real :: apb_4a, ax2_3apb ! Various nondimensional ratios of crv and slope [nondim].
+  real :: a2x48_apb3, Iapb ! Combinations of crv (a) and slope (b) [Z-1 ~> m-1]
+  real :: L0               ! A linear estimate of L appropriate for tiny volumes [nondim].
+  real :: slope_crv        ! The slope divided by the curvature [nondim]
+  real :: tmp_val_m1_to_p1 ! A temporary variable [nondim]
+  real, parameter :: C1_3 = 1.0/3.0, C1_12 = 1.0/12.0 ! Rational constants [nondim]
+  real, parameter :: C2pi_3 = 8.0*atan(1.0)/3.0  ! An irrational constant, 2/3 pi. [nondim]
+  integer :: K, nz
+
+  nz = GV%ke
+
+  ! Each cell extends from x=-1/2 to 1/2, and has a topography
+  ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
+  !crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  crv_3 = (Dp + Dm - (2.0*D_vel)) ; crv = 3.0*crv_3
+  slope = Dp - Dm
+
+  ! Calculate the volume above which the entire cell is open and the volume at which the
+  ! equation that is solved for L changes because there are two separate open regions.
+  if (slope >= crv) then
+    Vol_open = D_vel - Dm ; Vol_2_reg = Vol_open
+  else
+    slope_crv = slope / crv
+    Vol_open = 0.25*slope*slope_crv + C1_12*crv
+    Vol_2_reg = 0.5*slope_crv**2 * (crv - C1_3*slope)
+  endif
+  ! Define some combinations of crv & slope for later use.
+  C24_crv = 24.0/crv ; Iapb = 1.0/(crv+slope)
+  apb_4a = (slope+crv)/(4.0*crv) ; a2x48_apb3 = (48.0*(crv*crv))*(Iapb**3)
+  ax2_3apb = 2.0*C1_3*crv*Iapb
+
+  L(nz+1) = 0.0
+  ! Determine the normalized open length (L) at each interface.
+  do K=nz,1,-1
+    if (vol_below(K) >= Vol_open) then ! The whole cell is open.
+      L(K) = 1.0
+    elseif (vol_below(K) < Vol_2_reg) then
+      ! In this case, there is a contiguous open region and
+      !   vol_below(K) = 0.5*L^2*(slope + crv/3*(3-4L)).
+      if (a2x48_apb3*vol_below(K) < 1e-8) then ! Could be 1e-7?
+        ! There is a very good approximation here for massless layers.
+        !L0 = sqrt(2.0*vol_below(K)*Iapb) ; L(K) = L0*(1.0 + ax2_3apb*L0)
+        L0 = sqrt(2.0*vol_below(K)*Iapb) ; L(K) = L0*(1.0 + (ax2_3apb*L0))
+      else
+        !L(K) = apb_4a * (1.0 - &
+        !         2.0 * cos(C1_3*acos(a2x48_apb3*vol_below(K) - 1.0) - C2pi_3))
+        L(K) = apb_4a * (1.0 - &
+                 2.0 * cos(C1_3*acos((a2x48_apb3*vol_below(K)) - 1.0) - C2pi_3))
+      endif
+      ! To check the answers.
+      ! Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol_below(K)
+    else ! There are two separate open regions.
+      !   vol_below(K) = slope^2/4crv + crv/12 - (crv/12)*(1-L)^2*(1+2L)
+      ! At the deepest volume, L = slope/crv, at the top L = 1.
+      !  L(K) = 0.5 - cos(C1_3*acos(1.0 - C24_crv*(Vol_open - vol_below(K))) - C2pi_3)
+      tmp_val_m1_to_p1 = 1.0 - C24_crv*(Vol_open - vol_below(K))
+      tmp_val_m1_to_p1 = max(-1., min(1., tmp_val_m1_to_p1))
+      L(K) = 0.5 - cos(C1_3*acos(tmp_val_m1_to_p1) - C2pi_3)
+      ! To check the answers.
+      ! Vol_err = Vol_open - 0.25*crv_3*(1.0+2.0*L(K)) * (1.0-L(K))**2 - vol_below(K)
+    endif
+  enddo ! k loop to determine L(K) in the concave case
+
+end subroutine find_L_open_concave_trigonometric
+
+
+
+!> Determine the normalized open length of each interface for concave bathymetry (from the ocean perspective) using
+!! iterative methods to solve the relevant cubic equations.   In this case there can be two separate open regions.
+subroutine find_L_open_concave_iterative(vol_below, D_vel, Dp, Dm, L, GV)
+  type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
+                                                   !! the full horizontal area of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: D_vel !< The average bottom depth at a velocity point [Z ~> m]
+  real,                        intent(in)  :: Dp   !< The larger of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real, dimension(SZK_(GV)+1), intent(out) :: L    !< The fraction of the full cell width that is open at
+                                                   !! the depth of each interface [nondim]
+
+  ! Local variables
+  real :: crv              ! crv is the curvature of the bottom depth across a
+                           ! cell, times the cell width squared [Z ~> m].
+  real :: crv_3            ! crv/3 [Z ~> m].
+  real :: slope            ! The absolute value of the bottom depth slope across
+                           ! a cell times the cell width [Z ~> m].
+
+  ! The following "volumes" have units of vertical heights because they are normalized
+  ! by the full horizontal area of a velocity cell.
+  real :: Vol_open         ! The cell volume above which the face is fully is open [Z ~> m].
+  real :: Vol_2_reg        ! The cell volume above which there are two separate
+                           ! open areas that must be integrated [Z ~> m].
+  real :: L_2_reg          ! The value of L when vol_below is Vol_2_reg [nondim]
+  real :: vol_inflect_1    ! The volume at which there is an inflection point in the expression
+                           ! relating L to vol_err when there is a single open region [Z ~> m]
+  real :: vol_inflect_2    ! The volume at which there is an inflection point in the expression
+                           ! relating L to vol_err when there are two open regions [Z ~> m]
+
+  real :: L_inflect_1      ! The value of L that sits at an inflection point in the expression
+                           ! relating L to vol_err when there is a single open region [nondim]
+  real :: L_inflect_2      ! The value of L that sits at an inflection point in the expression
+                           ! relating L to vol_err when there is are two open regions [nondim]
+  real :: L_max, L_min     ! Maximum and minimum bounds on the solution for L for an interface [nondim]
+  real :: vol_err          ! The difference between the volume below an interface for a given value
+                           ! of L and the target value [Z ~> m]
+  real :: dVol_dL          ! The partial derivative of the volume below with L [Z ~> m]
+  real :: vol_err_max      ! The value of vol_err when L is L_max [Z ~> m]
+
+  ! The following combinations of slope and crv are reused across layers, and hence are pre-calculated
+  ! for efficiency.  All are non-negative.
+  real :: Icrvpslope       ! The inverse of the sum of crv and slope [Z-1 ~> m-1]
+  real :: slope_crv        ! The slope divided by the curvature [nondim]
+  ! These are only used if the slope exceeds or matches the curvature.
+  real :: smc              ! The slope minus the curvature [Z ~> m]
+  real :: C3c_m_s          ! 3 times the curvature minus the slope [Z ~> m]
+  real :: I_3c_m_s         ! The inverse of 3 times the curvature minus the slope [Z-1 ~> m-1]
+  ! These are only used if the curvature exceeds the slope.
+  real :: C4_crv           ! The inverse of a quarter of the curvature [Z-1 ~> m-1]
+  real :: sxcms_c          ! The slope times the difference between the curvature and slope
+                           ! divided by the curvature [Z ~> m]
+  real :: slope2_4crv      ! A quarter of the slope squared divided by the curvature [Z ~> m]
+  real :: I_3s_m_c         ! The inverse of 3 times the slope minus the curvature [Z-1 ~> m-1]
+  real :: C3s_m_c          ! 3 times the slope minus the curvature [Z ~> m]
+
+  real, parameter :: C1_3 = 1.0 / 3.0, C1_12 = 1.0 / 12.0 ! Rational constants [nondim]
+  integer :: K, nz, itt
+  integer, parameter :: max_itt = 10
+
+  nz = GV%ke
+
+  ! Each cell extends from x=-1/2 to 1/2, and has a topography
+  ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
+
+  crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  slope = Dp - Dm
+
+  ! Calculate the volume above which the entire cell is open and the volume at which the
+  ! equation that is solved for L changes because there are two separate open regions.
+  if (slope >= crv) then
+    Vol_open = D_vel - Dm ; Vol_2_reg = Vol_open
+    L_2_reg = 1.0
+    if (crv + slope >= 4.0*crv) then
+      L_inflect_1 = 1.0 ; Vol_inflect_1 = Vol_open
+    else
+      slope_crv = slope / crv
+      L_inflect_1 = 0.25 + 0.25*slope_crv
+      vol_inflect_1 = 0.25*C1_12 * ((slope_crv + 1.0)**2 * (slope + crv))
+    endif
+    ! Precalculate some combinations of crv & slope for later use.
+    smc = slope - crv
+    C3c_m_s = 3.0*crv - slope
+    if (C3c_m_s > 2.0*smc) I_3c_m_s = 1.0 / C3c_m_s
+  else
+    slope_crv = slope / crv
+    Vol_open = 0.25*slope*slope_crv + C1_12*crv
+    Vol_2_reg = 0.5*slope_crv**2 * (crv - C1_3*slope)
+    L_2_reg = slope_crv
+
+    ! The inflection point is useful to know because below the inflection point
+    ! Newton's method converges monotonically from above and conversely above it.
+    ! These are the inflection point values of L and vol_below with a single open segment.
+    vol_inflect_1 = 0.25*C1_12 * ((slope_crv + 1.0)**2 * (slope + crv))
+    L_inflect_1 = 0.25 + 0.25*slope_crv
+    ! These are the inflection point values of L and vol_below when there are two open segments.
+    ! Vol_inflect_2 = Vol_open - 0.125 * crv_3, which is equivalent to:
+    vol_inflect_2 = 0.25*slope*slope_crv + 0.125*crv_3
+    L_inflect_2 = 0.5
+    ! Precalculate some combinations of crv & slope for later use.
+    C4_crv = 4.0 / crv
+    slope2_4crv = 0.25 * slope * slope_crv
+    sxcms_c = slope_crv*(crv - slope)
+    C3s_m_c = 3.0*slope - crv
+    if (C3s_m_c > 2.0*sxcms_c) I_3s_m_c = 1.0 / C3s_m_c
+  endif
+  ! Define some combinations of crv & slope for later use.
+  Icrvpslope = 1.0 / (crv+slope)
+
+  L(nz+1) = 0.0
+  ! Determine the normalized open length (L) at each interface.
+  do K=nz,1,-1
+    if (vol_below(K) >= Vol_open) then ! The whole cell is open.
+      L(K) = 1.0
+    elseif (vol_below(K) < Vol_2_reg) then
+      ! In this case, there is a single contiguous open region from x=1/2-L to 1/2.
+      ! Changing the horizontal variable in the expression from D(x) to D(L) gives:
+      !   x(L) = 1/2 - L
+      !   D(L) = crv*(0.5 - L)^2 + slope*(0.5 - L) + D_vel - crv/12
+      !   D(L) = crv*L^2 - crv*L + crv/4 + slope*(1/2 - L) + D_vel - crv/12
+      !   D(L) = crv*L^2 - (slope+crv)*L + slope/2 + D_vel + crv/6
+      !   D(0) = slope/2 + D_vel + crv/6 = (Dp - Dm)/2 + D_vel + (Dp + Dm - 2*D_vel)/2 = Dp
+      !   D(1) = crv - slope - crv + slope/2 + Dvel + crv/6 = D_vel - slope/2 + crv/6 = Dm
+      !
+      !   vol_below = integral(y = 0 to L) D(y) dy - L * D(L)
+      !             = crv/3*L^3 - (slope+crv)/2*L^2 + (slope/2 + D_vel + crv/6)*L -
+      !                    (crv*L^2 - (slope+crv)*L + slope/2 + D_vel + crv/6) * L
+      !             = -2/3 * crv * L^3 + 1/2 * (slope+crv) * L^2
+      !   vol_below(K) = 0.5*L(K)**2*(slope + crv_3*(3-4*L(K)))
+      ! L(K) is between L(K+1) and slope_crv.
+      L_max = min(L_2_reg, 1.0)
+      if (vol_below(K) <= vol_inflect_1) L_max = min(L_max, L_inflect_1)
+
+      L_min = L(K+1)
+      if (vol_below(K) >= vol_inflect_1) L_min = max(L_min, L_inflect_1)
+
+      ! Ignoring the cubic term gives an under-estimate but is very accurate for near bottom
+      ! layers, so use this as a potential floor.
+      if (2.0*vol_below(K)*Icrvpslope > L_min**2) L_min = sqrt(2.0*vol_below(K)*Icrvpslope)
+
+      ! Start with L_min in most cases.
+      L(k) = L_min
+
+      if (vol_below(K) <= vol_inflect_1) then
+        ! Starting with L_min below L_inflect_1, only the first overshooting iteration of Newton's
+        ! method needs bounding.
+        L(k) = L_min
+        vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L_min is already the best solution.
+        if (vol_err < 0.0) then
+          dVol_dL = L(K) * (slope + crv*(1.0 - 2.0*L(k)))
+          if (L(K)*dVol_dL > vol_err + L_max*dVol_dL) then
+            L(K) = L_max
+          else
+            L(K) = L(K) - (vol_err / dVol_dL)
+          endif
+
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+            dVol_dL = L(K) * (slope + crv*(1.0 - 2.0*L(k)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+      else ! (vol_below(K) > vol_inflect_1)
+        ! Iteration from below converges monotonically, but we need to deal with the case where we are
+        ! close to the peak of the topography and Newton's method mimics the convergence of bisection.
+
+        ! Evaluate the error when L(K) = L_min as a possible first guess.
+        L(k) = L_min
+        vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L_min is already the best solution.
+        if (vol_err < 0.0) then
+
+          ! These two upper estimates deal with the possibility that this point may be near
+          ! the upper extrema, where the error term might be approximately parabolic and
+          ! Newton's method would converge slowly like simple bisection.
+          if (slope < crv) then
+            ! if ((L_2_reg - L_min)*(3.0*slope - crv) > 2.0*slope_crv*(crv-slope)) then
+            if ((L_2_reg - L_min)*C3s_m_c > 2.0*sxcms_c) then
+              ! There is a decent upper estimate of L from the approximate quadratic equation found
+              ! by examining the error expressions at L ~= L_2_reg and ignoring the cubic term.
+              L_max = (slope_crv*(2.0*slope) - sqrt(sxcms_c**2 + &
+                                                    2.0*C3s_m_c*(Vol_2_reg - vol_below(K))) ) * I_3s_m_c
+              ! The line above is equivalent to:
+              ! L_max = (slope_crv*(2.0*slope) - sqrt(slope_crv**2*(crv-slope)**2 + &
+              !                                       2.0*(3.0*slope - crv)*(Vol_2_reg - vol_below(K))) ) / &
+              !                      (3.0*slope - crv)
+            else
+              L_max = slope_crv
+            endif
+          else ! (slope >= crv)
+            if ((1.0 - L_min)*C3c_m_s > 2.0*smc) then
+              ! There is a decent upper estimate of L from the approximate quadratic equation found
+              ! by examining the error expressions at L ~= 1 and ignoring the cubic term.
+              L_max = ( 2.0*crv - sqrt(smc**2 + 2.0*C3c_m_s * (Vol_open - vol_below(K))) ) * I_3c_m_s
+              ! The line above is equivalent to:
+              ! L_max = ( 2.0*crv - sqrt((slope - crv)**2 + 2.0*(3.0*crv - slope) * (Vol_open - vol_below(K))) ) / &
+              !             (3.0*crv - slope)
+            else
+              L_max = 1.0
+            endif
+          endif
+          Vol_err_max = 0.5*L_max**2 * (slope + crv*(1.0 - 4.0*C1_3*L_max)) - vol_below(K)
+          ! if (Vol_err_max < 0.0) call MOM_error(FATAL, &
+          !        "Vol_err_max should never be negative in find_L_open_concave_iterative.")
+          if ((Vol_err_max < abs(Vol_err)) .and. (L_max < 1.0)) then
+            ! Start with 1 bounded Newton's method step from L_max
+            dVol_dL = L_max * (slope + crv*(1.0 - 2.0*L_max))
+            L(K) = max(L_min, L_max - (vol_err_max / dVol_dL) )
+          ! else ! Could use the fact that Vol_err is known to take an iteration?
+          endif
+
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            vol_err = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+            dVol_dL = L(K) * (slope + crv*(1.0 - 2.0*L(k)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+
+      endif
+
+      ! To check the answers.
+      ! Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol_below(K)
+    else ! There are two separate open regions.
+      !   vol_below(K) = slope^2/(4*crv) + crv/12 - (crv/12)*(1-L)^2*(1+2L)
+      ! At the deepest volume, L = slope/crv, at the top L = 1.
+
+      ! To check the answers.
+      ! Vol_err = Vol_open - 0.25*crv_3*(1.0+2.0*L(K)) * (1.0-L(K))**2 - vol_below(K)
+      !   or equivalently:
+      ! Vol_err = Vol_open - 0.25*crv_3*(3.0-2.0*(1.0-L(K))) * (1.0-L(K))**2 - vol_below(K)
+      !  ! Note that: Vol_open = 0.25*slope*slope_crv + C1_12*crv
+      ! Vol_err = 0.25*slope*slope_crv + 0.25*crv_3*( 1.0 - (1.0 + 2.0*L(K)) * (1.0-L(K))**2 ) - vol_below(K)
+      ! Vol_err = 0.25*crv_3*L(K)**2*( 3.0 - 2.0*L(K) ) + 0.25*slope*slope_crv - vol_below(K)
+
+      ! Derivation of the L_max limit below:
+      !     Vol_open - vol_below(K) = 0.25*crv_3*(3.0-2.0*(1.0-L(K))) * (1.0-L(K))**2
+      !     (3.0-2.0*(1.0-L(K))) * (1.0-L(K))**2 = (Vol_open - vol_below(K)) / (0.25*crv_3)
+      !   When 1-L(K) << 1:
+      !     3.0 * (1.0-L_max)**2 = (Vol_open - vol_below(K)) / (0.25*crv_3)
+      !     (1.0-L_max)**2 = (Vol_open - vol_below(K)) / (0.25*crv)
+
+      ! Derivation of the L_min limit below:
+      !     Vol_err = 0.25*crv_3*L(K)**2*( 3.0 - 2.0*L(K) ) + 0.25*slope*slope_crv - vol_below(K)
+      !     crv*L(K)**2*( 1.0 - 2.0*C1_3*L(K) ) = 4.0*vol_below(K) - slope*slope_crv
+      !   When L(K) << 1:
+      !     crv*L_min**2 = 4.0*vol_below(K) - slope*slope_crv
+      !     L_min = sqrt((4.0*vol_below(K) - slope*slope_crv)/crv)
+      !   Noting that L(K) >= slope_crv, when L(K)-slope_crv << 1:
+      !     (crv + 2.0*C1_3*slope)*L_min**2 = 4.0*vol_below(K) - slope*slope_crv
+      !     L_min = sqrt((4.0*vol_below(K) - slope*slope_crv)/(crv + 2.0*C1_3*slope))
+
+      if (vol_below(K) <= Vol_inflect_2) then
+        ! Newton's Method would converge monotonically from above, but overshoot from below.
+        L_min = max(L(K+1), L_2_reg) ! L_2_reg = slope_crv
+        ! This under-estimate of L(K) is accurate for L ~= slope_crv:
+        if ((4.0*vol_below(K) - slope*slope_crv) > (crv + 2.0*C1_3*slope)*L_min**2) &
+          L_min = max(L_min, sqrt((4.0*vol_below(K) - slope*slope_crv) / (crv + 2.0*C1_3*slope)))
+        L_max = 0.5 ! = L_inflect_2
+
+        ! Starting with L_min below L_inflect_2, only the first overshooting iteration of Newton's
+        ! method needs bounding.
+        L(k) = L_min
+        Vol_err = crv_3*L(K)**2*( 0.75 - 0.5*L(K) ) + (slope2_4crv - vol_below(K))
+
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L_min is already the best solution.
+        if (vol_err < 0.0) then
+          dVol_dL = 0.5*crv * (L(K) * (1.0 - L(K)))
+          if (L(K)*dVol_dL >= vol_err + L_max*dVol_dL) then
+            L(K) = L_max
+          else
+            L(K) = L(K) - (vol_err / dVol_dL)
+          endif
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            Vol_err = crv_3 * (L(K)**2 * (0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+            dVol_dL = 0.5*crv * (L(K)*(1.0 - L(K)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+      else ! (vol_below(K) > Vol_inflect_2)
+        ! Newton's Method would converge monotonically from below, but overshoots from above, and
+        ! we may need to deal with the case where we are close to the peak of the topography.
+        L_min = max(L(K+1), 0.5)
+        L(k) = L_min
+
+        Vol_err = crv_3 * (L(K)**2 * ( 0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+        ! If vol_err is 0 or positive (perhaps due to roundoff in L(K+1)), L(k) is already the best solution.
+        if (Vol_err < 0.0) then
+          ! This over-estimate of L(K) is accurate for L ~= 1:
+          L_max = 1.0 - sqrt( (Vol_open - vol_below(K)) * C4_crv )
+          Vol_err_max = crv_3 * (L_max**2 * ( 0.75 - 0.5*L_max)) + (slope2_4crv - vol_below(K))
+          ! if (Vol_err_max < 0.0) call MOM_error(FATAL, &
+          !         "Vol_err_max should never be negative in find_L_open_concave_iterative.")
+          if ((Vol_err_max < abs(Vol_err)) .and. (L_max < 1.0)) then
+            ! Start with 1 bounded Newton's method step from L_max
+            dVol_dL = 0.5*crv * (L_max * (1.0 - L_max))
+            L(K) = max(L_min, L_max - (vol_err_max / dVol_dL) )
+          ! else ! Could use the fact that Vol_err is known to take an iteration?
+          endif
+
+          ! Subsequent iterations of Newton's method do not need bounds.
+          do itt=1,max_itt
+            Vol_err = crv_3 * (L(K)**2 * ( 0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+            dVol_dL = 0.5*crv * (L(K) * (1.0 - L(K)))
+            if (abs(vol_err) < max(1.0e-15*L(K), 1.0e-25)*dVol_dL) exit
+            L(K) = L(K) - (vol_err / dVol_dL)
+          enddo
+        endif
+      endif
+
+    endif
+  enddo ! k loop to determine L(K) in the concave case
+
+end subroutine find_L_open_concave_iterative
+
+
+
+!> Test the validity the normalized open lengths of each interface for concave bathymetry (from the ocean perspective)
+!! by evaluating and returing the relevant cubic equations.
+subroutine test_L_open_concave(vol_below, D_vel, Dp, Dm, L, vol_err, GV)
+  type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), intent(in)  :: vol_below !< The volume below each interface, normalized by
+                                                   !! the full horizontal area of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: D_vel !< The average bottom depth at a velocity point [Z ~> m]
+  real,                        intent(in)  :: Dp   !< The larger of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real, dimension(SZK_(GV)+1), intent(in)  :: L    !< The fraction of the full cell width that is open at
+                                                   !! the depth of each interface [nondim]
+  real, dimension(SZK_(GV)+1), intent(out) :: vol_err !< The difference between vol_below and the
+                                                   !! value obtained from using L in the cubic equation [Z ~> m]
+
+  ! Local variables
+  real :: crv              ! crv is the curvature of the bottom depth across a
+                           ! cell, times the cell width squared [Z ~> m].
+  real :: crv_3            ! crv/3 [Z ~> m].
+  real :: slope            ! The absolute value of the bottom depth slope across
+                           ! a cell times the cell width [Z ~> m].
+
+  ! The following "volumes" have units of vertical heights because they are normalized
+  ! by the full horizontal area of a velocity cell.
+  real :: Vol_open         ! The cell volume above which the face is fully is open [Z ~> m].
+  real :: Vol_2_reg        ! The cell volume above which there are two separate
+                           ! open areas that must be integrated [Z ~> m].
+  real :: L_2_reg          ! The value of L when vol_below is Vol_2_reg [nondim]
+
+  ! The following combinations of slope and crv are reused across layers, and hence are pre-calculated
+  ! for efficiency.  All are non-negative.
+  real :: slope_crv        ! The slope divided by the curvature [nondim]
+  ! These are only used if the curvature exceeds the slope.
+  real :: slope2_4crv      ! A quarter of the slope squared divided by the curvature [Z ~> m]
+
+  real, parameter :: C1_3 = 1.0 / 3.0, C1_12 = 1.0 / 12.0 ! Rational constants [nondim]
+  integer :: K, nz
+
+  nz = GV%ke
+
+  ! Each cell extends from x=-1/2 to 1/2, and has a topography
+  ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
+
+  crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  slope = Dp - Dm
+
+  ! Calculate the volume above which the entire cell is open and the volume at which the
+  ! equation that is solved for L changes because there are two separate open regions.
+  if (slope >= crv) then
+    Vol_open = D_vel - Dm ; Vol_2_reg = Vol_open
+    L_2_reg = 1.0
+    if (crv + slope >= 4.0*crv) then
+      slope_crv = 1.0
+    else
+      slope_crv = slope / crv
+    endif
+  else
+    slope_crv = slope / crv
+    Vol_open = 0.25*slope*slope_crv + C1_12*crv
+    Vol_2_reg = 0.5*slope_crv**2 * (crv - C1_3*slope)
+    L_2_reg = slope_crv
+  endif
+  slope2_4crv = 0.25 * slope * slope_crv
+
+  ! Determine the volume error based on the normalized open length (L) at each interface.
+  Vol_err(nz+1) = 0.0
+  do K=nz,1,-1
+    if (L(K) >= 1.0) then
+      Vol_err(K) = max(Vol_open - vol_below(K), 0.0)
+    elseif (L(K) <= L_2_reg) then
+      vol_err(K) = 0.5*L(K)**2 * (slope + crv*(1.0 - 4.0*C1_3*L(K))) - vol_below(K)
+    else ! There are two separate open regions.
+      Vol_err(K) = crv_3 * (L(K)**2 * ( 0.75 - 0.5*L(K))) + (slope2_4crv - vol_below(K))
+    endif
+  enddo ! k loop to determine L(K) in the concave case
+
+end subroutine test_L_open_concave
+
+
+!> Determine the normalized open length of each interface for convex bathymetry (from the ocean
+!! perspective) using Newton's method iterations.  In this case there is a single open region
+!! with the minimum depth at one edge of the cell.
+subroutine find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
+  type(verticalGrid_type),     intent(in)  :: GV   !< The ocean's vertical grid structure.
+  real, dimension(SZK_(GV)+1), intent(in)  :: vol_below  !< The volume below each interface, normalized by
+                                                   !! the full horizontal area of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: D_vel !< The average bottom depth at a velocity point [Z ~> m]
+  real,                        intent(in)  :: Dp   !< The larger of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real,                        intent(in)  :: Dm   !< The smaller of the two depths at the edge
+                                                   !! of a velocity cell [Z ~> m]
+  real, dimension(SZK_(GV)+1), intent(out) :: L    !< The fraction of the full cell width that is open at
+                                                   !! the depth of each interface [nondim]
+  type(unit_scale_type),       intent(in)  :: US   !< A dimensional unit scaling type
+  type(set_visc_CS),           intent(in)  :: CS   !< The control structure returned by a previous
+                                                   !! call to set_visc_init.
+
+  ! Local variables
+  real :: crv              ! crv is the curvature of the bottom depth across a
+                           ! cell, times the cell width squared [Z ~> m].
+  real :: crv_3            ! crv/3 [Z ~> m].
+  real :: slope            ! The absolute value of the bottom depth slope across
+                           ! a cell times the cell width [Z ~> m].
+  ! All of the following "volumes" have units of vertical heights because they are normalized
+  ! by the full horizontal area of a velocity cell.
+  real :: Vol_err          ! The error in the volume with the latest estimate of
+                           ! L, or the error for the interface below [Z ~> m].
+  real :: Vol_quit         ! The volume error below which to quit iterating [Z ~> m].
+  real :: Vol_tol          ! A volume error tolerance [Z ~> m].
+  real :: Vol_open         ! The cell volume above which the face is fully open [Z ~> m].
+  real :: Vol_direct       ! With less than Vol_direct [Z ~> m], there is a direct
+                           ! solution of a cubic equation for L.
+  real :: Vol_err_max      ! The volume error for the upper bound on the correct value for L [Z ~> m]
+  real :: Vol_err_min      ! The volume error for the lower bound on the correct value for L [Z ~> m]
+  real :: Vol_0            ! A deeper volume with known width L0 [Z ~> m].
+  real :: dVol             ! vol - Vol_0 [Z ~> m].
+  real :: dV_dL2           ! The partial derivative of volume with L squared
+                           ! evaluated at L=L0 [Z ~> m].
+  real :: L_direct         ! The value of L above volume Vol_direct [nondim].
+  real :: L_max, L_min     ! Upper and lower bounds on the correct value for L [nondim].
+  real :: L0               ! The value of L above volume Vol_0 [nondim].
+  real :: Iapb, Ibma_2     ! Combinations of crv (a) and slope (b) [Z-1 ~> m-1]
+  real :: C24_crv          ! 24/crv [Z-1 ~> m-1].
+  real :: curv_tol         ! Numerator of curvature cubed, used to estimate
+                           ! accuracy of a single L(:) Newton iteration [Z5 ~> m5]
+  real, parameter :: C1_3 = 1.0/3.0, C1_6 = 1.0/6.0 ! Rational constants [nondim]
+  logical :: use_L0, do_one_L_iter  ! Control flags for L(:) Newton iteration
+  integer :: K, nz, itt, maxitt=20
+
+  nz = GV%ke
+
+  ! Each cell extends from x=-1/2 to 1/2, and has a topography
+  ! given by D(x) = crv*x^2 + slope*x + D_vel - crv/12.
+  crv_3 = (Dp + Dm - 2.0*D_vel) ; crv = 3.0*crv_3
+  slope = Dp - Dm
+
+  ! Calculate the volume above which the entire cell is open and the volume at which the
+  ! equation that is solved for L changes because there is a direct solution.
+  Vol_open = D_vel - Dm
+  if (slope >= -crv) then
+    Iapb = 1.0e30*US%Z_to_m ; if (slope+crv /= 0.0) Iapb = 1.0/(crv+slope)
+    Vol_direct = 0.0 ; L_direct = 0.0 ; C24_crv = 0.0
+  else
+    C24_crv = 24.0/crv ; Iapb = 1.0/(crv+slope)
+    L_direct = 1.0 + slope/crv ! L_direct < 1 because crv < 0
+    Vol_direct = -C1_6*crv*L_direct**3
+  endif
+  Ibma_2 = 2.0 / (slope - crv)
+
+  if (CS%answer_date < 20190101) Vol_quit = (0.9*GV%Angstrom_Z + GV%dZ_subroundoff)
+
+  L(nz+1) = 0.0 ; Vol_err = 0.0
+  ! Determine the normalized open length (L) at each interface.
+  do K=nz,1,-1
+    if (vol_below(K) >= Vol_open) then
+      L(K) = 1.0
+    elseif (vol_below(K) <= Vol_direct) then
+      ! Both edges of the cell are bounded by walls.
+      ! if (CS%answer_date < 20240101)) then
+        L(K) = (-0.25*C24_crv*vol_below(K))**C1_3
+      ! else
+      !   L(K) = cuberoot(-0.25*C24_crv*vol_below(K))
+      ! endif
+    else
+      ! x_R is at 1/2 but x_L is in the interior & L is found by iteratively solving
+      !   vol_below(K) = 0.5*L^2*(slope + crv/3*(3-4L))
+
+      !  Vol_err = 0.5*(L(K+1)*L(K+1))*(slope + crv_3*(3.0-4.0*L(K+1))) - vol_below(K+1)
+      ! Change to ...
+      !   if (min(vol_below(K+1) + Vol_err, vol_below(K)) <= Vol_direct) then ?
+      if (vol_below(K+1) + Vol_err <= Vol_direct) then
+        L0 = L_direct ; Vol_0 = Vol_direct
+      else
+        L0 = L(K+1) ; Vol_0 = vol_below(K+1) + Vol_err
+        ! Change to   Vol_0 = min(vol_below(K+1) + Vol_err, vol_below(K)) ?
+      endif
+
+      !   Try a relatively simple solution that usually works well
+      ! for massless layers.
+      dV_dL2 = 0.5*(slope+crv) - crv*L0 ; dVol = (vol_below(K)-Vol_0)
+   !  dV_dL2 = 0.5*(slope+crv) - crv*L0 ; dVol = max(vol_below(K)-Vol_0, 0.0)
+
+      use_L0 = .false.
+      do_one_L_iter = .false.
+      if (CS%answer_date < 20190101) then
+        curv_tol = GV%Angstrom_Z*dV_dL2**2 &
+                   * (0.25 * dV_dL2 * GV%Angstrom_Z - crv * L0 * dVol)
+        do_one_L_iter = (crv * crv * dVol**3) < curv_tol
+      else
+        ! The following code is more robust when GV%Angstrom_H=0, but
+        ! it changes answers.
+        use_L0 = (dVol <= 0.)
+
+        Vol_tol = max(0.5 * GV%Angstrom_Z + GV%dZ_subroundoff, 1e-14 * vol_below(K))
+        Vol_quit = max(0.9 * GV%Angstrom_Z + GV%dZ_subroundoff, 1e-14 * vol_below(K))
+
+        curv_tol = Vol_tol * dV_dL2**2 &
+                   * (dV_dL2 * Vol_tol - 2.0 * crv * L0 * dVol)
+        do_one_L_iter = (crv * crv * dVol**3) < curv_tol
+      endif
+
+      if (use_L0) then
+        L(K) = L0
+        Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol_below(K)
+      elseif (do_one_L_iter) then
+        ! One iteration of Newton's method should give an estimate
+        ! that is accurate to within Vol_tol.
+        L(K) = sqrt(L0*L0 + dVol / dV_dL2)
+        Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol_below(K)
+      else
+        if (dV_dL2*(1.0-L0*L0) < dVol + &
+            dV_dL2 * (Vol_open - vol_below(K))*Ibma_2) then
+          L_max = sqrt(1.0 - (Vol_open - vol_below(K))*Ibma_2)
+        else
+          L_max = sqrt(L0*L0 + dVol / dV_dL2)
+        endif
+        L_min = sqrt(L0*L0 + dVol / (0.5*(slope+crv) - crv*L_max))
+
+        Vol_err_min = 0.5*(L_min**2)*(slope + crv_3*(3.0-4.0*L_min)) - vol_below(K)
+        Vol_err_max = 0.5*(L_max**2)*(slope + crv_3*(3.0-4.0*L_max)) - vol_below(K)
+   !    if ((abs(Vol_err_min) <= Vol_quit) .or. (Vol_err_min >= Vol_err_max)) then
+        if (abs(Vol_err_min) <= Vol_quit) then
+          L(K) = L_min ; Vol_err = Vol_err_min
+        else
+          L(K) = sqrt((L_min**2*Vol_err_max - L_max**2*Vol_err_min) / &
+                      (Vol_err_max - Vol_err_min))
+          do itt=1,maxitt
+            Vol_err = 0.5*(L(K)*L(K))*(slope + crv_3*(3.0-4.0*L(K))) - vol_below(K)
+            if (abs(Vol_err) <= Vol_quit) exit
+            ! Take a Newton's method iteration. This equation has proven
+            ! robust enough not to need bracketing.
+            L(K) = L(K) - Vol_err / (L(K)* (slope + crv - 2.0*crv*L(K)))
+            ! This would be a Newton's method iteration for L^2:
+            !   L(K) = sqrt(L(K)*L(K) - Vol_err / (0.5*(slope+crv) - crv*L(K)))
+          enddo
+        endif ! end of iterative solver
+      endif ! end of 1-boundary alternatives.
+    endif ! end of 0, 1- and 2- boundary cases.
+  enddo ! k loop to determine L(K) in the convex case
+
+end subroutine find_L_open_convex
 
 !> This subroutine finds a thickness-weighted value of v at the u-points.
 function set_v_at_u(v, h, G, GV, i, j, k, mask2dCv, OBC)
@@ -1413,9 +2011,9 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   real :: frac_used   ! The fraction of the present layer that contributes to Dh and Ddz [nondim]
   real :: Dh          ! The increment in layer thickness from the present layer [H ~> m or kg m-2].
   real :: Ddz         ! The increment in height change from the present layer [Z ~> m].
-  real :: U_bg_sq   ! The square of an assumed background velocity, for
-                    ! calculating the mean magnitude near the top for use in
-                    ! the quadratic surface drag [L2 T-2 ~> m2 s-2].
+  real :: u2_bg(SZIB_(G)) ! The square of an assumed background velocity, for
+                          ! calculating the mean magnitude near the top for use in
+                          ! the quadratic surface drag [L2 T-2 ~> m2 s-2].
   real :: h_tiny    ! A very small thickness [H ~> m or kg m-2]. Layers that are less than
                     ! h_tiny can not be the deepest in the viscous mixed layer.
   real :: absf      ! The absolute value of f averaged to velocity points [T-1 ~> s-1].
@@ -1446,7 +2044,6 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
             associated(forces%frac_shelf_v)) ) return
 
   Rho0x400_G = 400.0*(GV%H_to_RZ / (US%L_to_Z**2 * GV%g_Earth))
-  U_bg_sq = CS%drag_bg_vel * CS%drag_bg_vel
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_H = cdrag_sqrt * US%L_to_m * GV%m_to_H
   cdrag_sqrt_H_RL = cdrag_sqrt * US%L_to_Z * GV%RZ_to_H
@@ -1520,7 +2117,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 
   !$OMP parallel do default(private) shared(u,v,h,dz,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     nonBous_ML,h_neglect,dz_neglect,h_tiny,g_H_Rho0, &
-  !$OMP                                     js,je,OBC,Isq,Ieq,nz,nkml,U_star_2d,U_bg_sq,mask_v, &
+  !$OMP                                     js,je,OBC,Isq,Ieq,nz,nkml,U_star_2d,mask_v, &
   !$OMP                                     cdrag_sqrt,cdrag_sqrt_H,cdrag_sqrt_H_RL,Rho0x400_G)
   do j=js,je  ! u-point loop
     if (CS%dynamic_viscous_ML) then
@@ -1672,7 +2269,14 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 
           if (.not.CS%linear_drag) then
             v_at_u = set_v_at_u(v, h, G, GV, i, j, k, mask_v, OBC)
-            hutot = hutot + hweight * sqrt(u(I,j,k)**2 + v_at_u**2 + U_bg_sq)
+            ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
+            if (CS%BBL_use_tidal_bg) then
+              u2_bg(I) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                               G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
+            else
+              u2_bg(I) = CS%drag_bg_vel * CS%drag_bg_vel
+            endif
+            hutot = hutot + hweight * sqrt(u(I,j,k)**2 + v_at_u**2 + u2_bg(I))
           endif
           if (use_EOS) then
             Thtot(I) = Thtot(I) + hweight * 0.5 * (tv%T(i,j,k) + tv%T(i+1,j,k))
@@ -1790,7 +2394,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 
   !$OMP parallel do default(private) shared(u,v,h,dz,tv,forces,visc,dt,G,GV,US,CS,use_EOS,dt_Rho0, &
   !$OMP                                     nonBous_ML,h_neglect,dz_neglect,h_tiny,g_H_Rho0, &
-  !$OMP                                     is,ie,OBC,Jsq,Jeq,nz,nkml,U_bg_sq,U_star_2d,mask_u, &
+  !$OMP                                     is,ie,OBC,Jsq,Jeq,nz,nkml,U_star_2d,mask_u, &
   !$OMP                                     cdrag_sqrt,cdrag_sqrt_H,cdrag_sqrt_H_RL,Rho0x400_G)
   do J=Jsq,Jeq  ! v-point loop
     if (CS%dynamic_viscous_ML) then
@@ -1944,7 +2548,14 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
 
           if (.not.CS%linear_drag) then
             u_at_v = set_u_at_v(u, h, G, GV, i, J, k, mask_u, OBC)
-            hutot = hutot + hweight * sqrt(v(i,J,k)**2 + u_at_v**2 + U_bg_sq)
+            ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
+            if (CS%BBL_use_tidal_bg) then
+              u2_bg(i) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                               G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
+            else
+              u2_bg(i) = CS%drag_bg_vel * CS%drag_bg_vel
+            endif
+            hutot = hutot + hweight * sqrt(v(i,J,k)**2 + u_at_v**2 + u2_bg(i))
           endif
           if (use_EOS) then
             Thtot(i) = Thtot(i) + hweight * 0.5 * (tv%T(i,j,k) + tv%T(i,j+1,k))
@@ -2086,7 +2697,8 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
   logical,                 intent(in) :: use_ice_shelf !< if true, register tau_shelf restarts
   ! Local variables
   logical :: use_kappa_shear, KS_at_vertex
-  logical :: adiabatic, useKPP, useEPBL
+  logical :: adiabatic, useKPP, useEPBL, use_ideal_age
+  logical :: do_brine_plume, use_hor_bnd_diff, use_neutral_diffusion, use_fpmix
   logical :: use_CVMix_shear, MLE_use_PBL_MLD, MLE_use_Bodner, use_CVMix_conv
   integer :: isd, ied, jsd, jed, nz
   real :: hfreeze !< If hfreeze > 0 [Z ~> m], melt potential will be computed.
@@ -2150,20 +2762,45 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
     call safe_alloc_ptr(visc%Kv_slow, isd, ied, jsd, jed, nz+1)
   endif
 
-  ! visc%MLD is used to communicate the state of the (e)PBL or KPP to the rest of the model
+  ! visc%MLD and visc%h_ML are used to communicate the state of the (e)PBL or KPP to the rest of the model
   call get_param(param_file, mdl, "MLE_USE_PBL_MLD", MLE_use_PBL_MLD, &
                  default=.false., do_not_log=.true.)
-  ! visc%MLD needs to be allocated when melt potential is computed (HFREEZE>0)
+  ! visc%h_ML needs to be allocated when melt potential is computed (HFREEZE>0) or one of
+  ! several other parameterizations are in use.
   call get_param(param_file, mdl, "HFREEZE", hfreeze, &
                  units="m", default=-1.0, scale=US%m_to_Z, do_not_log=.true.)
+  call get_param(param_file, mdl, "DO_BRINE_PLUME", do_brine_plume, &
+                 "If true, use a brine plume parameterization from Nguyen et al., 2009.", &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_HORIZONTAL_BOUNDARY_DIFFUSION", use_hor_bnd_diff, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_NEUTRAL_DIFFUSION", use_neutral_diffusion, &
+                 default=.false., do_not_log=.true.)
+  if (use_neutral_diffusion) &
+    call get_param(param_file, mdl, "NDIFF_INTERIOR_ONLY", use_neutral_diffusion, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "FPMIX", use_fpmix, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "USE_IDEAL_AGE_TRACER", use_ideal_age, &
+                 default=.false., do_not_log=.true.)
 
-  if (hfreeze >= 0.0 .or. MLE_use_PBL_MLD) then
+  if (MLE_use_PBL_MLD) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
+  endif
+  if ((hfreeze >= 0.0) .or. MLE_use_PBL_MLD .or. do_brine_plume .or. use_fpmix .or. &
+      use_neutral_diffusion .or. use_hor_bnd_diff .or. use_ideal_age) then
+    call safe_alloc_ptr(visc%h_ML, isd, ied, jsd, jed)
   endif
 
   if (MLE_use_PBL_MLD) then
     call register_restart_field(visc%MLD, "MLD", .false., restart_CS, &
                   "Instantaneous active mixing layer depth", units="m", conversion=US%Z_to_m)
+  endif
+  if (MLE_use_PBL_MLD .or. do_brine_plume .or. use_fpmix .or. &
+      use_neutral_diffusion .or. use_hor_bnd_diff) then
+    call register_restart_field(visc%h_ML, "h_ML", .false., restart_CS, &
+                  "Instantaneous active mixing layer thickness", &
+                  units=get_thickness_units(GV), conversion=GV%H_to_mks)
   endif
 
   ! visc%sfc_buoy_flx is used to communicate the state of the (e)PBL or KPP to the rest of the model
@@ -2388,6 +3025,11 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
       call get_param(param_file, mdl, "TIDEAMP_VARNAME", tideamp_var, &
                    "The name of the tidal amplitude variable in the input file.", &
                    default="tideamp")
+      ! This value is here only to detect whether it is inadvertently used. CS%drag_bg_vel should
+      ! not be used if CS%BBL_use_tidal_bg is True. For this reason, we do not apply dimensions,
+      ! nor dimensional testing in this mode. If we ever detect a dimensional sensitivity to
+      ! this parameter, in this mode, then it means it is being used inappropriately.
+      CS%drag_bg_vel = 1.e30
     else
       call get_param(param_file, mdl, "DRAG_BG_VEL", CS%drag_bg_vel, &
                    "DRAG_BG_VEL is either the assumed bottom velocity (with "//&
@@ -2459,8 +3101,13 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
                  "default is to use the same value as SMAG_LAP_CONST if "//&
                  "it is defined, or 0.15 if it is not. The value used is "//&
                  "also 0.15 if the specified value is negative.", &
-                 units="nondim", default=cSmag_chan_dflt)
+                 units="nondim", default=cSmag_chan_dflt, do_not_log=.not.CS%Channel_drag)
     if (CS%c_Smag < 0.0) CS%c_Smag = 0.15
+
+    call get_param(param_file, mdl, "TRIG_CHANNEL_DRAG_WIDTHS", CS%concave_trigonometric_L, &
+                 "If true, use trigonometric expressions to determine the fractional open "//&
+                 "interface lengths for concave topography.", &
+                 default=.true., do_not_log=.not.CS%Channel_drag)
   endif
 
   Chan_max_thick_dflt = -1.0*US%m_to_Z

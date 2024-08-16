@@ -27,13 +27,13 @@ contains
 subroutine basin_builder_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max [A]
   type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
-  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units [A]
   ! Local variables
   character(len=17) :: pname1, pname2 ! For construction of parameter names
   character(len=20) :: funcs ! Basin build function
-  real, dimension(20) :: pars ! Parameters for each function
+  real, dimension(20) :: pars ! Parameters for each function [various]
   real :: lon ! Longitude [degrees_E]
   real :: lat ! Latitude [degrees_N]
   integer :: i, j, n, n_funcs
@@ -161,9 +161,9 @@ end subroutine basin_builder_topography
 !! If clip is present the top of the cone is cut off at "clip", which
 !! effectively defaults to 1.
 real function cone(x, x0, L, clip)
-  real,           intent(in) :: x    !< non-dimensional coordinate [nondim]
-  real,           intent(in) :: x0   !< position of peak [nondim]
-  real,           intent(in) :: L    !< half-width of base of cone [nondim]
+  real,           intent(in) :: x    !< Coordinate in arbitrary units [A]
+  real,           intent(in) :: x0   !< position of peak in arbitrary units [A]
+  real,           intent(in) :: L    !< half-width of base of cone in arbitrary units [A]
   real, optional, intent(in) :: clip !< clipping height of cone [nondim]
 
   cone = max( 0., 1. - abs(x - x0) / L )
@@ -172,10 +172,10 @@ end function cone
 
 !> Returns an s-curve s(x) s.t. s(x0)<=0, s(x0+L)>=1 and cubic in between.
 real function scurve(x, x0, L)
-  real, intent(in) :: x       !< non-dimensional coordinate [nondim]
-  real, intent(in) :: x0      !< position of peak [nondim]
-  real, intent(in) :: L       !< half-width of base of cone [nondim]
-  real :: s
+  real, intent(in) :: x       !< Coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< position of peak in arbitrary units [A]
+  real, intent(in) :: L       !< half-width of base of cone in arbitrary units [A]
+  real :: s ! A rescaled position [nondim]
 
   s = max( 0., min( 1.,( x - x0 ) / L ) )
   scurve = ( 3. - 2.*s ) * ( s * s )
@@ -183,14 +183,14 @@ end function scurve
 
 !> Returns a "coastal" profile.
 real function cstprof(x, x0, L, lf, bf, sf, sh)
-  real, intent(in) :: x       !< non-dimensional coordinate [nondim]
-  real, intent(in) :: x0      !< position of peak [nondim]
-  real, intent(in) :: L       !< width of profile [nondim]
+  real, intent(in) :: x       !< Coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< position of peak in arbitrary units [A]
+  real, intent(in) :: L       !< width of profile in arbitrary units [A]
   real, intent(in) :: lf      !< fraction of width that is "land" [nondim]
   real, intent(in) :: bf      !< fraction of width that is "beach" [nondim]
   real, intent(in) :: sf      !< fraction of width that is "continental slope" [nondim]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
-  real :: s
+  real :: s ! A rescaled position [nondim]
 
   s = max( 0., min( 1.,( x - x0 ) / L ) )
   cstprof = sh * scurve(s-lf,0.,bf) + (1.-sh) * scurve(s - (1.-sf),0.,sf)
@@ -198,12 +198,12 @@ end function cstprof
 
 !> Distance between points x,y and a line segment (x0,y0) and (x0,y1).
 real function dist_line_fixed_x(x, y, x0, y0, y1)
-  real, intent(in) :: x       !< non-dimensional x-coordinate [nondim]
-  real, intent(in) :: y       !< non-dimensional y-coordinate [nondim]
-  real, intent(in) :: x0      !< x-position of line segment [nondim]
-  real, intent(in) :: y0      !< y-position of line segment end[nondim]
-  real, intent(in) :: y1      !< y-position of line segment end[nondim]
-  real :: dx, yr, dy
+  real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
+  real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< x-position of line segment in arbitrary units [A]
+  real, intent(in) :: y0      !< y-position of line segment end in arbitrary units [A]
+  real, intent(in) :: y1      !< y-position of line segment end in arbitrary units [A]
+  real :: dx, yr, dy ! Relative positions in arbitrary units [A]
 
   dx = x - x0
   yr = min( max(y0,y1), max( min(y0,y1), y ) ) ! bound y by y0,y1
@@ -213,11 +213,11 @@ end function dist_line_fixed_x
 
 !> Distance between points x,y and a line segment (x0,y0) and (x1,y0).
 real function dist_line_fixed_y(x, y, x0, x1, y0)
-  real, intent(in) :: x       !< non-dimensional x-coordinate [nondim]
-  real, intent(in) :: y       !< non-dimensional y-coordinate [nondim]
-  real, intent(in) :: x0      !< x-position of line segment end[nondim]
-  real, intent(in) :: x1      !< x-position of line segment end[nondim]
-  real, intent(in) :: y0      !< y-position of line segment [nondim]
+  real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
+  real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< x-position of line segment end in arbitrary units [A]
+  real, intent(in) :: x1      !< x-position of line segment end in arbitrary units [A]
+  real, intent(in) :: y0      !< y-position of line segment in arbitrary units [A]
 
   dist_line_fixed_y = dist_line_fixed_x(y, x, y0, x0, x1)
 end function dist_line_fixed_y
@@ -230,10 +230,11 @@ real function angled_coast(lon, lat, lon_eq, lat_mer, dr, sh)
   real, intent(in) :: lat_mer !< Latitude intersection with Prime Meridian [degrees_N]
   real, intent(in) :: dr      !< "Radius" of coast profile [degrees]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
-  real :: r
+  real :: r ! A relative position [degrees]
+  real :: I_dr ! The inverse of a distance [degrees-1]
 
-  r = 1/sqrt( lat_mer*lat_mer + lon_eq*lon_eq )
-  r = r * ( lat_mer*lon + lon_eq*lat - lon_eq*lat_mer)
+  I_dr = 1/sqrt( lat_mer*lat_mer + lon_eq*lon_eq )
+  r = I_dr * ( lat_mer*lon + lon_eq*lat - lon_eq*lat_mer)
   angled_coast = cstprof(r, 0., dr, 0.125, 0.125, 0.5, sh)
 end function angled_coast
 
@@ -246,7 +247,7 @@ real function NS_coast(lon, lat, lonC, lat0, lat1, dlon, sh)
   real, intent(in) :: lat1    !< Latitude of coast end [degrees_N]
   real, intent(in) :: dlon    !< "Radius" of coast profile [degrees]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [degrees]
 
   r = dist_line_fixed_x( lon, lat, lonC, lat0, lat1 )
   NS_coast = cstprof(r, 0., dlon, 0.125, 0.125, 0.5, sh)
@@ -261,7 +262,7 @@ real function EW_coast(lon, lat, latC, lon0, lon1, dlat, sh)
   real, intent(in) :: lon1    !< Longitude of coast end [degrees_E]
   real, intent(in) :: dlat    !< "Radius" of coast profile [degrees]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [degrees]
 
   r = dist_line_fixed_y( lon, lat, lon0, lon1, latC )
   EW_coast = cstprof(r, 0., dlat, 0.125, 0.125, 0.5, sh)
@@ -276,7 +277,7 @@ real function NS_conic_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   real, intent(in) :: lat1    !< Latitude of ridge end [degrees_N]
   real, intent(in) :: dlon    !< "Radius" of ridge profile [degrees]
   real, intent(in) :: rh      !< depth of ridge as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [degrees]
 
   r = dist_line_fixed_x( lon, lat, lonC, lat0, lat1 )
   NS_conic_ridge = 1. - rh * cone(r, 0., dlon)
@@ -291,7 +292,7 @@ real function NS_scurve_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   real, intent(in) :: lat1    !< Latitude of ridge end [degrees_N]
   real, intent(in) :: dlon    !< "Radius" of ridge profile [degrees]
   real, intent(in) :: rh      !< depth of ridge as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [degrees]
 
   r = dist_line_fixed_x( lon, lat, lonC, lat0, lat1 )
   NS_scurve_ridge = 1. - rh * (1. - scurve(r, 0., dlon) )
@@ -306,12 +307,13 @@ real function circ_conic_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness
   real, intent(in) :: ring_radius    !< Radius of ring [degrees]
   real, intent(in) :: ring_thickness !< Radial thickness of ring [degrees]
   real, intent(in) :: ridge_height   !< Ridge height as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [degrees]
+  real :: frac_ht ! The fractional height of the topography [nondim]
 
   r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
   r = abs( r - ring_radius) ! Pseudo-distance from a circle
-  r = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
-  circ_conic_ridge = 1. - r ! nondim depths (1-frac_ridge_height) .. 1
+  frac_ht = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
+  circ_conic_ridge = 1. - frac_ht ! nondim depths (1-frac_ridge_height) .. 1
 end function circ_conic_ridge
 
 !> A circular ridge with cutoff scurve profile
@@ -323,13 +325,15 @@ real function circ_scurve_ridge(lon, lat, lon0, lat0, ring_radius, ring_thicknes
   real, intent(in) :: ring_radius    !< Radius of ring [degrees]
   real, intent(in) :: ring_thickness !< Radial thickness of ring [degrees]
   real, intent(in) :: ridge_height   !< Ridge height as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [degrees]
+  real :: s  ! A function of the normalized position [nondim]
+  real :: frac_ht ! The fractional height of the topography [nondim]
 
   r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
   r = abs( r - ring_radius) ! Pseudo-distance from a circle
-  r = 1. - scurve(r, 0., ring_thickness) ! 0 .. 1
-  r = r * ridge_height ! 0 .. frac_ridge_height
-  circ_scurve_ridge = 1. - r ! nondim depths (1-frac_ridge_height) .. 1
+  s = 1. - scurve(r, 0., ring_thickness) ! 0 .. 1
+  frac_ht = s * ridge_height ! 0 .. frac_ridge_height
+  circ_scurve_ridge = 1. - frac_ht ! nondim depths (1-frac_ridge_height) .. 1
 end function circ_scurve_ridge
 
 end module basin_builder

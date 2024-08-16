@@ -34,12 +34,12 @@ contains
 subroutine Neverworld_initialize_topography(D, G, param_file, max_depth)
   type(dyn_horgrid_type),  intent(in)  :: G !< The dynamic horizontal grid type
   real, dimension(G%isd:G%ied,G%jsd:G%jed), &
-                           intent(out) :: D !< Ocean bottom depth in the units of depth_max
+                           intent(out) :: D !< Ocean bottom depth in the units of depth_max [A]
   type(param_file_type),   intent(in)  :: param_file !< Parameter file structure
-  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units
+  real,                    intent(in)  :: max_depth !< Maximum ocean depth in arbitrary units [A]
 
   ! Local variables
-  real :: PI                   ! 3.1415926... calculated as 4*atan(1)
+  real :: PI                   ! 3.1415926... calculated as 4*atan(1) [nondim]
   real :: x, y ! Lateral positions normalized by the domain size [nondim]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -84,9 +84,9 @@ end subroutine Neverworld_initialize_topography
 
 !> Returns the value of a cosine-bell function evaluated at x/L
 real function cosbell(x, L)
-  real , intent(in) :: x       !< non-dimensional position [nondim]
-  real , intent(in) :: L       !< non-dimensional width [nondim]
-  real              :: PI      !< 3.1415926... calculated as 4*atan(1)
+  real , intent(in) :: x       !< Position in arbitrary units [A]
+  real , intent(in) :: L       !< Width in arbitrary units [A]
+  real              :: PI      !< 3.1415926... calculated as 4*atan(1) [nondim]
 
   PI      = 4.0*atan(1.0)
   cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
@@ -95,9 +95,9 @@ end function cosbell
 !> Returns the value of a sin-spike function evaluated at x/L
 real function spike(x, L)
 
-  real , intent(in) :: x       !< non-dimensional position [nondim]
-  real , intent(in) :: L       !< non-dimensional width [nondim]
-  real              :: PI      !< 3.1415926... calculated as 4*atan(1)
+  real , intent(in) :: x       !< Position in arbitrary units [A]
+  real , intent(in) :: L       !< Width in arbitrary units [A]
+  real              :: PI      !< 3.1415926... calculated as 4*atan(1) [nondim]
 
   PI    = 4.0*atan(1.0)
   spike = (1 - sin(PI*MIN(ABS(x/L),0.5)))
@@ -108,9 +108,9 @@ end function spike
 !! If clip is present the top of the cone is cut off at "clip", which
 !! effectively defaults to 1.
 real function cone(x, x0, L, clip)
-  real,           intent(in) :: x    !< non-dimensional coordinate [nondim]
-  real,           intent(in) :: x0   !< position of peak [nondim]
-  real,           intent(in) :: L    !< half-width of base of cone [nondim]
+  real,           intent(in) :: x    !< Coordinate in arbitrary units [A]
+  real,           intent(in) :: x0   !< position of peak in arbitrary units [A]
+  real,           intent(in) :: L    !< half-width of base of cone in arbitrary units [A]
   real, optional, intent(in) :: clip !< clipping height of cone [nondim]
 
   cone = max( 0., 1. - abs(x - x0) / L )
@@ -119,10 +119,10 @@ end function cone
 
 !> Returns an s-curve s(x) s.t. s(x0)<=0, s(x0+L)>=1 and cubic in between.
 real function scurve(x, x0, L)
-  real, intent(in) :: x       !< non-dimensional coordinate [nondim]
-  real, intent(in) :: x0      !< position of peak [nondim]
-  real, intent(in) :: L       !< half-width of base of cone [nondim]
-  real :: s
+  real, intent(in) :: x       !< Coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< position of peak in arbitrary units [A]
+  real, intent(in) :: L       !< half-width of base of cone in arbitrary units [A]
+  real :: s ! A rescaled position [nondim]
 
   s = max( 0., min( 1.,( x - x0 ) / L ) )
   scurve = ( 3. - 2.*s ) * ( s * s )
@@ -132,14 +132,14 @@ end function scurve
 
 !> Returns a "coastal" profile.
 real function cstprof(x, x0, L, lf, bf, sf, sh)
-  real, intent(in) :: x       !< non-dimensional coordinate [nondim]
-  real, intent(in) :: x0      !< position of peak [nondim]
-  real, intent(in) :: L       !< width of profile [nondim]
+  real, intent(in) :: x       !< Coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< position of peak in arbitrary units [A]
+  real, intent(in) :: L       !< width of profile in arbitrary units [A]
   real, intent(in) :: lf      !< fraction of width that is "land" [nondim]
   real, intent(in) :: bf      !< fraction of width that is "beach" [nondim]
   real, intent(in) :: sf      !< fraction of width that is "continental slope" [nondim]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
-  real :: s
+  real :: s ! A rescaled position [nondim]
 
   s = max( 0., min( 1.,( x - x0 ) / L ) )
   cstprof = sh * scurve(s-lf,0.,bf) + (1.-sh) * scurve(s - (1.-sf),0.,sf)
@@ -147,12 +147,12 @@ end function cstprof
 
 !> Distance between points x,y and a line segment (x0,y0) and (x0,y1).
 real function dist_line_fixed_x(x, y, x0, y0, y1)
-  real, intent(in) :: x       !< non-dimensional x-coordinate [nondim]
-  real, intent(in) :: y       !< non-dimensional y-coordinate [nondim]
-  real, intent(in) :: x0      !< x-position of line segment [nondim]
-  real, intent(in) :: y0      !< y-position of line segment end[nondim]
-  real, intent(in) :: y1      !< y-position of line segment end[nondim]
-  real :: dx, yr, dy
+  real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
+  real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< x-position of line segment in arbitrary units [A]
+  real, intent(in) :: y0      !< y-position of line segment end in arbitrary units [A]
+  real, intent(in) :: y1      !< y-position of line segment end in arbitrary units [A]
+  real :: dx, yr, dy ! Relative positions in arbitrary units [A]
 
   dx = x - x0
   yr = min( max(y0,y1), max( min(y0,y1), y ) ) ! bound y by y0,y1
@@ -162,11 +162,11 @@ end function dist_line_fixed_x
 
 !> Distance between points x,y and a line segment (x0,y0) and (x1,y0).
 real function dist_line_fixed_y(x, y, x0, x1, y0)
-  real, intent(in) :: x       !< non-dimensional x-coordinate [nondim]
-  real, intent(in) :: y       !< non-dimensional y-coordinate [nondim]
-  real, intent(in) :: x0      !< x-position of line segment end[nondim]
-  real, intent(in) :: x1      !< x-position of line segment end[nondim]
-  real, intent(in) :: y0      !< y-position of line segment [nondim]
+  real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
+  real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
+  real, intent(in) :: x0      !< x-position of line segment end in arbitrary units [A]
+  real, intent(in) :: x1      !< x-position of line segment end in arbitrary units [A]
+  real, intent(in) :: y0      !< y-position of line segment in arbitrary units [A]
 
   dist_line_fixed_y = dist_line_fixed_x(y, x, y0, x0, x1)
 end function dist_line_fixed_y
@@ -180,7 +180,7 @@ real function NS_coast(lon, lat, lon0, lat0, lat1, dlon, sh)
   real, intent(in) :: lat1    !< Latitude of coast end [degrees_N]
   real, intent(in) :: dlon    !< "Radius" of coast profile [degrees]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [nondim]
 
   r = dist_line_fixed_x( lon, lat, lon0, lat0, lat1 )
   NS_coast = cstprof(r, 0., dlon, 0.125, 0.125, 0.5, sh)
@@ -195,7 +195,7 @@ real function EW_coast(lon, lat, lon0, lon1, lat0, dlat, sh)
   real, intent(in) :: lat0    !< Latitude of coast [degrees_N]
   real, intent(in) :: dlat    !< "Radius" of coast profile [degrees]
   real, intent(in) :: sh      !< depth of shelf as fraction of full depth [nondim]
-  real :: r
+  real :: r  ! A relative position [nondim]
 
   r = dist_line_fixed_y( lon, lat, lon0, lon1, lat0 )
   EW_coast = cstprof(r, 0., dlat, 0.125, 0.125, 0.5, sh)
@@ -210,7 +210,7 @@ real function NS_ridge(lon, lat, lon0, lat0, lat1, dlon, rh)
   real, intent(in) :: lat1    !< Latitude of ridge end [degrees_N]
   real, intent(in) :: dlon    !< "Radius" of ridge profile [degrees]
   real, intent(in) :: rh      !< depth of ridge as fraction of full depth [nondim]
-  real :: r
+  real :: r ! A distance from a point [degrees]
 
   r = dist_line_fixed_x( lon, lat, lon0, lat0, lat1 )
   NS_ridge = 1. - rh * cone(r, 0., dlon)
@@ -226,12 +226,13 @@ real function circ_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridg
   real, intent(in) :: ring_radius    !< Radius of ring [degrees]
   real, intent(in) :: ring_thickness !< Radial thickness of ring [degrees]
   real, intent(in) :: ridge_height   !< Ridge height as fraction of full depth [nondim]
-  real :: r
+  real :: r ! A relative position [degrees]
+  real :: frac_ht ! The fractional height of the topography [nondim]
 
   r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
   r = abs( r - ring_radius) ! Pseudo-distance from a circle
-  r = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
-  circ_ridge = 1. - r ! Fractional depths (1-frac_ridge_height) .. 1
+  frac_ht = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
+  circ_ridge = 1. - frac_ht ! Fractional depths (1-frac_ridge_height) .. 1
 end function circ_ridge
 
 !> This subroutine initializes layer thicknesses for the Neverworld test case,

@@ -41,8 +41,10 @@ type, public :: hybgen_regrid_CS ; private
     dp0k, & !< minimum deep    z-layer separation [H ~> m or kg m-2]
     ds0k    !< minimum shallow z-layer separation [H ~> m or kg m-2]
 
-  real :: coord_scale = 1.0     !< A scaling factor to restores the depth coordinates to values in m
-  real :: Rho_coord_scale = 1.0 !< A scaling factor to restores the denesity coordinates to values in kg m-3
+  real :: coord_scale = 1.0     !< A scaling factor to restores the depth coordinates to
+                                !! values in m [m H-1 ~> 1 or m3 kg-1]
+  real :: Rho_coord_scale = 1.0 !< A scaling factor to restores the denesity coordinates to
+                                !! values in kg m-3 [kg m-3 R-1 ~> 1]
 
   real :: dpns  !< depth to start terrain following [H ~> m or kg m-2]
   real :: dsns  !< depth to stop terrain following [H ~> m or kg m-2]
@@ -68,7 +70,7 @@ type, public :: hybgen_regrid_CS ; private
                      !! the bottom that certain adjustments can be made in the Hybgen regridding
                      !! code [H ~> m or kg m-2].  In Hycom, this is set to onem (nominally 1 m).
   real :: h_thin     !< A layer thickness below which a layer is considered to be too thin for
-                     !! certain adjustments to be made in the Hybgen regridding code.
+                     !! certain adjustments to be made in the Hybgen regridding code [H ~> m or kg m-2].
                      !! In Hycom, this is set to onemm (nominally 0.001 m).
 
   real :: rho_eps    !< A small nonzero density that is used to prevent division by zero
@@ -284,7 +286,7 @@ subroutine get_hybgen_regrid_params(CS, nk, ref_pressure, hybiso, nsigma, dp00i,
   real,    optional, intent(out) :: ref_pressure !< Reference pressure for density calculations [R L2 T-2 ~> Pa]
   real,    optional, intent(out) :: hybiso  !< Hybgen uses PCM if layer is within hybiso of target density [R ~> kg m-3]
   integer, optional, intent(out) :: nsigma  !< Number of sigma levels used by HYBGEN
-  real,    optional, intent(out) :: dp00i   !< Deep isopycnal spacing minimum thickness (m)
+  real,    optional, intent(out) :: dp00i   !< Deep isopycnal spacing minimum thickness [H ~> m or kg m-2]
   real,    optional, intent(out) :: qhybrlx !< Fractional relaxation amount per timestep, 0 < qyhbrlx <= 1 [nondim]
   real,    optional, intent(out) :: dp0k(:) !< minimum deep    z-layer separation [H ~> m or kg m-2]
   real,    optional, intent(out) :: ds0k(:) !< minimum shallow z-layer separation [H ~> m or kg m-2]
@@ -687,8 +689,8 @@ real function cushn(delp, dp0)
   ! These are derivative nondimensional parameters.
   ! real, parameter :: cusha = qqmn**2 * (qqmx-1.0) / (qqmx-qqmn)**2
   ! real, parameter :: I_qqmn = 1.0 / qqmn
-  real, parameter :: qq_scale = (qqmx-1.0) / (qqmx-qqmn)**2
-  real, parameter :: I_qqmx = 1.0 / qqmx
+  real, parameter :: qq_scale = (qqmx-1.0) / (qqmx-qqmn)**2  ! A scaling factor based on qqmn and qqmx [nondim]
+  real, parameter :: I_qqmx = 1.0 / qqmx  ! The inverse of qqmx [nondim]
 
   ! --- if delp >= qqmx*dp0 >>  dp0, cushn returns delp.
   ! --- if delp <= qqmn*dp0 << -dp0, cushn returns dp0.

@@ -31,12 +31,12 @@ contains
 subroutine time_interp_external_0d(field, time, data_in, verbose, scale)
   type(external_field), intent(in) :: field    !< Handle for time interpolated field
   type(time_type),   intent(in)    :: time     !< The target time for the data
-  real,              intent(inout) :: data_in  !< The interpolated value
+  real,              intent(inout) :: data_in  !< The interpolated value in arbitrary units [A ~> a]
   logical, optional, intent(in)    :: verbose  !< If true, write verbose output for debugging
-  real,     optional, intent(in)    :: scale   !< A scaling factor that new values of data_in are
-                                               !! multiplied by before it is returned
-  real :: data_in_pre_scale ! The input data before rescaling
-  real :: I_scale ! The inverse of scale
+  real,    optional, intent(in)    :: scale    !< A scaling factor that new values of data_in are
+                                               !! multiplied by before it is returned [A a-1 ~> 1]
+  real :: data_in_pre_scale ! The input data before rescaling [a]
+  real :: I_scale ! The inverse of scale [a A-1 ~> 1]
 
   ! Store the input value in case the scaling factor is perfectly invertable.
   data_in_pre_scale = data_in
@@ -68,7 +68,8 @@ subroutine time_interp_external_2d(field, time, data_in, interp, &
                                    verbose, horz_interp, mask_out, turns, scale)
   type(external_field), intent(in)    :: field    !< Handle for time interpolated field
   type(time_type),      intent(in)    :: time     !< The target time for the data
-  real, dimension(:,:), intent(inout) :: data_in  !< The array in which to store the interpolated values
+  real, dimension(:,:), intent(inout) :: data_in  !< The array in which to store the interpolated
+                                                  !! values in arbitrary units [A ~> a]
   integer,    optional, intent(in)    :: interp   !< A flag indicating the temporal interpolation method
   logical,    optional, intent(in)    :: verbose  !< If true, write verbose output for debugging
   type(horiz_interp_type), &
@@ -77,11 +78,11 @@ subroutine time_interp_external_2d(field, time, data_in, interp, &
               optional, intent(out)   :: mask_out !< An array that is true where there is valid data
   integer,    optional, intent(in)    :: turns    !< Number of quarter turns to rotate the data
   real,       optional, intent(in)    :: scale    !< A scaling factor that new values of data_in are
-                                                  !! multiplied by before it is returned
+                                                  !! multiplied by before it is returned [A a-1 ~> 1]
 
-  real, allocatable :: data_in_pre_scale(:,:) ! The input data before rescaling
-  real, allocatable :: data_pre_rot(:,:)      ! The unscaled input data before rotation
-  real    :: I_scale ! The inverse of scale
+  real, allocatable :: data_in_pre_scale(:,:) ! The input data before rescaling [a]
+  real, allocatable :: data_pre_rot(:,:)      ! The unscaled input data before rotation [a]
+  real    :: I_scale ! The inverse of scale [a A-1 ~> 1]
   integer :: qturns ! The number of quarter turns to rotate the data
   integer :: i, j
 
@@ -140,7 +141,8 @@ subroutine time_interp_external_3d(field, time, data_in, interp, &
                                    verbose, horz_interp, mask_out, turns, scale)
   type(external_field), intent(in)      :: field    !< Handle for time interpolated field
   type(time_type),        intent(in)    :: time     !< The target time for the data
-  real, dimension(:,:,:), intent(inout) :: data_in  !< The array in which to store the interpolated values
+  real, dimension(:,:,:), intent(inout) :: data_in  !< The array in which to store the interpolated
+                                                    !! values in arbitrary units [A ~> a]
   integer,      optional, intent(in)    :: interp   !< A flag indicating the temporal interpolation method
   logical,      optional, intent(in)    :: verbose  !< If true, write verbose output for debugging
   type(horiz_interp_type), &
@@ -149,11 +151,11 @@ subroutine time_interp_external_3d(field, time, data_in, interp, &
                 optional, intent(out)   :: mask_out !< An array that is true where there is valid data
   integer,      optional, intent(in)    :: turns    !< Number of quarter turns to rotate the data
   real,         optional, intent(in)    :: scale    !< A scaling factor that new values of data_in are
-                                                    !! multiplied by before it is returned
+                                                    !! multiplied by before it is returned [A a-1 ~> 1]
 
-  real, allocatable :: data_in_pre_scale(:,:,:) ! The input data before rescaling
-  real, allocatable :: data_pre_rot(:,:,:)      ! The unscaled input data before rotation
-  real    :: I_scale ! The inverse of scale
+  real, allocatable :: data_in_pre_scale(:,:,:) ! The input data before rescaling [a]
+  real, allocatable :: data_pre_rot(:,:,:)      ! The unscaled input data before rotation [a]
+  real    :: I_scale ! The inverse of scale [a A-1 ~> 1]
   integer :: qturns  ! The number of quarter turns to rotate the data
   integer :: i, j, k
 
