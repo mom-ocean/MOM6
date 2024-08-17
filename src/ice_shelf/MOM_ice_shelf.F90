@@ -24,6 +24,8 @@ use MOM_domains, only : MOM_domains_init, pass_var, pass_vector, clone_MOM_domai
 use MOM_domains, only : TO_ALL, CGRID_NE, BGRID_NE, CORNER
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
+use MOM_error_handler, only : callTree_showQuery
+use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_grid_initialize, only : set_grid_metrics
@@ -39,12 +41,12 @@ use MOM_restart, only : register_restart_field, save_restart
 use MOM_restart, only : restart_init, restore_state, MOM_restart_CS, register_restart_pair
 use MOM_time_manager, only : time_type, time_type_to_real, real_to_time, operator(>), operator(-)
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
-use MOM_transcribe_grid,       only : rotate_dyngrid
+use MOM_transcribe_grid, only : rotate_dyngrid
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init, fix_restart_unit_scaling
 use MOM_variables, only : surface, allocate_surface_state, deallocate_surface_state
 use MOM_variables, only : rotate_surface_state
 use MOM_forcing_type, only : forcing, allocate_forcing_type, deallocate_forcing_type, MOM_forcing_chksum
-use MOM_forcing_type, only : mech_forcing, allocate_mech_forcing, MOM_mech_forcing_chksum
+use MOM_forcing_type, only : mech_forcing, allocate_mech_forcing, deallocate_mech_forcing, MOM_mech_forcing_chksum
 use MOM_forcing_type, only : copy_common_forcing_fields, rotate_forcing, rotate_mech_forcing
 use MOM_get_input, only : directories, Get_MOM_input
 use MOM_EOS, only : calculate_density, calculate_density_derivs, calculate_TFreeze, EOS_domain
@@ -59,7 +61,6 @@ use MOM_ice_shelf_initialize, only : initialize_ice_thickness
 use MOM_ice_shelf_state, only : ice_shelf_state, ice_shelf_state_end, ice_shelf_state_init
 use user_shelf_init, only : USER_initialize_shelf_mass, USER_update_shelf_mass
 use user_shelf_init, only : user_ice_shelf_CS
-use MOM_coms, only : reproducing_sum
 use MOM_spatial_means, only : global_area_integral
 use MOM_checksums, only : hchksum, qchksum, chksum, uchksum, vchksum, uvchksum
 use MOM_interpolate, only : init_external_field, time_interp_external, time_interp_external_init
@@ -90,10 +91,6 @@ type, public :: ice_shelf_CS ; private
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control
                                                   !! structure for the ice shelves
   type(ocean_grid_type), pointer :: Grid_in => NULL() !< un-rotated input grid metric
-  type(hor_index_type), pointer :: HI_in => NULL()  !< Pointer to a horizontal indexing structure for
-                                                    !! incoming data which has not been rotated.
-  type(hor_index_type), pointer :: HI => NULL()  !< Pointer to a horizontal indexing structure for
-                                                 !! incoming data which has not been rotated.
   logical :: rotate_index = .false.   !< True if index map is rotated
   integer :: turns                    !< The number of quarter turns for rotation testing.
   type(ocean_grid_type), pointer :: Grid => NULL() !< Grid for the ice-shelf model
@@ -1020,18 +1017,18 @@ end subroutine change_thickness_using_melt
 
 !> This subroutine adds the mechanical forcing fields and perhaps shelf areas, based on
 !! the ice state in ice_shelf_CS.
-subroutine add_shelf_forces(Ocn_grid, US, CS, forces, do_shelf_area, external_call)
+subroutine add_shelf_forces(Ocn_grid, US, CS, forces_in, do_shelf_area, external_call)
   type(ocean_grid_type), intent(in)    :: Ocn_grid !< The ocean's grid structure.
   type(unit_scale_type), intent(in)    :: US   !< A dimensional unit scaling type
   type(ice_shelf_CS),    pointer       :: CS   !< This module's control structure.
-  type(mech_forcing),    intent(inout) :: forces !< A structure with the
+  type(mech_forcing), target, intent(inout) :: forces_in !< A structure with the
                                                !! driving mechanical forces
   logical, optional,     intent(in)    :: do_shelf_area !< If true find the shelf-covered areas.
   logical, optional,     intent(in)    :: external_call !< If true the incoming forcing type
-                                               !! is using the input grid metric and needs
+                                               !! is using the unrotated input grid and may need
                                                !! to be rotated.
   type(ocean_grid_type), pointer :: G => NULL()   !< A pointer to the ocean grid metric.
-!  type(mech_forcing),    target :: forces     !< A structure with the driving mechanical forces
+  type(mech_forcing),    pointer :: forces     !< A structure with the driving mechanical forces
   real :: kv_rho_ice ! The viscosity of ice divided by its density [L4 T-1 R-1 Z-2 ~> m5 kg-1 s-1].
   real :: press_ice  ! The pressure of the ice shelf per unit area of ocean (not ice) [R L2 T-2 ~> Pa].
   logical :: find_area ! If true find the shelf areas at u & v points.
@@ -1041,28 +1038,24 @@ subroutine add_shelf_forces(Ocn_grid, US, CS, forces, do_shelf_area, external_ca
 
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed
 
-  if (present(external_call)) rotate=external_call
-
-  if ((Ocn_grid%isc /= CS%Grid_in%isc) .or. (Ocn_grid%iec /= CS%Grid_in%iec) .or. &
-      (Ocn_grid%jsc /= CS%Grid_in%jsc) .or. (Ocn_grid%jec /= CS%Grid_in%jec)) &
-    call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
+  rotate = .false. ; if (present(external_call)) rotate = external_call
 
   if (CS%rotate_index .and. rotate) then
-    call MOM_error(FATAL,"add_shelf_forces: Rotation not implemented for ice shelves.")
-    ! allocate(forces)
-    ! call allocate_mech_forcing(forces_in, CS%Grid, forces)
-    ! call rotate_mech_forcing(forces_in, CS%turns, forces)
-  ! else
-  !   if ((Ocn_grid%isc /= CS%Grid%isc) .or. (Ocn_grid%iec /= CS%Grid%iec) .or. &
-  !       (Ocn_grid%jsc /= CS%Grid%jsc) .or. (Ocn_grid%jec /= CS%Grid%jec)) &
-  !     call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and Ice shelf grids.")
+    if ((Ocn_grid%isc /= CS%Grid_in%isc) .or. (Ocn_grid%iec /= CS%Grid_in%iec) .or. &
+        (Ocn_grid%jsc /= CS%Grid_in%jsc) .or. (Ocn_grid%jec /= CS%Grid_in%jec)) &
+      call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and external Ice shelf grids.")
+    allocate(forces)
+    call allocate_mech_forcing(forces_in, CS%Grid, forces)
+    call rotate_mech_forcing(forces_in, CS%turns, forces)
+  else
+    if ((Ocn_grid%isc /= CS%Grid%isc) .or. (Ocn_grid%iec /= CS%Grid%iec) .or. &
+        (Ocn_grid%jsc /= CS%Grid%jsc) .or. (Ocn_grid%jec /= CS%Grid%jec)) &
+      call MOM_error(FATAL,"add_shelf_forces: Incompatible Ocean and internal Ice shelf grids.")
 
-  !   forces=>forces_in
+    forces=>forces_in
   endif
 
   G=>CS%Grid
-
-
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; jsd = G%jsd ; ied = G%ied ; jed = G%jed
@@ -1125,10 +1118,10 @@ subroutine add_shelf_forces(Ocn_grid, US, CS, forces, do_shelf_area, external_ca
         scalar_pair=.true.)
   endif
 
-  ! if (CS%rotate_index .and. rotate) then
-  !    call rotate_mech_forcing(forces, -CS%turns, forces_in)
-  !    ! TODO: deallocate mech forcing?
-  ! endif
+  if (CS%rotate_index .and. rotate) then
+    call rotate_mech_forcing(forces, -CS%turns, forces_in)
+    call deallocate_mech_forcing(forces)
+  endif
 
 end subroutine add_shelf_forces
 
@@ -1411,6 +1404,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
                                           !! the ice-shelf state
   type(directories)  :: dirs
   type(dyn_horgrid_type), pointer :: dG => NULL()
+  type(dyn_horgrid_type), pointer :: dG_in => NULL()
   real :: meltrate_conversion ! The conversion factor to use for in the melt rate diagnostic.
   real :: dz_ocean_min_float ! The minimum ocean thickness above which the ice shelf is considered
                         ! to be floating when CONST_SEA_LEVEL = True [Z ~> m].
@@ -1422,6 +1416,7 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
   character(len=40)  :: mdl = "MOM_ice_shelf"  ! This module's name.
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, Isdq, Iedq, Jsdq, Jedq
   integer :: wd_halos(2)
+  logical :: showCallTree
   logical :: read_TideAmp, debug
   logical :: global_indexing
   character(len=240) :: Tideamp_file  ! Input file names
@@ -1463,55 +1458,57 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
 
   ! Set up the ice-shelf domain and grid
   wd_halos(:)=0
-  allocate(CS%Grid)
-  call MOM_domains_init(CS%Grid%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
+  allocate(CS%Grid_in)
+  call MOM_domains_init(CS%Grid_in%domain, param_file, min_halo=wd_halos, symmetric=GRID_SYM_,&
                         domain_name='MOM_Ice_Shelf_in', US=CS%US)
   !allocate(CS%Grid_in%HI)
   !call hor_index_init(CS%Grid%Domain, CS%Grid%HI, param_file, &
   !     local_indexing=.not.global_indexing)
-  call MOM_grid_init(CS%Grid, param_file, CS%US)
+  call MOM_grid_init(CS%Grid_in, param_file, CS%US)
 
-  ! if (CS%rotate_index) then
+  if (CS%rotate_index) then
   !   ! TODO: Index rotation currently only works when index rotation does not
   !   !   change the MPI rank of each domain.  Resolving this will require a
   !   !   modification to FMS PE assignment.
   !   !   For now, we only permit single-core runs.
 
-  !   if (num_PEs() /= 1) &
-  !        call MOM_error(FATAL, "Index rotation is only supported on one PE.")
+    if (num_PEs() /= 1) call MOM_error(FATAL, "Index rotation is only supported on one PE.")
 
-  !   call get_param(param_file, mdl, "INDEX_TURNS", CS%turns, &
-  !        "Number of counterclockwise quarter-turn index rotations.", &
-  !        default=1, debuggingParam=.true.)
-  !   ! NOTE: If indices are rotated, then CS%Grid and CS%Grid_in must both be initialized.
-  !   !   If not rotated, then CS%Grid_in and CS%Ggrid are the same grid.
-  !   allocate(CS%Grid)
-  !   !allocate(CS%HI)
-  !   call clone_MOM_domain(CS%Grid_in%Domain, CS%Grid%Domain,turns=CS%turns)
-  !   call rotate_hor_index(CS%Grid_in%HI, CS%turns, CS%Grid%HI)
-  !   call MOM_grid_init(CS%Grid, param_file, CS%US, CS%HI)
-  !   call create_dyn_horgrid(dG, CS%Grid%HI)
-  !   call create_dyn_horgrid(dG_in, CS%Grid_in%HI)
-  !   call clone_MOM_domain(CS%Grid_in%Domain, dG_in%Domain)
-  !   ! Set up the bottom depth, G%D either analytically or from file
-  !   call set_grid_metrics(dG_in,param_file,CS%US)
-  !   call MOM_initialize_topography(dG_in%bathyT, CS%Grid_in%max_depth, dG_in, param_file)
-  !   call rescale_dyn_horgrid_bathymetry(dG_in, CS%US%Z_to_m)
-  !   call rotate_dyngrid(dG_in, dG, CS%US, CS%turns)
-  !   call copy_dyngrid_to_MOM_grid(dG,CS%Grid,CS%US)
-  ! else
-  !CS%Grid=>CS%Grid_in
-  dG => NULL()
-  !CS%Grid%HI=>CS%Grid_in%HI
-  call create_dyn_horgrid(dG, CS%Grid%HI)
-  call clone_MOM_domain(CS%Grid%Domain,dG%Domain)
-  call set_grid_metrics(dG,param_file,CS%US)
-  ! Set up the bottom depth, dG%bathyT, either analytically or from file
-  call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file, CS%US)
-  call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
-  call destroy_dyn_horgrid(dG)
-!  endif
-  G => CS%Grid ; CS%Grid_in => CS%Grid
+    call get_param(param_file, mdl, "INDEX_TURNS", CS%turns, &
+         "Number of counterclockwise quarter-turn index rotations.", &
+         default=1, debuggingParam=.true.)
+    ! NOTE: If indices are rotated, then CS%Grid and CS%Grid_in must both be initialized.
+    !   If not rotated, then CS%Grid_in and CS%Ggrid are the same grid.
+    call create_dyn_horgrid(dG_in, CS%Grid_in%HI)
+    call clone_MOM_domain(CS%Grid_in%Domain, dG_in%Domain)
+    call set_grid_metrics(dG_in, param_file, CS%US)
+    ! Set up the bottom depth, dG_in%bathyT, either analytically or from file
+    call MOM_initialize_topography(dG_in%bathyT, CS%Grid_in%max_depth, dG_in, param_file, CS%US)
+    call copy_dyngrid_to_MOM_grid(dG_in, CS%Grid_in, CS%US)
+
+    ! Now set up the rotated ice-shelf grid.
+    allocate(CS%Grid)
+    call clone_MOM_domain(CS%Grid_in%Domain, CS%Grid%Domain, turns=CS%turns)
+    call rotate_hor_index(CS%Grid_in%HI, CS%turns, CS%Grid%HI)
+    call MOM_grid_init(CS%Grid, param_file, CS%US, CS%Grid%HI)
+    call create_dyn_horgrid(dG, CS%Grid%HI)
+    call rotate_dyngrid(dG_in, dG, CS%US, CS%turns)
+    call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
+
+    call destroy_dyn_horgrid(dG_in)
+    call destroy_dyn_horgrid(dG)
+  else
+    CS%Grid => CS%Grid_in
+    dG => NULL()
+    call create_dyn_horgrid(dG, CS%Grid%HI)
+    call clone_MOM_domain(CS%Grid%Domain, dG%Domain)
+    call set_grid_metrics(dG, param_file, CS%US)
+    ! Set up the bottom depth, dG%bathyT, either analytically or from file
+    call MOM_initialize_topography(dG%bathyT, CS%Grid%max_depth, dG, param_file, CS%US)
+    call copy_dyngrid_to_MOM_grid(dG, CS%Grid, CS%US)
+    call destroy_dyn_horgrid(dG)
+  endif
+  G => CS%Grid
 
   allocate(CS%diag)
   call MOM_IS_diag_mediator_init(G, CS%US, param_file, CS%diag, component='MOM_IceShelf')
@@ -1979,8 +1976,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
 
   if (save_IC .and. .not.((dirs%input_filename(1:1) == 'r') .and. &
                           (LEN_TRIM(dirs%input_filename) == 1))) then
+    showCallTree = callTree_showQuery()
+    if (showCallTree) call callTree_waypoint("About to call save_restart (MOM_ice_shelf)")
     call save_restart(dirs%output_directory, CS%Time, CS%Grid_in, CS%restart_CSp, &
                       filename=IC_file, write_ic=.true.)
+    if (showCallTree) call callTree_waypoint("Done with call to save_restart (MOM_ice_shelf)")
   endif
 
   CS%id_area_shelf_h = register_diag_field('ice_shelf_model', 'area_shelf_h', CS%diag%axesT1, CS%Time, &
@@ -2130,16 +2130,23 @@ subroutine initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
 
 end subroutine initialize_ice_shelf_fluxes
 
+!> Allocate and initialize the ice-shelf forcing elements of a mechanical forcing type.
+!! This forcing type is on the unrotated grid that is used outside of the MOM6 ice shelf code.
 subroutine initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
   type(ice_shelf_CS),           pointer       :: CS   !< A pointer to the ice shelf control structure
   type(ocean_grid_type),        pointer       :: ocn_grid   !< The calling ocean model's horizontal grid structure
-  type(unit_scale_type),        intent(in)    :: US  !< A dimensional unit scaling type
+  type(unit_scale_type),        intent(in)    :: US   !< A dimensional unit scaling type
   type(mech_forcing),   target, intent(inout) :: forces_in !< A structure with the driving mechanical forces
 
   ! Local variables
   type(mech_forcing), pointer :: forces => NULL()
 
   call MOM_mesg("MOM_ice_shelf.F90, initialize_ice_shelf: allocating forces.")
+
+  if ((Ocn_grid%isc /= CS%Grid_in%isc) .or. (Ocn_grid%iec /= CS%Grid_in%iec) .or. &
+      (Ocn_grid%jsc /= CS%Grid_in%jsc) .or. (Ocn_grid%jec /= CS%Grid_in%jec)) &
+    call MOM_error(FATAL,"initialize_ice_shelf_forces: Incompatible ocean and external ice shelf grids.")
+
   call allocate_mech_forcing(CS%Grid_in, forces_in, ustar=.true., shelf=.true., press=.true., tau_mag=.true.)
   if (CS%rotate_index) then
     allocate(forces)
@@ -2149,10 +2156,13 @@ subroutine initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
     forces=>forces_in
   endif
 
-  call add_shelf_forces(ocn_grid, US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet)
+  call add_shelf_forces(CS%grid, US, CS, forces, do_shelf_area=.not.CS%solo_ice_sheet, &
+                        external_call=.false.)
 
-  if (CS%rotate_index) &
+  if (CS%rotate_index) then
     call rotate_mech_forcing(forces, -CS%turns, forces_in)
+    call deallocate_mech_forcing(forces)
+  endif
 
 end subroutine initialize_ice_shelf_forces
 

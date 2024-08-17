@@ -2955,20 +2955,20 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       ! These arrays are not initialized in most solo cases, but are needed
       ! when using an ice shelf. Passing the ice shelf diagnostics CS from MOM
       ! for legacy reasons. The actual ice shelf diag CS is internal to the ice shelf
-      call initialize_ice_shelf(param_file, G_in, Time, ice_shelf_CSp, diag_ptr, &
+      call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr, &
                                 Time_init, dirs%output_directory, calve_ice_shelf_bergs=point_calving)
       allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
       allocate(mass_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed), source=0.0)
       allocate(CS%mass_shelf(isd:ied, jsd:jed), source=0.0)
-      call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h, CS%mass_shelf)
+      call ice_shelf_query(ice_shelf_CSp, G, CS%frac_shelf_h, CS%mass_shelf)
       ! MOM_initialize_state is using the  unrotated metric
       call rotate_array(CS%frac_shelf_h, -turns, frac_shelf_in)
       call rotate_array(CS%mass_shelf, -turns, mass_shelf_in)
       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           sponge_in_CSp, ALE_sponge_in_CSp, oda_incupd_in_CSp, OBC_in, Time_in, &
-          frac_shelf_h=frac_shelf_in, mass_shelf = mass_shelf_in)
+          frac_shelf_h=frac_shelf_in, mass_shelf=mass_shelf_in)
     else
       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -4173,9 +4173,14 @@ subroutine save_MOM_restart(CS, directory, time, G, time_stamped, filename, &
   logical, optional, intent(in) :: write_IC
     !< If present and true, initial conditions are being written
 
+  logical :: showCallTree
+  showCallTree = callTree_showQuery()
+
+  if (showCallTree) call callTree_waypoint("About to call save_restart (step_MOM)")
   call save_restart(directory, time, G, CS%restart_CS, &
       time_stamped=time_stamped, filename=filename, GV=GV, &
       num_rest_files=num_rest_files, write_IC=write_IC)
+  if (showCallTree) call callTree_waypoint("Done with call to save_restart (step_MOM)")
 
   if (CS%use_particles) call particles_save_restart(CS%particles, CS%h, directory, time, time_stamped)
 end subroutine save_MOM_restart
