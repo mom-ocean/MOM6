@@ -447,7 +447,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
 
   !   With an ice-shelf or icebergs, this linearity condition might need to be applied
   ! to a sub-surface interface.
-  if (CS%correction_intxpa) then
+  if (CS%correction_intxpa .or. CS%reset_intxpa_integral) then
     ! Determine surface temperature and salinity for use in the pressure gradient corrections
     if (use_ALE .and. (CS%Recon_Scheme > 0)) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -458,7 +458,9 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
         T_top(i,j) = tv%T(i,j,1) ; S_top(i,j) = tv%S(i,j,1)
       enddo ; enddo
     endif
+  endif
 
+  if (CS%correction_intxpa) then
     if (CS%correction_intxpa_5pt) then
       ! This version makes a 5 point quadrature correction for hydrostatic variations in surface
       ! pressure under ice.
@@ -581,8 +583,6 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   if (CS%reset_intxpa_integral) then
     ! Having stored the pressure gradient info, we can work out where the first nonvanished layers is
     ! reset intx_za there, then adjust intx_za throughout the water column.
-    ! Note: This option currently assumes height varies quadratically along the bottom of the topmost non-vanished,
-    ! non-mass-weighted layer.  Possibly 5 point quadrature should be implemented as for the surface.
 
     ! Zero out the 2-d arrays that will be set from various reference interfaces.
     T_int_W(:,:) = 0.0 ; S_int_W(:,:) = 0.0 ; p_int_W(:,:) = 0.0
@@ -591,7 +591,20 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     do j=js,je ; do I=Isq,Ieq
       seek_x_cor(I,j) = (G%mask2dCu(I,j) > 0.)
     enddo ; enddo
-    do k=1,nz-1
+
+    do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+      if ((p(i+1,j,2) >= p(i,j,1)) .and. (p(i,j,2) >= p(i+1,j,1))) then
+        ! This is the typical case in the open ocean, so use the topmost interface.
+        T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+        S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+        p_int_W(I,j) = p(i,j,1) ; p_int_E(I,j) = p(i+1,j,1)
+        intx_za_nonlin(I,j) = intx_za(I,j,1) - 0.5*(za(i,j,1) + za(i+1,j,1))
+        dp_int_x(I,j) = p(i+1,j,1)-p(i,j,1)
+        seek_x_cor(I,j) = .false.
+      endif
+    endif ; enddo ; enddo
+
+    do k=1,nz
       do_more_k = .false.
       do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
         ! Find the topmost layer for which both sides are nonvanished and mass-weighting is not
@@ -614,18 +627,54 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
       if (.not.do_more_k) exit  ! All reference interfaces have been found, so stop working downward.
     enddo
 
-    do j=js,je
-      call calculate_spec_vol(T_int_W(:,j), S_int_W(:,j), p_int_W(:,j), SpV_x_W(:,j), &
-                              tv%eqn_of_state, EOSdom_u, spv_ref=alpha_ref)
-      call calculate_spec_vol(T_int_E(:,j), S_int_E(:,j), p_int_E(:,j), SpV_x_E(:,j), &
-                              tv%eqn_of_state, EOSdom_u, spv_ref=alpha_ref)
-      do I=Isq,Ieq
-        ! This expression assumes that specific volume varies linearly with depth between the corners of the
-        ! reference interfaces found above to get a vertically uniform correction to intx_za.
-        ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
-        intx_za_cor_ri(I,j) = C1_12 * (SpV_x_E(I,j)-SpV_x_W(I,j)) * dp_int_x(I,j) - intx_za_nonlin(I,j)
+    if (do_more_k) then
+      ! There are still points where a correction is needed, so use the top interface.
+      do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+        T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+        S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+        p_int_W(I,j) = p(i,j,1) ; p_int_E(I,j) = p(i+1,j,1)
+        intx_za_nonlin(I,j) = intx_za(I,j,1) - 0.5*(za(i,j,1) + za(i+1,j,1))
+        dp_int_x(I,j) = p(i+1,j,1)-p(i,j,1)
+        seek_x_cor(I,j) = .false.
+      endif ; enddo ; enddo
+    endif
+
+    if (CS%correction_intxpa_5pt) then
+      do j=js,je
+        do I=Isq,Ieq
+          ! This expression assumes that temperature and salinity vary linearly with pressure
+          ! between the corners of the reference interfaces found above to get a correction to
+          ! intx_pa that takes nonlinearities in the equation of state into account.
+          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+          ! linear correction so that the pressures and heights match at the end-points.  It turns
+          ! out that this linear correction cancels out the mid-point specific volume.
+          ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
+          T5(1) = T_Int_W(I,j) ; S5(1) = S_Int_W(I,j) ; p5(1) = p_Int_W(I,j)
+          T5(5) = T_Int_E(I,j) ; S5(5) = S_Int_E(I,j) ; p5(5) = p_Int_E(I,j)
+          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+          call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
+
+          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+          intx_za_cor_ri(I,j) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * &
+                                        dp_int_x(I,j) - intx_za_nonlin(I,j)
+        enddo
       enddo
-    enddo
+    else
+      do j=js,je
+        call calculate_spec_vol(T_int_W(:,j), S_int_W(:,j), p_int_W(:,j), SpV_x_W(:,j), &
+                                tv%eqn_of_state, EOSdom_u, spv_ref=alpha_ref)
+        call calculate_spec_vol(T_int_E(:,j), S_int_E(:,j), p_int_E(:,j), SpV_x_E(:,j), &
+                              tv%eqn_of_state, EOSdom_u, spv_ref=alpha_ref)
+        do I=Isq,Ieq
+          ! This expression assumes that specific volume varies linearly with depth between the corners of the
+          ! reference interfaces found above to get a vertically uniform correction to intx_za.
+          ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
+          intx_za_cor_ri(I,j) = C1_12 * (SpV_x_E(I,j)-SpV_x_W(I,j)) * dp_int_x(I,j) - intx_za_nonlin(I,j)
+        enddo
+      enddo
+    endif
 
     ! Repeat the calculations above for v-velocity points.
     T_int_S(:,:) = 0.0 ; S_int_S(:,:) = 0.0 ; p_int_S(:,:) = 0.0
@@ -634,7 +683,20 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     do J=Jsq,Jeq ; do i=is,ie
       seek_y_cor(i,J) = (G%mask2dCv(i,J) > 0.)
     enddo ; enddo
-    do k=1,nz-1
+
+    do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+      if ((p(i,j+1,2) >= p(i,j,1)) .and. (p(i,j,2) >= p(i,j+1,1))) then
+        ! This is the typical case in the open ocean, so use the topmost interface.
+        T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+        S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+        p_int_S(i,J) = p(i,j,1) ; p_int_N(i,J) = p(i,j+1,1)
+        inty_za_nonlin(i,J) = inty_za(i,J,1) - 0.5*(za(i,j,1) + za(i,j+1,1))
+        dp_int_y(i,J) = p(i,j+1,1) - p(i,j,1)
+        seek_y_cor(i,J) = .false.
+      endif
+    endif ; enddo ; enddo
+
+    do k=1,nz
       do_more_k = .false.
       do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
         ! Find the topmost layer for which both sides are nonvanished and mass-weighting is not
@@ -656,18 +718,54 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
       if (.not.do_more_k) exit  ! All reference interfaces have been found, so stop working downward.
     enddo
 
-    do J=Jsq,Jeq
-      call calculate_spec_vol(T_int_S(:,J), S_int_S(:,J), p_int_S(:,J), SpV_y_S(:,J), &
-                             tv%eqn_of_state, EOSdom_v, spv_ref=alpha_ref)
-      call calculate_spec_vol(T_int_N(:,J), S_int_N(:,J), p_int_N(:,J), SpV_y_N(:,J), &
-                             tv%eqn_of_state, EOSdom_v, spv_ref=alpha_ref)
-      do i=is,ie
-        ! This expression assumes that specific volume varies linearly with depth between the corners of the
-        ! reference interfaces found above to get a vertically uniform correction to inty_pa.
-        ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
-        inty_za_cor_ri(i,J) = C1_12 * (SpV_y_N(i,J)-SpV_y_S(i,J)) * dp_int_y(i,J) - inty_za_nonlin(i,J)
+    if (do_more_k) then
+      ! There are still points where a correction is needed, so use the top interface.
+      do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+        T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+        S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+        p_int_S(i,J) = p(i,j,1) ; p_int_N(i,J) = p(i,j+1,1)
+        inty_za_nonlin(i,J) = inty_za(i,J,1) - 0.5*(za(i,j,1) + za(i,j+1,1))
+        dp_int_y(i,J) = p(i,j+1,1) - p(i,j,1)
+        seek_y_cor(i,J) = .false.
+      endif ; enddo ; enddo
+    endif
+
+    if (CS%correction_intxpa_5pt) then
+      do J=Jsq,Jeq
+        do i=is,ie
+          ! This expression assumes that temperature and salinity vary linearly with pressure
+          ! between the corners of the reference interfaces found above to get a correction to
+          ! intx_pa that takes nonlinearities in the equation of state into account.
+          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+          ! linear correction so that the pressures and heights match at the end-points.  It turns
+          ! out that this linear correction cancels out the mid-point specific volume.
+          ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
+          T5(1) = T_Int_S(i,J) ; S5(1) = S_Int_S(i,J) ; p5(1) = p_Int_S(i,J)
+          T5(5) = T_Int_N(i,J) ; S5(5) = S_Int_N(i,J) ; p5(5) = p_Int_N(i,J)
+          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+          call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
+
+          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+          inty_za_cor_ri(i,J) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * &
+                                        dp_int_y(i,J) - inty_za_nonlin(i,J)
+        enddo
       enddo
-    enddo
+    else
+      do J=Jsq,Jeq
+        call calculate_spec_vol(T_int_S(:,J), S_int_S(:,J), p_int_S(:,J), SpV_y_S(:,J), &
+                               tv%eqn_of_state, EOSdom_v, spv_ref=alpha_ref)
+        call calculate_spec_vol(T_int_N(:,J), S_int_N(:,J), p_int_N(:,J), SpV_y_N(:,J), &
+                               tv%eqn_of_state, EOSdom_v, spv_ref=alpha_ref)
+        do i=is,ie
+          ! This expression assumes that specific volume varies linearly with depth between the corners of the
+          ! reference interfaces found above to get a vertically uniform correction to inty_pa.
+          ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
+          inty_za_cor_ri(i,J) = C1_12 * (SpV_y_N(i,J)-SpV_y_S(i,J)) * dp_int_y(i,J) - inty_za_nonlin(i,J)
+        enddo
+      enddo
+    endif
 
     if (CS%debug) then
       call uvchksum("Pre-reset int[xy]_za", intx_za, inty_za, G%HI, haloshift=0, &
@@ -1189,7 +1287,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo ; enddo
   enddo
 
-  if (CS%correction_intxpa) then
+  if (CS%correction_intxpa .or. CS%reset_intxpa_integral) then
     ! Determine surface temperature and salinity for use in the pressure gradient corrections
     if (use_ALE .and. (CS%Recon_Scheme > 0)) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1200,7 +1298,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
         T_top(i,j) = tv%T(i,j,1) ; S_top(i,j) = tv%S(i,j,1)
       enddo ; enddo
     endif
+  endif
 
+  if (CS%correction_intxpa) then
     ! Determine surface density for use in the pressure gradient corrections
     !$OMP parallel do default(shared) private(p_surf_EOS)
     do j=Jsq,Jeq+1
@@ -1376,8 +1476,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (CS%reset_intxpa_integral) then
     ! Having stored the pressure gradient info, we can work out where the first nonvanished layers is
     ! reset intxpa there, then adjust intxpa throughout the water column.
-    ! Note: This currently assumes pressure varies quadratically along the bottom of the topmost non-vanished,
-    ! non-mass-weighted layer.  Possibly 5 pt quadrature should be implemented as for the surface.
 
     ! Zero out the 2-d arrays that will be set from various reference interfaces.
     T_int_W(:,:) = 0.0 ; S_int_W(:,:) = 0.0 ; p_int_W(:,:) = 0.0
@@ -1386,7 +1484,21 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     do j=js,je ; do I=Isq,Ieq
       seek_x_cor(I,j) = (G%mask2dCu(I,j) > 0.)
     enddo ; enddo
-    do k=1,nz-1
+
+    do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+      if ((e(i+1,j,2) <= e(i,j,1)) .and. (e(i,j,2) <= e(i+1,j,1))) then
+        ! This is a typical case in the open ocean, so use the topmost interface.
+        T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+        S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+        p_int_W(I,j) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+        p_int_E(I,j) = -GxRho*(e(i+1,j,1) - Z_0p(i,j))
+        intx_pa_nonlin(I,j) = intx_pa(I,j,1) - 0.5*(pa(i,j,1) + pa(i+1,j,1))
+        dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,1)-e(i,j,1))
+        seek_x_cor(I,j) = .false.
+      endif
+    endif ; enddo ; enddo
+
+    do k=1,nz
       do_more_k = .false.
       do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
         ! Find the topmost layer for which both sides are nonvanished and mass-weighting is not
@@ -1412,18 +1524,55 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       if (.not.do_more_k) exit  ! All reference interfaces have been found, so stop working downward.
     enddo
 
-    do j=js,je
-      call calculate_density(T_int_W(:,j), S_int_W(:,j), p_int_W(:,j), rho_x_W(:,j), &
-                             tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
-      call calculate_density(T_int_E(:,j), S_int_E(:,j), p_int_E(:,j), rho_x_E(:,j), &
-                             tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
-      do I=Isq,Ieq
-        ! This expression assumes that density varies linearly with depth between the corners of the
-        ! reference interfaces found above to get a vertically uniform correction to intx_pa.
-        ! This can be used without masking because dgeo_x and intx_pa_nonlin are 0 over land.
-        intx_pa_cor_ri(I,j) = C1_12 * (rho_x_E(I,j)-rho_x_W(I,j)) * dgeo_x(I,j) - intx_pa_nonlin(I,j)
+    if (do_more_k) then
+      ! There are still points where a correction is needed, so use the top interface for lack of a better idea?
+      do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+        T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+        S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+        p_int_W(I,j) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+        p_int_E(I,j) = -GxRho*(e(i+1,j,1) - Z_0p(i,j))
+        intx_pa_nonlin(I,j) = intx_pa(I,j,1) - 0.5*(pa(i,j,1) + pa(i+1,j,1))
+        dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,1)-e(i,j,1))
+        seek_x_cor(I,j) = .false.
+      endif ; enddo ; enddo
+    endif
+
+    if (CS%correction_intxpa_5pt) then
+      do j=js,je
+        do I=Isq,Ieq
+          ! This expression assumes that temperature and salinity vary linearly with hieght
+          ! between the corners of the reference interfaces found above to get a correction to
+          ! intx_pa that takes nonlinearities in the equation of state into account.
+          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+          ! linear correction so that the pressures and heights match at the end-points.  It turns
+          ! out that this linear correction cancels out the mid-point density anomaly.
+          ! This can be used without masking because dgeo_x and intx_pa_nonlin are 0 over land.
+          T5(1) = T_Int_W(I,j) ; S5(1) = S_Int_W(I,j) ; p5(1) = p_Int_W(I,j)
+          T5(5) = T_Int_E(I,j) ; S5(5) = S_Int_E(I,j) ; p5(5) = p_Int_E(I,j)
+          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+          call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
+
+          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+          intx_pa_cor_ri(I,j) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dgeo_x(I,j) - &
+                                intx_pa_nonlin(I,j)
+        enddo
       enddo
-    enddo
+    else
+      do j=js,je
+        call calculate_density(T_int_W(:,j), S_int_W(:,j), p_int_W(:,j), rho_x_W(:,j), &
+                               tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
+        call calculate_density(T_int_E(:,j), S_int_E(:,j), p_int_E(:,j), rho_x_E(:,j), &
+                               tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
+        do I=Isq,Ieq
+          ! This expression assumes that density varies linearly with depth between the corners of the
+          ! reference interfaces found above to get a vertically uniform correction to intx_pa.
+          ! This can be used without masking because dgeo_x and intx_pa_nonlin are 0 over land.
+          intx_pa_cor_ri(I,j) = C1_12 * (rho_x_E(I,j)-rho_x_W(I,j)) * dgeo_x(I,j) - intx_pa_nonlin(I,j)
+        enddo
+      enddo
+    endif
 
     ! Repeat the calculations above for v-velocity points.
     T_int_S(:,:) = 0.0 ; S_int_S(:,:) = 0.0 ; p_int_S(:,:) = 0.0
@@ -1432,7 +1581,21 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     do J=Jsq,Jeq ; do i=is,ie
       seek_y_cor(i,J) = (G%mask2dCv(i,J) > 0.)
     enddo ; enddo
-    do k=1,nz-1
+
+    do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+      if ((e(i,j+1,2) <= e(i,j,1)) .and. (e(i,j,2) <= e(i,j+1,1))) then
+        ! This is a typical case in the open ocean, so use the topmost interface.
+        T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+        S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+        p_int_S(i,J) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+        p_int_N(i,J) = -GxRho*(e(i,j+1,1) - Z_0p(i,j))
+        inty_pa_nonlin(i,J) = inty_pa(i,J,1) - 0.5*(pa(i,j,1) + pa(i,j+1,1))
+        dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,1)-e(i,j,1))
+        seek_y_cor(i,J) = .false.
+      endif
+    endif ; enddo ; enddo
+
+    do k=1,nz
       do_more_k = .false.
       do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
         ! Find the topmost layer for which both sides are nonvanished and mass-weighting is not
@@ -1457,18 +1620,55 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       if (.not.do_more_k) exit  ! All reference interfaces have been found, so stop working downward.
     enddo
 
-    do J=Jsq,Jeq
-      call calculate_density(T_int_S(:,J), S_int_S(:,J), p_int_S(:,J), rho_y_S(:,J), &
-                             tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
-      call calculate_density(T_int_N(:,J), S_int_N(:,J), p_int_N(:,J), rho_y_N(:,J), &
-                             tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
-      do i=is,ie
-        ! This expression assumes that density varies linearly with depth between the corners of the
-        ! reference interfaces found above to get a vertically uniform correction to inty_pa.
-        ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
-        inty_pa_cor_ri(i,J) = C1_12 * (rho_y_N(i,J)-rho_y_S(i,J)) * dgeo_y(i,J) - inty_pa_nonlin(i,J)
+    if (do_more_k) then
+      ! There are still points where a correction is needed, so use the top interface for lack of a better idea?
+      do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+        T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+        S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+        p_int_S(i,J) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+        p_int_N(i,J) = -GxRho*(e(i,j+1,1) - Z_0p(i,j))
+        inty_pa_nonlin(i,J) = inty_pa(i,J,1) - 0.5*(pa(i,j,1) + pa(i,j+1,1))
+        dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,1)-e(i,j,1))
+        seek_y_cor(i,J) = .false.
+      endif ; enddo ; enddo
+    endif
+
+    if (CS%correction_intxpa_5pt) then
+      do J=Jsq,Jeq
+        do i=is,ie
+          ! This expression assumes that temperature and salinity vary linearly with hieght
+          ! between the corners of the reference interfaces found above to get a correction to
+          ! intx_pa that takes nonlinearities in the equation of state into account.
+          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+          ! linear correction so that the pressures and heights match at the end-points.  It turns
+          ! out that this linear correction cancels out the mid-point density anomaly.
+          ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
+          T5(1) = T_Int_S(i,J) ; S5(1) = S_Int_S(i,J) ; p5(1) = p_Int_S(i,J)
+          T5(5) = T_Int_N(i,J) ; S5(5) = S_Int_N(i,J) ; p5(5) = p_Int_N(i,J)
+          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+          call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
+
+          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+          inty_pa_cor_ri(i,J) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dgeo_y(i,J) - &
+                                inty_pa_nonlin(i,J)
+        enddo
       enddo
-    enddo
+    else
+      do J=Jsq,Jeq
+        call calculate_density(T_int_S(:,J), S_int_S(:,J), p_int_S(:,J), rho_y_S(:,J), &
+                               tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
+        call calculate_density(T_int_N(:,J), S_int_N(:,J), p_int_N(:,J), rho_y_N(:,J), &
+                               tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
+        do i=is,ie
+          ! This expression assumes that density varies linearly with depth between the corners of the
+          ! reference interfaces found above to get a vertically uniform correction to inty_pa.
+          ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
+          inty_pa_cor_ri(i,J) = C1_12 * (rho_y_N(i,J)-rho_y_S(i,J)) * dgeo_y(i,J) - inty_pa_nonlin(i,J)
+        enddo
+      enddo
+    endif
 
     ! Correct intx_pa and inty_pa at each interface using vertically constant corrections.
     do K=1,nz+1 ; do j=js,je ; do I=Isq,Ieq
@@ -1728,12 +1928,13 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   call get_param(param_file, mdl, "CORRECTION_INTXPA", CS%correction_intxpa, &
                  "If true, use a correction for surface pressure curvature in intx_pa.", &
                  default=.false., do_not_log=.not.use_EOS)
-  call get_param(param_file, mdl, "CORRECTION_INTXPA_5PT", CS%correction_intxpa_5pt, &
-                 "If true, use 5point quadrature to calculate intxpa. This requires "//&
-                 "CORRECTION_INTXPA = True.", default=.false., do_not_log=.not.use_EOS)
   call get_param(param_file, mdl, "RESET_INTXPA_INTEGRAL", CS%reset_intxpa_integral, &
                  "If true, reset INTXPA to match pressures at first nonvanished cell. "//&
                  "Includes pressure correction.", default=.false., do_not_log=.not.use_EOS)
+  call get_param(param_file, mdl, "CORRECTION_INTXPA_5PT", CS%correction_intxpa_5pt, &
+                 "If true, use 5-point quadrature to calculate the corrections to intxpa or intxza. "//&
+                 "This option only acts if CORRECTION_INTXPA = True or RESET_INTXPA_INTEGRAL = True.", &
+                 default=.false., do_not_log=.not.use_EOS)
   if (.not.use_EOS) then  ! These options do nothing without an equation of state.
     CS%correction_intxpa = .false.
     CS%correction_intxpa_5pt = .false.
