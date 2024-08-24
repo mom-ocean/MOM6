@@ -540,9 +540,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
         if (G%mask2dCu(I_up,j)*G%mask2dCu(I_up-1,j)*(Tp-Tc)*(Tc-Tm) <= 0.) then
           aL = Tc ; aR = Tc ! PCM for local extrema and boundary cells
         elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
-          aL = 3.*Tc - 2.*aR
+          aL = (3.*Tc) - 2.*aR
         elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
-          aR = 3.*Tc - 2.*aL
+          aR = (3.*Tc) - 2.*aL
         endif
 
         a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
@@ -925,9 +925,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         if (G%mask2dCv(i,J_up)*G%mask2dCv(i,J_up-1)*(Tp-Tc)*(Tc-Tm) <= 0.) then
           aL = Tc ; aR = Tc ! PCM for local extrema and boundary cells
         elseif ( dA*(Tc-mA) > (dA*dA)/6. ) then
-          aL = 3.*Tc - 2.*aR
+          aL = (3.*Tc) - 2.*aR
         elseif ( dA*(Tc-mA) < - (dA*dA)/6. ) then
-          aR = 3.*Tc - 2.*aL
+          aR = (3.*Tc) - 2.*aL
         endif
 
         a6 = 6.*Tc - 3. * (aR + aL) ! Curvature
