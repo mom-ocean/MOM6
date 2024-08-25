@@ -337,14 +337,14 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
       do j=js,je ; do I=Isq,Ieq
         ! PFu_bc = p* grad alpha*
         PFu_bc = (alpha_star(i+1,j,k) - alpha_star(i,j,k)) * (G%IdxCu(I,j) * &
-            ((dp_star(i,j)*dp_star(i+1,j) + (p(i,j,K)*dp_star(i+1,j) + p(i+1,j,K)*dp_star(i,j))) / &
+            ((dp_star(i,j)*dp_star(i+1,j) + ((p(i,j,K)*dp_star(i+1,j)) + (p(i+1,j,K)*dp_star(i,j)))) / &
              (dp_star(i,j) + dp_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
         if (allocated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = (alpha_star(i,j+1,k) - alpha_star(i,j,k)) * (G%IdyCv(i,J) * &
-            ((dp_star(i,j)*dp_star(i,j+1) + (p(i,j,K)*dp_star(i,j+1) + p(i,j+1,K)*dp_star(i,j))) / &
+            ((dp_star(i,j)*dp_star(i,j+1) + ((p(i,j,K)*dp_star(i,j+1)) + (p(i,j+1,K)*dp_star(i,j)))) / &
              (dp_star(i,j) + dp_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
         if (allocated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
@@ -586,15 +586,15 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
       enddo ; enddo
       do j=js,je ; do I=Isq,Ieq
         PFu_bc = -1.0*(rho_star(i+1,j,k) - rho_star(i,j,k)) * (G%IdxCu(I,j) * &
-          ((h_star(i,j) * h_star(i+1,j) - (e(i,j,K) * h_star(i+1,j) + &
-          e(i+1,j,K) * h_star(i,j))) / (h_star(i,j) + h_star(i+1,j))))
+          ((h_star(i,j) * h_star(i+1,j) - ((e(i,j,K) * h_star(i+1,j)) + &
+          (e(i+1,j,K) * h_star(i,j)))) / (h_star(i,j) + h_star(i+1,j))))
         PFu(I,j,k) = -(M(i+1,j,k) - M(i,j,k)) * G%IdxCu(I,j) + PFu_bc
         if (allocated(CS%PFu_bc)) CS%PFu_bc(i,j,k) = PFu_bc
       enddo ; enddo
       do J=Jsq,Jeq ; do i=is,ie
         PFv_bc = -1.0*(rho_star(i,j+1,k) - rho_star(i,j,k)) * (G%IdyCv(i,J) * &
-          ((h_star(i,j) * h_star(i,j+1) - (e(i,j,K) * h_star(i,j+1) + &
-          e(i,j+1,K) * h_star(i,j))) / (h_star(i,j) + h_star(i,j+1))))
+          ((h_star(i,j) * h_star(i,j+1) - ((e(i,j,K) * h_star(i,j+1)) + &
+          (e(i,j+1,K) * h_star(i,j)))) / (h_star(i,j) + h_star(i,j+1))))
         PFv(i,J,k) = -(M(i,j+1,k) - M(i,j,k)) * G%IdyCv(i,J) + PFv_bc
         if (allocated(CS%PFv_bc)) CS%PFv_bc(i,j,k) = PFv_bc
       enddo ; enddo
