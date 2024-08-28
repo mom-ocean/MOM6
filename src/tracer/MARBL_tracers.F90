@@ -82,6 +82,8 @@ type :: tracer_ind_type
   integer :: alk_alt_co2_ind  !< ALK_ALT_CO2 index
   integer :: dic_ind  !< DIC index
   integer :: dic_alt_co2_ind  !< DIC_ALT_CO2 index
+  integer :: abio_dic_ind  !< ABIO_DIC index
+  integer :: abio_di14c_ind  !< ABIO_DI14C index
 end type tracer_ind_type
 
 !> MOM needs to store some information about saved_state; besides providing these
@@ -183,6 +185,7 @@ type, public :: MARBL_tracers_CS ; private
   !! because we already copy data into CS%STF; latter requires copying data and indices
   !! so currently using temp_MARBL_diag for that.
   integer, allocatable :: id_surface_flux_out(:)  !< register_diag indices for surface_flux output
+  integer, allocatable :: id_surface_flux_from_salt_flux(:)  !< register_diag indices for surface_flux from salt_flux
   type(temp_MARBL_diag), allocatable :: interior_tendency_out(:)  !< collect interior tendencies for diagnostic output
   type(temp_MARBL_diag), allocatable :: interior_tendency_out_zint(:)  !< vertical integral of interior tendencies
                                                                        !! (full column)
@@ -191,6 +194,9 @@ type, public :: MARBL_tracers_CS ; private
   integer :: bot_flux_to_tend_id  !< register_diag index for BOT_FLUX_TO_TEND
   integer, allocatable :: fracr_cat_id(:) !< register_diag index for per-category ice fraction
   integer, allocatable :: qsw_cat_id(:)   !< register_diag index for per-category shortwave
+
+  real :: DIC_salt_ratio !< ratio to convert salt surface flux to DIC surface flux [conc ppt-1]
+  real :: ALK_salt_ratio !< ratio to convert salt surface flux to ALK surface flux [conc ppt-1]
 
   real, allocatable :: STF(:,:,:)    !< surface fluxes returned from MARBL to use in tracer_vertdiff
                                      !! (dims: i, j, tracer) [conc Z T-1 ~> conc m s-1]
@@ -703,7 +709,14 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
         call log_param(param_file, mdl, "INPUTDIR/D14C_FILE", CS%d14c_dataset(m)%file_name)
       endif
     enddo
-endif
+  endif
+
+  call get_param(param_file, mdl, "DIC_SALT_RATIO", CS%DIC_salt_ratio, &
+      "Ratio to convert salt surface flux to DIC surface flux", units="conc ppt-1", &
+      default=64.0)
+  call get_param(param_file, mdl, "ALK_SALT_RATIO", CS%ALK_salt_ratio, &
+      "Ratio to convert salt surface flux to ALK surface flux", units="conc ppt-1", &
+      default=70.0)
 
   ! ** Tracer Restoring
   call get_param(param_file, mdl, "MARBL_TRACER_RESTORING_SOURCE", CS%restoring_source, &
@@ -858,6 +871,7 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
 
   ! Register per-tracer diagnostics computed from MARBL surface flux / interior tendency values
   allocate(CS%id_surface_flux_out(CS%ntr))
+  allocate(CS%id_surface_flux_from_salt_flux(CS%ntr))
   allocate(CS%interior_tendency_out(CS%ntr))
   allocate(CS%interior_tendency_out_zint(CS%ntr))
   allocate(CS%interior_tendency_out_zint_100m(CS%ntr))
@@ -866,6 +880,12 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
     write(longname, "(2A)") trim(MARBL_instances%tracer_metadata(m)%long_name), " Surface Flux"
     write(units, "(2A)") trim(MARBL_instances%tracer_metadata(m)%units), " m/s"
     CS%id_surface_flux_out(m) = register_diag_field("ocean_model", trim(name), &
+        diag%axesT1, & ! T => tracer grid? 1 => no vertical grid
+        day, trim(longname), trim(units), conversion=US%Z_to_m*US%s_to_T)
+
+    write(name, "(2A)") "STF_SALT_", trim(MARBL_instances%tracer_metadata(m)%short_name)
+    write(longname, "(2A)") trim(MARBL_instances%tracer_metadata(m)%long_name), " Surface Flux from Salt Flux"
+    CS%id_surface_flux_from_salt_flux(m) = register_diag_field("ocean_model", trim(name), &
         diag%axesT1, & ! T => tracer grid? 1 => no vertical grid
         day, trim(longname), trim(units), conversion=US%Z_to_m*US%s_to_T)
 
@@ -1239,6 +1259,10 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
 
 ! Local variables
   character(len=256) :: log_message
+  real, dimension(SZI_(G),SZJ_(G)) :: net_salt_rate  !< Surface salt flux into the ocean
+                                                     !! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1].
+  real, dimension(SZI_(G),SZJ_(G)) :: flux_from_salt_flux !< Surface tracer flux from salt flux
+                                                     !! [conc Z T-1 ~> conc m s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: ref_mask ! Mask for 2D MARBL diags using ref_depth
   real, dimension(SZI_(G),SZJ_(G)) :: riv_flux_loc ! Local copy of CS%RIV_FLUXES*dt
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -1367,6 +1391,69 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
 
     enddo
   enddo
+
+  ! convert salt flux to tracer fluxes and add to STF
+  do j=js,je ; do i=is,ie
+    net_salt_rate(i,j) = (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j)) * GV%RZ_to_H
+  enddo ; enddo
+
+  ! DIC related tracers
+  do j=js,je ; do i=is,ie
+    flux_from_salt_flux(i,j) = (CS%DIC_salt_ratio * GV%H_to_Z) * net_salt_rate(i,j)
+  enddo ; enddo
+  m = CS%tracer_inds%dic_ind
+  if (m > 0) then
+    do j=js,je ; do i=is,ie
+      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+    enddo ; enddo
+    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+  endif
+  m = CS%tracer_inds%dic_alt_co2_ind
+  if (m > 0) then
+    do j=js,je ; do i=is,ie
+      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+    enddo ; enddo
+    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+  endif
+  m = CS%tracer_inds%abio_dic_ind
+  if (m > 0) then
+    do j=js,je ; do i=is,ie
+      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+    enddo ; enddo
+    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+  endif
+  m = CS%tracer_inds%abio_di14c_ind
+  if (m > 0) then
+    do j=js,je ; do i=is,ie
+      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+    enddo ; enddo
+    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+  endif
+
+  ! ALK related tracers
+  do j=js,je ; do i=is,ie
+    flux_from_salt_flux(i,j) = (CS%ALK_salt_ratio * GV%H_to_Z) * net_salt_rate(i,j)
+  enddo ; enddo
+  m = CS%tracer_inds%alk_ind
+  if (m > 0) then
+    do j=js,je ; do i=is,ie
+      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+    enddo ; enddo
+    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+  endif
+  m = CS%tracer_inds%alk_alt_co2_ind
+  if (m > 0) then
+    do j=js,je ; do i=is,ie
+      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+    enddo ; enddo
+    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+  endif
 
   if (CS%debug) then
     do m=1,CS%ntr
@@ -2061,6 +2148,8 @@ subroutine set_riv_flux_tracer_inds(CS)
   CS%tracer_inds%alk_alt_co2_ind = 0
   CS%tracer_inds%dic_ind = 0
   CS%tracer_inds%dic_alt_co2_ind = 0
+  CS%tracer_inds%abio_dic_ind = 0
+  CS%tracer_inds%abio_di14c_ind = 0
   do m=1,CS%ntr
     name = MARBL_instances%tracer_metadata(m)%short_name
     if (trim(name) == "NO3") then
@@ -2091,6 +2180,10 @@ subroutine set_riv_flux_tracer_inds(CS)
        CS%tracer_inds%dic_ind = m
     elseif (trim(name) == "DIC_ALT_CO2") then
        CS%tracer_inds%dic_alt_co2_ind = m
+    elseif (trim(name) == "ABIO_DIC") then
+       CS%tracer_inds%abio_dic_ind = m
+    elseif (trim(name) == "ABIO_DI14C") then
+       CS%tracer_inds%abio_di14c_ind = m
     endif
   enddo
 
