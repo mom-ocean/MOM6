@@ -503,6 +503,199 @@ function get_polynomial_coordinate( N, h, x_g, edge_values, ppoly_coefs, &
   x_tgt = x_g(k_found) + xi0 * h(k_found)
 end function get_polynomial_coordinate
 
+! For a given target value, find all locations of its interface in the column.
+! Return an array containing the index of the interface in each cell.
+! If the interface index is -1, the target value is less than the value in the cell
+! If the interface index is 2, the target value is greater than the values in the cell
+! If the interface index is 0, the target value falls between the edges of the cell obove and this one
+! If the interface value is between 0 and 1, this is the normalized position of the interface in the cell,
+!     determined via NR solver.
+function get_interface_indices( N, edge_values, ppoly_coefs, &
+  target_value, degree, answer_date ) result ( interfaces )
+
+  ! Arguments
+  integer,              intent(in) :: N            !< Number of grid cells
+  real, dimension(N,2), intent(in) :: edge_values  !< Edge values of interpolating polynomials [A]
+  real, dimension(N,DEGREE_MAX+1), intent(in) :: ppoly_coefs  !< Coefficients of interpolating polynomials [A]
+  real,                 intent(in) :: target_value !< Target value to find position for [A]
+  integer,              intent(in) :: degree       !< Degree of the interpolating polynomials
+  integer,              intent(in) :: answer_date  !< The vintage of the expressions to use
+  real, dimension(N)               :: interfaces   !< An array indicating location of indices in relation to each cell
+
+  ! Local variables
+  real                        :: xi0         ! normalized target coordinate [nondim]
+  real, dimension(DEGREE_MAX) :: a           ! polynomial coefficients [A]
+  real                        :: numerator   ! The numerator of an expression [A]
+  real                        :: denominator ! The denominator of an expression [A]
+  real                        :: delta       ! Newton-Raphson increment [nondim]
+!   real                        :: x           ! global target coordinate [nondim]
+  real                        :: eps         ! offset used to get away from boundaries [nondim]
+  real                        :: grad        ! gradient during N-R iterations [A]
+  integer :: i, k, iter  ! loop indices
+  integer :: k_found     ! index of target cell
+  character(len=320) :: mesg
+  logical :: use_2018_answers  ! If true use older, less accurate expressions.
+
+  eps = NR_OFFSET
+  k_found = -1
+  use_2018_answers = (answer_date < 20190101)
+
+  do k = 1,N
+    if ( target_value <= edge_values(k,1) ) then
+      interfaces(k) = -1
+    elseif (target_value >= edge_values(k,2) ) then
+      interfaces(k) = 2
+    elseif ( ( target_value >= edge_values(k-1,2) ) .AND. ( target_value <= edge_values(k,1) ) ) then
+      interfaces(k) = 0
+    else
+      ! Interface is within cell, so use Newton-Raphson iterations to find it
+
+      ! Reset all polynomial coefficients to 0 and copy those pertaining to
+      ! the found cell
+      a(:) = 0.0
+      do i = 1,degree+1
+        a(i) = ppoly_coefs(k,i)
+      enddo
+
+      ! Guess the middle of the cell to start Newton-Raphson iterations
+      xi0 = 0.5
+
+      ! Newton-Raphson iterations
+      do iter = 1,NR_ITERATIONS
+
+        if (use_2018_answers) then
+          numerator = a(1) + a(2)*xi0 + a(3)*xi0*xi0 + a(4)*xi0*xi0*xi0 + &
+                      a(5)*xi0*xi0*xi0*xi0 - target_value
+          denominator = a(2) + 2*a(3)*xi0 + 3*a(4)*xi0*xi0 + 4*a(5)*xi0*xi0*xi0
+        else  ! These expressions are mathematicaly equivalent but more accurate.
+          numerator = (a(1) - target_value) + xi0*(a(2) + xi0*(a(3) + xi0*(a(4) + a(5)*xi0)))
+          denominator = a(2) + xi0*(2.*a(3) + xi0*(3.*a(4) + 4.*a(5)*xi0))
+        endif
+
+        delta = -numerator / denominator
+
+        xi0 = xi0 + delta
+
+        ! Check whether new estimate is out of bounds. If the new estimate is
+        ! indeed out of bounds, we manually set it to be equal to the overtaken
+        ! bound with a small offset towards the interior when the gradient of
+        ! the function at the boundary is zero (in which case, the Newton-Raphson
+        ! algorithm does not converge).
+        if ( xi0 < 0.0 ) then
+          xi0 = 0.0
+          grad = a(2)
+          if ( grad == 0.0 ) xi0 = xi0 + eps
+        endif
+
+        if ( xi0 > 1.0 ) then
+          xi0 = 1.0
+          if (use_2018_answers) then
+            grad = a(2) + 2*a(3) + 3*a(4) + 4*a(5)
+          else  ! These expressions are mathematicaly equivalent but more accurate.
+            grad = a(2) + (2.*a(3) + (3.*a(4) + 4.*a(5)))
+          endif
+          if ( grad == 0.0 ) xi0 = xi0 - eps
+        endif
+
+        ! break if converged or too many iterations taken
+        if ( abs(delta) < NR_TOLERANCE ) exit
+      enddo ! end Newton-Raphson iterations
+
+      interfaces(k) = xi0
+
+    endif
+  enddo
+
+end function get_interface_indices
+
+!> Given target values (e.g., density), build new grid based on polynomial
+!!
+!! Given the grid 'grid0' and the piecewise polynomial interpolant
+!! 'ppoly0' (possibly discontinuous), the coordinates of the new grid 'grid1'
+!! are determined by finding the corresponding target interface densities.
+subroutine get_histogram_weights( n0, ppoly0_E, ppoly0_coefs, &
+  target_values, degree, n1, answer_date )
+integer,               intent(in)     :: n0            !< Number of points on source grid
+integer,               intent(in)     :: n1            !< Number of points on target grid
+real, dimension(n0,2), intent(in)     :: ppoly0_E      !< Edge values of interpolating polynomials [A]
+real, dimension(n0,DEGREE_MAX+1), &
+intent(in)    :: ppoly0_coefs  !< Coefficients of interpolating polynomials [A]
+real, dimension(n1+1),  intent(in)    :: target_values !< Target values of interfaces [A]
+integer,                intent(in)    :: degree        !< Degree of interpolating polynomials
+integer,      optional, intent(in)    :: answer_date   !< The vintage of the expressions to use
+
+
+
+! Local variables
+real, dimension(n0) :: iindices_l      !< array to hold interface indices of target values
+real, dimension(n0) :: iindices_u      !< array to hold interface indices of target values
+real :: index_u      !< dummy array to hold upper interface index
+real :: index_l      !< dummy array to hold upper interface index
+real :: index_u_prior      !< dummy array to hold upper interface index
+real :: index_l_prior      !< dummy array to hold upper interface index
+integer        :: k0 ! loop index
+integer        :: k1 ! loop index
+real           :: tl ! current interface target density [A]
+real           :: tu ! dummy variable for interface target value above t
+
+do k1=1,n1
+  tl = target_value(k)
+  tu = target_values(k+1)
+  iindices_l(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tl, degree, answer_date )
+  iindices_u(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tu, degree, answer_date )
+  !!! Note that I need a different approach for getting weights in very first cell
+  !!! and then will start this loop from k=2
+  do k0=1,n0
+    index_l = iindices_l(k0)
+    index_l_prior = iindices_l(k0-1)
+    index_u = iindices_u(k0)
+    index_u_prior = iindices_u(k0-1)
+    if ( ( index_l == -1 ) .AND. ( index_u == -1 ) ) then
+      ! Both interfaces have values lower than this cell
+      histogram_weights(k0,k1) = 0
+    elseif ( (index_l == 2 ) .AND. ( index_u == 2 ) ) then
+      ! Both interfaces have values greater than this cell
+      histogram_weights(k0,k1) = 0
+    elseif ( (index_l == -1 ) .AND. ( index_u == 2 ) ) then
+      ! The upper interface is greater, the lower interface is less
+      ! Therefore all of the cell is within the bin
+      histogram_weights(k0,k1) = 1
+      !! It should never occur the other way rounnd
+      !! - that the upper interface is lower than the cell,
+      !! and the lower interface is greater than the cell,
+      !! since this would imply that the lower interface is greater than the upper interface
+    elseif ( ( (index_l >= 0 ) .AND (index_l < 1) ) .AND. ( (index_u >=0 ) .AND (index_u < 1) ) ) then
+      ! Both interfaces are within the cell
+      ! Their orientation doesn't matter, so the weight is just the magnitude of the difference
+      histogram_weights(k0,k1) = abs(index_l - index_u)
+    elseif ( ( ( (index_l >= 0 ) .AND (index_l < 1) ) ) .AND. ( (index_u == -1 ) .OR. ( index_u == 2 ) ) ) then
+      ! Lower interface is within cell
+      if  ( index_l_prior < 2 ) then
+        ! and is less than or within the previous cell
+        ! Therefore include shallower portion of cell
+        histogram_weights(k0,k1) = index_l
+      elseif  ( index_l_prior == 2 ) then
+        ! and is greater than the previous cell
+        ! Therefore include deeper portion of cell
+        histogram_weights(k0,k1) = 1 - index_l
+      endif
+    elseif ( ( ( (index_u >= 0 ) .AND (index_u < 1) ) ) .AND. ( (index_l == -1 ) .OR. ( index_l == 2 ) ) ) then
+      ! Lower interface is within cell
+      if  ( index_u_prior < 2 ) then
+        ! and is greater than or within the previous cell
+        ! Therefore include deeper portion of cell
+        histogram_weights(k0,k1) = 1 - index_u
+      elseif  ( index_u_prior == 2 ) then
+        ! and is less than the previous cell
+        ! Therefore include shallower portion of cell
+        histogram_weights(k0,k1) = index_u
+      endif
+    endif
+  enddo
+enddo
+
+end subroutine get_histogram_weights
+
 !> Numeric value of interpolation_scheme corresponding to scheme name
 integer function interpolation_scheme(interp_scheme)
   character(len=*), intent(in) :: interp_scheme !< Name of the interpolation scheme
