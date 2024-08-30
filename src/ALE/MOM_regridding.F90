@@ -654,7 +654,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                     histogram_extensive_diags, &
                     "If true, extensive diagnostics are remapped using a histogram procedure"//&
                     "This is therefore suitable for coordinates that are non-monotonic "//&
-                    "in the vertical dimension. This should only be set True for **diagnostic**"
+                    "in the vertical dimension. This should only be set True for **diagnostic**"//&
                     "coordinates.", units="nondim", default=.false.)
     call set_regrid_params(CS, compress_fraction=tmpReal, ref_pressure=P_Ref, histogram_extensive_diags=histogram_extensive_diags)
   endif
@@ -2385,7 +2385,7 @@ end function getCoordinateShortName
 !> Can be used to set any of the parameters for MOM_regridding.
 subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_grid_weight, &
              interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
-             compress_fraction, ref_pressure, &
+             compress_fraction, ref_pressure, histogram_extensive_diags, &
              integrate_downward_for_e, remap_answers_2018, remap_answer_date, regrid_answer_date, &
              adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin, adaptDrho0)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
@@ -2399,6 +2399,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density [nondim]
   real,    optional, intent(in) :: ref_pressure     !< The reference pressure for density-dependent
                                                     !! coordinates [R L2 T-2 ~> Pa]
+  logical, optional, intent(in) :: histogram_extensive_diags !< If true, use histogrammign procedure for remapping extensive diagnostics
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface positions downward
                                                     !! from the top.
   logical, optional, intent(in) :: remap_answers_2018 !< If true, use the order of arithmetic and expressions
