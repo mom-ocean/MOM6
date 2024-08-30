@@ -1257,12 +1257,12 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
                                               !! fluxes can be applied [m]
 
-! Local variables
+  ! Local variables
   character(len=256) :: log_message
-  real, dimension(SZI_(G),SZJ_(G)) :: net_salt_rate  !< Surface salt flux into the ocean
-                                                     !! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1].
-  real, dimension(SZI_(G),SZJ_(G)) :: flux_from_salt_flux !< Surface tracer flux from salt flux
-                                                     !! [conc Z T-1 ~> conc m s-1].
+  real, dimension(SZI_(G),SZJ_(G)) :: net_salt_rate  ! Surface salt flux into the ocean
+                                                     ! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1].
+  real, dimension(SZI_(G),SZJ_(G)) :: flux_from_salt_flux ! Surface tracer flux from salt flux
+                                                          ! [conc Z T-1 ~> conc m s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: ref_mask ! Mask for 2D MARBL diags using ref_depth
   real, dimension(SZI_(G),SZJ_(G)) :: riv_flux_loc ! Local copy of CS%RIV_FLUXES*dt
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
@@ -2010,7 +2010,7 @@ function MARBL_tracers_stock(h, stocks, G, GV, CS, names, units, stock_index)
   integer                                              :: MARBL_tracers_stock   !< Return value: the number of stocks
                                                                                 !! calculated here.
 
-! Local variables
+  ! Local variables
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
