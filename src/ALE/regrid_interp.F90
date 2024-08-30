@@ -39,6 +39,7 @@ end type interp_CS_type
 
 public regridding_set_ppolys, build_and_interpolate_grid
 public set_interp_scheme, set_interp_extrap, set_interp_answer_date
+public get_histogram_weights, build_histogram_weights
 
 ! List of interpolation schemes
 integer, parameter :: INTERPOLATION_P1M_H2     = 0 !< O(h^2)
