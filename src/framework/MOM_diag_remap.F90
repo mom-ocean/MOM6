@@ -368,7 +368,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
 
       ! Fill out 4d array of histogram weights
-      if ( allocated(hweights3d) ) then
+      if ( get_rho_CS(remap_cs%regrid_cs)%histogram_extensive_diags ) then
         do k0 = 1,GV%ke
           do k1 = 1,nk
             hweights3d(i,j,k0,k1) = histogram_weights(k0,k1)
