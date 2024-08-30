@@ -263,7 +263,7 @@ end function
 !! height or layer thicknesses changes. In the case of density-based
 !! coordinates then technically we should also regenerate the
 !! target grid whenever T/S change.
-subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_target)
+subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_target, hweights3d)
   type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),   pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
@@ -279,6 +279,7 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
   real, dimension(SZI_(G),SZJ_(G),remap_cs%nz), &
                         intent(inout) :: h_target  !< The new diagnostic thicknesses in [H ~> m or kg m-2]
                                             !! or [Z ~> m], depending on the value of remap_cs%Z_based_coord
+  real, optional, dimension(SZI_(G),SZJ_(G),SZK_(GV),remap_cs%nz) :: hweights3d
 
   ! Local variables
   real, dimension(remap_cs%nz + 1) :: zInterfaces ! Interface positions [H ~> m or kg m-2] or [Z ~> m]
@@ -288,6 +289,8 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
   real :: Z_unit_scale   ! A conversion factor from Z-units the internal work units in this routine,
                          ! in units of [H Z-1 ~> 1 or kg m-3] or [nondim], depending on remap_cs%Z_based_coord.
   integer :: i, j, k, is, ie, js, je, nz
+  real, dimension(SZK_(GV),remap_cs%nz) :: histogram_weights
+  logical :: histogram_extensive_diags
 
   ! Note that coordinateMode('LAYER') is never 'configured' so will always return here.
   if (.not. remap_cs%configured) return
@@ -360,7 +363,16 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
                             bottom_depth(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+
       do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
+      call check_if_histogram_extensive_diags(remap_cs%regrid_cs,histogram_extensive_diags)
+      if ( histogram_extensive_diags ) then
+        call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
+                            bottom_depth(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
+                            eqn_of_state, zInterfaces, &
+                            histogram_weights=histogram_weights, h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+        hweights3d(i,j,:,:) = histogram_weights
+      endif
     endif ; enddo ; enddo
   elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
     call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")

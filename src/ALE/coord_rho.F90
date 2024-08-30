@@ -29,6 +29,9 @@ type, public :: rho_CS ; private
   !> Nominal density of interfaces [R ~> kg m-3]
   real, allocatable, dimension(:) :: target_density
 
+  !> If true, use a histogramming procedure for extensive diagnostics (rather than the reintegrate procedure)
+  logical :: histogram_extensive_diags = .false.
+
   !> Interpolation control structure
   type(interp_CS_type) :: interp_CS
 end type rho_CS
@@ -38,11 +41,12 @@ public init_coord_rho, set_rho_params, build_rho_column, old_inflate_layers_1d, 
 contains
 
 !> Initialise a rho_CS with pointers to parameters
-subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
+subroutine init_coord_rho(CS, nk, ref_pressure, target_density, histogram_extensive_diags, interp_CS)
   type(rho_CS),         pointer    :: CS !< Unassociated pointer to hold the control structure
   integer,              intent(in) :: nk !< Number of layers in the grid
   real,                 intent(in) :: ref_pressure !< Coordinate reference pressure [R L2 T-2 ~> Pa]
   real, dimension(:),   intent(in) :: target_density !< Nominal density of interfaces [R ~> kg m-3]
+  logical,   intent(in)            :: histogram_extensive_diags !< Boolean to select how to deal with extensive diagnostics
   type(interp_CS_type), intent(in) :: interp_CS !< Controls for interpolation
 
   if (associated(CS)) call MOM_error(FATAL, "init_coord_rho: CS already associated!")
@@ -52,6 +56,7 @@ subroutine init_coord_rho(CS, nk, ref_pressure, target_density, interp_CS)
   CS%nk                = nk
   CS%ref_pressure      = ref_pressure
   CS%target_density(:) = target_density(:)
+  CS%histogram_extensive_diags = histogram_extensive_diags
   CS%interp_CS         = interp_CS
 
 end subroutine init_coord_rho
@@ -67,7 +72,7 @@ subroutine end_coord_rho(CS)
 end subroutine end_coord_rho
 
 !> This subroutine can be used to set the parameters for the coord_rho module
-subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS, ref_pressure)
+subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, histogram_extensive_diags, interp_CS, ref_pressure)
   type(rho_CS),      pointer    :: CS !< Coordinate control structure
   real,    optional, intent(in) :: min_thickness !< Minimum allowed thickness [H ~> m or kg m-2]
   logical, optional, intent(in) :: integrate_downward_for_e !< If true, integrate for interface
@@ -75,6 +80,7 @@ subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS
                                       !! from the bottom upward, as does the rest of the model.
   real,    optional, intent(in) :: ref_pressure     !< The reference pressure for density-dependent
                                                     !! coordinates [R L2 T-2 ~> Pa]
+  real,    optional, intent(in) :: histogram_extensive_diags     !< If true, use histogram approach to for outputing extensive diags
 
   type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
 
@@ -82,6 +88,7 @@ subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, interp_CS
 
   if (present(min_thickness)) CS%min_thickness = min_thickness
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+  if (present(histogram_extensive_diags)) CS%histogram_extensive_diags = histogram_extensive_diags
   if (present(interp_CS)) CS%interp_CS = interp_CS
   if (present(ref_pressure)) CS%ref_pressure = ref_pressure
 end subroutine set_rho_params
@@ -91,7 +98,7 @@ end subroutine set_rho_params
 !! 1. Density profiles are calculated on the source grid.
 !! 2. Positions of target densities (for interfaces) are found by interpolation.
 subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
-                            z_rigid_top, eta_orig, h_neglect, h_neglect_edge)
+                            histogram_weights, z_rigid_top, eta_orig, h_neglect, h_neglect_edge)
   type(rho_CS),        intent(in)    :: CS !< coord_rho control structure
   integer,             intent(in)    :: nz !< Number of levels on source grid (i.e. length of  h, T, S)
   real,                intent(in)    :: depth !< Depth of ocean bottom (positive downward) [H ~> m or kg m-2]
@@ -109,6 +116,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
                                              !! of cell reconstructions [H ~> m or kg m-2]
   real,      optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose
                                              !! of edge value calculations [H ~> m or kg m-2]
+  real, optional, dimension(nz,CS%nk), intent (inout) :: histogram_weights ! Matrix of weights mapping source grid cells to target grid layers
 
   ! Local variables
   integer :: k, count_nonzero_layers
@@ -140,6 +148,12 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
     call build_and_interpolate_grid(CS%interp_CS, densities, count_nonzero_layers, &
                                     h_nv, xTmp, CS%target_density, CS%nk, h_new, &
                                     x1, h_neglect, h_neglect_edge)
+
+    if (CS%histogram_extensive_diags) then
+      ! Based on source column density profile, derive weights that map source to target grid
+      call build_histogram_weights(CS%interp_CS, densities, nz, CS%target_density, CS%nk, &
+                                    histogram_weights, h_neglect, h_neglect_edge)
+    endif
 
     ! Inflate vanished layers
     call old_inflate_layers_1d(CS%min_thickness, CS%nk, h_new)

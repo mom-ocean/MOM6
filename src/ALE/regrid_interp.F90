@@ -353,6 +353,34 @@ subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, 
        n1, h1, x1, answer_date=CS%answer_date)
 end subroutine build_and_interpolate_grid
 
+!> Build array of weights mapping source grid to target grid
+subroutine build_histogram_weights(CS, densities, n0, target_values, &
+  n1, histogram_weights, h_neglect, h_neglect_edge)
+type(interp_CS_type),  intent(in)    :: CS  !< A control structure for regrid_interp
+integer,               intent(in)    :: n0  !< The number of points on the input grid
+integer,               intent(in)    :: n1  !< The number of points on the output grid
+real, dimension(n0),   intent(in)    :: densities !< Input cell densities [R ~> kg m-3]
+real, dimension(n1+1), intent(in)    :: target_values !< Target values of interfaces [R ~> kg m-3]
+real, dimension(n0,n1), intent(inout):: histogram_weights !< Matrix of weights mapping source grid cells
+       !! to target grid layers
+real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+       !! purpose of cell reconstructions [H]
+       !! in the same units as h0.
+real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
+       !! for the purpose of edge value calculations [H]
+       !! in the same units as h0.
+
+real, dimension(n0,2) :: ppoly0_E   ! Polynomial edge values [R ~> kg m-3]
+real, dimension(n0,2) :: ppoly0_S   ! Polynomial edge slopes [R H-1]
+real, dimension(n0,DEGREE_MAX+1) :: ppoly0_C  ! Polynomial interpolant coeficients on the local 0-1 grid [R ~> kg m-3]
+integer :: degree
+
+call regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, ppoly0_C, &
+degree, h_neglect, h_neglect_edge)
+call get_histogram_weights(n0, ppoly0_E, ppoly0_C, target_values, degree, &
+n1, histogram_weights, answer_date=CS%answer_date)
+end subroutine build_histogram_weights
+
 !> Given a target value, find corresponding coordinate for given polynomial
 !!
 !! Here, 'ppoly' is assumed to be a piecewise discontinuous polynomial of degree
@@ -520,7 +548,7 @@ function get_interface_indices( N, edge_values, ppoly_coefs, &
   real,                 intent(in) :: target_value !< Target value to find position for [A]
   integer,              intent(in) :: degree       !< Degree of the interpolating polynomials
   integer,              intent(in) :: answer_date  !< The vintage of the expressions to use
-  real, dimension(N)               :: interfaces   !< An array indicating location of indices in relation to each cell
+  real, dimension(N)               :: interfaces   !< An array indicating location of target interfaces in relation to each cell
 
   ! Local variables
   real                        :: xi0         ! normalized target coordinate [nondim]
@@ -681,7 +709,7 @@ end function get_interface_indices
 !! 'ppoly0' (possibly discontinuous), the coordinates of the new grid 'grid1'
 !! are determined by finding the corresponding target interface densities.
 subroutine get_histogram_weights( n0, ppoly0_E, ppoly0_coefs, &
-  target_values, degree, n1, answer_date )
+  target_values, degree, n1, histogram_weights, answer_date )
 integer,               intent(in)     :: n0            !< Number of points on source grid
 integer,               intent(in)     :: n1            !< Number of points on target grid
 real, dimension(n0,2), intent(in)     :: ppoly0_E      !< Edge values of interpolating polynomials [A]
@@ -690,8 +718,8 @@ intent(in)    :: ppoly0_coefs  !< Coefficients of interpolating polynomials [A]
 real, dimension(n1+1),  intent(in)    :: target_values !< Target values of interfaces [A]
 integer,                intent(in)    :: degree        !< Degree of interpolating polynomials
 integer,      optional, intent(in)    :: answer_date   !< The vintage of the expressions to use
-
-
+real, dimension(n0,n1), intent(inout) :: histogram_weights !< Matrix of weights mapping source grid cells
+                                                           !< to target grid layers
 
 ! Local variables
 real, dimension(n0) :: iindices_l      !< array to hold interface indices of target values
@@ -710,8 +738,6 @@ do k1=1,n1
   tu = target_values(k+1)
   iindices_l(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tl, degree, answer_date )
   iindices_u(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tu, degree, answer_date )
-  !!! Note that I need a different approach for getting weights in very first cell
-  !!! and then will start this loop from k=2
   do k0=1,n0
     edge_value_shallow = ppoly0_E(k0,1)
     edge_value_deep = ppoly0_E(k0,2)
