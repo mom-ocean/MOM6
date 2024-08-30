@@ -540,7 +540,74 @@ function get_interface_indices( N, edge_values, ppoly_coefs, &
   k_found = -1
   use_2018_answers = (answer_date < 20190101)
 
-  do k = 1,N
+  !!! THIS IS A HACK AND COULD BE DONE BETTER
+  !!! but because of discontinuous values at cell boundaries, I need to do the first cell here separately
+  k = 1
+  if ( target_value <= edge_values(k,1) ) then
+    interfaces(k) = -1
+  elseif (target_value >= edge_values(k,2) ) then
+    interfaces(k) = 2
+  else
+    ! Interface is within cell, so use Newton-Raphson iterations to find it
+
+    ! Reset all polynomial coefficients to 0 and copy those pertaining to
+    ! the found cell
+    a(:) = 0.0
+    do i = 1,degree+1
+      a(i) = ppoly_coefs(k,i)
+    enddo
+
+    ! Guess the middle of the cell to start Newton-Raphson iterations
+    xi0 = 0.5
+
+    ! Newton-Raphson iterations
+    do iter = 1,NR_ITERATIONS
+
+      if (use_2018_answers) then
+        numerator = a(1) + a(2)*xi0 + a(3)*xi0*xi0 + a(4)*xi0*xi0*xi0 + &
+                    a(5)*xi0*xi0*xi0*xi0 - target_value
+        denominator = a(2) + 2*a(3)*xi0 + 3*a(4)*xi0*xi0 + 4*a(5)*xi0*xi0*xi0
+      else  ! These expressions are mathematicaly equivalent but more accurate.
+        numerator = (a(1) - target_value) + xi0*(a(2) + xi0*(a(3) + xi0*(a(4) + a(5)*xi0)))
+        denominator = a(2) + xi0*(2.*a(3) + xi0*(3.*a(4) + 4.*a(5)*xi0))
+      endif
+
+      delta = -numerator / denominator
+
+      xi0 = xi0 + delta
+
+      ! Check whether new estimate is out of bounds. If the new estimate is
+      ! indeed out of bounds, we manually set it to be equal to the overtaken
+      ! bound with a small offset towards the interior when the gradient of
+      ! the function at the boundary is zero (in which case, the Newton-Raphson
+      ! algorithm does not converge).
+      if ( xi0 < 0.0 ) then
+        xi0 = 0.0
+        grad = a(2)
+        if ( grad == 0.0 ) xi0 = xi0 + eps
+      endif
+
+      if ( xi0 > 1.0 ) then
+        xi0 = 1.0
+        if (use_2018_answers) then
+          grad = a(2) + 2*a(3) + 3*a(4) + 4*a(5)
+        else  ! These expressions are mathematicaly equivalent but more accurate.
+          grad = a(2) + (2.*a(3) + (3.*a(4) + 4.*a(5)))
+        endif
+        if ( grad == 0.0 ) xi0 = xi0 - eps
+      endif
+
+      ! break if converged or too many iterations taken
+      if ( abs(delta) < NR_TOLERANCE ) exit
+    enddo ! end Newton-Raphson iterations
+
+    interfaces(k) = xi0
+
+  endif
+
+  !!! Now do the rest of the column
+
+  do k = 2,N
     if ( target_value <= edge_values(k,1) ) then
       interfaces(k) = -1
     elseif (target_value >= edge_values(k,2) ) then
@@ -630,26 +697,26 @@ integer,      optional, intent(in)    :: answer_date   !< The vintage of the exp
 real, dimension(n0) :: iindices_l      !< array to hold interface indices of target values
 real, dimension(n0) :: iindices_u      !< array to hold interface indices of target values
 real :: index_u      !< dummy array to hold upper interface index
-real :: index_l      !< dummy array to hold upper interface index
-real :: index_u_prior      !< dummy array to hold upper interface index
-real :: index_l_prior      !< dummy array to hold upper interface index
+real :: index_l      !< dummy array to hold lower interface index
+real :: edge_value_shallow !< dummy array to hold edge value at shallow edge of cell on source grid
+real :: edge_value_deep !< dummy array to hold edge value at deep edge of cell on source grid
 integer        :: k0 ! loop index
 integer        :: k1 ! loop index
 real           :: tl ! current interface target density [A]
 real           :: tu ! dummy variable for interface target value above t
 
 do k1=1,n1
-  tl = target_value(k)
+  tl = target_values(k)
   tu = target_values(k+1)
   iindices_l(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tl, degree, answer_date )
   iindices_u(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tu, degree, answer_date )
   !!! Note that I need a different approach for getting weights in very first cell
   !!! and then will start this loop from k=2
   do k0=1,n0
+    edge_value_shallow = ppoly0_E(k0,1)
+    edge_value_deep = ppoly0_E(k0,2)
     index_l = iindices_l(k0)
-    index_l_prior = iindices_l(k0-1)
     index_u = iindices_u(k0)
-    index_u_prior = iindices_u(k0-1)
     if ( ( index_l == -1 ) .AND. ( index_u == -1 ) ) then
       ! Both interfaces have values lower than this cell
       histogram_weights(k0,k1) = 0
@@ -660,33 +727,33 @@ do k1=1,n1
       ! The upper interface is greater, the lower interface is less
       ! Therefore all of the cell is within the bin
       histogram_weights(k0,k1) = 1
-      !! It should never occur the other way rounnd
-      !! - that the upper interface is lower than the cell,
-      !! and the lower interface is greater than the cell,
-      !! since this would imply that the lower interface is greater than the upper interface
+      !! It should never occur the other way round
+      !! - that the upper interface target value is lower than the cell,
+      !! and the lower interface target value is greater than the cell,
+      !! since this would imply that the lower interface target is greater than the upper interface target
     elseif ( ( (index_l >= 0 ) .AND (index_l < 1) ) .AND. ( (index_u >=0 ) .AND (index_u < 1) ) ) then
       ! Both interfaces are within the cell
       ! Their orientation doesn't matter, so the weight is just the magnitude of the difference
       histogram_weights(k0,k1) = abs(index_l - index_u)
     elseif ( ( ( (index_l >= 0 ) .AND (index_l < 1) ) ) .AND. ( (index_u == -1 ) .OR. ( index_u == 2 ) ) ) then
-      ! Lower interface is within cell
-      if  ( index_l_prior < 2 ) then
-        ! and is less than or within the previous cell
+      ! Lower interface is within cell (and upper interface is not)
+      if  ( edge_value_shallow > edge_value_deep ) then
+        ! Values decreasing in cell
         ! Therefore include shallower portion of cell
         histogram_weights(k0,k1) = index_l
-      elseif  ( index_l_prior == 2 ) then
-        ! and is greater than the previous cell
+      else
+        ! Values increasing in cell
         ! Therefore include deeper portion of cell
         histogram_weights(k0,k1) = 1 - index_l
       endif
     elseif ( ( ( (index_u >= 0 ) .AND (index_u < 1) ) ) .AND. ( (index_l == -1 ) .OR. ( index_l == 2 ) ) ) then
-      ! Lower interface is within cell
-      if  ( index_u_prior < 2 ) then
-        ! and is greater than or within the previous cell
+      ! Upper interface is within cell (and lower interface is not)
+      if  ( edge_value_shallow > edge_value_deep ) then
+        ! Values decreasing in cell
         ! Therefore include deeper portion of cell
         histogram_weights(k0,k1) = 1 - index_u
-      elseif  ( index_u_prior == 2 ) then
-        ! and is less than the previous cell
+      else
+        ! Values increasing in cell
         ! Therefore include shallower portion of cell
         histogram_weights(k0,k1) = index_u
       endif
