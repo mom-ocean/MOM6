@@ -355,11 +355,12 @@ subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, 
 end subroutine build_and_interpolate_grid
 
 !> Build array of weights mapping source grid to target grid
-subroutine build_histogram_weights(CS, densities, n0, target_values, &
+subroutine build_histogram_weights(CS, densities, n0, h0, target_values, &
   n1, histogram_weights, h_neglect, h_neglect_edge)
 type(interp_CS_type),  intent(in)    :: CS  !< A control structure for regrid_interp
 integer,               intent(in)    :: n0  !< The number of points on the input grid
 integer,               intent(in)    :: n1  !< The number of points on the output grid
+real, dimension(n0),   intent(in)    :: h0  !< Initial cell widths [H]
 real, dimension(n0),   intent(in)    :: densities !< Input cell densities [R ~> kg m-3]
 real, dimension(n1+1), intent(in)    :: target_values !< Target values of interfaces [R ~> kg m-3]
 real, dimension(n0,n1), intent(inout):: histogram_weights !< Matrix of weights mapping source grid cells
@@ -735,10 +736,10 @@ real           :: tl ! current interface target density [A]
 real           :: tu ! dummy variable for interface target value above t
 
 do k1=1,n1
-  tl = target_values(k)
-  tu = target_values(k+1)
-  iindices_l(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tl, degree, answer_date )
-  iindices_u(:) = get_interface_indices( N, ppoly0_E, ppoly0_coefs, tu, degree, answer_date )
+  tl = target_values(k1)
+  tu = target_values(k1+1)
+  iindices_l(:) = get_interface_indices( n0, ppoly0_E, ppoly0_coefs, tl, degree, answer_date )
+  iindices_u(:) = get_interface_indices( n0, ppoly0_E, ppoly0_coefs, tu, degree, answer_date )
   do k0=1,n0
     edge_value_shallow = ppoly0_E(k0,1)
     edge_value_deep = ppoly0_E(k0,2)
@@ -758,11 +759,11 @@ do k1=1,n1
       !! - that the upper interface target value is lower than the cell,
       !! and the lower interface target value is greater than the cell,
       !! since this would imply that the lower interface target is greater than the upper interface target
-    elseif ( ( (index_l >= 0 ) .AND (index_l < 1) ) .AND. ( (index_u >=0 ) .AND (index_u < 1) ) ) then
+    elseif ( ( (index_l >= 0 ) .AND. (index_l < 1) ) .AND. ( (index_u >=0 ) .AND. (index_u < 1) ) ) then
       ! Both interfaces are within the cell
       ! Their orientation doesn't matter, so the weight is just the magnitude of the difference
       histogram_weights(k0,k1) = abs(index_l - index_u)
-    elseif ( ( ( (index_l >= 0 ) .AND (index_l < 1) ) ) .AND. ( (index_u == -1 ) .OR. ( index_u == 2 ) ) ) then
+    elseif ( ( ( (index_l >= 0 ) .AND. (index_l < 1) ) ) .AND. ( (index_u == -1 ) .OR. ( index_u == 2 ) ) ) then
       ! Lower interface is within cell (and upper interface is not)
       if  ( edge_value_shallow > edge_value_deep ) then
         ! Values decreasing in cell
@@ -773,7 +774,7 @@ do k1=1,n1
         ! Therefore include deeper portion of cell
         histogram_weights(k0,k1) = 1 - index_l
       endif
-    elseif ( ( ( (index_u >= 0 ) .AND (index_u < 1) ) ) .AND. ( (index_l == -1 ) .OR. ( index_l == 2 ) ) ) then
+    elseif ( ( ( (index_u >= 0 ) .AND. (index_u < 1) ) ) .AND. ( (index_l == -1 ) .OR. ( index_l == 2 ) ) ) then
       ! Upper interface is within cell (and lower interface is not)
       if  ( edge_value_shallow > edge_value_deep ) then
         ! Values decreasing in cell

@@ -44,6 +44,7 @@ use MOM_remapping,        only : remapping_CS, initialize_remapping, remapping_c
 use MOM_remapping,        only : interpolate_column, reintegrate_column
 use MOM_regridding,       only : regridding_CS, initialize_regridding, end_regridding
 use MOM_regridding,       only : set_regrid_params, get_regrid_size
+use MOM_regridding,       only : check_if_histogram_extensive_diags
 use MOM_regridding,       only : getCoordinateInterfaces, set_h_neglect, set_dz_neglect
 use MOM_regridding,       only : get_zlike_CS, get_sigma_CS, get_rho_CS
 use regrid_consts,        only : coordinateMode
@@ -90,7 +91,7 @@ type :: diag_remap_ctrl
                                       !! vertical extents in [Z ~> m], depending on the setting of Z_based_coord.
   real, dimension(:,:,:), allocatable :: h_extensive !< Remap grid thicknesses in [H ~> m or kg m-2] or
                                       !! vertical extents in [Z ~> m] for remapping extensive variables
-  real, dimension(:,:,:), allocatable :: hweights3d !< Mapping of histogram weights
+  real, dimension(:,:,:,:), allocatable :: hweights3d !< Mapping of histogram weights
   integer :: interface_axes_id = 0 !< Vertical axes id for remapping at interfaces
   integer :: layer_axes_id = 0 !< Vertical axes id for remapping on layers
   logical :: om4_remap_via_sub_cells !< Use the OM4-era ramap_via_sub_cells
@@ -368,9 +369,10 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
       do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
 
       ! Fill out 4d array of histogram weights
-      if ( get_rho_CS(remap_cs%regrid_cs)%histogram_extensive_diags ) then
+      call check_if_histogram_extensive_diags(remap_cs%regrid_cs,histogram_extensive_diags)
+      if ( histogram_extensive_diags ) then
         do k0 = 1,GV%ke
-          do k1 = 1,nk
+          do k1 = 1,nz
             hweights3d(i,j,k0,k1) = histogram_weights(k0,k1)
           enddo
         enddo

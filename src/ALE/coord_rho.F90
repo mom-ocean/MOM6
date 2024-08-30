@@ -7,6 +7,7 @@ use MOM_error_handler, only : MOM_error, FATAL
 use MOM_remapping,     only : remapping_CS, remapping_core_h
 use MOM_EOS,           only : EOS_type, calculate_density
 use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid, DEGREE_MAX
+use regrid_interp,     only : build_histogram_weights
 
 implicit none ; private
 
@@ -80,7 +81,7 @@ subroutine set_rho_params(CS, min_thickness, integrate_downward_for_e, histogram
                                       !! from the bottom upward, as does the rest of the model.
   real,    optional, intent(in) :: ref_pressure     !< The reference pressure for density-dependent
                                                     !! coordinates [R L2 T-2 ~> Pa]
-  real,    optional, intent(in) :: histogram_extensive_diags     !< If true, use histogram approach to for outputing extensive diags
+  logical,    optional, intent(in) :: histogram_extensive_diags     !< If true, use histogram approach to for outputing extensive diags
 
   type(interp_CS_type), optional, intent(in) :: interp_CS !< Controls for interpolation
 
@@ -151,7 +152,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
 
     if (CS%histogram_extensive_diags) then
       ! Based on source column density profile, derive weights that map source to target grid
-      call build_histogram_weights(CS%interp_CS, densities, nz, CS%target_density, CS%nk, &
+      call build_histogram_weights(CS%interp_CS, densities, nz, h, CS%target_density, CS%nk, &
                                     histogram_weights, h_neglect, h_neglect_edge)
     endif
 

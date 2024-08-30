@@ -118,6 +118,9 @@ type, public :: regridding_CS ; private
   !! Higher values use more robust forms of the same remapping expressions.
   integer :: remap_answer_date = 99991231
 
+  !> If true, use histogram procedure to map between source and target grids for diagnostics
+  logical :: histogram_extensive_diags = .false.
+
   logical :: use_hybgen_unmix = .false.  !< If true, use the hybgen unmixing code before remapping
 
   type(zlike_CS),  pointer :: zlike_CS  => null() !< Control structure for z-like coordinate generator
@@ -142,6 +145,7 @@ public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
 public set_h_neglect, set_dz_neglect
 public get_zlike_CS, get_sigma_CS, get_rho_CS
+public check_if_histogram_extensive_diags
 
 !> Documentation for coordinate options
 character(len=*), parameter, public :: regriddingCoordinateModeDoc = &
@@ -210,6 +214,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   integer :: regrid_answer_date   ! The vintage of the regridding expressions to use.
   real :: tmpReal  ! A temporary variable used in setting other variables [various]
   real :: P_Ref    ! The coordinate variable reference pression [R L2 T-2 ~> Pa]
+  logical :: histogram_extensive_diags ! For diagnostic grids, extensive diags are remapped using a histogramming procedure
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_extra      ! The thickness of an added layer to append to the woa09_dz profile when
                         ! maximum_depth is large [m] (not in Z).
@@ -645,7 +650,13 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "When interpolating potential density profiles we can add "//&
                  "some artificial compressibility solely to make homogeneous "//&
                  "regions appear stratified.", units="nondim", default=0.)
-    call set_regrid_params(CS, compress_fraction=tmpReal, ref_pressure=P_Ref)
+    call get_param(param_file, mdl, create_coord_param(param_prefix, "HISTOGRAM_EXTENSIVE_DIAGS", param_suffix), &
+                    histogram_extensive_diags, &
+                    "If true, extensive diagnostics are remapped using a histogram procedure"//&
+                    "This is therefore suitable for coordinates that are non-monotonic "//&
+                    "in the vertical dimension. This should only be set True for **diagnostic**"
+                    "coordinates.", units="nondim", default=.false.)
+    call set_regrid_params(CS, compress_fraction=tmpReal, ref_pressure=P_Ref, histogram_extensive_diags=histogram_extensive_diags)
   endif
 
   if (main_parameters) then
@@ -2031,7 +2042,7 @@ subroutine initCoord(CS, GV, US, coord_mode, param_file)
   case (REGRIDDING_SIGMA)
     call init_coord_sigma(CS%sigma_CS, CS%nk, CS%coordinateResolution)
   case (REGRIDDING_RHO)
-    call init_coord_rho(CS%rho_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
+    call init_coord_rho(CS%rho_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%histogram_extensive_diags, CS%interp_CS)
   case (REGRIDDING_HYCOM1)
     call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, &
                           CS%interp_CS)
@@ -2625,6 +2636,14 @@ integer function rho_function1( string, rho_target )
   rho_function1 = nk
 
 end function rho_function1
+
+subroutine check_if_histogram_extensive_diags(CS,histogram_extensive_diags)
+  type(regridding_CS),  intent(in)  :: CS
+  logical,              intent(inout) :: histogram_extensive_diags
+
+  histogram_extensive_diags = CS%histogram_extensive_diags
+
+end subroutine check_if_histogram_extensive_diags
 
 !> \namespace mom_regridding
 !!
