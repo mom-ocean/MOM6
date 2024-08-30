@@ -3544,7 +3544,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
                                diag_cs%eqn_of_state, diag_cs%diag_remap_cs(m)%h)
       else
         call diag_remap_update(diag_cs%diag_remap_cs(m), diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
-                               diag_cs%eqn_of_state, diag_cs%diag_remap_cs(m)%h)
+                               diag_cs%eqn_of_state, diag_cs%diag_remap_cs(m)%h, diag_cs%diag_remap_cs(m)%hweights3d)
       endif
     enddo
   endif
@@ -3556,7 +3556,7 @@ subroutine diag_update_remap_grids(diag_cs, alt_h, alt_T, alt_S, update_intensiv
                                diag_cs%eqn_of_state, diag_cs%diag_remap_cs(m)%h_extensive)
       else
         call diag_remap_update(diag_cs%diag_remap_cs(m), diag_cs%G, diag_cs%GV, diag_cs%US, h_diag, T_diag, S_diag, &
-                               diag_cs%eqn_of_state, diag_cs%diag_remap_cs(m)%h_extensive)
+                               diag_cs%eqn_of_state, diag_cs%diag_remap_cs(m)%h_extensive, diag_cs%diag_remap_cs(m)%hweights3d)
       endif
     enddo
   endif
