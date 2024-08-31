@@ -41,7 +41,7 @@ use MOM_unit_scaling,     only : unit_scale_type
 use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping, remapping_core_h
-use MOM_remapping,        only : interpolate_column, reintegrate_column
+use MOM_remapping,        only : interpolate_column, reintegrate_column, histogram_column
 use MOM_regridding,       only : regridding_CS, initialize_regridding, end_regridding
 use MOM_regridding,       only : set_regrid_params, get_regrid_size
 use MOM_regridding,       only : check_if_histogram_extensive_diags

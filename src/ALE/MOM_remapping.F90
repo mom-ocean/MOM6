@@ -78,6 +78,7 @@ public remapping_core_h, remapping_core_w
 public initialize_remapping, end_remapping, remapping_set_param, extract_member_remapping_CS
 public remapping_unit_tests, build_reconstructions_1d, average_value_ppoly
 public interpolate_column, reintegrate_column, dzFromH1H2
+public histogram_column
 
 ! The following are private parameter constants
 integer, parameter  :: REMAPPING_PCM        = 0 !< O(h^1) remapping scheme
@@ -1214,6 +1215,31 @@ subroutine reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
   enddo
 
 end subroutine reintegrate_column
+
+!> Conservatively histogram data, uh_dest, weights mapping source grid to target grid
+subroutine histogram_column(nsrc, uh_src, ndest, uh_dest, histogram_weights)
+  integer,                intent(in)    :: nsrc    !< Number of source cells
+  real, dimension(nsrc),  intent(in)    :: uh_src  !< Values at source cell interfaces [A H]
+  integer,                intent(in)    :: ndest   !< Number of destination cells
+  real, dimension(ndest), intent(inout) :: uh_dest !< Interpolated value at destination cell interfaces [A H]
+  real, dimension(nsrc,ndest), intent(in) :: histogram_weights !< Weights mapping source to destination grid
+
+  ! Local variables
+  real, dimension(k_src) :: weights
+  real :: uh_dest_sum
+
+  uh_dest(:) = 0.0
+  do k_dest = 1,ndest ! Loop through destination grid layers
+    weights = histogram_weights(:,k_dest)
+    uh_dest_sum = 0.0
+    do k_src = 1,nsrc ! Loop through source grid
+      ! cumulatively sum field multiplied by the weight associated with each grid
+      uh_dest_sum = uh_dest_sum + uh_src(k_src)*weights(k_src)
+    enddo
+    uh_dest(k_dest) = uh_dest_sum
+  enddo
+
+end subroutine histogram_column
 
 !> Returns the average value of a reconstruction within a single source cell, i0,
 !! between the non-dimensional positions xa and xb (xa<=xb) with dimensional
