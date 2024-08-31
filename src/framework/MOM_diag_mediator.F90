@@ -1624,9 +1624,7 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       endif
 
       call check_if_histogram_extensive_diags(diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number)%regrid_cs, histogram_extensive_diags)
-      print *, "histogram_extensive_diags", histogram_extensive_diags
       if ( histogram_extensive_diags ) then
-        print *, "Eeep! inside logical for histogram check"
         ! Take histogramming approach
         if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
         allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
