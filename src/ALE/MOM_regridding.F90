@@ -2438,6 +2438,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
   if (present(ref_pressure)) CS%ref_pressure = ref_pressure
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
+  if (present(histogram_extensive_diags)) CS%histogram_extensive_diags = histogram_extensive_diags
   if (present(remap_answers_2018)) then
     if (remap_answers_2018) then
       CS%remap_answer_date = 20181231
@@ -2457,6 +2458,7 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
   case (REGRIDDING_RHO)
     if (present(min_thickness)) call set_rho_params(CS%rho_CS, min_thickness=min_thickness)
     if (present(ref_pressure)) call set_rho_params(CS%rho_CS, ref_pressure=ref_pressure)
+    if (present(histogram_extensive_diags)) call set_rho_params(CS%rho_CS, histogram_extensive_diags=histogram_extensive_diags)
     if (present(integrate_downward_for_e)) &
       call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
     if (associated(CS%rho_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
