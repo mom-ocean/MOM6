@@ -65,6 +65,7 @@ public diag_remap_get_axes_info, diag_remap_set_active
 public diag_remap_diag_registration_closed
 public vertically_reintegrate_diag_field
 public vertically_interpolate_diag_field
+public vertically_histogram_diag_field
 public horizontally_average_diag_field
 
 !> Represents remapping of diagnostics to a particular vertical coordinate.
@@ -690,7 +691,7 @@ subroutine vertically_histogram_diag_field(remap_cs, G, hweights3d, staggered_in
   logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
   real, dimension(:,:,:), pointer     :: mask     !< A mask for the field [nondim].  Note that because this
-        !! is a pointer it retains its declared indexing conventions.
+                                                  !! is a pointer it retains its declared indexing conventions.
   real, dimension(:,:,:), intent(in)  :: field    !<  The diagnostic field to be remapped [A]
   real, dimension(:,:,:), intent(out) :: histogrammed_field !< Field argument remapped to alternative coordinate [A]
 
@@ -698,8 +699,7 @@ subroutine vertically_histogram_diag_field(remap_cs, G, hweights3d, staggered_in
   integer :: isdf, jsdf !< The starting i- and j-indices in memory for field
 
   call assert(remap_cs%initialized, 'vertically_histogram_diag_field: remap_cs not initialized.')
-  call assert(size(field, 3) == size(h, 3), &
-  'vertically_histogram_diag_field: Remap field and thickness z-axes do not match.')
+  call assert(size(field, 3) == size(hweights3d, 3), 'vertically_histogram_diag_field: Remap field and thickness z-axes do not match.')
 
   isdf = G%isd ; if (staggered_in_x) Isdf = G%IsdB
   jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
@@ -708,10 +708,10 @@ subroutine vertically_histogram_diag_field(remap_cs, G, hweights3d, staggered_in
     call vertically_histogram_field(remap_cs, G, isdf, jsdf, hweights3d, staggered_in_x, staggered_in_y, &
                                       field, histogrammed_field, mask(:,:,1))
   else
-    call vertically_histogram_field(remap_cs, G, isdf, jsdf, hweights3d staggered_in_x, staggered_in_y, &
+    call vertically_histogram_field(remap_cs, G, isdf, jsdf, hweights3d, staggered_in_x, staggered_in_y, &
                                       field, histogrammed_field)
   endif
-
+  
 end subroutine vertically_histogram_diag_field
 
 !> The internal routine to vertically histogram a diagnostic field to
@@ -734,7 +734,10 @@ subroutine vertically_histogram_field(remap_cs, G, isdf, jsdf, hweights3d, stagg
 
   ! Local variables
   integer :: i, j                   ! Grid index
+  integer :: nz_src, nz_dest
 
+  nz_src = size(field,3)
+  nz_dest = remap_cs%nz
   histogrammed_field(:,:,:) = 0.
 
   if (staggered_in_x .and. .not. staggered_in_y) then

@@ -17,6 +17,7 @@ use MOM_diag_manager_infra, only : get_MOM_diag_field_id, DIAG_FIELD_NOT_FOUND
 use MOM_diag_remap,       only : diag_remap_ctrl, diag_remap_update, diag_remap_calc_hmask
 use MOM_diag_remap,       only : diag_remap_init, diag_remap_end, diag_remap_do_remap
 use MOM_diag_remap,       only : vertically_reintegrate_diag_field, vertically_interpolate_diag_field
+use MOM_diag_remap,       only : vertically_histogram_diag_field
 use MOM_diag_remap,       only : horizontally_average_diag_field, diag_remap_get_axes_info
 use MOM_diag_remap,       only : diag_remap_configure_axes, diag_remap_axes_configured
 use MOM_diag_remap,       only : diag_remap_diag_registration_closed, diag_remap_set_active
@@ -1647,10 +1648,6 @@ subroutine post_data_3d(diag_field_id, field, diag_cs, is_static, mask, alt_h)
       else
         ! The field is vertically integrated and needs to be re-gridded
         ! Take regridding approach
-        if (present(mask)) then
-          call MOM_error(FATAL,"post_data_3d: no mask for regridded field.")
-        endif
-
         if (id_clock_diag_remap>0) call cpu_clock_begin(id_clock_diag_remap)
         allocate(remapped_field(size(field,1), size(field,2), diag%axes%nz))
         if (diag_cs%diag_remap_cs(diag%axes%vertical_coordinate_number)%Z_based_coord) then

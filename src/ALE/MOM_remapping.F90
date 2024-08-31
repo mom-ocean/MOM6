@@ -1225,7 +1225,8 @@ subroutine histogram_column(nsrc, uh_src, ndest, uh_dest, histogram_weights)
   real, dimension(nsrc,ndest), intent(in) :: histogram_weights !< Weights mapping source to destination grid
 
   ! Local variables
-  real, dimension(k_src) :: weights
+  integer :: k_dest, k_src
+  real, dimension(nsrc) :: weights
   real :: uh_dest_sum
 
   uh_dest(:) = 0.0
