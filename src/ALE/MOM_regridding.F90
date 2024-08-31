@@ -20,7 +20,7 @@ use MOM_remapping, only : remapping_CS
 use regrid_consts, only : state_dependent, coordinateUnits
 use regrid_consts, only : coordinateMode, DEFAULT_COORDINATE_MODE
 use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
-use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
+use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SCALAR, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_HYBGEN, REGRIDDING_ADAPTIVE
 use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap, set_interp_answer_date
@@ -28,6 +28,7 @@ use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap, 
 use coord_zlike,  only : init_coord_zlike, zlike_CS, set_zlike_params, build_zstar_column, end_coord_zlike
 use coord_sigma,  only : init_coord_sigma, sigma_CS, set_sigma_params, build_sigma_column, end_coord_sigma
 use coord_rho,    only : init_coord_rho, rho_CS, set_rho_params, build_rho_column, end_coord_rho
+use coord_scalar, only : init_coord_scalar, scalar_CS, set_scalar_params, build_scalar_column, end_coord_scalar
 use coord_rho,    only : old_inflate_layers_1d
 use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column, end_coord_hycom
 use coord_adapt,  only : init_coord_adapt, adapt_CS, set_adapt_params, build_adapt_column, end_coord_adapt
@@ -126,6 +127,7 @@ type, public :: regridding_CS ; private
   type(zlike_CS),  pointer :: zlike_CS  => null() !< Control structure for z-like coordinate generator
   type(sigma_CS),  pointer :: sigma_CS  => null() !< Control structure for sigma coordinate generator
   type(rho_CS),    pointer :: rho_CS    => null() !< Control structure for rho coordinate generator
+  type(scalar_CS), pointer :: scalar_CS => null() !< Control structure for rho coordinate generator
   type(hycom_CS),  pointer :: hycom_CS  => null() !< Control structure for hybrid coordinate generator
   type(adapt_CS),  pointer :: adapt_CS  => null() !< Control structure for adaptive coordinate generator
   type(hybgen_regrid_CS), pointer :: hybgen_CS => NULL() !< Control structure for hybgen regridding
@@ -144,7 +146,7 @@ public getCoordinateResolution, getCoordinateInterfaces
 public getCoordinateUnits, getCoordinateShortName, getStaticThickness
 public DEFAULT_COORDINATE_MODE
 public set_h_neglect, set_dz_neglect
-public get_zlike_CS, get_sigma_CS, get_rho_CS
+public get_zlike_CS, get_sigma_CS, get_rho_CS, get_scalar_CS
 public check_if_histogram_extensive_diags
 
 !> Documentation for coordinate options
@@ -154,6 +156,7 @@ character(len=*), parameter, public :: regriddingCoordinateModeDoc = &
                  " SIGMA_SHELF_ZSTAR - stretched geopotential z* ignoring shelf\n"//&
                  " SIGMA - terrain following coordinates\n"//&
                  " RHO   - continuous isopycnal\n"//&
+                 " SCALAR - any scalar variable ** for diagnostic grids only ** \n"//&
                  " HYCOM1 - HyCOM-like hybrid coordinate\n"//&
                  " HYBGEN - Hybrid coordinate from the Hycom hybgen code\n"//&
                  " ADAPTIVE - optimize for smooth neutral density surfaces"
@@ -231,6 +234,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   real, dimension(:), allocatable :: dz_max ! Thicknesses used to find maximum interface depths
                                             ! [H ~> m or kg m-2] or other units
   real, dimension(:), allocatable :: rho_target ! Target density used in HYBRID mode [kg m-3]
+  real, dimension(:), allocatable :: scalar_target ! Target scalar used in SCALAR mode [kg m-3]
   ! Thicknesses [m] that give level centers approximately corresponding to table 2 of WOA09
   ! These are approximate because the WOA09 depths are not smoothly spaced. Levels
   ! 1, 4, 5, 9, 12, 24, and 36 are 2.5, 2.5, 1.25 12.5, 37.5 and 62.5 m deeper than WOA09
@@ -422,6 +426,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       expected_units = 'nondim' ; alt_units = expected_units
     elseif (CS%regridding_scheme == REGRIDDING_RHO) then
       expected_units = 'kg m-3' ; alt_units = expected_units
+    elseif (CS%regridding_scheme == REGRIDDING_SCALAR) then
+      expected_units = 'degC' ; alt_units = expected_units
     else
       expected_units = 'meters' ; alt_units = 'm'
     endif
@@ -437,6 +443,9 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
         call MOM_read_data(trim(fileName), trim(varName), rho_target)
+      elseif (CS%regridding_scheme == REGRIDDING_SCALAR) then
+        allocate(scalar_target(ke+1))
+        call MOM_read_data(trim(fileName), trim(varName), scalar_target)
       else
         allocate(dz(ke))
         allocate(z_max(ke+1))
@@ -592,7 +601,12 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   allocate( CS%coordinateResolution(CS%nk), source=-1.E30 )
   if (state_dependent(CS%regridding_scheme)) then
     ! Target values
-    allocate( CS%target_density(CS%nk+1), source=-1.E30*US%kg_m3_to_R )
+    !! gmac : adding if statement to allow selection of different units, may not be necessary
+    if (coordinateMode(coord_mode) == REGRIDDING_RHO) then
+      allocate( CS%target_density(CS%nk+1), source=-1.E30*US%kg_m3_to_R )
+    elseif (coordinateMode(coord_mode) == REGRIDDING_SCALAR) then
+      allocate( CS%target_density(CS%nk+1), source=-1.E30*US%degC_to_C )
+    endif
   endif
 
   if (allocated(dz)) then
@@ -600,6 +614,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call setCoordinateResolution(dz, CS, scale=1.0)
     elseif (coordinateMode(coord_mode) == REGRIDDING_RHO) then
       call setCoordinateResolution(dz, CS, scale=US%kg_m3_to_R)
+    elseif (coordinateMode(coord_mode) == REGRIDDING_SCALAR) then
+      call setCoordinateResolution(dz, CS, scale=US%degC_to_C)
     elseif (coordinateMode(coord_mode) == REGRIDDING_ADAPTIVE) then
       call setCoordinateResolution(dz, CS, scale=GV%m_to_H)
       CS%coord_scale = GV%H_to_m
@@ -609,9 +625,11 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
   endif
 
-  ! set coord_scale for RHO regridding independent of allocation status of dz
+  ! set coord_scale for RHO and SCALAR regridding independent of allocation status of dz
   if (coordinateMode(coord_mode) == REGRIDDING_RHO) then
     CS%coord_scale = US%R_to_kg_m3
+  elseif (coordinateMode(coord_mode) == REGRIDDING_SCALAR) then
+    CS%coord_scale = US%C_to_degC
   endif
 
   ! ensure CS%ref_pressure is rescaled properly
@@ -626,6 +644,17 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     call set_target_densities_from_GV(GV, US, CS)
     call log_param(param_file, mdl, "!TARGET_DENSITIES", US%R_to_kg_m3*CS%target_density(:), &
              'RHO target densities for interfaces', units=coordinateUnits(coord_mode))
+  endif
+
+  if (allocated(scalar_target)) then
+    call set_target_densities(CS, US%degC_to_C*scalar_target)
+    deallocate(scalar_target)
+
+  ! \todo This line looks like it would overwrite the target densities set just above?
+  elseif (coordinateMode(coord_mode) == REGRIDDING_SCALAR) then
+    call set_target_densities_from_GV(GV, US, CS)
+    call log_param(param_file, mdl, "!TARGET_DENSITIES", US%C_to_degC*CS%target_density(:), &
+             'SCALAR target densities for interfaces', units=coordinateUnits(coord_mode))
   endif
 
   ! initialise coordinate-specific control structure
@@ -841,6 +870,7 @@ subroutine end_regridding(CS)
   if (associated(CS%zlike_CS))  call end_coord_zlike(CS%zlike_CS)
   if (associated(CS%sigma_CS))  call end_coord_sigma(CS%sigma_CS)
   if (associated(CS%rho_CS))    call end_coord_rho(CS%rho_CS)
+  if (associated(CS%scalar_CS)) call end_coord_scalar(CS%scalar_CS)
   if (associated(CS%hycom_CS))  call end_coord_hycom(CS%hycom_CS)
   if (associated(CS%adapt_CS))  call end_coord_adapt(CS%adapt_CS)
   if (associated(CS%hybgen_CS)) call end_hybgen_regrid(CS%hybgen_CS)
@@ -2009,7 +2039,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
            REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_ADAPTIVE )
       uniformResolution(:) = maxDepth / real(nk)
 
-    case ( REGRIDDING_RHO )
+    case ( REGRIDDING_RHO, REGRIDDING_SCALAR )
       uniformResolution(:) = (rhoHeavy - rhoLight) / real(nk)
 
     case ( REGRIDDING_SIGMA )
@@ -2043,6 +2073,8 @@ subroutine initCoord(CS, GV, US, coord_mode, param_file)
     call init_coord_sigma(CS%sigma_CS, CS%nk, CS%coordinateResolution)
   case (REGRIDDING_RHO)
     call init_coord_rho(CS%rho_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%histogram_extensive_diags, CS%interp_CS)
+  case (REGRIDDING_SCALAR)
+    call init_coord_scalar(CS%scalar_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%histogram_extensive_diags, CS%interp_CS)
   case (REGRIDDING_HYCOM1)
     call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, &
                           CS%interp_CS)
@@ -2304,6 +2336,16 @@ function getCoordinateInterfaces( CS, undo_scaling )
     else
       getCoordinateInterfaces(:) = CS%target_density(:)
     endif
+  elseif (CS%regridding_scheme == REGRIDDING_SCALAR) then
+    if (.not. CS%target_density_set) &
+      call MOM_error(FATAL, 'MOM_regridding, getCoordinateInterfaces: '//&
+                            'target densities not set!')
+
+    if (unscale) then
+      getCoordinateInterfaces(:) = CS%coord_scale * CS%target_density(:)
+    else
+      getCoordinateInterfaces(:) = CS%target_density(:)
+    endif
   else
     if (unscale) then
       getCoordinateInterfaces(1) = 0.
@@ -2341,6 +2383,8 @@ function getCoordinateUnits( CS )
       getCoordinateUnits = 'fraction'
     case ( REGRIDDING_RHO )
       getCoordinateUnits = 'kg/m3'
+    case ( REGRIDDING_SCALAR )
+      getCoordinateUnits = 'degC'
     case ( REGRIDDING_ARBITRARY )
       getCoordinateUnits = 'unknown'
     case default
@@ -2367,6 +2411,8 @@ function getCoordinateShortName( CS )
       getCoordinateShortName = 'sigma'
     case ( REGRIDDING_RHO )
       getCoordinateShortName = 'rho'
+    case ( REGRIDDING_SCALAR )
+      getCoordinateShortName = 'scalar'
     case ( REGRIDDING_ARBITRARY )
       getCoordinateShortName = 'coordinate'
     case ( REGRIDDING_HYCOM1 )
@@ -2463,6 +2509,14 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
       call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
     if (associated(CS%rho_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
       call set_rho_params(CS%rho_CS, interp_CS=CS%interp_CS)
+  case (REGRIDDING_SCALAR)
+    if (present(min_thickness)) call set_rho_params(CS%scalar_CS, min_thickness=min_thickness)
+    if (present(ref_pressure)) call set_rho_params(CS%scalar_CS, ref_pressure=ref_pressure)
+    if (present(histogram_extensive_diags)) call set_rho_params(CS%scalar_CS, histogram_extensive_diags=histogram_extensive_diags)
+    if (present(integrate_downward_for_e)) &
+      call set_rho_params(CS%scalar_CS, integrate_downward_for_e=integrate_downward_for_e)
+    if (associated(CS%scalar_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
+      call set_rho_params(CS%scalar_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_HYCOM1)
     if (associated(CS%hycom_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
       call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS)
@@ -2511,6 +2565,14 @@ function get_rho_CS(CS)
 
   get_rho_CS = CS%rho_CS
 end function get_rho_CS
+
+!> This returns a copy of the scalar_CS stored in the regridding control structure.
+function get_scalar_CS(CS)
+  type(regridding_CS), intent(in) :: CS !< Regridding control structure
+  type(scalar_CS) :: get_scalar_CS
+
+  get_scalar_CS = CS%scalar_CS
+end function get_scalar_CS
 
 !------------------------------------------------------------------------------
 !> Return coordinate-derived thicknesses for fixed coordinate systems

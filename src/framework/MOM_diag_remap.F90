@@ -46,11 +46,12 @@ use MOM_regridding,       only : regridding_CS, initialize_regridding, end_regri
 use MOM_regridding,       only : set_regrid_params, get_regrid_size
 use MOM_regridding,       only : check_if_histogram_extensive_diags
 use MOM_regridding,       only : getCoordinateInterfaces, set_h_neglect, set_dz_neglect
-use MOM_regridding,       only : get_zlike_CS, get_sigma_CS, get_rho_CS
+use MOM_regridding,       only : get_zlike_CS, get_sigma_CS, get_rho_CS, get_scalar_CS
 use regrid_consts,        only : coordinateMode
 use coord_zlike,          only : build_zstar_column
 use coord_sigma,          only : build_sigma_column
 use coord_rho,            only : build_rho_column
+use coord_scalar,         only : build_scalar_column
 
 
 implicit none ; private
@@ -207,6 +208,9 @@ subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
   elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
     units = 'kg m-3'
     longname = 'Target Potential Density'
+  elseif (remap_cs%vertical_coord == coordinateMode('SCALAR')) then
+    units = 'degC'
+    longname = 'Target Scalar Values'
   else
     units = 'meters'
     longname = 'Depth'
@@ -364,6 +368,25 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
     do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
       ! This function call can work with 5 arguments in units of [Z ~> m] or [H ~> kg m-2].
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
+                            bottom_depth(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
+                            eqn_of_state, zInterfaces, histogram_weights=histogram_weights, h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+
+      do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
+
+      ! Fill out 4d array of histogram weights
+      call check_if_histogram_extensive_diags(remap_cs%regrid_cs,histogram_extensive_diags)
+      if ( histogram_extensive_diags ) then
+        do k0 = 1,GV%ke
+          do k1 = 1,nz
+            hweights3d(i,j,k0,k1) = histogram_weights(k0,k1)
+          enddo
+        enddo
+      endif
+    endif ; enddo ; enddo
+  elseif (remap_cs%vertical_coord == coordinateMode('SCALAR')) then
+    do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
+      ! This function call can work with 5 arguments in units of [Z ~> m] or [H ~> kg m-2].
+      call build_scalar_column(get_scalar_CS(remap_cs%regrid_cs), GV%ke, &
                             bottom_depth(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
                             eqn_of_state, zInterfaces, histogram_weights=histogram_weights, h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
