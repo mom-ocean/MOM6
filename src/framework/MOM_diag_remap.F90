@@ -681,6 +681,87 @@ subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, st
 
 end subroutine vertically_reintegrate_field
 
+!> Vertically histogram a diagnostic field to alternative vertical grid.
+subroutine vertically_histogram_diag_field(remap_cs, G, hweights3d, staggered_in_x, staggered_in_y, &
+                                            mask, field, histogrammed_field)
+  type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),  intent(in)  :: G        !< Ocean grid structure
+  real, dimension(:,:,:,:), intent(in)  :: hweights3d !< Weights used to map from grid to histogram
+  logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(:,:,:), pointer     :: mask     !< A mask for the field [nondim].  Note that because this
+        !! is a pointer it retains its declared indexing conventions.
+  real, dimension(:,:,:), intent(in)  :: field    !<  The diagnostic field to be remapped [A]
+  real, dimension(:,:,:), intent(out) :: histogrammed_field !< Field argument remapped to alternative coordinate [A]
+
+  ! Local variables
+  integer :: isdf, jsdf !< The starting i- and j-indices in memory for field
+
+  call assert(remap_cs%initialized, 'vertically_histogram_diag_field: remap_cs not initialized.')
+  call assert(size(field, 3) == size(h, 3), &
+  'vertically_histogram_diag_field: Remap field and thickness z-axes do not match.')
+
+  isdf = G%isd ; if (staggered_in_x) Isdf = G%IsdB
+  jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
+
+  if (associated(mask)) then
+    call vertically_histogram_field(remap_cs, G, isdf, jsdf, hweights3d, staggered_in_x, staggered_in_y, &
+                                      field, histogrammed_field, mask(:,:,1))
+  else
+    call vertically_histogram_field(remap_cs, G, isdf, jsdf, hweights3d staggered_in_x, staggered_in_y, &
+                                      field, histogrammed_field)
+  endif
+
+end subroutine vertically_histogram_diag_field
+
+!> The internal routine to vertically histogram a diagnostic field to
+!! an alternative vertical grid.
+subroutine vertically_histogram_field(remap_cs, G, isdf, jsdf, hweights3d, staggered_in_x, staggered_in_y, &
+                                        field, histogrammed_field, mask)
+  type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),  intent(in)  :: G        !< Ocean grid structure
+  integer,                intent(in)  :: isdf     !< The starting i-index in memory for field
+  integer,                intent(in)  :: jsdf     !< The starting j-index in memory for field
+  real, dimension(G%isd:,G%jsd:,:,:), intent(in)  :: hweights3d !< The weights for histogramming from source to target
+  logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(isdf:,jsdf:,:), &
+                          intent(in)  :: field   !< The diagnostic field to be remapped [A]
+  real, dimension(isdf:,jsdf:,:), &
+                          intent(out) :: histogrammed_field !< Field argument remapped to alternative coordinate [A]
+  real, dimension(isdf:,jsdf:), &
+                          optional, intent(in)  :: mask !< A mask for the field [nondim]
+
+  ! Local variables
+  integer :: i, j                   ! Grid index
+
+  histogrammed_field(:,:,:) = 0.
+
+  if (staggered_in_x .and. .not. staggered_in_y) then
+    ! U-points
+    call assert(.false., 'vertically_histogram_diag_field: U point histogramming is not coded yet.')
+  elseif (staggered_in_y .and. .not. staggered_in_x) then
+    ! V-points
+    call assert(.false., 'vertically_histogram_diag_field: V point histogramming is not coded yet.')
+  elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
+    ! H-points
+    if (present(mask)) then
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (mask(i,J) > 0.0) then
+        call histogram_column(nz_src, field(i,j,:), &
+                                nz_dest, histogrammed_field(i,j,:), hweights3d(i,j,:,:))
+      endif ; enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        call histogram_column(nz_src, field(i,j,:), &
+                                nz_dest, histogrammed_field(i,j,:), hweights3d(i,j,:,:))
+      enddo ; enddo
+    endif
+  else
+    call assert(.false., 'vertically_histogram_diag_field: Q point remapping is not coded yet.')
+  endif
+
+end subroutine vertically_histogram_field
+
 !> Vertically interpolate diagnostic field to alternative vertical grid.
 subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
                                              mask, field, interpolated_field)
