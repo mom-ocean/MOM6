@@ -1378,7 +1378,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
                          dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE(k), dS_to_dPE(k), &
                          pres_Z(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
                          dT_to_dColHt(k), dS_to_dColHt(k), &
-                         PE_chg=dPE_conv, dPEc_dKd=dPEc_dKd)
+                         PE_chg=PE_chg, dPEc_dKd=dPEc_dKd)
               endif
               MKE_src = dMKE_max * (1.0 - exp(-MKE2_Hharm * Kddt_h_guess))
               dMKE_src_dK = dMKE_max * MKE2_Hharm * exp(-MKE2_Hharm * Kddt_h_guess)
