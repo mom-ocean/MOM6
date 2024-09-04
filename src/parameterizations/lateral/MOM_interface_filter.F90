@@ -123,11 +123,11 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
   if (CS%isotropic_filter) then
     !$OMP parallel do default(shared)
     do j=js-hs,je+hs ; do I=is-(hs+1),ie+hs
-      Lsm2_u(I,j) = (0.25*filter_strength) / (G%IdxCu(I,j)**2 + G%IdyCu(I,j)**2)
+      Lsm2_u(I,j) = (0.25*filter_strength) / ((G%IdxCu(I,j)**2) + (G%IdyCu(I,j)**2))
     enddo ; enddo
     !$OMP parallel do default(shared)
     do J=js-(hs+1),je+hs ; do i=is-hs,ie+hs
-      Lsm2_v(i,J) = (0.25*filter_strength) / (G%IdxCv(i,J)**2 + G%IdyCv(i,J)**2)
+      Lsm2_v(i,J) = (0.25*filter_strength) / ((G%IdxCv(i,J)**2) + (G%IdyCv(i,J)**2))
     enddo ; enddo
   else
     !$OMP parallel do default(shared)

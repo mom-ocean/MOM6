@@ -443,15 +443,15 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0))
   enddo ; enddo ; endif
 
   !> Get tau_mag [R L Z T-2 ~> Pa]
   if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
     forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2)))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
   enddo ; enddo ; endif
 
 end subroutine idealized_hurricane_wind_forcing
@@ -510,7 +510,7 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
 
   ! Implementing Holland (1980) parametric wind profile
 
-  radius = SQRT(XX**2 + YY**2)
+  radius = SQRT((XX**2) + (YY**2))
   rad_rad_max = radius / CS%rad_max_wind
 
   ! rkm - r converted to km for Holland prof.
@@ -648,7 +648,7 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   dV = U10*cos(Adir-Alph) - Vocn + V_TS
 
   !  Use a simple drag coefficient as a function of U10 (from Sullivan et al., 2010)
-  du10 = sqrt(du**2+dv**2)
+  du10 = sqrt((du**2) + (dv**2))
   Cd = simple_wind_scaled_Cd(u10, du10, CS)
 
   ! Compute stress vector
@@ -737,7 +737,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
 
   ! Calculate x position relative to hurricane center as a function of time.
   xx = (t0 - time_type_to_real(day)*US%s_to_T) * CS%hurr_translation_spd * cos(transdir)
-  rad = sqrt(xx**2 + CS%dy_from_center**2)
+  rad = sqrt((xx**2) + (CS%dy_from_center**2))
 
   ! rkm - rad converted to km for Holland prof.
   !       used in km due to error, correct implementation should
@@ -811,7 +811,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     !/----------------------------------------------------|
     !  Add a simple drag coefficient as a function of U10 |
     !/----------------------------------------------------|
-    du10 = sqrt(du**2+dv**2)
+    du10 = sqrt((du**2) + (dv**2))
     Cd = simple_wind_scaled_Cd(u10, du10, CS)
 
     forces%taux(I,j) = CS%rho_a * US%L_to_Z * G%mask2dCu(I,j) * Cd*du10*dU
@@ -824,7 +824,7 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
     Vocn = 0. ! sfc_state%v(i,J)
     dU = U10*sin(Adir - CS%pi - Alph) - Uocn + U_TS
     dV = U10*cos(Adir-Alph) - Vocn + V_TS
-    du10 = sqrt(du**2+dv**2)
+    du10 = sqrt((du**2) + (dv**2))
     Cd = simple_wind_scaled_Cd(u10, du10, CS)
     forces%tauy(I,j) = CS%rho_a * US%L_to_Z * G%mask2dCv(I,j) * Cd*dU10*dV
   enddo ; enddo
@@ -833,15 +833,15 @@ subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, C
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2))/CS%Rho0))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0))
   enddo ; enddo ; endif
 
   !> Set magnitude of the wind stress [R L Z T-2 ~> Pa]
   if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
     forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
-            sqrt(0.5*(forces%taux(I-1,j)**2 + forces%taux(I,j)**2) + &
-                 0.5*(forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2)))
+            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
   enddo ; enddo ; endif
 
 end subroutine SCM_idealized_hurricane_wind_forcing

@@ -322,10 +322,10 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         drag_rate_visc(i,j) = (0.25*G%IareaT(i,j) * &
-                ((G%areaCu(I-1,j)*drag_vel_u(I-1,j) + &
-                  G%areaCu(I,j)*drag_vel_u(I,j)) + &
-                 (G%areaCv(i,J-1)*drag_vel_v(i,J-1) + &
-                  G%areaCv(i,J)*drag_vel_v(i,J)) ) )
+                (((G%areaCu(I-1,j)*drag_vel_u(I-1,j)) + &
+                  (G%areaCu(I,j)*drag_vel_u(I,j))) + &
+                 ((G%areaCv(i,J-1)*drag_vel_v(i,J-1)) + &
+                  (G%areaCv(i,J)*drag_vel_v(i,J))) ) )
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -821,8 +821,8 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
                       (depth_tot(i,j)-depth_tot(i,j-1)) * G%IdyCv(i,J-1) &
                   / max(depth_tot(i,j), depth_tot(i,j-1), h_neglect) )
       endif
-      beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
-                   (G%dF_dy(i,j) + beta_topo_y)**2 )
+      beta =  sqrt(((G%dF_dx(i,j) + beta_topo_x)**2) + &
+                   ((G%dF_dy(i,j) + beta_topo_y)**2) )
 
       if (KhCoeff*SN*I_mass(i,j)>0.) then
         ! Solve resid(E) = 0, where resid = Kh(E) * (SN)^2 - damp_rate(E) E
@@ -1001,8 +1001,8 @@ subroutine MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, EKE, depth_tot, &
                       (depth_tot(i,j)-depth_tot(i,j-1)) * G%IdyCv(i,J-1) &
                  / max(depth_tot(i,j), depth_tot(i,j-1), h_neglect) )
       endif
-      beta =  sqrt((G%dF_dx(i,j) + beta_topo_x)**2 + &
-                   (G%dF_dy(i,j) + beta_topo_y)**2 )
+      beta =  sqrt(((G%dF_dx(i,j) + beta_topo_x)**2) + &
+                   ((G%dF_dy(i,j) + beta_topo_y)**2) )
 
     else
       beta = 0.
@@ -1618,9 +1618,9 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
     endif
 
     ! Calculate mean kinetic energy
-    u_t = a_e*u(I,j,1)+a_w*u(I-1,j,1)
-    v_t = a_n*v(i,J,1)+a_s*v(i,J-1,1)
-    mke(i,j) = 0.5*( u_t*u_t + v_t*v_t )
+    u_t = (a_e*u(I,j,1)) + (a_w*u(I-1,j,1))
+    v_t = (a_n*v(i,J,1)) + (a_s*v(i,J-1,1))
+    mke(i,j) = 0.5*( (u_t*u_t) + (v_t*v_t) )
 
     ! Calculate the magnitude of the slope
     slope_t = slope_x_vert_avg(I,j)*a_e+slope_x_vert_avg(I-1,j)*a_w
@@ -1632,8 +1632,8 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
 
   ! Calculate relative vorticity
   do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-    dvdx = (v(i+1,J,1)*G%dyCv(i+1,J) - v(i,J,1)*G%dyCv(i,J))
-    dudy = (u(I,j+1,1)*G%dxCu(I,j+1) - u(I,j,1)*G%dxCu(I,j))
+    dvdx = ((v(i+1,J,1)*G%dyCv(i+1,J)) - (v(i,J,1)*G%dyCv(i,J)))
+    dudy = ((u(I,j+1,1)*G%dxCu(I,j+1)) - (u(I,j,1)*G%dxCu(I,j)))
     ! Assumed no slip
     rv_z(I,J) = (2.0-G%mask2dBu(I,J)) * (dvdx - dudy) * G%IareaBu(I,J)
   enddo; enddo

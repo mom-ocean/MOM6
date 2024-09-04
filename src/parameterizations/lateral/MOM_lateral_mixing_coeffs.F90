@@ -592,8 +592,8 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
       wNE = G%mask2dCv(i+1,J  ) * ( (h(i+1,j,k)*h(i+1,j+1,k)) * (h(i+1,j,k-1)*h(i+1,j+1,k-1)) )
       wSW = G%mask2dCv(i  ,J-1) * ( (h(i  ,j,k)*h(i  ,j-1,k)) * (h(i  ,j,k-1)*h(i  ,j-1,k-1)) )
       S2 =  slope_x(I,j,K)**2 + &
-              ((wNW*slope_y(i,J,K)**2 + wSE*slope_y(i+1,J-1,K)**2) + &
-               (wNE*slope_y(i+1,J,K)**2 + wSW*slope_y(i,J-1,K)**2) ) / &
+              (((wNW*slope_y(i,J,K)**2) + (wSE*slope_y(i+1,J-1,K)**2)) + &
+               ((wNE*slope_y(i+1,J,K)**2) + (wSW*slope_y(i,J-1,K)**2)) ) / &
               ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 )
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
 
@@ -628,8 +628,8 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
       wNE = G%mask2dCu(I,j+1)   * ( (h(i,j+1,k)*h(i+1,j+1,k)) * (h(i,j+1,k-1)*h(i+1,j+1,k-1)) )
       wSW = G%mask2dCu(I-1,j)   * ( (h(i,j  ,k)*h(i-1,j  ,k)) * (h(i,j  ,k-1)*h(i-1,j  ,k-1)) )
       S2 = slope_y(i,J,K)**2 + &
-             ((wSE*slope_x(I,j,K)**2 + wNW*slope_x(I-1,j+1,K)**2) + &
-              (wNE*slope_x(I,j+1,K)**2 + wSW*slope_x(I-1,j,K)**2) ) / &
+             (((wSE*slope_x(I,j,K)**2) + (wNW*slope_x(I-1,j+1,K)**2)) + &
+              ((wNE*slope_x(I,j+1,K)**2) + (wSW*slope_x(I-1,j,K)**2)) ) / &
              ( ((wSE+wNW) + (wNE+wSW)) + GV%H_subroundoff**4 )
       if (S2max>0.) S2 = S2 * S2max / (S2 + S2max) ! Limit S2
 
@@ -799,15 +799,15 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN,
   do j=G%jsc,G%jec
     do I=G%isc-1,G%iec
       CS%SN_u(I,j) = sqrt( SN_cpy(I,j)**2 &
-                         + 0.25*( (CS%SN_v(i,J)**2 + CS%SN_v(i+1,J-1)**2) &
-                                + (CS%SN_v(i+1,J)**2 + CS%SN_v(i,J-1)**2) ) )
+                         + 0.25*( ((CS%SN_v(i,J)**2) + (CS%SN_v(i+1,J-1)**2)) &
+                                + ((CS%SN_v(i+1,J)**2) + (CS%SN_v(i,J-1)**2)) ) )
     enddo
   enddo
   do J=G%jsc-1,G%jec
     do i=G%isc,G%iec
       CS%SN_v(i,J) = sqrt( CS%SN_v(i,J)**2 &
-                         + 0.25*( (SN_cpy(I,j)**2 + SN_cpy(I-1,j+1)**2) &
-                                + (SN_cpy(I,j+1)**2 + SN_cpy(I-1,j)**2) ) )
+                         + 0.25*( ((SN_cpy(I,j)**2) + (SN_cpy(I-1,j+1)**2)) &
+                                + ((SN_cpy(I,j+1)**2) + (SN_cpy(I-1,j)**2)) ) )
     enddo
   enddo
 
@@ -906,7 +906,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
     ! Calculate N*S*h from this layer and add to the sum
     do j=js,je ; do I=is-1,ie
       S2 = ( E_x(I,j)**2  + 0.25*( &
-            (E_y(i,J)**2+E_y(i+1,J-1)**2) + (E_y(i+1,J)**2+E_y(i,J-1)**2) ) )
+            ((E_y(i,J)**2) + (E_y(i+1,J-1)**2)) + ((E_y(i+1,J)**2) + (E_y(i,J-1)**2)) ) )
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) S2 = 0.0
 
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
@@ -917,7 +917,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       S2 = ( E_y(i,J)**2  + 0.25*( &
-            (E_x(I,j)**2+E_x(I-1,j+1)**2) + (E_x(I,j+1)**2+E_x(I-1,j)**2) ) )
+            ((E_x(I,j)**2) + (E_x(I-1,j+1)**2)) + ((E_x(I,j+1)**2) + (E_x(I-1,j)**2)) ) )
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) S2 = 0.0
 
       Hdn = 2.*h(i,j,k)*h(i,j,k-1) / (h(i,j,k) + h(i,j,k-1) + h_neglect)
@@ -1091,16 +1091,16 @@ subroutine calc_QG_Leith_viscosity(CS, G, GV, US, h, dz, k, div_xx_dx, div_xx_dy
     do J=js-2,je+1 ; do i=is-1,ie+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J) )
       vort_xy_dx(i,J) = vort_xy_dx(i,J) - f * &
-            ( ( h_at_u(I,j) * dslopex_dz(I,j) + h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1) ) &
-            + ( h_at_u(I-1,j) * dslopex_dz(I-1,j) + h_at_u(I,j+1) * dslopex_dz(I,j+1) ) ) / &
+            ( ( (h_at_u(I,j) * dslopex_dz(I,j)) + (h_at_u(I-1,j+1) * dslopex_dz(I-1,j+1)) ) &
+            + ( (h_at_u(I-1,j) * dslopex_dz(I-1,j)) + (h_at_u(I,j+1) * dslopex_dz(I,j+1)) ) ) / &
               ( ( h_at_u(I,j) + h_at_u(I-1,j+1) ) + ( h_at_u(I-1,j) + h_at_u(I,j+1) ) + GV%H_subroundoff)
     enddo ; enddo
 
     do j=js-1,je+1 ; do I=is-2,ie+1
       f = 0.5 * ( G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1) )
       vort_xy_dy(I,j) = vort_xy_dy(I,j) - f * &
-            ( ( h_at_v(i,J) * dslopey_dz(i,J) + h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1) ) &
-            + ( h_at_v(i,J-1) * dslopey_dz(i,J-1) + h_at_v(i+1,J) * dslopey_dz(i+1,J) ) ) / &
+            ( ( (h_at_v(i,J) * dslopey_dz(i,J)) + (h_at_v(i+1,J-1) * dslopey_dz(i+1,J-1)) ) &
+            + ( (h_at_v(i,J-1) * dslopey_dz(i,J-1)) + (h_at_v(i+1,J) * dslopey_dz(i+1,J)) ) ) / &
               ( ( h_at_v(i,J) + h_at_v(i+1,J-1) ) + ( h_at_v(i,J-1) + h_at_v(i+1,J) ) + GV%H_subroundoff)
     enddo ; enddo
   endif ! k > 1
@@ -1502,35 +1502,35 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     endif
 
     do J=js-1,Jeq ; do I=is-1,Ieq
-      CS%f2_dx2_q(I,J) = (G%dxBu(I,J)**2 + G%dyBu(I,J)**2) * &
-                         max(G%CoriolisBu(I,J)**2, absurdly_small_freq**2)
-      CS%beta_dx2_q(I,J) = oneOrTwo * ((G%dxBu(I,J))**2 + (G%dyBu(I,J))**2) * (sqrt(0.5 * &
-          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
-             ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
-             ((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IdyCu(I,j+1))**2) ) ))
+      CS%f2_dx2_q(I,J) = ((G%dxBu(I,J)**2) + (G%dyBu(I,J)**2)) * &
+                         max(G%Coriolis2Bu(I,J), absurdly_small_freq**2)
+      CS%beta_dx2_q(I,J) = oneOrTwo * ((G%dxBu(I,J)**2) + (G%dyBu(I,J)**2)) * (sqrt(0.5 * &
+          ( ((((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2) + &
+             (((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2)) + &
+            ((((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2) + &
+             (((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IdyCu(I,j+1))**2)) ) ))
     enddo ; enddo
 
     do j=js,je ; do I=is-1,Ieq
-      CS%f2_dx2_u(I,j) = (G%dxCu(I,j)**2 + G%dyCu(I,j)**2) * &
-          max(0.5* (G%CoriolisBu(I,J)**2+G%CoriolisBu(I,J-1)**2), absurdly_small_freq**2)
-      CS%beta_dx2_u(I,j) = oneOrTwo * ((G%dxCu(I,j))**2 + (G%dyCu(I,j))**2) * (sqrt( &
-          0.25*( (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2 + &
-                  ((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2) + &
-                 (((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * G%IdxCv(i+1,J-1))**2 + &
-                  ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2) ) + &
-                  ((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 ))
+      CS%f2_dx2_u(I,j) = ((G%dxCu(I,j)**2) + (G%dyCu(I,j)**2)) * &
+          max(0.5* (G%Coriolis2Bu(I,J)+G%Coriolis2Bu(I,J-1)), absurdly_small_freq**2)
+      CS%beta_dx2_u(I,j) = oneOrTwo * ((G%dxCu(I,j)**2) + (G%dyCu(I,j)**2)) * (sqrt( &
+          ((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
+          0.25*( ((((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
+                  (((G%CoriolisBu(I+1,J)-G%CoriolisBu(I,J)) * G%IdxCv(i+1,J))**2)) + &
+                 ((((G%CoriolisBu(I+1,J-1)-G%CoriolisBu(I,J-1)) * G%IdxCv(i+1,J-1))**2) + &
+                  (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2)) ) ))
     enddo ; enddo
 
     do J=js-1,Jeq ; do i=is,ie
-      CS%f2_dx2_v(i,J) = ((G%dxCv(i,J))**2 + (G%dyCv(i,J))**2) * &
-          max(0.5*(G%CoriolisBu(I,J)**2+G%CoriolisBu(I-1,J)**2), absurdly_small_freq**2)
-      CS%beta_dx2_v(i,J) = oneOrTwo * ((G%dxCv(i,J))**2 + (G%dyCv(i,J))**2) * (sqrt( &
+      CS%f2_dx2_v(i,J) = ((G%dxCv(i,J)**2) + (G%dyCv(i,J)**2)) * &
+          max(0.5*(G%Coriolis2Bu(I,J)+G%Coriolis2Bu(I-1,J)), absurdly_small_freq**2)
+      CS%beta_dx2_v(i,J) = oneOrTwo * ((G%dxCv(i,J)**2) + (G%dyCv(i,J)**2)) * (sqrt( &
           ((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
-          0.25*( (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
-                  ((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * G%IdyCu(I-1,j+1))**2) + &
-                 (((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IdyCu(I,j+1))**2 + &
-                  ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
+          0.25*( ((((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2) + &
+                  (((G%CoriolisBu(I-1,J+1)-G%CoriolisBu(I-1,J)) * G%IdyCu(I-1,j+1))**2)) + &
+                 ((((G%CoriolisBu(I,J+1)-G%CoriolisBu(I,J)) * G%IdyCu(I,j+1))**2) + &
+                  (((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2)) ) ))
     enddo ; enddo
 
   endif
@@ -1558,15 +1558,15 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%beta_dx2_h(isd:ied,jsd:jed), source=0.0)
     allocate(CS%f2_dx2_h(isd:ied,jsd:jed), source=0.0)
     do j=js-1,je+1 ; do i=is-1,ie+1
-      CS%f2_dx2_h(i,j) = (G%dxT(i,j)**2 + G%dyT(i,j)**2) * &
-          max(0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                      (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)), &
+      CS%f2_dx2_h(i,j) = ((G%dxT(i,j)**2) + (G%dyT(i,j)**2)) * &
+          max(0.25 * ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                      (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))), &
               absurdly_small_freq**2)
-      CS%beta_dx2_h(i,j) = oneOrTwo * ((G%dxT(i,j))**2 + (G%dyT(i,j))**2) * (sqrt(0.5 * &
-          ( (((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2 + &
-             ((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2) + &
-            (((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2 + &
-             ((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2) ) ))
+      CS%beta_dx2_h(i,j) = oneOrTwo * ((G%dxT(i,j)**2) + (G%dyT(i,j)**2)) * (sqrt(0.5 * &
+          ( ((((G%CoriolisBu(I,J)-G%CoriolisBu(I-1,J)) * G%IdxCv(i,J))**2) + &
+             (((G%CoriolisBu(I,J-1)-G%CoriolisBu(I-1,J-1)) * G%IdxCv(i,J-1))**2)) + &
+            ((((G%CoriolisBu(I,J)-G%CoriolisBu(I,J-1)) * G%IdyCu(I,j))**2) + &
+             (((G%CoriolisBu(I-1,J)-G%CoriolisBu(I-1,J-1)) * G%IdyCu(I-1,j))**2)) ) ))
     enddo ; enddo
   endif
 

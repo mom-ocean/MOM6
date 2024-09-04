@@ -1329,10 +1329,10 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, maxTKE,
 
       ! TKE_Ray has been initialized to 0 above.
       if (Rayleigh_drag) TKE_Ray = 0.5*CS%BBL_effic * US%L_to_Z**2 * G%IareaT(i,j) * &
-            ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
-              G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
-             (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
-              G%areaCv(i,J)   * visc%Ray_v(i,J,k)   * v(i,J,k)**2))
+            (((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2) + &
+              (G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2)) + &
+             ((G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2) + &
+              (G%areaCv(i,J)   * visc%Ray_v(i,J,k)   * v(i,J,k)**2)))
 
       if (TKE_to_layer + TKE_Ray > 0.0) then
         if (CS%BBL_mixing_as_max) then
@@ -1528,10 +1528,10 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Rho_bo
       ! Add in additional energy input from bottom-drag against slopes (sides)
       if (Rayleigh_drag) TKE_remaining = TKE_remaining + &
             0.5*CS%BBL_effic * US%L_to_Z**2 * G%IareaT(i,j) * &
-            ((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2 + &
-              G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2) + &
-             (G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2 + &
-              G%areaCv(i,J)   * visc%Ray_v(i,J,k)   * v(i,J,k)**2))
+            (((G%areaCu(I-1,j) * visc%Ray_u(I-1,j,k) * u(I-1,j,k)**2) + &
+              (G%areaCu(I,j)   * visc%Ray_u(I,j,k)   * u(I,j,k)**2)) + &
+             ((G%areaCv(i,J-1) * visc%Ray_v(i,J-1,k) * v(i,J-1,k)**2) + &
+              (G%areaCv(i,J)   * visc%Ray_v(i,J,k)   * v(i,J,k)**2)))
 
       ! Exponentially decay TKE across the thickness of the layer.
       ! This is energy loss in addition to work done as mixing, apparently to Joule heating.
@@ -1649,8 +1649,8 @@ subroutine add_MLrad_diffusivity(dz, fluxes, tv, j, Kd_int, G, GV, US, CS, TKE_t
     if (CS%ML_omega_frac >= 1.0) then
       f_sq = 4.0 * Omega2
     else
-      f_sq = 0.25 * ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                     (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f_sq = 0.25 * ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                     (G%Coriolis2Bu(I,J-1) + G%Coriolis2Bu(I-1,J)))
       if (CS%ML_omega_frac > 0.0) &
         f_sq = CS%ML_omega_frac * 4.0 * Omega2 + (1.0 - CS%ML_omega_frac) * f_sq
     endif
@@ -1928,15 +1928,15 @@ subroutine set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS, OBC)
 
     do i=is,ie
       visc%ustar_BBL(i,j) = sqrt(0.5*G%IareaT(i,j) * &
-                ((G%areaCu(I-1,j)*(ustar(I-1)*ustar(I-1)) + &
-                  G%areaCu(I,j)*(ustar(I)*ustar(I))) + &
-                 (G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1)) + &
-                  G%areaCv(i,J)*(vstar(i,J)*vstar(i,J))) ) )
+                (((G%areaCu(I-1,j)*(ustar(I-1)*ustar(I-1))) + &
+                  (G%areaCu(I,j)*(ustar(I)*ustar(I)))) + &
+                 ((G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1))) + &
+                  (G%areaCv(i,J)*(vstar(i,J)*vstar(i,J)))) ) )
       visc%TKE_BBL(i,j) = US%L_to_Z**2 * &
-                 (((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1)) + &
-                    G%areaCu(I,j) * (ustar(I)*u2_bbl(I))) + &
-                   (G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1)) + &
-                    G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J))) )*G%IareaT(i,j))
+                 ((((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1))) + &
+                    (G%areaCu(I,j) * (ustar(I)*u2_bbl(I)))) + &
+                   ((G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1))) + &
+                    (G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J)))) )*G%IareaT(i,j))
     enddo
   enddo
   !$OMP end parallel
