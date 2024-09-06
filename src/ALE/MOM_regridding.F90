@@ -200,7 +200,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   character(len=80)  :: string, string2, varName ! Temporary strings
   character(len=40)  :: coord_units, coord_res_param ! Temporary strings
   character(len=MAX_PARAM_LENGTH) :: param_name
-  character(len=200) :: inputdir, fileName
+  character(len=200) :: inputdir, fileName, longString
   character(len=320) :: message ! Temporary strings
   character(len=12) :: expected_units, alt_units ! Temporary strings
   logical :: tmpLogical, do_sum, main_parameters
@@ -680,7 +680,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
     ! Optionally specify maximum thicknesses for each layer, enforced by moving
     ! the interface below a layer downward.
-    call get_param(param_file, mdl, "MAX_LAYER_THICKNESS_CONFIG", string, &
+    call get_param(param_file, mdl, "MAX_LAYER_THICKNESS_CONFIG", longString, &
                    "Determines how to specify the maximum layer thicknesses.\n"//&
                    "Valid options are:\n"//&
                    " NONE        - there are no maximum layer thicknesses\n"//&
@@ -692,26 +692,26 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                    default='NONE')
     message = "The list of maximum thickness for each layer."
     allocate(h_max(ke))
-    if ( trim(string) == "NONE") then
+    if ( trim(longString) == "NONE") then
       ! Do nothing.
-    elseif ( trim(string) ==  "PARAM") then
+    elseif ( trim(longString) ==  "PARAM") then
       call get_param(param_file, mdl, "MAX_LAYER_THICKNESS", h_max, &
                    trim(message), units="m", fail_if_missing=.true., scale=GV%m_to_H)
       call set_regrid_max_thickness(CS, h_max)
-    elseif (index(trim(string),'FILE:')==1) then
-      if (string(6:6)=='.' .or. string(6:6)=='/') then
+    elseif (index(trim(longString),'FILE:')==1) then
+      if (longString(6:6)=='.' .or. longString(6:6)=='/') then
         ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
-        fileName = trim( extractWord(trim(string(6:80)), 1) )
+        fileName = trim( extractWord(trim(longString(6:200)), 1) )
       else
         ! Otherwise assume we should look for the file in INPUTDIR
-        fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+        fileName = trim(inputdir) // trim( extractWord(trim(longString(6:200)), 1) )
       endif
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(longString)//")")
 
-      varName = trim( extractWord(trim(string(6:)), 2) )
+      varName = trim( extractWord(trim(longString(6:)), 2) )
       if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(longString)//")")
       if (len_trim(varName)==0) then
         if (field_exists(fileName,'h_max')) then; varName = 'h_max'
         elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max'
@@ -723,14 +723,14 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call log_param(param_file, mdl, "!MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_thickness(CS, h_max, GV%m_to_H)
-    elseif (index(trim(string),'FNC1:')==1) then
-      call dz_function1( trim(string(6:)), h_max )
+    elseif (index(trim(longString),'FNC1:')==1) then
+      call dz_function1( trim(longString(6:)), h_max )
       call log_param(param_file, mdl, "!MAX_LAYER_THICKNESS", h_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_thickness(CS, h_max, GV%m_to_H)
     else
       call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(string))
+        "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(longString))
     endif
     deallocate(h_max)
   endif
