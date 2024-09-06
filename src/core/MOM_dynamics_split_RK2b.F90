@@ -1463,7 +1463,7 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
 
   call barotropic_init(u, v, h, CS%eta, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
-                       CS%SAL_CSp, CS%HA_CSp)
+                       CS%SAL_CSp, HA_CSp)
 
   flux_units = get_flux_units(GV)
   thickness_units = get_thickness_units(GV)

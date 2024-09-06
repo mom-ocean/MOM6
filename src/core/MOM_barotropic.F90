@@ -4504,9 +4504,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   if (present(SAL_CSp)) then
     CS%SAL_CSp => SAL_CSp
   endif
-  if (present(HA_CSp)) then
-    CS%HA_CSp  => HA_CSp
-  endif
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "SPLIT", CS%split, default=.true., do_not_log=.true.)
@@ -4639,6 +4636,7 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
                  default=.not.visc_rem_bug)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  if (use_tides .and. present(HA_CSp)) CS%HA_CSp => HA_CSp
   call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
                  "If true, calculate self-attraction and loading.", default=use_tides)
   det_de = 0.0
