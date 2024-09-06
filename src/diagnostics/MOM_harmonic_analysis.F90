@@ -46,7 +46,9 @@ type, public :: harmonic_analysis_CS ; private
     time_ref                                 !< Reference time (t = 0) used to calculate tidal forcing
   real, dimension(MAX_CONSTITUENTS) :: &
     freq, &                                  !< The frequency of a tidal constituent [T-1 ~> s-1]
-    phase0                                   !< The phase of a tidal constituent at time 0 [rad]
+    phase0, &                                !< The phase of a tidal constituent at time 0 [rad]
+    tide_fn, &                               !< Amplitude modulation of tides by nodal cycle [nondim].
+    tide_un                                  !< Phase modulation of tides by nodal cycle [rad].
   real, allocatable :: FtF(:,:)              !< Accumulator of (F' * F) for all fields [nondim]
   integer :: nc                              !< The number of tidal constituents in use
   integer :: length                          !< Number of fields of which harmonic analysis is to be performed
@@ -60,13 +62,15 @@ contains
 
 !> This subroutine sets static variables used by this module and initializes CS%list.
 !! THIS MUST BE CALLED AT THE END OF tidal_forcing_init.
-subroutine HA_init(Time, US, param_file, time_ref, nc, freq, phase0, const_name, CS)
+subroutine HA_init(Time, US, param_file, time_ref, nc, freq, phase0, const_name, tide_fn, tide_un, CS)
   type(time_type),       intent(in)  :: Time        !< The current model time
   type(time_type),       intent(in)  :: time_ref    !< Reference time (t = 0) used to calculate tidal forcing
   type(unit_scale_type), intent(in)  :: US          !< A dimensional unit scaling type
   type(param_file_type), intent(in)  :: param_file  !< A structure to parse for run-time parameters
-  real, dimension(MAX_CONSTITUENTS), intent(in) :: freq   !< The frequency of a tidal constituent [T-1 ~> s-1]
-  real, dimension(MAX_CONSTITUENTS), intent(in) :: phase0 !< The phase of a tidal constituent at time 0 [rad]
+  real, intent(in) :: freq(MAX_CONSTITUENTS)        !< The frequency of a tidal constituent [T-1 ~> s-1]
+  real, intent(in) :: phase0(MAX_CONSTITUENTS)      !< The phase of a tidal constituent at time 0 [rad]
+  real, intent(in) :: tide_fn(MAX_CONSTITUENTS)     !< Amplitude modulation of tides by nodal cycle [nondim].
+  real, intent(in) :: tide_un(MAX_CONSTITUENTS)     !< Phase modulation of tides by nodal cycle [rad].
   integer,               intent(in)  :: nc          !< The number of tidal constituents in use
   character(len=16),     intent(in)  :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
   type(harmonic_analysis_CS), intent(out) :: CS     !< Control structure of the MOM_harmonic_analysis module
@@ -135,6 +139,8 @@ subroutine HA_init(Time, US, param_file, time_ref, nc, freq, phase0, const_name,
   CS%time_ref   =  time_ref
   CS%freq       =  freq
   CS%phase0     =  phase0
+  CS%tide_fn    =  tide_fn
+  CS%tide_un    =  tide_un
   CS%nc         =  nc
   CS%const_name =  const_name
   CS%length     =  0
@@ -198,8 +204,8 @@ subroutine HA_accum_FtF(Time, CS)
   do c=1,nc
     icos = 2*c
     isin = 2*c+1
-    cosomegat = cos(CS%freq(c) * now + CS%phase0(c))
-    sinomegat = sin(CS%freq(c) * now + CS%phase0(c))
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
 
     ! First column, corresponding to the zero frequency constituent (mean)
     CS%FtF(icos,1) = CS%FtF(icos,1) + cosomegat
@@ -208,8 +214,8 @@ subroutine HA_accum_FtF(Time, CS)
     do cc=1,c
       iccos = 2*cc
       issin = 2*cc+1
-      ccosomegat = cos(CS%freq(cc) * now + CS%phase0(cc))
-      ssinomegat = sin(CS%freq(cc) * now + CS%phase0(cc))
+      ccosomegat = CS%tide_fn(cc) * cos(CS%freq(cc) * now + (CS%phase0(cc) + CS%tide_un(cc)))
+      ssinomegat = CS%tide_fn(cc) * sin(CS%freq(cc) * now + (CS%phase0(cc) + CS%tide_un(cc)))
 
       ! Interior of the matrix, corresponding to the products of cosine and sine terms
       CS%FtF(icos,iccos) = CS%FtF(icos,iccos) + cosomegat * ccosomegat
@@ -290,8 +296,8 @@ subroutine HA_accum_FtSSH(key, data, Time, G, CS)
   do c=1,nc
     icos = 2*c
     isin = 2*c+1
-    cosomegat = cos(CS%freq(c) * now + CS%phase0(c))
-    sinomegat = sin(CS%freq(c) * now + CS%phase0(c))
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
     do j=js,je ; do i=is,ie
       ha1%FtSSH(i,j,icos) = ha1%FtSSH(i,j,icos) + (data(i,j) - ha1%ref(i,j)) * cosomegat
       ha1%FtSSH(i,j,isin) = ha1%FtSSH(i,j,isin) + (data(i,j) - ha1%ref(i,j)) * sinomegat
