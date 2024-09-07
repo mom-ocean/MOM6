@@ -268,8 +268,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         pos = i*15+(m-2)*5
         T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i+1,j))
         S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i+1,j))
-        p15(pos+1) = -GxRho * ( ((wt_L*z_t(i,j)) + (wt_R*z_t(i+1,j))) - &
-                                ((wt_L*z0pres(i,j)) + (wt_R*z0pres(i+1,j))) )
+        p15(pos+1) = -GxRho * ((wt_L*(z_t(i,j)-z0pres(i,j))) + (wt_R*(z_t(i+1,j)-z0pres(i+1,j))))
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m,i)
@@ -335,8 +334,7 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         pos = i*15+(m-2)*5
         T15(pos+1) = (wtT_L*T(i,j)) + (wtT_R*T(i,j+1))
         S15(pos+1) = (wtT_L*S(i,j)) + (wtT_R*S(i,j+1))
-        p15(pos+1) = -GxRho * ( ((wt_L*z_t(i,j)) + (wt_R*z_t(i,j+1))) - &
-                                ((wt_L*z0pres(i,j)) + (wt_R*z0pres(i,j+1))) )
+        p15(pos+1) = -GxRho * ((wt_L*(z_t(i,j)-z0pres(i,j))) + (wt_R*(z_t(i,j+1)-z0pres(i,j+1))))
         do n=2,5
           T15(pos+n) = T15(pos+1) ; S15(pos+n) = S15(pos+1)
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i)
@@ -627,8 +625,7 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         S15(pos+1) = (w_left*Stl) + (w_right*Str)
         S15(pos+5) = (w_left*Sbl) + (w_right*Sbr)
 
-        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - &
-                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i+1,j))) )
+        p15(pos+1) = -GxRho * ((w_left*(e(i,j,K)-z0pres(i,j))) + (w_right*(e(i+1,j,K)-z0pres(i+1,j))))
 
         ! Pressure
         do n=2,5
@@ -724,8 +721,7 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
         S15(pos+1) = (w_left*Stl) + (w_right*Str)
         S15(pos+5) = (w_left*Sbl) + (w_right*Sbr)
 
-        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - &
-                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i,j+1))) )
+        p15(pos+1) = -GxRho * ((w_left*(e(i,j,K)-z0pres(i,j))) + (w_right*(e(i,j+1,K)-z0pres(i,j+1))))
 
         ! Pressure
         do n=2,5
@@ -1037,8 +1033,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         dz_x(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i+1,j,K) - e(i+1,j,K+1)))
 
         pos = i*15+(m-2)*5
-        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i+1,j,K))) - &
-                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i+1,j))) )
+        p15(pos+1) = -GxRho * ((w_left*(e(i,j,K)-z0pres(i,j))) + (w_right*(e(i+1,j,K)-z0pres(i+1,j))))
         do n=2,5
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_x(m,i)
         enddo
@@ -1143,8 +1138,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
         dz_y(m,i) = (w_left*(e(i,j,K) - e(i,j,K+1))) + (w_right*(e(i,j+1,K) - e(i,j+1,K+1)))
 
         pos = i*15+(m-2)*5
-        p15(pos+1) = -GxRho * ( ((w_left*e(i,j,K)) + (w_right*e(i,j+1,K))) - &
-                                ((w_left*z0pres(i,j)) + (w_right*z0pres(i,j+1))) )
+        p15(pos+1) = -GxRho * ((w_left*(e(i,j,K)-z0pres(i,j))) + (w_right*(e(i,j+1,K)-z0pres(i,j+1))))
         do n=2,5
           p15(pos+n) = p15(pos+n-1) + GxRho*0.25*dz_y(m,i)
         enddo

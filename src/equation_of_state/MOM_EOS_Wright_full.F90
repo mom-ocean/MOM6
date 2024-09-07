@@ -597,8 +597,8 @@ subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       lambda = (wtT_L*lambda_2d(i,j)) + (wtT_R*lambda_2d(i+1,j))
 
       dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i+1,j) - z_b(i+1,j)))
-      p_ave = -GxRho*(0.5*((wt_L*(z_t(i,j)+z_b(i,j))) + (wt_R*(z_t(i+1,j)+z_b(i+1,j)))) - &
-                      ((wt_L*z0pres(i,j)) + (wt_R*z0pres(i+1,j))))
+      p_ave = -GxRho*((wt_L * (0.5*(z_t(i,j)+z_b(i,j)) - z0pres(i,j))) + &
+                      (wt_R * (0.5*(z_t(i+1,j)+z_b(i+1,j)) - z0pres(i+1,j))))
 
       I_al0 = 1.0 / al0
       I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
@@ -639,8 +639,8 @@ subroutine int_density_dz_wright_full(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       lambda = (wtT_L*lambda_2d(i,j)) + (wtT_R*lambda_2d(i,j+1))
 
       dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i,j+1) - z_b(i,j+1)))
-      p_ave = -GxRho*(0.5*((wt_L*(z_t(i,j)+z_b(i,j))) + (wt_R*(z_t(i,j+1)+z_b(i,j+1)))) - &
-                      ((wt_L*z0pres(i,j)) + (wt_R*z0pres(i,j+1))))
+      p_ave = -GxRho*((wt_L*(0.5*(z_t(i,j)+z_b(i,j))-z0pres(i,j))) + &
+                      (wt_R*(0.5*(z_t(i,j+1)+z_b(i,j+1))-z0pres(i,j+1))))
 
       I_al0 = 1.0 / al0
       I_Lzz = 1.0 / ((p0 + p_ave) + lambda * I_al0)
