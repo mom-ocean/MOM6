@@ -1392,67 +1392,69 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
     enddo
   enddo
 
-  ! convert salt flux to tracer fluxes and add to STF
-  do j=js,je ; do i=is,ie
-    net_salt_rate(i,j) = (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j)) * GV%RZ_to_H
-  enddo ; enddo
+  if (associated(fluxes%salt_flux)) then
+    ! convert salt flux to tracer fluxes and add to STF
+    do j=js,je ; do i=is,ie
+      net_salt_rate(i,j) = (1000.0*US%ppt_to_S * fluxes%salt_flux(i,j)) * GV%RZ_to_H
+    enddo ; enddo
 
-  ! DIC related tracers
-  do j=js,je ; do i=is,ie
-    flux_from_salt_flux(i,j) = (CS%DIC_salt_ratio * GV%H_to_Z) * net_salt_rate(i,j)
-  enddo ; enddo
-  m = CS%tracer_inds%dic_ind
-  if (m > 0) then
+    ! DIC related tracers
     do j=js,je ; do i=is,ie
-      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      flux_from_salt_flux(i,j) = (CS%DIC_salt_ratio * GV%H_to_Z) * net_salt_rate(i,j)
     enddo ; enddo
-    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
-      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
-  endif
-  m = CS%tracer_inds%dic_alt_co2_ind
-  if (m > 0) then
-    do j=js,je ; do i=is,ie
-      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
-    enddo ; enddo
-    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
-      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
-  endif
-  m = CS%tracer_inds%abio_dic_ind
-  if (m > 0) then
-    do j=js,je ; do i=is,ie
-      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
-    enddo ; enddo
-    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
-      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
-  endif
-  m = CS%tracer_inds%abio_di14c_ind
-  if (m > 0) then
-    do j=js,je ; do i=is,ie
-      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
-    enddo ; enddo
-    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
-      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
-  endif
+    m = CS%tracer_inds%dic_ind
+    if (m > 0) then
+      do j=js,je ; do i=is,ie
+        CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      enddo ; enddo
+      if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+        call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+    endif
+    m = CS%tracer_inds%dic_alt_co2_ind
+    if (m > 0) then
+      do j=js,je ; do i=is,ie
+        CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      enddo ; enddo
+      if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+        call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+    endif
+    m = CS%tracer_inds%abio_dic_ind
+    if (m > 0) then
+      do j=js,je ; do i=is,ie
+        CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      enddo ; enddo
+      if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+        call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+    endif
+    m = CS%tracer_inds%abio_di14c_ind
+    if (m > 0) then
+      do j=js,je ; do i=is,ie
+        CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      enddo ; enddo
+      if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+        call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+    endif
 
-  ! ALK related tracers
-  do j=js,je ; do i=is,ie
-    flux_from_salt_flux(i,j) = (CS%ALK_salt_ratio * GV%H_to_Z) * net_salt_rate(i,j)
-  enddo ; enddo
-  m = CS%tracer_inds%alk_ind
-  if (m > 0) then
+    ! ALK related tracers
     do j=js,je ; do i=is,ie
-      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      flux_from_salt_flux(i,j) = (CS%ALK_salt_ratio * GV%H_to_Z) * net_salt_rate(i,j)
     enddo ; enddo
-    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
-      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
-  endif
-  m = CS%tracer_inds%alk_alt_co2_ind
-  if (m > 0) then
-    do j=js,je ; do i=is,ie
-      CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
-    enddo ; enddo
-    if (CS%id_surface_flux_from_salt_flux(m) > 0) &
-      call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+    m = CS%tracer_inds%alk_ind
+    if (m > 0) then
+      do j=js,je ; do i=is,ie
+        CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      enddo ; enddo
+      if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+        call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+    endif
+    m = CS%tracer_inds%alk_alt_co2_ind
+    if (m > 0) then
+      do j=js,je ; do i=is,ie
+        CS%STF(i,j,m) = CS%STF(i,j,m) + flux_from_salt_flux(i,j)
+      enddo ; enddo
+      if (CS%id_surface_flux_from_salt_flux(m) > 0) &
+        call post_data(CS%id_surface_flux_from_salt_flux(m), flux_from_salt_flux, CS%diag)
+    endif
   endif
 
   if (CS%debug) then
