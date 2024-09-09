@@ -1953,10 +1953,10 @@ logical function test_answer(verbose, u, u_true, label, tol)
   if (abs(u - u_true) > tolerance) test_answer = .true.
   if (test_answer .or. verbose) then
     if (test_answer) then
-      print '(3(a,1pe24.16),x,a,x,a)','computed =',u,' correct =',u_true, &
+      print '(3(a,1pe24.16),1x,a,1x,a)','computed =',u,' correct =',u_true, &
             ' err=',u-u_true,' < wrong',label
     else
-      print '(2(a,1pe24.16),x,a)','computed =',u,' correct =',u_true,label
+      print '(2(a,1pe24.16),1x,a)','computed =',u,' correct =',u_true,label
     endif
   endif
 

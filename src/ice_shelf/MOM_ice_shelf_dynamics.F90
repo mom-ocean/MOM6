@@ -1122,7 +1122,7 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
     else
       call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=WRITEONLY_FILE)
       if (abs(CS%timeunit - 86400.0) < 1.0) then
-        write(CS%IS_fileenergy_ascii,'("  Step,",7x,"Day,"8x,"Energy/Mass,",13x,"Total Mass")')
+        write(CS%IS_fileenergy_ascii,'("  Step,",7x,"Day,",8x,"Energy/Mass,",13x,"Total Mass")')
         write(CS%IS_fileenergy_ascii,'(12x,"[days]",10x,"[m2 s-2]",17x,"[kg]")')
       else
         if ((CS%timeunit >= 0.99) .and. (CS%timeunit < 1.01)) then
@@ -1137,7 +1137,7 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
           write(time_units,'(9x,"[",es8.2," s]    ")') CS%timeunit
         endif
 
-        write(CS%IS_fileenergy_ascii,'("  Step,",7x,"Time,"7x,"Energy/Mass,",13x,"Total Mass")')
+        write(CS%IS_fileenergy_ascii,'("  Step,",7x,"Time,",7x,"Energy/Mass,",13x,"Total Mass")')
         write(CS%IS_fileenergy_ascii,'(A25,3x,"[m2 s-2]",17x,"[kg]")') time_units
       endif
     endif

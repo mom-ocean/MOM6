@@ -344,10 +344,10 @@ end subroutine find_N2_bottom
 !> Returns TKE_itidal_input
 subroutine get_input_TKE(G, TKE_itidal_input, nFreq, CS)
   type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
+  integer, intent(in) :: nFreq !< number of frequencies
   real, dimension(SZI_(G),SZJ_(G),nFreq), &
                          intent(out) :: TKE_itidal_input !< The energy input to the internal waves
                                                          !! [H Z2 T-3 ~> m3 s-3 or W m-2].
-  integer, intent(in) :: nFreq !< number of frequencies
   type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
                                                  !! structure for the internal tide input module.
   integer :: i,j,fr
@@ -361,9 +361,9 @@ end subroutine get_input_TKE
 !> Returns barotropic tidal velocities
 subroutine get_barotropic_tidal_vel(G, vel_btTide, nFreq, CS)
   type(ocean_grid_type), intent(in)    :: G !< The ocean's grid structure (in).
+  integer, intent(in) :: nFreq !< number of frequencies
   real, dimension(SZI_(G),SZJ_(G),nFreq), &
                          intent(out) :: vel_btTide !< Barotropic velocity read from file [L T-1 ~> m s-1].
-  integer, intent(in) :: nFreq !< number of frequencies
   type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
                                                  !! structure for the internal tide input module.
   integer :: i,j,fr

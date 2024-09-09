@@ -2428,7 +2428,7 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
     tol_here = 0.5*tol*(abs(SpV_avg_a(1)) + abs(SpV_avg_q(1)))
     test_OK = (abs(SpV_avg_a(1) - SpV_avg_q(1)) < tol_here)
     if (verbose) then
-      write(mesg, '(ES24.16," and ",ES24.16," differ by ",ES16.8," (",ES10.2"), tol=",ES16.8)') &
+      write(mesg, '(ES24.16," and ",ES24.16," differ by ",ES16.8," (",ES10.2,"), tol=",ES16.8)') &
         SpV_avg_a(1), SpV_avg_q(1), SpV_avg_a(1) - SpV_avg_q(1), &
         2.0*(SpV_avg_a(1) - SpV_avg_q(1)) / (abs(SpV_avg_a(1)) + abs(SpV_avg_q(1)) + tiny(SpV_avg_a(1))), &
         tol_here
@@ -2508,8 +2508,7 @@ logical function test_EOS_consistency(T_test, S_test, p_test, EOS, verbose, &
 
     check_FD = ( abs(val_fd(1) - val) < (1.2*abs(val_fd(2) - val)/2**order + abs(tol)) )
 
-    ! write(mesg, '(ES16.8," and ",ES16.8," differ by ",ES16.8," (",ES10.2"), tol=",ES16.8)') &
-    write(mesg, '(ES24.16," and ",ES24.16," differ by ",ES16.8," (",ES10.2"), tol=",ES16.8)') &
+    write(mesg, '(ES24.16," and ",ES24.16," differ by ",ES16.8," (",ES10.2,"), tol=",ES16.8)') &
           val, val_fd(1), val - val_fd(1), &
           2.0*(val - val_fd(1)) / (abs(val) + abs(val_fd(1)) + tiny(val)), &
           (1.2*abs(val_fd(2) - val)/2**order + abs(tol))

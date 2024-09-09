@@ -510,7 +510,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides af halo", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: after forcing')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: after forcing', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: after forcing', CS%En_sum
     enddo ; enddo
   endif
 
@@ -537,7 +537,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides af refr", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: after 1/2 refraction')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: after 1/2 refraction', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: after 1/2 refraction', CS%En_sum
     enddo ; enddo
     ! Check for En<0 - for debugging, delete later
     do m=1,CS%nMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
@@ -567,7 +567,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides af halo R", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: after correct halo rotation')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: after correct halo rotation', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: after correct halo rotation', CS%En_sum
     enddo ; enddo
   endif
 
@@ -598,7 +598,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides af prop", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: after propagate')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: after propagate', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: after propagate', CS%En_sum
     enddo ; enddo
     ! Check for En<0 - for debugging, delete later
     do m=1,CS%nMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
@@ -640,7 +640,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides af refr2", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: after 2/2 refraction')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: after 2/2 refraction', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: after 2/2 refraction', CS%En_sum
     enddo ; enddo
     ! Check for En<0 - for debugging, delete later
     do m=1,CS%nMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
@@ -696,9 +696,9 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides after leak", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: after background drag')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: after background drag', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: after background drag', CS%En_sum
       call sum_En(G, GV, US, CS, CS%TKE_leak_loss(:,:,:,fr,m) * dt, 'prop_int_tide: loss after background drag')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: loss after background drag', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: loss after background drag', CS%En_sum
     enddo ; enddo
     ! Check for En<0 - for debugging, delete later
     do m=1,CS%nMode ; do fr=1,CS%Nfreq ; do a=1,CS%nAngle
@@ -867,7 +867,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides after wave", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: before Froude drag')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: before Froude drag', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: before Froude drag', CS%En_sum
     enddo ; enddo
     ! save loss term for online budget, may want to add a debug flag later
     do m=1,CS%nMode ; do fr=1,CS%nFreq
@@ -941,9 +941,9 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
     call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides after froude", G%HI, haloshift=0, scale=HZ2_T2_to_J_m2)
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'prop_int_tide: after Froude drag')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: after Froude drag', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: after Froude drag', CS%En_sum
       call sum_En(G, GV, US, CS, CS%TKE_Froude_loss(:,:,:,fr,m) * dt, 'prop_int_tide: loss after Froude drag')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'prop_int_tide: loss after Froude drag', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'prop_int_tide: loss after Froude drag', CS%En_sum
     enddo ; enddo
     ! save loss term for online budget, may want to add a debug flag later
     do m=1,CS%nMode ; do fr=1,CS%nFreq
@@ -1024,7 +1024,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
                             CS%TKE_quad_loss_glo_dt(fr,m) - CS%TKE_itidal_loss_glo_dt(fr,m) - &
                             CS%TKE_Froude_loss_glo_dt(fr,m) - CS%TKE_residual_loss_glo_dt(fr,m) - &
                             CS%En_end_glo(fr,m)
-    if (is_root_pe()) write(stdout,'(A,F18.10)'), "error in Energy budget", CS%error_mode(fr,m)
+    if (is_root_pe()) write(stdout,'(A,F18.10)') "error in Energy budget", CS%error_mode(fr,m)
     enddo ; enddo
   endif
 
@@ -1612,23 +1612,23 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
          enddo
 
          if (abs(verif_N -1.0) > threshold_verif) then
-           write(stdout,'(I5,I5,F18.10)'), i, j, verif_N
+           write(stdout,'(I5,I5,F18.10)') i, j, verif_N
            call MOM_error(FATAL, "mismatch integral for N profile")
          endif
          if (abs(verif_N2 -1.0) > threshold_verif) then
-           write(stdout,'(I5,I5,F18.10)'), i, j, verif_N2
+           write(stdout,'(I5,I5,F18.10)') i, j, verif_N2
            call MOM_error(FATAL, "mismatch integral for N2 profile")
          endif
          if (abs(verif_bbl -1.0) > threshold_verif) then
-           write(stdout,'(I5,I5,F18.10)'), i, j, verif_bbl
+           write(stdout,'(I5,I5,F18.10)') i, j, verif_bbl
            call MOM_error(FATAL, "mismatch integral for bbl profile")
          endif
          if (abs(verif_stl1 -1.0) > threshold_verif) then
-           write(stdout,'(I5,I5,F18.10)'), i, j, verif_stl1
+           write(stdout,'(I5,I5,F18.10)') i, j, verif_stl1
            call MOM_error(FATAL, "mismatch integral for stl1 profile")
          endif
          if (abs(verif_stl2 -1.0) > threshold_verif) then
-           write(stdout,'(I5,I5,F18.10)'), i, j, verif_stl2
+           write(stdout,'(I5,I5,F18.10)') i, j, verif_stl2
            call MOM_error(FATAL, "mismatch integral for stl2 profile")
          endif
 
@@ -2108,7 +2108,7 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
   if (CS%debug) then
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: top of routine')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'propagate: top of routine', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: top of routine', CS%En_sum
     enddo ; enddo
   endif
 
@@ -2180,7 +2180,7 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
     if (CS%debug) then
       do m=1,CS%nMode ; do fr=1,CS%Nfreq
         call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after propagate_x')
-        if (is_root_pe()) write(stdout,'(A,E18.10)'), 'propagate: after propagate_x', CS%En_sum
+        if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after propagate_x', CS%En_sum
       enddo ; enddo
     endif
 
@@ -2191,7 +2191,7 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
     if (CS%debug) then
       do m=1,CS%nMode ; do fr=1,CS%Nfreq
         call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after halo update')
-        if (is_root_pe()) write(stdout,'(A,E18.10)'), 'propagate: after halo update', CS%En_sum
+        if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after halo update', CS%En_sum
       enddo ; enddo
     endif
     ! Apply propagation in y-direction (reflection included)
@@ -2210,7 +2210,7 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
     if (CS%debug) then
       do m=1,CS%nMode ; do fr=1,CS%Nfreq
         call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after propagate_y')
-        if (is_root_pe()) write(stdout,'(A,E18.10)'), 'propagate: after propagate_y', CS%En_sum
+        if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after propagate_y', CS%En_sum
       enddo ; enddo
     endif
 
@@ -2219,7 +2219,7 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
   if (CS%debug) then
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: bottom of routine')
-      if (is_root_pe()) write(stdout,'(A,E18.10)'), 'propagate: bottom of routine', CS%En_sum
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: bottom of routine', CS%En_sum
     enddo ; enddo
   endif
 
