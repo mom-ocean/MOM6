@@ -829,10 +829,10 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       tau_mag = 0.0 ; gustiness = CS%gust_const
       if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
            (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0.0) then
-        tau_mag = sqrt(((G%mask2dBu(I,J)*(taux_at_q(I,J)**2 + tauy_at_q(I,J)**2) + &
-            G%mask2dBu(I-1,J-1)*(taux_at_q(I-1,J-1)**2 + tauy_at_q(I-1,J-1)**2)) + &
-           (G%mask2dBu(I,J-1)*(taux_at_q(I,J-1)**2 + tauy_at_q(I,J-1)**2) + &
-            G%mask2dBu(I-1,J)*(taux_at_q(I-1,J)**2 + tauy_at_q(I-1,J)**2)) ) / &
+        tau_mag = sqrt(((G%mask2dBu(I,J)*((taux_at_q(I,J)**2) + (tauy_at_q(I,J)**2)) + &
+            G%mask2dBu(I-1,J-1)*((taux_at_q(I-1,J-1)**2) + (tauy_at_q(I-1,J-1)**2))) + &
+           (G%mask2dBu(I,J-1)*((taux_at_q(I,J-1)**2) + (tauy_at_q(I,J-1)**2)) + &
+            G%mask2dBu(I-1,J)*((taux_at_q(I-1,J)**2) + (tauy_at_q(I-1,J)**2))) ) / &
           ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
       endif
@@ -862,9 +862,9 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     do j=js,je ; do i=is,ie
       gustiness = CS%gust_const
       if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0.0)) gustiness = CS%gust(i,j)
-      forces%tau_mag(i,j) = gustiness + G%mask2dT(i,j) * sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2)
+      forces%tau_mag(i,j) = gustiness + G%mask2dT(i,j) * sqrt((taux_at_h(i,j)**2) + (tauy_at_h(i,j)**2))
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
-                               sqrt(taux_at_h(i,j)**2 + tauy_at_h(i,j)**2))
+                               sqrt((taux_at_h(i,j)**2) + (tauy_at_h(i,j)**2)))
       !forces%omega_w2x(i,j) = atan(tauy_at_h(i,j), taux_at_h(i,j))
     enddo ; enddo
     call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
@@ -876,13 +876,13 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     do j=js,je ; do i=is,ie
       taux2 = 0.0
       if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0.0) &
-        taux2 = (G%mask2dCu(I-1,j)*forces%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j)*forces%taux(I,j)**2) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
+        taux2 = (G%mask2dCu(I-1,j)*(forces%taux(I-1,j)**2) + &
+                 G%mask2dCu(I,j)*(forces%taux(I,j)**2)) / (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
 
       tauy2 = 0.0
       if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0.0) &
-        tauy2 = (G%mask2dCv(i,J-1)*forces%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J)*forces%tauy(i,J)**2) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
+        tauy2 = (G%mask2dCv(i,J-1)*(forces%tauy(i,J-1)**2) + &
+                 G%mask2dCv(i,J)*(forces%tauy(i,J)**2)) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (CS%read_gust_2d) then
         forces%tau_mag(i,j) = CS%gust(i,j) + sqrt(taux2 + tauy2)

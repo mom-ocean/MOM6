@@ -390,7 +390,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
         do k=1,nz
           kp1 = MIN(k+1 , nz)
-          tau_u(I,j,k+1) = sqrt( tauxDG_u(I,j,k+1)*tauxDG_u(I,j,k+1) + tauyDG_u(I,j,k+1)*tauyDG_u(I,j,k+1))
+          tau_u(I,j,k+1) = sqrt( (tauxDG_u(I,j,k+1)*tauxDG_u(I,j,k+1)) + (tauyDG_u(I,j,k+1)*tauyDG_u(I,j,k+1)) )
           Omega_tau2x  = atan2( tauyDG_u(I,j,k+1) , tauxDG_u(I,j,k+1) )
           omega_tmp = Omega_tau2x !- omega_w2x_u(I,j)
           if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
@@ -412,7 +412,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
         do k=1,nz-1
           kp1 = MIN(k+1 , nz)
-          tau_v(i,J,k+1) = sqrt ( tauxDG_v(i,J,k+1)*tauxDG_v(i,J,k+1) + tauyDG_v(i,J,k+1)*tauyDG_v(i,J,k+1) )
+          tau_v(i,J,k+1) = sqrt ( (tauxDG_v(i,J,k+1)*tauxDG_v(i,J,k+1)) + (tauyDG_v(i,J,k+1)*tauyDG_v(i,J,k+1)) )
           omega_tau2x  =  atan2( tauyDG_v(i,J,k+1) , tauxDG_v(i,J,k+1) )
           omega_tmp  = omega_tau2x !- omega_w2x_v(i,J)
           if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
@@ -472,7 +472,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
           ! diagnostics
           Omega_tau2s_u(I,j,k+1) = atan2(tauNL_CG  , (tau_u(I,j,k+1)+tauNL_DG))
-          tau_u(I,j,k+1)         = sqrt((tauxDG_u(I,j,k+1) + tauNL_X)**2 + (tauyDG_u(I,j,k+1) + tauNL_Y)**2)
+          tau_u(I,j,k+1)         = sqrt(((tauxDG_u(I,j,k+1) + tauNL_X)**2) + ((tauyDG_u(I,j,k+1) + tauNL_Y)**2))
           omega_tau2x            = atan2((tauyDG_u(I,j,k+1) + tauNL_Y), (tauxDG_u(I,j,k+1) + tauNL_X))
           omega_tau2w            = omega_tau2x !-  omega_w2x_u(I,j)
           if (omega_tau2w >= pi ) omega_tau2w = omega_tau2w - 2.*pi
@@ -532,7 +532,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
           ! diagnostics
           Omega_tau2s_v(i,J,k+1) = atan2(tauNL_CG, tau_v(i,J,k+1) + tauNL_DG)
-          tau_v(i,J,k+1)         = sqrt((tauxDG_v(i,J,k+1) + tauNL_X)**2 + (tauyDG_v(i,J,k+1) + tauNL_Y)**2)
+          tau_v(i,J,k+1)         = sqrt(((tauxDG_v(i,J,k+1) + tauNL_X)**2) + ((tauyDG_v(i,J,k+1) + tauNL_Y)**2))
           !omega_tau2x            = atan2((tauyDG_v(i,J,k+1) + tauNL_Y) , (tauxDG_v(i,J,k+1) + tauNL_X))
           !omega_tau2w            = omega_tau2x - omega_w2x_v(i,J)
           if (omega_tau2w > pi)  omega_tau2w = omega_tau2w - 2.*pi

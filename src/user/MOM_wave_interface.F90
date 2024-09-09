@@ -1216,7 +1216,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
     enddo
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, US_H, LA_STKx)
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, VS_H, LA_STKy)
-    LA_STK = sqrt(LA_STKX*LA_STKX+LA_STKY*LA_STKY)
+    LA_STK = sqrt((LA_STKX*LA_STKX) + (LA_STKY*LA_STKY))
   elseif (Waves%WaveMethod==SURFBANDS) then
     allocate(StkBand_X(Waves%NumBands), StkBand_Y(Waves%NumBands))
     do bb = 1,Waves%NumBands
@@ -1225,7 +1225,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
     enddo
     call Get_SL_Average_Band(GV, Dpt_LASL, Waves%NumBands, Waves%WaveNum_Cen, StkBand_X, LA_STKx )
     call Get_SL_Average_Band(GV, Dpt_LASL, Waves%NumBands, Waves%WaveNum_Cen, StkBand_Y, LA_STKy )
-    LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
+    LA_STK = sqrt((LA_STKX**2) + (LA_STKY**2))
     deallocate(StkBand_X, StkBand_Y)
   elseif (Waves%WaveMethod==DHH85) then
     ! Temporarily integrating profile rather than spectrum for simplicity
@@ -1235,7 +1235,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
     enddo
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, US_H, LA_STKx)
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, VS_H, LA_STKy)
-    LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
+    LA_STK = sqrt((LA_STKX**2) + (LA_STKY**2))
   elseif (Waves%WaveMethod==LF17) then
     call get_StokesSL_LiFoxKemper(ustar, HBL*Waves%LA_FracHBL, GV, US, Waves, LA_STK, LA)
   elseif (Waves%WaveMethod==Null_WaveMethod) then
@@ -1655,8 +1655,8 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, Waves)
   do k = 1, GV%ke
     do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
-        DVel = 0.25*(Waves%us_y(i,j+1,k)+Waves%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
-               0.25*(Waves%us_y(i,j,k)+Waves%us_y(i-1,j,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*((Waves%us_y(i,J+1,k)+Waves%us_y(i-1,J+1,k)) * G%CoriolisBu(I,J+1)) + &
+               0.25*((Waves%us_y(i,J,k)+Waves%us_y(i-1,J,k)) * G%CoriolisBu(I,J))
         u(I,j,k) = u(I,j,k) + DVEL*dt
       enddo
     enddo
@@ -1665,8 +1665,8 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, Waves)
   do k = 1, GV%ke
     do J = G%jscB, G%jecB
       do i = G%isc, G%iec
-        DVel = 0.25*(Waves%us_x(i+1,j,k)+Waves%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
-               0.25*(Waves%us_x(i,j,k)+Waves%us_x(i,j-1,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*((Waves%us_x(I+1,j,k)+Waves%us_x(I+1,j-1,k)) * G%CoriolisBu(I+1,J)) + &
+               0.25*((Waves%us_x(I,j,k)+Waves%us_x(I,j-1,k)) * G%CoriolisBu(I,J))
         v(i,J,k) = v(i,j,k) - DVEL*dt
       enddo
     enddo
