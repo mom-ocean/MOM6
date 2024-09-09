@@ -3588,8 +3588,9 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 end subroutine diabatic_driver_init
 
 !> Routine to register restarts, pass-through to children modules
-subroutine register_diabatic_restarts(G, US, param_file, int_tide_CSp, restart_CSp)
+subroutine register_diabatic_restarts(G, GV, US, param_file, int_tide_CSp, restart_CSp)
   type(ocean_grid_type), intent(in)    :: G           !< The ocean's grid structure
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure
   type(unit_scale_type), intent(in)    :: US          !< A dimensional unit scaling type
   type(param_file_type), intent(in)    :: param_file  !< A structure to parse for run-time parameters
   type(int_tide_CS),     pointer       :: int_tide_CSp !< Internal tide control structure
@@ -3602,7 +3603,7 @@ subroutine register_diabatic_restarts(G, US, param_file, int_tide_CSp, restart_C
   call read_param(param_file, "INTERNAL_TIDES", use_int_tides)
 
   if (use_int_tides) then
-    call register_int_tide_restarts(G, US, param_file, int_tide_CSp, restart_CSp)
+    call register_int_tide_restarts(G, GV, US, param_file, int_tide_CSp, restart_CSp)
   endif
 
 end subroutine register_diabatic_restarts
