@@ -2778,7 +2778,7 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "VISC_REM_CONT_HVEL_FIX", CS%visc_rem_hvel_fix, &
                  "If true, velocity cell thickness h_[uv] from the continuity solver "//&
                  "is not multiplied by visc_rem_[uv]. Default of this flag is set by "//&
-                 "VISC_REM_BUG.", default=.not.visc_rem_bug)
+                 "VISC_REM_BUG.", default=.False.) !, default=.not.visc_rem_bug)
   CS%diag => diag
 
   id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)
