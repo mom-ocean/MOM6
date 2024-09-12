@@ -83,19 +83,21 @@ export FMS_URL
 # TODO: This needs more automated configuration
 MPIRUN ?= mpirun
 
-# Generic compiler variables are pass through to the builds
+# Generic compiler variables are passed through to the builds
 export CC
 export MPICC
 export FC
 export MPIFC
 
 # Builds are distinguished by FCFLAGS
-FCFLAGS_DEBUG ?= -g -O0
+FCFLAGS ?= -g -O0
+
+FCFLAGS_DEBUG ?= $(FCFLAGS)
 FCFLAGS_REPRO ?= -g -O2
 FCFLAGS_OPT ?= -g -O3 -mavx -fno-omit-frame-pointer
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?= -g -O0 -fbacktrace --coverage
-FCFLAGS_FMS ?= $(FCFLAGS_DEBUG)
+FCFLAGS_FMS ?= $(FCFLAGS)
 # Additional notes:
 # - These default values are simple, minimalist flags, supported by nearly all
 #   compilers, and are somewhat analogous to GFDL's DEBUG and REPRO builds.
