@@ -49,9 +49,14 @@ type, public :: PressureForce_FV_CS ; private
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                             !! timing of diagnostic output.
   integer :: MassWghtInterp !< A flag indicating whether and how to use mass weighting in T/S interpolation
-  logical :: correction_intxpa !< If true, apply a correction to surface intxpa under ice.
-  logical :: correction_intxpa_5pt !< Use 5 point quadrature to calculate surface intxpa
-  logical :: reset_intxpa_integral !< In the interior, reset intxpa at a trusted cell (for ice shelf)
+  logical :: correction_intxpa !< If true, apply a correction to the value of intxpa at a selected
+                            !! interface under ice, using matching at the end values along with a
+                            !! 5-point quadrature integral of the hydrostatic pressure or height
+                            !! changes along that interface.  The selected interface is either at the
+                            !! ocean's surface or in the interior, depending on reset_intxpa_integral.
+  logical :: reset_intxpa_integral !< If true and the surface displacement between adjacent cells
+                            !! exceeds the vertical grid spacing, reset intxpa at the interface below
+                            !! a trusted interior cell.  (This often applies in ice shelf cavities.)
   real    :: h_nonvanished  !< A minimal layer thickness that indicates that a layer is thick enough
                             !! to usefully reestimate the pressure integral across the interface
                             !! below it [H ~> m or kg m-2]
@@ -235,7 +240,6 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
 
 !  real :: oneatm       ! 1 standard atmosphere of pressure in [R L2 T-2 ~> Pa]
   real, parameter :: C1_6 = 1.0/6.0  ! [nondim]
-  real, parameter :: C1_12 = 1.0/12.0  ! A rational constant [nondim]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
@@ -461,89 +465,52 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   endif
 
   if (CS%correction_intxpa) then
-    if (CS%correction_intxpa_5pt) then
-      ! This version makes a 5 point quadrature correction for hydrostatic variations in surface
-      ! pressure under ice.
-      !$OMP parallel do default(shared) private(dp_sfc,T5,S5,p5,wt_R,SpV5)
-      do j=js,je ; do I=Isq,Ieq
-        intx_za_cor(I,j) = 0.0
-        dp_sfc = (p(i+1,j,1) - p(i,j,1))
-        ! If the changes in pressure and height anomaly were explicable by just a hydrostatic balance,
-        ! the implied specific volume would be   SpV_implied = alpha_ref - (dza_x / dp_x)
-        if (dp_sfc * (alpha_ref*dp_sfc - (za(i+1,j,1)-za(i,j,1))) > 0.0) then
-          T5(1) = T_top(i,j) ; T5(5) = T_top(i+1,j)
-          S5(1) = S_top(i,j) ; S5(5) = S_top(i+1,j)
-          p5(1) = p(i,j,1)   ; p5(5) = p(i+1,j,1)
-          do m=2,4
-            wt_R =  0.25*real(m-1)
-            T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
-            S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
-            p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
-          enddo !m
-          call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
-          ! See the Boussinesq calculation of inty_pa_cor for the derivation of the following expression.
-          intx_za_cor(I,j) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * dp_sfc
-          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
-        endif
-        intx_za(I,j,1) = 0.5*(za(i,j,1) + za(i+1,j,1)) + intx_za_cor(I,j)
-      enddo ; enddo
-      !$OMP parallel do default(shared) private(dp_sfc,T5,S5,p5,wt_R,SpV5)
-      do J=Jsq,Jeq ; do i=is,ie
-        inty_za_cor(i,J) = 0.0
-        dp_sfc = (p(i,j+1,1) - p(i,j,1))
-        if (dp_sfc * (alpha_ref*dp_sfc - (za(i,j+1,1)-za(i,j,1))) > 0.0) then
-          ! The pressure/depth relationship has a positive implied specific volume.
-          T5(1) = T_top(i,j) ; T5(5) = T_top(i,j+1)
-          S5(1) = S_top(i,j) ; S5(5) = S_top(i,j+1)
-          p5(1) = p(i,j,1)   ; p5(5) = p(i,j+1,1)
-          do m=2,4
-            wt_R =  0.25*real(m-1)
-            T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
-            S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
-            p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
-          enddo !m
-          call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
-          ! See the Boussinesq calculation of inty_pa_cor for the derivation of the following expression.
-          inty_za_cor(i,J) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * dp_sfc
-        endif
-        inty_za(i,J,1) = 0.5*(za(i,j,1) + za(i,j+1,1)) + inty_za_cor(i,J)
-      enddo ; enddo
-    else
-      ! This version makes a parabolic correction for hydrostatic variations in surface pressure under ice.
-
-      ! Determine surface specific volume for use in the pressure gradient corrections
-      do j=Jsq,Jeq+1
-        call calculate_spec_vol(T_top(:,j), S_top(:,j), p(:,j,1), SpV_top(:,j), &
-                                tv%eqn_of_state, EOSdom, spv_ref=alpha_ref)
-      enddo
-
-      !$OMP parallel do default(shared) private(dp_sfc)
-      do j=js,je ; do I=Isq,Ieq
-        intx_za_cor(I,j) = 0.0
-        dp_sfc = (p(i+1,j,1) - p(i,j,1))
-        ! If the changes in pressure and height anomaly were explicable by just a hydrostatic balance,
-        ! the implied specific volume would be   SpV_implied = alpha_ref - (dza_x / dp_x)
-        if (dp_sfc * (alpha_ref*dp_sfc - (za(i+1,j,1)-za(i,j,1))) > 0.0) then
-          ! The pressure/depth relationship has a positive implied specific volume.
-          ! In non-Bousinesq mode, no other restrictions seem to be needed, and even the test
-          ! above might be unnecessary, but a test for the implied specific volume being at least
-          ! half the average specific volume would be:
-          ! if ((alpha_ref - dza / dp) > 0.25*((SpV_top(i+1,j)+SpV_top(i,j)) + 2.0*alpha_ref)) &
-          intx_za_cor(I,j) = C1_12 * (SpV_top(i+1,j)-SpV_top(i,j)) * dp_sfc
-        endif
-        intx_za(I,j,1) = 0.5*(za(i,j,1) + za(i+1,j,1)) + intx_za_cor(I,j)
-      enddo ; enddo
-      !$OMP parallel do default(shared) private(dp_sfc)
-      do J=Jsq,Jeq ; do i=is,ie
-        inty_za_cor(i,J) = 0.0
-        dp_sfc = (p(i,j+1,1) - p(i,j,1))
-        if (dp_sfc * (alpha_ref*dp_sfc - (za(i,j+1,1)-za(i,j,1))) > 0.0) then
-          ! The pressure/depth relationship has a positive implied specific volume.
-          inty_za_cor(i,J) = C1_12 * (SpV_top(i,j+1)-SpV_top(i,j)) * dp_sfc
-        endif
-        inty_za(i,J,1) = 0.5*(za(i,j,1) + za(i,j+1,1)) + inty_za_cor(i,J)
-      enddo ; enddo
-    endif
+    ! This version makes a 5 point quadrature correction for hydrostatic variations in surface
+    ! pressure under ice.
+    !$OMP parallel do default(shared) private(dp_sfc,T5,S5,p5,wt_R,SpV5)
+    do j=js,je ; do I=Isq,Ieq
+      intx_za_cor(I,j) = 0.0
+      dp_sfc = (p(i+1,j,1) - p(i,j,1))
+      ! If the changes in pressure and height anomaly were explicable by just a hydrostatic balance,
+      ! the implied specific volume would be   SpV_implied = alpha_ref - (dza_x / dp_x)
+      if (dp_sfc * (alpha_ref*dp_sfc - (za(i+1,j,1)-za(i,j,1))) > 0.0) then
+        T5(1) = T_top(i,j) ; T5(5) = T_top(i+1,j)
+        S5(1) = S_top(i,j) ; S5(5) = S_top(i+1,j)
+        p5(1) = p(i,j,1)   ; p5(5) = p(i+1,j,1)
+        do m=2,4
+          wt_R =  0.25*real(m-1)
+          T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
+          S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
+          p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
+        enddo !m
+        call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
+        ! See the Boussinesq calculation of inty_pa_cor for the derivation of the following expression.
+        intx_za_cor(I,j) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * dp_sfc
+        ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+      endif
+      intx_za(I,j,1) = 0.5*(za(i,j,1) + za(i+1,j,1)) + intx_za_cor(I,j)
+    enddo ; enddo
+    !$OMP parallel do default(shared) private(dp_sfc,T5,S5,p5,wt_R,SpV5)
+    do J=Jsq,Jeq ; do i=is,ie
+      inty_za_cor(i,J) = 0.0
+      dp_sfc = (p(i,j+1,1) - p(i,j,1))
+      if (dp_sfc * (alpha_ref*dp_sfc - (za(i,j+1,1)-za(i,j,1))) > 0.0) then
+        ! The pressure/depth relationship has a positive implied specific volume.
+        T5(1) = T_top(i,j) ; T5(5) = T_top(i,j+1)
+        S5(1) = S_top(i,j) ; S5(5) = S_top(i,j+1)
+        p5(1) = p(i,j,1)   ; p5(5) = p(i,j+1,1)
+        do m=2,4
+          wt_R =  0.25*real(m-1)
+          T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
+          S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
+          p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
+        enddo !m
+        call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
+        ! See the Boussinesq calculation of inty_pa_cor for the derivation of the following expression.
+        inty_za_cor(i,J) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * dp_sfc
+      endif
+      inty_za(i,J,1) = 0.5*(za(i,j,1) + za(i,j+1,1)) + inty_za_cor(i,J)
+    enddo ; enddo
   else
     !   This order of integrating upward and then downward again is necessary with
     ! a nonlinear equation of state, so that the surface geopotentials will go
@@ -639,42 +606,27 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
       endif ; enddo ; enddo
     endif
 
-    if (CS%correction_intxpa_5pt) then
-      do j=js,je
-        do I=Isq,Ieq
-          ! This expression assumes that temperature and salinity vary linearly with pressure
-          ! between the corners of the reference interfaces found above to get a correction to
-          ! intx_pa that takes nonlinearities in the equation of state into account.
-          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
-          ! linear correction so that the pressures and heights match at the end-points.  It turns
-          ! out that this linear correction cancels out the mid-point specific volume.
-          ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
-          T5(1) = T_Int_W(I,j) ; S5(1) = S_Int_W(I,j) ; p5(1) = p_Int_W(I,j)
-          T5(5) = T_Int_E(I,j) ; S5(5) = S_Int_E(I,j) ; p5(5) = p_Int_E(I,j)
-          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
-          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
-          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
-          call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
+    do j=js,je
+      do I=Isq,Ieq
+        ! This expression assumes that temperature and salinity vary linearly with pressure
+        ! between the corners of the reference interfaces found above to get a correction to
+        ! intx_pa that takes nonlinearities in the equation of state into account.
+        ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+        ! linear correction so that the pressures and heights match at the end-points.  It turns
+        ! out that this linear correction cancels out the mid-point specific volume.
+        ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
+        T5(1) = T_Int_W(I,j) ; S5(1) = S_Int_W(I,j) ; p5(1) = p_Int_W(I,j)
+        T5(5) = T_Int_E(I,j) ; S5(5) = S_Int_E(I,j) ; p5(5) = p_Int_E(I,j)
+        T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+        S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+        p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+        call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
 
-          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
-          intx_za_cor_ri(I,j) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * &
-                                        dp_int_x(I,j) - intx_za_nonlin(I,j)
-        enddo
+        ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+        intx_za_cor_ri(I,j) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * &
+                                      dp_int_x(I,j) - intx_za_nonlin(I,j)
       enddo
-    else
-      do j=js,je
-        call calculate_spec_vol(T_int_W(:,j), S_int_W(:,j), p_int_W(:,j), SpV_x_W(:,j), &
-                                tv%eqn_of_state, EOSdom_u, spv_ref=alpha_ref)
-        call calculate_spec_vol(T_int_E(:,j), S_int_E(:,j), p_int_E(:,j), SpV_x_E(:,j), &
-                              tv%eqn_of_state, EOSdom_u, spv_ref=alpha_ref)
-        do I=Isq,Ieq
-          ! This expression assumes that specific volume varies linearly with depth between the corners of the
-          ! reference interfaces found above to get a vertically uniform correction to intx_za.
-          ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
-          intx_za_cor_ri(I,j) = C1_12 * (SpV_x_E(I,j)-SpV_x_W(I,j)) * dp_int_x(I,j) - intx_za_nonlin(I,j)
-        enddo
-      enddo
-    endif
+    enddo
 
     ! Repeat the calculations above for v-velocity points.
     T_int_S(:,:) = 0.0 ; S_int_S(:,:) = 0.0 ; p_int_S(:,:) = 0.0
@@ -730,42 +682,27 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
       endif ; enddo ; enddo
     endif
 
-    if (CS%correction_intxpa_5pt) then
-      do J=Jsq,Jeq
-        do i=is,ie
-          ! This expression assumes that temperature and salinity vary linearly with pressure
-          ! between the corners of the reference interfaces found above to get a correction to
-          ! intx_pa that takes nonlinearities in the equation of state into account.
-          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
-          ! linear correction so that the pressures and heights match at the end-points.  It turns
-          ! out that this linear correction cancels out the mid-point specific volume.
-          ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
-          T5(1) = T_Int_S(i,J) ; S5(1) = S_Int_S(i,J) ; p5(1) = p_Int_S(i,J)
-          T5(5) = T_Int_N(i,J) ; S5(5) = S_Int_N(i,J) ; p5(5) = p_Int_N(i,J)
-          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
-          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
-          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
-          call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
+    do J=Jsq,Jeq
+      do i=is,ie
+        ! This expression assumes that temperature and salinity vary linearly with pressure
+        ! between the corners of the reference interfaces found above to get a correction to
+        ! intx_pa that takes nonlinearities in the equation of state into account.
+        ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+        ! linear correction so that the pressures and heights match at the end-points.  It turns
+        ! out that this linear correction cancels out the mid-point specific volume.
+        ! This can be used without masking because dp_int_x and intx_za_nonlin are 0 over land.
+        T5(1) = T_Int_S(i,J) ; S5(1) = S_Int_S(i,J) ; p5(1) = p_Int_S(i,J)
+        T5(5) = T_Int_N(i,J) ; S5(5) = S_Int_N(i,J) ; p5(5) = p_Int_N(i,J)
+        T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+        S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+        p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+        call calculate_spec_vol(T5, S5, p5, SpV5, tv%eqn_of_state, spv_ref=alpha_ref)
 
-          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
-          inty_za_cor_ri(i,J) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * &
-                                        dp_int_y(i,J) - inty_za_nonlin(i,J)
-        enddo
+        ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+        inty_za_cor_ri(i,J) = C1_90 * (4.75*(SpV5(5)-SpV5(1)) + 5.5*(SpV5(4)-SpV5(2))) * &
+                                      dp_int_y(i,J) - inty_za_nonlin(i,J)
       enddo
-    else
-      do J=Jsq,Jeq
-        call calculate_spec_vol(T_int_S(:,J), S_int_S(:,J), p_int_S(:,J), SpV_y_S(:,J), &
-                               tv%eqn_of_state, EOSdom_v, spv_ref=alpha_ref)
-        call calculate_spec_vol(T_int_N(:,J), S_int_N(:,J), p_int_N(:,J), SpV_y_N(:,J), &
-                               tv%eqn_of_state, EOSdom_v, spv_ref=alpha_ref)
-        do i=is,ie
-          ! This expression assumes that specific volume varies linearly with depth between the corners of the
-          ! reference interfaces found above to get a vertically uniform correction to inty_pa.
-          ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
-          inty_za_cor_ri(i,J) = C1_12 * (SpV_y_N(i,J)-SpV_y_S(i,J)) * dp_int_y(i,J) - inty_za_nonlin(i,J)
-        enddo
-      enddo
-    endif
+    enddo
 
     if (CS%debug) then
       call uvchksum("Pre-reset int[xy]_za", intx_za, inty_za, G%HI, haloshift=0, &
@@ -1019,6 +956,14 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   real :: dz_neglect         ! A minimal thickness [Z ~> m], like e.
   real :: H_to_RL2_T2        ! A factor to convert from thickness units (H) to pressure
                              ! units [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1].
+  real :: T5(5)         ! Temperatures and salinities at five quadrature points [C ~> degC]
+  real :: S5(5)         ! Salinities at five quadrature points [S ~> ppt]
+  real :: p5(5)         ! Full pressures at five quadrature points for use with the equation of state [R L2 T-2 ~> Pa]
+  real :: pa5(5)        ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at five quadrature points [R L2 T-2 ~> Pa].
+  real :: r5(5)         ! Densities at five quadrature points [R ~> kg m-3]
+  real :: wt_R          ! A weighting factor [nondim]
+  real, parameter :: C1_6 = 1.0/6.0    ! A rational constant [nondim]
+  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
   logical :: use_ALE         ! If true, use an ALE pressure reconstruction.
   logical :: use_EOS         ! If true, density is calculated from T & S using an equation of state.
@@ -1030,15 +975,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   integer, dimension(2) :: EOSdom_v ! The i-computational domain for the equation of state at v-velocity points
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k, m, k2
-  real :: T5(5)         ! Temperatures and salinities at five quadrature points [C ~> degC]
-  real :: S5(5)         ! Salinities at five quadrature points [S ~> ppt]
-  real :: p5(5)         ! Full pressures at five quadrature points for use with the equation of state [R L2 T-2 ~> Pa]
-  real :: pa5(5)        ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at five quadrature points [R L2 T-2 ~> Pa].
-  real :: r5(5)         ! Densities at five quadrature points [R ~> kg m-3]
-  real :: wt_R       ! A weighting factor [nondim]
-  real, parameter :: C1_6 = 1.0/6.0    ! A rational constant [nondim]
-  real, parameter :: C1_12 = 1.0/12.0  ! A rational constant [nondim]
-  real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   nkmb=GV%nk_rho_varies
@@ -1328,31 +1264,27 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
             0.25*((rho_top(i+1,j)+rho_top(i,j))-2.0*rho_ref) * dz_geo_sfc**2) then
           ! The pressure difference is at least half the size of the difference expected by hydrostatic
           ! balance.  This test gets rid of pressure differences that are small, e.g. open ocean.
-          if (CS%correction_intxpa_5pt) then
-            ! Use 5 point quadrature to calculate intxpa
-            T5(1) = T_top(i,j) ; T5(5) = T_top(i+1,j)
-            S5(1) = S_top(i,j) ; S5(5) = S_top(i+1,j)
-            pa5(1) = pa(i,j,1) ; pa5(5) = pa(i+1,j,1)
-            ! Pressure input to density EOS is consistent with the pressure used in the int_density_dz routines.
-            p5(1) = -GxRho*(e(i,j,1) - Z_0p(i,j))
-            p5(5) = -GxRho*(e(i+1,j,1) - Z_0p(i,j))
-            do m=2,4
-              wt_R =  0.25*real(m-1)
-              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
-              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
-              p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
-            enddo !m
-            call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
+          ! Use 5 point quadrature to calculate intxpa
+          T5(1) = T_top(i,j) ; T5(5) = T_top(i+1,j)
+          S5(1) = S_top(i,j) ; S5(5) = S_top(i+1,j)
+          pa5(1) = pa(i,j,1) ; pa5(5) = pa(i+1,j,1)
+          ! Pressure input to density EOS is consistent with the pressure used in the int_density_dz routines.
+          p5(1) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+          p5(5) = -GxRho*(e(i+1,j,1) - Z_0p(i,j))
+          do m=2,4
+            wt_R =  0.25*real(m-1)
+            T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
+            S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
+            p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
+          enddo !m
+          call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
 
-            ! Use a trapezoidal rule integral of the hydrostatic equation to determine the pressure
-            ! anomalies at 5 equally spaced points along the interface, and then use Boole's rule
-            ! quadrature to find the integrated correction to the integral of pressure along the interface.
-            ! The derivation for this expression is shown below in the y-direction version.
-            intx_pa_cor(I,j) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dz_geo_sfc
-            ! Note that (4.75 + 5.5/2) / 90 = 1/12, so this is consistent with the linear result below.
-          else ! Do not use 5-point quadrature.
-            intx_pa_cor(I,j) = C1_12 * (rho_top(i+1,j)-rho_top(i,j)) * dz_geo_sfc
-          endif
+          ! Use a trapezoidal rule integral of the hydrostatic equation to determine the pressure
+          ! anomalies at 5 equally spaced points along the interface, and then use Boole's rule
+          ! quadrature to find the integrated correction to the integral of pressure along the interface.
+          ! The derivation for this expression is shown below in the y-direction version.
+          intx_pa_cor(I,j) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dz_geo_sfc
+          ! Note that (4.75 + 5.5/2) / 90 = 1/12, so this is consistent with the linear result below.
         endif
       endif
       intx_pa(I,j,1) = 0.5*(pa(i,j,1) + pa(i+1,j,1)) + intx_pa_cor(I,j)
@@ -1367,72 +1299,67 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
             0.25*((rho_top(i,j+1)+rho_top(i,j))-2.0*rho_ref) * dz_geo_sfc**2) then
           ! The pressure difference is at least half the size of the difference expected by hydrostatic
           ! balance.  This test gets rid of pressure differences that are small, e.g. open ocean.
-          if (CS%correction_intxpa_5pt) then
-            ! Use 5 point quadrature to calculate intypa
-            T5(1) = T_top(i,j) ; T5(5) = T_top(i,j+1)
-            S5(1) = S_top(i,j) ; S5(5) = S_top(i,j+1)
-            pa5(1) = pa(i,j,1) ; pa5(5) = pa(i,j+1,1)
-            ! Pressure input to density EOS is consistent with the pressure used in the int_density_dz routines.
-            p5(1) = -GxRho*(e(i,j,1) - Z_0p(i,j))
-            p5(5) = -GxRho*(e(i,j+1,1) - Z_0p(i,j))
+          ! Use 5 point quadrature to calculate intypa
+          T5(1) = T_top(i,j) ; T5(5) = T_top(i,j+1)
+          S5(1) = S_top(i,j) ; S5(5) = S_top(i,j+1)
+          pa5(1) = pa(i,j,1) ; pa5(5) = pa(i,j+1,1)
+          ! Pressure input to density EOS is consistent with the pressure used in the int_density_dz routines.
+          p5(1) = -GxRho*(e(i,j,1) - Z_0p(i,j))
+          p5(5) = -GxRho*(e(i,j+1,1) - Z_0p(i,j))
 
-            do m=2,4
-              wt_R =  0.25*real(m-1)
-              T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
-              S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
-              p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
-            enddo !m
-            call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
+          do m=2,4
+            wt_R =  0.25*real(m-1)
+            T5(m) = T5(1) + (T5(5)-T5(1))*wt_R
+            S5(m) = S5(1) + (S5(5)-S5(1))*wt_R
+            p5(m) = p5(1) + (p5(5)-p5(1))*wt_R
+          enddo !m
+          call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
 
-            ! Use a trapezoidal rule integral of the hydrostatic equation to determine the pressure
-            ! anomalies at 5 equally spaced points along the interface, and then use Boole's rule
-            ! quadrature to find the integrated correction to the integral of pressure along the interface.
-            inty_pa_cor(i,J) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dz_geo_sfc
+          ! Use a trapezoidal rule integral of the hydrostatic equation to determine the pressure
+          ! anomalies at 5 equally spaced points along the interface, and then use Boole's rule
+          ! quadrature to find the integrated correction to the integral of pressure along the interface.
+          inty_pa_cor(i,J) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dz_geo_sfc
 
-            ! The derivation of this correction follows:
+          ! The derivation of this correction follows:
 
-            ! Make pressure curvature a difference from the linear fit of pressure between the two points
-            ! (which is equivalent to taking 4 trapezoidal rule integrals of the hydrostatic equation on
-            ! sub-segments), with a constant slope that is chosen so that the pressure anomalies at the
-            ! two ends of the segment agree with their known values.
-            ! d_geo_8 = 0.125*dz_geo_sfc
-            ! dpa_subseg = 0.25*(pa5(5)-pa5(1)) + &
-            !              0.25*d_geo_8 * ((r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3)))
-            ! do m=2,4
-            !   pa5(m) = pa5(m-1) + dpa_subseg - d_geo_8*(r5(m)+r5(m-1)))
-            ! enddo
+          ! Make pressure curvature a difference from the linear fit of pressure between the two points
+          ! (which is equivalent to taking 4 trapezoidal rule integrals of the hydrostatic equation on
+          ! sub-segments), with a constant slope that is chosen so that the pressure anomalies at the
+          ! two ends of the segment agree with their known values.
+          ! d_geo_8 = 0.125*dz_geo_sfc
+          ! dpa_subseg = 0.25*(pa5(5)-pa5(1)) + &
+          !              0.25*d_geo_8 * ((r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3)))
+          ! do m=2,4
+          !   pa5(m) = pa5(m-1) + dpa_subseg - d_geo_8*(r5(m)+r5(m-1)))
+          ! enddo
 
-            ! Explicitly finding expressions for the incremental pressures from the recursion relation above:
-            ! pa5(2) = 0.25*(3.*pa5(1) + pa5(5)) + 0.25*d_geo_8 * ( (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) )
-            ! ! pa5(3) = 0.5*(pa5(1) + pa5(5)) + 0.25*d_geo_8 * &
-            ! !   ( (r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3)) + &
-            ! !     (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) - 4.*(r5(3)+r5(2)) )
-            ! pa5(3) = 0.5*(pa5(1) + pa5(5)) + d_geo_8 * (0.5*(r5(5)-r5(1)) + (r5(4)-r5(2)) )
-            ! ! pa5(4) = 0.25*(pa5(1) + 3.0*pa5(5)) + 0.25*d_geo_8 * &
-            ! !   (2.0*(r5(5)-r5(1)) + 4.0*(r5(4)-r5(2)) + (r5(5)+r5(1)) + &
-            ! !    2.0*(r5(4)+r5(2)) + 2.0*r5(3) - 4.*(r5(4)+r5(3)))
-            ! pa5(4) = 0.25*(pa5(1) + 3.0*pa5(5)) + 0.25*d_geo_8 * ( (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3)) )
-            ! ! pa5(5) = pa5(5) + 0.25*d_geo_8 * &
-            ! !     ( (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3)) + &
-            ! !      ((r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3))) - 4.*(r5(5)+r5(4)) )
-            ! pa5(5) = pa5(5)  ! As it should.
+          ! Explicitly finding expressions for the incremental pressures from the recursion relation above:
+          ! pa5(2) = 0.25*(3.*pa5(1) + pa5(5)) + 0.25*d_geo_8 * ( (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) )
+          ! ! pa5(3) = 0.5*(pa5(1) + pa5(5)) + 0.25*d_geo_8 * &
+          ! !   ( (r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3)) + &
+          ! !     (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) - 4.*(r5(3)+r5(2)) )
+          ! pa5(3) = 0.5*(pa5(1) + pa5(5)) + d_geo_8 * (0.5*(r5(5)-r5(1)) + (r5(4)-r5(2)) )
+          ! ! pa5(4) = 0.25*(pa5(1) + 3.0*pa5(5)) + 0.25*d_geo_8 * &
+          ! !   (2.0*(r5(5)-r5(1)) + 4.0*(r5(4)-r5(2)) + (r5(5)+r5(1)) + &
+          ! !    2.0*(r5(4)+r5(2)) + 2.0*r5(3) - 4.*(r5(4)+r5(3)))
+          ! pa5(4) = 0.25*(pa5(1) + 3.0*pa5(5)) + 0.25*d_geo_8 * ( (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3)) )
+          ! ! pa5(5) = pa5(5) + 0.25*d_geo_8 * &
+          ! !     ( (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3)) + &
+          ! !      ((r5(5)+r5(1)) + 2.0*((r5(4)+r5(2)) + r5(3))) - 4.*(r5(5)+r5(4)) )
+          ! pa5(5) = pa5(5)  ! As it should.
 
-            ! From these:
-            ! pa5(2) + pa5(4) = (pa5(1) + pa5(5)) + 0.25*d_geo_8 * &
-            !     ( (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) + (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3))
-            ! pa5(2) + pa5(4) = (pa5(1) + pa5(5)) + d_geo_8 * ( (r5(5)-r5(1)) + (r5(4)-r5(2)) )
+          ! From these:
+          ! pa5(2) + pa5(4) = (pa5(1) + pa5(5)) + 0.25*d_geo_8 * &
+          !     ( (r5(5)-3.*r5(1)) + 2.0*((r5(4)-r5(2)) + r5(3)) + (3.*r5(5)-r5(1)) + 2.0*((r5(4)-r5(2)) - r5(3))
+          ! pa5(2) + pa5(4) = (pa5(1) + pa5(5)) + d_geo_8 * ( (r5(5)-r5(1)) + (r5(4)-r5(2)) )
 
-            ! Get the correction from the difference between the 5-point quadrature integral of pa5 and
-            ! its trapezoidal rule integral as:
-            ! inty_pa_cor(i,J) = C1_90*(7.0*(pa5(1)+pa5(5)) + 32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 0.5*(pa5(1)+pa5(5)))
-            ! inty_pa_cor(i,J) = C1_90*((32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 38.0*(pa5(1)+pa5(5)))
-            ! inty_pa_cor(i,J) = C1_90*d_geo_8 * ((32.0*( (r5(5)-r5(1)) + (r5(4)-r5(2)) ) + &
-            !                                      (6.*(r5(5)-r5(1)) + 12.0*(r5(4)-r5(2)) ))
-            ! inty_pa_cor(i,J) = C1_90*d_geo_8 * ( 38.0*(r5(5)-r5(1)) + 44.0*(r5(4)-r5(2)) )
-
-          else ! Do not use 5-point quadrature.
-            inty_pa_cor(i,J) = C1_12 * (rho_top(i,j+1)-rho_top(i,j)) * dz_geo_sfc
-          endif
+          ! Get the correction from the difference between the 5-point quadrature integral of pa5 and
+          ! its trapezoidal rule integral as:
+          ! inty_pa_cor(i,J) = C1_90*(7.0*(pa5(1)+pa5(5)) + 32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 0.5*(pa5(1)+pa5(5)))
+          ! inty_pa_cor(i,J) = C1_90*((32.0*(pa5(2)+pa5(4)) + 12.0*pa5(3)) - 38.0*(pa5(1)+pa5(5)))
+          ! inty_pa_cor(i,J) = C1_90*d_geo_8 * ((32.0*( (r5(5)-r5(1)) + (r5(4)-r5(2)) ) + &
+          !                                      (6.*(r5(5)-r5(1)) + 12.0*(r5(4)-r5(2)) ))
+          ! inty_pa_cor(i,J) = C1_90*d_geo_8 * ( 38.0*(r5(5)-r5(1)) + 44.0*(r5(4)-r5(2)) )
         endif
       endif
       inty_pa(i,J,1) = 0.5*(pa(i,j,1) + pa(i,j+1,1)) + inty_pa_cor(i,J)
@@ -1537,42 +1464,27 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       endif ; enddo ; enddo
     endif
 
-    if (CS%correction_intxpa_5pt) then
-      do j=js,je
-        do I=Isq,Ieq
-          ! This expression assumes that temperature and salinity vary linearly with hieght
-          ! between the corners of the reference interfaces found above to get a correction to
-          ! intx_pa that takes nonlinearities in the equation of state into account.
-          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
-          ! linear correction so that the pressures and heights match at the end-points.  It turns
-          ! out that this linear correction cancels out the mid-point density anomaly.
-          ! This can be used without masking because dgeo_x and intx_pa_nonlin are 0 over land.
-          T5(1) = T_Int_W(I,j) ; S5(1) = S_Int_W(I,j) ; p5(1) = p_Int_W(I,j)
-          T5(5) = T_Int_E(I,j) ; S5(5) = S_Int_E(I,j) ; p5(5) = p_Int_E(I,j)
-          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
-          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
-          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
-          call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
+    do j=js,je
+      do I=Isq,Ieq
+        ! This expression assumes that temperature and salinity vary linearly with hieght
+        ! between the corners of the reference interfaces found above to get a correction to
+        ! intx_pa that takes nonlinearities in the equation of state into account.
+        ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+        ! linear correction so that the pressures and heights match at the end-points.  It turns
+        ! out that this linear correction cancels out the mid-point density anomaly.
+        ! This can be used without masking because dgeo_x and intx_pa_nonlin are 0 over land.
+        T5(1) = T_Int_W(I,j) ; S5(1) = S_Int_W(I,j) ; p5(1) = p_Int_W(I,j)
+        T5(5) = T_Int_E(I,j) ; S5(5) = S_Int_E(I,j) ; p5(5) = p_Int_E(I,j)
+        T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+        S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+        p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+        call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
 
-          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
-          intx_pa_cor_ri(I,j) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dgeo_x(I,j) - &
-                                intx_pa_nonlin(I,j)
-        enddo
+        ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+        intx_pa_cor_ri(I,j) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dgeo_x(I,j) - &
+                              intx_pa_nonlin(I,j)
       enddo
-    else
-      do j=js,je
-        call calculate_density(T_int_W(:,j), S_int_W(:,j), p_int_W(:,j), rho_x_W(:,j), &
-                               tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
-        call calculate_density(T_int_E(:,j), S_int_E(:,j), p_int_E(:,j), rho_x_E(:,j), &
-                               tv%eqn_of_state, EOSdom_u, rho_ref=rho_ref)
-        do I=Isq,Ieq
-          ! This expression assumes that density varies linearly with depth between the corners of the
-          ! reference interfaces found above to get a vertically uniform correction to intx_pa.
-          ! This can be used without masking because dgeo_x and intx_pa_nonlin are 0 over land.
-          intx_pa_cor_ri(I,j) = C1_12 * (rho_x_E(I,j)-rho_x_W(I,j)) * dgeo_x(I,j) - intx_pa_nonlin(I,j)
-        enddo
-      enddo
-    endif
+    enddo
 
     ! Repeat the calculations above for v-velocity points.
     T_int_S(:,:) = 0.0 ; S_int_S(:,:) = 0.0 ; p_int_S(:,:) = 0.0
@@ -1633,42 +1545,27 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
       endif ; enddo ; enddo
     endif
 
-    if (CS%correction_intxpa_5pt) then
-      do J=Jsq,Jeq
-        do i=is,ie
-          ! This expression assumes that temperature and salinity vary linearly with hieght
-          ! between the corners of the reference interfaces found above to get a correction to
-          ! intx_pa that takes nonlinearities in the equation of state into account.
-          ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
-          ! linear correction so that the pressures and heights match at the end-points.  It turns
-          ! out that this linear correction cancels out the mid-point density anomaly.
-          ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
-          T5(1) = T_Int_S(i,J) ; S5(1) = S_Int_S(i,J) ; p5(1) = p_Int_S(i,J)
-          T5(5) = T_Int_N(i,J) ; S5(5) = S_Int_N(i,J) ; p5(5) = p_Int_N(i,J)
-          T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
-          S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
-          p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
-          call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
+    do J=Jsq,Jeq
+      do i=is,ie
+        ! This expression assumes that temperature and salinity vary linearly with hieght
+        ! between the corners of the reference interfaces found above to get a correction to
+        ! intx_pa that takes nonlinearities in the equation of state into account.
+        ! It is derived from a 5 point quadrature estimate of the integral with a large-scale
+        ! linear correction so that the pressures and heights match at the end-points.  It turns
+        ! out that this linear correction cancels out the mid-point density anomaly.
+        ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
+        T5(1) = T_Int_S(i,J) ; S5(1) = S_Int_S(i,J) ; p5(1) = p_Int_S(i,J)
+        T5(5) = T_Int_N(i,J) ; S5(5) = S_Int_N(i,J) ; p5(5) = p_Int_N(i,J)
+        T5(2) = 0.25*(3.0*T5(1) + T5(5)) ; T5(4) = 0.25*(3.0*T5(5) + T5(1)) ; T5(3) = 0.5*(T5(5) + T5(1))
+        S5(2) = 0.25*(3.0*S5(1) + S5(5)) ; S5(4) = 0.25*(3.0*S5(5) + S5(1)) ; S5(3) = 0.5*(S5(5) + S5(1))
+        p5(2) = 0.25*(3.0*p5(1) + p5(5)) ; p5(4) = 0.25*(3.0*p5(5) + p5(1)) ; p5(3) = 0.5*(p5(5) + p5(1))
+        call calculate_density(T5, S5, p5, r5, tv%eqn_of_state, rho_ref=rho_ref)
 
-          ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
-          inty_pa_cor_ri(i,J) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dgeo_y(i,J) - &
-                                inty_pa_nonlin(i,J)
-        enddo
+        ! Note the consistency with the linear form below because (4.75 + 5.5/2) / 90 = 1/12
+        inty_pa_cor_ri(i,J) = C1_90 * (4.75*(r5(5)-r5(1)) + 5.5*(r5(4)-r5(2))) * dgeo_y(i,J) - &
+                              inty_pa_nonlin(i,J)
       enddo
-    else
-      do J=Jsq,Jeq
-        call calculate_density(T_int_S(:,J), S_int_S(:,J), p_int_S(:,J), rho_y_S(:,J), &
-                               tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
-        call calculate_density(T_int_N(:,J), S_int_N(:,J), p_int_N(:,J), rho_y_N(:,J), &
-                               tv%eqn_of_state, EOSdom_v, rho_ref=rho_ref)
-        do i=is,ie
-          ! This expression assumes that density varies linearly with depth between the corners of the
-          ! reference interfaces found above to get a vertically uniform correction to inty_pa.
-          ! This can be used without masking because dgeo_y and inty_pa_nonlin are 0 over land.
-          inty_pa_cor_ri(i,J) = C1_12 * (rho_y_N(i,J)-rho_y_S(i,J)) * dgeo_y(i,J) - inty_pa_nonlin(i,J)
-        enddo
-      enddo
-    endif
+    enddo
 
     ! Correct intx_pa and inty_pa at each interface using vertically constant corrections.
     do K=1,nz+1 ; do j=js,je ; do I=Isq,Ieq
@@ -1931,13 +1828,8 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   call get_param(param_file, mdl, "RESET_INTXPA_INTEGRAL", CS%reset_intxpa_integral, &
                  "If true, reset INTXPA to match pressures at first nonvanished cell. "//&
                  "Includes pressure correction.", default=.false., do_not_log=.not.use_EOS)
-  call get_param(param_file, mdl, "CORRECTION_INTXPA_5PT", CS%correction_intxpa_5pt, &
-                 "If true, use 5-point quadrature to calculate the corrections to intxpa or intxza. "//&
-                 "This option only acts if CORRECTION_INTXPA = True or RESET_INTXPA_INTEGRAL = True.", &
-                 default=.false., do_not_log=.not.use_EOS)
   if (.not.use_EOS) then  ! These options do nothing without an equation of state.
     CS%correction_intxpa = .false.
-    CS%correction_intxpa_5pt = .false.
     CS%reset_intxpa_integral = .false.
   endif
   call get_param(param_file, mdl, "RESET_INTXPA_H_NONVANISHED", CS%h_nonvanished, &
