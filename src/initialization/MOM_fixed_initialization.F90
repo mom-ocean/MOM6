@@ -146,6 +146,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
   endif
 
   ! Read sub-grid scale topography parameters at velocity points used for porous barrier calculation
+  ! TODO: The following routine call may eventually be merged as one of the CHANNEL_CONFIG options
   call get_param(PF, mdl, "SUBGRID_TOPO_AT_VEL", read_porous_file, &
                  "If true, use variables from TOPO_AT_VEL_FILE as parameters for porous barrier.", &
                  default=.False.)
