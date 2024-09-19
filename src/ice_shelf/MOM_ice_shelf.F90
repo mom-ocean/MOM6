@@ -824,7 +824,7 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
       ISS%dhdt_shelf(i,j) = (ISS%h_shelf(i,j) - ISS%dhdt_shelf(i,j))*Itime_step
     enddo; enddo
 
-    call IS_dynamics_post_data(time_step, Time, CS%dCS, G)
+    call IS_dynamics_post_data(time_step, Time, CS%dCS, ISS, G)
   endif
 
   if (CS%shelf_mass_is_dynamic) &
@@ -2603,7 +2603,7 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
   call process_and_post_scalar_data(CS, vaf0, vaf0_A, vaf0_G, Ifull_time_step, dh_adott, dh_adott*0.0)
   call disable_averaging(CS%diag)
 
-  call IS_dynamics_post_data(full_time_step, Time, CS%dCS, G)
+  call IS_dynamics_post_data(full_time_step, Time, CS%dCS, ISS, G)
 end subroutine solo_step_ice_shelf
 
 !> Post_data calls for ice-sheet scalars
