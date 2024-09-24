@@ -42,7 +42,6 @@ private :: State_setExport
 !> Get field pointer
 interface State_GetFldPtr
   module procedure State_GetFldPtr_1d
-  module procedure State_GetFldPtr_1d_from_2d
   module procedure State_GetFldPtr_2d
 end interface
 
@@ -850,32 +849,6 @@ subroutine State_GetFldPtr_1d(State, fldname, fldptr, rc)
 
 end subroutine State_GetFldPtr_1d
 
-!> Get specific 1D field pointer from 2D field
-subroutine State_GetFldPtr_1d_from_2d(State, fldname, esmf_ind, fldptr, rc)
-  type(ESMF_State)            , intent(in)  :: State    !< ESMF state
-  character(len=*)            , intent(in)  :: fldname  !< Field name
-  real(ESMF_KIND_R8), pointer               :: fldptr(:)!< Pointer to the 1D field
-  integer,                      intent(in)  :: esmf_ind !< Index into 2D ESMF array
-  integer, optional           , intent(out) :: rc       !< Return code
-
-  ! local variables
-  real(ESMF_KIND_R8), pointer  :: fldptr2d(:,:)!< Pointer to the 1D field
-  type(ESMF_Field) :: lfield
-  integer :: lrc
-  character(len=*),parameter :: subname='(MOM_cap:State_GetFldPtr)'
-
-  call ESMF_StateGet(State, itemName=trim(fldname), field=lfield, rc=lrc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  call ESMF_FieldGet(lfield, farrayPtr=fldptr2d, rc=lrc)
-  if (ChkErr(rc,__LINE__,u_FILE_u)) return
-
-  if (.not. associated(fldptr)) allocate(fldptr(size(fldptr2d,2)))
-  fldptr = fldptr2d(esmf_ind, :)
-
-  if (present(rc)) rc = lrc
-
-end subroutine State_GetFldPtr_1d_from_2d
-
 !> Get field pointer 2D
 subroutine State_GetFldPtr_2d(State, fldname, fldptr, rc)
   type(ESMF_State)            , intent(in)  :: State      !< ESMF state
@@ -940,7 +913,8 @@ subroutine State_GetImport_2d(state, fldname, isc, iec, jsc, jec, output, do_sum
 
       ! get field pointer
       if (present(esmf_ind)) then
-         call state_getfldptr(state, trim(fldname), esmf_ind, dataptr1d, rc)
+         call state_getfldptr(state, trim(fldname), dataptr2d, rc)
+         dataptr1d => dataptr2d(esmf_ind,:)
       else
          call state_getfldptr(state, trim(fldname), dataptr1d, rc)
       endif
