@@ -2371,6 +2371,11 @@ contains  !- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
          ungriddedLBound=(/1/), ungriddedUBound=(/scalar_field_count/), gridToFieldMap=(/2/), rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
+    ! initialize fldptr to zero
+    call ESMF_FieldGet(field, farrayPtr=fldptr2d, rc=rc)
+    if (ChkErr(rc,__LINE__,u_FILE_u)) return
+    fldptr2d(:,:) = 0.0
+
   end subroutine SetScalarField
 
 end subroutine MOM_RealizeFields
