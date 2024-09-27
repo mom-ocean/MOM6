@@ -41,7 +41,7 @@ type, public :: SAL_CS ; private
   integer :: sal_sht_Nd
     !< Maximum degree for spherical harmonic transforms [nodim]
   real, allocatable :: ebot_ref(:,:)
-    !< Reference bottom pressure normalized by Rho_0 and G_Earth[Z ~> m]
+    !< Reference bottom pressure scaled by Rho_0 and G_Earth[Z ~> m]
   real, allocatable :: Love_scaling(:)
     !< Dimensional coefficients for harmonic SAL, which are functions of Love numbers
     !! [nondim or L2 Z-1 T-2 ~> m s-2 or R-1 ~> m3 kg-1 or L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
@@ -56,16 +56,15 @@ contains
 !> This subroutine calculates seawater self-attraction and loading based on either sea surface height (SSH) or bottom
 !! pressure anomaly.  Note that the SAL calculation applies to all motions across the spectrum. Tidal-specific methods
 !! that assume periodicity, i.e. iterative and read-in SAL, are stored in MOM_tidal_forcing module.
-!!     The input field is always assume to have the unit of [Z ~> m], which can be either SSH or total bottom pressure
-!! normalized by mean seawater density Rho_0 and earth gravity G_Earth. For spherical harmonic method, the mean
-!! seawater density would be cancelled by the same parameter in Love Number scalings. If total bottom pressure is used
-!! as input, bottom pressure anomaly is calculated in the subroutine by subtracting a reference pressure from the
-!! input bottom pressure.
-!!     The output field is expressed as geopotential height anomaly, and therefore has the unit of [Z ~> m].
+!! The input field is always assume to have the unit of [Z ~> m], which can be either SSH or total bottom pressure
+!! scaled by mean seawater density Rho_0 and earth gravity G_Earth. For spherical harmonics, the mean seawater density
+!! would be cancelled by the same parameter in Love number scalings. If total bottom pressure is used as input, bottom
+!! pressure anomaly is calculated in the subroutine by subtracting a reference pressure from the input bottom pressure.
+!! The output field is expressed as geopotential height anomaly, and therefore has the unit of [Z ~> m].
 subroutine calc_SAL(eta, eta_sal, G, CS, tmp_scale)
   type(ocean_grid_type), intent(in)  :: G  !< The ocean's grid structure.
   real, dimension(SZI_(G),SZJ_(G)), intent(in)  :: eta     !< The sea surface height anomaly from
-              !! a time-mean geoid or total bottom pressure normalized by mean density [Z ~> m].
+              !! a time-mean geoid or total bottom pressure scaled by mean density and earth gravity [Z ~> m].
   real, dimension(SZI_(G),SZJ_(G)), intent(out) :: eta_sal !< The geopotential height anomaly from
               !! self-attraction and loading [Z ~> m].
   type(SAL_CS), intent(inout) :: CS !< The control structure returned by a previous call to SAL_init.
