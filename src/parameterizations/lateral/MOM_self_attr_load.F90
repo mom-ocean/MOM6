@@ -45,8 +45,8 @@ type, public :: SAL_CS ; private
   real, allocatable :: Love_scaling(:)
     !< Dimensional coefficients for harmonic SAL, which are functions of Love numbers
     !! [nondim or L2 Z-1 T-2 ~> m s-2 or R-1 ~> m3 kg-1 or L2 Z-1 T-2 R-1 ~> m4 s-2 kg-1]
-  real, allocatable :: Snm_Re(:), Snm_Im(:)
-    !< Real and imaginary coefficients for harmonic SAL [Z ~> m or L2 T-2 ~> m2 s-2]
+  real, allocatable :: Snm_Re(:), &    !< Real SHT coefficient for SHT SAL [Z ~> m]
+                       Snm_Im(:)       !< Imaginary SHT coefficient for SHT SAL [Z ~> m]
 end type SAL_CS
 
 integer :: id_clock_SAL   !< CPU clock for self-attraction and loading
