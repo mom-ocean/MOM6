@@ -282,7 +282,7 @@ $(BUILD)/%/MOM6: $(BUILD)/%/Makefile FORCE
 
 # Target codebase should use its own build system
 $(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
-	$(MAKE) -C $(TARGET_CODEBASE)/.testing build/symmetric/MOM6
+	$(MAKE) -C $(TARGET_CODEBASE)/.testing BUILD=build build/symmetric/MOM6
 
 $(BUILD)/target: | $(TARGET_CODEBASE)
 	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/symmetric $@
