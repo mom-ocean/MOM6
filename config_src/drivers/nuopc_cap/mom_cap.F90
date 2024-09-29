@@ -449,9 +449,11 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                                                                  ! (same as restartfile if single restart file)
   character(len=*), parameter            :: subname='(MOM_cap:InitializeAdvertise)'
   character(len=32)                      :: calendar
+  character(len=17)                      :: timestamp
   character(len=:), allocatable          :: rpointer_filename
   integer                                :: inst_index
   logical                                :: i2o_per_cat
+  logical                                :: found=.false.       ! rpointer inquiry
   real(8)                                :: MPI_Wtime, timeiads
 !--------------------------------
 
@@ -487,7 +489,14 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call get_component_instance(gcomp, inst_suffix, inst_index, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ensemble_manager_init(inst_suffix)
-  rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+
+  write(timestamp,'(".",i4.4,"-",i2.2,"-",i2.2,"-",i5.5)'),year,month,day,hour*3600+minute*60+second
+  rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)//timestamp
+  inquire(file=trim(rpointer_filename), exist=found)
+  ! for backward compatibility
+  if (.not. found) then
+     rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+  endif
 #endif
 
   ! reset shr logging to my log file
@@ -1682,7 +1691,6 @@ subroutine ModelAdvance(gcomp, rc)
   integer(ESMF_KIND_I8)                  :: n_interval, time_elapsed_sec
   type(ESMF_Field)                       :: lfield
   type(ESMF_StateItem_Flag)              :: itemType
-  character(len=64)                      :: timestamp
   type (ocean_public_type),      pointer :: ocean_public       => NULL()
   type (ocean_state_type),       pointer :: ocean_state        => NULL()
   type(ice_ocean_boundary_type), pointer :: Ice_ocean_boundary => NULL()
@@ -1708,6 +1716,7 @@ subroutine ModelAdvance(gcomp, rc)
   character(len=*),parameter             :: subname='(MOM_cap:ModelAdvance)'
   character(len=8)                       :: suffix
   character(len=:), allocatable          :: rpointer_filename
+  character(len=17)                      :: timestamp
   integer                                :: num_rest_files
   real(8)                                :: MPI_Wtime, timers
   logical                                :: write_restart
@@ -1909,10 +1918,12 @@ subroutine ModelAdvance(gcomp, rc)
         call ESMF_VMGet(vm, localPet=localPet, rc=rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
-        rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+        write(timestamp,'(".",i4.4,"-",i2.2,"-",i2.2,"-",i5.5)'),year,month,day,hour*3600+minute*60+seconds
 
-        write(restartname,'(A,".mom6.r.",I4.4,"-",I2.2,"-",I2.2,"-",I5.5)') &
-             trim(casename), year, month, day, hour * 3600 + minute * 60 + seconds
+        rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)//timestamp
+
+        write(restartname,'(A,".mom6.r",A)') &
+             trim(casename), timestamp
         call ESMF_LogWrite("MOM_cap: Writing restart :  "//trim(restartname), ESMF_LOGMSG_INFO)
         ! write restart file(s)
         call ocean_model_restart(ocean_state, restartname=restartname, num_rest_files=num_rest_files)
@@ -2234,7 +2245,6 @@ subroutine ocean_model_finalize(gcomp, rc)
   type(ESMF_Time)                        :: currTime
   type(ESMF_Alarm), allocatable          :: alarmList(:)
   integer                                :: alarmCount
-  character(len=64)                      :: timestamp
   logical                                :: write_restart
   character(len=*),parameter  :: subname='(MOM_cap:ocean_model_finalize)'
   real(8)                                :: MPI_Wtime, timefs
