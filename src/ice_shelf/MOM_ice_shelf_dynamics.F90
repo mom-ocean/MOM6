@@ -1081,48 +1081,63 @@ subroutine IS_dynamics_post_data(time_step, Time, CS, ISS, G)
   type(ice_shelf_state),  intent(inout) :: ISS !< A structure with elements that describe
                                                !! the ice-shelf state
   type(ocean_grid_type),  intent(in) :: G  !< The grid structure used by the ice shelf.
-  real, dimension(SZDIB_(G),SZDJB_(G))  :: taud_x, taud_y  !<area-averaged driving stress [R L2 T-2 ~> Pa]
-  real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc !< area-averaged vertically integrated ice viscosity
+  real, dimension(SZDIB_(G),SZDJB_(G))  :: taud_x, taud_y, taud  ! area-averaged driving stress [R L2 T-2 ~> Pa]
+  real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc ! area-averaged vertically integrated ice viscosity
                                                   !! [R L2 Z T-1 ~> Pa s m]
-  real, dimension(SZDI_(G),SZDJ_(G))  :: basal_tr !< area-averaged taub_beta field related to basal traction,
+  real, dimension(SZDI_(G),SZDJ_(G))  :: basal_tr ! area-averaged taub_beta field related to basal traction,
                                                   !! [R L1 T-1 ~> Pa s m-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: surf_slope ! the surface slope of the ice shelf/sheet [nondim]
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: ice_speed ! ice sheet flow speed [L T-1 ~> m s-1]
+
+  integer :: i,j
     call enable_averages(time_step, Time, CS%diag)
     if (CS%id_col_thick > 0) call post_data(CS%id_col_thick, CS%OD_av, CS%diag)
     if (CS%id_u_shelf > 0) call post_data(CS%id_u_shelf, CS%u_shelf, CS%diag)
     if (CS%id_v_shelf > 0) call post_data(CS%id_v_shelf, CS%v_shelf, CS%diag)
-    if (CS%id_shelf_speed > 0) call post_data(CS%id_shelf_speed, sqrt((CS%u_shelf**2) + (CS%v_shelf**2)), CS%diag)
+    if (CS%id_shelf_speed > 0) then
+      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+        ice_speed(I,J) = sqrt((CS%u_shelf(I,J)**2) + (CS%v_shelf(I,J)**2))
+      enddo ; enddo
+      call post_data(CS%id_shelf_speed, ice_speed, CS%diag)
+    endif
 !   if (CS%id_t_shelf > 0) call post_data(CS%id_t_shelf, CS%t_shelf, CS%diag)
     if (CS%id_taudx_shelf > 0) then
-      taud_x(:,:) = CS%taudx_shelf(:,:)*G%IareaBu(:,:)
+      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+        taud_x(I,J) = CS%taudx_shelf(I,J)*G%IareaBu(I,J)
+      enddo ; enddo
       call post_data(CS%id_taudx_shelf, taud_x, CS%diag)
     endif
     if (CS%id_taudy_shelf > 0) then
-      taud_y(:,:) = CS%taudy_shelf(:,:)*G%IareaBu(:,:)
+      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+        taud_y(I,J) = CS%taudy_shelf(I,J)*G%IareaBu(I,J)
+      enddo ; enddo
       call post_data(CS%id_taudy_shelf, taud_y, CS%diag)
     endif
     if (CS%id_taud_shelf > 0) then
-      taud_x(:,:) = CS%taudx_shelf(:,:)*G%IareaBu(:,:)
-      taud_y(:,:) = CS%taudy_shelf(:,:)*G%IareaBu(:,:)
-      call post_data(CS%id_taud_shelf, sqrt((taud_x**2)+(taud_y**2)), CS%diag)
+      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+        taud(I,J) = sqrt((CS%taudx_shelf(I,J)**2)+(CS%taudy_shelf(I,J)**2))*G%IareaBu(I,J)
+      enddo ; enddo
+      call post_data(CS%id_taud_shelf, taud, CS%diag)
     endif
     if (CS%id_sx_shelf > 0) call post_data(CS%id_sx_shelf, CS%sx_shelf, CS%diag)
     if (CS%id_sy_shelf > 0) call post_data(CS%id_sy_shelf, CS%sy_shelf, CS%diag)
-    if (CS%id_surf_slope_mag_shelf > 0) &
-      call post_data(CS%id_surf_slope_mag_shelf, sqrt((CS%sx_shelf**2)+(CS%sy_shelf**2)), CS%diag)
+    if (CS%id_surf_slope_mag_shelf > 0) then
+      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+        surf_slope(I,J) = sqrt((CS%sx_shelf(I,J)**2)+(CS%sy_shelf(I,J)**2))
+      enddo ; enddo
+      call post_data(CS%id_surf_slope_mag_shelf, surf_slope, CS%diag)
+    endif
     if (CS%id_ground_frac > 0) call post_data(CS%id_ground_frac, CS%ground_frac, CS%diag)
     if (CS%id_float_cond > 0) call post_data(CS%id_float_cond, CS%float_cond, CS%diag)
     if (CS%id_OD_av >0) call post_data(CS%id_OD_av, CS%OD_av,CS%diag)
     if (CS%id_visc_shelf > 0) then
-      if (CS%visc_qps==4) then
-        ice_visc(:,:) = (0.25 * G%IareaT(:,:)) * &
-          ((CS%ice_visc(:,:,1) + CS%ice_visc(:,:,4)) + (CS%ice_visc(:,:,2) + CS%ice_visc(:,:,3)))
-      else
-        ice_visc(:,:) = CS%ice_visc(:,:,1)*G%IareaT(:,:)
-      endif
+      call ice_visc_diag(CS,G,ice_visc)
       call post_data(CS%id_visc_shelf, ice_visc, CS%diag)
     endif
     if (CS%id_taub > 0) then
-      basal_tr(:,:) = CS%basal_traction(:,:)*G%IareaT(:,:)
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        basal_tr(i,j) = CS%basal_traction(i,j)*G%IareaT(i,j)
+      enddo ; enddo
       call post_data(CS%id_taub, basal_tr, CS%diag)
     endif
     if (CS%id_u_mask > 0) call post_data(CS%id_u_mask, CS%umask, CS%diag)
@@ -1141,6 +1156,27 @@ subroutine IS_dynamics_post_data(time_step, Time, CS, ISS, G)
 
     call disable_averaging(CS%diag)
 end subroutine IS_dynamics_post_data
+
+!> Calculate cell-centered, area-averaged, vertically integrated ice viscosity for diagnostics
+subroutine ice_visc_diag(CS,G,ice_visc)
+  type(ice_shelf_dyn_CS), intent(in) :: CS !< The ice shelf dynamics control structure
+  type(ocean_grid_type),  intent(in) :: G  !< The grid structure used by the ice shelf.
+  real, dimension(SZDI_(G),SZDJ_(G)), intent(out)  :: ice_visc !< area-averaged vertically integrated ice viscosity
+                                                               !! [R L2 Z T-1 ~> Pa s m]
+  integer :: i,j
+
+  ice_visc(:,:)=0.0
+  if (CS%visc_qps==4) then
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      ice_visc(i,j) = (0.25 * G%IareaT(i,j)) * &
+        ((CS%ice_visc(i,j,1) + CS%ice_visc(i,j,4)) + (CS%ice_visc(i,j,2) + CS%ice_visc(i,j,3)))
+    enddo ; enddo
+  else
+    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      ice_visc(i,j) = CS%ice_visc(i,j,1)*G%IareaT(i,j)
+    enddo ; enddo
+  endif
+end subroutine ice_visc_diag
 
 !>  Writes the total ice shelf kinetic energy and mass to an ascii file
 subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
@@ -1504,7 +1540,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE)
 
     err_init = 0 ; err_tempu = 0 ; err_tempv = 0
-    do J=G%IscB,G%JecB ; do I=G%IscB,G%IecB
+    do J=G%JscB,G%JecB ; do I=G%IscB,G%IecB
       if (CS%umask(I,J) == 1) then
         err_tempu = ABS(Au(I,J) - taudx(I,J))
         if (err_tempu >= err_init) err_init = err_tempu
@@ -1586,7 +1622,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
 
       err_max = 0
 
-      do J=G%jscB,G%jecB ; do I=G%jscB,G%iecB
+      do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
         if (CS%umask(I,J) == 1) then
           err_tempu = ABS(Au(I,J) - taudx(I,J))
           if (err_tempu >= err_max) err_max = err_tempu
@@ -3071,10 +3107,13 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
   real, dimension(SZDIB_(G),SZDJB_(G)) :: Hv  ! Ice shelf v_flux at corners [Z L T-1 ~> m2 s-1].
   real, dimension(SZDI_(G),SZDJ_(G)) :: Hux  ! Ice shelf d(u_flux)/dx at cell centers [Z T-1 ~> m s-1].
   real, dimension(SZDI_(G),SZDJ_(G)) :: Hvy  ! Ice shelf d(v_flux)/dy at cell centers [Z T-1 ~> m s-1].
-  real, dimension(SZDI_(G),SZDJ_(G)) :: flux_div ! 2-D flux divergence div(uH) [Z T-1 ~> m s-1].
-  real, dimension(SZDI_(G),SZDJ_(G),3) :: strain_rate ! 2-D strain-rate components xx,yy, and xy [T-1 ~> s-1]
-  real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc_loc ! area-averaged ice viscosity [R L2 T-1 ~> Pa s]
-  real, dimension(SZDI_(G),SZDJ_(G))  :: p1,p2 ! Used to calculate strain-rate principal components [T-1 ~> s-1]
+  real, dimension(SZDI_(G),SZDJ_(G)) :: flux_div ! horizontal flux divergence div(uH) [Z T-1 ~> m s-1].
+  real, dimension(SZDI_(G),SZDJ_(G),3) :: strain_rate ! strain-rate components xx,yy, and xy [T-1 ~> s-1]
+  real, dimension(SZDI_(G),SZDJ_(G),2) :: p_strain_rate ! horizontal principal strain-rates [T-1 ~> s-1]
+  real, dimension(SZDI_(G),SZDJ_(G),3) :: dev_stress ! deviatoric stress components xx,yy, and xy [R L Z T-2 ~> Pa]
+  real, dimension(SZDI_(G),SZDJ_(G),2) :: p_dev_stress ! horizontal principal deviatoric stress [R L Z T-2 ~> Pa]
+  real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc ! area-averaged ice viscosity [R L2 T-1 ~> Pa s]
+  real :: p1,p2 ! Used to calculate strain-rate principal components [T-1 ~> s-1]
   integer :: i, j
 
   !Allocate the gradient basis functions for 1 cell-centered quadrature point per cell
@@ -3088,9 +3127,17 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
   !Calculate flux divergence and its components
   if (CS%id_duHdx > 0 .or. CS%id_dvHdy > 0 .or. CS%id_fluxdiv > 0) then
     call interpolate_H_to_B(G, ISS%h_shelf, ISS%hmask, H_node, CS%min_h_shelf)
-    Hu(:,:) = (H_node(:,:) * CS%u_shelf(:,:))
-    Hv(:,:) = (H_node(:,:) * CS%v_shelf(:,:))
-    Hux(:,:) = 0.0 ; Hvy(:,:) = 0.0
+
+    Hu(:,:) = 0.0; Hv(:,:) = 0.0; Hux(:,:) = 0.0 ; Hvy(:,:) = 0.0 ; flux_div(:,:) = 0.0
+    do J=G%jscB,G%jecB ; do I=G%iscB,G%iecB
+      if (CS%umask(I,J) > 0) then
+        Hu(I,J) = (H_node(I,J) * CS%u_shelf(I,J))
+      endif
+      if (CS%vmask(I,J) > 0) then
+        Hv(I,J) = (H_node(I,J) * CS%v_shelf(I,J))
+      endif
+    enddo; enddo
+
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
       if ((ISS%hmask(i,j) == 1) .or. (ISS%hmask(i,j) == 3)) then
         !components of flux divergence at cell centers
@@ -3099,12 +3146,13 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
 
         Hvy(i,j) = (((Hv(I-1,J-1) * CS%PhiC(2,i,j)) + (Hv(I,J  ) * CS%PhiC(8,i,j))) + &
                     ((Hv(I-1,J  ) * CS%PhiC(6,i,j)) + (Hv(I,J-1) * CS%PhiC(4,i,j))))
+        flux_div(i,j) = Hux(i,j) + Hvy(i,j)
       endif
     enddo ; enddo
 
     if (CS%id_duHdx > 0)   call post_data(CS%id_duHdx, Hux, CS%diag)
     if (CS%id_dvHdy > 0)   call post_data(CS%id_dvHdy, Hvy, CS%diag)
-    if (CS%id_fluxdiv > 0) call post_data(CS%id_fluxdiv, Hux+Hvy, CS%diag)
+    if (CS%id_fluxdiv > 0) call post_data(CS%id_fluxdiv, flux_div, CS%diag)
   endif
 
   if (CS%id_devstress_xx > 0  .or. CS%id_devstress_yy > 0  .or. CS%id_devstress_xy > 0  .or. &
@@ -3135,30 +3183,50 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
     if (CS%id_strainrate_yy > 0) call post_data(CS%id_strainrate_yy, strain_rate(:,:,2), CS%diag)
     if (CS%id_strainrate_xy > 0) call post_data(CS%id_strainrate_xy, strain_rate(:,:,3), CS%diag)
 
-
     if (CS%id_pstrainrate_1 > 0 .or. CS%id_pstrainrate_2 > 0 .or. &
         CS%id_pdevstress_1  > 0 .or. CS%id_pdevstress_2  > 0) then
-        p1(:,:) = 0.5*( strain_rate(:,:,1) + strain_rate(:,:,2))
-        p2(:,:) = sqrt( (( 0.5 * (strain_rate(:,:,1) - strain_rate(:,:,2)) )**2) + (strain_rate(:,:,3)**2) )
-    endif
+      p_strain_rate(:,:,:) = 0.0
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        p1 = 0.5*( strain_rate(i,j,1) + strain_rate(i,j,2))
+        p2 = sqrt( (( 0.5 * (strain_rate(i,j,1) - strain_rate(i,j,2)) )**2) + (strain_rate(i,j,3)**2) )
+        p_strain_rate(i,j,1) = p1+p2 !Max horizontal principal strain-rate
+        p_strain_rate(i,j,2) = p1-p2 !Min horizontal principal strain-rate
+      enddo ; enddo
 
-    if (CS%id_pstrainrate_1 > 0) call post_data(CS%id_pstrainrate_1, p1+p2, CS%diag)
-    if (CS%id_pstrainrate_2 > 0) call post_data(CS%id_pstrainrate_2, p1-p2, CS%diag)
+      if (CS%id_pstrainrate_1 > 0) call post_data(CS%id_pstrainrate_1, p_strain_rate(:,:,1), CS%diag)
+      if (CS%id_pstrainrate_2 > 0) call post_data(CS%id_pstrainrate_2, p_strain_rate(:,:,2), CS%diag)
+    endif
 
     if (CS%id_devstress_xx > 0 .or. CS%id_devstress_yy > 0 .or. CS%id_devstress_xy > 0 .or. &
         CS%id_pdevstress_1 > 0 .or. CS%id_pdevstress_2 > 0) then
-      if (CS%visc_qps==4) then
-        ice_visc_loc(:,:) = ((0.25 * G%IareaT(:,:)) * &
-          ((CS%ice_visc(:,:,1) + CS%ice_visc(:,:,4)) + (CS%ice_visc(:,:,2) + CS%ice_visc(:,:,3)))) / ISS%h_shelf(:,:)
-      else
-        ice_visc_loc(:,:) = (CS%ice_visc(:,:,1)*G%IareaT(:,:)) / ISS%h_shelf(:,:)
+
+      call ice_visc_diag(CS,G,ice_visc)
+
+      if (CS%id_devstress_xx > 0 .or. CS%id_devstress_yy > 0 .or. CS%id_devstress_xy > 0) then
+        dev_stress(:,:,:)=0.0
+        do j=G%jsc,G%jec ; do i=G%isc,G%iec
+          if (ISS%h_shelf(i,j)>0) then
+            dev_stress(i,j,1) = 2*ice_visc(i,j)*strain_rate(i,j,1)/ISS%h_shelf(i,j) !deviatoric stress xx
+            dev_stress(i,j,2) = 2*ice_visc(i,j)*strain_rate(i,j,2)/ISS%h_shelf(i,j) !deviatoric stress yy
+            dev_stress(i,j,3) = 2*ice_visc(i,j)*strain_rate(i,j,3)/ISS%h_shelf(i,j) !deviatoric stress xy
+          endif
+        enddo; enddo
+        if (CS%id_devstress_xx > 0) call post_data(CS%id_devstress_xx, dev_stress(:,:,1), CS%diag)
+        if (CS%id_devstress_yy > 0) call post_data(CS%id_devstress_yy, dev_stress(:,:,2), CS%diag)
+        if (CS%id_devstress_xy > 0) call post_data(CS%id_devstress_xy, dev_stress(:,:,3), CS%diag)
       endif
 
-      if (CS%id_devstress_xx > 0) call post_data(CS%id_devstress_xx, 2*ice_visc_loc*strain_rate(:,:,1), CS%diag)
-      if (CS%id_devstress_yy > 0) call post_data(CS%id_devstress_yy, 2*ice_visc_loc*strain_rate(:,:,2), CS%diag)
-      if (CS%id_devstress_xy > 0) call post_data(CS%id_devstress_xy, 2*ice_visc_loc*strain_rate(:,:,3), CS%diag)
-      if (CS%id_pdevstress_1 > 0) call post_data(CS%id_pdevstress_1, 2*ice_visc_loc*(p1+p2), CS%diag)
-      if (CS%id_pdevstress_2 > 0) call post_data(CS%id_pdevstress_2, 2*ice_visc_loc*(p1-p2), CS%diag)
+      if (CS%id_pdevstress_1 > 0 .or. CS%id_pdevstress_2 > 0) then
+        p_dev_stress(:,:,:)=0.0
+        do j=G%jsc,G%jec ; do i=G%isc,G%iec
+          if (ISS%h_shelf(i,j)>0) then
+            p_dev_stress(i,j,1) = 2*ice_visc(i,j)*p_strain_rate(i,j,1)/ISS%h_shelf(i,j) !max horiz principal dev stress
+            p_dev_stress(i,j,2) = 2*ice_visc(i,j)*p_strain_rate(i,j,2)/ISS%h_shelf(i,j) !min horiz principal dev stress
+          endif
+        enddo; enddo
+        if (CS%id_pdevstress_1 > 0) call post_data(CS%id_pdevstress_1, p_dev_stress(:,:,1), CS%diag)
+        if (CS%id_pdevstress_2 > 0) call post_data(CS%id_pdevstress_2, p_dev_stress(:,:,2), CS%diag)
+      endif
     endif
   endif
 end subroutine IS_dynamics_post_data_2
