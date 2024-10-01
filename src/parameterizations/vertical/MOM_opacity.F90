@@ -1377,7 +1377,11 @@ function lookup_ohlmann_opacity(chl,optics) result(B)
   integer :: n
 
   ! Make sure we are in the table
-  log10chl = max(optics%log10chl_min,min(log10(chl),optics%log10chl_max))
+  if (chl > optics%chl_min) then
+    log10chl = min(log10(chl),optics%log10chl_max)
+  else
+    log10chl = optics%log10chl_min
+  endif
   ! Do a nearest neighbor lookup
   n = nint( (log10chl - optics%log10chl_min)/optics%dlog10chl ) + 1
 
