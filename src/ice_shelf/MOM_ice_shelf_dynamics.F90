@@ -558,7 +558,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                 units="m", default=1.e-3, scale=US%m_to_Z)
     call get_param(param_file, mdl, "NONLIN_SOLVE_ERR_MODE", CS%nonlin_solve_err_mode, &
                 "Choose whether nonlin error in vel solve is based on nonlinear "//&
-                "residual (1), relative change since last iteration (2), or change in norm (3)", default=1)
+                "residual (1), relative change since last iteration (2), or change in norm (3)", default=3)
 
     call get_param(param_file, mdl, "SHELF_MOVING_FRONT", CS%moving_shelf_front, &
                  "Specify whether to advance shelf front (and calve).", &
