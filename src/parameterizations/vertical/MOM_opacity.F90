@@ -45,6 +45,7 @@ type, public :: optics_type
   !! Lookup tables for Ohlmann solar penetration scheme
   !! These would naturally exist as private module variables but that is prohibited in MOM6
   real :: dlog10chl           !< Chl increment within lookup table
+  real :: chl_min             !< Lower bound of Chl in lookup table
   real :: log10chl_min        !< Lower bound of Chl in lookup table
   real :: log10chl_max        !< Upper bound of Chl in lookup table
   real, allocatable, dimension(:) :: a1_lut,&       !< Coefficient for band 1
@@ -1303,6 +1304,7 @@ subroutine init_ohlmann_table(optics)
      call MOM_error(FATAL,"init_ohlmann: Cannot allocate lookup table")
   endif
 
+  optics%chl_min = chl_tab1a(1)
   optics%log10chl_min = log10(chl_tab1a(1))
   optics%log10chl_max = log10(chl_tab1a(nval_tab1a))
   optics%dlog10chl = (optics%log10chl_max - optics%log10chl_min)/(nval_lut-1)
@@ -1349,7 +1351,11 @@ function lookup_ohlmann_swpen(chl,optics) result(A)
   integer :: n
 
   ! Make sure we are in the table
-  log10chl = max(optics%log10chl_min,min(log10(chl),optics%log10chl_max))
+  if (chl > optics%chl_min) then
+    log10chl = min(log10(chl),optics%log10chl_max)
+  else
+    log10chl = optics%log10chl_min
+  endif
   ! Do a nearest neighbor lookup
   n = nint( (log10chl - optics%log10chl_min)/optics%dlog10chl ) + 1
 
@@ -1371,7 +1377,11 @@ function lookup_ohlmann_opacity(chl,optics) result(B)
   integer :: n
 
   ! Make sure we are in the table
-  log10chl = max(optics%log10chl_min,min(log10(chl),optics%log10chl_max))
+  if (chl > optics%chl_min) then
+    log10chl = min(log10(chl),optics%log10chl_max)
+  else
+    log10chl = optics%log10chl_min
+  endif
   ! Do a nearest neighbor lookup
   n = nint( (log10chl - optics%log10chl_min)/optics%dlog10chl ) + 1
 
