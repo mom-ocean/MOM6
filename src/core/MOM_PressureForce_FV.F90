@@ -145,7 +145,10 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
                 ! the pressure anomaly at the top of the layer [R L4 T-4 ~> Pa m2 s-2].
   real, dimension(SZI_(G),SZJ_(G))  :: &
     dp, &       ! The (positive) change in pressure across a layer [R L2 T-2 ~> Pa].
-    pbot_anom, & ! Bottom pressure (anomaly) in depth units, used for self-attraction and loading [Z ~> m].
+    SSH, &      ! Sea surfae height anomaly for self-attraction and loading. Used if
+                ! CALCULATE_SAL is True and SAL_USE_BPA is False [Z ~> m].
+    pbot, &     ! Total bottom pressure for self-attraction and loading. Used if
+                ! CALCULATE_SAL is True and SAL_USE_BPA is True [R L2 T-2 ~> Pa].
     e_sal, &    ! The bottom geopotential anomaly due to self-attraction and loading [Z ~> m].
     e_tidal_eq,  & ! The bottom geopotential anomaly due to tidal forces from astronomical sources [Z ~> m].
     e_tidal_sal, & ! The bottom geopotential anomaly due to harmonic self-attraction and loading
@@ -222,7 +225,6 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real :: dp_neglect         ! A thickness that is so small it is usually lost
                              ! in roundoff and can be neglected [R L2 T-2 ~> Pa].
   real :: I_gEarth           ! The inverse of GV%g_Earth [T2 Z L-2 ~> s2 m-1]
-  real :: I_g_rho            ! The inverse of the density times the gravitational acceleration [Z T2 L-2 R-1 ~> m Pa-1]
   real :: alpha_anom         ! The in-situ specific volume, averaged over a
                              ! layer, less alpha_ref [R-1 ~> m3 kg-1].
   logical :: use_p_atm       ! If true, use the atmospheric pressure.
@@ -408,19 +410,19 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   ! Calculate and add self-attraction and loading (SAL) geopotential height anomaly to interface height.
   if (CS%calculate_SAL) then
     if (CS%sal_use_bpa) then
-      I_g_rho = 1.0 / (GV%rho0*GV%g_Earth)
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        pbot_anom(i,j) = p(i,j,nz+1) * I_g_rho
+        pbot(i,j) = p(i,j,nz+1)
       enddo ; enddo
+      call calc_SAL(pbot, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        pbot_anom(i,j) = (za(i,j,1) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref &
+        SSH(i,j) = (za(i,j,1) - alpha_ref*p(i,j,1)) * I_gEarth - G%Z_ref &
                   - max(-G%bathyT(i,j)-G%Z_ref, 0.0)
       enddo ; enddo
+      call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
     endif
-    call calc_SAL(pbot_anom, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
 
     ! This gives new answers after the change of separating SAL from tidal forcing module.
     if ((CS%tides_answer_date>20230630) .or. (.not.GV%semi_Boussinesq) .or. (.not.CS%tides)) then
@@ -873,7 +875,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     e_tidal_sal, & ! The bottom geopotential anomaly due to harmonic self-attraction and loading
                   ! specific to tides [Z ~> m].
     Z_0p, &       ! The height at which the pressure used in the equation of state is 0 [Z ~> m]
-    pbot_anom, &  ! Bottom pressure (anomaly) in depth units, used for self-attraction and loading [Z ~> m].
+    SSH, &      ! Sea surfae height anomaly for self-attraction and loading. Used if
+                ! CALCULATE_SAL is True and SAL_USE_BPA is False [Z ~> m].
+    pbot, &     ! Total bottom pressure for self-attraction and loading. Used if
+                ! CALCULATE_SAL is True and SAL_USE_BPA is True [R L2 T-2 ~> Pa].
     dM          ! The barotropic adjustment to the Montgomery potential to
                 ! account for a reduced gravity model [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G)) :: &
@@ -1018,7 +1023,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   G_Rho0 = GV%g_Earth / GV%Rho0
   GxRho = GV%g_Earth * GV%Rho0
   rho_ref = CS%Rho0
-  I_g_rho = 1.0 / (CS%rho0*GV%g_Earth) ! I think it should be I_g_rho = 1.0 / (GV%rho0*GV%g_Earth)
 
   if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
     MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
@@ -1033,17 +1037,17 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   ! The following code is for recovering old answers only. The algorithm moves interface heights before density
   ! calculations, and therefore is incorrect without SSH_IN_EOS_PRESSURE_FOR_PGF=True (added in August 2024).
   ! See the code right after Pa calculation loop for the new method.
-  if (CS%tides_answer_date<=20230630) then
+  if (CS%tides .and. CS%tides_answer_date<=20230630) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        pbot_anom(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0) ! reference bottom pressure
+        SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0) ! reference bottom pressure
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
-        pbot_anom(i,j) = pbot_anom(i,j) + h(i,j,k)*GV%H_to_Z
+        SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
-    call calc_SAL(pbot_anom, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
+    call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
     call calc_tidal_forcing_legacy(CS%Time, e_sal, e_sal_and_tide, e_tidal_eq, e_tidal_sal, &
                                    G, US, CS%tides_CSp)
     !$OMP parallel do default(shared)
@@ -1118,6 +1122,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   endif
 
   if (CS%use_SSH_in_Z0p .and. use_p_atm) then
+    I_g_rho = 1.0 / (CS%rho0*GV%g_Earth)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       Z_0p(i,j) = e(i,j,1) + p_atm(i,j) * I_g_rho
     enddo ; enddo
@@ -1201,15 +1206,16 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     if (CS%sal_use_bpa) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        pbot_anom(i,j) = pa(i,j,nz+1) * I_g_rho - e(i,j,nz+1)
+        pbot(i,j) = pa(i,j,nz+1) - GxRho * e(i,j,nz+1)
       enddo ; enddo
+      call calc_SAL(pbot, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
     else
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        pbot_anom(i,j) = e(i,j,1) - max(-G%bathyT(i,j) - G%Z_ref, 0.0) ! Remove topography above sea level
+        SSH(i,j) = e(i,j,1) - max(-G%bathyT(i,j) - G%Z_ref, 0.0) ! Remove topography above sea level
       enddo ; enddo
+      call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
     endif
-    call calc_SAL(pbot_anom, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
     if (.not.CS%bq_sal_tides) then ; do K=1,nz+1
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
