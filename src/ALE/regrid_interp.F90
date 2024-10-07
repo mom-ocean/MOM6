@@ -381,6 +381,7 @@ call regridding_set_ppolys(CS, densities, n0, h0, ppoly0_E, ppoly0_S, ppoly0_C, 
 degree, h_neglect, h_neglect_edge)
 call get_histogram_weights(n0, ppoly0_E, ppoly0_C, target_values, degree, &
 n1, histogram_weights, answer_date=CS%answer_date)
+
 end subroutine build_histogram_weights
 
 !> Given a target value, find corresponding coordinate for given polynomial
@@ -638,11 +639,17 @@ function get_interface_indices( N, edge_values, ppoly_coefs, &
   !!! Now do the rest of the column
 
   do k = 2,N
-    if ( target_value <= edge_values(k,1) ) then
+    if ( ( target_value < edge_values(k,1) ) .AND. ( target_value < edge_values(k,2) ) ) then
+      ! target less than whole cell
       interfaces(k) = -1
-    elseif (target_value >= edge_values(k,2) ) then
+    elseif ( (target_value > edge_values(k,1) ) .AND. (target_value > edge_values(k,1) ) ) then
+      ! target greater than whole cell
       interfaces(k) = 2
     elseif ( ( target_value >= edge_values(k-1,2) ) .AND. ( target_value <= edge_values(k,1) ) ) then
+      ! target greater than cell above but less than current cell
+      interfaces(k) = 0
+    elseif ( ( target_value <= edge_values(k-1,2) ) .AND. ( target_value >= edge_values(k,1) ) ) then
+      ! target less than cell above but greater than current cell
       interfaces(k) = 0
     else
       ! Interface is within cell, so use Newton-Raphson iterations to find it
@@ -703,6 +710,11 @@ function get_interface_indices( N, edge_values, ppoly_coefs, &
     endif
   enddo
 
+  ! print *, "target_value", target_value
+  ! print *, "edge_values(:,1)", edge_values(:,1)
+  ! print *, "edge_values(:,2)", edge_values(:,2)
+  ! print *, "interfaces", interfaces
+
 end function get_interface_indices
 
 !> Given target values (e.g., density), build new grid based on polynomial
@@ -734,6 +746,7 @@ integer        :: k0 ! loop index
 integer        :: k1 ! loop index
 real           :: tl ! current interface target density [A]
 real           :: tu ! dummy variable for interface target value above t
+real, dimension(n0) :: weightsum ! dummy array for checking whether all of a bin is accounted for
 
 do k1=1,n1
   tl = target_values(k1)
@@ -787,7 +800,21 @@ do k1=1,n1
       endif
     endif
   enddo
+
+  ! print *, "tl", tl
+  ! print *, "tu", tu
+  ! print *, "iindices_l", iindices_l
+  ! print *, "iindices_u", iindices_u
+  ! print *, "histogram_weights", histogram_weights(:,k1)
+
 enddo
+
+! weightsum=0.0
+! do k1 = 1,n1
+!   weightsum(:) = weightsum(:) + histogram_weights(:,k1)
+! enddo
+
+! print *, "weightsum", weightsum
 
 end subroutine get_histogram_weights
 

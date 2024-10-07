@@ -2510,13 +2510,13 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
     if (associated(CS%rho_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
       call set_rho_params(CS%rho_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_SCALAR)
-    if (present(min_thickness)) call set_rho_params(CS%scalar_CS, min_thickness=min_thickness)
-    if (present(ref_pressure)) call set_rho_params(CS%scalar_CS, ref_pressure=ref_pressure)
-    if (present(histogram_extensive_diags)) call set_rho_params(CS%scalar_CS, histogram_extensive_diags=histogram_extensive_diags)
+    if (present(min_thickness)) call set_scalar_params(CS%scalar_CS, min_thickness=min_thickness)
+    if (present(ref_pressure)) call set_scalar_params(CS%scalar_CS, ref_pressure=ref_pressure)
+    if (present(histogram_extensive_diags)) call set_scalar_params(CS%scalar_CS, histogram_extensive_diags=histogram_extensive_diags)
     if (present(integrate_downward_for_e)) &
-      call set_rho_params(CS%scalar_CS, integrate_downward_for_e=integrate_downward_for_e)
+      call set_scalar_params(CS%scalar_CS, integrate_downward_for_e=integrate_downward_for_e)
     if (associated(CS%scalar_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
-      call set_rho_params(CS%scalar_CS, interp_CS=CS%interp_CS)
+      call set_scalar_params(CS%scalar_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_HYCOM1)
     if (associated(CS%hycom_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
       call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS)
