@@ -6,6 +6,7 @@ module MOM_forcing_type
 use MOM_array_transform, only : rotate_array, rotate_vector, rotate_array_pair
 use MOM_coupler_types, only : coupler_2d_bc_type, coupler_type_destructor
 use MOM_coupler_types, only : coupler_type_increment_data, coupler_type_initialized
+use MOM_coupler_types, only : coupler_type_copy_data
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
@@ -125,9 +126,8 @@ type, public :: forcing
   real, pointer, dimension(:,:) :: &
     netMassIn     => NULL(), & !< Sum of water mass fluxes into the ocean integrated over a
                                !! forcing timestep [H ~> m or kg m-2]
-    netMassOut    => NULL(), & !< Net water mass flux out of the ocean integrated over a forcing timestep,
+    netMassOut    => NULL()    !< Net water mass flux out of the ocean integrated over a forcing timestep,
                                !! with negative values for water leaving the ocean [H ~> m or kg m-2]
-    KPP_salt_flux => NULL()    !< KPP effective salt flux [ppt m s-1]
 
   ! heat associated with water crossing ocean surface
   real, pointer, dimension(:,:) :: &
@@ -2425,13 +2425,13 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
     do j=js,je ; do i=is,ie
       taux2 = 0.0
       if ((G%mask2dCu(I-1,j) + G%mask2dCu(I,j)) > 0.0) &
-        taux2 = (G%mask2dCu(I-1,j) * forces%taux(I-1,j)**2 + &
-                 G%mask2dCu(I,j) * forces%taux(I,j)**2) / &
+        taux2 = (G%mask2dCu(I-1,j) * (forces%taux(I-1,j)**2) + &
+                 G%mask2dCu(I,j) * (forces%taux(I,j)**2)) / &
                 (G%mask2dCu(I-1,j) + G%mask2dCu(I,j))
       tauy2 = 0.0
       if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0.0) &
-        tauy2 = (G%mask2dCv(i,J-1) * forces%tauy(i,J-1)**2 + &
-                 G%mask2dCv(i,J) * forces%tauy(i,J)**2) / &
+        tauy2 = (G%mask2dCv(i,J-1) * (forces%tauy(i,J-1)**2) + &
+                 G%mask2dCv(i,J) * (forces%tauy(i,J)**2)) / &
                 (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (associated(fluxes%ustar_gustless)) then
@@ -3496,7 +3496,7 @@ end subroutine get_mech_forcing_groups
 
 !> Allocates and zeroes-out array.
 subroutine myAlloc(array, is, ie, js, je, flag)
-  real, dimension(:,:), pointer :: array !< Array to be allocated
+  real, dimension(:,:), pointer :: array !< Array to be allocated [arbitrary]
   integer,           intent(in) :: is !< Start i-index
   integer,           intent(in) :: ie !< End i-index
   integer,           intent(in) :: js !< Start j-index
@@ -3702,9 +3702,11 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
   if (associated(fluxes_in%ustar_tidal)) &
     call rotate_array(fluxes_in%ustar_tidal, turns, fluxes%ustar_tidal)
 
-  ! TODO: tracer flux rotation
-  if (coupler_type_initialized(fluxes%tr_fluxes)) &
-    call MOM_error(FATAL, "Rotation of tracer BC fluxes not yet implemented.")
+  ! NOTE: Tracer fields are handled by FMS, so are left unrotated.  Any
+  ! reads/writes to tr_fields must be appropriately rotated.
+  if (coupler_type_initialized(fluxes%tr_fluxes)) then
+    call coupler_type_copy_data(fluxes_in%tr_fluxes, fluxes%tr_fluxes)
+  endif
 
   ! Scalars and flags
   fluxes%accumulate_p_surf = fluxes_in%accumulate_p_surf
@@ -3757,10 +3759,18 @@ subroutine rotate_mech_forcing(forces_in, turns, forces)
   endif
 
   if (do_press) then
-    ! NOTE: p_surf_SSH either points to p_surf or p_surf_full
     call rotate_array(forces_in%p_surf, turns, forces%p_surf)
     call rotate_array(forces_in%p_surf_full, turns, forces%p_surf_full)
     call rotate_array(forces_in%net_mass_src, turns, forces%net_mass_src)
+
+    ! p_surf_SSH points to either p_surf or p_surf_full
+    if (associated(forces_in%p_surf_SSH, forces_in%p_surf)) then
+      forces%p_surf_SSH => forces%p_surf
+    else if (associated(forces_in%p_surf_SSH, forces_in%p_surf_full)) then
+      forces%p_surf_SSH => forces%p_surf_full
+    else
+      forces%p_surf_SSH => null()
+    endif
   endif
 
   if (do_iceberg) then
@@ -3812,7 +3822,7 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
       if (G%mask2dCv(i,J) > 0.0) forces%tauy(i,J) = ty_mean
     enddo ; enddo
     if (tau2ustar) then
-      tau_mag = sqrt(tx_mean**2 + ty_mean**2)
+      tau_mag = sqrt((tx_mean**2) + (ty_mean**2))
       if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         forces%tau_mag(i,j) = tau_mag
       endif ; enddo ; enddo ; endif
@@ -3974,11 +3984,12 @@ end subroutine homogenize_forcing
 
 subroutine homogenize_field_t(var, G, tmp_scale)
   type(ocean_grid_type),            intent(in)    :: G   !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: var !< The variable to homogenize
-  real,                   optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
-                                                         !! variable that is reversed in the return value
+  real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: var !< The variable to homogenize [A ~> a]
+  real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
+                                                         !! variable that is reversed in the
+                                                         !! return value [a A-1 ~> 1]
 
-  real    :: avg   ! Global average of var, in the same units as var
+  real    :: avg   ! Global average of var, in the same units as var [A ~> a]
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -3991,11 +4002,12 @@ end subroutine homogenize_field_t
 
 subroutine homogenize_field_v(var, G, tmp_scale)
   type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize [A ~> a]
   real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
-                                                         !! variable that is reversed in the return value
+                                                           !! variable that is reversed in the
+                                                           !! return value [a A-1 ~> 1]
 
-  real    :: avg   ! Global average of var, in the same units as var
+  real    :: avg   ! Global average of var, in the same units as var [A ~> a]
   integer :: i, j, is, ie, jsB, jeB
   is = G%isc ; ie = G%iec ; jsB = G%jscB ; jeB = G%jecB
 
@@ -4008,11 +4020,12 @@ end subroutine homogenize_field_v
 
 subroutine homogenize_field_u(var, G, tmp_scale)
   type(ocean_grid_type),             intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize
+  real, dimension(SZI_(G),SZJB_(G)), intent(inout) :: var  !< The variable to homogenize [A ~> a]
   real,                    optional, intent(in)    :: tmp_scale !< A temporary rescaling factor for the
-                                                         !! variable that is reversed in the return value
+                                                           !! variable that is reversed in the
+                                                           !! return value [a A-1 ~> 1]
 
-  real    :: avg   ! Global average of var, in the same units as var
+  real    :: avg   ! Global average of var, in the same units as var [A ~> a]
   integer :: i, j, isB, ieB, js, je
   isB = G%iscB ; ieB = G%iecB ; js = G%jsc ; je = G%jec
 

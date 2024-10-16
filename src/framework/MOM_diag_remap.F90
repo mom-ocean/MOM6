@@ -15,42 +15,14 @@
 !!    the diagnostic is written out.
 
 
-! NOTE: In the following functions, the fields are passed using 1-based
-! indexing, which requires special handling within the grid index loops.
+! NOTE: In the following functions, the fields are initially passed using 1-based
+! indexing, which are then passed to separate private internal routines that shift
+! the indexing to use the same indexing conventions used elsewhere in the MOM6 code.
 !
-!   * diag_remap_do_remap
-!   * vertically_reintegrate_diag_field
-!   * vertically_interpolate_diag_field
-!   * horizontally_average_diag_field
-!
-! Symmetric grids add an additional row of western and southern points to u-
-! and v-grids.  Non-symmetric grids are 1-based and symmetric grids are
-! zero-based, allowing the same expressions to be used when accessing the
-! fields.  But if u- or v-points become 1-indexed, as in these functions, then
-! the stencils must be re-assessed.
-!
-! For interpolation between h and u grids, we use the following relations:
-!
-!   h->u: f_u(ig) = 0.5 * (f_h( ig ) + f_h(ig+1))
-!         f_u(i1) = 0.5 * (f_h(i1-1) + f_h( i1 ))
-!
-!   u->h: f_h(ig) = 0.5 * (f_u(ig-1) + f_u( ig ))
-!         f_h(i1) = 0.5 * (f_u( i1 ) + f_u(i1+1))
-!
-! where ig is the grid index and i1 is the 1-based index.  That is, a 1-based
-! u-point is ahead of its matching h-point in non-symmetric mode, but behind
-! its matching h-point in non-symmetric mode.
-!
-! We can combine these expressions by applying to ig a -1 shift on u-grids and
-! a +1 shift on h-grids in symmetric mode.
-!
-! We do not adjust the h-point indices, since they are assumed to be 1-based.
-! This is only correct when global indexing is disabled.  If global indexing is
-! enabled, then all indices will need to be defined relative to the data
-! domain.
-!
-! Finally, note that the mask input fields are pointers to arrays which are
-! zero-indexed, and do not need any corrections over grid index loops.
+!   * diag_remap_do_remap, which calls do_remap
+!   * vertically_reintegrate_diag_field, which calls vertically_reintegrate_field
+!   * vertically_interpolate_diag_field, which calls vertically_interpolate_field
+!   * horizontally_average_diag_field, which calls horizontally_average_field
 
 
 module MOM_diag_remap
@@ -70,10 +42,9 @@ use MOM_verticalGrid,     only : verticalGrid_type
 use MOM_EOS,              only : EOS_type
 use MOM_remapping,        only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_remapping,        only : interpolate_column, reintegrate_column
-use MOM_regridding,       only : regridding_CS, initialize_regridding
-use MOM_regridding,       only : end_regridding
+use MOM_regridding,       only : regridding_CS, initialize_regridding, end_regridding
 use MOM_regridding,       only : set_regrid_params, get_regrid_size
-use MOM_regridding,       only : getCoordinateInterfaces
+use MOM_regridding,       only : getCoordinateInterfaces, set_h_neglect, set_dz_neglect
 use MOM_regridding,       only : get_zlike_CS, get_sigma_CS, get_rho_CS
 use regrid_consts,        only : coordinateMode
 use coord_zlike,          only : build_zstar_column
@@ -82,6 +53,8 @@ use coord_rho,            only : build_rho_column
 
 
 implicit none ; private
+
+#include "MOM_memory.h"
 
 public diag_remap_ctrl
 public diag_remap_init, diag_remap_end, diag_remap_update, diag_remap_do_remap
@@ -104,14 +77,19 @@ type :: diag_remap_ctrl
   logical :: used = .false.  !< Whether this coordinate actually gets used.
   integer :: vertical_coord = 0 !< The vertical coordinate that we remap to
   character(len=10) :: vertical_coord_name ='' !< The coordinate name as understood by ALE
+  logical :: Z_based_coord = .false.  !< If true, this coordinate is based on remapping of
+                                      !! geometric distances across layers (in [Z ~> m]) rather
+                                      !! than layer thicknesses (in [H ~> m or kg m-2]).  This
+                                      !! distinction only matters in non-Boussinesq mode.
   character(len=16) :: diag_coord_name = '' !< A name for the purpose of run-time parameters
   character(len=8) :: diag_module_suffix = '' !< The suffix for the module to appear in diag_table
   type(remapping_CS) :: remap_cs !< Remapping control structure use for this axes
   type(regridding_CS) :: regrid_cs !< Regridding control structure that defines the coordinates for this axes
   integer :: nz = 0 !< Number of vertical levels used for remapping
-  real, dimension(:,:,:), allocatable :: h !< Remap grid thicknesses [H ~> m or kg m-2]
-  real, dimension(:,:,:), allocatable :: h_extensive !< Remap grid thicknesses for extensive
-                                           !! variables [H ~> m or kg m-2]
+  real, dimension(:,:,:), allocatable :: h !< Remap grid thicknesses in [H ~> m or kg m-2] or
+                                      !! vertical extents in [Z ~> m], depending on the setting of Z_based_coord.
+  real, dimension(:,:,:), allocatable :: h_extensive !< Remap grid thicknesses in [H ~> m or kg m-2] or
+                                      !! vertical extents in [Z ~> m] for remapping extensive variables
   integer :: interface_axes_id = 0 !< Vertical axes id for remapping at interfaces
   integer :: layer_axes_id = 0 !< Vertical axes id for remapping on layers
   integer :: answer_date      !< The vintage of the order of arithmetic and expressions
@@ -124,19 +102,28 @@ end type diag_remap_ctrl
 contains
 
 !> Initialize a diagnostic remapping type with the given vertical coordinate.
-subroutine diag_remap_init(remap_cs, coord_tuple, answer_date)
-  type(diag_remap_ctrl), intent(inout) :: remap_cs !< Diag remapping control structure
+subroutine diag_remap_init(remap_cs, coord_tuple, answer_date, GV)
+  type(diag_remap_ctrl), intent(inout) :: remap_cs    !< Diag remapping control structure
   character(len=*),      intent(in)    :: coord_tuple !< A string in form of
                                                       !! MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME
   integer,               intent(in)    :: answer_date !< The vintage of the order of arithmetic and expressions
                                                       !! to use for remapping.  Values below 20190101 recover
                                                       !! the answers from 2018, while higher values use more
                                                       !! robust forms of the same remapping expressions.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean vertical grid structure, used here to evaluate
+                                                      !! whether the model is in non-Boussinesq mode.
 
   remap_cs%diag_module_suffix = trim(extractWord(coord_tuple, 1))
   remap_cs%diag_coord_name = trim(extractWord(coord_tuple, 2))
   remap_cs%vertical_coord_name = trim(extractWord(coord_tuple, 3))
   remap_cs%vertical_coord = coordinateMode(remap_cs%vertical_coord_name)
+  remap_cs%Z_based_coord = .false.
+  if (.not.(GV%Boussinesq .or. GV%semi_Boussinesq) .and. &
+      ((remap_cs%vertical_coord == coordinateMode('ZSTAR')) .or. &
+       (remap_cs%vertical_coord == coordinateMode('SIGMA')) .or. &
+       (remap_cs%vertical_coord == coordinateMode('RHO'))) ) &
+    remap_cs%Z_based_coord = .true.
+
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
   remap_cs%used = .false.
@@ -196,7 +183,11 @@ subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
   character(len=40)  :: mod  = "MOM_diag_remap" ! This module's name.
   character(len=8)   :: units
   character(len=34)  :: longname
-  real, allocatable, dimension(:) :: interfaces, layers
+  real, allocatable, dimension(:) :: &
+    interfaces, & ! Numerical values for interface vertical coordinates, in unscaled units
+                  ! that might be [m], [kg m-3] or [nondim], depending on the coordinate.
+    layers        ! Numerical values for layer vertical coordinates, in unscaled units
+                  ! that might be [m], [kg m-3] or [nondim], depending on the coordinate.
 
   call initialize_regridding(remap_cs%regrid_cs, GV, US, GV%max_depth, param_file, mod, &
            trim(remap_cs%vertical_coord_name), "DIAG_COORD", trim(remap_cs%diag_coord_name))
@@ -274,31 +265,46 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
   type(ocean_grid_type),   pointer    :: G  !< The ocean's grid type
   type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US !< A dimensional unit scaling type
-  real, dimension(:,:,:),  intent(in) :: h  !< New thickness [H ~> m or kg m-2]
-  real, dimension(:,:,:),  intent(in) :: T  !< New temperatures [C ~> degC]
-  real, dimension(:,:,:),  intent(in) :: S  !< New salinities [S ~> ppt]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h  !< New thickness in [H ~> m or kg m-2] or [Z ~> m], depending
+                                            !! on the value of remap_cs%Z_based_coord
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: T  !< New temperatures [C ~> degC]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: S  !< New salinities [S ~> ppt]
   type(EOS_type),          intent(in) :: eqn_of_state !< A pointer to the equation of state
-  real, dimension(:,:,:),  intent(inout) :: h_target  !< The new diagnostic thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),remap_cs%nz), &
+                        intent(inout) :: h_target  !< The new diagnostic thicknesses in [H ~> m or kg m-2]
+                                            !! or [Z ~> m], depending on the value of remap_cs%Z_based_coord
 
   ! Local variables
-  real, dimension(remap_cs%nz + 1) :: zInterfaces ! Interface positions [H ~> m or kg m-2]
-  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
-  integer :: i, j, k, nz
+  real, dimension(remap_cs%nz + 1) :: zInterfaces ! Interface positions [H ~> m or kg m-2] or [Z ~> m]
+  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  real :: bottom_depth(SZI_(G),SZJ_(G)) ! The depth of the bathymetry in [H ~> m or kg m-2] or [Z ~> m]
+  real :: h_tot(SZI_(G),SZJ_(G))        ! The total thickness of the water column [H ~> m or kg m-2] or [Z ~> m]
+  real :: Z_unit_scale   ! A conversion factor from Z-units the internal work units in this routine,
+                         ! in units of [H Z-1 ~> 1 or kg m-3] or [nondim], depending on remap_cs%Z_based_coord.
+  integer :: i, j, k, is, ie, js, je, nz
 
-  ! Note that coordinateMode('LAYER') is never 'configured' so will
-  ! always return here.
-  if (.not. remap_cs%configured) then
-    return
-  endif
+  ! Note that coordinateMode('LAYER') is never 'configured' so will always return here.
+  if (.not. remap_cs%configured) return
 
-  if (remap_cs%answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+
+  ! Set the bottom depth and negligible thicknesses used in the coordinate remapping in the right units.
+  if (remap_cs%Z_based_coord) then
+    h_neglect = set_dz_neglect(GV, US, remap_cs%answer_date, h_neglect_edge)
+    Z_unit_scale = 1.0
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      bottom_depth(i,j) = G%bathyT(i,j) + G%Z_ref
+    enddo ; enddo
   else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+    h_neglect = set_h_neglect(GV, remap_cs%answer_date, h_neglect_edge)
+    Z_unit_scale = GV%Z_to_H  ! This branch is not used in fully non-Boussinesq mode.
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      bottom_depth(i,j) = GV%Z_to_H * (G%bathyT(i,j) + G%Z_ref)
+    enddo ; enddo
   endif
-  nz = remap_cs%nz
 
   if (.not. remap_cs%initialized) then
     ! Initialize remapping and regridding on the first call
@@ -307,145 +313,203 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
     remap_cs%initialized = .true.
   endif
 
+  ! Calculate the total thickness of the water column, if it is needed,
+  if ((remap_cs%vertical_coord == coordinateMode('ZSTAR')) .or. &
+      (remap_cs%vertical_coord == coordinateMode('SIGMA'))) then
+    if (remap_CS%answer_date >= 20240201) then
+      ! Avoid using sum to have a specific order for the vertical sums.
+      ! For some compilers, the explicit expression gives the same answers as the sum function.
+      h_tot(:,:) = 0.0
+      do k=1,GV%ke ; do j=js-1,je+1 ; do i=is-1,ie+1
+        h_tot(i,j) = h_tot(i,j) + h(i,j,k)
+      enddo ; enddo ; enddo
+    else
+      do j=js-1,je+1 ; do i=is-1,ie+1
+        h_tot(i,j) = sum(h(i,j,:))
+      enddo ; enddo
+    endif
+  endif
+
   ! Calculate remapping thicknesses for different target grids based on
   ! nominal/target interface locations. This happens for every call on the
   ! assumption that h, T, S has changed.
-  do j=G%jsc-1, G%jec+1 ; do i=G%isc-1, G%iec+1
-    if (G%mask2dT(i,j)==0.) then
-      h_target(i,j,:) = 0.
-      cycle
-    endif
+  h_target(:,:,:) = 0.0
 
-    if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
+  nz = remap_cs%nz
+  if (remap_cs%vertical_coord == coordinateMode('ZSTAR')) then
+    do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
+      ! This function call can work with the last 4 arguments all in units of [Z ~> m] or [H ~> kg m-2].
       call build_zstar_column(get_zlike_CS(remap_cs%regrid_cs), &
-                              GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), &
-                              zInterfaces, zScale=GV%Z_to_H)
-    elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
+                              bottom_depth(i,j), h_tot(i,j), zInterfaces, zScale=Z_unit_scale)
+      do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
+    endif ; enddo ; enddo
+  elseif (remap_cs%vertical_coord == coordinateMode('SIGMA')) then
+    do j=js-1, je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
+      ! This function call can work with the last 3 arguments all in units of [Z ~> m] or [H ~> kg m-2].
       call build_sigma_column(get_sigma_CS(remap_cs%regrid_cs), &
-                              GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), zInterfaces)
-    elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
+                              bottom_depth(i,j), h_tot(i,j), zInterfaces)
+      do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
+    endif ; enddo ; enddo
+  elseif (remap_cs%vertical_coord == coordinateMode('RHO')) then
+    do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
+      ! This function call can work with 5 arguments in units of [Z ~> m] or [H ~> kg m-2].
       call build_rho_column(get_rho_CS(remap_cs%regrid_cs), GV%ke, &
-                            GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), h(i,j,:), T(i,j,:), S(i,j,:), &
-                            eqn_of_state, zInterfaces, h_neglect, h_neglect_edge)
-    elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
-!     call build_hycom1_column(remap_cs%regrid_cs, nz, &
-!                           GV%Z_to_H*(G%bathyT(i,j)+G%Z_ref), sum(h(i,j,:)), zInterfaces)
-      call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
-    endif
-    do k = 1,nz
-      h_target(i,j,k) = zInterfaces(k) - zInterfaces(k+1)
-    enddo
-  enddo ; enddo
+                            bottom_depth(i,j), h(i,j,:), T(i,j,:), S(i,j,:), &
+                            eqn_of_state, zInterfaces, h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+      do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
+    endif ; enddo ; enddo
+  elseif (remap_cs%vertical_coord == coordinateMode('HYCOM1')) then
+    call MOM_error(FATAL,"diag_remap_update: HYCOM1 coordinate not coded for diagnostics yet!")
+!    do j=js-1,je+1 ; do i=is-1,ie+1 ; if (G%mask2dT(i,j) > 0.0) then
+!      call build_hycom1_column(remap_cs%regrid_cs, nz, &
+!                           bottom_depth(i,j), h_tot(i,j), zInterfaces)
+!      do k=1,nz ; h_target(i,j,k) = zInterfaces(K) - zInterfaces(K+1) ; enddo
+!    endif ; enddo ; enddo
+  endif
 
 end subroutine diag_remap_update
 
 !> Remap diagnostic field to alternative vertical grid.
-subroutine diag_remap_do_remap(remap_cs, G, GV, h, staggered_in_x, staggered_in_y, &
+subroutine diag_remap_do_remap(remap_cs, G, GV, US, h, staggered_in_x, staggered_in_y, &
                                mask, field, remapped_field)
-  type(diag_remap_ctrl),   intent(in) :: remap_cs !< Diagnostic coodinate control structure
-  type(ocean_grid_type),   intent(in) :: G  !< Ocean grid structure
-  type(verticalGrid_type), intent(in) :: GV !< ocean vertical grid structure
-  real, dimension(:,:,:),  intent(in) :: h  !< The current thicknesses [H ~> m or kg m-2]
-  logical,                 intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
-  logical,                 intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
-  real, dimension(:,:,:),  pointer    :: mask !< A mask for the field [nondim]
-  real, dimension(:,:,:),  intent(in) :: field(:,:,:) !< The diagnostic field to be remapped [A]
-  real, dimension(:,:,:),  intent(inout) :: remapped_field !< Field remapped to new coordinate [A]
+  type(diag_remap_ctrl),   intent(in)  :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
+  real, dimension(:,:,:),  intent(in)  :: h  !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
+                                             !! depending on the value of remap_CS%Z_based_coord
+  logical,                 intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                 intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(:,:,:),  pointer     :: mask !< A mask for the field [nondim].
+  real, dimension(:,:,:),  intent(in)  :: field(:,:,:) !< The diagnostic field to be remapped [A]
+  real, dimension(:,:,:),  intent(out) :: remapped_field !< Field remapped to new coordinate [A]
+
   ! Local variables
-  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2]
-  real, dimension(size(h,3)) :: h_src    ! A column of source thicknesses [H ~> m or kg m-2]
-  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2]
-  integer :: nz_src, nz_dest
-  integer :: i, j                   !< Grid index
-  integer :: i1, j1                 !< 1-based index
-  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
-  integer :: shift                  !< Symmetric offset for 1-based indexing
+  integer :: isdf, jsdf !< The starting i- and j-indices in memory for field
 
   call assert(remap_cs%initialized, 'diag_remap_do_remap: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
               'diag_remap_do_remap: Remap field and thickness z-axes do not match.')
 
-  if (remap_cs%answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  isdf = G%isd ; if (staggered_in_x) Isdf = G%IsdB
+  jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
+
+  if (associated(mask)) then
+    call do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                  field, remapped_field, mask(:,:,1))
   else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
+    call do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                  field, remapped_field)
+  endif
+
+end subroutine diag_remap_do_remap
+
+!> The internal routine to remap a diagnostic field to an alternative vertical grid.
+subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                    field, remapped_field, mask)
+  type(diag_remap_ctrl),   intent(in)  :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type), intent(in)  :: GV !< ocean vertical grid structure
+  type(unit_scale_type),   intent(in)  :: US !< A dimensional unit scaling type
+  integer,                 intent(in)  :: isdf !< The starting i-index in memory for field
+  integer,                 intent(in)  :: jsdf !< The starting j-index in memory for field
+  real, dimension(G%isd:,G%jsd:,:), &
+                           intent(in)  :: h  !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
+                                             !! depending on the value of remap_CS%Z_based_coord
+  logical,                 intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                 intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(isdf:,jsdf:,:), &
+                           intent(in)  :: field !< The diagnostic field to be remapped [A]
+  real, dimension(isdf:,jsdf:,:), &
+                           intent(out) :: remapped_field !< Field remapped to new coordinate [A]
+  real, dimension(isdf:,jsdf:), &
+                 optional, intent(in)  :: mask !< A mask for the field [nondim]
+
+  ! Local variables
+  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(size(h,3)) :: h_src    ! A column of source thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  integer :: nz_src, nz_dest        ! The number of layers on the native and remapped grids
+  integer :: i, j                   ! Grid index
+
+  if (remap_cs%Z_based_coord) then
+    h_neglect = set_dz_neglect(GV, US, remap_cs%answer_date, h_neglect_edge)
+  else
+    h_neglect = set_h_neglect(GV, remap_cs%answer_date, h_neglect_edge)
   endif
 
   nz_src = size(field,3)
   nz_dest = remap_cs%nz
   remapped_field(:,:,:) = 0.
 
-  ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0 ; if (G%symmetric) shift = 1
-
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
-    do j=G%jsc, G%jec
-      do I=G%iscB, G%iecB
-        I1 = I - G%isdB + 1
-        i_lo = I1 - shift; i_hi = i_lo + 1
-        if (associated(mask)) then
-          if (mask(I,j,1) == 0.) cycle
-        endif
-        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
-        call remapping_core_h(remap_cs%remap_cs, &
-                              nz_src, h_src(:), field(I1,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I1,j,:), &
-                              h_neglect, h_neglect_edge)
-      enddo
-    enddo
+    if (present(mask)) then
+      do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (mask(I,j) > 0.) then
+        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
+                              nz_dest, h_dest(:), remapped_field(I,j,:), h_neglect, h_neglect_edge)
+      endif ; enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
+                              nz_dest, h_dest(:), remapped_field(I,j,:), h_neglect, h_neglect_edge)
+      enddo ; enddo
+    endif
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
-    do J=G%jscB, G%jecB
-      J1 = J - G%jsdB + 1
-      j_lo = J1 - shift; j_hi = j_lo + 1
-      do i=G%isc, G%iec
-        if (associated(mask)) then
-          if (mask(i,J,1) == 0.) cycle
-        endif
-        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
-        call remapping_core_h(remap_cs%remap_cs, &
-                              nz_src, h_src(:), field(i,J1,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J1,:), &
-                              h_neglect, h_neglect_edge)
-      enddo
-    enddo
+    if (present(mask)) then
+      do J=G%jscB,G%jecB ; do i=G%isc,G%iec ; if (mask(i,j) > 0.) then
+        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
+                              nz_dest, h_dest(:), remapped_field(i,J,:), h_neglect, h_neglect_edge)
+      endif ; enddo ; enddo
+    else
+      do J=G%jscB,G%jecB ; do i=G%isc,G%iec
+        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
+                              nz_dest, h_dest(:), remapped_field(i,J,:), h_neglect, h_neglect_edge)
+      enddo ; enddo
+    endif
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
     ! H-points
-    do j=G%jsc, G%jec
-      do i=G%isc, G%iec
-        if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
-        endif
-        h_src(:) = h(i,j,:)
-        h_dest(:) = remap_cs%h(i,j,:)
-        call remapping_core_h(remap_cs%remap_cs, &
-                              nz_src, h_src(:), field(i,j,:), &
-                              nz_dest, h_dest(:), remapped_field(i,j,:), &
+    if (present(mask)) then
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (mask(i,j) > 0.) then
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
+                              nz_dest, remap_cs%h(i,j,:), remapped_field(i,j,:), &
                               h_neglect, h_neglect_edge)
-      enddo
-    enddo
+      endif ; enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
+                              nz_dest, remap_cs%h(i,j,:), remapped_field(i,j,:), &
+                              h_neglect, h_neglect_edge)
+      enddo ; enddo
+    endif
   else
     call assert(.false., 'diag_remap_do_remap: Unsupported axis combination')
   endif
 
-end subroutine diag_remap_do_remap
+end subroutine do_remap
 
 !> Calculate masks for target grid
 subroutine diag_remap_calc_hmask(remap_cs, G, mask)
-  type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coodinate control structure
+  type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),  intent(in)  :: G    !< Ocean grid structure
-  real, dimension(:,:,:), intent(out) :: mask !< h-point mask for target grid [nondim]
+  real, dimension(G%isd:,G%jsd:,:), &
+                          intent(out) :: mask !< h-point mask for target grid [nondim]
+
   ! Local variables
-  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2]
+  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2] or [Z ~> m]
   integer :: i, j, k
   logical :: mask_vanished_layers
-  real :: h_tot      ! Sum of all thicknesses [H ~> m or kg m-2]
-  real :: h_err      ! An estimate of a negligible thickness [H ~> m or kg m-2]
+  real :: h_tot      ! Sum of all thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  real :: h_err      ! An estimate of a negligible thickness [H ~> m or kg m-2] or [Z ~> m]
 
   call assert(remap_cs%initialized, 'diag_remap_calc_hmask: remap_cs not initialized.')
 
@@ -453,7 +517,7 @@ subroutine diag_remap_calc_hmask(remap_cs, G, mask)
   mask_vanished_layers = (remap_cs%vertical_coord == coordinateMode('ZSTAR'))
   mask(:,:,:) = 0.
 
-  do j=G%jsc-1, G%jec+1 ; do i=G%isc-1, G%iec+1
+  do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
     if (G%mask2dT(i,j)>0.) then
       if (mask_vanished_layers) then
         h_dest(:) = remap_cs%h(i,j,:)
@@ -482,166 +546,239 @@ end subroutine diag_remap_calc_hmask
 !> Vertically re-grid an already vertically-integrated diagnostic field to alternative vertical grid.
 subroutine vertically_reintegrate_diag_field(remap_cs, G, h, h_target, staggered_in_x, staggered_in_y, &
                                              mask, field, reintegrated_field)
-  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
-  type(ocean_grid_type),  intent(in) :: G        !< Ocean grid structure
-  real, dimension(:,:,:), intent(in) :: h        !< The thicknesses of the source grid [H ~> m or kg m-2]
-  real, dimension(:,:,:), intent(in) :: h_target !< The thicknesses of the target grid [H ~> m or kg m-2]
-  logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
-  logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
-  real, dimension(:,:,:), pointer    :: mask     !< A mask for the field [nondim]
-  real, dimension(:,:,:), intent(in) :: field    !<  The diagnostic field to be remapped [A]
-  real, dimension(:,:,:), intent(inout) :: reintegrated_field !< Field argument remapped to alternative coordinate [A]
+  type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),  intent(in)  :: G        !< Ocean grid structure
+  real, dimension(:,:,:), intent(in)  :: h        !< The thicknesses of the source grid [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(:,:,:), intent(in)  :: h_target !< The thicknesses of the target grid [H ~> m or kg m-2] or [Z ~> m]
+  logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(:,:,:), pointer     :: mask     !< A mask for the field [nondim].  Note that because this
+                                                  !! is a pointer it retains its declared indexing conventions.
+  real, dimension(:,:,:), intent(in)  :: field    !<  The diagnostic field to be remapped [A]
+  real, dimension(:,:,:), intent(out) :: reintegrated_field !< Field argument remapped to alternative coordinate [A]
+
   ! Local variables
-  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2]
-  real, dimension(size(h,3)) :: h_src    ! A column of source thicknesses [H ~> m or kg m-2]
-  integer :: nz_src, nz_dest
-  integer :: i, j                   !< Grid index
-  integer :: i1, j1                 !< 1-based index
-  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
-  integer :: shift                  !< Symmetric offset for 1-based indexing
+  integer :: isdf, jsdf !< The starting i- and j-indices in memory for field
 
   call assert(remap_cs%initialized, 'vertically_reintegrate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3), &
               'vertically_reintegrate_diag_field: Remap field and thickness z-axes do not match.')
 
-  nz_src = size(field,3)
-  nz_dest = remap_cs%nz
-  reintegrated_field(:,:,:) = 0.
+  isdf = G%isd ; if (staggered_in_x) Isdf = G%IsdB
+  jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
 
-  ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0 ; if (G%symmetric) shift = 1
-
-  if (staggered_in_x .and. .not. staggered_in_y) then
-    ! U-points
-    do j=G%jsc, G%jec
-      do I=G%iscB, G%iecB
-        I1 = I - G%isdB + 1
-        i_lo = I1 - shift; i_hi = i_lo + 1
-        if (associated(mask)) then
-          if (mask(I,j,1) == 0.) cycle
-        endif
-        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
-        h_dest(:) = 0.5 * (h_target(i_lo,j,:) + h_target(i_hi,j,:))
-        call reintegrate_column(nz_src, h_src, field(I1,j,:), &
-                                nz_dest, h_dest, reintegrated_field(I1,j,:))
-      enddo
-    enddo
-  elseif (staggered_in_y .and. .not. staggered_in_x) then
-    ! V-points
-    do J=G%jscB, G%jecB
-      J1 = J - G%jsdB + 1
-      j_lo = J1 - shift; j_hi = j_lo + 1
-      do i=G%isc, G%iec
-        if (associated(mask)) then
-          if (mask(i,J,1) == 0.) cycle
-        endif
-        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
-        h_dest(:) = 0.5 * (h_target(i,j_lo,:) + h_target(i,j_hi,:))
-        call reintegrate_column(nz_src, h_src, field(i,J1,:), &
-                                nz_dest, h_dest, reintegrated_field(i,J1,:))
-      enddo
-    enddo
-  elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
-    ! H-points
-    do j=G%jsc, G%jec
-      do i=G%isc, G%iec
-        if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
-        endif
-        h_src(:) = h(i,j,:)
-        h_dest(:) = h_target(i,j,:)
-        call reintegrate_column(nz_src, h_src, field(i,j,:), &
-                                nz_dest, h_dest, reintegrated_field(i,j,:))
-      enddo
-    enddo
+  if (associated(mask)) then
+    call vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, staggered_in_x, staggered_in_y, &
+                                      field, reintegrated_field, mask(:,:,1))
   else
-    call assert(.false., 'vertically_reintegrate_diag_field: Q point remapping is not coded yet.')
+    call vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, staggered_in_x, staggered_in_y, &
+                                      field, reintegrated_field)
   endif
 
 end subroutine vertically_reintegrate_diag_field
 
+!> The internal routine to vertically re-grid an already vertically-integrated diagnostic field to
+!! an alternative vertical grid.
+subroutine vertically_reintegrate_field(remap_cs, G, isdf, jsdf, h, h_target, staggered_in_x, staggered_in_y, &
+                                        field, reintegrated_field, mask)
+  type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),  intent(in)  :: G        !< Ocean grid structure
+  integer,                intent(in)  :: isdf     !< The starting i-index in memory for field
+  integer,                intent(in)  :: jsdf     !< The starting j-index in memory for field
+  real, dimension(G%isd:,G%jsd:,:), &
+                          intent(in)  :: h        !< The thicknesses of the source grid [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(G%isd:,G%jsd:,:), &
+                          intent(in)  :: h_target !< The thicknesses of the target grid [H ~> m or kg m-2] or [Z ~> m]
+  logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(isdf:,jsdf:,:), &
+                          intent(in)  :: field   !< The diagnostic field to be remapped [A]
+  real, dimension(isdf:,jsdf:,:), &
+                          intent(out) :: reintegrated_field !< Field argument remapped to alternative coordinate [A]
+  real, dimension(isdf:,jsdf:), &
+                optional, intent(in)  :: mask !< A mask for the field [nondim]
+
+  ! Local variables
+  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(size(h,3)) :: h_src    ! A column of source thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  integer :: nz_src, nz_dest        ! The number of layers on the native and remapped grids
+  integer :: i, j                   ! Grid index
+
+  nz_src = size(field,3)
+  nz_dest = remap_cs%nz
+  reintegrated_field(:,:,:) = 0.
+
+  if (staggered_in_x .and. .not. staggered_in_y) then
+    ! U-points
+    if (present(mask)) then
+      do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (mask(I,j) > 0.0) then
+        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i+1,j,:))
+        call reintegrate_column(nz_src, h_src, field(I,j,:), &
+                                nz_dest, h_dest, reintegrated_field(I,j,:))
+      endif ; enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i+1,j,:))
+        call reintegrate_column(nz_src, h_src, field(I,j,:), &
+                                nz_dest, h_dest, reintegrated_field(I,j,:))
+      enddo ; enddo
+    endif
+  elseif (staggered_in_y .and. .not. staggered_in_x) then
+    ! V-points
+    if (present(mask)) then
+      do J=G%jscB,G%jecB ; do i=G%isc,G%iec ; if (mask(i,J) > 0.0) then
+        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i,j+1,:))
+        call reintegrate_column(nz_src, h_src, field(i,J,:), &
+                                nz_dest, h_dest, reintegrated_field(i,J,:))
+      endif ; enddo ; enddo
+    else
+      do J=G%jscB,G%jecB ; do i=G%isc,G%iec
+        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+        h_dest(:) = 0.5 * (h_target(i,j,:) + h_target(i,j+1,:))
+        call reintegrate_column(nz_src, h_src, field(i,J,:), &
+                                nz_dest, h_dest, reintegrated_field(i,J,:))
+      enddo ; enddo
+    endif
+  elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
+    ! H-points
+    if (present(mask)) then
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (mask(i,J) > 0.0) then
+        call reintegrate_column(nz_src, h(i,j,:), field(i,j,:), &
+                                nz_dest, h_target(i,j,:), reintegrated_field(i,j,:))
+      endif ; enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        call reintegrate_column(nz_src, h(i,j,:), field(i,j,:), &
+                                nz_dest, h_target(i,j,:), reintegrated_field(i,j,:))
+      enddo ; enddo
+    endif
+  else
+    call assert(.false., 'vertically_reintegrate_diag_field: Q point remapping is not coded yet.')
+  endif
+
+end subroutine vertically_reintegrate_field
+
 !> Vertically interpolate diagnostic field to alternative vertical grid.
 subroutine vertically_interpolate_diag_field(remap_cs, G, h, staggered_in_x, staggered_in_y, &
                                              mask, field, interpolated_field)
-  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coodinate control structure
+  type(diag_remap_ctrl),  intent(in) :: remap_cs !< Diagnostic coordinate control structure
   type(ocean_grid_type),  intent(in) :: G   !< Ocean grid structure
-  real, dimension(:,:,:), intent(in) :: h   !< The current thicknesses [H ~> m or kg m-2]
+  real, dimension(:,:,:), intent(in) :: h   !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
+                                            !! depending on the value of remap_cs%Z_based_coord
   logical,                intent(in) :: staggered_in_x !< True is the x-axis location is at u or q points
   logical,                intent(in) :: staggered_in_y !< True is the y-axis location is at v or q points
-  real, dimension(:,:,:), pointer    :: mask !< A mask for the field [nondim]
+  real, dimension(:,:,:), pointer    :: mask !< A mask for the field [nondim].  Note that because this
+                                             !! is a pointer it retains its declared indexing conventions.
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped [A]
   real, dimension(:,:,:), intent(inout) :: interpolated_field !< Field argument remapped to alternative coordinate [A]
+
   ! Local variables
-  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2]
-  real, dimension(size(h,3)) :: h_src    ! A column of source thicknesses [H ~> m or kg m-2]
-  integer :: nz_src, nz_dest
-  integer :: i, j                   !< Grid index
-  integer :: i1, j1                 !< 1-based index
-  integer :: i_lo, i_hi, j_lo, j_hi !< (uv->h) interpolation indices
-  integer :: shift                  !< Symmetric offset for 1-based indexing
+  integer :: isdf, jsdf !< The starting i- and j-indices in memory for field
 
   call assert(remap_cs%initialized, 'vertically_interpolate_diag_field: remap_cs not initialized.')
   call assert(size(field, 3) == size(h, 3)+1, &
               'vertically_interpolate_diag_field: Remap field and thickness z-axes do not match.')
+
+  isdf = G%isd ; if (staggered_in_x) Isdf = G%IsdB
+  jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
+
+  if (associated(mask)) then
+    call vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                                      field, interpolated_field, mask(:,:,1))
+  else
+    call vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                                      field, interpolated_field)
+  endif
+
+end subroutine vertically_interpolate_diag_field
+
+!> Internal routine to vertically interpolate a diagnostic field to an alternative vertical grid.
+subroutine vertically_interpolate_field(remap_cs, G, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                                        field, interpolated_field, mask)
+  type(diag_remap_ctrl),  intent(in)  :: remap_cs !< Diagnostic coordinate control structure
+  type(ocean_grid_type),  intent(in)  :: G    !< Ocean grid structure
+  integer,                intent(in)  :: isdf !< The starting i-index in memory for field
+  integer,                intent(in)  :: jsdf !< The starting j-index in memory for field
+  real, dimension(G%isd:,G%jsd:,:), &
+                          intent(in)  :: h    !< The current thicknesses [H ~> m or kg m-2] or [Z ~> m],
+                                              !! depending on the value of remap_cs%Z_based_coord
+  logical,                intent(in)  :: staggered_in_x !< True is the x-axis location is at u or q points
+  logical,                intent(in)  :: staggered_in_y !< True is the y-axis location is at v or q points
+  real, dimension(isdf:,jsdf:,:), &
+                          intent(in)  :: field !< The diagnostic field to be remapped [A]
+  real, dimension(isdf:,jsdf:,:), &
+                          intent(out) :: interpolated_field !< Field argument remapped to alternative coordinate [A]
+  real, dimension(isdf:,jsdf:), &
+                optional, intent(in)  :: mask !< A mask for the field [nondim]
+
+  ! Local variables
+  real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(size(h,3)) :: h_src    ! A column of source thicknesses [H ~> m or kg m-2] or [Z ~> m]
+  integer :: nz_src, nz_dest        ! The number of layers on the native and remapped grids
+  integer :: i, j                   !< Grid index
 
   interpolated_field(:,:,:) = 0.
 
   nz_src = size(h,3)
   nz_dest = remap_cs%nz
 
-  ! Symmetric grid offset under 1-based indexing; see header for details.
-  shift = 0 ; if (G%symmetric) shift = 1
-
   if (staggered_in_x .and. .not. staggered_in_y) then
     ! U-points
-    do j=G%jsc, G%jec
-      do I=G%iscB, G%iecB
-        I1 = I - G%isdB + 1
-        i_lo = I1 - shift; i_hi = i_lo + 1
-        if (associated(mask)) then
-          if (mask(I,j,1) == 0.) cycle
-        endif
-        h_src(:) = 0.5 * (h(i_lo,j,:) + h(i_hi,j,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i_lo,j,:) + remap_cs%h(i_hi,j,:))
-        call interpolate_column(nz_src, h_src, field(I1,j,:), &
-                                nz_dest, h_dest, interpolated_field(I1,j,:), .true.)
-      enddo
-    enddo
+    if (present(mask)) then
+      do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (mask(I,j) > 0.0) then
+        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        call interpolate_column(nz_src, h_src, field(I,j,:), &
+                                nz_dest, h_dest, interpolated_field(I,j,:), .true.)
+      endif ; enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
+        h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
+        call interpolate_column(nz_src, h_src, field(I,j,:), &
+                                nz_dest, h_dest, interpolated_field(I,j,:), .true.)
+      enddo ; enddo
+    endif
   elseif (staggered_in_y .and. .not. staggered_in_x) then
     ! V-points
-    do J=G%jscB, G%jecB
-      J1 = J - G%jsdB + 1
-      j_lo = J1 - shift; j_hi = j_lo + 1
-      do i=G%isc, G%iec
-        if (associated(mask)) then
-          if (mask(i,J,1) == 0.) cycle
-        endif
-        h_src(:) = 0.5 * (h(i,j_lo,:) + h(i,j_hi,:))
-        h_dest(:) = 0.5 * (remap_cs%h(i,j_lo,:) + remap_cs%h(i,j_hi,:))
-        call interpolate_column(nz_src, h_src, field(i,J1,:), &
-                                nz_dest, h_dest, interpolated_field(i,J1,:), .true.)
-      enddo
-    enddo
+    if (present(mask)) then
+      do J=G%jscB,G%jecB ; do i=G%isc,G%iec ; if (mask(I,j) > 0.0) then
+        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        call interpolate_column(nz_src, h_src, field(i,J,:), &
+                                nz_dest, h_dest, interpolated_field(i,J,:), .true.)
+      endif ; enddo ; enddo
+    else
+      do J=G%jscB,G%jecB ; do i=G%isc,G%iec
+        h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
+        h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
+        call interpolate_column(nz_src, h_src, field(i,J,:), &
+                                nz_dest, h_dest, interpolated_field(i,J,:), .true.)
+      enddo ; enddo
+    endif
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
     ! H-points
-    do j=G%jsc, G%jec
-      do i=G%isc, G%iec
-        if (associated(mask)) then
-          if (mask(i,j,1) == 0.) cycle
-        endif
-        h_src(:) = h(i,j,:)
-        h_dest(:) = remap_cs%h(i,j,:)
-        call interpolate_column(nz_src, h_src, field(i,j,:), &
-                                nz_dest, h_dest, interpolated_field(i,j,:), .true.)
-      enddo
-    enddo
+    if (present(mask)) then
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (mask(i,j) > 0.0) then
+        call interpolate_column(nz_src, h(i,j,:), field(i,j,:), &
+                                nz_dest, remap_cs%h(i,j,:), interpolated_field(i,j,:), .true.)
+      endif ; enddo ; enddo
+    else
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        call interpolate_column(nz_src, h(i,j,:), field(i,j,:), &
+                                nz_dest, remap_cs%h(i,j,:), interpolated_field(i,j,:), .true.)
+      enddo ; enddo
+    endif
   else
     call assert(.false., 'vertically_interpolate_diag_field: Q point remapping is not coded yet.')
   endif
 
-end subroutine vertically_interpolate_diag_field
+end subroutine vertically_interpolate_field
 
-!> Horizontally average field
+!> Horizontally average a diagnostic field
 subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_in_y, &
                                            is_layer, is_extensive, &
                                            field, averaged_field, &
@@ -654,16 +791,51 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
   logical,                intent(in) :: is_layer !< True if the z-axis location is at h points
   logical,                intent(in) :: is_extensive !< True if the z-direction is spatially integrated (over layers)
   real, dimension(:,:,:), intent(in) :: field !<  The diagnostic field to be remapped [A]
-  real, dimension(:),  intent(inout) :: averaged_field !< Field argument horizontally averaged [A]
-  logical, dimension(:), intent(inout) :: averaged_mask  !< Mask for horizontally averaged field [nondim]
+  real, dimension(:),    intent(out) :: averaged_field !< Field argument horizontally averaged [A]
+  logical, dimension(:), intent(out) :: averaged_mask  !< Mask for horizontally averaged field [nondim]
 
   ! Local variables
-  real, dimension(G%isc:G%iec, G%jsc:G%jec, size(field,3)) :: volume, stuff
-  real, dimension(size(field, 3)) :: vol_sum, stuff_sum ! nz+1 is needed for interface averages
+  integer :: isdf, jsdf !< The starting i- and j-indices in memory for field
+
+  isdf = G%isd ; if (staggered_in_x) Isdf = G%IsdB
+  jsdf = G%jsd ; if (staggered_in_y) Jsdf = G%JsdB
+
+  call horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                                  is_layer, is_extensive, field, averaged_field, averaged_mask)
+
+end subroutine horizontally_average_diag_field
+
+!> Horizontally average a diagnostic field
+subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, staggered_in_y, &
+                                      is_layer, is_extensive, field, averaged_field, averaged_mask)
+  type(ocean_grid_type),   intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type), intent(in)  :: GV !< The ocean vertical grid structure
+  integer,                 intent(in)  :: isdf !< The starting i-index in memory for field
+  integer,                 intent(in)  :: jsdf !< The starting j-index in memory for field
+  real, dimension(G%isd:,G%jsd:,:), &
+                           intent(in)  :: h  !< The current thicknesses [H ~> m or kg m-2]
+  logical,                 intent(in)  :: staggered_in_x !< True if the x-axis location is at u or q points
+  logical,                 intent(in)  :: staggered_in_y !< True if the y-axis location is at v or q points
+  logical,                 intent(in)  :: is_layer !< True if the z-axis location is at h points
+  logical,                 intent(in)  :: is_extensive !< True if the z-direction is spatially integrated (over layers)
+  real, dimension(isdf:,jsdf:,:), &
+                           intent(in)  :: field !<  The diagnostic field to be remapped [A]
+  real, dimension(:),      intent(out) :: averaged_field !< Field argument horizontally averaged [A]
+  logical, dimension(:),   intent(out) :: averaged_mask  !< Mask for horizontally averaged field [nondim]
+
+  ! Local variables
+  real :: volume(G%isc:G%iec, G%jsc:G%jec, size(field,3)) ! The area [m2], volume [m3] or mass [kg] of each cell.
+  real :: stuff(G%isc:G%iec, G%jsc:G%jec, size(field,3))  ! The area, volume or mass-weighted integral of the
+                                             ! field being averaged in each cell, in [m2 A], [m3 A] or [kg A],
+                                             ! depending on the weighting for the averages and whether the
+                                             ! model makes the Boussinesq approximation.
+  real, dimension(size(field, 3)) :: vol_sum   ! The global sum of the areas [m2], volumes [m3] or mass [kg]
+                                               ! in the cells that used in the weighted averages.
+  real, dimension(size(field, 3)) :: stuff_sum ! The global sum of the weighted field in all cells, in
+                                               ! [A m2], [A m3] or [A kg]
   type(EFP_type), dimension(2*size(field,3)) :: sums_EFP ! Sums of volume or stuff by layer
   real :: height  ! An average thickness attributed to an velocity point [H ~> m or kg m-2]
   integer :: i, j, k, nz
-  integer :: i1, j1                 !< 1-based index
 
   nz = size(field, 3)
 
@@ -679,26 +851,23 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
         stuff_sum(k) = 0.
         if (is_extensive) then
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
-            I1 = I - G%isdB + 1
             volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) * G%mask2dCu(I,j)
-            stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
+            stuff(I,j,k) = volume(I,j,k) * field(I,j,k)
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
-            I1 = i - G%isdB + 1
             height = 0.5 * (h(i,j,k) + h(i+1,j,k))
             volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) &
-                * (GV%H_to_m * height) * G%mask2dCu(I,j)
-            stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
+                * (GV%H_to_MKS * height) * G%mask2dCu(I,j)
+            stuff(I,j,k) = volume(I,j,k) * field(I,j,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
         do j=G%jsc, G%jec ; do I=G%isc, G%iec
-          I1 = I - G%isdB + 1
           volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) * G%mask2dCu(I,j)
-          stuff(I,j,k) = volume(I,j,k) * field(I1,j,k)
+          stuff(I,j,k) = volume(I,j,k) * field(I,j,k)
         enddo ; enddo
       enddo
     endif
@@ -708,26 +877,23 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
       do k=1,nz
         if (is_extensive) then
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
-            J1 = J - G%jsdB + 1
             volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) * G%mask2dCv(i,J)
-            stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
+            stuff(i,J,k) = volume(i,J,k) * field(i,J,k)
           enddo ; enddo
         else ! Intensive
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
-            J1 = J - G%jsdB + 1
             height = 0.5 * (h(i,j,k) + h(i,j+1,k))
             volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) &
-                * (GV%H_to_m * height) * G%mask2dCv(i,J)
-            stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
+                * (GV%H_to_MKS * height) * G%mask2dCv(i,J)
+            stuff(i,J,k) = volume(i,J,k) * field(i,J,k)
           enddo ; enddo
         endif
       enddo
     else ! Interface
       do k=1,nz
         do J=G%jsc, G%jec ; do i=G%isc, G%iec
-          J1 = J - G%jsdB + 1
           volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) * G%mask2dCv(i,J)
-          stuff(i,J,k) = volume(i,J,k) * field(i,J1,k)
+          stuff(i,J,k) = volume(i,J,k) * field(i,J,k)
         enddo ; enddo
       enddo
     endif
@@ -748,7 +914,7 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
             volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) &
-                * (GV%H_to_m * h(i,j,k)) * G%mask2dT(i,j)
+                * (GV%H_to_MKS * h(i,j,k)) * G%mask2dT(i,j)
             stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
           enddo ; enddo
         endif
@@ -787,6 +953,6 @@ subroutine horizontally_average_diag_field(G, GV, h, staggered_in_x, staggered_i
     endif
   enddo
 
-end subroutine horizontally_average_diag_field
+end subroutine horizontally_average_field
 
 end module MOM_diag_remap

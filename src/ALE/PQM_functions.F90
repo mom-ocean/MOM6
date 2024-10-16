@@ -30,10 +30,10 @@ subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_
 
   ! Local variables
   integer   :: k                ! loop index
-  real      :: h_c              ! cell width
+  real      :: h_c              ! cell width [H]
   real      :: u0_l, u0_r       ! edge values (left and right) [A]
   real      :: u1_l, u1_r       ! edge slopes (left and right) [A H-1]
-  real      :: a, b, c, d, e    ! parabola coefficients
+  real      :: a, b, c, d, e    ! quartic fit coefficients [A]
 
   ! PQM limiter
   call PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_date=answer_date )
@@ -90,14 +90,15 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
   real    :: u1_l, u1_r     ! edge slopes [A H-1]
   real    :: u_l, u_c, u_r  ! left, center and right cell averages [A]
   real    :: h_l, h_c, h_r  ! left, center and right cell widths [H]
-  real    :: sigma_l, sigma_c, sigma_r ! left, center and right van Leer slopes
-  real    :: slope          ! retained PLM slope
-  real    :: a, b, c, d, e
-  real    :: alpha1, alpha2, alpha3
-  real    :: rho, sqrt_rho
-  real    :: gradient1, gradient2
-  real    :: x1, x2
-  real    :: hNeglect
+  real    :: sigma_l, sigma_c, sigma_r ! left, center and right van Leer slopes [A H-1]
+  real    :: slope          ! retained PLM slope [A H-1]
+  real    :: a, b, c, d, e  ! quartic fit coefficients [A]
+  real    :: alpha1, alpha2, alpha3 ! Normalized second derivative coefficients [A]
+  real    :: rho            ! A temporary expression [A2]
+  real    :: sqrt_rho       ! The square root of rho [A]
+  real    :: gradient1, gradient2 ! Normalized gradients [A]
+  real    :: x1, x2         ! Fractional inflection point positions in a cell [nondim]
+  real    :: hNeglect       ! A negligibly small width for the purpose of cell reconstructions [H]
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
@@ -359,13 +360,13 @@ subroutine PQM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef )
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
   ! Local variables
   integer       :: i0, i1
-  real          :: u0, u1
-  real          :: h0, h1
-  real          :: a, b, c, d, e
-  real          :: u0_l, u0_r
-  real          :: u1_l, u1_r
-  real          :: slope
-  real          :: exp1, exp2
+  real          :: u0, u1         ! Successive cell averages [A]
+  real          :: h0, h1         ! Successive cell thicknesses [H]
+  real          :: a, b, c, d, e  ! quartic fit coefficients [A]
+  real          :: u0_l, u0_r     ! Edge values [A]
+  real          :: u1_l, u1_r     ! Edge slopes [A H-1]
+  real          :: slope          ! The integrated slope across the cell [A]
+  real          :: exp1, exp2     ! Two temporary expressions [A2]
 
   ! ----- Left boundary -----
   i0 = 1
@@ -511,19 +512,21 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
   integer :: i0, i1
   integer :: inflexion_l
   integer :: inflexion_r
-  real    :: u0, u1, um
-  real    :: h0, h1
-  real    :: a, b, c, d, e
-  real    :: ar, br, beta
-  real    :: u0_l, u0_r
-  real    :: u1_l, u1_r
-  real    :: u_plm
-  real    :: slope
-  real    :: alpha1, alpha2, alpha3
-  real    :: rho, sqrt_rho
-  real    :: gradient1, gradient2
-  real    :: x1, x2
-  real    :: hNeglect
+  real    :: u0, u1, um     ! Successive cell averages [A]
+  real    :: h0, h1         ! Successive cell thicknesses [H]
+  real    :: a, b, c, d, e  ! quartic fit coefficients [A]
+  real    :: ar, br         ! Temporary variables in [A]
+  real    :: beta           ! A rational function coefficient [nondim]
+  real    :: u0_l, u0_r     ! Edge values [A]
+  real    :: u1_l, u1_r     ! Edge slopes [A H-1]
+  real    :: u_plm          ! The integrated piecewise linear method slope [A]
+  real    :: slope          ! The integrated slope across the cell [A]
+  real    :: alpha1, alpha2, alpha3 ! Normalized second derivative coefficients [A]
+  real    :: rho            ! A temporary expression [A2]
+  real    :: sqrt_rho       ! The square root of rho [A]
+  real    :: gradient1, gradient2 ! Normalized gradients [A]
+  real    :: x1, x2         ! Fractional inflection point positions in a cell [nondim]
+  real    :: hNeglect       ! A negligibly small width for the purpose of cell reconstructions [H]
 
   hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 

@@ -19,7 +19,7 @@ use MOM_domains,             only : pass_var, pass_vector, AGRID, To_South, To_W
 use MOM_domains,             only : fill_symmetric_edges, CGRID_NE
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, MOM_mesg, is_root_pe
 use MOM_error_handler,       only : callTree_enter, callTree_leave
-use MOM_file_parser,         only : get_param, log_version, param_file_type
+use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
 use MOM_string_functions,    only : uppercase
 use MOM_forcing_type,        only : forcing, mech_forcing
 use MOM_forcing_type,        only : set_net_mass_forcing, copy_common_forcing_fields
@@ -116,8 +116,8 @@ type, public :: surface_forcing_CS ; private
                              !! Dates before 20190101 use original answers.
                              !! Dates after 20190101 use a form of the gyre wind stresses that are
                              !! rotationally invariant and more likely to be the same between compilers.
-  logical :: fix_ustar_gustless_bug         !< If true correct a bug in the time-averaging of the
-                                            !! gustless wind friction velocity.
+  logical :: ustar_gustless_bug   !< If true, include a bug in the time-averaging of the
+                                  !! gustless wind friction velocity.
   ! if WIND_CONFIG=='scurves' then use the following to define a piecewise scurve profile
   real :: scurves_ydata(20) = 90. !< Latitudes of scurve nodes [degreesN]
   real :: scurves_taux(20) = 0.   !< Zonal wind stress values at scurve nodes [R L Z T-2 ~> Pa]
@@ -256,7 +256,7 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     call allocate_mech_forcing(G, forces, stress=.true., ustar=.not.CS%nonBous, press=.true., tau_mag=CS%nonBous)
 
     call allocate_forcing_type(G, fluxes, ustar=.not.CS%nonBous, tau_mag=CS%nonBous, &
-                               fix_accum_bug=CS%fix_ustar_gustless_bug)
+                               fix_accum_bug=.not.CS%ustar_gustless_bug)
     if (trim(CS%buoy_config) /= "NONE") then
       if ( CS%use_temperature ) then
         call allocate_forcing_type(G, fluxes, water=.true., heat=.true., press=.true.)
@@ -533,13 +533,13 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   ! set the friction velocity
   if (CS%answer_date < 20190101) then
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-      forces%tau_mag(i,j) = CS%gust_const + sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                                                      (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+      forces%tau_mag(i,j) = CS%gust_const + sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                                      ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       forces%ustar(i,j) = sqrt(US%L_to_Z * ((CS%gust_const/CS%Rho0) + &
-              sqrt(0.5*(forces%tauy(i,J-1)*forces%tauy(i,J-1) + forces%tauy(i,J)*forces%tauy(i,J) + &
-                        forces%taux(I-1,j)*forces%taux(I-1,j) + forces%taux(I,j)*forces%taux(I,j)))/CS%Rho0) )
+              sqrt(0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2) + &
+                        (forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)))/CS%Rho0) )
     enddo ; enddo ; endif
   else
     call stresses_to_ustar(forces, G, US, CS)
@@ -743,19 +743,19 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       if (.not.read_Ustar) then
         if (CS%read_gust_2d) then
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-            forces%tau_mag(i,j) = CS%gust(i,j) + sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)
+            forces%tau_mag(i,j) = CS%gust(i,j) + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-            tau_mag = CS%gust(i,j) + sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)
+            tau_mag = CS%gust(i,j) + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
             forces%ustar(i,j) = sqrt(tau_mag * US%L_to_Z / CS%Rho0)
           enddo ; enddo ; endif
         else
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-            forces%tau_mag(i,j) = CS%gust_const + sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)
+            forces%tau_mag(i,j) = CS%gust_const + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
             forces%ustar(i,j) = sqrt(US%L_to_Z * (CS%gust_const/CS%Rho0 + &
-                    sqrt(temp_x(i,j)*temp_x(i,j) + temp_y(i,j)*temp_y(i,j)) / CS%Rho0) )
+                    sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) / CS%Rho0) )
           enddo ; enddo ; endif
         endif
       endif
@@ -797,25 +797,25 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
         if (CS%read_gust_2d) then
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
             forces%tau_mag(i,j) = CS%gust(i,j) + &
-                    sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                              (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+                    sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                              ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
             tau_mag = CS%gust(i,j) + &
-                    sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                              (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+                    sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                              ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
             forces%ustar(i,j) = sqrt( tau_mag * US%L_to_Z / CS%Rho0 )
           enddo ; enddo ; endif
         else
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
             forces%tau_mag(i,j) = CS%gust_const + &
-                  sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                            (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+                  sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                            ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
              forces%ustar(i,j) = sqrt(US%L_to_Z * ( (CS%gust_const/CS%Rho0) + &
-                  sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                            (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))/CS%Rho0))
+                  sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                            ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))/CS%Rho0))
           enddo ; enddo ; endif
         endif
       endif
@@ -885,21 +885,21 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   if (CS%read_gust_2d) then
     call data_override(G%Domain, 'gust', CS%gust, day, scale=US%Pa_to_RLZ_T2)
     if (associated(forces%tau_mag)) then ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      forces%tau_mag(i,j) = sqrt(temp_x(i,j)**2 + temp_y(i,j)**2) + CS%gust(i,j)
+      forces%tau_mag(i,j) = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
     enddo ; enddo ; endif
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      tau_mag = sqrt(temp_x(i,j)**2 + temp_y(i,j)**2) + CS%gust(i,j)
+      tau_mag = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
       ustar_loc(i,j) = sqrt( tau_mag * US%L_to_Z / CS%Rho0 )
     enddo ; enddo
   else
     if (associated(forces%tau_mag)) then
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        forces%tau_mag(i,j) = sqrt(temp_x(i,j)**2 + temp_y(i,j)**2) + CS%gust_const
+        forces%tau_mag(i,j) = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust_const
       ! ustar_loc(i,j) = sqrt( forces%tau_mag(i,j) * US%L_to_Z / CS%Rho0 )
       enddo ; enddo
     endif
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      ustar_loc(i,j) = sqrt(US%L_to_Z * (sqrt(temp_x(i,j)**2 + temp_y(i,j)**2)/CS%Rho0 + &
+      ustar_loc(i,j) = sqrt(US%L_to_Z * (sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))/CS%Rho0 + &
                             CS%gust_const/CS%Rho0))
     enddo ; enddo
   endif
@@ -945,25 +945,25 @@ subroutine stresses_to_ustar(forces, G, US, CS)
   if (CS%read_gust_2d) then
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = CS%gust(i,j) + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       tau_mag = CS%gust(i,j) + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
       forces%ustar(i,j) = sqrt( tau_mag * I_rho )
     enddo ; enddo ; endif
   else
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = CS%gust_const + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       tau_mag = CS%gust_const + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2 + forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2 + forces%taux(I,j)**2)))
+              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
       forces%ustar(i,j) = sqrt( tau_mag * I_rho )
     enddo ; enddo ; endif
   endif
@@ -1582,6 +1582,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   real :: flux_const_default ! The unscaled value of FLUXCONST [m day-1]
   logical :: Boussinesq       ! If true, this run is fully Boussinesq
   logical :: semi_Boussinesq  ! If true, this run is partially non-Boussinesq
+  logical :: fix_ustar_gustless_bug  ! If false, include a bug using an older run-time parameter.
+  logical :: test_value  ! This is used to determine whether a logical parameter is being set explicitly.
+  logical :: explicit_bug, explicit_fix ! These indicate which parameters are set explicitly.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   character(len=40)  :: mdl = "MOM_surface_forcing" ! This module's name.
   character(len=200) :: filename, gust_file ! The name of the gustiness input file.
@@ -1907,19 +1910,19 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
       call get_param(param_file, mdl, "SST_NORTH", CS%T_north, &
                  "With buoy_config linear, the sea surface temperature "//&
                  "at the northern end of the domain toward which to "//&
-                 "to restore.", units="deg C", default=0.0, scale=US%degC_to_C)
+                 "to restore.", units="degC", default=0.0, scale=US%degC_to_C)
       call get_param(param_file, mdl, "SST_SOUTH", CS%T_south, &
                  "With buoy_config linear, the sea surface temperature "//&
                  "at the southern end of the domain toward which to "//&
-                 "to restore.", units="deg C", default=0.0, scale=US%degC_to_C)
+                 "to restore.", units="degC", default=0.0, scale=US%degC_to_C)
       call get_param(param_file, mdl, "SSS_NORTH", CS%S_north, &
                  "With buoy_config linear, the sea surface salinity "//&
                  "at the northern end of the domain toward which to "//&
-                 "to restore.", units="PSU", default=35.0, scale=US%ppt_to_S)
+                 "to restore.", units="ppt", default=35.0, scale=US%ppt_to_S)
       call get_param(param_file, mdl, "SSS_SOUTH", CS%S_south, &
                  "With buoy_config linear, the sea surface salinity "//&
                  "at the southern end of the domain toward which to "//&
-                 "to restore.", units="PSU", default=35.0, scale=US%ppt_to_S)
+                 "to restore.", units="ppt", default=35.0, scale=US%ppt_to_S)
     endif
     call get_param(param_file, mdl, "RESTORE_FLUX_RHO", CS%rho_restore, &
                  "The density that is used to convert piston velocities into salt or heat "//&
@@ -1935,9 +1938,33 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
                  units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2)
-  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", CS%fix_ustar_gustless_bug, &
+
+  call get_param(param_file, mdl, "USTAR_GUSTLESS_BUG", CS%ustar_gustless_bug, &
+                 "If true include a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false., do_not_log=.true.)
+  ! This is used to test whether USTAR_GUSTLESS_BUG is being actively set.
+  call get_param(param_file, mdl, "USTAR_GUSTLESS_BUG", test_value, default=.true., do_not_log=.true.)
+  explicit_bug = CS%ustar_gustless_bug .eqv. test_value
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", fix_ustar_gustless_bug, &
                  "If true correct a bug in the time-averaging of the gustless wind friction velocity", &
-                 default=.true.)
+                 default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "FIX_USTAR_GUSTLESS_BUG", test_value, default=.false., do_not_log=.true.)
+  explicit_fix = fix_ustar_gustless_bug .eqv. test_value
+
+  if (explicit_bug .and. explicit_fix .and. (fix_ustar_gustless_bug .eqv. CS%ustar_gustless_bug)) then
+    ! USTAR_GUSTLESS_BUG is being explicitly set, and should not be changed.
+    call MOM_error(FATAL, "USTAR_GUSTLESS_BUG and FIX_USTAR_GUSTLESS_BUG are both being set "//&
+                   "with inconsistent values.  FIX_USTAR_GUSTLESS_BUG is an obsolete "//&
+                   "parameter and should be removed.")
+  elseif (explicit_fix) then
+    call MOM_error(WARNING, "FIX_USTAR_GUSTLESS_BUG is an obsolete parameter.  "//&
+                   "Use USTAR_GUSTLESS_BUG instead (noting that it has the opposite sense).")
+    CS%ustar_gustless_bug = .not.fix_ustar_gustless_bug
+  endif
+  call log_param(param_file, mdl, "USTAR_GUSTLESS_BUG", CS%ustar_gustless_bug, &
+                 "If true include a bug in the time-averaging of the gustless wind friction velocity", &
+                 default=.false.)
+
   call get_param(param_file, mdl, "READ_GUST_2D", CS%read_gust_2d, &
                  "If true, use a 2-dimensional gustiness supplied from "//&
                  "an input file", default=.false.)

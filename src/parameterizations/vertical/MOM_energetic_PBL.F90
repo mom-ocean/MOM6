@@ -13,6 +13,7 @@ use MOM_file_parser,    only : get_param, log_param, log_version, param_file_typ
 use MOM_forcing_type,   only : forcing
 use MOM_grid,           only : ocean_grid_type
 use MOM_interface_heights, only : thickness_to_dz
+use MOM_intrinsic_functions, only : cuberoot
 use MOM_string_functions, only : uppercase
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_variables,      only : thermo_var_ptrs
@@ -161,7 +162,10 @@ type, public :: energetic_PBL_CS ; private
   integer :: answer_date     !< The vintage of the order of arithmetic and expressions in the ePBL
                              !! calculations.  Values below 20190101 recover the answers from the
                              !! end of 2018, while higher values use updated and more robust forms
-                             !! of the same expressions.
+                             !! of the same expressions.  Values below 20240101 use A**(1./3.) to
+                             !! estimate the cube root of A in several expressions, while higher
+                             !! values use the integer root function cuberoot(A) and therefore
+                             !! can work with scaled variables.
   logical :: orig_PE_calc    !< If true, the ePBL code uses the original form of the
                              !! potential energy change code.  Otherwise, it uses a newer version
                              !! that can work with successive increments to the diffusivity in
@@ -335,8 +339,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     mixvel, &       ! A turbulent mixing velocity [Z T-1 ~> m s-1].
     mixlen, &       ! A turbulent mixing length [Z ~> m].
     SpV_dt          ! Specific volume interpolated to interfaces divided by dt or 1.0 / (dt * Rho0)
-                    ! times conversion factors in [m3 Z-3 R-1 T2 s-3 ~> m3 kg-1 s-1],
-                    ! used to convert local TKE into a turbulence velocity cubed.
+                    ! times conversion factors for answer dates before 20240101 in
+                    ! [m3 Z-3 R-1 T2 s-3 ~> m3 kg-1 s-1] or without the convsersion factors for
+                    ! answer dates of 20240101 and later in [R-1 T-1 ~> m3 kg-1 s-1], used to
+                    ! convert local TKE into a turbulence velocity cubed.
   real :: h_neglect ! A thickness that is so small it is usually lost
                     ! in roundoff and can be neglected [H ~> m or kg m-2].
 
@@ -348,6 +354,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   real :: I_rho     ! The inverse of the Boussinesq reference density times a ratio of scaling
                     ! factors [Z L-1 R-1 ~> m3 kg-1]
   real :: I_dt      ! The Adcroft reciprocal of the timestep [T-1 ~> s-1]
+  real :: I_rho0dt  ! The inverse of the Boussinesq reference density times the time
+                    ! step [R-1 T-1 ~> m3 kg-1 s-1]
   real :: B_Flux    ! The surface buoyancy flux [Z2 T-3 ~> m2 s-3]
   real :: MLD_io    ! The mixed layer depth found by ePBL_column [Z ~> m]
 
@@ -374,6 +382,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
   h_neglect = GV%H_subroundoff
   I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0 ! This is not used when fully non-Boussinesq.
   I_dt = 0.0 ; if (dt > 0.0) I_dt = 1.0 / dt
+  I_rho0dt = 1.0 / (GV%Rho0 * dt)  ! This is not used when fully non-Boussinesq.
 
   ! Zero out diagnostics before accumulation.
   if (CS%TKE_diagnostics) then
@@ -403,9 +412,15 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
     ! Set the inverse density used to translating local TKE into a turbulence velocity
     SpV_dt(:) = 0.0
     if ((dt > 0.0) .and. GV%Boussinesq .or. .not.allocated(tv%SpV_avg)) then
-      do K=1,nz+1
-        SpV_dt(K) = (US%Z_to_m**3*US%s_to_T**3) / (dt*GV%Rho0)
-      enddo
+      if (CS%answer_date < 20240101) then
+        do K=1,nz+1
+          SpV_dt(K) = (US%Z_to_m**3*US%s_to_T**3) / (dt*GV%Rho0)
+        enddo
+      else
+        do K=1,nz+1
+          SpV_dt(K) = I_rho0dt
+        enddo
+      endif
     endif
 
     !   Determine the initial mech_TKE and conv_PErel, including the energy required
@@ -442,11 +457,19 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       endif
 
       if (allocated(tv%SpV_avg) .and. .not.GV%Boussinesq) then
-        SpV_dt(1) = (US%Z_to_m**3*US%s_to_T**3) * tv%SpV_avg(i,j,1) * I_dt
-        do K=2,nz
-          SpV_dt(K) = (US%Z_to_m**3*US%s_to_T**3) * 0.5*(tv%SpV_avg(i,j,k-1) + tv%SpV_avg(i,j,k)) * I_dt
-        enddo
-        SpV_dt(nz+1) = (US%Z_to_m**3*US%s_to_T**3) * tv%SpV_avg(i,j,nz) * I_dt
+        if (CS%answer_date < 20240101) then
+          SpV_dt(1) = (US%Z_to_m**3*US%s_to_T**3) * tv%SpV_avg(i,j,1) * I_dt
+          do K=2,nz
+            SpV_dt(K) = (US%Z_to_m**3*US%s_to_T**3) * 0.5*(tv%SpV_avg(i,j,k-1) + tv%SpV_avg(i,j,k)) * I_dt
+          enddo
+          SpV_dt(nz+1) = (US%Z_to_m**3*US%s_to_T**3) * tv%SpV_avg(i,j,nz) * I_dt
+        else
+          SpV_dt(1) = tv%SpV_avg(i,j,1) * I_dt
+          do K=2,nz
+            SpV_dt(K) = 0.5*(tv%SpV_avg(i,j,k-1) + tv%SpV_avg(i,j,k)) * I_dt
+          enddo
+          SpV_dt(nz+1) = tv%SpV_avg(i,j,nz) * I_dt
+        endif
       endif
 
       B_flux = buoy_flux(i,j)
@@ -565,9 +588,13 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
   real, dimension(SZK_(GV)), intent(in)  :: dSV_dS !< The partial derivative of in-situ specific
                                                    !! volume with salinity [R-1 S-1 ~> m3 kg-1 ppt-1].
   real, dimension(SZK_(GV)+1), intent(in) :: SpV_dt !< Specific volume interpolated to interfaces
-                                                   !! divided by dt or 1.0 / (dt * Rho0) times conversion
-                                                   !! factors in [m3 Z-3 R-1 T2 s-3 ~> m3 kg-1 s-1],
-                                                   !! used to convert local TKE into a turbulence velocity.
+                                                   !! divided by dt or 1.0 / (dt * Rho0), times conversion
+                                                   !! factors for answer dates before 20240101 in
+                                                   !! [m3 Z-3 R-1 T2 s-3 ~> m3 kg-1 s-1] or without
+                                                   !! the convsersion factors for answer dates of
+                                                   !! 20240101 and later in [R-1 T-1 ~> m3 kg-1 s-1],
+                                                   !! used to convert local TKE into a turbulence
+                                                   !! velocity cubed.
   real, dimension(SZK_(GV)), intent(in)  :: TKE_forcing !< The forcing requirements to homogenize the
                                                    !! forcing that has been applied to each layer
                                                    !! [R Z3 T-2 ~> J m-2].
@@ -819,7 +846,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
   max_itt = 20
 
   dz_tt_min = 0.0
-  vstar_unit_scale = US%m_to_Z * US%T_to_s
+  if (CS%answer_date < 20240101) vstar_unit_scale = US%m_to_Z * US%T_to_s
 
   MLD_guess = MLD_io
 
@@ -1144,7 +1171,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
             ! velocities between layer k and the layers above.
             dMKE_max = (US%L_to_Z**2*GV%H_to_RZ * CS%MKE_to_TKE_effic) * 0.5 * &
                 (h(k) / ((htot + h(k))*htot)) * &
-                ((uhtot-u(k)*htot)**2 + (vhtot-v(k)*htot)**2)
+                (((uhtot-u(k)*htot)**2) + ((vhtot-v(k)*htot)**2))
             ! A fraction (1-exp(Kddt_h*MKE2_Hharm)) of this energy would be
             ! extracted by mixing with a finite viscosity.
             MKE2_Hharm = (htot + h(k) + 2.0*h_neglect) / &
@@ -1160,12 +1187,22 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
           dz_tt = dztot + dz_tt_min
           TKE_here = mech_TKE + CS%wstar_ustar_coef*conv_PErel
           if (TKE_here > 0.0) then
-            if (CS%wT_scheme==wT_from_cRoot_TKE) then
-              vstar = CS%vstar_scale_fac * vstar_unit_scale * (SpV_dt(K)*TKE_here)**C1_3
-            elseif (CS%wT_scheme==wT_from_RH18) then
-              Surface_Scale = max(0.05, 1.0 - dztot / MLD_guess)
-              vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
-                        vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*SpV_dt(K))**C1_3)
+            if (CS%answer_date < 20240101) then
+              if (CS%wT_scheme==wT_from_cRoot_TKE) then
+                vstar = CS%vstar_scale_fac * vstar_unit_scale * (SpV_dt(K)*TKE_here)**C1_3
+              elseif (CS%wT_scheme==wT_from_RH18) then
+                Surface_Scale = max(0.05, 1.0 - dztot / MLD_guess)
+                vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
+                          vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*SpV_dt(K))**C1_3)
+              endif
+            else
+              if (CS%wT_scheme==wT_from_cRoot_TKE) then
+                vstar = CS%vstar_scale_fac * cuberoot(SpV_dt(K)*TKE_here)
+              elseif (CS%wT_scheme==wT_from_RH18) then
+                Surface_Scale = max(0.05, 1.0 - dztot / MLD_guess)
+                vstar = (CS%vstar_scale_fac * Surface_Scale) * ( CS%vstar_surf_fac*u_star + &
+                          cuberoot((CS%wstar_ustar_coef*conv_PErel) * SpV_dt(K)) )
+              endif
             endif
             hbs_here = min(hb_hs(K), MixLen_shape(K))
             mixlen(K) = MAX(CS%min_mix_len, ((dz_tt*hbs_here)*vstar) / &
@@ -1209,12 +1246,22 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
               ! Does MKE_src need to be included in the calculation of vstar here?
               TKE_here = mech_TKE + CS%wstar_ustar_coef*(conv_PErel-PE_chg_max)
               if (TKE_here > 0.0) then
-                if (CS%wT_scheme==wT_from_cRoot_TKE) then
-                  vstar = CS%vstar_scale_fac * vstar_unit_scale * (SpV_dt(K)*TKE_here)**C1_3
-                elseif (CS%wT_scheme==wT_from_RH18) then
-                  Surface_Scale = max(0.05, 1. - dztot / MLD_guess)
-                  vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
-                                  vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*SpV_dt(K))**C1_3)
+                if (CS%answer_date < 20240101) then
+                  if (CS%wT_scheme==wT_from_cRoot_TKE) then
+                    vstar = CS%vstar_scale_fac * vstar_unit_scale * (SpV_dt(K)*TKE_here)**C1_3
+                  elseif (CS%wT_scheme==wT_from_RH18) then
+                    Surface_Scale = max(0.05, 1. - dztot / MLD_guess)
+                    vstar = CS%vstar_scale_fac * Surface_Scale * (CS%vstar_surf_fac*u_star + &
+                                    vstar_unit_scale * (CS%wstar_ustar_coef*conv_PErel*SpV_dt(K))**C1_3)
+                  endif
+                else
+                  if (CS%wT_scheme==wT_from_cRoot_TKE) then
+                    vstar = CS%vstar_scale_fac * cuberoot(SpV_dt(K)*TKE_here)
+                  elseif (CS%wT_scheme==wT_from_RH18) then
+                    Surface_Scale = max(0.05, 1. - dztot / MLD_guess)
+                    vstar = (CS%vstar_scale_fac * Surface_Scale) * ( CS%vstar_surf_fac*u_star + &
+                                    cuberoot((CS%wstar_ustar_coef*conv_PErel) * SpV_dt(K)) )
+                  endif
                 endif
                 hbs_here = min(hb_hs(K), MixLen_shape(K))
                 mixlen(K) = max(CS%min_mix_len, ((dz_tt*hbs_here)*vstar) / &
@@ -2076,7 +2123,9 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "The vintage of the order of arithmetic and expressions in the energetic "//&
                  "PBL calculations.  Values below 20190101 recover the answers from the "//&
                  "end of 2018, while higher values use updated and more robust forms of the "//&
-                 "same expressions.", &
+                 "same expressions.  Values below 20240101 use A**(1./3.) to estimate the cube "//&
+                 "root of A in several expressions, while higher values use the integer root "//&
+                 "function cuberoot(A) and therefore can work with scaled variables.", &
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
