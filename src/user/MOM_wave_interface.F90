@@ -673,7 +673,7 @@ subroutine Update_Surface_Waves(G, GV, US, Time_present, dt, CS, forces)
   type(mech_forcing),      intent(in), optional  :: forces !< MOM_forcing_type
   ! Local variables
   type(time_type) :: Stokes_Time
-  integer :: ii, jj, b
+  integer :: i, j, b
 
   if (CS%WaveMethod == TESTPROF) then
     ! Do nothing
@@ -701,37 +701,37 @@ subroutine Update_Surface_Waves(G, GV, US, Time_present, dt, CS, forces)
       do b=1,CS%NumBands
         CS%WaveNum_Cen(b) = forces%stk_wavenumbers(b)
         !Interpolate from a grid to c grid
-        do jj=G%jsc,G%jec
-          do II=G%iscB,G%iecB
-            CS%STKx0(II,jj,b) = 0.5*(forces%UStkb(ii,jj,b)+forces%UStkb(ii+1,jj,b))
+        do j=G%jsc,G%jec
+          do I=G%iscB,G%iecB
+            CS%STKx0(I,j,b) = 0.5*(forces%UStkb(i,j,b)+forces%UStkb(i+1,j,b))
           enddo
         enddo
-        do JJ=G%jscB, G%jecB
-          do ii=G%isc,G%iec
-            CS%STKY0(ii,JJ,b) = 0.5*(forces%VStkb(ii,jj,b)+forces%VStkb(ii,jj+1,b))
+        do J=G%jscB,G%jecB
+          do i=G%isc,G%iec
+            CS%STKY0(i,J,b) = 0.5*(forces%VStkb(i,j,b)+forces%VStkb(i,j+1,b))
           enddo
         enddo
         call pass_vector(CS%STKx0(:,:,b),CS%STKy0(:,:,b), G%Domain)
       enddo
-      do jj=G%jsc,G%jec
-        do ii=G%isc,G%iec
-          !CS%Omega_w2x(ii,jj)   = forces%omega_w2x(ii,jj)
+      do j=G%jsc,G%jec
+        do i=G%isc,G%iec
+          !CS%Omega_w2x(i,j)   = forces%omega_w2x(i,j)
           do b=1,CS%NumBands
-            CS%UStk_Hb(ii,jj,b) = US%m_s_to_L_T*forces%UStkb(ii,jj,b)
-            CS%VStk_Hb(ii,jj,b) = US%m_s_to_L_T*forces%VStkb(ii,jj,b)
+            CS%UStk_Hb(i,j,b) = forces%UStkb(i,j,b)
+            CS%VStk_Hb(i,j,b) = forces%VStkb(i,j,b)
           enddo
         enddo
       enddo
     elseif (CS%DataSource == INPUT) then
       do b=1,CS%NumBands
-        do jj=G%jsd,G%jed
-          do II=G%isdB,G%iedB
-            CS%STKx0(II,jj,b) = CS%PrescribedSurfStkX(b)
+        do j=G%jsd,G%jed
+          do I=G%isdB,G%iedB
+            CS%STKx0(I,j,b) = CS%PrescribedSurfStkX(b)
           enddo
         enddo
-        do JJ=G%jsdB, G%jedB
-          do ii=G%isd,G%ied
-            CS%STKY0(ii,JJ,b) = CS%PrescribedSurfStkY(b)
+        do J=G%jsdB, G%jedB
+          do i=G%isd,G%ied
+            CS%STKY0(i,J,b) = CS%PrescribedSurfStkY(b)
           enddo
         enddo
       enddo
@@ -763,7 +763,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
   real    :: UStokes  ! A Stokes drift velocity [L T-1 ~> m s-1]
   real    :: PI       ! 3.1415926535... [nondim]
   real    :: La       ! The local Langmuir number [nondim]
-  integer :: ii, jj, kk, b, iim1, jjm1
+  integer :: i, j, k, b
   real    :: I_dt     ! The inverse of the time step [T-1 ~> s-1]
 
   if (CS%WaveMethod==EFACTOR) return
@@ -777,29 +777,27 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
   if (CS%WaveMethod==TESTPROF) then
     PI = 4.0*atan(1.0)
     DecayScale = 4.*PI / CS%TP_WVL !4pi
-    do jj = G%jsc,G%jec
-      do II = G%iscB,G%iecB
-        IIm1 = max(1,II-1)
+    do j=G%jsc,G%jec
+      do I=G%iscB,G%iecB
         Bottom = 0.0
         MidPoint = 0.0
-        do kk = 1,GV%ke
+        do k = 1,GV%ke
           Top = Bottom
-          MidPoint = Bottom - 0.25*(dz(II,jj,kk)+dz(IIm1,jj,kk))
-          Bottom = Bottom - 0.5*(dz(II,jj,kk)+dz(IIm1,jj,kk))
-          CS%Us_x(II,jj,kk) = CS%TP_STKX0*exp(MidPoint*DecayScale)
+          MidPoint = Bottom - 0.25*(dz(I,j,k)+dz(I-1,j,k))
+          Bottom = Bottom - 0.5*(dz(I,j,k)+dz(I-1,j,k))
+          CS%Us_x(I,j,k) = CS%TP_STKX0*exp(MidPoint*DecayScale)
         enddo
       enddo
     enddo
-    do JJ = G%jscB,G%jecB
-      do ii = G%isc,G%iec
-        JJm1 = max(1,JJ-1)
+    do J=G%jscB,G%jecB
+      do i=G%isc,G%iec
         Bottom = 0.0
         MidPoint = 0.0
-        do kk = 1,GV%ke
+        do k = 1,GV%ke
           Top = Bottom
-          MidPoint = Bottom - 0.25*(dz(ii,JJ,kk)+dz(ii,JJm1,kk))
-          Bottom = Bottom - 0.5*(dz(ii,JJ,kk)+dz(ii,JJm1,kk))
-          CS%Us_y(ii,JJ,kk) = CS%TP_STKY0*exp(MidPoint*DecayScale)
+          MidPoint = Bottom - 0.25*(dz(i,J,k)+dz(i,J-1,k))
+          Bottom = Bottom - 0.5*(dz(i,J,k)+dz(i,J-1,k))
+          CS%Us_y(i,J,k) = CS%TP_STKY0*exp(MidPoint*DecayScale)
         enddo
       enddo
     enddo
@@ -813,19 +811,18 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
     CS%Us0_x(:,:) = 0.0
     CS%Us0_y(:,:) = 0.0
     ! Computing X direction Stokes drift
-    do jj = G%jsc,G%jec
-      do II = G%iscB,G%iecB
+    do j=G%jsc,G%jec
+      do I=G%iscB,G%iecB
         ! 1. First compute the surface Stokes drift
         !    by summing over the partitions.
         do b = 1,CS%NumBands
-          CS%US0_x(II,jj) = CS%US0_x(II,jj) + CS%STKx0(II,jj,b)
+          CS%US0_x(I,j) = CS%US0_x(I,j) + CS%STKx0(I,j,b)
         enddo
         ! 2. Second compute the level averaged Stokes drift
         bottom = 0.0
-        do kk = 1,GV%ke
+        do k = 1,GV%ke
           Top = Bottom
-          IIm1 = max(II-1,1)
-          level_thick = 0.5*(dz(II,jj,kk)+dz(IIm1,jj,kk))
+          level_thick = 0.5*(dz(I,j,k)+dz(I-1,j,k))
           MidPoint = Top - 0.5*level_thick
           Bottom = Top - level_thick
 
@@ -840,7 +837,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
                 WN = CS%Freq_Cen(b)**2 * CS%I_g_Earth
                 CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
               endif
-              CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
+              CS%US_x(I,j,k) = CS%US_x(I,j,k) + CS%STKx0(I,j,b)*CMN_FAC
             enddo
 
           elseif (level_thick > CS%Stokes_min_thick_avg) then
@@ -855,7 +852,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
                 WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
-              CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
+              CS%US_x(I,j,k) = CS%US_x(I,j,k) + CS%STKx0(I,j,b)*CMN_FAC
             enddo
           else ! Take the value at the midpoint
             do b = 1,CS%NumBands
@@ -864,7 +861,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
               else
                 CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
               endif
-              CS%US_x(II,jj,kk) = CS%US_x(II,jj,kk) + CS%STKx0(II,jj,b)*CMN_FAC
+              CS%US_x(I,j,k) = CS%US_x(I,j,k) + CS%STKx0(I,j,b)*CMN_FAC
             enddo
           endif
         enddo
@@ -872,18 +869,17 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
     enddo
 
     ! Computing Y direction Stokes drift
-    do JJ = G%jscB,G%jecB
-      do ii = G%isc,G%iec
+    do J=G%jscB,G%jecB
+      do i=G%isc,G%iec
         ! Set the surface value to that at z=0
         do b = 1,CS%NumBands
-          CS%US0_y(ii,JJ) = CS%US0_y(ii,JJ) + CS%STKy0(ii,JJ,b)
+          CS%US0_y(i,J) = CS%US0_y(i,J) + CS%STKy0(i,J,b)
         enddo
         ! Compute the level averages.
         bottom = 0.0
-        do kk = 1,GV%ke
+        do k = 1,GV%ke
           Top = Bottom
-          JJm1 = max(JJ-1,1)
-          level_thick = 0.5*(dz(ii,JJ,kk)+dz(ii,JJm1,kk))
+          level_thick = 0.5*(dz(i,J,k)+dz(i,J-1,k))
           MidPoint = Top - 0.5*level_thick
           Bottom = Top - level_thick
 
@@ -898,7 +894,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
                 WN = CS%Freq_Cen(b)**2 * CS%I_g_Earth
                 CMN_FAC = exp(2.*WN*Top) * one_minus_exp_x(2.*WN*level_thick)
               endif
-              CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
+              CS%US_y(i,J,k) = CS%US_y(i,J,k) + CS%STKy0(i,J,b)*CMN_FAC
             enddo
           elseif (level_thick > CS%Stokes_min_thick_avg) then
             ! -> Stokes drift in thin layers not averaged.
@@ -912,7 +908,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
                 WN = CS%Freq_Cen(b)**2 / CS%g_Earth !bgr bug-fix missing g
                 CMN_FAC = (exp(2.*WN*Top)-exp(2.*WN*Bottom)) / (2.*WN*(Top-Bottom))
               endif
-              CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
+              CS%US_y(i,J,k) = CS%US_y(i,J,k) + CS%STKy0(i,J,b)*CMN_FAC
             enddo
           else ! Take the value at the midpoint
             do b = 1,CS%NumBands
@@ -921,7 +917,7 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
               else
                 CMN_FAC = exp(MidPoint * 2. * CS%Freq_Cen(b)**2 / CS%g_Earth)
               endif
-              CS%US_y(ii,JJ,kk) = CS%US_y(ii,JJ,kk) + CS%STKy0(ii,JJ,b)*CMN_FAC
+              CS%US_y(i,J,k) = CS%US_y(i,J,k) + CS%STKy0(i,J,b)*CMN_FAC
             enddo
           endif
         enddo
@@ -931,39 +927,37 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
     call pass_vector(CS%Us0_x(:,:),CS%Us0_y(:,:), G%Domain)
   elseif (CS%WaveMethod == DHH85) then
     if (.not.(CS%StaticWaves .and. CS%DHH85_is_set)) then
-      do jj = G%jsc,G%jec
-        do II = G%iscB,G%iecB
+      do j=G%jsc,G%jec
+        do I=G%iscB,G%iecB
           bottom = 0.0
-          do kk = 1,GV%ke
+          do k = 1,GV%ke
             Top = Bottom
-            IIm1 = max(II-1,1)
-            MidPoint = Top - 0.25*(dz(II,jj,kk)+dz(IIm1,jj,kk))
-            Bottom = Top - 0.5*(dz(II,jj,kk)+dz(IIm1,jj,kk))
-            !bgr note that this is using a u-point ii on h-point ustar
+            MidPoint = Top - 0.25*(dz(I,j,k)+dz(I-1,j,k))
+            Bottom = Top - 0.5*(dz(I,j,k)+dz(I-1,j,k))
+            !bgr note that this is using a u-point I on h-point ustar
             !    this code has only been previous used for uniform
             !    grid cases.  This needs fixed if DHH85 is used for non
             !    uniform cases.
             call DHH85_mid(GV, US, CS, MidPoint, UStokes)
             ! Putting into x-direction (no option for direction
-            CS%US_x(II,jj,kk) = UStokes
+            CS%US_x(I,j,k) = UStokes
           enddo
         enddo
       enddo
-      do JJ = G%jscB,G%jecB
-        do ii = G%isc,G%iec
+      do J=G%jscB,G%jecB
+        do i=G%isc,G%iec
           Bottom = 0.0
-          do kk=1, GV%ke
+          do k = 1,GV%ke
             Top = Bottom
-            JJm1 = max(JJ-1,1)
-            MidPoint = Bottom - 0.25*(dz(ii,JJ,kk)+dz(ii,JJm1,kk))
-            Bottom = Bottom - 0.5*(dz(ii,JJ,kk)+dz(ii,JJm1,kk))
-            !bgr note that this is using a v-point jj on h-point ustar
+            MidPoint = Bottom - 0.25*(dz(i,J,k)+dz(i,J-1,k))
+            Bottom = Bottom - 0.5*(dz(i,J,k)+dz(i,J-1,k))
+            !bgr note that this is using a v-point J on h-point ustar
             !    this code has only been previous used for uniform
             !    grid cases.  This needs fixed if DHH85 is used for non
             !    uniform cases.
             ! call DHH85_mid(GV, US, CS, Midpoint, UStokes)
             ! Putting into x-direction, so setting y direction to 0
-            CS%US_y(ii,JJ,kk) = 0.0
+            CS%US_y(i,J,k) = 0.0
             ! For rotational symmetry there should be the option for this to become = UStokes
             !    bgr - see note above, but this is true
             !          if this is used for anything
@@ -975,28 +969,18 @@ subroutine Update_Stokes_Drift(G, GV, US, CS, dz, ustar, dt, dynamics_step)
     endif
     call pass_vector(CS%Us_x(:,:,:),CS%Us_y(:,:,:), G%Domain)
   else! Keep this else, fallback to 0 Stokes drift
-    do kk= 1,GV%ke
-      do jj = G%jsd,G%jed
-        do II = G%isdB,G%iedB
-          CS%Us_x(II,jj,kk) = 0.
-        enddo
-      enddo
-      do JJ = G%jsdB,G%jedB
-        do ii = G%isd,G%ied
-          CS%Us_y(ii,JJ,kk) = 0.
-        enddo
-      enddo
-    enddo
+    CS%Us_x(:,:,:) = 0.
+    CS%Us_y(:,:,:) = 0.
   endif
 
   ! Turbulent Langmuir number is computed here and available to use anywhere.
   ! SL Langmuir number requires mixing layer depth, and therefore is computed
   ! in the routine it is needed by (e.g. KPP or ePBL).
-  do jj = G%jsc, G%jec
-    do ii = G%isc,G%iec
-      call get_Langmuir_Number( La, G, GV, US, dz(ii,jj,1), ustar(ii,jj), ii, jj, &
-             dz(ii,jj,:), CS, Override_MA=.false.)
-      CS%La_turb(ii,jj) = La
+  do j=G%jsc, G%jec
+    do i=G%isc,G%iec
+      call get_Langmuir_Number( La, G, GV, US, dz(i,j,1), ustar(i,j), i, j, &
+             dz(i,j,:), CS, Override_MA=.false.)
+      CS%La_turb(i,j) = La
     enddo
   enddo
 
@@ -1197,7 +1181,7 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
   logical :: ContinueLoop, USE_MA
   real, dimension(SZK_(GV)) :: US_H, VS_H ! Profiles of Stokes velocities [L T-1 ~> m s-1]
   real, allocatable :: StkBand_X(:), StkBand_Y(:) ! Stokes drifts by band [L T-1 ~> m s-1]
-  integer :: KK, BB
+  integer :: k, BB
 
   ! Compute averaging depth for Stokes drift (negative)
   Dpt_LASL = -1.0*max(Waves%LA_FracHBL*HBL, Waves%LA_HBL_min)
@@ -1211,28 +1195,28 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
         "Get_LA_waves requested to consider misalignment, but velocities were not provided.")
     ContinueLoop = .true.
     bottom = 0.0
-    do kk = 1,GV%ke
+    do k = 1,GV%ke
       Top = Bottom
-      MidPoint = Bottom + 0.5*dz(kk)
-      Bottom = Bottom + dz(kk)
+      MidPoint = Bottom + 0.5*dz(k)
+      Bottom = Bottom + dz(k)
       !### Given the sign convention that Dpt_LASL is negative, the next line seems to have a bug.
       !    To correct this bug, this line should be changed to:
-      ! if (MidPoint > abs(Dpt_LASL) .and. (kk > 1) .and. ContinueLoop) then
-      if (MidPoint > Dpt_LASL .and. kk > 1 .and. ContinueLoop) then
-        ShearDirection = atan2(V_H(1)-V_H(kk),U_H(1)-U_H(kk))
+      ! if (MidPoint > abs(Dpt_LASL) .and. (k > 1) .and. ContinueLoop) then
+      if (MidPoint > Dpt_LASL .and. k > 1 .and. ContinueLoop) then
+        ShearDirection = atan2(V_H(1)-V_H(k), U_H(1)-U_H(k))
         ContinueLoop = .false.
       endif
     enddo
   endif
 
   if (Waves%WaveMethod==TESTPROF) then
-    do kk = 1,GV%ke
-      US_H(kk) = 0.5*(Waves%US_X(I,j,kk)+Waves%US_X(I-1,j,kk))
-      VS_H(kk) = 0.5*(Waves%US_Y(i,J,kk)+Waves%US_Y(i,J-1,kk))
+    do k = 1,GV%ke
+      US_H(k) = 0.5*(Waves%US_X(I,j,k)+Waves%US_X(I-1,j,k))
+      VS_H(k) = 0.5*(Waves%US_Y(i,J,k)+Waves%US_Y(i,J-1,k))
     enddo
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, US_H, LA_STKx)
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, VS_H, LA_STKy)
-    LA_STK = sqrt(LA_STKX*LA_STKX+LA_STKY*LA_STKY)
+    LA_STK = sqrt((LA_STKX*LA_STKX) + (LA_STKY*LA_STKY))
   elseif (Waves%WaveMethod==SURFBANDS) then
     allocate(StkBand_X(Waves%NumBands), StkBand_Y(Waves%NumBands))
     do bb = 1,Waves%NumBands
@@ -1241,17 +1225,17 @@ subroutine get_Langmuir_Number( LA, G, GV, US, HBL, ustar, i, j, dz, Waves, &
     enddo
     call Get_SL_Average_Band(GV, Dpt_LASL, Waves%NumBands, Waves%WaveNum_Cen, StkBand_X, LA_STKx )
     call Get_SL_Average_Band(GV, Dpt_LASL, Waves%NumBands, Waves%WaveNum_Cen, StkBand_Y, LA_STKy )
-    LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
+    LA_STK = sqrt((LA_STKX**2) + (LA_STKY**2))
     deallocate(StkBand_X, StkBand_Y)
   elseif (Waves%WaveMethod==DHH85) then
     ! Temporarily integrating profile rather than spectrum for simplicity
-    do kk = 1,GV%ke
-      US_H(kk) = 0.5*(Waves%US_X(I,j,kk)+Waves%US_X(I-1,j,kk))
-      VS_H(kk) = 0.5*(Waves%US_Y(i,J,kk)+Waves%US_Y(i,J-1,kk))
+    do k = 1,GV%ke
+      US_H(k) = 0.5*(Waves%US_X(I,j,k)+Waves%US_X(I-1,j,k))
+      VS_H(k) = 0.5*(Waves%US_Y(i,J,k)+Waves%US_Y(i,J-1,k))
     enddo
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, US_H, LA_STKx)
     call Get_SL_Average_Prof( GV, Dpt_LASL, dz, VS_H, LA_STKy)
-    LA_STK = sqrt(LA_STKX**2 + LA_STKY**2)
+    LA_STK = sqrt((LA_STKX**2) + (LA_STKY**2))
   elseif (Waves%WaveMethod==LF17) then
     call get_StokesSL_LiFoxKemper(ustar, HBL*Waves%LA_FracHBL, GV, US, Waves, LA_STK, LA)
   elseif (Waves%WaveMethod==Null_WaveMethod) then
@@ -1451,20 +1435,20 @@ subroutine Get_SL_Average_Prof( GV, AvgDepth, dz, Profile, Average )
   !Local variables
   real :: Top, Bottom ! Depths, negative downward [Z ~> m]
   real :: Sum  ! The depth weighted vertical sum of a quantity [A Z ~> A m]
-  integer :: kk
+  integer :: k
 
   ! Initializing sum
   Sum = 0.0
 
   ! Integrate
   bottom = 0.0
-  do kk = 1, GV%ke
+  do k = 1, GV%ke
     Top = Bottom
-    Bottom = Bottom - dz(kk)
+    Bottom = Bottom - dz(k)
     if (AvgDepth < Bottom) then ! The whole cell is within H_LA
-      Sum = Sum + Profile(kk) * dz(kk)
+      Sum = Sum + Profile(k) * dz(k)
     elseif (AvgDepth < Top) then ! A partial cell is within H_LA
-      Sum = Sum + Profile(kk) * (Top-AvgDepth)
+      Sum = Sum + Profile(k) * (Top-AvgDepth)
       exit
     else
       exit
@@ -1671,8 +1655,8 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, Waves)
   do k = 1, GV%ke
     do j = G%jsc, G%jec
       do I = G%iscB, G%iecB
-        DVel = 0.25*(Waves%us_y(i,j+1,k)+Waves%us_y(i-1,j+1,k))*G%CoriolisBu(i,j+1) + &
-               0.25*(Waves%us_y(i,j,k)+Waves%us_y(i-1,j,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*((Waves%us_y(i,J+1,k)+Waves%us_y(i-1,J+1,k)) * G%CoriolisBu(I,J+1)) + &
+               0.25*((Waves%us_y(i,J,k)+Waves%us_y(i-1,J,k)) * G%CoriolisBu(I,J))
         u(I,j,k) = u(I,j,k) + DVEL*dt
       enddo
     enddo
@@ -1681,8 +1665,8 @@ subroutine CoriolisStokes(G, GV, dt, h, u, v, Waves)
   do k = 1, GV%ke
     do J = G%jscB, G%jecB
       do i = G%isc, G%iec
-        DVel = 0.25*(Waves%us_x(i+1,j,k)+Waves%us_x(i+1,j-1,k))*G%CoriolisBu(i+1,j) + &
-               0.25*(Waves%us_x(i,j,k)+Waves%us_x(i,j-1,k))*G%CoriolisBu(i,j)
+        DVel = 0.25*((Waves%us_x(I+1,j,k)+Waves%us_x(I+1,j-1,k)) * G%CoriolisBu(I+1,J)) + &
+               0.25*((Waves%us_x(I,j,k)+Waves%us_x(I,j-1,k)) * G%CoriolisBu(I,J))
         v(i,J,k) = v(i,j,k) - DVEL*dt
       enddo
     enddo

@@ -72,7 +72,7 @@ subroutine seamount_initialize_topography( D, G, param_file, max_depth )
     ! Compute normalized zonal coordinates (x,y=0 at center of domain)
     x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
     y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
-    D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(rLx*x)**2 -(rLy*y)**2) )
+    D(i,j) = G%max_depth * ( 1.0 - delta * exp(-((rLx*x)**2) - ((rLy*y)**2)) )
   enddo ; enddo
 
 end subroutine seamount_initialize_topography
@@ -233,16 +233,16 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
                  'and "exponential".', default='linear', do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_SSS", S_surf, &
                  'Initial surface salinity', &
-                 units='1e-3', default=34., scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=34., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_SST", T_surf, &
                  'Initial surface temperature', &
-                 units='C', default=0., scale=US%degC_to_C, do_not_log=just_read)
+                 units="degC", default=0., scale=US%degC_to_C, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_S_RANGE", S_range, &
                  'Initial salinity range (bottom - surface)', &
-                 units='1e-3', default=2., scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=2., scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(param_file, mdl,"INITIAL_T_RANGE", T_range, &
                  'Initial temperature range (bottom - surface)', &
-                 units='C', default=0., scale=US%degC_to_C, do_not_log=just_read)
+                 units="degC", default=0., scale=US%degC_to_C, do_not_log=just_read)
 
   select case ( coordinateMode(verticalCoordinate) )
     case ( REGRIDDING_LAYER ) ! Initial thicknesses for layer isopycnal coordinates
@@ -254,11 +254,11 @@ subroutine seamount_initialize_temperature_salinity(T, S, h, G, GV, US, param_fi
       call get_param(param_file, mdl, "TS_RANGE_T_DENSE", T_dense, &
                  units="degC", default=US%C_to_degC*T_Ref, scale=US%degC_to_C, do_not_log=.true.)
       call get_param(param_file, mdl, "S_REF", S_ref, &
-                 units="1e-3", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_S_LIGHT", S_light, &
-                 units="1e-3", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_S_DENSE", S_dense, &
-                 units="1e-3", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
+                 units="ppt", default=US%S_to_ppt*S_Ref, scale=US%ppt_to_S, do_not_log=.true.)
       call get_param(param_file, mdl, "TS_RANGE_RESOLN_RATIO", res_rat, &
                  units="nondim", default=1.0, do_not_log=.true.)
       if (just_read) return ! All run-time parameters have been read, so return.

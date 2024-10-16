@@ -126,7 +126,7 @@ subroutine hybgen_ppm_coefs(s, h_src, edges, nk, ns, thin, PCM_lay)
   real :: da        ! Difference between the unlimited scalar edge value estimates [A]
   real :: a6        ! Scalar field differences that are proportional to the curvature [A]
   real :: slk, srk  ! Differences between adjacent cell averages of scalars [A]
-  real :: sck       ! Scalar differences across a cell.
+  real :: sck       ! Scalar differences across a cell [A]
   real :: as(nk)    ! Scalar field difference across each cell [A]
   real :: al(nk), ar(nk)   ! Scalar field at the left and right edges of a cell [A]
   real :: h112(nk+1), h122(nk+1)  ! Combinations of thicknesses [H ~> m or kg m-2]

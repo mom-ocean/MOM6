@@ -166,7 +166,7 @@ function global_area_integral(var, G, scale, area, tmp_scale)
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units of the
   ! input array while [a] indicates the unscaled (e.g., mks) units that can be used with the reproducing sums
   real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming ! An unscaled cell integral [a m2]
-  real :: scalefac  ! An overall scaling factor for the areas and variable.
+  real :: scalefac  ! An overall scaling factor for the areas and variable, perhaps in [m2 a A-1 L-2 ~> 1]
   real :: temp_scale ! A temporary scaling factor [a A-1 ~> 1] or [1]
   integer :: i, j, is, ie, js, je
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -211,11 +211,13 @@ function global_layer_mean(var, h, G, GV, scale, tmp_scale)
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units of the
   ! input array while [a] indicates the unscaled (e.g., mks) units that can be used with the reproducing sums
-  real, dimension(G%isc:G%iec,G%jsc:G%jec,SZK_(GV)) :: tmpForSumming  ! An unscaled cell integral [a m3]
-  real, dimension(G%isc:G%iec,G%jsc:G%jec,SZK_(GV)) :: weight  ! The volume of each cell, used as a weight [m3]
+  real, dimension(G%isc:G%iec,G%jsc:G%jec,SZK_(GV)) :: tmpForSumming  ! An unscaled cell integral [a m3] or [a kg]
+  real, dimension(G%isc:G%iec,G%jsc:G%jec,SZK_(GV)) :: weight  ! The volume or mass of each cell, depending on
+                                                    ! whether the model is Boussinesq, used as a weight [m3] or [kg]
   type(EFP_type), dimension(2*SZK_(GV)) :: laysums
-  real, dimension(SZK_(GV)) :: global_temp_scalar    ! The global integral of the tracer in each layer [a m3]
-  real, dimension(SZK_(GV)) :: global_weight_scalar  ! The global integral of the volume of each layer [m3]
+  real, dimension(SZK_(GV)) :: global_temp_scalar   ! The global integral of the tracer in each layer [a m3] or [a kg]
+  real, dimension(SZK_(GV)) :: global_weight_scalar ! The global integral of the volume or mass of each
+                                                    ! layer [m3] or [kg]
   real :: temp_scale ! A temporary scaling factor [a A-1 ~> 1] or [1]
   real :: scalefac  ! A scaling factor for the variable [a A-1 ~> 1]
   integer :: i, j, k, is, ie, js, je, nz
@@ -226,7 +228,7 @@ function global_layer_mean(var, h, G, GV, scale, tmp_scale)
   tmpForSumming(:,:,:) = 0. ; weight(:,:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
-    weight(i,j,k)  =  (GV%H_to_m * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j))
+    weight(i,j,k)  =  (GV%H_to_MKS * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j,k) =  scalefac * var(i,j,k) * weight(i,j,k)
   enddo ; enddo ; enddo
 
@@ -262,9 +264,9 @@ function global_volume_mean(var, h, G, GV, scale, tmp_scale)
   ! input array while [a] indicates the unscaled (e.g., mks) units that can be used with the reproducing sums
   real :: temp_scale ! A temporary scaling factor [a A-1 ~> 1] or [1]
   real :: scalefac   ! A scaling factor for the variable [a A-1 ~> 1]
-  real :: weight_here ! The volume of a grid cell [m3]
-  real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming ! The volume integral of the variable in a column [a m3]
-  real, dimension(SZI_(G),SZJ_(G)) :: sum_weight  ! The volume of each column of water [m3]
+  real :: weight_here ! The volume or mass of a grid cell [m3] or [kg]
+  real, dimension(SZI_(G),SZJ_(G)) :: tmpForSumming ! The volume integral of the variable in a column [a m3] or [a kg]
+  real, dimension(SZI_(G),SZJ_(G)) :: sum_weight  ! The volume or mass of each column of water [m3] or [kg]
   integer :: i, j, k, is, ie, js, je, nz
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -273,7 +275,7 @@ function global_volume_mean(var, h, G, GV, scale, tmp_scale)
   tmpForSumming(:,:) = 0. ; sum_weight(:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
-    weight_here  =  (GV%H_to_m * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j))
+    weight_here  =  (GV%H_to_MKS * h(i,j,k)) * (G%US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j))
     tmpForSumming(i,j) = tmpForSumming(i,j) + scalefac * var(i,j,k) * weight_here
     sum_weight(i,j) = sum_weight(i,j) + weight_here
   enddo ; enddo ; enddo
@@ -491,7 +493,7 @@ subroutine global_j_mean(array, j_mean, G, mask, scale, tmp_scale)
                                                             !! arbitrary, possibly rescaled units [A ~> a]
   real, dimension(SZI_(G)),         intent(out)   :: j_mean !<  Global mean of array along its j-axis [a] or [A ~> a]
   real, dimension(SZI_(G),SZJ_(G)), &
-                          optional, intent(in)    :: mask  !< An array used for weighting the j-mean
+                          optional, intent(in)    :: mask  !< An array used for weighting the j-mean [nondim]
   real,                   optional, intent(in)    :: scale !< A rescaling factor for the output variable [a A-1 ~> 1]
                                                            !! that converts it back to unscaled (e.g., mks)
                                                            !! units to enable the use of the reproducing sums

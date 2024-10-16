@@ -683,7 +683,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   tmp1(:,:,:) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
     tmp1(i,j,k) = (0.25 * KE_scale_factor * (areaTm(i,j) * h(i,j,k))) * &
-            ((u(I-1,j,k)**2 + u(I,j,k)**2) + (v(i,J-1,k)**2 + v(i,J,k)**2))
+            (((u(I-1,j,k)**2) + (u(I,j,k)**2)) + ((v(i,J-1,k)**2) + (v(i,J,k)**2)))
   enddo ; enddo ; enddo
 
   KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=KE)

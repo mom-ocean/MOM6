@@ -23,4 +23,4 @@ ARFLAGS = @ARFLAGS@
 .PHONY: depend
 depend: Makefile.dep
 Makefile.dep:
-	$(PYTHON) $(MAKEDEP) -o Makefile.dep -e -x libFMS.a -s @srcdir@/test_fms @srcdir@
+	$(PYTHON) $(MAKEDEP) $(DEFS) -o Makefile.dep -e -x libFMS.a -s @srcdir@/test_fms @srcdir@
