@@ -1114,6 +1114,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   EOSdom_u(1) = Isq - (G%IsdB-1) ; EOSdom_u(2) = Ieq - (G%IsdB-1)
   EOSdom_v(1) = is - (G%isd-1)   ; EOSdom_v(2) = ie - (G%isd-1)
 
+  ! TODO: These would be done outside of the function!
+  !$acc enter data copyin(CS)
+
   if (.not.CS%initialized) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
 
@@ -1142,6 +1145,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     GxRho_ref = GV%g_Earth * rho_ref
     I_g_rho = 1.0 / (GV%rho0 * GV%g_Earth)
   endif
+
+  ! TODO: Ideally, these will be only be computed on the GPU...
+  !$acc enter data copyin(h_neglect, I_Rho0)
 
   if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
     MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
@@ -1790,7 +1796,14 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo ; enddo ; enddo
   endif ! intx_pa and inty_pa have now been reset to reflect the properties of an unimpeded interface.
 
+  !$acc enter data create(PFu, PFv)
+  !!!$acc enter data copyin(e)
+
   ! Compute pressure gradient in x direction
+  !$acc data &
+  !$acc   present(G, GV, e, PFu, PFv) &
+  !$acc   copyin(e, pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
+  !$acc kernels
   !$OMP parallel do default(shared)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     PFu(I,j,k) = (((pa(i,j,K)*h(i,j,k) + intz_dpa(i,j,k)) - &
@@ -1811,6 +1824,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                  ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                   ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
   enddo ; enddo ; enddo
+  !$acc end kernels
+  !$acc end data
+
+  ! NOTE: PF[uv] stays on the GPU until the next loop!
 
   ! Calculate SAL geopotential anomaly and add its gradient to pressure gradient force
   if (CS%calculate_SAL .and. CS%tides_answer_date>20230630 .and. CS%bq_sal_tides) then
@@ -1856,14 +1873,28 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
           dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * (e(i,j,1) - G%Z_ref)
         enddo
       enddo
+      !TODO Temporary copy of dM until calculate_density is on GPU
+      !$acc enter data copyin(dM)
     else
       !$OMP parallel do default(shared)
+      !!!$acc enter data create(dM)
+      !!!$acc enter data copyin(e)
+
+      !!!$acc data &
+      !!!$acc   present(CS, G, GV, e, dM)
+      !!!$acc kernels
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
+      !!!$acc end kernels
+      !!!$acc end data
     endif
 
+    !$acc enter data copyin(dM)
+
     !$OMP parallel do default(shared)
+    !$acc data present(G, dM, PFu, PFv)
+    !$acc kernels
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
@@ -1872,7 +1903,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
+    !$acc end kernels
+    !$acc end data
   endif
+
+  !$acc exit data copyout(PFu, PFv, dM)
 
   if (present(pbce)) then
     call set_pbce_Bouss(e, tv_tmp, G, GV, US, rho0_set_pbce, CS%GFS_scale, pbce)

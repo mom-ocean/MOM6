@@ -2877,10 +2877,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! Copy the grid metrics and bathymetry to the ocean_grid_type
   call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
 
+  !$acc enter data copyin(G)
+  !$acc enter data copyin(G%IdxCu, G%IdyCv)
+
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
+
+  !$acc enter data copyin(GV)
+  !$acc enter data copyin(GV%Rlay)
 
   ! Now that the vertical grid has been initialized, rescale parameters that depend on factors
   ! that are set with the vertical grid to their desired units.  This added rescaling step would
