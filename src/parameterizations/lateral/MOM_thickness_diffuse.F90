@@ -38,6 +38,7 @@ type, public :: thickness_diffuse_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Khth                !< Background isopycnal depth diffusivity [L2 T-1 ~> m2 s-1]
   real    :: Khth_Slope_Cff      !< Slope dependence coefficient of Khth [nondim]
+  real    :: Grad_L_Scale	 !< Gradient model coefficient  [nondim]
   real    :: max_Khth_CFL        !< Maximum value of the diffusive CFL for isopycnal height diffusion [nondim]
   real    :: Khth_Min            !< Minimum value of Khth [L2 T-1 ~> m2 s-1]
   real    :: Khth_Max            !< Maximum value of Khth [L2 T-1 ~> m2 s-1], or 0 for no max
@@ -192,16 +193,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
   khth_use_ebt_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
-  Depth_scaled = .false.
+  Depth_scaled = .false. 
 
   if (VarMix%use_variable_mixing) then
-    use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
+    use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.) .or. (CS%Grad_L_Scale > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     Depth_scaled = VarMix%Depth_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
     khth_use_ebt_struct = VarMix%khth_use_ebt_struct
     use_Visbeck = VarMix%use_Visbeck
     use_QG_Leith = VarMix%use_QG_Leith_GM
+!>    use_gradient_model = VarMix%use_gradient_model
     if (allocated(VarMix%cg1)) cg1 => VarMix%cg1
   else
     cg1 => null()
@@ -312,6 +314,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     endif
   endif
 
+  if (use_VarMix) then
+    if (CS%Grad_L_Scale > 0.0) then
+      !$OMP do
+      do k=1,nz ; do j=js,je ; do I=is-1,ie
+        KH_u(I,j,k) = 1.0*CS%Grad_L_Scale*VarMix%L2grad_u(I,j)*VarMix%UH_grad(I,j,k)
+!!        print*, "KH_u=", KH_u(I,j,k)
+      enddo ; enddo ; enddo
+    endif
+  endif
+
+
   if (CS%use_GME_thickness_diffuse) then
     !$OMP do
     do k=1,nz+1 ; do j=js,je ; do I=is-1,ie
@@ -408,6 +421,16 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     endif
   endif
 
+  if (use_VarMix) then
+    if (CS%Grad_L_Scale > 0.0) then  !< Gradient model
+      !$OMP do
+      do k=1,nz ; do J=js-1,je ; do i=is,ie
+        KH_v(i,J,k) = 1.0*CS%Grad_L_Scale*VarMix%L2grad_v(i,J)*VarMix%VH_grad(i,J,k)
+!!        print*, "KH_v=", KH_v(i,J,k)
+      enddo ; enddo ; enddo
+    endif
+  endif
+  
   if (CS%use_GME_thickness_diffuse) then
     !$OMP do
     do k=1,nz+1 ; do J=js-1,je ; do i=is,ie
@@ -773,11 +796,10 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
 
   I4dt = 0.25 / dt
   I_slope_max2 = 1.0 / (CS%slope_max**2)
-  G_scale = GV%g_Earth * GV%H_to_Z
 
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2 ; hn_2 = 0.5*h_neglect
   dz_neglect = GV%dZ_subroundoff ; dz_neglect2 = dz_neglect**2
-  G_rho0 = GV%g_Earth / GV%Rho0
+  if (GV%Boussinesq) G_rho0 = GV%g_Earth / GV%Rho0
   N2_floor = CS%N2_floor * US%Z_to_L**2
 
   use_EOS = associated(tv%eqn_of_state)
@@ -2132,6 +2154,9 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "KHTH_SLOPE_CFF", CS%KHTH_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula for "//&
                  "the interface depth diffusivity", units="nondim", default=0.0)
+  call get_param(param_file, mdl, "GRAD_L_SCALE", CS%GRAD_L_Scale, &
+                 "The nondimensional coefficient in the Gradient model for "//&
+                 "the thickness depth diffusivity", units="nondim", default=1.0)
   call get_param(param_file, mdl, "KHTH_MIN", CS%KHTH_Min, &
                  "The minimum horizontal thickness diffusivity.", &
                  default=0.0, units="m2 s-1", scale=US%m_to_L**2*US%T_to_s)
