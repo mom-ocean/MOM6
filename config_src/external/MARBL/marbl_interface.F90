@@ -36,7 +36,8 @@ module marbl_interface
        contains
         procedure, public  :: put_setting                !< dummy put_setting routine
         procedure, public  :: get_setting                !< dummy get_setting routine
-        procedure, public  :: init                       !< dummy routine
+        procedure, public  :: init                       !< dummy init routine
+        procedure, public  :: compute_totChl             !< dummy routine to compute total Chlorophyll
         procedure, public  :: surface_flux_compute       !< dummy surface flux routine
         procedure, public  :: interior_tendency_compute  !< dummy interior tendency routine
         procedure, public  :: add_output_for_GCM         !< dummy add_output_for_GCM routine
@@ -88,6 +89,15 @@ contains
 
         call MOM_error(FATAL, error_msg)
     end subroutine init
+
+    !> Dummy version of MARBL's compute_totChl() function
+    subroutine compute_totChl(self)
+
+      class(marbl_interface_class), intent(inout) :: self
+
+      call MOM_error(FATAL, error_msg)
+
+    end subroutine compute_totChl
 
     !> Dummy version of MARBL's surface_flux_compute() function
     subroutine surface_flux_compute(self)

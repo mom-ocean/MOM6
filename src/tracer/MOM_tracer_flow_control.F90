@@ -255,7 +255,7 @@ subroutine call_tracer_register(G, GV, US, param_file, CS, tr_Reg, restart_CS)
     register_ideal_age_tracer(G%HI, GV, param_file, CS%ideal_age_tracer_CSp, &
                               tr_Reg, restart_CS)
   if (CS%use_MARBL_tracers) CS%use_MARBL_tracers = &
-    register_MARBL_tracers(G%HI, GV, US, param_file,  CS%MARBL_tracers_CSp, &
+    register_MARBL_tracers(G, G%HI, GV, US, param_file,  CS%MARBL_tracers_CSp, &
                         tr_Reg, restart_CS, CS%get_chl_from_MARBL)
   if (CS%use_regional_dyes) CS%use_regional_dyes = &
     register_dye_tracer(G%HI, GV, US, param_file, CS%dye_tracer_CSp, &
