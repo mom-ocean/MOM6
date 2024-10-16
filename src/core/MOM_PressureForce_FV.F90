@@ -1147,7 +1147,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   endif
 
   ! TODO: Ideally, these will be only be computed on the GPU...
-  !$acc enter data copyin(h_neglect, I_Rho0)
+  !$acc enter data copyin(h_neglect, I_Rho0, G_Rho0)
 
   if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
     MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
@@ -1797,12 +1797,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   endif ! intx_pa and inty_pa have now been reset to reflect the properties of an unimpeded interface.
 
   !$acc enter data create(PFu, PFv)
-  !!!$acc enter data copyin(e)
+  !$acc enter data copyin(e)
 
   ! Compute pressure gradient in x direction
   !$acc data &
   !$acc   present(G, GV, e, PFu, PFv) &
-  !$acc   copyin(e, pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
+  !$acc   copyin(pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
   !$acc kernels
   !$OMP parallel do default(shared)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1859,6 +1859,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
+    !$acc enter data create(dM)
     if (use_EOS) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1
@@ -1873,24 +1874,18 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
           dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * (e(i,j,1) - G%Z_ref)
         enddo
       enddo
-      !TODO Temporary copy of dM until calculate_density is on GPU
-      !$acc enter data copyin(dM)
+      !$acc update device(dM)
     else
       !$OMP parallel do default(shared)
-      !!!$acc enter data create(dM)
-      !!!$acc enter data copyin(e)
 
-      !!!$acc data &
-      !!!$acc   present(CS, G, GV, e, dM)
-      !!!$acc kernels
+      !$acc data present(CS, G, GV, e, dM)
+      !$acc kernels
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
-      !!!$acc end kernels
-      !!!$acc end data
+      !$acc end kernels
+      !$acc end data
     endif
-
-    !$acc enter data copyin(dM)
 
     !$OMP parallel do default(shared)
     !$acc data present(G, dM, PFu, PFv)
@@ -1905,9 +1900,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo
     !$acc end kernels
     !$acc end data
+
+    !$acc exit data copyout(dM)
   endif
 
-  !$acc exit data copyout(PFu, PFv, dM)
+  !$acc exit data copyout(PFu, PFv, e)
 
   if (present(pbce)) then
     call set_pbce_Bouss(e, tv_tmp, G, GV, US, rho0_set_pbce, CS%GFS_scale, pbce)

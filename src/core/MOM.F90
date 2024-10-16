@@ -2885,9 +2885,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
 
-  !$acc enter data copyin(GV)
-  !$acc enter data copyin(GV%Rlay)
-
   ! Now that the vertical grid has been initialized, rescale parameters that depend on factors
   ! that are set with the vertical grid to their desired units.  This added rescaling step would
   ! be unnecessary if the vertical grid were initialized earlier in this routine.
@@ -3452,6 +3449,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     call calc_derived_thermo(CS%tv, CS%h, G, GV, US, halo=dynamics_stencil, debug=CS%debug)
   endif
 
+  ! XXX: Where to put this??
+  !$acc enter data copyin(GV)
+  !$acc enter data copyin(GV%Rlay)
 
   diag => CS%diag
   ! Initialize the diag mediator.
