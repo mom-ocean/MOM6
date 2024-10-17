@@ -1028,6 +1028,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   real :: hcorr         ! A cumulative correction arising from inflation of vanished layers [Z ~> m]
 
   ! For Langmuir Calculations
+  real :: Vt_layer     ! non-dimensional extent contribution to unresolved shear
   real :: LangEnhVt2   ! Langmuir enhancement for unresolved shear [nondim]
   real, dimension(GV%ke) :: U_H, V_H ! Velocities at tracer points [L T-1 ~> m s-1]
   real :: MLD_guess    ! A guess at the mixed layer depth for calculating the Langmuir number [Z ~> m]
@@ -1085,7 +1086,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   !$OMP                           uS_SLD, vS_SLD, uS_SLC, vS_SLC, uSbar_SLD, vSbar_SLD, &
   !$OMP                           StokesXI, StokesXI_1d, StokesVt_1d, kbl) &
   !$OMP                           shared(G, GV, CS, US, uStar, h, dz, buoy_scale, buoyFlux, &
-  !$OMP                           Temp, Salt, waves, tv, GoRho, GoRho_Z_L2, u, v, lamult)
+  !$OMP                           Temp, Salt, waves, tv, GoRho, GoRho_Z_L2, u, v, lamult, Vt_layer)
   do j = G%jsc, G%jec
     do i = G%isc, G%iec ; if (G%mask2dT(i,j) > 0.0) then
 
@@ -1099,7 +1100,6 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           vE_H(k) = 0.5 * (v(i,J,k)+v(i,J-1,k)-Waves%US_y(i,J,k)-Waves%US_y(i,J-1,k))
         enddo
       endif
-
       ! things independent of position within the column
       Coriolis = 0.25*US%s_to_T*( (G%CoriolisBu(i,j)   + G%CoriolisBu(i-1,j-1)) + &
                                   (G%CoriolisBu(i-1,j) + G%CoriolisBu(i,j-1)) )
@@ -1137,7 +1137,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           endif
         enddo
 
-         if (CS%StokesMOST) then
+        if (CS%StokesMOST) then
           surfBuoyFlux   = buoy_scale * &
                           (buoyFlux(i,j,1) - 0.5*(buoyFlux(i,j,k)+buoyFlux(i,j,k+1)) )
           surfBuoyFlux2(k) = surfBuoyFlux
@@ -1149,7 +1149,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
                surfFricVel,waves%omega_w2x(i,j), uE_H, vE_H, uS_Hi, vS_Hi, uSbar_H, vSbar_H, uS_SLD,&
                vS_SLD, uSbar_SLD, vSbar_SLD, StokesXI, CVMix_kpp_params_user=CS%KPP_params )
           StokesXI_1d(k) = StokesXI
-          StokesVt_1d(k) = StokesXI
+          StokesVt_1d(k) = 0.0  ! StokesXI
 
           ! average temperature, salinity, u and v over surface layer starting at ksfc
           delH      = SLdepth_0d + iFaceHeight(ksfc-1)
@@ -1171,12 +1171,12 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           surfSalt = surfHsalt * I_hTot
           surfU    = surfHu    * I_hTot
           surfV    = surfHv    * I_hTot
+
           Uk       = uE_H(k) + uS_H(k) - surfU
           Vk       = vE_H(k) + vS_H(k) - surfV
 
         else   !not StokesMOST
           StokesXI_1d(k) = 0.0
-
           ! average temperature, salinity, u and v over surface layer
           ! use C-grid average to get u and v on T-points.
           surfHtemp = 0.0
@@ -1205,13 +1205,20 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
             endif
 
           enddo
+          !I_hTot = 1./hTot
+          !surfTemp = surfHtemp * I_hTot
+          !surfSalt = surfHsalt * I_hTot
+          !surfU    = surfHu    * I_hTot
+          !surfV    = surfHv    * I_hTot
+          !surfUs   = surfHus   * I_hTot
+          !surfVs   = surfHvs   * I_hTot
+
           surfTemp = surfHtemp / hTot
           surfSalt = surfHsalt / hTot
           surfU    = surfHu    / hTot
           surfV    = surfHv    / hTot
           surfUs   = surfHus   / hTot
           surfVs   = surfHvs   / hTot
-
           ! vertical shear between present layer and surface layer averaged surfU and surfV.
           ! C-grid average to get Uk and Vk on T-points.
           Uk         = 0.5*(u(i,j,k)+u(i-1,j,k)) - surfU
@@ -1296,12 +1303,13 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
         z_inter(K) = US%Z_to_m*iFaceHeight(K)
       enddo
 
-      ! turbulent velocity scales w_s and w_m computed at the cell centers.
-      ! Note that if sigma > CS%surf_layer_ext, then CVMix_kpp_compute_turbulent_scales
-      ! computes w_s and w_m velocity scale at sigma=CS%surf_layer_ext. So we only pass
-      ! sigma=CS%surf_layer_ext for this calculation.
+      ! CVMix_kpp_compute_turbulent_scales_1d_OBL computes w_s velocity scale at cell centers for
+      ! CVmix_kpp_compute_bulk_Richardson call to CVmix_kpp_compute_unresolved_shear
+      ! at sigma=Vt_layer (CS%surf_layer_ext or 1.0) for this calculation.
+      ! StokesVt_1d controls Stokes enhancement  (= 0 for none)
+      Vt_layer = 1.0      ! CS%surf_layer_ext
       call CVMix_kpp_compute_turbulent_scales( &                             ! 1d_OBL
-              CS%surf_layer_ext, & ! (in)  Normalized surface layer depth; sigma = CS%surf_layer_ext
+              Vt_layer,          & ! (in)  Boundary layer extent contributing to unresolved shear
               OBL_depth,         & ! (in)  OBL depth [m]
               surfBuoyFlux2,     & ! (in)  Buoyancy flux at surface [m2 s-3]
               surfFricVel,       & ! (in)  Turbulent friction velocity at surface [m s-1]
@@ -1341,7 +1349,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
                   N_iface=N_col,                     & ! Buoyancy frequency [s-1]
                   EFactor=LangEnhVT2,                & ! Langmuir enhancement factor [nondim]
                   LaSL=CS%La_SL(i,j),                & ! surface layer averaged Langmuir number [nondim]
-                  bfsfc=surfBuoyFlux2,                & ! surface buoyancy flux [m2 s-3]
+                  bfsfc=surfBuoyFlux2,               & ! surface buoyancy flux [m2 s-3]
                   uStar=surfFricVel,                 & ! surface friction velocity [m s-1]
                   CVMix_kpp_params_user=CS%KPP_params ) ! KPP parameters
 
