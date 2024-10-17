@@ -203,7 +203,8 @@ type, public :: MARBL_tracers_CS ; private
   real, pointer :: SFO(:,:,:) => NULL()    !< surface flux output returned from MARBL for use in GCM
                                            !! e.g. CO2 flux to pass to atmosphere (dims: i, j, num_sfo)
   real, pointer :: ITO(:,:,:,:) => NULL()  !< interior tendency output returned from MARBL for use in GCM
-                                           !! e.g. total chlorophyll to use in shortwave penetration (dims: i, j, k, num_ito)
+                                           !! e.g. total chlorophyll to use in shortwave penetration
+                                           !! (dims: i, j, k, num_ito)
 
   integer :: u10_sqr_ind   !< index of MARBL forcing field array to copy 10-m wind (squared) into
   integer :: sss_ind       !< index of MARBL forcing field array to copy sea surface salinity into
