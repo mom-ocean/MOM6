@@ -27,7 +27,7 @@ implicit none ; private
 type, public :: VarMix_CS
   logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: use_variable_mixing  !< If true, use the variable mixing.
-!>  logical :: use_gradient_model   !< If true, use the gradient model.
+  logical :: use_gradient_model   !< If true, use the gradient model.
   logical :: Resoln_scaling_used  !< If true, a resolution function is used somewhere to scale
                                   !! away one of the viscosities or diffusivities when the
                                   !! deformation radius is well resolved.
@@ -933,21 +933,21 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh, calcul
       ! Calculate the gradient slopes U_xH_x, V_xH_x, U_yH_y, V_yH_y on u- and v-points respectively
       do j=js-1,je+1 ; do I=is-1,ie
         U_xH_x(I,j) =1.0*(G%IdxCu(I+1,j)*G%IdyCu(I+1,j)*uh(I+1,j,K) - G%IdxCu(I,j)*G%IdyCu(I,j)*uh(I,j,k))*( &
-                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyCu(I,j) * (2.0*(h(I+1,j,K) - h(I,j,K))/( &
+                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyCu(I,j) * (1.0*(h(I+1,j,K) - h(I,j,K))/( &
                      h(I+1,j,K) + h(I,j,K) + h_neglect))
         V_xH_x(I,j) =1.0*(G%IdxCv(I+1,j)*G%IdxCv(I+1,j)*vh(I+1,j,K) - G%IdxCv(I,j)*G%IdxCv(I,j)*vh(I,j,k))*( &
-                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyCu(I,j) * (2.0*(h(I+1,j,K) - h(I,j,K))/( &
+                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyCu(I,j) * (1.0*(h(I+1,j,K) - h(I,j,K))/( &
                      h(I+1,j,K) + h(I,j,K) + h_neglect))
         ! Mask slopes where interface intersects topography
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) U_xH_x(I,j) = 0. 
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) V_xH_x(I,j) = 0. 
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        U_yH_y(i,J) =1.0*(G%IdyCu(i,J+1)**G%IdyCu(i,J+1)*uh(i,J+1,K) - G%IdyCu(i,J)*G%IdyCu(i,J)*uh(i,J,k))*( &
-                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCu(i,J) * (2.0*(h(i,J+1,K) - h(i,J,K))/( &
+        U_yH_y(i,J) =1.0*(G%IdyCu(i,J+1)*G%IdyCu(i,J+1)*uh(i,J+1,K) - G%IdyCu(i,J)*G%IdyCu(i,J)*uh(i,J,k))*( &
+                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCu(i,J) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
                      h(i,J+1,K) + h(i,J,K) + h_neglect))
         V_yH_y(i,J) =1.0*(G%IdyCv(i,J+1)*G%IdxCv(i,J+1)*vh(i,J,K) - G%IdyCv(i,J)*G%IdxCv(i,J)*vh(i,J,k))*( &
-                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCv(I,j) * (2.0*(h(i,J+1,K) - h(i,J,K))/( &
+                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCv(I,j) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
                      h(i,J+1,K) + h(i,J,K) + h_neglect))
         ! Mask slopes where interface intersects topography
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) U_yH_y(I,j) = 0.
@@ -956,20 +956,20 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh, calcul
     else ! This branch is not used.
       do j=js-1,je+1 ; do I=is-1,ie
         U_xH_x(I,j) =1.0*(G%IdxCu(I+1,j)*G%IdyCu(I+1,j)*uh(I+1,j,K) - G%IdxCu(I,j)*G%IdyCu(I,j)*uh(I,j,k))*( &
-                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyCu(I,j) * (2.0*(h(I+1,j,K) - h(I,j,K))/( &
+                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyCu(I,j) * (1.0*(h(I+1,j,K) - h(I,j,K))/( &
                      h(I+1,j,K) + h(I,j,K) + h_neglect)) 
         V_xH_x(I,j) =1.0*(G%IdxCv(I+1,j)*G%IdxCv(I+1,j)*vh(I+1,j,K) - G%IdxCv(I,j)*G%IdxCv(I,j)*vh(I,j,k))*( &
-                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dy_Cu(I,j) * (2.0*(h(I+1,j,K) - h(I,j,K))/( &
+                     G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dy_Cu(I,j) * (1.0*(h(I+1,j,K) - h(I,j,K))/( &
                      h(I+1,j,K) + h(I,j,K) + h_neglect)) 
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) U_xH_x(I,j) = 0.
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) V_xH_x(I,j) = 0. 
       enddo ; enddo
       do j=js-1,je ; do I=is-1,ie+1
         U_yH_y(i,J) =1.0*(G%IdyCu(i,J+1)*G%IdyCu(i,J+1)*uh(i,J+1,K) - G%IdyCu(i,J)*G%IdyCu(i,J)*uh(i,J,k))*( &
-                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCu(i,J) * (2.0*(h(i,J+1,K) - h(i,J,K))/( &
+                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCu(i,J) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
                      h(i,J+1,K) + h(i,J,K) + h_neglect)) 
         V_yH_y(i,J) =1.0*(G%IdyCv(i,J+1)*G%IdxCv(i,J+1)*vh(i,J,K) - G%IdyCv(i,J)*G%IdxCv(i,J)*vh(i,J,k))*( &
-                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCv(I,j) * (2.0*(h(i,J+1,K) - h(i,J,K))/( &
+                     G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxCv(I,j) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
                      h(i,J+1,K) + h(i,J,K) + h_neglect))
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) U_yH_y(I,j) = 0.
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) V_yH_y(I,j) = 0.
@@ -987,7 +987,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh, calcul
       gradUH = U_xH_x(I,j) + 0.25*(U_yH_y(I,j)+U_yH_y(I,j-1)+U_yH_y(I+1,j)+U_yH_y(I+1,j-1)) 
       if (min(h(i,j,k-1), h(i+1,j,k-1), h(i,j,k), h(i+1,j,k)) < H_cutoff) &
         S2 = 0.0
-        gradUH = 0.0
       S2N2_u_local(I,j,k) = (H_geom * GV%H_to_Z) * S2 * N2
       UH_grad_local(I,j,k) = gradUH
     enddo ; enddo
@@ -1001,7 +1000,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh, calcul
       gradVH = 0.25*(V_xH_x(i,J)+V_xH_x(i-1,J)+V_xH_x(i,J+1)+V_xH_x(i-1,J+1))+V_yH_y(i,J) 
       if (min(h(i,j,k-1), h(i,j+1,k-1), h(i,j,k), h(i,j+1,k)) < H_cutoff) &
         S2 = 0.0
-        gradVH = 0.0
       S2N2_v_local(i,J,k) = (H_geom * GV%H_to_Z) * S2 * N2
       VH_grad_local(i,J,k) = gradVH
     enddo ; enddo
@@ -1013,6 +1011,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh, calcul
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + S2N2_u_local(I,j,k)
       CS%UH_grad(I,j,k) = UH_grad_local(I,j,k)
+!!      print*, "UH_grad=", CS%UH_grad(I,j,k)
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
     do I=is-1,ie
@@ -1035,6 +1034,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh, calcul
     do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
       CS%SN_v(i,J) = CS%SN_v(i,J) + S2N2_v_local(i,J,k)
       CS%VH_grad(i,J,k) = VH_grad_local(i,J,k)
+!!      print*, "VH_grad=", CS%VH_grad(I,j,k)
     enddo ; enddo
     do i=is,ie
       !### Replace G%bathT+G%Z_ref here with (e(i,j,1) - e(i,j,nz+1)).
@@ -1050,7 +1050,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh, calcul
       endif
     enddo
   enddo
-
 end subroutine calc_slope_functions_using_just_e
 
 !> Calculates the Leith Laplacian and bi-harmonic viscosity coefficients
@@ -1255,6 +1254,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   CS%calculate_res_fns = .false.
   CS%use_simpler_Eady_growth_rate = .false.
   CS%calculate_depth_fns = .false.
+  CS%use_gradient_model = .false.
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "USE_VARIABLE_MIXING", CS%use_variable_mixing,&
@@ -1263,11 +1263,11 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "not used.  If KHTR_SLOPE_CFF>0 or  KhTh_Slope_Cff>0, "//&
                  "this is set to true regardless of what is in the "//&
                  "parameter file.", default=.false.)
- !  call get_param(param_file, mdl, "USE_GRADIENT_MODEL", CS%use_gradient_model,&
- !                "If true, use the gradient model formula for eddy diffusivity.  This "//&
- !                "allows diagnostics to be created even if the scheme is "//&
- !                "not used.  If Grad_L_Scale>0, this is set to true regardless of what "//& 
- !                "is in the parameter file.", default=.false.) 
+  call get_param(param_file, mdl, "USE_GRADIENT_MODEL", CS%use_gradient_model,&
+                 "If true, use the gradient model formula for eddy diffusivity.  This "//&
+                 "allows diagnostics to be created even if the scheme is "//&
+                 "not used.  If Grad_L_Scale>0, this is set to true regardless of what "//& 
+                 "is in the parameter file.", default=.false.) 
   call get_param(param_file, mdl, "USE_VISBECK", CS%use_Visbeck,&
                  "If true, use the Visbeck et al. (1997) formulation for \n"//&
                  "thickness diffusivity.", default=.false.)
@@ -1444,7 +1444,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
        'm2', conversion=US%L_to_m**2)
   endif
 
-  if (KhTr_Slope_Cff>0. .or. KhTh_Slope_Cff>0.) then
+  if (CS%use_gradient_model) then
     in_use = .true.
     call get_param(param_file, mdl, "GRAD_L_SCALE", CS%grad_L_scale, &
                  "The fixed length scale in the gradient formula.", units="m", &
