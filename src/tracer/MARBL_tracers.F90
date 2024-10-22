@@ -550,8 +550,7 @@ end subroutine configure_MARBL_tracers
 
 !> This subroutine is used to register tracer fields and subroutines
 !! to be used with MOM.
-function register_MARBL_tracers(G, HI, GV, US, param_file, CS, tr_Reg, restart_CS, MARBL_computes_chl)
-  type(ocean_grid_type),      intent(in) :: G    !< The ocean's grid structure
+function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, MARBL_computes_chl)
   type(hor_index_type),       intent(in) :: HI   !< A horizontal index type structure.
   type(verticalGrid_type),    intent(in) :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),      intent(in) :: US   !< A dimensional unit scaling type
@@ -814,8 +813,8 @@ function register_MARBL_tracers(G, HI, GV, US, param_file, CS, tr_Reg, restart_C
       CS%tracers_may_reinit, CS%interior_tendency_saved_state)
 
   ! Set up memory for additional output from MARBL and add to restart files
-  allocate(CS%SFO(SZI_(G), SZJ_(G), CS%sfo_cnt), &
-           CS%ITO(SZI_(G), SZJ_(G), SZK_(GV), CS%ito_cnt), &
+  allocate(CS%SFO(SZI_(HI), SZJ_(HI), CS%sfo_cnt), &
+           CS%ITO(SZI_(HI), SZJ_(HI), SZK_(GV), CS%ito_cnt), &
            source=0.0)
 
   do m=1,CS%sfo_cnt
@@ -954,14 +953,10 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
       ! TODO: added the ongrid optional argument, but is there a good way to detect if the file is on grid?
       call MOM_initialize_tracer_from_Z(h, CS%tracer_data(m)%tr, G, GV, US, param_file, &
           CS%IC_file, name, ongrid=CS%ongrid)
-      do k=1,GV%ke
-        do j=G%jsc, G%jec
-          do i=G%isc, G%iec
-            ! Ensure tracer concentrations are at / above minimum value
-            if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
-          enddo
-        enddo
-      enddo
+      do k=1,GV%ke ; do j=G%jsc, G%jec ; do i=G%isc, G%iec
+        ! Ensure tracer concentrations are at / above minimum value
+        if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
+      enddo ; enddo ; enddo
     endif
   enddo
 
@@ -970,23 +965,19 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
       ((.not. restart) .or. &
        (.not. query_initialized(CS%ITO(:,:,:,CS%total_Chl_ind), "MARBL_ITO_total_Chl", CS%restart_CSp)))) then
     ! Three steps per column
-    do j=G%jsc, G%jec
-      do i=G%isc, G%iec
-        ! (i) Copy initial tracers into MARBL structure
-        do m=1,CS%ntr
-          do k=1,GV%ke
-            MARBL_instances%tracers(m,k) = max(CS%tracer_data(m)%tr(i,j,k), 0.)
-          enddo
-        enddo
-        ! (ii) Compute total Chl for the column
-        call MARBL_instances%compute_totChl()
-        ! (iii) Copy total Chl from MARBL data-structure into CS%ITO
-        do k=1,GV%ke
-          CS%ITO(i,j,k,CS%total_Chl_ind) = &
-            MARBL_instances%interior_tendency_output%outputs_for_GCM(CS%total_Chl_ind)%forcing_field_1d(1,k)
-        enddo
+    do j=G%jsc, G%jec ; do i=G%isc, G%iec
+      ! (i) Copy initial tracers into MARBL structure
+      do k=1,GV%ke ; do m=1,CS%ntr
+        MARBL_instances%tracers(m,k) = max(CS%tracer_data(m)%tr(i,j,k), 0.)
+      enddo ; enddo
+      ! (ii) Compute total Chl for the column
+      call MARBL_instances%compute_totChl()
+      ! (iii) Copy total Chl from MARBL data-structure into CS%ITO
+      do k=1,GV%ke
+        CS%ITO(i,j,k,CS%total_Chl_ind) = &
+          MARBL_instances%interior_tendency_output%outputs_for_GCM(CS%total_Chl_ind)%forcing_field_1d(1,k)
       enddo
-    enddo
+    enddo ; enddo
   endif
 
   ! Register diagnostics for river fluxes
