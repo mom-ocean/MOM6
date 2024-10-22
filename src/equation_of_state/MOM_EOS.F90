@@ -66,6 +66,7 @@ public get_EOS_name
 interface calculate_density
   module procedure calculate_density_scalar
   module procedure calculate_density_1d
+  module procedure calculate_density_2d
   module procedure calculate_stanley_density_scalar
   module procedure calculate_stanley_density_1d
 end interface calculate_density
@@ -352,6 +353,63 @@ subroutine calculate_density_1d(T, S, pressure, rho, EOS, dom, rho_ref, scale)
   enddo ; endif
 
 end subroutine calculate_density_1d
+
+
+!> 2D version...
+subroutine calculate_density_2d(T, S, pressure, rho, EOS, dom, rho_ref)
+  real, intent(in) :: T(:,:)
+    !< Potential temperature referenced to the surface [C ~> degC]
+  real, intent(in) :: S(:,:)
+    !< Salinity [S ~> ppt]
+  real, intent(in) :: pressure(:,:)
+    !< Pressure [R L2 T-2 ~> Pa]
+  real, intent(inout) :: rho(:,:)
+    !< Density (in-situ if pressure is local) [R ~> kg m-3]
+  type(EOS_type), intent(in) :: EOS
+    !< Equation of state structure
+  integer, optional, intent(in) :: dom(2,2)
+    !< The domain of indices to work on, taking into account that arrays start
+    !! at 1.
+  real, optional, intent(in) :: rho_ref
+    !< A reference density [R ~> kg m-3]
+
+  real, dimension(size(rho,1), size(rho,2)) :: pres
+    ! Pressure converted to [Pa]
+  real, dimension(size(rho,1), size(rho,2)) :: Ta
+    ! Temperature converted to [degC]
+  real, dimension(size(rho,1), size(rho,2)) :: Sa
+    ! Salinity converted to [ppt]
+  integer :: i, is, ie, js, je, npts
+  integer :: domain(2,2)
+
+  if (present(dom)) then
+    domain(:,:) = dom(:,:)
+  else
+    domain(1,:) = [1, size(rho,1)]
+    domain(2,:) = [1, size(rho,2)]
+  endif
+
+  if ((EOS%RL2_T2_to_Pa == 1.0) .and. (EOS%R_to_kg_m3 == 1.0) .and. &
+      (EOS%C_to_degC == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
+    call EOS%type%calculate_density_array_2d(T, S, pressure, rho, domain, &
+        rho_ref=rho_ref)
+  else ! This is the same as above, but with some extra work to rescale variables.
+    is = domain(1,1) ; ie = domain(1,2)
+    js = domain(2,1) ; je = domain(2,2)
+
+    pres(is:ie, js:je) = EOS%RL2_T2_to_Pa * pressure(is:ie, js:je)
+    Ta(is:ie, js:je) = EOS%C_to_degC * T(is:ie, js:je)
+    Sa(is:ie, js:je) = EOS%S_to_ppt * S(is:ie, js:je)
+
+    if (present(rho_ref)) then
+      call EOS%type%calculate_density_array_2d(Ta, Sa, pres, rho, domain, &
+          rho_ref=EOS%R_to_kg_m3*rho_ref)
+    else
+      call EOS%type%calculate_density_array_2d(Ta, Sa, pres, rho, domain)
+    endif
+  endif
+end subroutine calculate_density_2d
+
 
 !> Calls the appropriate subroutine to calculate the density of sea water for 1-D array inputs
 !! including the variance of T, S and covariance of T-S,

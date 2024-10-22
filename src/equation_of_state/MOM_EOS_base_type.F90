@@ -42,6 +42,8 @@ contains
   procedure :: calculate_density_scalar => a_calculate_density_scalar
   !> Calculates the in-situ density or density anomaly for array inputs [m3 kg-1]
   procedure :: calculate_density_array => a_calculate_density_array
+  !> Calculates the in-situ density or density anomaly for 2d array inputs [m3 kg-1]
+  procedure :: calculate_density_array_2d => a_calculate_density_array_2d
   !> Calculates the in-situ specific volume or specific volume anomaly for scalar inputs [m3 kg-1]
   procedure :: calculate_spec_vol_scalar => a_calculate_spec_vol_scalar
   !> Calculates the in-situ specific volume or specific volume anomaly for array inputs [m3 kg-1]
@@ -251,6 +253,36 @@ contains
     endif
 
   end subroutine a_calculate_density_array
+
+  !> Calculate the in-situ density for 2D array inputs and outputs.
+  subroutine a_calculate_density_array_2d(this, T, S, pressure, rho, dom, rho_ref)
+    class(EOS_base), intent(in) :: this     !< This EOS
+    real, intent(in) :: T(:,:)
+      !< Potential temperature relative to the surface [degC]
+    real, intent(in) :: S(:,:)
+      !< Salinity [PSU]
+    real, intent(in) :: pressure(:,:)
+      !< Pressure [Pa]
+    real, intent(out) :: rho(:,:)
+      !< In situ density [kg m-3]
+    integer, intent(in) :: dom(2,2)
+      !< Index bounds of domain.  dom(::) = [[is, ie], [js, je]]
+    real, optional, intent(in) :: rho_ref
+      !< A reference density [kg m-3]
+
+    integer :: is, ie, js, je
+
+    is = dom(1,1) ; ie = dom(1,2)
+    js = dom(2,1) ; je = dom(2,2)
+
+    if (present(rho_ref)) then
+      rho(is:ie, js:je) = this%density_anomaly_elem(T(is:ie, js:je), &
+          S(is:ie, js:je), pressure(is:ie, js:je), rho_ref)
+    else
+      rho(is:ie, js:je) = this%density_elem(T(is:ie, js:je), S(is:ie, js:je), &
+          pressure(is:ie, js:je))
+    endif
+  end subroutine a_calculate_density_array_2d
 
   !> In situ specific volume [m3 kg-1]
   real function a_spec_vol_fn(this, T, S, pressure, spv_ref)

@@ -1066,12 +1066,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: &
     p_stanley   ! Pressure [R L2 T-2 ~> Pa] estimated with Rho_0
   real :: zeros(SZI_(G))     ! An array of zero values that can be used as an argument [various]
-  real :: rho_in_situ(SZI_(G)) ! The in situ density [R ~> kg m-3].
+  real :: rho_in_situ(SZI_(G),SZJ_(G)) ! The in situ density [R ~> kg m-3].
   real :: p_ref(SZI_(G))     !   The pressure used to calculate the coordinate
                              ! density, [R L2 T-2 ~> Pa] (usually 2e7 Pa = 2000 dbar).
   real :: p_surf_EOS(SZI_(G))  ! The pressure at the ocean surface determined from the surface height,
                              ! consistent with what is used in the density integral routines [R L2 T-2 ~> Pa]
-  real :: p0(SZI_(G))        ! An array of zeros to use for pressure [R L2 T-2 ~> Pa].
+  real :: p0(SZI_(G), SZJ_(G)) ! An array of zeros to use for pressure [R L2 T-2 ~> Pa].
   real :: dz_geo_sfc         ! The change in surface geopotential height between adjacent cells [L2 T-2 ~> m2 s-2]
   real :: GxRho0             ! The gravitational acceleration times mean ocean density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: GxRho_ref          ! The gravitational acceleration times reference density [R L2 Z-1 T-2 ~> Pa m-1]
@@ -1104,6 +1104,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   integer, dimension(2) :: EOSdom_h ! The i-computational domain for the equation of state at tracer points
   integer, dimension(2) :: EOSdom_u ! The i-computational domain for the equation of state at u-velocity points
   integer, dimension(2) :: EOSdom_v ! The i-computational domain for the equation of state at v-velocity points
+  integer :: EOSdom2d(2,2)  ! The 2D compute domain for the equation of state
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
   integer :: i, j, k, m, k2
 
@@ -1114,7 +1115,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   EOSdom_u(1) = Isq - (G%IsdB-1) ; EOSdom_u(2) = Ieq - (G%IsdB-1)
   EOSdom_v(1) = is - (G%isd-1)   ; EOSdom_v(2) = ie - (G%isd-1)
 
-  ! TODO: These would be done outside of the function!
+  EOSdom2d(1,:) = EOSdom(:)
+  EOSdom2d(2,:) = [Jsq - (G%isd - 1), (je + 1) - (G%jsd - 1)]
+
+  ! TODO: This would be done outside of the function!
   !$acc enter data copyin(CS)
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
@@ -1122,7 +1126,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
-  do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
+  !do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
+  p0(Isq:Ieq+1, Jsq:Jeq+1) = 0.
   use_ALE = .false.
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
@@ -1862,19 +1867,17 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     ! Adjust the Montgomery potential to make this a reduced gravity model.
 
     if (use_EOS) then
+      if (use_p_atm) then
+        call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p_atm, rho_in_situ, &
+                                 tv%eqn_of_state, EOSdom2d)
+      else
+        call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p0, rho_in_situ, &
+                                 tv%eqn_of_state, EOSdom2d)
+      endif
       !$OMP parallel do default(shared)
-      do j=Jsq,Jeq+1
-        if (use_p_atm) then
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p_atm(:,j), rho_in_situ, &
-                                 tv%eqn_of_state, EOSdom)
-        else
-          call calculate_density(tv_tmp%T(:,j,1), tv_tmp%S(:,j,1), p0, rho_in_situ, &
-                                 tv%eqn_of_state, EOSdom)
-        endif
-        do i=Isq,Ieq+1
-          dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i)) * (e(i,j,1) - G%Z_ref)
-        enddo
-      enddo
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i,j)) * (e(i,j,1) - G%Z_ref)
+      enddo ; enddo
       !$acc update device(dM)
     else
       !$OMP parallel do default(shared)
