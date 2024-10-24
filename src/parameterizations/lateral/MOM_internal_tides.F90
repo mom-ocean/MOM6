@@ -146,6 +146,7 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:,:,:) :: int_N2w2 !< Depth-integrated Brunt Vaissalla freqency times
                         !! vertical profile squared, for each mode [H T-2 ~> m s-2 or kg m-2 s-2]
   real :: q_itides      !< fraction of local dissipation [nondim]
+  real :: mixing_effic  !< mixing efficiency [nondim]
   real :: En_sum        !< global sum of energy for use in debugging, in MKS units [H Z2 T-2 L2 ~> m5 s-2 or J]
   real :: En_underflow  !< A minuscule amount of energy [H Z2 T-2 ~> m3 s-2 or J m-2]
   integer :: En_restart_power !< A power factor of 2 by which to multiply the energy in restart [nondim]
@@ -1653,7 +1654,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         ! layer diffusivity for processus
         if (h(i,j,k) >= CS%min_thick_layer_Kd) then
           TKE_to_Kd_lim = min(TKE_to_Kd(i,k), CS%max_TKE_to_Kd)
-          Kd_leak_lay(k) = TKE_loss * TKE_to_Kd_lim * profile_leak(i,k) * h(i,j,k)
+          Kd_leak_lay(k) = CS%mixing_effic * TKE_loss * TKE_to_Kd_lim * profile_leak(i,k) * h(i,j,k)
         else
           Kd_leak_lay(k) = 0.
         endif
@@ -1675,7 +1676,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         ! layer diffusivity for processus
         if (h(i,j,k) >= CS%min_thick_layer_Kd) then
           TKE_to_Kd_lim = min(TKE_to_Kd(i,k), CS%max_TKE_to_Kd)
-          Kd_Froude_lay(k) = TKE_loss * TKE_to_Kd_lim * profile_Froude(i,k) * h(i,j,k)
+          Kd_Froude_lay(k) = CS%mixing_effic * TKE_loss * TKE_to_Kd_lim * profile_Froude(i,k) * h(i,j,k)
         else
           Kd_Froude_lay(k) = 0.
         endif
@@ -1697,7 +1698,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         ! layer diffusivity for processus
         if (h(i,j,k) >= CS%min_thick_layer_Kd) then
           TKE_to_Kd_lim = min(TKE_to_Kd(i,k), CS%max_TKE_to_Kd)
-          Kd_itidal_lay(k) = TKE_loss * TKE_to_Kd_lim * profile_itidal(i,k) * h(i,j,k)
+          Kd_itidal_lay(k) = CS%mixing_effic * TKE_loss * TKE_to_Kd_lim * profile_itidal(i,k) * h(i,j,k)
         else
           Kd_itidal_lay(k) = 0.
         endif
@@ -1719,7 +1720,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         ! layer diffusivity for processus
         if (h(i,j,k) >= CS%min_thick_layer_Kd) then
           TKE_to_Kd_lim = min(TKE_to_Kd(i,k), CS%max_TKE_to_Kd)
-          Kd_slope_lay(k) = TKE_loss * TKE_to_Kd_lim * profile_slope(i,k) * h(i,j,k)
+          Kd_slope_lay(k) = CS%mixing_effic * TKE_loss * TKE_to_Kd_lim * profile_slope(i,k) * h(i,j,k)
         else
           Kd_slope_lay(k) = 0.
         endif
@@ -1741,7 +1742,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         ! layer diffusivity for processus
         if (h(i,j,k) >= CS%min_thick_layer_Kd) then
           TKE_to_Kd_lim = min(TKE_to_Kd(i,k), CS%max_TKE_to_Kd)
-          Kd_quad_lay(k) = TKE_loss * TKE_to_Kd_lim * profile_quad(i,k) * h(i,j,k)
+          Kd_quad_lay(k) = CS%mixing_effic * TKE_loss * TKE_to_Kd_lim * profile_quad(i,k) * h(i,j,k)
         else
           Kd_quad_lay(k) = 0.
         endif
@@ -3539,6 +3540,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "MINTHICK_TKE_TO_KD", CS%min_thick_layer_Kd, &
                  "The minimum thickness allowed with TKE_to_Kd.", &
                  units="m", default=1e-6, scale=GV%m_to_H)
+  call get_param(param_file, mdl, "ITIDES_MIXING_EFFIC", CS%mixing_effic, &
+                 "Mixing efficiency for internal tides raytracing", &
+                 units="nondim", default=0.2)
   call get_param(param_file, mdl, "MAX_TKE_TO_KD", CS%max_TKE_to_Kd, &
                  "Limiter for TKE_to_Kd.", &
                  units="", default=1e9, scale=US%Z_to_m*US%s_to_T**2)
