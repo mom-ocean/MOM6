@@ -289,7 +289,7 @@ type, public :: barotropic_CS ; private
   logical :: tidal_sal_flather !< Apply adjustment to external gravity wave speed
                              !! consistent with tidal self-attraction and loading
                              !! used within the barotropic solver
-  logical :: wt_uv_fix       !< If true, use a normalized wt_[uv] for vertical averages.
+  logical :: wt_uv_bug = .true. !< If true, recover a bug that wt_[uv] that is not normalized.
   type(time_type), pointer :: Time  => NULL() !< A pointer to the ocean models clock.
   type(diag_ctrl), pointer :: diag => NULL()  !< A structure that is used to regulate
                              !! the timing of diagnostic output.
@@ -1070,7 +1070,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     wt_v(i,J,k) = CS%frhatv(i,J,k) * visc_rem
   enddo ; enddo ; enddo
 
-  if (CS%wt_uv_fix) then
+  if (.not. CS%wt_uv_bug) then
     do j=js,je ; do I=is-1,ie ; Iwt_u_tot(I,j) = wt_u(I,j,1) ; enddo ; enddo
     do k=2,nz ; do j=js,je ; do I=is-1,ie
       Iwt_u_tot(I,j) = Iwt_u_tot(I,j) + wt_u(I,j,k)
@@ -4652,11 +4652,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, default=.true., do_not_log=.true.)
-  call get_param(param_file, mdl, "VISC_REM_BT_WEIGHT_FIX", CS%wt_uv_fix, &
-                 "If true, use a normalized weight function for vertical averages of "//&
-                 "baroclinic velocity and forcing. Default of this flag is set by "//&
-                 "VISC_REM_BUG. This flag should be used with VISC_REM_TIMESTEP_FIX.", &
-                 default=.not.visc_rem_bug)
+  call get_param(param_file, mdl, "VISC_REM_BT_WEIGHT_BUG", CS%wt_uv_bug, &
+                 "If true, recover a bug in barotropic solver that uses an unnormalized weight "//&
+                 "function for vertical averages of baroclinic velocity and forcing. Default "//&
+                 "of this flag is set by VISC_REM_BUG.", default=visc_rem_bug)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   if (use_tides .and. present(HA_CSp)) CS%HA_CSp => HA_CSp
