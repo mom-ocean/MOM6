@@ -1152,7 +1152,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
           StokesVt_1d(k) = StokesXI
 
           ! average temperature, salinity, u and v over surface layer starting at ksfc
-          delH      = SLdepth_0d + iFaceHeight(ksfc-1)
+          delH      = SLdepth_0d + iFaceHeight(ksfc)
           surfHtemp = Temp(i,j,ksfc) * delH
           surfHsalt = Salt(i,j,ksfc) * delH
           surfHu    = (uE_H(ksfc) + uSbar_SLD)  * delH
@@ -1368,7 +1368,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
       CS%OBLdepth(i,j) = US%m_to_Z * KPP_OBL_depth
 
     if (CS%StokesMOST) then
-      kbl = nint(CS%kOBL(i,j))
+      kbl = int(CS%kOBL(i,j))
       SLdepth_0d = CS%surf_layer_ext*CS%OBLdepth(i,j)
       surfBuoyFlux = surfBuoyFlux2(kbl)
         ! find ksfc for cell where "surface layer" sits
