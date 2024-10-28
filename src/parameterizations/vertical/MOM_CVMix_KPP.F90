@@ -13,6 +13,7 @@ use MOM_file_parser,    only : get_param, log_param, log_version, param_file_typ
 use MOM_file_parser,    only : openParameterBlock, closeParameterBlock
 use MOM_grid,           only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : thickness_to_dz
+use MOM_restart,        only : MOM_restart_CS, register_restart_field
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_variables,      only : thermo_var_ptrs
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -36,6 +37,7 @@ implicit none ; private
 
 #include "MOM_memory.h"
 
+public :: register_KPP_restarts
 public :: KPP_init
 public :: KPP_compute_BLD
 public :: KPP_calculate
@@ -152,7 +154,7 @@ type, public :: KPP_CS ; private
   !>@}
 
   ! Diagnostics arrays
-  real, allocatable, dimension(:,:)   :: OBLdepth  !< Depth (positive) of ocean boundary layer (OBL) [Z ~> m]
+  real, pointer,     dimension(:,:)   :: OBLdepth  !< Depth (positive) of ocean boundary layer (OBL) [Z ~> m]
   real, allocatable, dimension(:,:)   :: OBLdepth_original  !< Depth (positive) of OBL [Z ~> m] without smoothing
   real, allocatable, dimension(:,:)   :: StokesParXI !< Stokes similarity parameter
   real, allocatable, dimension(:,:)   :: Lam2        !< La^(-2) = Ustk0/u*
@@ -188,6 +190,33 @@ integer :: id_clock_KPP_calc, id_clock_KPP_compute_BLD, id_clock_KPP_smoothing
 
 contains
 
+!> Routine to register restarts, pass-through to children modules
+subroutine register_KPP_restarts(G, param_file, restart_CSp, CS)
+  type(ocean_grid_type), intent(in)    :: G           !< The ocean's grid structure
+  type(param_file_type), intent(in)    :: param_file  !< A structure to parse for run-time parameters
+  type(MOM_restart_CS),  pointer       :: restart_CSp  !< MOM restart control structure
+  type(KPP_CS),         pointer        :: CS           !< module control structure
+
+  character(len=40) :: mdl = 'MOM_CVMix_KPP' !< name of this module
+  logical :: use_kpp, fpmix
+
+  if (associated(CS)) call MOM_error(FATAL, 'MOM_CVMix_KPP, register_KPP_restarts: '// &
+           'Control structure has already been initialized')
+  call get_param(param_file, mdl, "USE_KPP", use_kpp, default=.false., do_not_log=.true.)
+  ! Forego remainder of initialization if not using this scheme
+  if (.not. use_kpp) return
+  allocate(CS)
+
+  allocate(CS%OBLdepth(SZI_(G),SZJ_(G)), source=0.0)
+
+  ! FPMIX is needed to decide if boundary layer depth should be added to restart file
+  call get_param(param_file, '', "FPMIX", fpmix, &
+                 "If true, add non-local momentum flux increments and diffuse down the Eulerian gradient.", &
+                 default=.false., do_not_log=.true.)
+    if (fpmix) call register_restart_field(CS%OBLdepth, 'KPP_OBLdepth', .false., restart_CSp)
+
+end subroutine register_KPP_restarts
+
 !> Initialize the CVMix KPP module and set up diagnostics
 !! Returns True if KPP is to be used, False otherwise.
 logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
@@ -213,9 +242,6 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
   logical :: CS_IS_ONE=.false.         !< Logical for setting Cs based on Non-local
   logical :: lnoDGat1=.false.          !< True => G'(1) = 0 (shape function)
                                        !! False => compute G'(1) as in LMD94
-  if (associated(CS)) call MOM_error(FATAL, 'MOM_CVMix_KPP, KPP_init: '// &
-           'Control structure has already been initialized')
-
   ! Read parameters
   call get_param(paramFile, mdl, "USE_KPP", KPP_init, default=.false., do_not_log=.true.)
   call log_version(paramFile, mdl, version, 'This is the MOM wrapper to CVMix:KPP\n' // &
@@ -226,7 +252,6 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
                  default=.false.)
   ! Forego remainder of initialization if not using this scheme
   if (.not. KPP_init) return
-  allocate(CS)
 
   call get_param(paramFile, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
@@ -599,7 +624,6 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
       'Surface-layer Langmuir number computed in [CVMix] KPP','nondim')
 
   allocate( CS%N( SZI_(G), SZJ_(G), SZK_(GV)+1 ), source=0. )
-  allocate( CS%OBLdepth( SZI_(G), SZJ_(G) ), source=0. )
   allocate( CS%StokesParXI( SZI_(G), SZJ_(G) ), source=0. )
   allocate( CS%Lam2    ( SZI_(G), SZJ_(G) ), source=0. )
   allocate( CS%kOBL( SZI_(G), SZJ_(G) ), source=0. )

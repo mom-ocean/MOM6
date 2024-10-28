@@ -2895,7 +2895,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
 
   if (.not. CS%adiabatic) then
-    call register_diabatic_restarts(G, US, param_file, CS%int_tide_CSp, restart_CSp)
+    call register_diabatic_restarts(G, US, param_file, CS%int_tide_CSp, restart_CSp, CS%diabatic_CSp)
   endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
