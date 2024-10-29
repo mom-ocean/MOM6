@@ -1203,7 +1203,7 @@ end subroutine find_N2
 
 !> This subroutine sets the additional diffusivities of temperature and
 !! salinity due to double diffusion, using the same functional form as is
-!! used in MOM4.1, and taken from an NCAR technical note (REF?) that updates
+!! used in MOM4.1, and taken from the appendix of Danabasoglu et al. (2006), which updates
 !! what was in Large et al. (1994).  All the coefficients here should probably
 !! be made run-time variables rather than hard-coded constants.
 !!
@@ -1246,8 +1246,6 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
   real :: Kd_dd   ! The dominant double diffusive diffusivity [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real :: prandtl ! flux ratio for diffusive convection regime [nondim]
 
-  real, parameter :: Rrho0  = 1.9 ! limit for double-diffusive density ratio [nondim]
-
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, k, is, ie, nz
   is = G%isc ; ie = G%iec ; nz = GV%ke
@@ -1273,8 +1271,8 @@ subroutine double_diffusion(tv, h, T_f, S_f, j, G, GV, US, CS, Kd_T_dd, Kd_S_dd)
         beta_dS  = dRho_dS(i) * (S_f(i,j,k-1) - S_f(i,j,k))
 
         if ((alpha_dT > beta_dS) .and. (beta_dS > 0.0)) then  ! salt finger case
-          Rrho = min(alpha_dT / beta_dS, Rrho0)
-          diff_dd = 1.0 - ((RRho-1.0)/(RRho0-1.0))
+          Rrho = min(alpha_dT / beta_dS, CS%Max_Rrho_salt_fingers)
+          diff_dd = 1.0 - ((RRho-1.0)/(CS%Max_Rrho_salt_fingers-1.0))
           Kd_dd = CS%Max_salt_diff_salt_fingers * diff_dd*diff_dd*diff_dd
           Kd_T_dd(i,K) = 0.7 * Kd_dd
           Kd_S_dd(i,K) = Kd_dd
@@ -2541,7 +2539,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   if (CS%double_diffusion) then
     call get_param(param_file, mdl, "MAX_RRHO_SALT_FINGERS", CS%Max_Rrho_salt_fingers, &
                  "Maximum density ratio for salt fingering regime.", &
-                 default=2.55, units="nondim")
+                 default=1.9, units="nondim")
     call get_param(param_file, mdl, "MAX_SALT_DIFF_SALT_FINGERS", CS%Max_salt_diff_salt_fingers, &
                  "Maximum salt diffusivity for salt fingering regime.", &
                  default=1.e-4, units="m2 s-1", scale=GV%m2_s_to_HZ_T)
