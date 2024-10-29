@@ -225,8 +225,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
   real, dimension(SZI_(G),SZJB_(G))  :: hbl_v   !< boundary layer depth (v-pts) [H ~> m]
   real, dimension(SZIB_(G),SZJ_(G))  :: taux_u  !< kinematic zonal wind stress (u-pts) [L2 T-2 ~> m2 s-2]
   real, dimension(SZI_(G),SZJB_(G))  :: tauy_v  !< kinematic merid wind stress (v-pts) [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G))  :: uS0     !< surface zonal Stokes drift [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G))  :: vS0     !< surface zonal Stokes drift [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G))   :: uS0     !< surface zonal Stokes drift h-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G))   :: vS0     !< surface zonal Stokes drift h-pts [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uE_u    !< zonal Eulerian u-pts [L T-1 ~> m s-1]
   real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: uE_h    !< zonal Eulerian h-pts [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vE_v    !< merid Eulerian v-pts [L T-1 ~> m s-1]
@@ -264,25 +264,29 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
         ! h to u-pts
         tmp_u  = MAX (1.0 ,(G%mask2dT(i,j) + G%mask2dT(i+1,j) ) )
         hbl_u(I,j) = (G%mask2dT(i,j)*  hbl_h(i,j) + G%mask2dT(i+1,j) * hbl_h(i+1,j)) / tmp_u
-      endif
-      depth   = 0.
-      Gat1  = 0.
-      do k=1, nz
-        ! cell center
-        depth = depth + 0.5*CS%h_u(I,j,k)
-        uE_u(I,j,k) = ui(I,j,k) - waves%Us_x(I,j,k)
-        if ( depth < hbl_u(I,j) )     then
-          sigma = depth / hbl_u(i,j)
-          ! cell bottom
+        depth   = 0.
+        Gat1  = 0.
+        do k=1, nz
+          ! cell center
           depth = depth + 0.5*CS%h_u(I,j,k)
-          call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
-          ! nonlocal boundary-layer increment
-          uInc_u(I,j,k)  = dt * Cemp_NL * taux_u(I,j) * dGdsig / hbl_u(I,j)
-          ui(I,j,k) = ui(I,j,k) + uInc_u(I,j,k)
-        else
+          uE_u(I,j,k) = ui(I,j,k) - waves%Us_x(I,j,k)
+          if ( depth < hbl_u(I,j) )     then
+            sigma = depth / hbl_u(i,j)
+            ! cell bottom
+            depth = depth + 0.5*CS%h_u(I,j,k)
+            call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
+            ! nonlocal boundary-layer increment
+            uInc_u(I,j,k)  = dt * Cemp_NL * taux_u(I,j) * dGdsig / hbl_u(I,j)
+            ui(I,j,k) = ui(I,j,k) + uInc_u(I,j,k)
+          else
+            uInc_u(I,j,k) = 0.0
+          endif
+        enddo
+      else
+        do k=1, nz
           uInc_u(I,j,k) = 0.0
-        endif
-      enddo
+        enddo
+      endif
     enddo
   enddo
 
@@ -294,25 +298,29 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
         ! h to v-pts
         tmp_v  = max( 1.0 ,(G%mask2dT(i,j) + G%mask2dT(i,j+1)))
         hbl_v(i,J) = (G%mask2dT(i,j) * hbl_h(i,J) + G%mask2dT(i,j+1) * hbl_h(i,j+1)) / tmp_v
-      endif
-      depth = 0.
-      Gat1  = 0.
-      do k=1, nz
-        ! cell center
-        depth = depth + 0.5* CS%h_v(i,J,k)
-        vE_v(i,J,k) = vi(i,J,k) - waves%Us_y(i,J,k)
-        if ( depth < hbl_v(i,J) )    then
-          sigma = depth / hbl_v(i,J)
-          ! cell bottom
+        depth = 0.
+        Gat1  = 0.
+        do k=1, nz
+          ! cell center
           depth = depth + 0.5* CS%h_v(i,J,k)
-          call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
-          ! nonlocal boundary-layer increment
-          vInc_v(i,J,k) = dt * Cemp_NL * tauy_v(i,J) * dGdsig / hbl_v(i,J)
-          vi(i,J,k) = vi(i,J,k) + vInc_v(i,J,k)
-        else
+          vE_v(i,J,k) = vi(i,J,k) - waves%Us_y(i,J,k)
+          if ( depth < hbl_v(i,J) )    then
+            sigma = depth / hbl_v(i,J)
+            ! cell bottom
+            depth = depth + 0.5* CS%h_v(i,J,k)
+            call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
+            ! nonlocal boundary-layer increment
+            vInc_v(i,J,k) = dt * Cemp_NL * tauy_v(i,J) * dGdsig / hbl_v(i,J)
+            vi(i,J,k) = vi(i,J,k) + vInc_v(i,J,k)
+          else
+            vInc_v(i,J,k)  = 0.0
+          endif
+        enddo
+      else
+        do k=1, nz
           vInc_v(i,J,k)  = 0.0
-        endif
-      enddo
+        enddo
+      endif
     enddo
   enddo
 
