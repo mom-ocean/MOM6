@@ -77,6 +77,7 @@ module marbl_interface_public_types
         ! that needs to be passed to the GCM / flux coupler.
         ! Data must be accessed via the marbl_output_for_GCM_type
         ! data structure.
+        character(len=0) :: short_name  !< dummy name
         real, allocatable, dimension(:)   :: forcing_field_0d  !< dummy forcing_field_0d
         real, allocatable, dimension(:,:) :: forcing_field_1d  !< forcing_field_1d
     end type marbl_single_output_type

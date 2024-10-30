@@ -92,8 +92,8 @@ type :: saved_state_for_MARBL_type
   character(len=200) :: short_name !< name of variable being saved
   character(len=200) :: file_varname !< name of variable in restart file
   character(len=200) :: units !< variable units
-  real, pointer :: field_2d(:,:) !< memory for 2D field
-  real, pointer :: field_3d(:,:,:) !< memory for 3D field
+  real, pointer :: field_2d(:,:) => NULL() !< memory for 2D field
+  real, pointer :: field_3d(:,:,:) => NULL() !< memory for 3D field
 end type saved_state_for_MARBL_type
 
 !> All calls to MARBL are done via the interface class
@@ -198,12 +198,13 @@ type, public :: MARBL_tracers_CS ; private
   real :: DIC_salt_ratio !< ratio to convert salt surface flux to DIC surface flux [conc ppt-1]
   real :: ALK_salt_ratio !< ratio to convert salt surface flux to ALK surface flux [conc ppt-1]
 
-  real, allocatable :: STF(:,:,:)    !< surface fluxes returned from MARBL to use in tracer_vertdiff
-                                     !! (dims: i, j, tracer) [conc Z T-1 ~> conc m s-1]
-  real, allocatable :: SFO(:,:,:)    !< surface flux output returned from MARBL for use in GCM
-                                     !! e.g. CO2 flux to pass to atmosphere (dims: i, j, num_sfo)
-  real, allocatable :: ITO(:,:,:,:)  !< interior tendency output returned from MARBL for use in GCM
-                                     !! e.g. total chlorophyll to use in shortwave penetration (dims: i, j, k, num_ito)
+  real, allocatable :: STF(:,:,:)          !< surface fluxes returned from MARBL to use in tracer_vertdiff
+                                           !! (dims: i, j, tracer) [conc Z T-1 ~> conc m s-1]
+  real, pointer :: SFO(:,:,:) => NULL()    !< surface flux output returned from MARBL for use in GCM
+                                           !! e.g. CO2 flux to pass to atmosphere (dims: i, j, num_sfo)
+  real, pointer :: ITO(:,:,:,:) => NULL()  !< interior tendency output returned from MARBL for use in GCM
+                                           !! e.g. total chlorophyll to use in shortwave penetration
+                                           !! (dims: i, j, k, num_ito)
 
   integer :: u10_sqr_ind   !< index of MARBL forcing field array to copy 10-m wind (squared) into
   integer :: sss_ind       !< index of MARBL forcing field array to copy sea surface salinity into
@@ -413,6 +414,8 @@ subroutine configure_MARBL_tracers(GV, US, param_file, CS)
   ! (4) Request fields needed by MOM6
   CS%sfo_cnt = 0
   CS%ito_cnt = 0
+  CS%flux_co2_ind = -1
+  CS%total_Chl_ind = -1
 
   if (CS%base_bio_on) then
     ! CO2 Flux to the atmosphere
@@ -809,6 +812,24 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
   call setup_saved_state(MARBL_instances%interior_tendency_saved_state, HI, GV, restart_CS, &
       CS%tracers_may_reinit, CS%interior_tendency_saved_state)
 
+  ! Set up memory for additional output from MARBL and add to restart files
+  allocate(CS%SFO(SZI_(HI), SZJ_(HI), CS%sfo_cnt), &
+           CS%ITO(SZI_(HI), SZJ_(HI), SZK_(GV), CS%ito_cnt), &
+           source=0.0)
+
+  do m=1,CS%sfo_cnt
+    write(var_name, "(2A)") 'MARBL_SFO_', &
+                            trim(MARBL_instances%surface_flux_output%outputs_for_GCM(m)%short_name)
+    call register_restart_field(CS%SFO(:,:,m), var_name, .false., restart_CS)
+  enddo
+
+  do m=1,CS%ito_cnt
+    write(var_name, "(2A)") 'MARBL_ITO_', &
+                            trim(MARBL_instances%interior_tendency_output%outputs_for_GCM(m)%short_name)
+    call register_restart_field(CS%ITO(:,:,:,m), var_name, .false., restart_CS)
+  enddo
+
+
   CS%tr_Reg => tr_Reg
   CS%restart_CSp => restart_CS
 
@@ -857,8 +878,6 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
   ! Allocate memory for surface tracer fluxes
   allocate(CS%STF(SZI_(G), SZJ_(G), CS%ntr), &
            CS%RIV_FLUXES(SZI_(G), SZJ_(G), CS%ntr), &
-           CS%SFO(SZI_(G), SZJ_(G), CS%sfo_cnt), &
-           CS%ITO(SZI_(G), SZJ_(G), SZK_(G), CS%ito_cnt), &
            source=0.0)
 
   ! Allocate memory for d14c forcing
@@ -925,6 +944,7 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
       diag%axesTL, & ! T=> tracer grid? L => layer center
       day, "Conversion Factor for Bottom Flux -> Tend", "1/m")
 
+  ! Initialize tracers (if they weren't initialized from restart file)
   do m=1,CS%ntr
     call query_vardesc(CS%tr_desc(m), name=name, caller="initialize_MARBL_tracers")
     if ((.not. restart) .or. &
@@ -933,16 +953,32 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
       ! TODO: added the ongrid optional argument, but is there a good way to detect if the file is on grid?
       call MOM_initialize_tracer_from_Z(h, CS%tracer_data(m)%tr, G, GV, US, param_file, &
           CS%IC_file, name, ongrid=CS%ongrid)
-      do k=1,GV%ke
-        do j=G%jsc, G%jec
-          do i=G%isc, G%iec
-            ! Ensure tracer concentrations are at / above minimum value
-            if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
-          enddo
-        enddo
-      enddo
+      do k=1,GV%ke ; do j=G%jsc, G%jec ; do i=G%isc, G%iec
+        ! Ensure tracer concentrations are at / above minimum value
+        if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
+      enddo ; enddo ; enddo
     endif
   enddo
+
+  ! Initialize total chlorophyll to get SW Pen correct (if it wasn't initialized from restart file)
+  if ((CS%total_Chl_ind > 0) .and. &
+      ((.not. restart) .or. &
+       (.not. query_initialized(CS%ITO(:,:,:,CS%total_Chl_ind), "MARBL_ITO_total_Chl", CS%restart_CSp)))) then
+    ! Three steps per column
+    do j=G%jsc, G%jec ; do i=G%isc, G%iec
+      ! (i) Copy initial tracers into MARBL structure
+      do k=1,GV%ke ; do m=1,CS%ntr
+        MARBL_instances%tracers(m,k) = max(CS%tracer_data(m)%tr(i,j,k), 0.)
+      enddo ; enddo
+      ! (ii) Compute total Chl for the column
+      call MARBL_instances%compute_totChl()
+      ! (iii) Copy total Chl from MARBL data-structure into CS%ITO
+      do k=1,GV%ke
+        CS%ITO(i,j,k,CS%total_Chl_ind) = &
+          MARBL_instances%interior_tendency_output%outputs_for_GCM(CS%total_Chl_ind)%forcing_field_1d(1,k)
+      enddo
+    enddo ; enddo
+  endif
 
   ! Register diagnostics for river fluxes
   CS%no3_riv_flux = register_diag_field("ocean_model", "NO3_RIV_FLUX", &
@@ -2116,7 +2152,14 @@ subroutine MARBL_tracers_end(CS)
     if (allocated(CS%qsw_cat_id)) deallocate(CS%qsw_cat_id)
     if (allocated(CS%STF)) deallocate(CS%STF)
     if (allocated(CS%RIV_FLUXES)) deallocate(CS%RIV_FLUXES)
-    if (allocated(CS%SFO)) deallocate(CS%SFO)
+    if (associated(CS%SFO)) then
+      deallocate(CS%SFO)
+      nullify(CS%SFO)
+    endif
+    if (associated(CS%ITO)) then
+      deallocate(CS%ITO)
+      nullify(CS%ITO)
+    endif
     if (allocated(CS%tracer_restoring_ind)) deallocate(CS%tracer_restoring_ind)
     if (allocated(CS%tracer_I_tau_ind)) deallocate(CS%tracer_I_tau_ind)
     if (allocated(CS%fesedflux_in)) deallocate(CS%fesedflux_in)
