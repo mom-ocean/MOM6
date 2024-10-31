@@ -1804,11 +1804,18 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$acc enter data create(PFu, PFv)
   !$acc enter data copyin(e)
 
+  ! NOTE: This should probably already be present, and we should be updating
+  !   the fields, rather than copying them.  Need more info.
+  !$acc enter data if (use_EOS) &
+  !$acc   copyin(tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
+  !$acc enter data if(use_p_atm) copyin(p_atm)
+  !$acc enter data if(.not. use_p_atm) copyin(p0)
+
   ! Compute pressure gradient in x direction
   !$acc data &
   !$acc   present(CS, G, GV, e, PFu, PFv) &
   !$acc   copyin(pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
-  !$acc   create(dM)
+  !$acc   create(rho_in_situ, dM)
 
   !$acc kernels
   !$OMP parallel do default(shared)
@@ -1867,18 +1874,26 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     ! Adjust the Montgomery potential to make this a reduced gravity model.
 
     if (use_EOS) then
+      !$acc data present(tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
       if (use_p_atm) then
+        !$acc data present(p_atm)
         call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p_atm, rho_in_situ, &
-                                 tv%eqn_of_state, EOSdom2d)
+                               tv%eqn_of_state, EOSdom2d)
+        !$acc end data
       else
+        !$acc data present(p0)
         call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p0, rho_in_situ, &
-                                 tv%eqn_of_state, EOSdom2d)
+                               tv%eqn_of_state, EOSdom2d)
+        !$acc end data
       endif
+      !$acc end data
+
       !$OMP parallel do default(shared)
+      !$acc kernels
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i,j)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
-      !$acc update device(dM)
+      !$acc end kernels
     else
       !$OMP parallel do default(shared)
 
@@ -1903,6 +1918,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   endif
   !$acc end data
 
+  !$acc exit data if(use_p_atm) delete(p_atm)
+  !$acc exit data if(.not. use_p_atm) delete(p0)
+  !$acc exit data if (use_EOS) &
+  !$acc   delete(tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
   !$acc exit data copyout(PFu, PFv, e)
 
   if (present(pbce)) then

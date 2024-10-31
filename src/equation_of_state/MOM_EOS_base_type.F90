@@ -266,7 +266,7 @@ contains
     real, intent(out) :: rho(:,:)
       !< In situ density [kg m-3]
     integer, intent(in) :: dom(2,2)
-      !< Index bounds of domain.  dom(::) = [[is, ie], [js, je]]
+      !< Index bounds of domain.  First index is rank, second is bounds
     real, optional, intent(in) :: rho_ref
       !< A reference density [kg m-3]
 

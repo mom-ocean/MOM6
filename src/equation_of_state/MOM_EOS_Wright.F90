@@ -67,6 +67,8 @@ contains
 
   !> Local implementation of generic calculate_density_array for efficiency
   procedure :: calculate_density_array => calculate_density_array_buggy_Wright
+  !> Local implementation of generic calculate_density_array_2d for efficiency
+  procedure :: calculate_density_array_2d => calculate_density_array_2d_buggy_Wright
   !> Local implementation of generic calculate_spec_vol_array for efficiency
   procedure :: calculate_spec_vol_array => calculate_spec_vol_array_buggy_Wright
 
@@ -919,6 +921,7 @@ subroutine calculate_density_array_buggy_Wright(this, T, S, pressure, rho, start
   ! Local variables
   integer :: j
 
+  !!!$acc kernels
   if (present(rho_ref)) then
     do j = start, start+npts-1
       rho(j) = density_anomaly_elem_buggy_Wright(this, T(j), S(j), pressure(j), rho_ref)
@@ -928,8 +931,46 @@ subroutine calculate_density_array_buggy_Wright(this, T, S, pressure, rho, start
       rho(j) = density_elem_buggy_Wright(this, T(j), S(j), pressure(j))
     enddo
   endif
-
+  !!!$acc end kernels
 end subroutine calculate_density_array_buggy_Wright
+
+!> Calculate the in-situ density for 2D arraya inputs and outputs.
+subroutine calculate_density_array_2d_buggy_Wright(this, T, S, pressure, rho, &
+    dom, rho_ref)
+  class(buggy_Wright_EOS), intent(in) :: this
+    !< This EOS
+  real, intent(in) :: T(:,:)
+    !< Potential temperature relative to the surface [degC]
+  real, intent(in) :: S(:,:)
+    !< Salinity [PSU]
+  real, intent(in) :: pressure(:,:)
+    !< Pressure [Pa]
+  real, intent(out) :: rho(:,:)
+    !< In situ density [kg m-3]
+  integer, intent(in) :: dom(2,2)
+    !< Index bounds of domain.  First index is rank, second is bounds
+  real, optional, intent(in) :: rho_ref
+    !< A reference density [kg m-3]
+
+  integer :: is, ie, js, je
+  integer :: i, j
+
+  is = dom(1,1) ; ie = dom(1,2)
+  js = dom(2,1) ; je = dom(2,2)
+
+  !$acc kernels present(T, S, pressure, rho_ref, rho)
+  if (present(rho_ref)) then
+    do j = js, je ; do i = is, ie
+      rho(i,j) = density_anomaly_elem_buggy_Wright(this, T(i,j), S(i,j), &
+          pressure(i,j), rho_ref)
+    enddo ; enddo
+  else
+    do j = js, je ; do i = is, ie
+      rho(i,j) = density_elem_buggy_Wright(this, T(i,j), S(i,j), pressure(i,j))
+    enddo ; enddo
+  endif
+  !$acc end kernels
+end subroutine calculate_density_array_2d_buggy_Wright
 
 !> Calculate the in-situ specific volume for 1D array inputs and outputs.
 subroutine calculate_spec_vol_array_buggy_Wright(this, T, S, pressure, specvol, start, npts, spv_ref)
