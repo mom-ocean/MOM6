@@ -171,7 +171,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     Kh_v          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
 
   real :: khdt_max ! The local limiting value of khdt_x or khdt_y [L2 ~> m2].
-  real :: max_CFL ! The global maximum of the diffusive CFL number [nondim]
+  real :: Coef_min ! The local limiting value of Coef_x or Coef_y, in [L2 ~> m2] for some
+                   ! schemes and [H L2 ~> m3 or kg] for others.
+  real :: max_CFL  ! The global maximum of the diffusive CFL number [nondim]
   logical :: use_VarMix, Resoln_scaled, do_online, use_Eady
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
   real :: I_numitts  ! The inverse of the number of iterations, num_itts [nondim]
@@ -431,7 +433,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           do J=js-1,je
             do i=is,ie
               Coef_y(i,J,K) = Coef_y(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
-              Coef_y(i,J,K) = max(Coef_y(i,J,K), CS%KhTr_min)
+              Coef_min = I_numitts * dt * (CS%KhTr_min*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+              Coef_y(i,J,K) = max(Coef_y(i,J,K), Coef_min)
             enddo
           enddo
         enddo
@@ -439,7 +442,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           do j=js,je
             do I=is-1,ie
               Coef_x(I,j,K) = Coef_x(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
-              Coef_x(I,j,K) = max(Coef_x(I,j,K), CS%KhTr_min)
+              Coef_min = I_numitts * dt * (CS%KhTr_min*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+              Coef_x(I,j,K) = max(Coef_x(I,j,K), Coef_min)
             enddo
           enddo
         enddo
