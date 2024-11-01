@@ -921,7 +921,6 @@ subroutine calculate_density_array_buggy_Wright(this, T, S, pressure, rho, start
   ! Local variables
   integer :: j
 
-  !!!$acc kernels
   if (present(rho_ref)) then
     do j = start, start+npts-1
       rho(j) = density_anomaly_elem_buggy_Wright(this, T(j), S(j), pressure(j), rho_ref)
@@ -931,7 +930,6 @@ subroutine calculate_density_array_buggy_Wright(this, T, S, pressure, rho, start
       rho(j) = density_elem_buggy_Wright(this, T(j), S(j), pressure(j))
     enddo
   endif
-  !!!$acc end kernels
 end subroutine calculate_density_array_buggy_Wright
 
 !> Calculate the in-situ density for 2D arraya inputs and outputs.
@@ -957,6 +955,9 @@ subroutine calculate_density_array_2d_buggy_Wright(this, T, S, pressure, rho, &
 
   is = dom(1,1) ; ie = dom(1,2)
   js = dom(2,1) ; je = dom(2,2)
+
+  ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
+  !   Possibly because Nvidia cannot associate `this` with `EOS%type`.
 
   !$acc kernels present(T, S, pressure, rho_ref, rho)
   if (present(rho_ref)) then

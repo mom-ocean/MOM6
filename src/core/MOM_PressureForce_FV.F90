@@ -1874,19 +1874,13 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     ! Adjust the Montgomery potential to make this a reduced gravity model.
 
     if (use_EOS) then
-      !$acc data present(tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
       if (use_p_atm) then
-        !$acc data present(p_atm)
         call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p_atm, rho_in_situ, &
                                tv%eqn_of_state, EOSdom2d)
-        !$acc end data
       else
-        !$acc data present(p0)
         call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p0, rho_in_situ, &
                                tv%eqn_of_state, EOSdom2d)
-        !$acc end data
       endif
-      !$acc end data
 
       !$OMP parallel do default(shared)
       !$acc kernels
