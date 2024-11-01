@@ -114,6 +114,7 @@ type, public :: KPP_CS ; private
   logical :: LT_K_Enhancement          !< Flags if enhancing mixing coefficients due to LT
   integer :: LT_K_Shape                !< Integer for constant or shape function enhancement
   integer :: LT_K_Method               !< Integer for mixing coefficients LT method
+  real    :: KPP_CVt2                  !< Parameter for Stokes MOST convection entrainment
   real    :: KPP_K_ENH_FAC             !< Factor to multiply by K if Method is CONSTANT [nondim]
   logical :: LT_Vt2_Enhancement        !< Flags if enhancing Vt2 due to LT
   integer :: LT_VT2_METHOD             !< Integer for Vt2 LT method
@@ -514,6 +515,10 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
                    units="m", default=1.0, scale=US%m_to_Z)
   endif
 
+  call get_param(paramFile, mdl, "KPP_CVt2", CS%KPP_CVt2, &
+                 'Parameter for Stokes MOST convection entrainment', &
+                 units="nondim", default=1.6)
+
   call get_param(paramFile, mdl, "ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic in the CVMix KPP calculations.  Values "//&
                  "below 20240501 recover the answers from early in 2024, while higher values "//&
@@ -529,6 +534,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
                        minVtsqr=US%L_T_to_m_s**2*CS%minVtsqr, &
                        vonKarman=CS%vonKarman,             &
                        surf_layer_ext=CS%surf_layer_ext,   &
+                       CVt2=CS%KPP_CVt2,                   &
                        interp_type=CS%interpType,          &
                        interp_type2=CS%interpType2,        &
                        lEkman=CS%computeEkman,             &
@@ -1162,8 +1168,10 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
         enddo
 
         if (CS%StokesMOST) then
+          ! if k=1, want buoyFlux(i,j,1) - buoyFlux(i,j,2), otherwise
+          ! subtract average of buoyFlux(i,j,k) and buoyFlux(i,j,k+1)
           surfBuoyFlux   = buoy_scale * &
-                          (buoyFlux(i,j,1) - 0.5*(buoyFlux(i,j,k)+buoyFlux(i,j,k+1)) )
+                          (buoyFlux(i,j,1) - 0.5*(buoyFlux(i,j,max(2,k))+buoyFlux(i,j,k+1)) )
           surfBuoyFlux2(k) = surfBuoyFlux
           call Compute_StokesDrift(i,j, iFaceHeight(k),iFaceHeight(k+1), &
               uS_Hi(k+1), vS_Hi(k+1), uS_H(k), vS_H(k), uSbar_H(k), vSbar_H(k), Waves)
