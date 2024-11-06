@@ -52,6 +52,8 @@ contains
   procedure :: calculate_density_derivs_scalar => a_calculate_density_derivs_scalar
   !> Calculates the derivatives of density for array inputs
   procedure :: calculate_density_derivs_array => a_calculate_density_derivs_array
+  !> Calculates the derivatives of density for array inputs
+  procedure :: calculate_density_derivs_2d => a_calculate_density_derivs_2d
   !> Calculates the second derivatives of density for scalar inputs
   procedure :: calculate_density_second_derivs_scalar => a_calculate_density_second_derivs_scalar
   !> Calculates the second derivatives of density for array inputs
@@ -381,6 +383,34 @@ contains
     call this%calculate_density_derivs_elem(T(js:je), S(js:je), pressure(js:je), drho_dt(js:je), drho_ds(js:je))
 
   end subroutine a_calculate_density_derivs_array
+
+  !> Calculate the derivatives of density with respect to temperature, salinity and pressure
+  !! for array inputs
+  subroutine a_calculate_density_derivs_2d(this, T, S, pressure, drho_dT, drho_dS, dom)
+    class(EOS_base), intent(in) :: this
+      !< This EOS
+    real, intent(in) :: T(:,:)
+      !< Potential temperature relative to the surface [degC]
+    real, intent(in)  :: S(:,:)
+      !< Salinity [PSU]
+    real, intent(in)  :: pressure(:,:)
+      !< Pressure [Pa]
+    real, intent(out) :: drho_dT(:,:)
+      !< The partial derivative of density with potential temperature
+      !! [kg m-3 degC-1]
+    real, intent(out) :: drho_dS(:,:)
+      !< The partial derivative of density with salinity, in [kg m-3 PSU-1]
+    integer, intent(in) :: dom(2,2)
+      !< Index bounds of domain.  First index is rank, second is bounds
+
+    integer :: is, ie, js, je
+
+    is = dom(1,1) ; ie = dom(1,2)
+    js = dom(2,1) ; je = dom(2,2)
+
+    call this%calculate_density_derivs_elem(T(is:ie, js:je), S(is:ie, js:je), &
+        pressure(is:ie, js:je), drho_dt(is:ie, js:je), drho_ds(is:ie, js:je))
+  end subroutine a_calculate_density_derivs_2d
 
   !> Calculate the second derivatives of density with respect to temperature, salinity and pressure
   !! for scalar inputs

@@ -71,6 +71,8 @@ contains
   procedure :: calculate_density_array_2d => calculate_density_array_2d_buggy_Wright
   !> Local implementation of generic calculate_spec_vol_array for efficiency
   procedure :: calculate_spec_vol_array => calculate_spec_vol_array_buggy_Wright
+  !> Local implementation of generic calculate_density_derivs_2d for efficiency
+  procedure :: calculate_density_derivs_2d => calculate_density_derivs_2d_buggy_Wright
 
 end type buggy_Wright_EOS
 
@@ -999,6 +1001,40 @@ subroutine calculate_spec_vol_array_buggy_Wright(this, T, S, pressure, specvol, 
 
 end subroutine calculate_spec_vol_array_buggy_Wright
 
+
+!> Calculate the in-situ density derivatives for 2D array inputs and outputs.
+subroutine calculate_density_derivs_2d_buggy_Wright(this, T, S, pressure, &
+    drho_dT, drho_dS, dom)
+  class(buggy_Wright_EOS), intent(in) :: this
+    !< This EOS
+  real, intent(in) :: T(:,:)
+    !< Potential temperature relative to the surface [degC]
+  real, intent(in) :: S(:,:)
+    !< Salinity [PSU]
+  real, intent(in) :: pressure(:,:)
+    !< Pressure [Pa]
+  real, intent(out) :: drho_dT(:,:)
+    !< Partial derivative of density with potential temperature [kg m-3 degC-1]
+  real, intent(out) :: drho_dS(:,:)
+    !< Partial derivative of density with salinity [kg m-3 PSU-1]
+  integer, intent(in) :: dom(2,2)
+    !< Index bounds of domain.  First index is rank, second is bounds
+
+  integer :: is, ie, js, je
+  integer :: i, j
+
+  is = dom(1,1) ; ie = dom(1,2)
+  js = dom(2,1) ; je = dom(2,2)
+
+  ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
+
+  !$acc kernels present(T, S, pressure, drho_dT, drho_dS)
+  do j = js, je ; do i = is, ie
+    call calculate_density_derivs_elem_buggy_Wright(this, T(i,j), S(i,j), &
+        pressure(i,j), drho_dT(i,j), drho_dS(i,j))
+  enddo ; enddo
+  !$acc end kernels
+end subroutine calculate_density_derivs_2d_buggy_Wright
 
 !> Set coefficients that can correct bugs un the buggy Wright equation of state.
 subroutine set_params_buggy_Wright(this, use_Wright_2nd_deriv_bug)

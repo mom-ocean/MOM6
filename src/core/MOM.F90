@@ -3452,6 +3452,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! XXX: Where to put this??
   !$acc enter data copyin(GV)
   !$acc enter data copyin(GV%Rlay)
+  !$acc enter data copyin(GV%g_prime)
 
   diag => CS%diag
   ! Initialize the diag mediator.
