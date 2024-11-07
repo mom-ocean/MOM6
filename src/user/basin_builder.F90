@@ -208,7 +208,7 @@ real function dist_line_fixed_x(x, y, x0, y0, y1)
   dx = x - x0
   yr = min( max(y0,y1), max( min(y0,y1), y ) ) ! bound y by y0,y1
   dy = y - yr ! =0 within y0<y<y1, =y0-y for y<y0, =y-y1 for y>y1
-  dist_line_fixed_x = sqrt( dx*dx + dy*dy )
+  dist_line_fixed_x = sqrt( (dx*dx) + (dy*dy) )
 end function dist_line_fixed_x
 
 !> Distance between points x,y and a line segment (x0,y0) and (x1,y0).
@@ -310,7 +310,7 @@ real function circ_conic_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness
   real :: r  ! A relative position [degrees]
   real :: frac_ht ! The fractional height of the topography [nondim]
 
-  r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
+  r = sqrt( ((lon - lon0)**2) + ((lat - lat0)**2) ) ! Pseudo-distance from a point
   r = abs( r - ring_radius) ! Pseudo-distance from a circle
   frac_ht = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
   circ_conic_ridge = 1. - frac_ht ! nondim depths (1-frac_ridge_height) .. 1
@@ -329,7 +329,7 @@ real function circ_scurve_ridge(lon, lat, lon0, lat0, ring_radius, ring_thicknes
   real :: s  ! A function of the normalized position [nondim]
   real :: frac_ht ! The fractional height of the topography [nondim]
 
-  r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
+  r = sqrt( ((lon - lon0)**2) + ((lat - lat0)**2) ) ! Pseudo-distance from a point
   r = abs( r - ring_radius) ! Pseudo-distance from a circle
   s = 1. - scurve(r, 0., ring_thickness) ! 0 .. 1
   frac_ht = s * ridge_height ! 0 .. frac_ridge_height

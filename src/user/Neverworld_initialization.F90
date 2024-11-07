@@ -157,7 +157,7 @@ real function dist_line_fixed_x(x, y, x0, y0, y1)
   dx = x - x0
   yr = min( max(y0,y1), max( min(y0,y1), y ) ) ! bound y by y0,y1
   dy = y - yr ! =0 within y0<y<y1, =y0-y for y<y0, =y-y1 for y>y1
-  dist_line_fixed_x = sqrt( dx*dx + dy*dy )
+  dist_line_fixed_x = sqrt( (dx*dx) + (dy*dy) )
 end function dist_line_fixed_x
 
 !> Distance between points x,y and a line segment (x0,y0) and (x1,y0).
@@ -229,7 +229,7 @@ real function circ_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridg
   real :: r ! A relative position [degrees]
   real :: frac_ht ! The fractional height of the topography [nondim]
 
-  r = sqrt( (lon - lon0)**2 + (lat - lat0)**2 ) ! Pseudo-distance from a point
+  r = sqrt( ((lon - lon0)**2) + ((lat - lat0)**2) ) ! Pseudo-distance from a point
   r = abs( r - ring_radius) ! Pseudo-distance from a circle
   frac_ht = cone(r, 0., ring_thickness, ridge_height) ! 0 .. frac_ridge_height
   circ_ridge = 1. - frac_ht ! Fractional depths (1-frac_ridge_height) .. 1
@@ -292,8 +292,8 @@ subroutine Neverworld_initialize_thickness(h, depth_tot, G, GV, US, param_file, 
       h(i,j,k) = e0(k) - e_interface ! Nominal thickness
       x = (G%geoLonT(i,j)-G%west_lon)/G%len_lon
       y = (G%geoLatT(i,j)-G%south_lat)/G%len_lat
-      r1 = sqrt((x-0.7)**2+(y-0.2)**2)
-      r2 = sqrt((x-0.3)**2+(y-0.25)**2)
+      r1 = sqrt(((x-0.7)**2) + ((y-0.2)**2))
+      r2 = sqrt(((x-0.3)**2) + ((y-0.25)**2))
       h(i,j,k) = h(i,j,k) + pert_amp * (e0(k) - e0(nz+1)) * &
                             (spike(r1,0.15)-spike(r2,0.15)) ! Prescribed perturbation
       if (h_noise /= 0.) then

@@ -1171,7 +1171,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
             ! velocities between layer k and the layers above.
             dMKE_max = (US%L_to_Z**2*GV%H_to_RZ * CS%MKE_to_TKE_effic) * 0.5 * &
                 (h(k) / ((htot + h(k))*htot)) * &
-                ((uhtot-u(k)*htot)**2 + (vhtot-v(k)*htot)**2)
+                (((uhtot-u(k)*htot)**2) + ((vhtot-v(k)*htot)**2))
             ! A fraction (1-exp(Kddt_h*MKE2_Hharm)) of this energy would be
             ! extracted by mixing with a finite viscosity.
             MKE2_Hharm = (htot + h(k) + 2.0*h_neglect) / &

@@ -1601,7 +1601,7 @@ subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read)
 
     x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon) / G%len_lon - 1.0  ! -1<x<1
     y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat) / G%len_lat - 1.0 ! -1<y<1
-    r = sqrt( x**2 + y**2 ) ! Circular stream function is a function of radius only
+    r = sqrt( (x**2) + (y**2) ) ! Circular stream function is a function of radius only
     r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
     my_psi = my_psi * (circular_max_u * G%US%m_to_L*G%len_lon*1e3 / dpi) ! len_lon is in km
