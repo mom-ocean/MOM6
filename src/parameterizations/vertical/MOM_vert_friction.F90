@@ -263,7 +263,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
       if ( (G%mask2dCu(I,j) > 0.5) ) then
         ! h to u-pts
         tmp_u  = MAX (1.0 ,(G%mask2dT(i,j) + G%mask2dT(i+1,j) ) )
-        hbl_u(I,j) = (G%mask2dT(i,j)*  hbl_h(i,j) + G%mask2dT(i+1,j) * hbl_h(i+1,j)) / tmp_u
+        hbl_u(I,j) = ((G%mask2dT(i,j) * hbl_h(i,j)) + (G%mask2dT(i+1,j) * hbl_h(i+1,j))) / tmp_u
         depth   = 0.
         Gat1  = 0.
         do k=1, nz
