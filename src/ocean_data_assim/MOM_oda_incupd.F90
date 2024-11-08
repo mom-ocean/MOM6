@@ -25,6 +25,7 @@ use MOM_get_input,       only : directories, Get_MOM_input
 use MOM_grid,            only : ocean_grid_type
 use MOM_io,              only : vardesc, var_desc
 use MOM_remapping,       only : remapping_cs, remapping_core_h, initialize_remapping
+use MOM_remapping,       only : remappingSchemesDoc
 use MOM_restart,         only : register_restart_field, register_restart_pair, MOM_restart_CS
 use MOM_restart,         only : restart_init, save_restart, query_initialized
 use MOM_spatial_means,   only : global_i_mean
@@ -184,22 +185,29 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
                  "use U,V increments.", &
                  default=.true.)
   call get_param(param_file, mdl, "REMAPPING_SCHEME", remapScheme, &
-                 "This sets the reconstruction scheme used "//&
-                 " for vertical remapping for all variables.", &
                  default="PLM", do_not_log=.true.)
+  call get_param(param_file, mdl, "ODA_REMAPPING_SCHEME", remapScheme, &
+                 "This sets the reconstruction scheme used "//&
+                 "for vertical remapping for all ODA variables. "//&
+                 "It can be one of the following schemes: "//&
+                 trim(remappingSchemesDoc), default=remapScheme)
 
+  !The default should be REMAP_BOUNDARY_EXTRAP
   call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
-                 "When defined, a proper high-order reconstruction "//&
-                 "scheme is used within boundary cells rather "//&
-                 "than PCM. E.g., if PPM is used for remapping, a "//&
-                 "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "ODA_BOUNDARY_EXTRAP", bndExtrapolation, &
+                 "If true, values at the interfaces of boundary cells are "//&
+                 "extrapolated instead of piecewise constant", default=bndExtrapolation)
   call get_param(param_file, mdl, "ODA_INCUPD_DATA_ONGRID", CS%incupdDataOngrid, &
                  "When defined, the incoming oda_incupd data are "//&
                  "assumed to be on the model horizontal grid " , &
                  default=.true.)
   call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  do_not_log=.true., default=.true.)
+  call get_param(param_file, mdl, "ODA_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+       "If true, use the OM4 remapping-via-subcells algorithm for ODA. "//&
+       "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
+       "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
 
   CS%nz = GV%ke
 

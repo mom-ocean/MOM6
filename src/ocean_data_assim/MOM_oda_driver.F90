@@ -245,7 +245,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   call get_param(PF, mdl, "INPUTDIR", inputdir)
   call get_param(PF, mdl, "ODA_REMAPPING_SCHEME", remap_scheme, &
                  "This sets the reconstruction scheme used "//&
-                 "for vertical remapping for all variables. "//&
+                 "for vertical remapping for all ODA variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default="PPM_H4")
   call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
@@ -324,7 +324,10 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
        default="ZSTAR", fail_if_missing=.false.)
   call get_param(PF, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  do_not_log=.true., default=.true.)
-
+  call get_param(PF, mdl, "ODA_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+       "If true, use the OM4 remapping-via-subcells algorithm for ODA. "//&
+       "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
+       "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
   call initialize_regridding(CS%regridCS, CS%GV, CS%US, dG%max_depth,PF,'oda_driver',coord_mode,'','')
 
   h_neglect = set_h_neglect(GV, CS%answer_date, h_neglect_edge)

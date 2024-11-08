@@ -448,9 +448,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
-  logical :: check_reconstruction, check_remapping, force_bounds_in_subcell
+  logical :: check_remapping, force_bounds_in_subcell
   logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
-  character(len=64)  :: remappingScheme
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
@@ -676,10 +675,12 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     enddo
 
     call get_param(param_file, mdl, "REMAPPING_SCHEME", OBC%remappingScheme, &
+          default=remappingDefaultScheme, do_not_log=.true.)
+    call get_param(param_file, mdl, "OBC_REMAPPING_SCHEME", OBC%remappingScheme, &
           "This sets the reconstruction scheme used "//&
-          "for vertical remapping for all variables. "//&
+          "for OBC vertical remapping for all variables. "//&
           "It can be one of the following schemes: \n"//&
-          trim(remappingSchemesDoc), default=remappingDefaultScheme,do_not_log=.true.)
+          trim(remappingSchemesDoc), default=OBC%remappingScheme)
     call get_param(param_file, mdl, "FATAL_CHECK_RECONSTRUCTIONS", OBC%check_reconstruction, &
           "If true, cell-by-cell reconstructions are checked for "//&
           "consistency and if non-monotonicity or an inconsistency is "//&

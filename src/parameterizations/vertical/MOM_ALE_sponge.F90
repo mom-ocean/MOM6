@@ -215,16 +215,17 @@ subroutine initialize_ALE_sponge_fixed(Iresttime, G, GV, param_file, CS, data_h,
                  default=.false.)
 
   call get_param(param_file, mdl, "REMAPPING_SCHEME", remapScheme, &
-                 "This sets the reconstruction scheme used "//&
-                 " for vertical remapping for all variables.", &
                  default="PLM", do_not_log=.true.)
+  call get_param(param_file, mdl, "SPONGE_REMAPPING_SCHEME", remapScheme, &
+          "This sets the reconstruction scheme used "//&
+          "for vertical remapping for all SPONGE variables.", default=remapScheme)
 
+  !This default should be from REMAP_BOUNDARY_EXTRAP
   call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
-                 "When defined, a proper high-order reconstruction "//&
-                 "scheme is used within boundary cells rather "//&
-                 "than PCM. E.g., if PPM is used for remapping, a "//&
-                 "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "SPONGE_BOUNDARY_EXTRAP", bndExtrapolation, &
+                 "If true, values at the interfaces of SPONGE boundary cells are "//&
+                 "extrapolated instead of piecewise constant", default=bndExtrapolation)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
@@ -495,15 +496,16 @@ subroutine initialize_ALE_sponge_varying(Iresttime, G, GV, US, param_file, CS, I
                  "Apply sponges in u and v, in addition to tracers.", &
                  default=.false.)
   call get_param(param_file, mdl, "REMAPPING_SCHEME", remapScheme, &
-                 "This sets the reconstruction scheme used "//&
-                 " for vertical remapping for all variables.", &
                  default="PLM", do_not_log=.true.)
+  call get_param(param_file, mdl, "SPONGE_REMAPPING_SCHEME", remapScheme, &
+          "This sets the reconstruction scheme used "//&
+          "for vertical remapping for all SPONGE variables.", default=remapScheme)
+  !This default should be from REMAP_BOUNDARY_EXTRAP
   call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
-                 "When defined, a proper high-order reconstruction "//&
-                 "scheme is used within boundary cells rather "//&
-                 "than PCM. E.g., if PPM is used for remapping, a "//&
-                 "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "SPONGE_BOUNDARY_EXTRAP", bndExtrapolation, &
+                 "If true, values at the interfaces of SPONGE boundary cells are "//&
+                 "extrapolated instead of piecewise constant", default=bndExtrapolation)
   call get_param(param_file, mdl, "VARYING_SPONGE_MASK_THICKNESS", CS%varying_input_dz_mask, &
                  "An input file thickness below which the target values with "//&
                  "time-varying sponges are replaced by the value above.", &
