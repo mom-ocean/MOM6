@@ -57,8 +57,8 @@ type, public :: neutral_diffusion_CS ; private
   logical :: tapering = .false. !< If true, neutral diffusion linearly decays towards zero within a
                       !! transition zone defined using boundary layer depths. Only available when
                       !! interior_only=true.
-  logical :: KhTh_use_ebt_struct !< If true, uses the equivalent barotropic structure
-                                 !! as the vertical structure of tracer diffusivity.
+  logical :: KhTh_use_vert_struct !< If true, uses vertical structure
+                                 !! for tracer diffusivity.
   logical :: use_unmasked_transport_bug !< If true, use an older form for the accumulation of
                       !! neutral-diffusion transports that were unmasked, as used prior to Jan 2018.
   real,    allocatable, dimension(:,:)  :: hbl    !< Boundary layer depth [H ~> m or kg m-2]
@@ -67,7 +67,7 @@ type, public :: neutral_diffusion_CS ; private
                                                   !! at cell interfaces [nondim]
   real,    allocatable, dimension(:) :: coeff_r   !< Non-dimensional coefficient in the right column,
                                                   !! at cell interfaces [nondim]
-  ! Array used when KhTh_use_ebt_struct is true
+  ! Array used when KhTh_use_vert_struct is true
   real,    allocatable, dimension(:,:,:) :: Coef_h !< Coef_x and Coef_y averaged at t-points [L2 ~> m2]
   ! Positions of neutral surfaces in both the u, v directions
   real,    allocatable, dimension(:,:,:) :: uPoL  !< Non-dimensional position with left layer uKoL-1, u-point [nondim]
@@ -153,6 +153,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   logical :: boundary_extrap      ! Indicate whether high-order boundary
                                   !! extrapolation should be used within boundary cells.
   logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
+  logical :: KhTh_use_ebt_struct, KhTh_use_sqg_struct
 
   if (associated(CS)) then
     call MOM_error(FATAL, "neutral_diffusion_init called with associated control structure.")
@@ -197,8 +198,12 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                    "a transition zone defined using boundary layer depths.    "//&
                    "Only applicable when NDIFF_INTERIOR_ONLY=True", default=.false.)
   endif
-  call get_param(param_file, mdl, "KHTR_USE_EBT_STRUCT", CS%KhTh_use_ebt_struct, &
+  call get_param(param_file, mdl, "KHTR_USE_EBT_STRUCT", KhTh_use_ebt_struct, &
                  "If true, uses the equivalent barotropic structure "//&
+                 "as the vertical structure of the tracer diffusivity.",&
+                 default=.false.,do_not_log=.true.)
+  call get_param(param_file, mdl, "KHTR_USE_SQG_STRUCT", KhTh_use_sqg_struct, &
+                 "If true, uses the surface geostrophic structure "//&
                  "as the vertical structure of the tracer diffusivity.",&
                  default=.false.,do_not_log=.true.)
   call get_param(param_file, mdl, "NDIFF_USE_UNMASKED_TRANSPORT_BUG", CS%use_unmasked_transport_bug, &
@@ -296,7 +301,8 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
     endif
   endif
 
-  if (CS%KhTh_use_ebt_struct) &
+  CS%KhTh_use_vert_struct = KhTh_use_ebt_struct .or. KhTh_use_sqg_struct
+  if (CS%KhTh_use_vert_struct) &
      allocate(CS%Coef_h(G%isd:G%ied,G%jsd:G%jed,SZK_(GV)+1), source=0.)
 
   ! Store a rescaling factor for use in diagnostic messages.
@@ -624,11 +630,11 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
   real, dimension(SZIB_(G),SZJ_(G),CS%nsurf-1) :: uFlx        ! Zonal flux of tracer in units that vary between a
                         ! thickness times a concentration ([C H ~> degC m or degC kg m-2] for temperature) or a
                         ! volume or mass times a concentration ([C H L2 ~> degC m3 or degC kg] for temperature),
-                        ! depending on the setting of CS%KhTh_use_ebt_struct.
+                        ! depending on the setting of CS%KhTh_use_vert_struct.
   real, dimension(SZI_(G),SZJB_(G),CS%nsurf-1) :: vFlx        ! Meridional flux of tracer in units that vary between a
                         ! thickness times a concentration ([C H ~> degC m or degC kg m-2] for temperature) or a
                         ! volume or mass times a concentration ([C H L2 ~> degC m3 or degC kg] for temperature),
-                        ! depending on the setting of CS%KhTh_use_ebt_struct.
+                        ! depending on the setting of CS%KhTh_use_vert_struct.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))    :: tendency    ! tendency array for diagnostics
                                                               ! [H conc T-1 ~> m conc s-1 or kg m-2 conc s-1]
                                                               ! For temperature these units are
@@ -673,7 +679,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     endif
   endif
 
-  if (CS%KhTh_use_ebt_struct) then
+  if (CS%KhTh_use_vert_struct) then
     ! Compute Coef at h points
     CS%Coef_h(:,:,:) = 0.
     do j = G%jsc,G%jec ; do i = G%isc,G%iec
@@ -706,7 +712,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     vFlx(:,:,:) = 0.
 
     ! x-flux
-    if (CS%KhTh_use_ebt_struct) then
+    if (CS%KhTh_use_vert_struct) then
       if (CS%tapering) then
         do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
           if (G%mask2dCu(I,j)>0.) then
@@ -770,7 +776,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     endif
 
     ! y-flux
-    if (CS%KhTh_use_ebt_struct) then
+    if (CS%KhTh_use_vert_struct) then
       if (CS%tapering) then
         do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
           if (G%mask2dCv(i,J)>0.) then
@@ -837,7 +843,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
 
     ! Update the tracer concentration from divergence of neutral diffusive flux components, noting
     ! that uFlx and vFlx use an unexpected sign convention.
-    if (CS%KhTh_use_ebt_struct) then
+    if (CS%KhTh_use_vert_struct) then
       do j = G%jsc,G%jec ; do i = G%isc,G%iec
         if (G%mask2dT(i,j)>0.) then
           if (CS%ndiff_answer_date <= 20240330) then
@@ -940,7 +946,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     ! Note sign corresponds to downgradient flux convention.
     if (tracer%id_dfx_2d > 0) then
 
-      if (CS%KhTh_use_ebt_struct) then
+      if (CS%KhTh_use_vert_struct) then
         do j = G%jsc,G%jec ; do I = G%isc-1,G%iec
           trans_x_2d(I,j) = 0.
           if (G%mask2dCu(I,j)>0.) then
@@ -969,7 +975,7 @@ subroutine neutral_diffusion(G, GV, h, Coef_x, Coef_y, dt, Reg, US, CS)
     ! Note sign corresponds to downgradient flux convention.
     if (tracer%id_dfy_2d > 0) then
 
-      if (CS%KhTh_use_ebt_struct) then
+      if (CS%KhTh_use_vert_struct) then
         do J = G%jsc-1,G%jec ; do i = G%isc,G%iec
           trans_y_2d(i,J) = 0.
           if (G%mask2dCv(i,J)>0.) then

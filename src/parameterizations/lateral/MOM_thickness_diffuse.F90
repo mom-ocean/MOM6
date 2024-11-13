@@ -179,7 +179,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
                                     ! to layer centers [L2 T-1 ~> m2 s-1]
   real :: KH_v_lay(SZI_(G),SZJ_(G)) ! Diagnostic of isopycnal height diffusivities at v-points averaged
                                     ! to layer centers [L2 T-1 ~> m2 s-1]
-  logical :: use_VarMix, Resoln_scaled, Depth_scaled, use_stored_slopes, khth_use_ebt_struct, use_Visbeck
+  logical :: use_VarMix, Resoln_scaled, Depth_scaled, use_stored_slopes, khth_use_vert_struct, use_Visbeck
   logical :: use_QG_Leith
   integer :: i, j, k, is, ie, js, je, nz
 
@@ -198,7 +198,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   endif
 
   use_VarMix = .false. ; Resoln_scaled = .false. ; use_stored_slopes = .false.
-  khth_use_ebt_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
+  khth_use_vert_struct = .false. ; use_Visbeck = .false. ; use_QG_Leith = .false.
   Depth_scaled = .false.
 
   if (VarMix%use_variable_mixing) then
@@ -206,7 +206,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     Depth_scaled = VarMix%Depth_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
-    khth_use_ebt_struct = VarMix%khth_use_ebt_struct
+    khth_use_vert_struct = allocated(VarMix%khth_struct)
     use_Visbeck = VarMix%use_Visbeck
     use_QG_Leith = VarMix%use_QG_Leith_GM
     if (allocated(VarMix%cg1)) cg1 => VarMix%cg1
@@ -298,10 +298,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     KH_u(I,j,1) = min(KH_u_CFL(I,j), Khth_loc_u(I,j))
   enddo ; enddo
 
-  if (khth_use_ebt_struct) then
+  if (khth_use_vert_struct) then
     !$OMP do
     do K=2,nz+1 ; do j=js,je ; do I=is-1,ie
-      KH_u(I,j,K) = KH_u(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+      KH_u(I,j,K) = KH_u(I,j,1) * 0.5 * ( VarMix%khth_struct(i,j,k-1) + VarMix%khth_struct(i+1,j,k-1) )
     enddo ; enddo ; enddo
   else
     !$OMP do
@@ -394,10 +394,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     enddo ; enddo
   endif
 
-  if (khth_use_ebt_struct) then
+  if (khth_use_vert_struct) then
     !$OMP do
     do K=2,nz+1 ; do J=js-1,je ; do i=is,ie
-      KH_v(i,J,K) = KH_v(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+      KH_v(i,J,K) = KH_v(i,J,1) * 0.5 * ( VarMix%khth_struct(i,j,k-1) + VarMix%khth_struct(i,j+1,k-1) )
     enddo ; enddo ; enddo
   else
     !$OMP do

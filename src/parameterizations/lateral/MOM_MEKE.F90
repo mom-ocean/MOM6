@@ -124,6 +124,7 @@ type, public :: MEKE_CS ; private
   logical :: debug      !< If true, write out checksums of data for debugging
   integer :: eke_src !< Enum specifying whether EKE is stepped forward prognostically (default),
                      !! read in from a file, or inferred via a neural network
+  logical :: sqg_use_MEKE !< If True, use MEKE%Le for the SQG vertical structure.
   type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
   !>@{ Diagnostic handles
   integer :: id_MEKE = -1, id_Ue = -1, id_Kh = -1, id_src = -1
@@ -398,6 +399,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       call hchksum(bottomFac2, 'MEKE bottomFac2', G%HI)
       call hchksum(barotrFac2, 'MEKE barotrFac2', G%HI)
       call hchksum(LmixScale, 'MEKE LmixScale', G%HI, unscale=US%L_to_m)
+    endif
+
+    if (allocated(MEKE%Le)) then
+      !$OMP parallel do default(shared)
+      do j=js,je ; do i=is,ie
+        MEKE%Le(i,j) = LmixScale(i,j)
+      enddo ; enddo
     endif
 
     ! Aggregate sources of MEKE (background, frictional and GM)
@@ -757,7 +765,8 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     enddo ; enddo
   endif
 
-  if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au)) then
+  if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au) &
+      .or. allocated(MEKE%Le)) then
     call cpu_clock_begin(CS%id_clock_pass)
     call do_group_pass(CS%pass_Kh, G%Domain)
     call cpu_clock_end(CS%id_clock_pass)
@@ -1425,6 +1434,9 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
                  "computing beta in the expression of Rhines scale. Use 1 if full "//&
                  "topographic beta effect is considered; use 0 if it's completely ignored.", &
                  units="nondim", default=0.0)
+  call get_param(param_file, mdl, "SQG_USE_MEKE", CS%sqg_use_MEKE, &
+                 "If true, the eddy scale of MEKE is used for the SQG vertical structure ",&
+                 default=.false.)
 
   ! Nonlocal module parameters
   call get_param(param_file, mdl, "CDRAG", cdrag, &
@@ -1531,6 +1543,7 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
 
   CS%id_clock_pass = cpu_clock_id('(Ocean continuity halo updates)', grain=CLOCK_ROUTINE)
 
+
   ! Detect whether this instance of MEKE_init() is at the beginning of a run
   ! or after a restart. If at the beginning, we will initialize MEKE to a local
   ! equilibrium.
@@ -1538,6 +1551,12 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
   if (coldStart) CS%initialize = .false.
   if (CS%initialize) call MOM_error(WARNING, &
                        "MEKE_init: Initializing MEKE with a local equilibrium balance.")
+  if (.not.query_initialized(MEKE%Le, "MEKE_Le", restart_CS) .and. allocated(MEKE%Le)) then
+    !$OMP parallel do default(shared)
+    do j=js,je ; do i=is,ie
+      MEKE%Le(i,j) = sqrt(G%areaT(i,j))
+    enddo ; enddo
+  endif
 
   ! Set up group passes.  In the case of a restart, these fields need a halo update now.
   if (allocated(MEKE%MEKE)) then
@@ -1548,8 +1567,10 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
   if (allocated(MEKE%Kh)) call create_group_pass(CS%pass_Kh, MEKE%Kh, G%Domain)
   if (allocated(MEKE%Ku)) call create_group_pass(CS%pass_Kh, MEKE%Ku, G%Domain)
   if (allocated(MEKE%Au)) call create_group_pass(CS%pass_Kh, MEKE%Au, G%Domain)
+  if (allocated(MEKE%Le)) call create_group_pass(CS%pass_Kh, MEKE%Le, G%Domain)
 
-  if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au)) &
+  if (allocated(MEKE%Kh) .or. allocated(MEKE%Ku) .or. allocated(MEKE%Au) &
+      .or. allocated(MEKE%Le)) &
     call do_group_pass(CS%pass_Kh, G%Domain)
 
 end function MEKE_init
@@ -1839,6 +1860,7 @@ subroutine MEKE_alloc_register_restart(HI, US, param_file, MEKE, restart_CS)
   real :: MEKE_KHCoeff, MEKE_viscCoeff_Ku, MEKE_viscCoeff_Au  ! Coefficients for various terms [nondim]
   logical :: Use_KH_in_MEKE
   logical :: useMEKE
+  logical :: sqg_use_MEKE
   integer :: isd, ied, jsd, jed
 
 ! Determine whether this module will be used
@@ -1853,6 +1875,7 @@ subroutine MEKE_alloc_register_restart(HI, US, param_file, MEKE, restart_CS)
   MEKE_viscCoeff_Ku = 0. ; call read_param(param_file,"MEKE_VISCOSITY_COEFF_KU",MEKE_viscCoeff_Ku)
   MEKE_viscCoeff_Au = 0. ; call read_param(param_file,"MEKE_VISCOSITY_COEFF_AU",MEKE_viscCoeff_Au)
   Use_KH_in_MEKE = .false. ; call read_param(param_file,"USE_KH_IN_MEKE", Use_KH_in_MEKE)
+  sqg_use_MEKE = .false. ; call read_param(param_file,"SQG_USE_MEKE", sqg_use_MEKE)
 
   if (.not. useMEKE) return
 
@@ -1883,6 +1906,12 @@ subroutine MEKE_alloc_register_restart(HI, US, param_file, MEKE, restart_CS)
     call register_restart_field(MEKE%Ku, "MEKE_Ku", .false., restart_CS, &
              longname="Lateral viscosity from Mesoscale Eddy Kinetic Energy", &
              units="m2 s-1", conversion=US%L_to_m**2*US%s_to_T)
+  endif
+  if (sqg_use_MEKE) then
+    allocate(MEKE%Le(isd:ied,jsd:jed), source=0.0)
+    call register_restart_field(MEKE%Le, "MEKE_Le", .false., restart_CS, &
+             longname="Eddy length scale from Mesoscale Eddy Kinetic Energy", &
+             units="m", conversion=US%L_to_m)
   endif
   if (Use_Kh_in_MEKE) then
     allocate(MEKE%Kh_diff(isd:ied,jsd:jed), source=0.0)
@@ -1918,6 +1947,7 @@ subroutine MEKE_end(MEKE)
   if (allocated(MEKE%mom_src_bh)) deallocate(MEKE%mom_src_bh)
   if (allocated(MEKE%GM_src)) deallocate(MEKE%GM_src)
   if (allocated(MEKE%MEKE)) deallocate(MEKE%MEKE)
+  if (allocated(MEKE%Le)) deallocate(MEKE%Le)
 end subroutine MEKE_end
 
 !> \namespace mom_meke
