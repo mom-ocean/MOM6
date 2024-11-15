@@ -1924,8 +1924,16 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$acc exit data copyout(PFu, PFv)
 
   if (present(eta)) then
+    !$acc enter data copyin(CS, e)
+    !$acc enter data if (CS%tides) copyin(e_tide_eq, e_tide_sal)
+    !$acc enter data if (CS%calculate_SAL) copyin(e_sal)
+    !$acc enter data create(eta)
+
+    !$acc data present(CS, e, eta)
+
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
     ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
+    !$acc kernels
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta(i,j) = e(i,j,1)*GV%Z_to_H
@@ -1949,6 +1957,13 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
       enddo ; enddo
     endif
+    !$acc end kernels
+    !$acc end data
+
+    !$acc exit data if (CS%calculate_SAL) delete(e_sal)
+    !$acc exit data if (CS%tides) delete(e_tide_eq, e_tide_sal)
+    !$acc exit data delete(e)
+    !$acc exit data copyout(eta)
   endif
 
   if (CS%use_stanley_pgf) then
