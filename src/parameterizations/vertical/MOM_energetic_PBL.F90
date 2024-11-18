@@ -59,6 +59,8 @@ type, public :: energetic_PBL_CS ; private
                              !! self-consistent mixed layer depth.  Otherwise use the false position
                              !! after a maximum and minimum bound have been evaluated and the
                              !! returned value from the previous guess or bisection before this.
+  logical :: MLD_iter_bug    !< If true use buggy logic that gives the wrong bounds for the next
+                             !! iteration when successive guesses increase by exactly EPBL_MLD_TOLERANCE.
   integer :: max_MLD_its     !< The maximum number of iterations that can be used to find a
                              !! self-consistent mixed layer depth with Use_MLD_iteration.
   real    :: MixLenExponent  !< Exponent in the mixing length shape-function [nondim].
@@ -1516,14 +1518,27 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
       ! is now dependent on the ML, and therefore the ML needs to be estimated
       ! more precisely than the grid spacing.
 
-      !New method uses ML_DEPTH as computed in ePBL routine
+      ! New method uses ML_DEPTH as computed in ePBL routine
       MLD_found = MLD_output
-      if (MLD_found - MLD_guess > CS%MLD_tol) then
-        min_MLD = MLD_guess ; dMLD_min = MLD_found - MLD_guess
-      elseif (abs(MLD_found - MLD_guess) < CS%MLD_tol) then
-        OBL_converged = .true. ! Break convergence loop
-      else ! We know this guess was too deep
-        max_MLD = MLD_guess ; dMLD_max = MLD_found - MLD_guess ! < -CS%MLD_tol
+
+      ! Find out whether to do another iteration and the new bounds on it.
+      if (CS%MLD_iter_bug) then
+        ! There is a bug in the logic here if (MLD_found - MLD_guess == CS%MLD_tol).
+        if (MLD_found - MLD_guess > CS%MLD_tol) then
+          min_MLD = MLD_guess ; dMLD_min = MLD_found - MLD_guess
+        elseif (abs(MLD_found - MLD_guess) < CS%MLD_tol) then
+          OBL_converged = .true. ! Break convergence loop
+        else ! We know this guess was too deep
+          max_MLD = MLD_guess ; dMLD_max = MLD_found - MLD_guess ! < -CS%MLD_tol
+        endif
+      else
+        if (abs(MLD_found - MLD_guess) < CS%MLD_tol) then
+          OBL_converged = .true. ! Break convergence loop
+        elseif (MLD_found > MLD_guess) then  ! This guess was too shallow
+          min_MLD = MLD_guess ; dMLD_min = MLD_found - MLD_guess
+        else ! We know this guess was too deep
+          max_MLD = MLD_guess ; dMLD_max = MLD_found - MLD_guess ! < -CS%MLD_tol
+        endif
       endif
 
       if (.not.OBL_converged) then ; if (CS%MLD_bisection) then
@@ -2276,6 +2291,10 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "mixed layer depth.  Otherwise use the false position after a maximum and minimum "//&
                  "bound have been evaluated and the returned value or bisection before this.", &
                  default=.false., do_not_log=.not.CS%Use_MLD_iteration)
+  call get_param(param_file, mdl, "EPBL_MLD_ITER_BUG", CS%MLD_iter_bug, &
+                 "If true, use buggy logic that gives the wrong bounds for the next iteration "//&
+                 "when successive guesses increase by exactly EPBL_MLD_TOLERANCE.", &
+                 default=.true., do_not_log=.not.CS%Use_MLD_iteration)  ! The default should be changed to .false.
   call get_param(param_file, mdl, "EPBL_MLD_MAX_ITS", CS%max_MLD_its, &
                  "The maximum number of iterations that can be used to find a self-consistent "//&
                  "mixed layer depth.  If EPBL_MLD_BISECTION is true, the maximum number "//&
