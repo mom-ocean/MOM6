@@ -69,6 +69,10 @@ type, public :: energetic_PBL_CS ; private
   real    :: MKE_to_TKE_effic !< The efficiency with which mean kinetic energy released by
                              !!  mechanically forced entrainment of the mixed layer is converted to
                              !!  TKE [nondim].
+  logical :: direct_calc     !< If true and there is no conversion from mean kinetic energy to ePBL
+                             !! turbulent kinetic energy, use a direct calculation of the
+                             !! diffusivity that is supported by a given energy input instead of the
+                             !! more general but slower iterative solver.
   real    :: ustar_min       !< A minimum value of ustar to avoid numerical problems [Z T-1 ~> m s-1].
                              !! If the value is small enough, this should not affect the solution.
   real    :: Ekman_scale_coef !< A nondimensional scaling factor controlling the inhibition of the
@@ -448,6 +452,10 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, dt, Kd_int, G, GV, US, CS
       else
         SpV_scale1 = US%Z_to_m**3 * US%s_to_T**3
       endif
+    elseif (CS%options_diff == 3) then
+      CS_tmp1%direct_calc = .true.   ; CS_tmp2%direct_calc = .false.
+      CS_tmp1%MKE_to_TKE_effic = 0.0 ; CS_tmp2%MKE_to_TKE_effic = 0.0
+      CS_tmp1%orig_PE_calc = .false. ; CS_tmp2%orig_PE_calc = .false.
     endif
     if (CS%id_opt_diff_Kd_ePBL > 0)    diff_Kd(:,:,:) = 0.0
     if (CS%id_opt_maxdiff_Kd_ePBL > 0) max_abs_diff_Kd(:,:) = 0.0
@@ -898,8 +906,14 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
   real :: dMLD_max  ! The change in diagnosed mixed layer depth when the guess is max_MLD [Z ~> m]
   integer :: OBL_it        ! Iteration counter
 
+  real :: TKE_used  ! The TKE used to support mixing at an interface [R Z3 T-2 ~> J m-2].
+  ! real :: Kd_add    ! The additional diffusivity at an interface [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+  real :: frac_in_BL ! The fraction of the energy required to support dKd_max that is suppiled by
+                     ! max_PE_chg, used here to determine a fractional layer contribution to the
+                     ! boundary layer thickness [nondim]
   real :: Surface_Scale ! Surface decay scale for vstar [nondim]
   logical :: calc_Te    ! If true calculate the expected final temperature and salinity values.
+  logical :: no_MKE_conversion ! If true, there is no conversion from MKE to TKE, so a simpler solver can be used.
   logical :: debug      ! This is used as a hard-coded value for debugging.
   logical :: convectively_unstable  ! If true, there is convective instability at an interface.
 
@@ -927,6 +941,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
 
   debug = .false.  ! Change this hard-coded value for debugging.
   calc_Te = (debug .or. (.not.CS%orig_PE_calc))
+  no_MKE_conversion = ((CS%direct_calc) .and. (CS%MKE_to_TKE_effic == 0.0))
 
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%dZ_subroundoff
@@ -1307,7 +1322,19 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
           mixvel(K) = vstar ! Track vstar
           Kddt_h_g0 = Kd_guess0 * dt_h
 
-          if (CS%orig_PE_calc) then
+          if (no_MKE_conversion) then
+            ! Without conversion from MKE to TKE, the updated diffusivity can be determined directly.
+            ! Replace h(k) with hp_b(k) = h(k), and dT_to_dPE with dT_to_dPE_b, etc., for a 2-direction solver.
+            call find_Kd_from_PE_chg(0.0, Kd_guess0, dt_h, tot_TKE, hp_a(k-1), h(k), &
+                        Th_a(k-1), Sh_a(k-1), Th_b(k), Sh_b(k), &
+                        dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), dT_to_dPE(k), dS_to_dPE(k), &
+                        pres_Z(K), dT_to_dColHt_a(k-1), dS_to_dColHt_a(k-1), &
+                        dT_to_dColHt(k), dS_to_dColHt(k), Kd_add=Kd(K), PE_chg=TKE_used, &
+                        dPE_max=PE_chg_max, frac_dKd_max_PE=frac_in_BL)
+            convectively_unstable = (PE_chg_max < 0.0)
+            PE_chg_g0 = TKE_used  ! This is only used in the convectively unstable limit.
+            MKE_src = 0.0
+          elseif (CS%orig_PE_calc) then
             call find_PE_chg_orig(Kddt_h_g0, h(k), hp_a(k-1), dTe_term, dSe_term, &
                      dT_km1_t2, dS_km1_t2, dT_to_dPE(k), dS_to_dPE(k), &
                      dT_to_dPE_a(k-1), dS_to_dPE_a(k-1), &
@@ -1404,6 +1431,31 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
             endif
 
             Kddt_h(K) = Kd(K) * dt_h
+
+          elseif (no_MKE_conversion) then  ! (PE_chg_max >= 0.0) and use the diffusivity from find_Kd_from_PE_chg.
+            ! Kd(K) and TKE_used were already set by find_Kd_from_PE_chg.
+
+            ! frac_in_BL = min((TKE_used / PE_chg_g0), 1.0)
+            if (sfc_connected)  MLD_output = MLD_output + frac_in_BL*dz(k)
+            if (frac_in_BL < 1.0) sfc_disconnect = .true.
+
+            ! Reduce the mechanical and convective TKE proportionately.
+            TKE_reduc = 0.0   ! tot_TKE could be 0 if Convectively_stable is false.
+            if ((tot_TKE > 0.0) .and. (tot_TKE > TKE_used)) TKE_reduc = (tot_TKE - TKE_used) / tot_TKE
+
+            ! All TKE should have been consumed.
+            if (CS%TKE_diagnostics) then
+              eCD%dTKE_mixing = eCD%dTKE_mixing - TKE_used * I_dtdiag
+              eCD%dTKE_conv_decay = eCD%dTKE_conv_decay + &
+                  (1.0-TKE_reduc)*(CS%nstar-nstar_FC) * conv_PErel * I_dtdiag
+            endif
+
+            tot_TKE = tot_TKE - TKE_used
+            mech_TKE = TKE_reduc*mech_TKE
+            conv_PErel = TKE_reduc*conv_PErel
+
+            Kddt_h(K) = Kd(K) * dt_h
+
           elseif (tot_TKE + (MKE_src - PE_chg_g0) >= 0.0) then
             ! This column is convectively stable and there is energy to support the suggested
             ! mixing.  Keep that estimate.
@@ -1803,6 +1855,153 @@ subroutine find_PE_chg(Kddt_h0, dKddt_h, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
   endif
 
 end subroutine find_PE_chg
+
+
+!> This subroutine directly calculates the an increment in the diapycnal diffusivity based on the
+!! change in potential energy within a timestep, subject to bounds on the possible change in
+!! diffusivity, returning both the added diffusivity and the realized potential energy change, and
+!! optionally also the maximum change in potential energy that would be realized for an infinitely
+!! large diffusivity.
+subroutine find_Kd_from_PE_chg(Kd_prev, dKd_max, dt_h, max_PE_chg, hp_a, hp_b, Th_a, Sh_a, Th_b, Sh_b, &
+                       dT_to_dPE_a, dS_to_dPE_a, dT_to_dPE_b, dS_to_dPE_b, pres_Z, &
+                       dT_to_dColHt_a, dS_to_dColHt_a, dT_to_dColHt_b, dS_to_dColHt_b, &
+                       Kd_add, PE_chg, dPE_max, frac_dKd_max_PE)
+  real, intent(in)  :: Kd_prev  !< The previously used diffusivity at an interface
+                                !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
+  real, intent(in)  :: dKd_max  !< The maximum change in the diffusivity at an interface
+                                !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
+  real, intent(in)  :: dt_h     !< The time step and divided by the average of the
+                                !! thicknesses around the interface [T Z-1 ~> s m-1].
+  real, intent(in)  :: max_PE_chg !< The maximum change in the column potential energy due to
+                                !! additional mixing at an interface [R Z3 T-2 ~> J m-2].
+
+  real, intent(in)  :: hp_a     !< The effective pivot thickness of the layer above the
+                                !! interface, given by h_k plus a term that
+                                !! is a fraction (determined from the tridiagonal solver) of
+                                !! Kddt_h for the interface above [H ~> m or kg m-2].
+  real, intent(in)  :: hp_b     !< The effective pivot thickness of the layer below the
+                                !! interface, given by h_k plus a term that
+                                !! is a fraction (determined from the tridiagonal solver) of
+                                !! Kddt_h for the interface below [H ~> m or kg m-2].
+  real, intent(in)  :: Th_a     !< An effective temperature times a thickness in the layer
+                                !! above, including implicit mixing effects with other
+                                !! yet higher layers [C H ~> degC m or degC kg m-2].
+  real, intent(in)  :: Sh_a     !< An effective salinity times a thickness in the layer
+                                !! above, including implicit mixing effects with other
+                                !! yet higher layers [S H ~> ppt m or ppt kg m-2].
+  real, intent(in)  :: Th_b     !< An effective temperature times a thickness in the layer
+                                !! below, including implicit mixing effects with other
+                                !! yet lower layers [C H ~> degC m or degC kg m-2].
+  real, intent(in)  :: Sh_b     !< An effective salinity times a thickness in the layer
+                                !! below, including implicit mixing effects with other
+                                !! yet lower layers [S H ~> ppt m or ppt kg m-2].
+  real, intent(in)  :: dT_to_dPE_a !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
+                                !! a layer's temperature change to the change in column potential
+                                !! energy, including all implicit diffusive changes in the
+                                !! temperatures of all the layers above [R Z3 T-2 C-1 ~> J m-2 degC-1].
+  real, intent(in)  :: dS_to_dPE_a !< A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
+                                !! a layer's salinity change to the change in column potential
+                                !! energy, including all implicit diffusive changes in the
+                                !! salinities of all the layers above [R Z3 T-2 S-1 ~> J m-2 ppt-1].
+  real, intent(in)  :: dT_to_dPE_b !< A factor (pres_lay*mass_lay*dSpec_vol/dT) relating
+                                !! a layer's temperature change to the change in column potential
+                                !! energy, including all implicit diffusive changes in the
+                                !! temperatures of all the layers below [R Z3 T-2 C-1 ~> J m-2 degC-1].
+  real, intent(in)  :: dS_to_dPE_b !< A factor (pres_lay*mass_lay*dSpec_vol/dS) relating
+                                !! a layer's salinity change to the change in column potential
+                                !! energy, including all implicit diffusive changes in the
+                                !! salinities of all the layers below [R Z3 T-2 S-1 ~> J m-2 ppt-1].
+  real, intent(in)  :: pres_Z   !< The rescaled hydrostatic interface pressure, which relates
+                                !! the changes in column thickness to the energy that is radiated
+                                !! as gravity waves and unavailable to drive mixing [R Z2 T-2 ~> J m-3].
+  real, intent(in)  :: dT_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dT) relating
+                                !! a layer's temperature change to the change in column
+                                !! height, including all implicit diffusive changes
+                                !! in the temperatures of all the layers above [Z C-1 ~> m degC-1].
+  real, intent(in)  :: dS_to_dColHt_a !< A factor (mass_lay*dSColHtc_vol/dS) relating
+                                !! a layer's salinity change to the change in column
+                                !! height, including all implicit diffusive changes
+                                !! in the salinities of all the layers above [Z S-1 ~> m ppt-1].
+  real, intent(in)  :: dT_to_dColHt_b !< A factor (mass_lay*dSColHtc_vol/dT) relating
+                                !! a layer's temperature change to the change in column
+                                !! height, including all implicit diffusive changes
+                                !! in the temperatures of all the layers below [Z C-1 ~> m degC-1].
+  real, intent(in)  :: dS_to_dColHt_b !< A factor (mass_lay*dSColHtc_vol/dS) relating
+                                !! a layer's salinity change to the change in column
+                                !! height, including all implicit diffusive changes
+                                !! in the salinities of all the layers below [Z S-1 ~> m ppt-1].
+  real, intent(out) :: Kd_add   !< The additional diffusivity at an interface
+                                !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
+  real, intent(out) :: PE_chg   !< The realized change in the column potential energy due to
+                                !! additional mixing at an interface [R Z3 T-2 ~> J m-2].
+  real, optional, &
+        intent(out) :: dPE_max  !< The maximum change in column potential energy that could
+                                !! be realized by applying a huge value of dKddt_h at the
+                                !! present interface [R Z3 T-2 ~> J m-2].
+  real, optional, &
+        intent(out) :: frac_dKd_max_PE !< The fraction of the energy required to support dKd_max
+                                !! that is supplied by max_PE_chg [nondim]
+
+  ! Local variables
+  real :: Kddt_h0   ! The previously used diffusivity at an interface times the time step
+                    ! and divided by the average of the thicknesses around the
+                    ! interface [H ~> m or kg m-2].
+  real :: dKddt_h   ! The upper bound on the change in the diffusivity at an interface times
+                    ! the time step and divided by the average of the thicknesses around
+                    ! the interface [H ~> m or kg m-2].
+  real :: hps       ! The sum of the two effective pivot thicknesses [H ~> m or kg m-2].
+  real :: bdt1      ! A product of the two pivot thicknesses plus a diffusive term [H2 ~> m2 or kg2 m-4].
+  real :: dT_c      ! The core term in the expressions for the temperature changes [C H2 ~> degC m2 or degC kg2 m-4].
+  real :: dS_c      ! The core term in the expressions for the salinity changes [S H2 ~> ppt m2 or ppt kg2 m-4].
+  real :: PEc_core  ! The diffusivity-independent core term in the expressions
+                    ! for the potential energy changes [R Z2 T-2 ~> J m-3].
+  real :: ColHt_core ! The diffusivity-independent core term in the expressions
+                     ! for the column height changes [H Z ~> m2 or kg m-1].
+
+  ! The expression for the change in potential energy used here is derived from the expression
+  ! for the final estimates of the changes in temperature and salinities, which is then
+  ! extensively manipulated to get it into its most succinct form.  It is the same as the
+  ! expression that appears in find_PE_chg.
+
+  Kddt_h0 = Kd_prev * dt_h
+  hps = hp_a + hp_b
+  bdt1 = hp_a * hp_b + Kddt_h0 * hps
+  dT_c = hp_a * Th_b - hp_b * Th_a
+  dS_c = hp_a * Sh_b - hp_b * Sh_a
+  PEc_core = hp_b * (dT_to_dPE_a * dT_c + dS_to_dPE_a * dS_c) - &
+             hp_a * (dT_to_dPE_b * dT_c + dS_to_dPE_b * dS_c)
+  ColHt_core = hp_b * (dT_to_dColHt_a * dT_c + dS_to_dColHt_a * dS_c) - &
+               hp_a * (dT_to_dColHt_b * dT_c + dS_to_dColHt_b * dS_c)
+  if (ColHt_core < 0.0) PEc_core = PEc_core - pres_Z * ColHt_core
+
+  ! Find the change in column potential energy due to the change in the
+  ! diffusivity at this interface by dKd_max, and use this to dermine which limit applies.
+  dKddt_h = dKd_max * dt_h
+  if ( (PEc_core * dKddt_h <= max_PE_chg * (bdt1 * (bdt1 + dKddt_h * hps))) .or. (PEc_core <= 0.0) ) then
+    ! There is more than enough energy available to support the maximum permitted diffusivity.
+    Kd_add = dKd_max
+    PE_chg = PEc_core * dKddt_h / (bdt1 * (bdt1 + dKddt_h * hps))
+    if (present(frac_dKd_max_PE)) frac_dKd_max_PE = 1.0
+  else
+    ! Mixing is constrained by the available energy, so solve the following for Kd_add:
+    !   max_PE_chg = PEc_core * Kd_add * dt_h / (bdt1 * (bdt1 + Kd_add * dt_h * hps))
+    ! It has been verified that the two branches are continuous.
+    Kd_add = (bdt1**2 * max_PE_chg) / (dt_h * (PEc_core - bdt1 * hps * max_PE_chg))
+    PE_chg = max_PE_chg
+    if (present(frac_dKd_max_PE)) &
+      frac_dKd_max_PE = (PE_chg * (bdt1 * (bdt1 + dKddt_h * hps))) / (PEc_core * dKddt_h)
+  endif
+
+  ! Note that the derivative of PE_chg with dKddt_h is monotonic:
+  !   dPE_chg_dKd = PEc_core * ( (bdt1 * (bdt1 + dKddt_h * hps)) - bdtl * hps * dKddt_h ) / &
+  !                              (bdt1 * (bdt1 + dKddt_h * hps))**2
+  !   dPE_chg_dKd = PEc_core / (bdt1 + dKddt_h * hps)**2
+
+  ! This expression is the limit of PE_chg for infinite dKddt_h.
+  if (present(dPE_max)) dPE_max = PEc_core / (bdt1 * hps)
+
+end subroutine find_Kd_from_PE_chg
+
 
 !> This subroutine calculates the change in potential energy and or derivatives
 !! for several changes in an interface's diapycnal diffusivity times a timestep
@@ -2246,6 +2445,11 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "TKE_DECAY relates the vertical rate of decay of the TKE available "//&
                  "for mechanical entrainment to the natural Ekman depth.", &
                  units="nondim", default=2.5)
+  call get_param(param_file, mdl, "DIRECT_EPBL_MIXING_CALC", CS%direct_calc, &
+                 "If true and there is no conversion from mean kinetic energy to ePBL turbulent "//&
+                 "kinetic energy, use a direct calculation of the diffusivity that is supported "//&
+                 "by a given energy input instead of the more general but slower iterative solver.", &
+                 default=.false., do_not_log=(CS%MKE_to_TKE_effic>0.0))
 
 
 !/2. Options related to setting MSTAR
@@ -2545,6 +2749,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       diff_text = "EPBL_ORIGINAL_PE_CALC settings"
     elseif (CS%options_diff == 2) then
       diff_text = "EPBL_ANSWER_DATE settings"
+    elseif (CS%options_diff == 3) then
+      diff_text = "DIRECT_EPBL_MIXING_CALC settings"
     else
       diff_text = "unchanged settings"
     endif
