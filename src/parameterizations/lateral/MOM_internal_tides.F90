@@ -3610,10 +3610,12 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  "mode speeds are not calculated but are simply reported as 0.  This must be "//&
                  "non-negative for the wave_speeds routine to be used.", &
                  units="m s-1", default=0.01, scale=US%m_s_to_L_T)
+  call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 do_not_log=.true., default=.true.)
   call get_param(param_file, mdl, "INTWAVE_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  "If true, use the OM4 remapping-via-subcells algorithm for calculating EBT structure. "//&
                  "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
-                 "We recommend setting this option to false.", default=.true.)
+                 "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
   call get_param(param_file, mdl, "UNIFORM_TEST_CG", CS%uniform_test_cg, &
                  "If positive, a uniform group velocity of internal tide for test case", &
                  default=-1., units="m s-1", scale=US%m_s_to_L_T)
