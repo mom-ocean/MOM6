@@ -923,7 +923,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
       forces%tau_mag(i,j) = gustiness + G%mask2dT(i,j) * sqrt((taux_at_h(i,j)**2) + (tauy_at_h(i,j)**2))
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt((taux_at_h(i,j)**2) + (tauy_at_h(i,j)**2)))
-      forces%omega_w2x(i,j) = atan(tauy_at_h(i,j), taux_at_h(i,j))
+      forces%omega_w2x(i,j) = atan2(tauy_at_h(i,j), taux_at_h(i,j))
     enddo ; enddo
     call pass_vector(forces%taux, forces%tauy, G%Domain, halo=1)
   else ! C-grid wind stresses.
