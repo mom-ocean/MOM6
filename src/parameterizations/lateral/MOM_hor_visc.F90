@@ -2141,7 +2141,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           Shear_mag_bc = sqrt(sh_xx(i,j) * sh_xx(i,j) + &
             0.25*(((sh_xy(I-1,J-1)*sh_xy(I-1,J-1)) + (sh_xy(I,J)*sh_xy(I,J))) + &
                   ((sh_xy(I-1,J)*sh_xy(I-1,J)) + (sh_xy(I,J-1)*sh_xy(I,J-1)))))
-          if (CS%answer_date > 20190101) then
+          if ((CS%answer_date > 20190101) .and. (CS%answer_date < 20241201)) then
             FatH = (US%s_to_T*FatH)**MEKE%backscatter_Ro_pow ! f^n
             ! Note the hard-coded dimensional constant in the following line that can not
             ! be rescaled for dimensional consistency.
@@ -2332,6 +2332,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: use_MEKE      ! If true, the MEKE parameterization is in use.
+  real    :: backscatter_Ro_c ! Coefficient in Rossby number function for backscatter [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   character(len=200) :: inputdir, filename ! Input file names and paths
   character(len=80) ::  Kh_var ! Input variable names
@@ -2363,13 +2364,23 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
+
+  ! Determine whether HOR_VISC_ANSWER_DATE is used, and avoid logging it if it is not used.
+  call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
+                 default=.false., do_not_log=.true.)
+  backscatter_Ro_c = 0.0
+  if (use_MEKE) call get_param(param_file, mdl, "MEKE_BACKSCAT_RO_C", backscatter_Ro_c, &
+                 "The coefficient in the Rossby number function for scaling the biharmonic "//&
+                 "frictional energy source. Setting to non-zero enables the Rossby number function.", &
+                 units="nondim", default=0.0, do_not_log=.true.)
+
   call get_param(param_file, mdl, "HOR_VISC_ANSWER_DATE", CS%answer_date, &
                  "The vintage of the order of arithmetic and expressions in the horizontal "//&
-                 "viscosity calculations.  Values below 20190101 recover the answers from the "//&
-                 "end of 2018, while higher values use updated and more robust forms of the "//&
-                 "same expressions.", &
-                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
-  if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
+                 "viscosity calculations.  Values between 20190102 and 20241201 recover the "//&
+                 "answers from the end of 2018, while higher values use updated and more robust "//&
+                 "forms of the same expressions.", &
+                 default=default_answer_date, do_not_log=(.not.GV%Boussinesq).or.(backscatter_Ro_c==0.0))
+  if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20241201)
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
   call get_param(param_file, mdl, "USE_CONT_THICKNESS", CS%use_cont_thick, &
@@ -2425,8 +2436,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "The nondimensional Laplacian Leith constant, "//&
                  "often set to 1.0", units="nondim", default=0.0, &
                   fail_if_missing=CS%Leith_Kh, do_not_log=.not.CS%Leith_Kh)
-  call get_param(param_file, mdl, "USE_MEKE", use_MEKE, &
-                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "RES_SCALE_MEKE_VISC", CS%res_scale_MEKE, &
                  "If true, the viscosity contribution from MEKE is scaled by "//&
                  "the resolution function.", default=.false., &
