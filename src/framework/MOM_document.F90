@@ -303,14 +303,16 @@ subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingPara
 end subroutine doc_param_real
 
 !> This subroutine handles parameter documentation for arrays of reals.
-subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debuggingParam, like_default)
+subroutine doc_param_real_array(doc, varname, desc, units, vals, default, defaults, &
+                                debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
   character(len=*),  intent(in) :: desc    !< A description of the parameter being documented
   character(len=*),  intent(in) :: units   !< The units of the parameter being documented
   real,              intent(in) :: vals(:) !< The array of values to record
-  real,    optional, intent(in) :: default !< The default value of this parameter
+  real,    optional, intent(in) :: default !< A uniform default value of this parameter
+  real,    optional, intent(in) :: defaults(:) !< The element-wise default values of this parameter
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
   logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
                                            !! it has the default value, even if there is no default.
@@ -333,6 +335,11 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debugg
       equalsDefault = .true.
       do i=1,size(vals) ; if (vals(i) /= default) equalsDefault = .false. ; enddo
       mesg = trim(mesg)//" default = "//trim(real_string(default))
+    endif
+    if (present(defaults)) then
+      equalsDefault = .true.
+      do i=1,size(vals) ; if (vals(i) /= defaults(i)) equalsDefault = .false. ; enddo
+      mesg = trim(mesg)//" default = "//trim(real_array_string(defaults))
     endif
     if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 

@@ -1464,7 +1464,7 @@ end subroutine log_param_real
 
 !> Log the name and values of an array of real model parameter in documentation files.
 subroutine log_param_real_array(CS, modulename, varname, value, desc, &
-                                units, default, debuggingParam, like_default, unscale)
+                                units, default, defaults, debuggingParam, like_default, unscale)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the calling module
@@ -1473,7 +1473,8 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
   character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
                                              !! present, this parameter is not written to a doc file
   character(len=*),           intent(in) :: units   !< The units of this parameter
-  real,             optional, intent(in) :: default !< The default value of the parameter
+  real,             optional, intent(in) :: default !< A uniform default value of the parameter
+  real,             optional, intent(in) :: defaults(:) !< The element-wise defaults of the parameter
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
                                          !! logged in the debugging parameter file
   logical,          optional, intent(in) :: like_default !< If present and true, log this parameter as
@@ -1498,7 +1499,7 @@ subroutine log_param_real_array(CS, modulename, varname, value, desc, &
 
   write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
-    call doc_param(CS%doc, varname, desc, myunits, log_val, default, &
+    call doc_param(CS%doc, varname, desc, myunits, log_val, default, defaults, &
                    debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_real_array
@@ -1835,7 +1836,7 @@ end subroutine get_param_real
 !> This subroutine reads the values of an array of real model parameters from a parameter file
 !! and logs them in documentation files.
 subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, debuggingParam, &
+               default, defaults, fail_if_missing, do_not_read, do_not_log, debuggingParam, &
                scale, unscaled)
   type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
@@ -1846,7 +1847,8 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
   character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
                                          !! present, this parameter is not written to a doc file
   character(len=*),           intent(in)    :: units   !< The units of this parameter
-  real,             optional, intent(in)    :: default !< The default value of the parameter
+  real,             optional, intent(in)    :: default !< A uniform default value of the parameter
+  real,             optional, intent(in)    :: defaults(:) !< The element-wise defaults of the parameter
   logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
                                          !! if this variable is not found in the parameter file
   logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
@@ -1865,14 +1867,22 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
 
+  if (present(defaults)) then
+    if (present(default)) call MOM_error(FATAL, &
+          "get_param_real_array: Only one of default and defaults can be specified at a time.")
+    if (size(defaults) /= size(value)) call MOM_error(FATAL, &
+          "get_param_real_array: The size of defaults nad value are not the same.")
+  endif
+
   if (do_read) then
     if (present(default)) value(:) = default
+    if (present(defaults)) value(:) = defaults(:)
     call read_param_real_array(CS, varname, value, fail_if_missing)
   endif
 
   if (do_log) then
     call log_param_real_array(CS, modulename, varname, value, desc, &
-                              units, default, debuggingParam)
+                              units, default, defaults, debuggingParam)
   endif
 
   if (present(unscaled)) unscaled(:) = value(:)
