@@ -1327,10 +1327,9 @@ subroutine compute_global_grid_integrals(G, US)
   G%areaT_global = reproducing_sum(tmpForSumming)
 
   if (G%areaT_global == 0.0) &
-    call MOM_error(FATAL, "compute_global_grid_integrals: "//&
-                    "zero ocean area (check topography?)")
+    call MOM_error(FATAL, "compute_global_grid_integrals: zero ocean area (check topography?)")
 
-  G%IareaT_global = 1.0 / (G%areaT_global)
+  G%IareaT_global = 1.0 / G%areaT_global
 end subroutine compute_global_grid_integrals
 ! -----------------------------------------------------------------------------
 
