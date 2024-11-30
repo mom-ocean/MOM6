@@ -21,9 +21,9 @@ use MOM_io,            only : axis_info, set_axis_info, delete_axis_info, get_fi
 use MOM_io,            only : attribute_info, set_attribute_info, delete_attribute_info
 use MOM_io,            only : APPEND_FILE, SINGLE_FILE, WRITEONLY_FILE
 use MOM_spatial_means, only : array_global_min_max
-use MOM_time_manager,  only : time_type, get_time, get_date, set_time, operator(>)
+use MOM_time_manager,  only : time_type, get_time, get_date, set_time
 use MOM_time_manager,  only : operator(+), operator(-), operator(*), operator(/)
-use MOM_time_manager,  only : operator(/=), operator(<=), operator(>=), operator(<)
+use MOM_time_manager,  only : operator(/=), operator(<=), operator(>=), operator(<), operator(>)
 use MOM_time_manager,  only : get_calendar_type, time_type_to_real, NO_CALENDAR
 use MOM_tracer_flow_control, only : tracer_flow_control_CS, call_tracer_stocks
 use MOM_unit_scaling,  only : unit_scale_type
@@ -489,7 +489,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
       CS%write_energy_time = CS%Start_time + CS%energysavedays * &
         (1 + (day - CS%Start_time) / CS%energysavedays)
     endif
-  elseif (day + (dt_force/2) <= CS%write_energy_time) then
+  elseif (day + (dt_force/2) < CS%write_energy_time) then
     return  ! Do not write this step
   else ! Determine the next write time before proceeding
     if (CS%energysave_geometric) then
