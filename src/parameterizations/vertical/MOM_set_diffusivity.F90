@@ -727,17 +727,17 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   endif
 
   if (CS%debug) then
-    if (CS%id_prof_leak > 0) call hchksum(dd%prof_leak, "leakage_profile", G%HI, haloshift=0, scale=GV%m_to_H)
-    if (CS%id_prof_slope > 0) call hchksum(dd%prof_slope, "slope_profile", G%HI, haloshift=0, scale=GV%m_to_H)
-    if (CS%id_prof_Froude > 0) call hchksum(dd%prof_Froude, "Froude_profile", G%HI, haloshift=0, scale=GV%m_to_H)
-    if (CS%id_prof_quad > 0) call hchksum(dd%prof_quad, "quad_profile", G%HI, haloshift=0, scale=GV%m_to_H)
-    if (CS%id_prof_itidal > 0) call hchksum(dd%prof_itidal, "itidal_profile", G%HI, haloshift=0, scale=GV%m_to_H)
-    if (CS%id_TKE_to_Kd > 0) call hchksum(dd%TKE_to_Kd, "TKE_to_Kd", G%HI, haloshift=0, scale=US%m_to_Z*US%T_to_s**2)
-    if (CS%id_Kd_leak > 0) call hchksum(dd%Kd_leak,   "Kd_leak",   G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
-    if (CS%id_Kd_quad > 0) call hchksum(dd%Kd_quad,   "Kd_quad",   G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
-    if (CS%id_Kd_itidal > 0) call hchksum(dd%Kd_itidal, "Kd_itidal", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
-    if (CS%id_Kd_Froude > 0) call hchksum(dd%Kd_Froude, "Kd_Froude", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
-    if (CS%id_Kd_slope > 0) call hchksum(dd%Kd_slope,  "Kd_slope",  G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
+    if (CS%id_prof_leak > 0) call hchksum(dd%prof_leak, "leakage_profile", G%HI, haloshift=0, unscale=GV%m_to_H)
+    if (CS%id_prof_slope > 0) call hchksum(dd%prof_slope, "slope_profile", G%HI, haloshift=0, unscale=GV%m_to_H)
+    if (CS%id_prof_Froude > 0) call hchksum(dd%prof_Froude, "Froude_profile", G%HI, haloshift=0, unscale=GV%m_to_H)
+    if (CS%id_prof_quad > 0) call hchksum(dd%prof_quad, "quad_profile", G%HI, haloshift=0, unscale=GV%m_to_H)
+    if (CS%id_prof_itidal > 0) call hchksum(dd%prof_itidal, "itidal_profile", G%HI, haloshift=0, unscale=GV%m_to_H)
+    if (CS%id_TKE_to_Kd > 0) call hchksum(dd%TKE_to_Kd, "TKE_to_Kd", G%HI, haloshift=0, unscale=US%m_to_Z*US%T_to_s**2)
+    if (CS%id_Kd_leak > 0) call hchksum(dd%Kd_leak,   "Kd_leak",   G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
+    if (CS%id_Kd_quad > 0) call hchksum(dd%Kd_quad,   "Kd_quad",   G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
+    if (CS%id_Kd_itidal > 0) call hchksum(dd%Kd_itidal, "Kd_itidal", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
+    if (CS%id_Kd_Froude > 0) call hchksum(dd%Kd_Froude, "Kd_Froude", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
+    if (CS%id_Kd_slope > 0) call hchksum(dd%Kd_slope,  "Kd_slope",  G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
   endif
 
   ! post diagnostics

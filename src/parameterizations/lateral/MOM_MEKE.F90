@@ -272,7 +272,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       if (allocated(MEKE%mom_src)) &
         call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%mom_src_bh)) &
-        call hchksum(MEKE%mom_src_bh, 'MEKE mom_src_bh', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+        call hchksum(MEKE%mom_src_bh, 'MEKE mom_src_bh', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%GME_snk)) &
         call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%GM_src)) &
