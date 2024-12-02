@@ -1479,7 +1479,7 @@ subroutine setup_u_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_y)
                      "Timescales in days for nudging along a segment, "//&
                      "for inflow, then outflow. Setting both to zero should "//&
                      "behave like SIMPLE obcs for the baroclinic velocities.", &
-                     fail_if_missing=.true., default=0., units="days", scale=86400.0*US%s_to_T)
+                     fail_if_missing=.true., units="days", scale=86400.0*US%s_to_T)
       OBC%segment(l_seg)%Velocity_nudging_timescale_in = tnudge(1)
       OBC%segment(l_seg)%Velocity_nudging_timescale_out = tnudge(2)
       deallocate(tnudge)
@@ -1620,7 +1620,7 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
                      "Timescales in days for nudging along a segment, "//&
                      "for inflow, then outflow. Setting both to zero should "//&
                      "behave like SIMPLE obcs for the baroclinic velocities.", &
-                     fail_if_missing=.true., default=0., units="days", scale=86400.0*US%s_to_T)
+                     fail_if_missing=.true., units="days", scale=86400.0*US%s_to_T)
       OBC%segment(l_seg)%Velocity_nudging_timescale_in = tnudge(1)
       OBC%segment(l_seg)%Velocity_nudging_timescale_out = tnudge(2)
       deallocate(tnudge)
