@@ -215,10 +215,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
         'Kelvin_set_OBC_data() was called but OBC type was not initialized!')
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
+          "Kelvin_set_OBC_data() is only set to work with Cartesian axis units.")
 
   time_sec = US%s_to_T*time_type_to_real(Time)
   PI = 4.0*atan(1.0)
-  km_to_L_scale = 1000.0*US%m_to_L
 
   do j=jsd,jed ; do i=isd,ied
     depth_tot(i,j) = 0.0
@@ -237,6 +238,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
     omega = (4.0 * CS%H0 * N0)  / (CS%mode * US%m_to_L*G%len_lon)
+    !### There is a bug here when len_lon is in km.  This should be
+    ! omega = (4.0 * CS%H0 * N0)  / (CS%mode * G%grid_unit_to_L*G%len_lon)
   endif
 
   sina = sin(CS%coast_angle)
@@ -257,8 +260,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       jsd = segment%HI%jsd ; jed = segment%HI%jed
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do j=jsd,jed ; do I=IsdB,IedB
-        x1 = km_to_L_scale * G%geoLonCu(I,j)
-        y1 = km_to_L_scale * G%geoLatCu(I,j)
+        x1 = G%grid_unit_to_L * G%geoLonCu(I,j)
+        y1 = G%grid_unit_to_L * G%geoLatCu(I,j)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = -(x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
@@ -299,8 +302,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       enddo ; enddo
       if (allocated(segment%tangential_vel)) then
         do J=JsdB+1,JedB-1 ; do I=IsdB,IedB
-          x1 = km_to_L_scale * G%geoLonBu(I,J)
-          y1 = km_to_L_scale * G%geoLatBu(I,J)
+          x1 = G%grid_unit_to_L * G%geoLonBu(I,J)
+          y1 = G%grid_unit_to_L * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
           cff = sqrt(GV%g_Earth * depth_tot(i+1,j) )
@@ -316,8 +319,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do J=JsdB,JedB ; do i=isd,ied
-        x1 = km_to_L_scale * G%geoLonCv(i,J)
-        y1 = km_to_L_scale * G%geoLatCv(i,J)
+        x1 = G%grid_unit_to_L * G%geoLonCv(i,J)
+        y1 = G%grid_unit_to_L * G%geoLatCv(i,J)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
@@ -355,8 +358,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       enddo ; enddo
       if (allocated(segment%tangential_vel)) then
         do J=JsdB,JedB ; do I=IsdB+1,IedB-1
-          x1 = km_to_L_scale * G%geoLonBu(I,J)
-          y1 = km_to_L_scale * G%geoLatBu(I,J)
+          x1 = G%grid_unit_to_L * G%geoLonBu(I,J)
+          y1 = G%grid_unit_to_L * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
           cff = sqrt(GV%g_Earth * depth_tot(i,j+1) )

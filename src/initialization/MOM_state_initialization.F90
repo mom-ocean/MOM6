@@ -1636,7 +1636,10 @@ subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  dpi=acos(0.0)*2.0 ! pi
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "MOM_state_initialization.F90: "//&
+          "initialize_velocity_circular() is only set to work with Cartesian axis units.")
+
+  dpi = acos(0.0)*2.0 ! pi
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
@@ -1663,7 +1666,7 @@ subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read)
     r = sqrt( (x**2) + (y**2) ) ! Circular stream function is a function of radius only
     r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
-    my_psi = my_psi * (circular_max_u * G%US%m_to_L*G%len_lon*1e3 / dpi) ! len_lon is in km
+    my_psi = my_psi * (circular_max_u * G%len_lon * G%grid_unit_to_L / dpi) ! len_lon is in km
   end function my_psi
 
 end subroutine initialize_velocity_circular
