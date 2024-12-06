@@ -1897,9 +1897,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
-    !$omp target data map(alloc: dM, rho_in_situ)
+    !$omp target data map(alloc: dM)
 
     if (use_EOS) then
+      !$omp target data map(alloc: rho_in_situ)
+
       if (use_p_atm) then
         call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p_atm, rho_in_situ, &
                                tv%eqn_of_state, EOSdom2d)
@@ -1916,6 +1918,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
       enddo ; enddo
       !$acc end kernels
       !$omp end target
+
+      !$omp end target data
     else
       !$acc kernels
       !$omp target
@@ -1945,25 +1949,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp end target data
   endif
 
-  !!$omp target exit data &
-  !!$omp   map(delete: CS, pa, h, e) &
-  !!$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
-  !!$omp   map(from: PFu, PFv)
-
-  !!$omp target exit data if (use_EOS) &
-  !!$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
-  !!$omp target exit data if (use_p_atm) map(delete: p_atm)
-  !!$omp target exit data if (.not. use_p_atm) map(delete: p0)
-
   if (present(pbce)) then
     call set_pbce_Bouss(e, tv_tmp, G, GV, US, rho0_set_pbce, CS%GFS_scale, pbce)
   endif
   !$acc end data
-
-  !$omp target exit data &
-  !$omp   map(delete: CS, pa, h, e) &
-  !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
-  !$omp   map(from: PFu, PFv)
 
   !$omp target exit data if (use_EOS) &
   !$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
@@ -1976,6 +1965,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   !$omp target exit data if (present(pbce)) &
   !$omp   map(from: pbce)
+
+  !$omp target exit data &
+  !$omp   map(delete: pa, h) &
+  !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
+  !$omp   map(from: PFu, PFv)
 
   ! NOTE: As above, these are here until data is set up outside of the function.
 
@@ -1993,42 +1987,73 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$acc enter data if (CS%calculate_SAL) copyin(e_sal)
     !$acc enter data create(eta)
 
+    ! NOTE: Many of these would normally be allocated and computed above.
+    !   The following are temporary data transfers.
+
+    !$omp target enter data if(CS%tides .and. CS%tides_answer_date > 20230630) &
+    !$omp   map(to: e_tide_eq, e_tide_sal)
+    !$omp target enter data if(CS%tides .and. CS%tides_answer_date <= 20230630) &
+    !$omp   map(to: e_sal_tide)
+    ! NOTE: e_sal is used with legacy tides when tides is false.
+    !   Most likely a bug but innocuous since e_sal is initialized to zero.
+    !   This has been fixed by He in a PR, but for now we use it as-is.
+    !$omp target enter data &
+    !$omp   if((CS%Calculate_SAL .and. CS%tides_answer_date > 20230630) .or. .not. CS%tides) &
+    !$omp   map(to: e_sal)
+
+    !$omp target enter data map(alloc: eta)
+
     !$acc data present(CS, e, eta)
 
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
     ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
     !$acc kernels
-    !$OMP parallel do default(shared)
+    !$omp target
+    !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta(i,j) = e(i,j,1)*GV%Z_to_H
     enddo ; enddo
     if (CS%tides .and. (.not.CS%bq_sal_tides)) then
       if (CS%tides_answer_date>20230630) then
-        !$OMP parallel do default(shared)
+        !$omp parallel loop collapse(2)
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
           eta(i,j) = eta(i,j) + (e_tidal_eq(i,j)+e_tidal_sal(i,j))*GV%Z_to_H
         enddo ; enddo
       else
-        !$OMP parallel do default(shared)
+        !$omp parallel loop collapse(2)
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
           eta(i,j) = eta(i,j) + e_sal_and_tide(i,j)*GV%Z_to_H
         enddo ; enddo
       endif
     endif
     if (CS%calculate_SAL .and. (CS%tides_answer_date>20230630) .and. (.not.CS%bq_sal_tides)) then
-      !$OMP parallel do default(shared)
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
       enddo ; enddo
     endif
     !$acc end kernels
+    !$omp end target
+
     !$acc end data
 
     !$acc exit data if (CS%calculate_SAL) delete(e_sal)
     !$acc exit data if (CS%tides) delete(e_tide_eq, e_tide_sal)
     !$acc exit data delete(e)
     !$acc exit data copyout(eta)
+
+    !$omp target exit data if(CS%tides .and. CS%tides_answer_date > 20230630) &
+    !$omp   map(delete: e_tide_eq, e_tide_sal)
+    !$omp target exit data if(CS%tides .and. CS%tides_answer_date <= 20230630) &
+    !$omp   map(delete: e_sal_tide)
+    !$omp target exit data &
+    !$omp   if((CS%Calculate_SAL .and. CS%tides_answer_date > 20230630) .or. .not. CS%tides) &
+    !$omp   map(delete: e_sal)
+
+    !$omp target exit data map(from: eta)
   endif
+
+  !$omp target exit data map(delete: CS, e)
 
   if (CS%use_stanley_pgf) then
     ! Calculated diagnostics related to the Stanley parameterization
