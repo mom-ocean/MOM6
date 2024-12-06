@@ -962,17 +962,21 @@ subroutine calculate_density_array_2d_buggy_Wright(this, T, S, pressure, rho, &
   !   Possibly because Nvidia cannot associate `this` with `EOS%type`.
 
   !$acc kernels present(T, S, pressure, rho_ref, rho)
+  !$omp target
   if (present(rho_ref)) then
+    !$omp parallel loop
     do j = js, je ; do i = is, ie
       rho(i,j) = density_anomaly_elem_buggy_Wright(this, T(i,j), S(i,j), &
           pressure(i,j), rho_ref)
     enddo ; enddo
   else
+    !$omp parallel loop
     do j = js, je ; do i = is, ie
       rho(i,j) = density_elem_buggy_Wright(this, T(i,j), S(i,j), pressure(i,j))
     enddo ; enddo
   endif
   !$acc end kernels
+  !$omp end target
 end subroutine calculate_density_array_2d_buggy_Wright
 
 !> Calculate the in-situ specific volume for 1D array inputs and outputs.

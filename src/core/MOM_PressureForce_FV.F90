@@ -1820,25 +1820,27 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$acc   copyin(pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
   !$acc   create(rho_in_situ, dM)
 
+  ! This should certainly be outside of the function
+  !$omp target enter data map(to: CS)
+
   !$omp target enter data &
-  !$omp   map(to: pa, h, e) &
+  !$omp   map(to: CS, pa, h, e) &
   !$omp   map(to: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
   !$omp   map(alloc: PFu, PFv)
 
-  !!!$omp target enter data if(use_EOS) &
-  !!!$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
+  !$omp target enter data if(use_EOS) &
+  !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
 
-  !!!$omp target enter data if(use_p_atm) &
-  !!!$omp   map(to: p_atm)
-  !!
-  !!!$omp target enter data if(.not. use_p_atm) &
-  !!!$omp   map(to: p0)
+  !$omp target enter data if(use_p_atm) &
+  !$omp   map(to: p_atm)
+
+  !$omp target enter data if(.not. use_p_atm) &
+  !$omp   map(to: p0)
 
   !!!$omp target enter data if(present(pbce)) &
   !!!$omp   map(to: pbce)
 
   !$omp target
-
   !$acc kernels
   !$omp parallel loop collapse(3)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1893,13 +1895,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   endif
   !$omp end target
 
-  !$omp target exit data &
-  !$omp   map(delete: pa, h, e) &
-  !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
-  !$omp   map(from: PFu, PFv)
-
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
+    !$omp target data map(alloc: dM, rho_in_situ)
 
     if (use_EOS) then
       if (use_p_atm) then
@@ -1911,29 +1909,51 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
       endif
 
       !$acc kernels
+      !$omp target
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i,j)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
       !$acc end kernels
+      !$omp end target
     else
       !$acc kernels
+      !$omp target
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
       !$acc end kernels
+      !$omp end target
     endif
 
     !$acc kernels
+    !$omp target
     do k=1,nz
+      !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
         PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
       enddo ; enddo
+      !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
         PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
     !$acc end kernels
+    !$omp end target
+
+    !$omp end target data
   endif
+
+  !$omp target exit data &
+  !$omp   map(delete: CS, pa, h, e) &
+  !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
+  !$omp   map(from: PFu, PFv)
+
+  !$omp target exit data if (use_EOS) &
+  !$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
+  !$omp target exit data if (use_p_atm) map(delete: p_atm)
+  !$omp target exit data if (.not. use_p_atm) map(delete: p0)
 
   if (present(pbce)) then
     call set_pbce_Bouss(e, tv_tmp, G, GV, US, rho0_set_pbce, CS%GFS_scale, pbce)

@@ -2887,7 +2887,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
 
-  !$omp target enter data map(to: GV, GV%Rlay, GV%g_prime)
+  ! This does not work.  GV%RLay changes sometime later.
+  !!!$omp target enter data map(to: GV, GV%Rlay, GV%g_prime)
 
   ! Now that the vertical grid has been initialized, rescale parameters that depend on factors
   ! that are set with the vertical grid to their desired units.  This added rescaling step would
@@ -3454,9 +3455,12 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
 
   ! XXX: Where to put this??
+  ! XXX: G transfer should possibly also be here.
+
   !$acc enter data copyin(GV)
   !$acc enter data copyin(GV%Rlay)
   !$acc enter data copyin(GV%g_prime)
+  !$omp target enter data map(to: GV, GV%Rlay, GV%g_prime)
 
   diag => CS%diag
   ! Initialize the diag mediator.
