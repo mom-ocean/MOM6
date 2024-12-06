@@ -1837,8 +1837,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp target enter data if(.not. use_p_atm) &
   !$omp   map(to: p0)
 
-  !!!$omp target enter data if(present(pbce)) &
-  !!!$omp   map(to: pbce)
+  !$omp target enter data if(present(pbce)) &
+  !$omp   map(to: pbce)
 
   !$omp target
   !$acc kernels
@@ -1945,6 +1945,21 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp end target data
   endif
 
+  !!$omp target exit data &
+  !!$omp   map(delete: CS, pa, h, e) &
+  !!$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
+  !!$omp   map(from: PFu, PFv)
+
+  !!$omp target exit data if (use_EOS) &
+  !!$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
+  !!$omp target exit data if (use_p_atm) map(delete: p_atm)
+  !!$omp target exit data if (.not. use_p_atm) map(delete: p0)
+
+  if (present(pbce)) then
+    call set_pbce_Bouss(e, tv_tmp, G, GV, US, rho0_set_pbce, CS%GFS_scale, pbce)
+  endif
+  !$acc end data
+
   !$omp target exit data &
   !$omp   map(delete: CS, pa, h, e) &
   !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
@@ -1952,13 +1967,15 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   !$omp target exit data if (use_EOS) &
   !$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
-  !$omp target exit data if (use_p_atm) map(delete: p_atm)
-  !$omp target exit data if (.not. use_p_atm) map(delete: p0)
 
-  if (present(pbce)) then
-    call set_pbce_Bouss(e, tv_tmp, G, GV, US, rho0_set_pbce, CS%GFS_scale, pbce)
-  endif
-  !$acc end data
+  !$omp target exit data if (use_p_atm) &
+  !$omp   map(delete: p_atm)
+
+  !$omp target exit data if (.not. use_p_atm) &
+  !$omp   map(delete: p0)
+
+  !$omp target exit data if (present(pbce)) &
+  !$omp   map(from: pbce)
 
   ! NOTE: As above, these are here until data is set up outside of the function.
 

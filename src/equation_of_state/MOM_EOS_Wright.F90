@@ -1033,11 +1033,14 @@ subroutine calculate_density_derivs_2d_buggy_Wright(this, T, S, pressure, &
   ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
 
   !$acc kernels present(T, S, pressure, drho_dT, drho_dS)
+  !$omp target
+  !$omp parallel loop collapse(2)
   do j = js, je ; do i = is, ie
     call calculate_density_derivs_elem_buggy_Wright(this, T(i,j), S(i,j), &
         pressure(i,j), drho_dT(i,j), drho_dS(i,j))
   enddo ; enddo
   !$acc end kernels
+  !$omp end target
 end subroutine calculate_density_derivs_2d_buggy_Wright
 
 !> Set coefficients that can correct bugs un the buggy Wright equation of state.
