@@ -1820,7 +1820,27 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$acc   copyin(pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
   !$acc   create(rho_in_situ, dM)
 
+  !$omp target enter data &
+  !$omp   map(to: pa, h, e) &
+  !$omp   map(to: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
+  !$omp   map(alloc: PFu, PFv)
+
+  !!!$omp target enter data if(use_EOS) &
+  !!!$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
+
+  !!!$omp target enter data if(use_p_atm) &
+  !!!$omp   map(to: p_atm)
+  !!
+  !!!$omp target enter data if(.not. use_p_atm) &
+  !!!$omp   map(to: p0)
+
+  !!!$omp target enter data if(present(pbce)) &
+  !!!$omp   map(to: pbce)
+
+  !$omp target
+
   !$acc kernels
+  !$omp parallel loop collapse(3)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     PFu(I,j,k) = (((pa(i,j,K)*h(i,j,k) + intz_dpa(i,j,k)) - &
                    (pa(i+1,j,K)*h(i+1,j,k) + intz_dpa(i+1,j,k))) + &
@@ -1831,6 +1851,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   enddo ; enddo ; enddo
 
   ! Compute pressure gradient in y direction
+  !$omp parallel loop collapse(3)
   do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     PFv(i,J,k) = (((pa(i,j,K)*h(i,j,k) + intz_dpa(i,j,k)) - &
                    (pa(i,j+1,K)*h(i,j+1,k) + intz_dpa(i,j+1,k))) + &
@@ -1870,6 +1891,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
       enddo ; enddo
     enddo
   endif
+  !$omp end target
+
+  !$omp target exit data &
+  !$omp   map(delete: pa, h, e) &
+  !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
+  !$omp   map(from: PFu, PFv)
 
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.

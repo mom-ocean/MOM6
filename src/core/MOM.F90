@@ -2879,11 +2879,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   !$acc enter data copyin(G)
   !$acc enter data copyin(G%IdxCu, G%IdyCv)
+  !$omp target enter data map(to: G)
+  !$omp target enter data map(to: G%IdxCu, G%IdyCv)
 
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
   call verticalGridInit( param_file, CS%GV, US )
   GV => CS%GV
+
+  !$omp target enter data map(to: GV, GV%Rlay, GV%g_prime)
 
   ! Now that the vertical grid has been initialized, rescale parameters that depend on factors
   ! that are set with the vertical grid to their desired units.  This added rescaling step would
