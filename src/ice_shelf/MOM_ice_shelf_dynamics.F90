@@ -1049,16 +1049,15 @@ subroutine volume_above_floatation(CS, G, ISS, vaf, hemisphere)
     if (mask(i,j)>0) then
       if (CS%bed_elev(i,j) <= 0) then
         !grounded above sea level
-        vaf_cell(i,j)= (ISS%h_shelf(i,j) * G%US%Z_to_m) * (ISS%area_shelf_h(i,j) * G%US%L_to_m**2)
+        vaf_cell(i,j) = ISS%h_shelf(i,j) * ISS%area_shelf_h(i,j)
       else
         !grounded if vaf_cell(i,j) > 0
-        vaf_cell(i,j) = (max(ISS%h_shelf(i,j) - rhow_rhoi * CS%bed_elev(i,j), 0.0) * G%US%Z_to_m) * &
-                        (ISS%area_shelf_h(i,j) * G%US%L_to_m**2)
+        vaf_cell(i,j) = max(ISS%h_shelf(i,j) - rhow_rhoi * CS%bed_elev(i,j), 0.0) * ISS%area_shelf_h(i,j)
       endif
     endif
   enddo; enddo
 
-  vaf = reproducing_sum(vaf_cell)
+  vaf = G%US%Z_to_m*G%US%L_to_m**2 * reproducing_sum(vaf_cell, unscale=G%US%Z_to_m*G%US%L_to_m**2)
 end subroutine volume_above_floatation
 
 !> multiplies a variable with the ice sheet grounding fraction
@@ -1193,7 +1192,8 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
   ! Local variables
   type(time_type) :: dt ! A time_type version of the timestep.
   real, dimension(SZDI_(G),SZDJ_(G)) :: tmp1 ! A temporary array used in reproducing sums [various]
-  real :: KE_tot, mass_tot, KE_scale_factor, mass_scale_factor
+  real :: KE_tot    ! THe total kinetic energy [J]
+  real :: mass_tot  ! The total mass [kg]
   integer :: is, ie, js, je, isr, ier, jsr, jer, i, j
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   integer :: start_of_day, num_days
@@ -1243,24 +1243,23 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
   isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
 
   !calculate KE using cell-centered ice shelf velocity
-  tmp1(:,:)=0.0
-  KE_scale_factor = US%L_to_m**2 * (US%RZ_to_kg_m2 * US%L_T_to_m_s**2)
+  tmp1(:,:) = 0.0
   do j=js,je ; do i=is,ie
-    tmp1(i,j) = (KE_scale_factor * 0.03125) * (mass(i,j) * area(i,j)) * &
+    tmp1(i,j) = 0.03125 * (mass(i,j) * area(i,j)) * &
       ((((CS%u_shelf(I-1,J-1)+CS%u_shelf(I,J))+(CS%u_shelf(I,J-1)+CS%u_shelf(I-1,J)))**2) + &
        (((CS%v_shelf(I-1,J-1)+CS%v_shelf(I,J))+(CS%v_shelf(I,J-1)+CS%v_shelf(I-1,J)))**2))
   enddo; enddo
 
-  KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer)
+  KE_tot = US%RZL2_to_kg*US%L_T_to_m_s**2 * &
+           reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=(US%RZL2_to_kg*US%L_T_to_m_s**2))
 
   !calculate mass
-  tmp1(:,:)=0.0
-  mass_scale_factor = US%L_to_m**2 * US%RZ_to_kg_m2
+  tmp1(:,:) = 0.0
   do j=js,je ; do i=is,ie
-    tmp1(i,j) =  mass_scale_factor * (mass(i,j) * area(i,j))
+    tmp1(i,j) = mass(i,j) * area(i,j)
   enddo; enddo
 
-  mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer)
+  mass_tot = US%RZL2_to_kg * reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=US%RZL2_to_kg)
 
   if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (day > CS%Start_time) then
@@ -1449,12 +1448,15 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thickness at corners [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! If GL_regularize=true, indicates cells containing
                                                 ! the grounding line (float_cond=1) or not (float_cond=0)
-  real, dimension(SZDIB_(G),SZDJB_(G)) :: Normvec  ! Used for convergence
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: Normvec  ! Velocities used for convergence [L2 T-2 ~> m2 s-2]
   character(len=160) :: mesg  ! The text of an error message
   integer :: conv_flag, i, j, k,l, iter, nodefloat
   integer :: Isdq, Iedq, Jsdq, Jedq, isd, ied, jsd, jed
   integer :: Iscq, Iecq, Jscq, Jecq, isc, iec, jsc, jec
-  real    :: err_max, err_tempu, err_tempv, err_init, max_vel, tempu, tempv, Norm, PrevNorm
+  real    :: err_max, err_tempu, err_tempv, err_init ! Errors in [R L3 Z T-2 ~> kg m s-2] or [L T-1 ~> m s-1]
+  real    :: max_vel  ! The maximum velocity magnitude [L T-1 ~> m s-1]
+  real    :: tempu, tempv   ! Temporary variables with velocity magnitudes [L T-1 ~> m s-1]
+  real    :: Norm, PrevNorm ! Velocities used to assess convergence [L T-1 ~> m s-1]
   real    :: rhoi_rhow ! The density of ice divided by a typical water density [nondim]
   integer :: Is_sum, Js_sum, Ie_sum, Je_sum ! Loop bounds for global sums or arrays starting at 1.
   integer :: Iscq_sv, Jscq_sv ! Starting loop bound for sum_vec
@@ -1553,7 +1555,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
 
     call max_across_PEs(err_init)
   elseif (CS%nonlin_solve_err_mode == 3) then
-    Normvec=0.0
+    Normvec(:,:) = 0.0
 
     ! Determine the loop limits for sums, bearing in mind that the arrays will be starting at 1.
     ! Includes the edge of the tile is at the western/southern bdry (if symmetric)
@@ -1570,11 +1572,10 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
     Ie_sum = Iecq + (1-Isdq) ; Je_sum = Jecq + (1-Jsdq)
 
     do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
-      if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + (u_shlf(I,J)**2 * US%L_T_to_m_s**2)
-      if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + (v_shlf(I,J)**2 * US%L_T_to_m_s**2)
+      if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + u_shlf(I,J)**2
+      if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + v_shlf(I,J)**2
     enddo ; enddo
-    Norm = reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum )
-    Norm = sqrt(Norm)
+    Norm = sqrt( reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, unscale=US%L_T_to_m_s**2 ) )
   endif
 
   u_last(:,:) = u_shlf(:,:) ; v_last(:,:) = v_shlf(:,:)
@@ -1662,14 +1663,13 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
       err_init = max_vel
 
     elseif (CS%nonlin_solve_err_mode == 3) then
-      PrevNorm=Norm; Norm=0.0; Normvec=0.0
+      PrevNorm = Norm ; Norm = 0.0 ; Normvec=0.0
       do J=Jscq_sv,Jecq ; do I=Iscq_sv,Iecq
-        if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + (u_shlf(I,J)**2 * US%L_T_to_m_s**2)
-        if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + (v_shlf(I,J)**2 * US%L_T_to_m_s**2)
+        if (CS%umask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + u_shlf(I,J)**2
+        if (CS%vmask(I,J) == 1) Normvec(I,J) = Normvec(I,J) + v_shlf(I,J)**2
       enddo; enddo
-      Norm = reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum )
-      Norm = sqrt(Norm)
-      err_max=2.*abs(Norm-PrevNorm); err_init=Norm+PrevNorm
+      Norm = sqrt( reproducing_sum( Normvec, Is_sum, Ie_sum, Js_sum, Je_sum, unscale=US%L_T_to_m_s**2 ) )
+      err_max = 2.*abs(Norm-PrevNorm) ; err_init = Norm+PrevNorm
     endif
 
     write(mesg,*) "ice_shelf_solve_outer: nonlinear fractional residual = ", err_max/err_init
@@ -1797,7 +1797,7 @@ subroutine ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H
   call pass_vector(Au, Av, G%domain, TO_ALL, BGRID_NE, complete=.true.)
 
   Ru(:,:) = (RHSu(:,:) - Au(:,:)) ; Rv(:,:) = (RHSv(:,:) - Av(:,:))
-  resid_scale = (US%L_to_m**2*US%s_to_T)*(US%RZ_to_kg_m2*US%L_T_to_m_s**2)
+  resid_scale = US%s_to_T*(US%RZL2_to_kg*US%L_T_to_m_s**2)
   resid2_scale = ((US%RZ_to_kg_m2*US%L_to_m)*US%L_T_to_m_s**2)**2
 
   sum_vec(:,:) = 0.0
@@ -3316,9 +3316,9 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
               (v_shlf(I,J-1) * CS%PhiC(4,i,j)))
 
         CS%ice_visc(i,j,1) = (G%areaT(i,j) * max(ISS%h_shelf(i,j),CS%min_h_shelf)) * &
-          max(0.5 * Visc_coef * &
-          (US%s_to_T**2 * (((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**((1.-n_g)/(2.*n_g)) * &
-          (US%Pa_to_RL2_T2*US%s_to_T),CS%min_ice_visc)
+            max(0.5 * Visc_coef * &
+            (US%s_to_T**2 * (((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**((1.-n_g)/(2.*n_g)) * &
+            (US%Pa_to_RL2_T2*US%s_to_T),CS%min_ice_visc)  ! Rescale after the fractional power law.
       elseif (model_qp4) then
         !calculate viscosity at 4 quadrature points per cell
 
@@ -3347,9 +3347,9 @@ subroutine calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
                 (v_shlf(I-1,J) * CS%Phi(6,2*(jq-1)+iq,i,j)))
 
           CS%ice_visc(i,j,2*(jq-1)+iq) = (G%areaT(i,j) * max(ISS%h_shelf(i,j),CS%min_h_shelf)) * &
-            max(0.5 * Visc_coef * &
-            (US%s_to_T**2 * (((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**((1.-n_g)/(2.*n_g)) * &
-            (US%Pa_to_RL2_T2*US%s_to_T),CS%min_ice_visc)
+              max(0.5 * Visc_coef * &
+              (US%s_to_T**2*(((ux**2) + (vy**2)) + ((ux*vy) + 0.25*((uy+vx)**2)) + eps_min**2))**((1.-n_g)/(2.*n_g)) * &
+              (US%Pa_to_RL2_T2*US%s_to_T),CS%min_ice_visc)  ! Rescale after the fractional power law.
         enddo; enddo
       endif
     endif
@@ -3376,7 +3376,9 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
 
   integer :: i, j, iscq, iecq, jscq, jecq, isd, jsd, ied, jed, iegq, jegq
   integer :: giec, gjec, gisc, gjsc, isc, jsc, iec, jec, is, js
-  real :: umid, vmid, unorm, eps_min ! Velocities [L T-1 ~> m s-1]
+  real :: umid, vmid ! Velocities [L T-1 ~> m s-1]
+  real :: eps_min ! A minimal strain rate used in the Glens flow law expression [T-1 ~> s-1]
+  real :: unorm ! The magnitude of the velocity in mks units for use with fractional powers [m s-1]
   real :: alpha !Coulomb coefficient [nondim]
   real :: Hf !"floatation thickness" for Coulomb friction [Z ~> m]
   real :: fN !Effective pressure (ice pressure - ocean pressure) for Coulomb friction [Pa]
@@ -3399,7 +3401,7 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
     else
       alpha = 1.0
     endif
-    fN_scale = US%R_to_kg_m3 * US%L_T_to_m_s**2
+    fN_scale = US%R_to_kg_m3 * US%L_T_to_m_s**2  ! Unscaling factor for use in the fractional power law.
   endif
 
   do j=jsd+1,jed
@@ -3417,12 +3419,12 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
           fB = alpha * (CS%C_basal_friction(i,j) / (CS%CF_Max * fN))**(CS%CF_PostPeak/CS%n_basal_fric)
 
           CS%basal_traction(i,j) = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * &
-            (unorm**(CS%n_basal_fric-1.0) / (1.0 + fB * unorm**CS%CF_PostPeak)**(CS%n_basal_fric))) * &
-            (US%Pa_to_RLZ_T2*US%L_T_to_m_s)
+              (unorm**(CS%n_basal_fric-1.0) / (1.0 + fB * unorm**CS%CF_PostPeak)**(CS%n_basal_fric))) * &
+              (US%Pa_to_RLZ_T2*US%L_T_to_m_s)   ! Restore the scaling after the fractional power law.
         else
           !linear (CS%n_basal_fric=1) or "Weertman"/power-law (CS%n_basal_fric /= 1)
           CS%basal_traction(i,j) = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * (unorm**(CS%n_basal_fric-1))) * &
-                                   (US%Pa_to_RLZ_T2*US%L_T_to_m_s)
+                                   (US%Pa_to_RLZ_T2*US%L_T_to_m_s) ! Rescale after the fractional power law.
         endif
 
         CS%basal_traction(i,j)=max(CS%basal_traction(i,j), CS%min_basal_traction * G%areaT(i,j))
