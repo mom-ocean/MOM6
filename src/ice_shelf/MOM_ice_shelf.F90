@@ -1141,9 +1141,9 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes, time_step)
   ! local variables
   real :: frac_shelf       !< The fractional area covered by the ice shelf [nondim].
   real :: frac_open        !< The fractional area of the ocean that is not covered by the ice shelf [nondim].
-  real :: delta_mass_shelf !< Change in ice shelf mass over one time step [R Z m2 T-1 ~> kg s-1]
+  real :: delta_mass_shelf !< Change in ice shelf mass over one time step [R Z L2 T-1 ~> kg s-1]
   real :: balancing_flux   !< The fresh water flux that balances the integrated melt flux [R Z T-1 ~> kg m-2 s-1]
-  real :: balancing_area   !< total area where the balancing flux is applied [m2]
+  real :: balancing_area   !< total area where the balancing flux is applied [L2 ~> m2]
   type(time_type) :: dTime !< The time step as a time_type
   type(time_type) :: Time0 !< The previous time (Time-dt)
   real, dimension(SZDI_(G),SZDJ_(G)) :: bal_frac  !< Fraction of the cell where the mass flux
@@ -1315,7 +1315,7 @@ subroutine add_shelf_flux(G, US, CS, sfc_state, fluxes, time_step)
       endif
     enddo ; enddo
 
-    balancing_area = global_area_integral(bal_frac, G, area=G%areaT)
+    balancing_area = global_area_integral(bal_frac, G, area=G%areaT, tmp_scale=1.0)
     if (balancing_area > 0.0) then
       balancing_flux = ( global_area_integral(ISS%water_flux, G, tmp_scale=US%RZ_T_to_kg_m2s, &
                                               area=ISS%area_shelf_h) + &

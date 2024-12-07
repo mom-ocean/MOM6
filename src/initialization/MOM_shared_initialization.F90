@@ -1318,7 +1318,7 @@ subroutine compute_global_grid_integrals(G, US)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
-  G%areaT_global = US%L_to_m**2 * reproducing_sum(tmpForSumming, unscale=US%L_to_m**2)
+  G%areaT_global = reproducing_sum(tmpForSumming, unscale=US%L_to_m**2)
 
   if (G%areaT_global == 0.0) &
     call MOM_error(FATAL, "compute_global_grid_integrals: zero ocean area (check topography?)")
