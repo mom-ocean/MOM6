@@ -2928,8 +2928,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     if (homogenize) then
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
       do k=1,nz
-        call homogenize_field(tv%T(:,:,k), G%mask2dT, G, scale=US%degC_to_C, answer_date=hor_regrid_answer_date)
-        call homogenize_field(tv%S(:,:,k), G%mask2dT, G, scale=US%ppt_to_S, answer_date=hor_regrid_answer_date)
+        call homogenize_field(tv%T(:,:,k), G, tmp_scale=US%C_to_degC, answer_date=hor_regrid_answer_date)
+        call homogenize_field(tv%S(:,:,k), G, tmp_scale=US%S_to_ppt, answer_date=hor_regrid_answer_date)
       enddo
     endif
 
