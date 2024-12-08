@@ -189,7 +189,6 @@ type, public :: dyn_horgrid_type
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line [degrees_E] or [km] or [m]
   real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain [degrees_N] or [km] or [m]
   real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain [degrees_E] or [km] or [m]
-  real :: Rad_Earth     !< The radius of the planet [m]
   real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
   real :: max_depth     !< The maximum depth of the ocean [Z ~> m]
 end type dyn_horgrid_type
@@ -407,7 +406,6 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   G%grid_unit_to_L = G_in%grid_unit_to_L
   G%areaT_global = G_in%areaT_global
   G%IareaT_global = G_in%IareaT_global
-  G%Rad_Earth = G_in%Rad_Earth
   G%Rad_Earth_L = G_in%Rad_Earth_L
   G%max_depth = G_in%max_depth
 

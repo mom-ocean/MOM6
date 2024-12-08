@@ -102,7 +102,6 @@ subroutine set_grid_metrics(G, param_file, US)
     call get_param(param_file, "MOM_grid_init", "RAD_EARTH", G%Rad_Earth_L, &
                    "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
   endif
-  G%Rad_Earth = US%L_to_m*G%Rad_Earth_L
 
   ! Calculate derived metrics (i.e. reciprocals and products)
   call callTree_enter("set_derived_metrics(), MOM_grid_initialize.F90")
