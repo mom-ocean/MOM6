@@ -502,6 +502,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                      CS%ALE_CSp, CS%ADp, p_surf, CS%pbce, CS%eta_PF)
+  !$omp target update from(CS%PFu, CS%PFv)
   if (dyn_p_surf) then
     pres_to_eta = 1.0 / (GV%g_Earth * GV%H_to_RZ)
     !$OMP parallel do default(shared)
@@ -835,6 +836,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call cpu_clock_begin(id_clock_pres)
     call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                        CS%ALE_CSp, CS%ADp, p_surf, CS%pbce, CS%eta_PF)
+    !$omp target exit data map(from: CS%PFu, CS%PFv)
     ! Stokes shear force contribution to pressure gradient
     Use_Stokes_PGF = present(Waves)
     if (Use_Stokes_PGF) then
@@ -1244,7 +1246,8 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
   ALLOC_(CS%CAv_pred(isd:ied,JsdB:JedB,nz)) ; CS%CAv_pred(:,:,:)   = 0.0
   ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz))   ; CS%PFu(:,:,:)   = 0.0
   ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz))   ; CS%PFv(:,:,:)   = 0.0
-
+  ! TODO: Replace with map(alloc:) (and remove PF[uv] = 0.)
+  !$omp target enter data map(to: CS%PFu, CS%PFv)
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:)    = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
@@ -1561,6 +1564,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   endif
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &
                           CS%SAL_CSp, CS%tides_CSp)
+  !$omp target enter data map(to: CS%PressureForce_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp, CS%fpmix)
@@ -1899,6 +1903,7 @@ subroutine end_dyn_split_RK2(CS)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
   DEALLOC_(CS%CAu_pred) ; DEALLOC_(CS%CAv_pred)
   DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)
+  !$omp target exit data map(delete: CS%PFu, CS%PFv)
 
   if (associated(CS%taux_bot)) deallocate(CS%taux_bot)
   if (associated(CS%tauy_bot)) deallocate(CS%tauy_bot)

@@ -1820,13 +1820,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$acc   copyin(pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
   !$acc   create(rho_in_situ, dM)
 
-  ! This should certainly be outside of the function
-  !$omp target enter data map(to: CS)
-
   !$omp target enter data &
-  !$omp   map(to: CS, pa, h, e) &
-  !$omp   map(to: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
-  !$omp   map(alloc: PFu, PFv)
+  !$omp   map(to: pa, h, e) &
+  !$omp   map(to: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
 
   !$omp target enter data if(use_EOS) &
   !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
@@ -1968,8 +1964,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   !$omp target exit data &
   !$omp   map(delete: pa, h) &
-  !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
-  !$omp   map(from: PFu, PFv)
+  !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
 
   ! NOTE: As above, these are here until data is set up outside of the function.
 
@@ -1998,7 +1993,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !   Most likely a bug but innocuous since e_sal is initialized to zero.
     !   This has been fixed by He in a PR, but for now we use it as-is.
     !$omp target enter data &
-    !$omp   if((CS%Calculate_SAL .and. CS%tides_answer_date > 20230630) .or. .not. CS%tides) &
+    !$omp   if((CS%calculate_SAL .and. CS%tides_answer_date > 20230630) .or. .not. CS%tides) &
     !$omp   map(to: e_sal)
 
     !$omp target enter data map(alloc: eta)
@@ -2042,6 +2037,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$acc exit data delete(e)
     !$acc exit data copyout(eta)
 
+    ! TODO: These may be needed for the diagnostics below!
     !$omp target exit data if(CS%tides .and. CS%tides_answer_date > 20230630) &
     !$omp   map(delete: e_tide_eq, e_tide_sal)
     !$omp target exit data if(CS%tides .and. CS%tides_answer_date <= 20230630) &
@@ -2053,7 +2049,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp target exit data map(from: eta)
   endif
 
-  !$omp target exit data map(delete: CS, e)
+  !$omp target exit data map(delete: e)
 
   if (CS%use_stanley_pgf) then
     ! Calculated diagnostics related to the Stanley parameterization
