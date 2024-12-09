@@ -1286,15 +1286,19 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo ; enddo
   endif
 
-  do k=1,nz
-    ! Calculate 4 integrals through the layer that are required in the
-    ! subsequent calculation.
-    if (use_EOS) then
-      ! The following routine computes the integrals that are needed to
-      ! calculate the pressure gradient force. Linear profiles for T and S are
-      ! assumed when regridding is activated. Otherwise, the previous version
-      ! is used, whereby densities within each layer are constant no matter
-      ! where the layers are located.
+  !$omp target enter data &
+  !$omp   map(to: h) &
+  !$omp   map(alloc: dpa, intx_dpa, inty_dpa, intz_dpa)
+
+  ! Calculate 4 integrals through the layer that are required in the
+  ! subsequent calculation.
+  if (use_EOS) then
+    ! The following routine computes the integrals that are needed to
+    ! calculate the pressure gradient force. Linear profiles for T and S are
+    ! assumed when regridding is activated. Otherwise, the previous version
+    ! is used, whereby densities within each layer are constant no matter
+    ! where the layers are located.
+    do k=1,nz
       if ( use_ALE .and. CS%Recon_Scheme > 0 ) then
         if ( CS%Recon_Scheme == 1 ) then
           call int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, &
@@ -1329,7 +1333,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         call diagnose_mass_weight_Z(e(:,:,K), e(:,:,K+1), G%bathyT, e(:,:,1), dz_neglect, CS%MassWghtInterp, &
                                     G%HI, MassWt_u(:,:,k), MassWt_v(:,:,k), &
                                     MassWghtInterpVanOnly=CS%MassWghtInterpVanOnly, h_nv=CS%h_nonvanished)
-    else
+    enddo
+  else
+    do k=1,nz
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
@@ -1344,10 +1350,13 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
       do J=Jsq,Jeq ; do i=is,ie
         inty_dpa(i,J,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i,j+1))
       enddo ; enddo
-    endif
-  enddo
+    enddo
+  endif
 
-  !$omp target enter data map(to: pa, dpa)
+  ! TODO: Get rid of this!  Run the block above on GPU...
+  !$omp target update to(dpa, intx_dpa, inty_dpa, intz_dpa)
+
+  !$omp target enter data map(to: pa)
 
   ! Set the pressure anomalies at the interfaces.
   !$omp target
@@ -1408,7 +1417,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     endif
   endif
 
-  !$omp target enter data map(to: intx_dpa, inty_dpa)
   !$omp target enter data map(alloc: intx_pa, inty_pa)
 
   if (CS%correction_intxpa) then
@@ -1841,8 +1849,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$acc   copyin(pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
   !$acc   create(rho_in_situ, dM)
 
-  !$omp target enter data &
-  !$omp   map(to: h, e, intz_dpa)
+  !$omp target enter data map(to: e)
 
   !$omp target enter data if(use_EOS) &
   !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
