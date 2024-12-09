@@ -5270,7 +5270,7 @@ subroutine register_barotropic_restarts(HI, GV, US, param_file, CS, restart_CS)
   character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   real :: am2, ak1      !< Bandwidth parameters of the M2 and K1 streaming filters [nondim]
-  real :: om2, ok1      !< Target frequencies of the M2 and K1 streaming filters [T-1 ~> s-1]
+  real :: om2, ok1      !< Target frequencies of the M2 and K1 streaming filters [rad T-1 ~> rad s-1]
 
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
@@ -5301,13 +5301,13 @@ subroutine register_barotropic_restarts(HI, GV, US, param_file, CS, restart_CS)
                  "Frequency of the M2 tidal constituent. "//&
                  "This is only used if TIDES and TIDE_M2"// &
                  " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and M2"// &
-                 " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=tidal_frequency("M2"), &
+                 " is in OBC_TIDE_CONSTITUENTS.", units="rad s-1", default=tidal_frequency("M2"), &
                  scale=US%T_to_s, do_not_log=.true.)
   call get_param(param_file, mdl, "TIDE_K1_FREQ", ok1, &
                  "Frequency of the K1 tidal constituent. "//&
                  "This is only used if TIDES and TIDE_K1"// &
                  " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and K1"// &
-                 " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=tidal_frequency("K1"), &
+                 " is in OBC_TIDE_CONSTITUENTS.", units="rad s-1", default=tidal_frequency("K1"), &
                  scale=US%T_to_s, do_not_log=.true.)
 
   ALLOC_(CS%ubtav(IsdB:IedB,jsd:jed))      ; CS%ubtav(:,:) = 0.0

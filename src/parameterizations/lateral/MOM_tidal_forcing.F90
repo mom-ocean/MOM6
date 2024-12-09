@@ -50,7 +50,7 @@ type, public :: tidal_forcing_CS ; private
                       !! and bottom geopotential anomalies [nondim].
   integer :: nc       !< The number of tidal constituents in use.
   real, dimension(MAX_CONSTITUENTS) :: &
-    freq, &           !< The frequency of a tidal constituent [T-1 ~> s-1].
+    freq, &           !< The frequency of a tidal constituent [rad T-1 ~> rad s-1].
     phase0, &         !< The phase of a tidal constituent at time 0 [rad].
     amp, &            !< The amplitude of a tidal constituent at time 0 [Z ~> m].
     love_no           !< The Love number of a tidal constituent at time 0 [nondim].
@@ -151,7 +151,7 @@ end function eq_phase
 !! Values used here are from previous versions of MOM.
 function tidal_frequency(constit)
   character (len=2), intent(in) :: constit !> Constituent to look up
-  real :: tidal_frequency                  !> Angular frequency [s-1]
+  real :: tidal_frequency                  !> Angular frequency [rad s-1]
 
   select case (constit)
     case ("M2")
@@ -246,7 +246,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
     phase, &          ! The phase of some tidal constituent [radians].
     lat_rad, lon_rad  ! Latitudes and longitudes of h-points [radians].
   real :: deg_to_rad  ! A conversion factor from degrees to radians [radian degree-1]
-  real, dimension(MAX_CONSTITUENTS) :: freq_def ! Default frequency for each tidal constituent [s-1]
+  real, dimension(MAX_CONSTITUENTS) :: freq_def ! Default frequency for each tidal constituent [rad s-1]
   real, dimension(MAX_CONSTITUENTS) :: phase0_def ! Default reference phase for each tidal constituent [rad]
   real, dimension(MAX_CONSTITUENTS) :: amp_def  ! Default amplitude for each tidal constituent [m]
   real, dimension(MAX_CONSTITUENTS) :: love_def ! Default love number for each constituent [nondim]
@@ -480,7 +480,8 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
                    "Frequency of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and "//trim(CS%const_name(c))// &
-                   " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=freq_def(c), scale=US%T_to_s)
+                   " is in OBC_TIDE_CONSTITUENTS.", units="rad s-1", default=freq_def(c), &
+                   scale=US%T_to_s)
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_AMP", CS%amp(c), &
                    "Amplitude of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &

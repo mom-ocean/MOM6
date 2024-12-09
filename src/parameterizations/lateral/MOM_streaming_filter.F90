@@ -15,7 +15,7 @@ public Filt_register, Filt_accum
 !> The control structure for storing the filter infomation of a particular field
 type, public :: Filter_CS ; private
   real       :: a, &                   !< Parameter that determines the bandwidth [nondim]
-                om, &                  !< Target frequency of the filter [T-1 ~> s-1]
+                om, &                  !< Target frequency of the filter [rad T-1 ~> rad s-1]
                 old_time = -1.0        !< The time of the previous accumulating step [T ~> s]
   real, allocatable, dimension(:,:) :: s1, & !< Dummy variable [A]
                                        u1    !< Filtered data [A]
@@ -29,7 +29,7 @@ contains
 !> This subroutine registers each of the fields to be filtered.
 subroutine Filt_register(a, om, grid, HI, CS)
   real,                      intent(in)    :: a      !< Parameter that determines the bandwidth [nondim]
-  real,                      intent(in)    :: om     !< Target frequency of the filter [T-1 ~> s-1]
+  real,                      intent(in)    :: om     !< Target frequency of the filter [rad T-1 ~> rad s-1]
   character(len=*),          intent(in)    :: grid   !< Horizontal grid location: h, u, or v
   type(hor_index_type),      intent(in)    :: HI     !< Horizontal index type structure
   type(Filter_CS),           intent(out)   :: CS     !< Control structure for the current field
