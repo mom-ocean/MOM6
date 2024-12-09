@@ -1347,13 +1347,17 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     endif
   enddo
 
+  !$omp target enter data map(to: pa, dpa)
+
   ! Set the pressure anomalies at the interfaces.
+  !$omp target
   do k=1,nz
-    !$OMP parallel do default(shared)
+    !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       pa(i,j,K+1) = pa(i,j,K) + dpa(i,j,k)
     enddo ; enddo
   enddo
+  !$omp end target
 
   ! Calculate and add SAL geopotential anomaly to interface height (new answers)
   if (CS%calculate_SAL .and. CS%tides_answer_date>20250131) then
@@ -1404,7 +1408,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     endif
   endif
 
+  !$omp target enter data map(to: intx_dpa, inty_dpa)
+  !$omp target enter data map(alloc: intx_pa, inty_pa)
+
   if (CS%correction_intxpa) then
+    ! TODO needs to be moved to GPU
+
     ! Determine surface density for use in the pressure gradient corrections
     !$OMP parallel do default(shared) private(p_surf_EOS)
     do j=Jsq,Jeq+1
@@ -1540,37 +1549,46 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                     symmetric=G%Domain%symmetric, scalar_pair=.true., unscale=US%RL2_T2_to_Pa)
     endif
 
+    ! TODO until moved to GPU
+    !$omp target update to(intx_pa, inty_pa)
   else
     ! Set the surface boundary conditions on the horizontally integrated pressure anomaly,
     ! assuming that the surface pressure anomaly varies linearly in x and y.
     ! If there is an ice-shelf or icebergs, this linear variation would need to be applied
     ! to an interior interface.
-    !$OMP parallel do default(shared)
+    !$omp target
+    !$omp parallel loop collapse(2)
     do j=js,je ; do I=Isq,Ieq
       intx_pa(I,j,1) = 0.5*(pa(i,j,1) + pa(i+1,j,1))
     enddo ; enddo
-    !$OMP parallel do default(shared)
+    !$omp parallel loop collapse(2)
     do J=Jsq,Jeq ; do i=is,ie
       inty_pa(i,J,1) = 0.5*(pa(i,j,1) + pa(i,j+1,1))
     enddo ; enddo
+    !$omp end target
   endif
 
+  !$omp target
   do k=1,nz
-    !$OMP parallel do default(shared)
+    !$omp parallel loop collapse(2)
     do j=js,je ; do I=Isq,Ieq
       intx_pa(I,j,K+1) = intx_pa(I,j,K) + intx_dpa(I,j,k)
     enddo ; enddo
   enddo
   do k=1,nz
-    !$OMP parallel do default(shared)
+    !$omp parallel loop collapse(2)
     do J=Jsq,Jeq ; do i=is,ie
       inty_pa(i,J,K+1) = inty_pa(i,J,K) + inty_dpa(i,J,k)
     enddo ; enddo
   enddo
+  !$omp end target
 
   if (CS%reset_intxpa_integral) then
     ! Having stored the pressure gradient info, we can work out where the first nonvanished layers is
     ! reset intxpa there, then adjust intxpa throughout the water column.
+
+    ! TODO temporarily move back to CPU
+    !$omp target update from(intx_pa, inty_pa)
 
     ! Zero out the 2-d arrays that will be set from various reference interfaces.
     T_int_W(:,:) = 0.0 ; S_int_W(:,:) = 0.0 ; p_int_W(:,:) = 0.0
@@ -1799,6 +1817,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     do K=1,nz+1 ; do J=Jsq,Jeq ; do i=is,ie
       inty_pa(i,J,K) = inty_pa(i,J,K) + inty_pa_cor_ri(i,J)
     enddo ; enddo ; enddo
+
+    ! TODO temporarily move back to CPU
+    !$omp target update to(intx_pa, inty_pa)
   endif ! intx_pa and inty_pa have now been reset to reflect the properties of an unimpeded interface.
 
   ! NOTE: None of these `enter data` statements should be here.  They are only
@@ -1821,8 +1842,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$acc   create(rho_in_situ, dM)
 
   !$omp target enter data &
-  !$omp   map(to: pa, h, e) &
-  !$omp   map(to: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
+  !$omp   map(to: h, e, intz_dpa)
 
   !$omp target enter data if(use_EOS) &
   !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
@@ -1963,7 +1983,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp   map(from: pbce)
 
   !$omp target exit data &
-  !$omp   map(delete: pa, h) &
+  !$omp   map(delete: pa, dpa, h) &
   !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
 
   ! NOTE: As above, these are here until data is set up outside of the function.
