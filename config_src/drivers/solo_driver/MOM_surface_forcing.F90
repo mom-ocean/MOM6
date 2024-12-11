@@ -45,9 +45,8 @@ use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,     only : user_revise_forcing_CS
-use idealized_hurricane, only : idealized_hurricane_wind_init
-use idealized_hurricane, only : idealized_hurricane_wind_forcing, SCM_idealized_hurricane_wind_forcing
-use idealized_hurricane, only : idealized_hurricane_CS
+use idealized_hurricane,     only : idealized_hurricane_wind_forcing
+use idealized_hurricane,     only : idealized_hurricane_wind_init, idealized_hurricane_CS
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_surface_forcing_init
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_wind_forcing
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_buoyancy_forcing
@@ -297,7 +296,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     elseif (trim(CS%wind_config) == "ideal_hurr") then
       call idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
-      call SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
+      call MOM_error(FATAL, "MOM_surface_forcing (set_forcing): "//&
+                            'WIND_CONFIG = "SCM_ideal_hurr" is a depricated option.')
     elseif (trim(CS%wind_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_wind_forcing(sfc_state, forces, day_center, G, US, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%wind_config) == "USER") then
@@ -1780,8 +1780,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing is specified.  Valid "//&
                  "options include (file), (data_override), (2gyre), (1gyre), (gyres), (zero), "//&
-                 "(const), (Neverworld), (scurves), (ideal_hurr), (SCM_ideal_hurr), "//&
-                 "(SCM_CVmix_tests) and (USER).", default="zero")
+                 "(const), (Neverworld), (scurves), (ideal_hurr), (SCM_CVmix_tests) and (USER).", &
+                 default="zero")
   if (trim(CS%wind_config) == "file") then
     call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in "//&
@@ -1990,9 +1990,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS%dumbbell_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, US, param_file, diag, CS%MESO_forcing_CSp)
-  elseif (trim(CS%wind_config) == "ideal_hurr" .or.&
-          trim(CS%wind_config) == "SCM_ideal_hurr") then
+  elseif (trim(CS%wind_config) == "ideal_hurr") then
     call idealized_hurricane_wind_init(Time, G, US, param_file, CS%idealized_hurricane_CSp)
+  elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
+    call MOM_error(FATAL, "MOM_surface_forcing (surface_forcing_init): "//&
+          'WIND_CONFIG = "SCM_ideal_hurr" is a depricated option.  '//&
+          'To obtain mathematically equivalent results set '//&
+          'WIND_CONFIG = "ideal_hurr", IDL_HURR_SCM = True and IDL_HURR_X0 = 6.48e+05.')
   elseif (trim(CS%wind_config) == "const") then
     call get_param(param_file, mdl, "CONST_WIND_TAUX", CS%tau_x0, &
                  "With wind_config const, this is the constant zonal wind-stress", &
