@@ -464,11 +464,6 @@ subroutine read_Z_edges(filename, tr_name, z_edges, nz_out, has_edges, &
 
 end subroutine read_Z_edges
 
-!### `find_overlap` and `find_limited_slope` were previously part of
-!    MOM_diag_to_Z.F90, and are nearly identical to `find_overlap` in
-!    `midas_vertmap.F90` with some slight differences.  We keep it here for
-!    reproducibility, but the two should be merged at some point
-
 !> Determines the layers bounded by interfaces e that overlap
 !! with the depth range between Z_top and Z_bot, and the fractional weights
 !! of each layer. It also calculates the normalized relative depths of the range
@@ -620,14 +615,12 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "determine_temperature" ! This subroutine's name.
-  logical :: adjust_salt, fit_together
+  logical :: domore(SZK_(GV)) ! Records which layers need additional iterations
+  logical :: adjust_salt, fit_together, convergence_bug, do_any
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, itt
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  ! ### The algorithms of determine_temperature subroutine needs to be reexamined.
-
 
   call log_version(PF, mdl, version, "")
 
@@ -638,7 +631,13 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
                  "based on the ratio of the thermal and haline coefficients.  Otherwise try to "//&
                  "match the density by only adjusting temperatures within a maximum range before "//&
                  "revising estimates of the salinity.", default=.false., do_not_log=just_read)
-  ! These hard coded parameters need to be set properly.
+  call get_param(PF, mdl, "DETERMINE_TEMP_CONVERGENCE_BUG", convergence_bug, &
+                 "If true, use layout-dependent tests on the changes in temperature and salinity "//&
+                 "to determine when the iterations have converged when DETERMINE_TEMP_ADJUST_T_AND_S "//&
+                 "is false.  For realistic equations of state and the default values of the "//&
+                 "various tolerances, this bug does not impact the solutions.", &
+                 default=.true., do_not_log=just_read) !### Change the default to false.
+
   call get_param(PF, mdl, "DETERMINE_TEMP_T_MIN", T_min, &
                  "The minimum temperature that can be found by determine_temperature.", &
                  units="degC", default=-2.0, scale=US%degC_to_C, do_not_log=just_read)
@@ -653,10 +652,12 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
                  units="ppt", default=65.0, scale=US%ppt_to_S, do_not_log=just_read)
   call get_param(PF, mdl, "DETERMINE_TEMP_T_TOLERANCE", tol_T, &
                  "The convergence tolerance for temperature in determine_temperature.", &
-                 units="degC", default=1.0e-4, scale=US%degC_to_C, do_not_log=just_read)
+                 units="degC", default=1.0e-4, scale=US%degC_to_C, &
+                 do_not_log=just_read.or.(.not.convergence_bug))
   call get_param(PF, mdl, "DETERMINE_TEMP_S_TOLERANCE", tol_S, &
                  "The convergence tolerance for temperature in determine_temperature.", &
-                 units="ppt", default=1.0e-4, scale=US%ppt_to_S, do_not_log=just_read)
+                 units="ppt", default=1.0e-4, scale=US%ppt_to_S, &
+                 do_not_log=just_read.or.(.not.convergence_bug))
   call get_param(PF, mdl, "DETERMINE_TEMP_RHO_TOLERANCE", tol_rho, &
                  "The convergence tolerance for density in determine_temperature.", &
                  units="kg m-3", default=1.0e-4, scale=US%kg_m3_to_R, do_not_log=just_read)
@@ -689,49 +690,69 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
     T(:,:) = temp(:,j,:)
     S(:,:) = salt(:,j,:)
     dT(:,:) = 0.0
+    domore(:) = .true.
     adjust_salt = .true.
     iter_loop: do itt = 1,niter
-      do k=1,nz
+      do k=k_start,nz ; if (domore(k)) then
+        domore(k) = .false.
         call calculate_density(T(:,k), S(:,k), press, rho(:,k), EOS, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
                                       EOS, EOSdom )
-      enddo
-      do k=k_start,nz ; do i=is,ie
-!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. abs(T(i,k)-land_fill) < epsln) then
-        if (abs(rho(i,k)-R_tgt(k))>tol_rho) then
-          if (.not.fit_together) then
-            dT(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
-            T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
-          else
-            I_denom = 1.0 / (drho_dS(i,k)**2 + dT_dS_gauge**2*drho_dT(i,k)**2)
-            dS(i,k) = (R_tgt(k)-rho(i,k)) * drho_dS(i,k) * I_denom
-            dT(i,k) = (R_tgt(k)-rho(i,k)) * dT_dS_gauge**2*drho_dT(i,k) * I_denom
+        do i=is,ie
+!         if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. abs(T(i,k)-land_fill) < epsln) then
+          if (abs(rho(i,k)-R_tgt(k))>tol_rho) then
+            domore(k) = .true.
+            if (.not.fit_together) then
+              dT(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dT(i,k), max_t_adj), -max_t_adj)
+              T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+            else
+              I_denom = 1.0 / (drho_dS(i,k)**2 + dT_dS_gauge**2*drho_dT(i,k)**2)
+              dS(i,k) = (R_tgt(k)-rho(i,k)) * drho_dS(i,k) * I_denom
+              dT(i,k) = (R_tgt(k)-rho(i,k)) * dT_dS_gauge**2*drho_dT(i,k) * I_denom
 
-            T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
-            S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+              T(i,k) = max(min(T(i,k)+dT(i,k), T_max), T_min)
+              S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+            endif
           endif
+        enddo
+      endif ; enddo
+      if (convergence_bug) then
+        ! If this test does anything, it is layout-dependent.
+        if (maxval(abs(dT)) < tol_T) then
+          adjust_salt = .false.
+          exit iter_loop
         endif
-      enddo ; enddo
-      if (maxval(abs(dT)) < tol_T) then
-        adjust_salt = .false.
-        exit iter_loop
       endif
+
+      do_any = .false.
+      do k=k_start,nz ; if (domore(k)) do_any = .true. ; enddo
+      if (.not.do_any) exit iter_loop ! Further iterations will not change anything.
     enddo iter_loop
 
     if (adjust_salt .and. .not.fit_together) then ; do itt = 1,niter
-      do k=1,nz
+      do k=k_start,nz ; if (domore(k)) then
+        domore(k) = .false.
         call calculate_density(T(:,k), S(:,k), press, rho(:,k), EOS, EOSdom )
         call calculate_density_derivs(T(:,k), S(:,k), press, drho_dT(:,k), drho_dS(:,k), &
                                       EOS, EOSdom )
-      enddo
-      do k=k_start,nz ; do i=is,ie
-!       if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. abs(T(i,k)-land_fill) < epsln ) then
-        if (abs(rho(i,k)-R_tgt(k)) > tol_rho) then
-          dS(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
-          S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
-        endif
-      enddo ; enddo
-      if (maxval(abs(dS)) < tol_S) exit
+        do i=is,ie
+!         if (abs(rho(i,k)-R_tgt(k))>tol_rho .and. abs(T(i,k)-land_fill) < epsln ) then
+          if (abs(rho(i,k)-R_tgt(k)) > tol_rho) then
+            dS(i,k) = max(min((R_tgt(k)-rho(i,k)) / drho_dS(i,k), max_s_adj), -max_s_adj)
+            S(i,k) = max(min(S(i,k)+dS(i,k), S_max), S_min)
+            domore(k) = .true.
+          endif
+        enddo
+      endif ; enddo
+
+      if (convergence_bug) then
+        ! If this test does anything, it is layout-dependent.
+        if (maxval(abs(dS)) < tol_S) exit
+      endif
+
+      do_any = .false.
+      do k=k_start,nz ; if (domore(k)) do_any = .true. ; enddo
+      if (.not.do_any) exit ! Further iterations will not change anything
     enddo ; endif
 
     temp(:,j,:) = T(:,:)

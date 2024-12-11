@@ -2504,7 +2504,7 @@ end subroutine MOM_read_vector_3d
 
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale)
+                              fill_value, turns, scale, unscale)
   type(file_type),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2516,7 +2516,13 @@ subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tst
   real,           optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
                                                         !! it is written [a A-1 ~> 1], for example to convert it
                                                         !! from its internal units to the desired units for output
+  real,           optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                        !! it is written [a A-1 ~> 1], for example to convert it
+                                                        !! from its internal units to the desired units for output.
+                                                        !! Here scale and unscale are synonymous, but unscale
+                                                        !! takes precedence if both are present.
 
+  ! Local variables
   real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units [a] or
                                            ! rescaled [A ~> a] then [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
@@ -2524,6 +2530,7 @@ subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tst
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
@@ -2541,7 +2548,7 @@ end subroutine MOM_write_field_legacy_4d
 
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale)
+                              fill_value, turns, scale, unscale)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2553,8 +2560,13 @@ subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tst
   real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
                                                       !! it is written [a A-1 ~> 1], for example to convert it
                                                       !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
-
+  ! Local variables
   real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units [a] or
                                          ! rescaled [A ~> a] then [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
@@ -2562,6 +2574,7 @@ subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tst
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
@@ -2579,7 +2592,7 @@ end subroutine MOM_write_field_legacy_3d
 
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale)
+                              fill_value, turns, scale, unscale)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2591,8 +2604,13 @@ subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tst
   real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
                                                       !! it is written [a A-1 ~> 1], for example to convert it
                                                       !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
-
+  ! Local variables
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units [a] or
                                        ! rescaled [A ~> a] then [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
@@ -2600,6 +2618,7 @@ subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tst
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
@@ -2616,7 +2635,7 @@ end subroutine MOM_write_field_legacy_2d
 
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_value, scale)
+subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2625,13 +2644,19 @@ subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_va
   real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
                                                       !! it is written [a A-1 ~> 1], for example to convert it
                                                       !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
-
+  ! Local variables
   real, dimension(:), allocatable :: array ! A rescaled copy of field [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: i
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if (scale_fac == 1.0) then
     call write_field(IO_handle, field_md, field, tstamp=tstamp)
@@ -2648,7 +2673,7 @@ end subroutine MOM_write_field_legacy_1d
 
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_value, scale)
+subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2657,11 +2682,21 @@ subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_va
   real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
                                                       !! it is written [a A-1 ~> 1], for example to convert it
                                                       !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
+  ! Local variables
+  real :: scale_fac  ! A scaling factor to use before writing the field [a A-1 ~> 1]
   real :: scaled_val ! A rescaled copy of field [a]
 
-  scaled_val = field
-  if (present(scale)) scaled_val = scale*field
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
+
+  scaled_val = field * scale_fac
+
   if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
 
   call write_field(IO_handle, field_md, scaled_val, tstamp=tstamp)
@@ -2670,24 +2705,32 @@ end subroutine MOM_write_field_legacy_0d
 
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale)
+                              fill_value, turns, scale, unscale)
   class(MOM_file),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write
-  real,           optional, intent(in)    :: tstamp     !< Model timestamp
+  real, dimension(:,:,:,:), intent(inout) :: field      !< Unrotated field to write in arbitrary units [A ~> a]
+  real,           optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
   integer,        optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
-  real,           optional, intent(in)    :: fill_value !< Missing data fill value
+  real,           optional, intent(in)    :: fill_value !< Missing data fill value [a]
   integer,        optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
-  real,           optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                        !! multiplied by before it is written
+  real,           optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                        !! it is written [a A-1 ~> 1], for example to convert it
+                                                        !! from its internal units to the desired units for output
+  real,           optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                        !! it is written [a A-1 ~> 1], for example to convert it
+                                                        !! from its internal units to the desired units for output.
+                                                        !! Here scale and unscale are synonymous, but unscale
+                                                        !! takes precedence if both are present.
 
-  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled
-  real :: scale_fac ! A scaling factor to use before writing the array
+  ! Local variables
+  real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
@@ -2704,24 +2747,32 @@ end subroutine MOM_write_field_4d
 
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale)
+                              fill_value, turns, scale, unscale)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real, dimension(:,:,:), intent(inout) :: field      !< Unrotated field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value [a]
   integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
-  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled
-  real :: scale_fac ! A scaling factor to use before writing the array
+  ! Local variables
+  real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
@@ -2738,24 +2789,32 @@ end subroutine MOM_write_field_3d
 
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale)
+                              fill_value, turns, scale, unscale)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
-  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
+  real, dimension(:,:),   intent(inout) :: field      !< Unrotated field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
   integer,      optional, intent(in)    :: tile_count !< PEs per tile (default: 1)
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value [a]
   integer,      optional, intent(in)    :: turns      !< Number of quarter-turns to rotate the data
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
-  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units
-  real :: scale_fac ! A scaling factor to use before writing the array
+  ! Local variables
+  real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units or rescaled [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: qturns ! The number of quarter turns through which to rotate field
 
   qturns = 0 ; if (present(turns)) qturns = modulo(turns, 4)
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if ((qturns == 0) .and. (scale_fac == 1.0)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
@@ -2771,20 +2830,28 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
 end subroutine MOM_write_field_2d
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale)
+subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
-  real, dimension(:),     intent(in)    :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
+  real, dimension(:),     intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value [a]
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
-  real, dimension(:), allocatable :: array ! A rescaled copy of field
-  real :: scale_fac ! A scaling factor to use before writing the array
+  ! Local variables
+  real, dimension(:), allocatable :: array ! A rescaled copy of field in arbtrary unscaled units [a]
+  real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
   integer :: i
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
 
   if (scale_fac == 1.0) then
     call IO_handle%write_field(field_md, field, tstamp=tstamp)
@@ -2800,18 +2867,30 @@ subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, sc
 end subroutine MOM_write_field_1d
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale)
+subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
-  real,                   intent(in)    :: field      !< Field to write
-  real,         optional, intent(in)    :: tstamp     !< Model timestamp
-  real,         optional, intent(in)    :: fill_value !< Missing data fill value
-  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is
-                                                      !! multiplied by before it is written
-  real :: scaled_val ! A rescaled copy of field
+  real,                   intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
+  real,         optional, intent(in)    :: tstamp     !< Model timestamp, often in [days]
+  real,         optional, intent(in)    :: fill_value !< Missing data fill value [a]
+  real,         optional, intent(in)    :: scale      !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output
+  real,         optional, intent(in)    :: unscale    !< A scaling factor that the field is multiplied by before
+                                                      !! it is written [a A-1 ~> 1], for example to convert it
+                                                      !! from its internal units to the desired units for output.
+                                                      !! Here scale and unscale are synonymous, but unscale
+                                                      !! takes precedence if both are present.
 
-  scaled_val = field
-  if (present(scale)) scaled_val = scale*field
+  ! Local variables
+  real :: scale_fac  ! A scaling factor to use before writing the field [a A-1 ~> 1]
+  real :: scaled_val ! A rescaled copy of field in arbtrary unscaled units [a]
+
+  scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
+  if (present(unscale)) scale_fac = unscale
+
+  scaled_val = field * scale_fac
+
   if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
 
   call IO_handle%write_field(field_md, scaled_val, tstamp=tstamp)

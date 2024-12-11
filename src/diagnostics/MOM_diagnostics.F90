@@ -970,9 +970,7 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
 
   if (.not.(CS%KE_term_on .or. (CS%id_KE > 0))) return
 
-  do j=js-1,je ; do i=is-1,ie
-    KE_u(I,j) = 0.0 ; KE_v(i,J) = 0.0
-  enddo ; enddo
+  KE_u(:,:) = 0. ; KE_v(:,:) = 0.
 
   do k=1,nz ; do j=js,je ; do i=is,ie
     KE(i,j,k) = (((u(I,j,k) * u(I,j,k)) + (u(I-1,j,k) * u(I-1,j,k))) &
@@ -1377,7 +1375,7 @@ subroutine post_surface_thermo_diags(IDs, G, GV, US, diag, dt_int, sfc_state, tv
     do j=js,je ; do i=is,ie
       work_2d(i,j) = G%mask2dT(i,j) * (ssh(i,j) + G%bathyT(i,j))
     enddo ; enddo
-    volo = global_area_integral(work_2d, G, scale=US%Z_to_m)
+    volo = global_area_integral(work_2d, G, unscale=US%Z_to_m)
     call post_data(IDs%id_volo, volo, diag)
   endif
 
@@ -1580,6 +1578,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
   logical :: split            ! True if using the barotropic-baroclinic split algorithm
+  logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for calculating the EBT structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_diagnostics" ! This module's name.
@@ -1617,6 +1616,10 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
+  call get_param(param_file, mdl, "INTWAVE_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for calculating EBT structure. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
+                 "We recommend setting this option to false.", default=.true.)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
@@ -1856,9 +1859,9 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if ((CS%id_cg1>0) .or. (CS%id_Rd1>0) .or. (CS%id_cfl_cg1>0) .or. &
       (CS%id_cfl_cg1_x>0) .or. (CS%id_cfl_cg1_y>0) .or. &
       (CS%id_cg_ebt>0) .or. (CS%id_Rd_ebt>0) .or. (CS%id_p_ebt>0)) then
-    call wave_speed_init(CS%wave_speed, remap_answer_date=remap_answer_date, &
+    call wave_speed_init(CS%wave_speed, GV, remap_answer_date=remap_answer_date, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &
-                         wave_speed_tol=wave_speed_tol)
+                         wave_speed_tol=wave_speed_tol, om4_remap_via_sub_cells=om4_remap_via_sub_cells)
   endif
 
   CS%id_mass_wt = register_diag_field('ocean_model', 'mass_wt', diag%axesT1, Time, &

@@ -55,7 +55,7 @@ use MOM_ALE, only : ALE_CS, ALE_initThicknessToCoord, ALE_init, ALE_updateVertic
 use MOM_domains, only : MOM_domains_init, MOM_domain_type, clone_MOM_domain
 use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_regridding, only : regridding_CS, initialize_regridding
-use MOM_regridding, only : regridding_main, set_regrid_params
+use MOM_regridding, only : regridding_main, set_regrid_params, set_h_neglect
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init
 use MOM_variables, only : thermo_var_ptrs
 use MOM_verticalGrid, only : verticalGrid_type, verticalGridInit
@@ -119,7 +119,7 @@ type, public :: ODA_CS ; private
   logical :: use_basin_mask !< If true, use a basin file to delineate weakly coupled ocean basins
   logical :: do_bias_adjustment !< If true, use spatio-temporally varying climatological tendency
                                 !! adjustment for Temperature and Salinity
-  real :: bias_adjustment_multiplier !< A scaling for the bias adjustment
+  real :: bias_adjustment_multiplier !< A scaling for the bias adjustment [nondim]
   integer :: assim_method !< Method: NO_ASSIM,EAKF_ASSIM or OI_ASSIM
   integer :: ensemble_size !< Size of the ensemble
   integer :: ensemble_id = 0 !< id of the current ensemble member
@@ -183,6 +183,8 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   character(len=80) :: remap_scheme
   character(len=80) :: bias_correction_file, inc_file
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
+  real :: h_neglect, h_neglect_edge                 ! small thicknesses [H ~> m or kg m-2]
 
   if (associated(CS)) call MOM_error(FATAL, 'Calling oda_init with associated control structure')
   allocate(CS)
@@ -243,7 +245,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   call get_param(PF, mdl, "INPUTDIR", inputdir)
   call get_param(PF, mdl, "ODA_REMAPPING_SCHEME", remap_scheme, &
                  "This sets the reconstruction scheme used "//&
-                 "for vertical remapping for all variables. "//&
+                 "for vertical remapping for all ODA variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default="PPM_H4")
   call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
@@ -320,8 +322,17 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   call get_param(PF, 'oda_driver', "REGRIDDING_COORDINATE_MODE", coord_mode, &
        "Coordinate mode for vertical regridding.", &
        default="ZSTAR", fail_if_missing=.false.)
+  call get_param(PF, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 do_not_log=.true., default=.true.)
+  call get_param(PF, mdl, "ODA_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+       "If true, use the OM4 remapping-via-subcells algorithm for ODA. "//&
+       "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
+       "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
   call initialize_regridding(CS%regridCS, CS%GV, CS%US, dG%max_depth,PF,'oda_driver',coord_mode,'','')
-  call initialize_remapping(CS%remapCS,remap_scheme)
+
+  h_neglect = set_h_neglect(GV, CS%answer_date, h_neglect_edge)
+  call initialize_remapping(CS%remapCS, remap_scheme, om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
   call set_regrid_params(CS%regridCS, min_thickness=0.)
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
 
@@ -412,7 +423,6 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   real, dimension(SZI_(G),SZJ_(G),CS%nk) :: S  ! Salinity on the analysis grid [S ~> ppt]
   integer :: i, j, m
   integer :: isc, iec, jsc, jec
-  real :: h_neglect, h_neglect_edge                 ! small thicknesses [H ~> m or kg m-2]
 
   ! return if not time for analysis
   if (Time < CS%Time) return
@@ -424,14 +434,6 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   call set_PElist(CS%filter_pelist)
   !call MOM_mesg('Setting prior')
 
-  if (CS%answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
-  endif
-
   ! computational domain for the analysis grid
   isc=CS%Grid%isc;iec=CS%Grid%iec;jsc=CS%Grid%jsc;jec=CS%Grid%jec
   ! array extents for the ensemble member
@@ -440,9 +442,9 @@ subroutine set_prior_tracer(Time, G, GV, h, tv, CS)
   ! remap temperature and salinity from the ensemble member to the analysis grid
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%T(i,j,:), &
-         CS%nk, CS%h(i,j,:), T(i,j,:), h_neglect, h_neglect_edge)
+                          CS%nk, CS%h(i,j,:), T(i,j,:))
     call remapping_core_h(CS%remapCS, GV%ke, h(i,j,:), tv%S(i,j,:), &
-         CS%nk, CS%h(i,j,:), S(i,j,:), h_neglect, h_neglect_edge)
+                          CS%nk, CS%h(i,j,:), S(i,j,:))
   enddo ; enddo
   ! cast ensemble members to the analysis domain
   do m=1,CS%ensemble_size
@@ -680,7 +682,6 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
                                                            !! DA [C T-1 ~> degC s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: S_tend !< The salinity tendency adjustment from DA
                                                           !! [S T-1 ~> ppt s-1]
-  real :: h_neglect, h_neglect_edge                 ! small thicknesses [H ~> m or kg m-2]
 
   if (.not. associated(CS)) return
   if (CS%assim_method == NO_ASSIM .and. (.not. CS%do_bias_adjustment)) return
@@ -697,20 +698,12 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
     S_tend = S_tend + CS%S_bc_tend
   endif
 
-  if (CS%answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
-  endif
-
   isc=G%isc; iec=G%iec; jsc=G%jsc; jec=G%jec
   do j=jsc,jec; do i=isc,iec
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), T_tend(i,j,:), &
-         G%ke, h(i,j,:), T_tend_inc(i,j,:), h_neglect, h_neglect_edge)
+                          G%ke, h(i,j,:), T_tend_inc(i,j,:))
     call remapping_core_h(CS%remapCS, CS%nk, CS%h(i,j,:), S_tend(i,j,:), &
-         G%ke, h(i,j,:), S_tend_inc(i,j,:), h_neglect, h_neglect_edge)
+                          G%ke, h(i,j,:), S_tend_inc(i,j,:))
   enddo; enddo
 
 
@@ -734,13 +727,17 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
 
 end subroutine apply_oda_tracer_increments
 
+!> Set up the grid of thicknesses at tracer points throughout the global domain
   subroutine set_up_global_tgrid(T_grid, CS, G)
     type(grid_type), pointer :: T_grid !< global tracer grid
     type(ODA_CS), pointer, intent(in) :: CS !< A pointer to DA control structure.
     type(ocean_grid_type), pointer :: G !< domain and grid information for ocean model
 
     ! local variables
-    real, dimension(:,:), allocatable :: global2D, global2D_old
+    real, dimension(:,:), allocatable :: &
+      global2D, &  ! A layer thickness in the entire global domain [H ~> m or kg m-2]
+      global2D_old ! The thickness of the layer above the one in global2D in the entire
+                   ! global domain [H ~> m or kg m-2]
     integer :: i, j, k
 
     !    get global grid information from ocean_model
@@ -769,6 +766,8 @@ end subroutine apply_oda_tracer_increments
     do k = 1, CS%nk
       call global_field(G%Domain%mpp_domain, CS%h(:,:,k), global2D)
       do i=1,CS%ni ; do j=1,CS%nj
+        ! ###Does the next line need to be revised?  Perhaps it should be
+        ! if ( global2D(i,j) > 1.0*GV%H_to_m ) then
         if ( global2D(i,j) > 1 ) then
            T_grid%mask(i,j,k) = 1.0
         endif

@@ -8,6 +8,7 @@ module MOM_diag_manager_infra
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use, intrinsic :: iso_fortran_env, only : real64
 use diag_axis_mod,    only : fms_axis_init=>diag_axis_init
 use diag_axis_mod,    only : fms_get_diag_axis_name => get_diag_axis_name
 use diag_axis_mod,    only : EAST, NORTH
@@ -359,7 +360,7 @@ end function send_data_infra_3d
 logical function send_data_infra_2d_r8(diag_field_id, field, is_in, ie_in, js_in, je_in, &
                                        time, mask, rmask, weight, err_msg)
   integer,                           intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
-  real(kind=8), dimension(:,:),      intent(in) :: field !< A 2-d array of values being recorded
+  real(kind=real64), dimension(:,:), intent(in) :: field !< A 2-d array of values being recorded
   integer,                 optional, intent(in) :: is_in !< The starting i-index for the data being recorded
   integer,                 optional, intent(in) :: ie_in !< The end i-index for the data being recorded
   integer,                 optional, intent(in) :: js_in !< The starting j-index for the data being recorded
@@ -382,7 +383,7 @@ end function send_data_infra_2d_r8
 logical function send_data_infra_3d_r8(diag_field_id, field, is_in, ie_in, js_in, je_in, ks_in, ke_in, &
                                     time, mask, rmask, weight, err_msg)
   integer,                             intent(in) :: diag_field_id !< The diagnostic manager identifier for this field
-  real(kind=8), dimension(:,:,:),      intent(in) :: field !< A rank 1 array of floating point values being recorded
+  real(kind=real64), dimension(:,:,:), intent(in) :: field !< A rank 1 array of floating point values being recorded
   integer,                   optional, intent(in) :: is_in !< The starting i-index for the data being recorded
   integer,                   optional, intent(in) :: ie_in !< The end i-index for the data being recorded
   integer,                   optional, intent(in) :: js_in !< The starting j-index for the data being recorded

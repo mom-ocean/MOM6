@@ -265,7 +265,8 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! diffu = horizontal viscosity terms (u,h)
   call enable_averages(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u, v, h, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, STOCH=STOCH)
+  call horizontal_viscosity(u, v, h, uh, vh, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, &
+    STOCH=STOCH)
   call cpu_clock_end(id_clock_horvisc)
   call disable_averaging(CS%diag)
 

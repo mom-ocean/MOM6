@@ -15,13 +15,6 @@ implicit none ; private
 
 public PPM_reconstruction, PPM_boundary_extrapolation, PPM_monotonicity
 
-!> A tiny width that is so small that adding it to cell widths does not
-!! change the value due to a computational representation. It is used
-!! to avoid division by zero.
-!! @note This is a dimensional parameter and should really include a unit
-!!       conversion.
-real, parameter :: hNeglect_dflt = 1.E-30
-
 contains
 
 !> Builds quadratic polynomials coefficients from cell mean and edge values.
@@ -31,7 +24,7 @@ subroutine PPM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect, answ
   real, dimension(N),   intent(in)    :: u !< Cell averages in arbitrary coordinates [A]
   real, dimension(N,2), intent(inout) :: edge_values !< Edge values [A]
   real, dimension(N,3), intent(inout) :: ppoly_coef !< Polynomial coefficients, mainly [A]
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  real,                 intent(in)    :: h_neglect !< A negligibly small width [H]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
@@ -64,7 +57,7 @@ subroutine PPM_limiter_standard( N, h, u, edge_values, h_neglect, answer_date )
   real, dimension(:),   intent(in)    :: h !< cell widths (size N) [H]
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
   real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values [A]
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  real,                 intent(in)    :: h_neglect !< A negligibly small width [H]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables
@@ -190,7 +183,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_negle
   real, dimension(:),   intent(in)    :: u !< cell averages (size N) [A]
   real, dimension(:,:), intent(inout) :: edge_values    !< edge values of piecewise polynomials [A]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly [A]
-  real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
+  real,                 intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
 
   ! Local variables
@@ -204,9 +197,6 @@ subroutine PPM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_negle
                         ! the cell being worked on [A]
   real    :: slope      ! The normalized slope [A]
   real    :: exp1, exp2 ! Temporary expressions [A2]
-  real    :: hNeglect   ! A negligibly small width used in cell reconstructions [H]
-
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! ----- Left boundary -----
   i0 = 1
@@ -219,7 +209,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_negle
   ! Compute the left edge slope in neighboring cell and express it in
   ! the global coordinate system
   b = ppoly_coef(i1,2)
-  u1_r = b *((h0+hNeglect)/(h1+hNeglect))     ! derivative evaluated at xi = 0.0,
+  u1_r = b *((h0+h_neglect)/(h1+h_neglect))     ! derivative evaluated at xi = 0.0,
                         ! expressed w.r.t. xi (local coord. system)
 
   ! Limit the right slope by the PLM limited slope
@@ -273,7 +263,7 @@ subroutine PPM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_negle
   b = ppoly_coef(i0,2)
   c = ppoly_coef(i0,3)
   u1_l = (b + 2*c)                  ! derivative evaluated at xi = 1.0
-  u1_l = u1_l * ((h1+hNeglect)/(h0+hNeglect))
+  u1_l = u1_l * ((h1+h_neglect)/(h0+h_neglect))
 
   ! Limit the left slope by the PLM limited slope
   slope = 2.0 * ( u1 - u0 )

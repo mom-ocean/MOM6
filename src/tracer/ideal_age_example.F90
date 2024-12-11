@@ -342,8 +342,8 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   if (CS%use_real_BL_depth .and. .not. present(Hbl)) then
-    call MOM_error(FATAL,"Attempting to use real boundary layer depth for ideal age tracers, &
-         but no valid boundary layer scheme was found")
+    call MOM_error(FATAL, "Attempting to use real boundary layer depth for ideal age tracers, " &
+         // "but no valid boundary layer scheme was found")
   endif
 
   if (CS%use_real_BL_depth .and. present(Hbl)) then
@@ -559,7 +559,7 @@ subroutine ideal_age_tracer_surface_state(sfc_state, h, G, GV, CS)
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
       call set_coupler_type_data(CS%tr(:,:,1,m), CS%ind_tr(m), sfc_state%tr_fields, &
-                   idim=(/isd, is, ie, ied/), jdim=(/jsd, js, je, jed/) )
+                   idim=(/isd, is, ie, ied/), jdim=(/jsd, js, je, jed/), turns=G%HI%turns)
     enddo
   endif
 

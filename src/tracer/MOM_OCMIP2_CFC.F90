@@ -453,9 +453,9 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
   !   The -GV%Rho0 changes the sign convention of the flux and with the scaling factors changes
   ! the units of the flux from [Conc. m s-1] to [Conc. R Z T-1 ~> Conc. kg m-2 s-1].
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, CFC11_flux, &
-                                 scale_factor=-GV%Rho0*US%m_to_Z*US%T_to_s, idim=idim, jdim=jdim)
+                                 scale_factor=-GV%Rho0*US%m_to_Z*US%T_to_s, idim=idim, jdim=jdim, turns=G%HI%turns)
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, CFC12_flux, &
-                                 scale_factor=-GV%Rho0*US%m_to_Z*US%T_to_s, idim=idim, jdim=jdim)
+                                 scale_factor=-GV%Rho0*US%m_to_Z*US%T_to_s, idim=idim, jdim=jdim, turns=G%HI%turns)
 
   ! Use a tridiagonal solver to determine the concentrations after the
   ! surface source is applied and diapycnal advection and diffusion occurs.
@@ -587,13 +587,13 @@ subroutine OCMIP2_CFC_surface_state(sfc_state, h, G, GV, US, CS)
   !   These calls load these values into the appropriate arrays in the
   ! coupler-type structure.
   call set_coupler_type_data(CFC11_alpha, CS%ind_cfc_11_flux, sfc_state%tr_fields, &
-                             solubility=.true., idim=idim, jdim=jdim)
+                             solubility=.true., idim=idim, jdim=jdim, turns=G%HI%turns)
   call set_coupler_type_data(CFC11_Csurf, CS%ind_cfc_11_flux, sfc_state%tr_fields, &
-                             idim=idim, jdim=jdim)
+                             idim=idim, jdim=jdim, turns=G%HI%turns)
   call set_coupler_type_data(CFC12_alpha, CS%ind_cfc_12_flux, sfc_state%tr_fields, &
-                             solubility=.true., idim=idim, jdim=jdim)
+                             solubility=.true., idim=idim, jdim=jdim, turns=G%HI%turns)
   call set_coupler_type_data(CFC12_Csurf, CS%ind_cfc_12_flux, sfc_state%tr_fields, &
-                             idim=idim, jdim=jdim)
+                             idim=idim, jdim=jdim, turns=G%HI%turns)
 
 end subroutine OCMIP2_CFC_surface_state
 

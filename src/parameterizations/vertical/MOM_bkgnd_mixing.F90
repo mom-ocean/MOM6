@@ -234,19 +234,19 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
 
     call get_param(param_file, mdl, "BCKGRND_VDC1", CS%bckgrnd_vdc1, &
                    "Background diffusivity (Ledwell) when HORIZ_VARYING_BACKGROUND=True", &
-                   units="m2 s-1",default = 0.16e-04, scale=GV%m2_s_to_HZ_T)
+                   units="m2 s-1", default=0.16e-04, scale=GV%m2_s_to_HZ_T)
 
     call get_param(param_file, mdl, "BCKGRND_VDC_EQ", CS%bckgrnd_vdc_eq, &
                    "Equatorial diffusivity (Gregg) when HORIZ_VARYING_BACKGROUND=True", &
-                   units="m2 s-1",default = 0.01e-04, scale=GV%m2_s_to_HZ_T)
+                   units="m2 s-1", default=0.01e-04, scale=GV%m2_s_to_HZ_T)
 
     call get_param(param_file, mdl, "BCKGRND_VDC_PSIM", CS%bckgrnd_vdc_psim, &
                    "Max. PSI induced diffusivity (MacKinnon) when HORIZ_VARYING_BACKGROUND=True", &
-                   units="m2 s-1",default = 0.13e-4, scale=GV%m2_s_to_HZ_T)
+                   units="m2 s-1", default=0.13e-4, scale=GV%m2_s_to_HZ_T)
 
     call get_param(param_file, mdl, "BCKGRND_VDC_BAN", CS%bckgrnd_vdc_Banda, &
                    "Banda Sea diffusivity (Gordon) when HORIZ_VARYING_BACKGROUND=True", &
-                   units="m2 s-1",default = 1.0e-4, scale=GV%m2_s_to_HZ_T)
+                   units="m2 s-1", default=1.0e-4, scale=GV%m2_s_to_HZ_T)
   endif
 
   call get_param(param_file, mdl, "PRANDTL_BKGND", CS%prandtl_bkgnd, &
