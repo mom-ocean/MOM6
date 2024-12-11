@@ -982,8 +982,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   real, dimension(SZI_(G)) :: &
     Rho_cv_BL   ! The coordinate potential density in the deepest variable
                 ! density near-surface layer [R ~> kg m-3].
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    dz_geo      ! The change in geopotential thickness through a layer [L2 T-2 ~> m2 s-2].
+  !real, dimension(SZI_(G),SZJ_(G)) :: &
+  !!!real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
+  !  dz_geo      ! The change in geopotential thickness through a layer [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     pa          ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
                 ! the interface atop a layer [R L2 T-2 ~> Pa].
@@ -1073,6 +1074,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                              ! consistent with what is used in the density integral routines [R L2 T-2 ~> Pa]
   real :: p0(SZI_(G), SZJ_(G)) ! An array of zeros to use for pressure [R L2 T-2 ~> Pa].
   real :: dz_geo_sfc         ! The change in surface geopotential height between adjacent cells [L2 T-2 ~> m2 s-2]
+  real :: dz_geo2, dz_geo3   ! Some dumb constants
   real :: GxRho0             ! The gravitational acceleration times mean ocean density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: GxRho_ref          ! The gravitational acceleration times reference density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: rho0_int_density   ! Rho0 used in int_density_dz_* subroutines [R ~> kg m-3]
@@ -1290,6 +1292,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp   map(to: h) &
   !$omp   map(alloc: dpa, intx_dpa, inty_dpa, intz_dpa)
 
+  !!$omp target enter data map(alloc: dz_geo)
+
   ! Calculate 4 integrals through the layer that are required in the
   ! subsequent calculation.
   if (use_EOS) then
@@ -1335,26 +1339,93 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                                     MassWghtInterpVanOnly=CS%MassWghtInterpVanOnly, h_nv=CS%h_nonvanished)
     enddo
   else
+    !$omp target
     do k=1,nz
-      !$OMP parallel do default(shared)
+      !!print *, "pre"
+      !!print *, k, "h", sum(h(Isq:Ieq+1,Jsq:Jeq+1,k))
+      !!print *, k, "GV%g_Earth", GV%g_Earth
+      !!print *, k, "GV%H_to_Z", GV%H_to_Z
+      !!!print *, k, "GV%Rlay(k)", GV%Rlay(k)
+      !!print *, k, "rho_ref", rho_ref
+
+      !call hchksum(h(:,:,k), "pre h", G%HI, haloshift=1)
+
+      !!$omp target
+
+      !!$OMP parallel do default(shared)
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
-        dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo(i,j)
-        intz_dpa(i,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * dz_geo(i,j)*h(i,j,k)
+        !!* Does not work *!
+        !dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
+        !dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo(i,j)
+        !intz_dpa(i,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * dz_geo(i,j)*h(i,j,k)
+
+        !* Works but needs a new 3d array *!
+        !!dz_geo(i,j,k) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
+        !!dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo(i,j,k)
+        !!intz_dpa(i,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * dz_geo(i,j,k)*h(i,j,k)
+
+        !* Works but requires re-computing dz_geo in next two loops *!
+        dz_geo2 = GV%g_Earth * GV%H_to_Z * h(i,j,k)
+        dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo2
+        intz_dpa(i,j,k) = 0.5 * (GV%Rlay(k) - rho_ref) * dz_geo2 * h(i,j,k)
+
+        !!* Does not work *!
+        !dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
+        !dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo(i,j)
+        !intz_dpa(i,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * dz_geo(i,j)*h(i,j,k)
+        !intx_dpa(I-1,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i-1,j) + dz_geo(i,j))
+        !inty_dpa(i,J-1,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j-1) + dz_geo(i,j))
       enddo ; enddo
-      !$OMP parallel do default(shared)
+      !!$OMP parallel do default(shared)
+      !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
-        intx_dpa(I,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i+1,j))
+        !intx_dpa(I,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i+1,j))
+        !!intx_dpa(I,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j,k) + dz_geo(i+1,j,k))
+
+        dz_geo2 = GV%g_Earth * GV%H_to_Z * h(i,j,k)
+        dz_geo3 = GV%g_Earth * GV%H_to_Z * h(i+1,j,k)
+        intx_dpa(I,j,k) = 0.5 * (GV%Rlay(k) - rho_ref) * (dz_geo2 + dz_geo3)
       enddo ; enddo
-      !$OMP parallel do default(shared)
+      !!$OMP parallel do default(shared)
+      !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
-        inty_dpa(i,J,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i,j+1))
+        !inty_dpa(i,J,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i,j+1))
+        !!inty_dpa(i,J,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j,k) + dz_geo(i,j+1,k))
+
+        dz_geo2 = GV%g_Earth * GV%H_to_Z * h(i,j+1,k)
+        dz_geo3 = GV%g_Earth * GV%H_to_Z * h(i,j,k)
+        inty_dpa(i,J,k) = 0.5 * (GV%Rlay(k) - rho_ref) * (dz_geo2 + dz_geo3)
       enddo ; enddo
+      !!$omp end target
+
+      !!$omp target update from(dz_geo, dpa, intx_dpa, inty_dpa, intz_dpa)
+      !print *, "post"
+      !print *, k, "dz_geo", sum(dz_geo(Isq:Ieq+1,Jsq:Jeq+1))
+      !print *, k, "dpa", sum(dpa(Isq:Ieq+1,Jsq:Jeq+1,k))
+      !print *, k, "intx_dpa", sum(intx_dpa(Isq:Ieq,js:je,k))
+      !print *, k, "inty_dpa", sum(inty_dpa(is:ie,Jsq:Jeq,k))
+      !print *, k, "intz_dpa", sum(intz_dpa(Isq:Ieq+1,Jsq:Jeq+1,k))
+      !print *, "-----"
+      !print *, k, "dz_geo(:,:)", dz_geo(Isq:Ieq+1,Jsq:Jeq+1)
+      !print *, "-----"
+      !print *, k, "intx_dpa(:,:)", intx_dpa(Isq:Ieq+1,Jsq:Jeq+1)
+      !print *, "-----"
+      !print *, k, "inty_dpa(:,:)", inty_dpa(Isq:Ieq+1,Jsq:Jeq+1)
+      !print *, "====="
+
+      !call hchksum(dz_geo(:,:), "post dz_geo", G%HI, haloshift=1)
+      !!call hchksum(dz_geo(:,:,k), "post dz_geo", G%HI, haloshift=1)
+      !call hchksum(dpa(:,:,k), "post dpa", G%HI, haloshift=1)
+      !call hchksum(intz_dpa(:,:,k), "post intz_dpa", G%HI, haloshift=1)
+      !call uvchksum("post intxy_dpa", intx_dpa(:,:,k), inty_dpa(:,:,k), G%HI)
     enddo
+    !$omp end target
   endif
 
   ! TODO: Get rid of this!  Run the block above on GPU...
-  !$omp target update to(dpa, intx_dpa, inty_dpa, intz_dpa)
+  !!$omp target update to(dpa, intx_dpa, inty_dpa, intz_dpa)
+  !!$omp target exit data map(delete: dz_geo)
 
   !$omp target enter data map(to: pa)
 
