@@ -257,7 +257,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
     h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
   endif
 
-  call initialize_remapping( CS%remapCS, string, &
+  call initialize_remapping( CS%remapCS, string, nk=GV%ke, &
                              boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
@@ -265,7 +265,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                              om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                              answer_date=CS%answer_date, &
                              h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
-  call initialize_remapping( CS%vel_remapCS, vel_string, &
+  call initialize_remapping( CS%vel_remapCS, vel_string, nk=GV%ke, &
                              boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &

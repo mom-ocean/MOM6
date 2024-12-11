@@ -267,16 +267,16 @@ $(BUILD)/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 # Build executables
 .NOTPARALLEL:$(foreach e,$(UNIT_EXECS),$(BUILD)/unit/$(e))
 $(BUILD)/unit/test_%: $(BUILD)/unit/Makefile FORCE
-	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+	cd $(@D) && $(TIME) $(MAKE) $(@F)
 $(BUILD)/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
 
 .NOTPARALLEL:$(foreach e,$(TIMING_EXECS),$(BUILD)/timing/$(e))
 $(BUILD)/timing/time_%: $(BUILD)/timing/Makefile FORCE
-	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+	cd $(@D) && $(TIME) $(MAKE) $(@F)
 $(BUILD)/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
 
 $(BUILD)/%/MOM6: $(BUILD)/%/Makefile FORCE
-	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+	cd $(@D) && $(TIME) $(MAKE) $(@F)
 
 # Target codebase should use its own build system
 $(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
