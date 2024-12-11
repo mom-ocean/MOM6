@@ -340,8 +340,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT [L2 ~> m2].
   real :: KE(SZK_(GV)) ! The total kinetic energy of a layer [J].
   real :: PE(SZK_(GV)+1)! The available potential energy of an interface [J].
-  real :: KE_tot       ! The total kinetic energy [J].
-  real :: PE_tot       ! The total available potential energy [J].
+  real :: KE_tot       ! The total kinetic energy [R Z L4 T-2 ~> J].
+  real :: PE_tot       ! The total available potential energy [R Z L4 T-2 ~> J].
   real :: Z_0APE(SZK_(GV)+1) ! The uniform depth which overlies the same
                        ! volume as is below an interface [Z ~> m].
   real :: H_0APE(SZK_(GV)+1) ! A version of Z_0APE, converted to m, usually positive [m].
@@ -351,9 +351,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
                        ! the total mass of the ocean [m2 s-2].
   real :: vol_lay(SZK_(GV)) ! The volume of fluid in a layer [Z L2 ~> m3].
   real :: volbelow     ! The volume of all layers beneath an interface [Z L2 ~> m3].
-  real :: mass_lay(SZK_(GV)) ! The mass of fluid in a layer [kg].
+  real :: mass_lay(SZK_(GV)) ! The mass of fluid in a layer [R Z L2 ~> kg].
+  real :: mass_tot_RZL2   ! The total mass of the ocean [R Z L2 ~> kg].
   real :: mass_tot     ! The total mass of the ocean [kg].
-  real :: vol_tot      ! The total ocean volume [m3].
+  real :: vol_tot      ! The total ocean volume [Z L2 ~> m3].
   real :: mass_chg     ! The change in total ocean mass of fresh water since
                        ! the last call to this subroutine [kg].
   real :: mass_anom    ! The change in fresh water that cannot be accounted for
@@ -399,14 +400,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     tmp1               ! A temporary array used in reproducing sums [various]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
-    PE_pt              ! The potential energy at each point [J].
+    PE_pt              ! The potential energy at each point [R Z L4 T-2 ~> J].
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Temp_int, Salt_int ! Layer and cell integrated heat and salt [J] and [g Salt].
-  real :: HL2_to_kg    ! A conversion factor from a thickness-volume to mass [kg H-1 L-2 ~> kg m-3 or 1]
-  real :: KE_scale_factor   ! The combination of unit rescaling factors in the kinetic energy
-                            ! calculation [kg T2 H-1 L-2 s-2 ~> kg m-3 or 1]
-  real :: PE_scale_factor   ! The combination of unit rescaling factors in the potential energy
-                            ! calculation [kg T2 R-1 Z-1 L-2 s-2 ~> 1]
+    Temp_int, Salt_int ! Layer and cell integrated heat and salt [Q R Z L2 ~> J] and [g Salt].
+  real :: RZL4_to_J    ! The combination of unit rescaling factors to convert the spatially integrated
+                       ! kinetic or potential energies into mks units [T2 kg m2 R-1 Z-1 L-4 s-2 ~> 1]
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, nz, m, Isq, Ieq, Jsq, Jeq, isr, ier, jsr, jer
@@ -532,7 +530,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
 
-  HL2_to_kg = GV%H_to_kg_m2*US%L_to_m**2
+  RZL4_to_J = US%RZL2_to_kg*US%L_T_to_m_s**2 ! Used to unscale energies
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
@@ -544,28 +542,21 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     areaTm(i,j) = G%mask2dT(i,j)*G%areaT(i,j)
   enddo ; enddo
 
+  tmp1(:,:,:) = 0.0
+  do k=1,nz ; do j=js,je ; do i=is,ie
+    tmp1(i,j,k) = h(i,j,k) * (GV%H_to_RZ*areaTm(i,j))
+  enddo ; enddo ; enddo
+  mass_tot_RZL2 = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP, unscale=US%RZL2_to_kg)
+
   if (GV%Boussinesq) then
-    tmp1(:,:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      tmp1(i,j,k) = h(i,j,k) * (HL2_to_kg*areaTm(i,j))
-    enddo ; enddo ; enddo
-
-    mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
-    do k=1,nz ; vol_lay(k) = (US%m_to_L**2*GV%H_to_Z/GV%H_to_kg_m2)*mass_lay(k) ; enddo
+    do k=1,nz ; vol_lay(k) = (1.0 / GV%Rho0) * mass_lay(k) ; enddo
   else
-    tmp1(:,:,:) = 0.0
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      tmp1(i,j,k) = HL2_to_kg * h(i,j,k) * areaTm(i,j)
-    enddo ; enddo ; enddo
-    mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP)
-
     if (CS%do_APE_calc) then
       call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
       do k=1,nz ; do j=js,je ; do i=is,ie
-        tmp1(i,j,k) = US%Z_to_m*US%L_to_m**2*(eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
+        tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo
-      vol_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=vol_lay)
-      do k=1,nz ; vol_lay(k) = US%m_to_Z*US%m_to_L**2 * vol_lay(k) ; enddo
+      vol_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=vol_lay, unscale=US%Z_to_m*US%L_to_m**2)
     endif
   endif ! Boussinesq
 
@@ -692,7 +683,6 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     !   Calculate the Available Potential Energy integrated over each interface.  With a nonlinear
     ! equation of state or with a bulk mixed layer this calculation is only approximate.
     ! With an ALE model this does not make sense and should be revisited.
-    PE_scale_factor = US%RZ_to_kg_m2*US%L_to_m**2*US%L_T_to_m_s**2
     PE_pt(:,:,:) = 0.0
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
@@ -702,7 +692,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
           hint = Z_0APE(K) + (hbelow - (G%bathyT(i,j) + G%Z_ref))
           hbot = Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref)
           hbot = (hbot + ABS(hbot)) * 0.5
-          PE_pt(i,j,K) = (0.5 * PE_scale_factor * areaTm(i,j)) * (GV%Rho0*GV%g_prime(K)) * &
+          PE_pt(i,j,K) = (0.5 * areaTm(i,j)) * (GV%Rho0*GV%g_prime(K)) * &
                   (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -711,7 +701,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
         do K=nz,1,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref), 0.0)
-          PE_pt(i,j,K) = (0.5 * PE_scale_factor * areaTm(i,j) * (GV%Rho0*GV%g_prime(K))) * &
+          PE_pt(i,j,K) = (0.5 * areaTm(i,j) * (GV%Rho0*GV%g_prime(K))) * &
                          (hint * hint - hbot * hbot)
         enddo
       enddo ; enddo
@@ -720,47 +710,44 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
         do K=nz,2,-1
           hint = Z_0APE(K) + eta(i,j,K)  ! eta and H_0 have opposite signs.
           hbot = max(Z_0APE(K) - (G%bathyT(i,j) + G%Z_ref), 0.0)
-          PE_pt(i,j,K) = (0.25 * PE_scale_factor * areaTm(i,j) * &
+          PE_pt(i,j,K) = (0.25 * areaTm(i,j) * &
                           ((GV%Rlay(k)+GV%Rlay(k-1))*GV%g_prime(K))) * &
                          (hint * hint - hbot * hbot)
         enddo
         hint = Z_0APE(1) + eta(i,j,1)  ! eta and H_0 have opposite signs.
         hbot = max(Z_0APE(1) - (G%bathyT(i,j) + G%Z_ref), 0.0)
-        PE_pt(i,j,1) = (0.5 * PE_scale_factor * areaTm(i,j) * (GV%Rlay(1)*GV%g_prime(1))) * &
+        PE_pt(i,j,1) = (0.5 * areaTm(i,j) * (GV%Rlay(1)*GV%g_prime(1))) * &
                        (hint * hint - hbot * hbot)
       enddo ; enddo
     endif
 
-    PE_tot = reproducing_sum(PE_pt, isr, ier, jsr, jer, sums=PE)
+    PE_tot = reproducing_sum(PE_pt, isr, ier, jsr, jer, sums=PE, unscale=RZL4_to_J)
     do k=1,nz+1 ; H_0APE(K) = US%Z_to_m*Z_0APE(K) ; enddo
   else
     PE_tot = 0.0
     do k=1,nz+1 ; PE(K) = 0.0 ; H_0APE(K) = 0.0 ; enddo
   endif
 
-! Calculate the Kinetic Energy integrated over each layer.
-  KE_scale_factor = HL2_to_kg*US%L_T_to_m_s**2
+  ! Calculate the Kinetic Energy integrated over each layer.
   tmp1(:,:,:) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
-    tmp1(i,j,k) = (0.25 * KE_scale_factor * (areaTm(i,j) * h(i,j,k))) * &
+    tmp1(i,j,k) = (0.25 * GV%H_to_RZ*(areaTm(i,j) * h(i,j,k))) * &
             (((u(I-1,j,k)**2) + (u(I,j,k)**2)) + ((v(i,J-1,k)**2) + (v(i,J,k)**2)))
   enddo ; enddo ; enddo
 
-  KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=KE)
+  KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=KE, unscale=RZL4_to_J)
 
-  toten = KE_tot + PE_tot
-
-  Salt = 0.0 ; Heat = 0.0
+  ! Use reproducing sums to do global integrals relate to the heat, salinity and water budgets.
   if (CS%use_temperature) then
     Temp_int(:,:) = 0.0 ; Salt_int(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      Salt_int(i,j) = Salt_int(i,j) + US%S_to_ppt*tv%S(i,j,k) * &
-                      (h(i,j,k)*(HL2_to_kg * areaTm(i,j)))
-      Temp_int(i,j) = Temp_int(i,j) + (US%Q_to_J_kg*tv%C_p * tv%T(i,j,k)) * &
-                      (h(i,j,k)*(HL2_to_kg * areaTm(i,j)))
+      Salt_int(i,j) = Salt_int(i,j) + tv%S(i,j,k) * (h(i,j,k)*(GV%H_to_RZ * areaTm(i,j)))
+      Temp_int(i,j) = Temp_int(i,j) + (tv%C_p * tv%T(i,j,k)) * (h(i,j,k)*(GV%H_to_RZ * areaTm(i,j)))
     enddo ; enddo ; enddo
-    salt_EFP = reproducing_sum_EFP(Salt_int, isr, ier, jsr, jer, only_on_PE=.true.)
-    heat_EFP = reproducing_sum_EFP(Temp_int, isr, ier, jsr, jer, only_on_PE=.true.)
+    salt_EFP = reproducing_sum_EFP(Salt_int, isr, ier, jsr, jer, only_on_PE=.true., &
+                                   unscale=US%RZL2_to_kg*US%S_to_ppt)
+    heat_EFP = reproducing_sum_EFP(Temp_int, isr, ier, jsr, jer, only_on_PE=.true., &
+                                   unscale=US%RZL2_to_kg*US%Q_to_J_kg)
 
     ! Combining the sums avoids multiple blocking all-PE updates.
     EFP_list(1) = salt_EFP ;  EFP_list(2) = heat_EFP ; EFP_list(3) = CS%fresh_water_in_EFP
@@ -770,13 +757,11 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     salt_EFP = EFP_list(1) ; heat_EFP = EFP_list(2) ; CS%fresh_water_in_EFP = EFP_list(3)
     CS%net_salt_in_EFP = EFP_list(4) ; CS%net_heat_in_EFP = EFP_list(5)
 
-    Salt = EFP_to_real(salt_EFP)
-    Heat = EFP_to_real(heat_EFP)
   else
     call EFP_sum_across_PEs(CS%fresh_water_in_EFP)
   endif
 
-! Calculate the maximum CFL numbers.
+  ! Calculate the maximum CFL numbers.
   max_CFL(1:2) = 0.0
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     CFL_Iarea = G%IareaT(i,j)
@@ -803,7 +788,12 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   call max_across_PEs(max_CFL, 2)
 
+  ! From this point onward, many of the calculations set or use variables in unscaled (mks) units.
+
+  Salt = 0.0 ; Heat = 0.0
   if (CS%use_temperature) then
+    Salt = EFP_to_real(salt_EFP)
+    Heat = EFP_to_real(heat_EFP)
     if (CS%previous_calls == 0) then
       CS%salt_prev_EFP = salt_EFP ; CS%heat_prev_EFP = heat_EFP
     endif
@@ -826,6 +816,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   endif
   mass_chg = EFP_to_real(mass_chg_EFP)
 
+  mass_tot = US%RZL2_to_kg * mass_tot_RZL2
   if (CS%use_temperature) then
     salin = Salt / mass_tot
     salin_anom = Salt_anom / mass_tot
@@ -833,6 +824,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     temp = heat / (mass_tot*US%Q_to_J_kg*US%degC_to_C*tv%C_p)
     temp_anom = Heat_anom / (mass_tot*US%Q_to_J_kg*US%degC_to_C*tv%C_p)
   endif
+  toten = RZL4_to_J * (KE_tot + PE_tot)
   En_mass = toten / mass_tot
 
   call get_time(day, start_of_day, num_days)
@@ -952,9 +944,12 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
     call CS%fileenergy_nc%write_field(CS%fields(1), real(CS%ntrunc), reday)
     call CS%fileenergy_nc%write_field(CS%fields(2), toten, reday)
+    do k=1,nz+1 ; PE(K) = RZL4_to_J*PE(K) ; enddo
     call CS%fileenergy_nc%write_field(CS%fields(3), PE, reday)
+    do k=1,nz ; KE(k) = RZL4_to_J*KE(k) ; enddo
     call CS%fileenergy_nc%write_field(CS%fields(4), KE, reday)
     call CS%fileenergy_nc%write_field(CS%fields(5), H_0APE, reday)
+    do k=1,nz ; mass_lay(k) = US%RZL2_to_kg*mass_lay(k) ; enddo
     call CS%fileenergy_nc%write_field(CS%fields(6), mass_lay, reday)
 
     call CS%fileenergy_nc%write_field(CS%fields(7), mass_tot, reday)
@@ -1018,19 +1013,17 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
                                               !! to MOM_sum_output_init.
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    FW_in, &   ! The net fresh water input, integrated over a timestep [kg].
+    FW_in, &   ! The net fresh water input, integrated over a timestep [R Z L2 ~> kg].
     salt_in, & ! The total salt added by surface fluxes, integrated
                ! over a time step [ppt kg].
     heat_in    ! The total heat added by surface fluxes, integrated
-               ! over a time step [J].
-  real :: RZL2_to_kg ! A combination of scaling factors for mass [kg R-1 Z-1 L-2 ~> 1]
-  real :: QRZL2_to_J ! A combination of scaling factors for heat [J Q-1 R-1 Z-1 L-2 ~> 1]
+               ! over a time step [Q R Z L2 ~> J].
 
   type(EFP_type) :: &
     FW_in_EFP,   &   ! The net fresh water input, integrated over a timestep
                      ! and summed over space [kg].
     salt_in_EFP, &   ! The total salt added by surface fluxes, integrated
-                     ! over a time step and summed over space [ppt kg].
+                     ! over a time step and summed over space [R Z L2 ~> ppt kg].
     heat_in_EFP      ! The total heat added by boundary fluxes, integrated
                      ! over a time step and summed over space [J].
 
@@ -1038,14 +1031,11 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  RZL2_to_kg = US%L_to_m**2*US%RZ_to_kg_m2
-  QRZL2_to_J = RZL2_to_kg*US%Q_to_J_kg
-
   FW_in(:,:) = 0.0
   if (associated(fluxes%evap)) then
     if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
       do j=js,je ; do i=is,ie
-        FW_in(i,j) = RZL2_to_kg * dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
+        FW_in(i,j) = dt*G%areaT(i,j)*(fluxes%evap(i,j) + &
             (((fluxes%lprec(i,j) + fluxes%vprec(i,j)) + fluxes%lrunoff(i,j)) + &
               (fluxes%fprec(i,j) + fluxes%frunoff(i,j))))
       enddo ; enddo
@@ -1056,27 +1046,26 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   endif
 
   if (associated(fluxes%seaice_melt)) then ; do j=js,je ; do i=is,ie
-    FW_in(i,j) = FW_in(i,j) + RZL2_to_kg*dt * &
-                 G%areaT(i,j) * fluxes%seaice_melt(i,j)
+    FW_in(i,j) = FW_in(i,j) + dt * G%areaT(i,j) * fluxes%seaice_melt(i,j)
   enddo ; enddo ; endif
 
   salt_in(:,:) = 0.0 ; heat_in(:,:) = 0.0
   if (CS%use_temperature) then
 
     if (associated(fluxes%sw)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * (fluxes%sw(i,j) + &
+      heat_in(i,j) = heat_in(i,j) + dt * G%areaT(i,j) * (fluxes%sw(i,j) + &
              (fluxes%lw(i,j) + (fluxes%latent(i,j) + fluxes%sens(i,j))))
     enddo ; enddo ; endif
 
     if (associated(fluxes%seaice_melt_heat)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
+      heat_in(i,j) = heat_in(i,j) + dt * G%areaT(i,j) * &
                                     fluxes%seaice_melt_heat(i,j)
     enddo ; enddo ; endif
 
     ! smg: new code
     ! include heat content from water transport across ocean surface
 !    if (associated(fluxes%heat_content_lprec)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
+!      heat_in(i,j) = heat_in(i,j) + dt * G%areaT(i,j) * &
 !         (fluxes%heat_content_lprec(i,j)   + (fluxes%heat_content_fprec(i,j)   &
 !       + (fluxes%heat_content_lrunoff(i,j) + (fluxes%heat_content_frunoff(i,j) &
 !       + (fluxes%heat_content_cond(i,j)    + (fluxes%heat_content_vprec(i,j)   &
@@ -1086,41 +1075,41 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
     ! smg: old code
     if (associated(fluxes%heat_content_evap)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + dt * QRZL2_to_J * G%areaT(i,j) * &
+        heat_in(i,j) = heat_in(i,j) + dt * G%areaT(i,j) * &
                        (fluxes%heat_content_evap(i,j) + fluxes%heat_content_lprec(i,j) + &
                         fluxes%heat_content_cond(i,j) + fluxes%heat_content_fprec(i,j) + &
                         fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j))
       enddo ; enddo
     elseif (associated(tv%TempxPmE)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (tv%C_p * QRZL2_to_J*G%areaT(i,j)) * tv%TempxPmE(i,j)
+        heat_in(i,j) = heat_in(i,j) + (tv%C_p * G%areaT(i,j)) * tv%TempxPmE(i,j)
       enddo ; enddo
     elseif (associated(fluxes%evap)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (US%Q_to_J_kg*tv%C_p * sfc_state%SST(i,j)) * FW_in(i,j)
+        heat_in(i,j) = heat_in(i,j) + (tv%C_p * sfc_state%SST(i,j)) * FW_in(i,j)
       enddo ; enddo
     endif
 
     ! The following heat sources may or may not be used.
     if (associated(tv%internal_heat)) then
       do j=js,je ; do i=is,ie
-        heat_in(i,j) = heat_in(i,j) + (tv%C_p * QRZL2_to_J*G%areaT(i,j)) * tv%internal_heat(i,j)
+        heat_in(i,j) = heat_in(i,j) + (tv%C_p * G%areaT(i,j)) * tv%internal_heat(i,j)
       enddo ; enddo
     endif
     if (associated(tv%frazil)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + QRZL2_to_J * G%areaT(i,j) * tv%frazil(i,j)
+      heat_in(i,j) = heat_in(i,j) + G%areaT(i,j) * tv%frazil(i,j)
     enddo ; enddo ; endif
     if (associated(fluxes%heat_added)) then ; do j=js,je ; do i=is,ie
-      heat_in(i,j) = heat_in(i,j) + QRZL2_to_J * dt*G%areaT(i,j) * fluxes%heat_added(i,j)
+      heat_in(i,j) = heat_in(i,j) + dt*G%areaT(i,j) * fluxes%heat_added(i,j)
     enddo ; enddo ; endif
 !    if (associated(sfc_state%sw_lost)) then ; do j=js,je ; do i=is,ie
-!      heat_in(i,j) = heat_in(i,j) - US%L_to_m**2*G%areaT(i,j) * sfc_state%sw_lost(i,j)
+!      sfc_state%sw_lost must be in units of [Q R Z ~> J m-2]
+!      heat_in(i,j) = heat_in(i,j) - G%areaT(i,j) * sfc_state%sw_lost(i,j)
 !    enddo ; enddo ; endif
 
     if (associated(fluxes%salt_flux)) then ; do j=js,je ; do i=is,ie
       ! integrate salt_flux in [R Z T-1 ~> kgSalt m-2 s-1] to give [ppt kg]
-      salt_in(i,j) = RZL2_to_kg * dt * &
-                     G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
+      salt_in(i,j) = dt * G%areaT(i,j)*(1000.0*fluxes%salt_flux(i,j))
     enddo ; enddo ; endif
   endif
 
@@ -1129,9 +1118,12 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
     ! The on-PE sums are stored here, but the sums across PEs are deferred to
     ! the next call to write_energy to avoid extra barriers.
     isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
-    FW_in_EFP   = reproducing_sum_EFP(FW_in,   isr, ier, jsr, jer, only_on_PE=.true.)
-    heat_in_EFP = reproducing_sum_EFP(heat_in, isr, ier, jsr, jer, only_on_PE=.true.)
-    salt_in_EFP = reproducing_sum_EFP(salt_in, isr, ier, jsr, jer, only_on_PE=.true.)
+    FW_in_EFP   = reproducing_sum_EFP(FW_in,   isr, ier, jsr, jer, only_on_PE=.true., &
+                                      unscale=US%RZL2_to_kg)
+    heat_in_EFP = reproducing_sum_EFP(heat_in, isr, ier, jsr, jer, only_on_PE=.true., &
+                                      unscale=US%RZL2_to_kg*US%Q_to_J_kg)
+    salt_in_EFP = reproducing_sum_EFP(salt_in, isr, ier, jsr, jer, only_on_PE=.true., &
+                                      unscale=US%RZL2_to_kg)
 
     CS%fresh_water_in_EFP = CS%fresh_water_in_EFP + FW_in_EFP
     CS%net_salt_in_EFP    = CS%net_salt_in_EFP    + salt_in_EFP
