@@ -4959,15 +4959,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
 
       if (len_trim(wave_drag_u) > 0 .and. len_trim(wave_drag_v) > 0) then
         call MOM_read_data(wave_drag_file, wave_drag_u, CS%lin_drag_u, G%Domain, &
-                           position=EAST_FACE, scale=GV%m_to_H*US%T_to_s)
-        call pass_var(CS%lin_drag_u, G%Domain)
-        CS%lin_drag_u(:,:) = wave_drag_scale * CS%lin_drag_u(:,:)
-
+                           position=EAST_FACE, scale=wave_drag_scale*GV%m_to_H*US%T_to_s)
         call MOM_read_data(wave_drag_file, wave_drag_v, CS%lin_drag_v, G%Domain, &
-                           position=NORTH_FACE, scale=GV%m_to_H*US%T_to_s)
-        call pass_var(CS%lin_drag_v, G%Domain)
-        CS%lin_drag_v(:,:) = wave_drag_scale * CS%lin_drag_v(:,:)
-
+                           position=NORTH_FACE, scale=wave_drag_scale*GV%m_to_H*US%T_to_s)
+        call pass_vector(CS%lin_drag_u, CS%lin_drag_v, G%domain, direction=To_All+SCALAR_PAIR)
       else
         allocate(lin_drag_h(isd:ied,jsd:jed), source=0.0)
 
