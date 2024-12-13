@@ -2193,6 +2193,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                                  ! as the vertical structure of thickness diffusivity.
                                  ! Used to determine if FULL_DEPTH_KHTH_MIN should be
                                  ! available.
+  logical :: use_meke = .false. ! If true, use the MEKE formulation for the thickness diffusivity.
   integer :: default_answer_date ! The default setting for the various ANSWER_DATE flags.
   integer :: i, j
 
@@ -2378,13 +2379,16 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
     if (.not.GV%Boussinesq) CS%MEKE_GEOM_answer_date = max(CS%MEKE_GEOM_answer_date, 20230701)
   endif
 
-  call get_param(param_file, mdl, "USE_KH_IN_MEKE", CS%Use_KH_in_MEKE, &
-                 "If true, uses the thickness diffusivity calculated here to diffuse MEKE.", &
-                 default=.false.)
-  call get_param(param_file, mdl, "MEKE_MIN_DEPTH_DIFF", CS%MEKE_min_depth_diff, &
-                 "The minimum total depth over which to average the diffusivity used for MEKE.  "//&
-                 "When the total depth is less than this, the diffusivity is scaled away.", &
-                 units="m", default=1.0, scale=GV%m_to_H, do_not_log=.not.CS%Use_KH_in_MEKE)
+  call get_param(param_file, mdl, "USE_MEKE", use_meke, default=.false., do_not_log=.true.)
+  if (use_meke) then
+    call get_param(param_file, mdl, "USE_KH_IN_MEKE", CS%Use_KH_in_MEKE, &
+                   "If true, uses the thickness diffusivity calculated here to diffuse MEKE.", &
+                   default=.false.)
+    call get_param(param_file, mdl, "MEKE_MIN_DEPTH_DIFF", CS%MEKE_min_depth_diff, &
+                   "The minimum total depth over which to average the diffusivity used for MEKE.  "//&
+                   "When the total depth is less than this, the diffusivity is scaled away.", &
+                   units="m", default=1.0, scale=GV%m_to_H, do_not_log=.not.CS%Use_KH_in_MEKE)
+  endif
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME_thickness_diffuse, &
                  "If true, use the GM+E backscatter scheme in association "//&
