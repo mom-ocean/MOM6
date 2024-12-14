@@ -338,42 +338,39 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   ! Local variables
   real :: eta(SZI_(G),SZJ_(G),SZK_(GV)+1) ! The height of interfaces [Z ~> m].
   real :: areaTm(SZI_(G),SZJ_(G)) ! A masked version of areaT [L2 ~> m2].
-  real :: KE(SZK_(GV)) ! The total kinetic energy of a layer [J].
-  real :: PE(SZK_(GV)+1)! The available potential energy of an interface [J].
+  real :: KE(SZK_(GV)) ! The total kinetic energy of a layer [R Z L4 T-2 ~> J]
+  real :: PE(SZK_(GV)+1)! The available potential energy of an interface [R Z L4 T-2 ~> J]
   real :: KE_tot       ! The total kinetic energy [R Z L4 T-2 ~> J].
   real :: PE_tot       ! The total available potential energy [R Z L4 T-2 ~> J].
   real :: Z_0APE(SZK_(GV)+1) ! The uniform depth which overlies the same
                        ! volume as is below an interface [Z ~> m].
-  real :: H_0APE(SZK_(GV)+1) ! A version of Z_0APE, converted to m, usually positive [m].
-  real :: toten        ! The total kinetic & potential energies of
-                       ! all layers [J] (i.e. kg m2 s-2).
+  real :: toten        ! The total kinetic & potential energies of all layers [R Z L4 T-2 ~> J]
   real :: En_mass      ! The total kinetic and potential energies divided by
-                       ! the total mass of the ocean [m2 s-2].
+                       ! the total mass of the ocean [L2 T-2 ~> m2 s-2].
   real :: vol_lay(SZK_(GV)) ! The volume of fluid in a layer [Z L2 ~> m3].
   real :: volbelow     ! The volume of all layers beneath an interface [Z L2 ~> m3].
-  real :: mass_lay(SZK_(GV)) ! The mass of fluid in a layer [R Z L2 ~> kg].
-  real :: mass_tot_RZL2   ! The total mass of the ocean [R Z L2 ~> kg].
-  real :: mass_tot     ! The total mass of the ocean [kg].
-  real :: vol_tot      ! The total ocean volume [Z L2 ~> m3].
+  real :: mass_lay(SZK_(GV)) ! The mass of fluid in a layer [R Z L2 ~> kg]
+  real :: mass_tot     ! The total mass of the ocean [R Z L2 ~> kg]
+  real :: vol_tot      ! The total ocean volume [Z L2 ~> m3]
   real :: mass_chg     ! The change in total ocean mass of fresh water since
-                       ! the last call to this subroutine [kg].
+                       ! the last call to this subroutine [R Z L2 ~> kg]
   real :: mass_anom    ! The change in fresh water that cannot be accounted for
-                       ! by the surface fluxes [kg].
-  real :: Salt         ! The total amount of salt in the ocean [ppt kg].
+                       ! by the surface fluxes [R Z L2 ~> kg]
+  real :: Salt         ! The total amount of salt in the ocean [1e-3 R Z L2 ~> g Salt]
   real :: Salt_chg     ! The change in total ocean salt since the last call
-                       ! to this subroutine [ppt kg].
+                       ! to this subroutine [1e-3 R Z L2 ~> g Salt]
   real :: Salt_anom    ! The change in salt that cannot be accounted for by
-                       ! the surface fluxes [ppt kg].
+                       ! the surface fluxes [1e-3 R Z L2 ~> g Salt]
   real :: salin        ! The mean salinity of the ocean [ppt].
   real :: salin_anom   ! The change in total salt that cannot be accounted for by
                        ! the surface fluxes divided by total mass [ppt].
-  real :: Heat         ! The total amount of Heat in the ocean [J].
-  real :: Heat_chg     ! The change in total ocean heat since the last call to this subroutine [J].
-  real :: Heat_anom    ! The change in heat that cannot be accounted for by the surface fluxes [J].
-  real :: temp         ! The mean potential temperature of the ocean [degC].
+  real :: Heat         ! The total amount of Heat in the ocean [Q R Z L2 ~> J]
+  real :: Heat_chg     ! The change in total ocean heat since the last call to this subroutine [Q R Z L2 ~> J]
+  real :: Heat_anom    ! The change in heat that cannot be accounted for by the surface fluxes [Q R Z L2 ~> J]
+  real :: temp         ! The mean potential temperature of the ocean [C ~> degC]
   real :: temp_anom    ! The change in total heat that cannot be accounted for
                        ! by the surface fluxes, divided by the total heat
-                       ! capacity of the ocean [degC].
+                       ! capacity of the ocean [C ~> degC]
   real :: hint         ! The deviation of an interface from H [Z ~> m].
   real :: hbot         ! 0 if the basin is deeper than H, or the
                        ! height of the basin depth over H otherwise [Z ~> m].
@@ -402,9 +399,16 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     PE_pt              ! The potential energy at each point [R Z L4 T-2 ~> J].
   real, dimension(SZI_(G),SZJ_(G)) :: &
-    Temp_int, Salt_int ! Layer and cell integrated heat and salt [Q R Z L2 ~> J] and [g Salt].
-  real :: RZL4_to_J    ! The combination of unit rescaling factors to convert the spatially integrated
+    Temp_int, Salt_int ! Layer and cell integrated heat and salt [Q R Z L2 ~> J] and [1e-3 R Z L2 ~> g Salt].
+  real :: RZL4_T2_to_J ! The combination of unit rescaling factors to convert the spatially integrated
                        ! kinetic or potential energies into mks units [T2 kg m2 R-1 Z-1 L-4 s-2 ~> 1]
+  real :: QRZL2_to_J   ! The combination of unit rescaling factors to convert integrated heat
+                       ! content into mks units [J Q-1 R-1 Z-1 L-2 ~> 1]
+  real :: J_to_QRZL2   ! The combination of unit rescaling factors to rescale integrated heat
+                       ! content from mks units into the internal units of MOM6 [Q R Z L J-1 ~> 1]
+  real :: kg_to_RZL2   ! The combination of unit rescaling factors to rescale masses from
+                       ! mks units into the internal units of MOM6 [R Z L kg-1 ~> 1]
+  real :: salt_to_kg   ! A factor used to rescale salt contents [kg R-1 Z-1 L-2 ~> nondim]
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
   integer :: i, j, k, is, ie, js, je, nz, m, Isq, Ieq, Jsq, Jeq, isr, ier, jsr, jer
@@ -504,33 +508,37 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     endif
   endif
 
+  RZL4_T2_to_J = US%RZL2_to_kg*US%L_T_to_m_s**2     ! Used to unscale energies
+  QRZL2_to_J = US%RZL2_to_kg*US%Q_to_J_kg           ! Used to unscale heat contents
+  salt_to_kg = 0.001*US%RZL2_to_kg                  ! Used to unscale salt contents
+  kg_to_RZL2 = US%kg_m3_to_R*US%m_to_Z*US%m_to_L**2 ! Used to scale masses
+  J_to_QRZL2 = US%J_kg_to_Q*kg_to_RZL2              ! Used to scale heat contents
+
   num_nc_fields = 17
   if (.not.CS%use_temperature) num_nc_fields = 11
   vars(1) = var_desc("Ntrunc","Nondim","Number of Velocity Truncations",'1','1')
-  vars(2) = var_desc("En","Joules","Total Energy",'1','1')
-  vars(3) = var_desc("APE","Joules","Total Interface APE",'1','i')
-  vars(4) = var_desc("KE","Joules","Total Layer KE",'1','L')
-  vars(5) = var_desc("H0","meter","Zero APE Depth of Interface",'1','i')
-  vars(6) = var_desc("Mass_lay","kg","Total Layer Mass",'1','L')
-  vars(7) = var_desc("Mass","kg","Total Mass",'1','1')
-  vars(8) = var_desc("Mass_chg","kg","Total Mass Change between Entries",'1','1')
-  vars(9) = var_desc("Mass_anom","kg","Anomalous Total Mass Change",'1','1')
+  vars(2) = var_desc("En","Joules","Total Energy",'1','1', conversion=RZL4_T2_to_J)
+  vars(3) = var_desc("APE","Joules","Total Interface APE",'1','i', conversion=RZL4_T2_to_J)
+  vars(4) = var_desc("KE","Joules","Total Layer KE",'1','L', conversion=RZL4_T2_to_J)
+  vars(5) = var_desc("H0","meter","Zero APE Depth of Interface",'1','i', conversion=US%Z_to_m)
+  vars(6) = var_desc("Mass_lay","kg","Total Layer Mass",'1','L', conversion=US%RZL2_to_kg)
+  vars(7) = var_desc("Mass","kg","Total Mass",'1','1', conversion=US%RZL2_to_kg)
+  vars(8) = var_desc("Mass_chg","kg","Total Mass Change between Entries",'1','1', conversion=US%RZL2_to_kg)
+  vars(9) = var_desc("Mass_anom","kg","Anomalous Total Mass Change",'1','1', conversion=US%RZL2_to_kg)
   vars(10) = var_desc("max_CFL_trans","Nondim","Maximum finite-volume CFL",'1','1')
   vars(11) = var_desc("max_CFL_lin","Nondim","Maximum finite-difference CFL",'1','1')
   if (CS%use_temperature) then
-    vars(12) = var_desc("Salt","kg","Total Salt",'1','1')
-    vars(13) = var_desc("Salt_chg","kg","Total Salt Change between Entries",'1','1')
-    vars(14) = var_desc("Salt_anom","kg","Anomalous Total Salt Change",'1','1')
-    vars(15) = var_desc("Heat","Joules","Total Heat",'1','1')
-    vars(16) = var_desc("Heat_chg","Joules","Total Heat Change between Entries",'1','1')
-    vars(17) = var_desc("Heat_anom","Joules","Anomalous Total Heat Change",'1','1')
+    vars(12) = var_desc("Salt","kg","Total Salt",'1','1', conversion=salt_to_kg)
+    vars(13) = var_desc("Salt_chg","kg","Total Salt Change between Entries",'1','1', conversion=salt_to_kg)
+    vars(14) = var_desc("Salt_anom","kg","Anomalous Total Salt Change",'1','1', conversion=salt_to_kg)
+    vars(15) = var_desc("Heat","Joules","Total Heat",'1','1', conversion=QRZL2_to_J)
+    vars(16) = var_desc("Heat_chg","Joules","Total Heat Change between Entries",'1','1', conversion=QRZL2_to_J)
+    vars(17) = var_desc("Heat_anom","Joules","Anomalous Total Heat Change",'1','1', conversion=QRZL2_to_J)
   endif
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   isr = is - (G%isd-1) ; ier = ie - (G%isd-1) ; jsr = js - (G%jsd-1) ; jer = je - (G%jsd-1)
-
-  RZL4_to_J = US%RZL2_to_kg*US%L_T_to_m_s**2 ! Used to unscale energies
 
   if (.not.associated(CS)) call MOM_error(FATAL, &
          "write_energy: Module must be initialized before it is used.")
@@ -546,7 +554,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   do k=1,nz ; do j=js,je ; do i=is,ie
     tmp1(i,j,k) = h(i,j,k) * (GV%H_to_RZ*areaTm(i,j))
   enddo ; enddo ; enddo
-  mass_tot_RZL2 = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP, unscale=US%RZL2_to_kg)
+  mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=mass_lay, EFP_sum=mass_EFP, unscale=US%RZL2_to_kg)
 
   if (GV%Boussinesq) then
     do k=1,nz ; vol_lay(k) = (1.0 / GV%Rho0) * mass_lay(k) ; enddo
@@ -721,11 +729,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
       enddo ; enddo
     endif
 
-    PE_tot = reproducing_sum(PE_pt, isr, ier, jsr, jer, sums=PE, unscale=RZL4_to_J)
-    do k=1,nz+1 ; H_0APE(K) = US%Z_to_m*Z_0APE(K) ; enddo
+    PE_tot = reproducing_sum(PE_pt, isr, ier, jsr, jer, sums=PE, unscale=RZL4_T2_to_J)
   else
     PE_tot = 0.0
-    do k=1,nz+1 ; PE(K) = 0.0 ; H_0APE(K) = 0.0 ; enddo
+    do k=1,nz+1 ; PE(K) = 0.0 ; Z_0APE(K) = 0.0 ; enddo
   endif
 
   ! Calculate the Kinetic Energy integrated over each layer.
@@ -735,7 +742,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
             (((u(I-1,j,k)**2) + (u(I,j,k)**2)) + ((v(i,J-1,k)**2) + (v(i,J,k)**2)))
   enddo ; enddo ; enddo
 
-  KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=KE, unscale=RZL4_to_J)
+  KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, sums=KE, unscale=RZL4_T2_to_J)
 
   ! Use reproducing sums to do global integrals relate to the heat, salinity and water budgets.
   if (CS%use_temperature) then
@@ -788,43 +795,41 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   call max_across_PEs(max_CFL, 2)
 
-  ! From this point onward, many of the calculations set or use variables in unscaled (mks) units.
-
   Salt = 0.0 ; Heat = 0.0
   if (CS%use_temperature) then
-    Salt = EFP_to_real(salt_EFP)
-    Heat = EFP_to_real(heat_EFP)
+    Salt = kg_to_RZL2 * EFP_to_real(salt_EFP)
+    Heat = J_to_QRZL2 * EFP_to_real(heat_EFP)
     if (CS%previous_calls == 0) then
       CS%salt_prev_EFP = salt_EFP ; CS%heat_prev_EFP = heat_EFP
     endif
     Salt_chg_EFP = Salt_EFP - CS%salt_prev_EFP
-    Salt_chg = EFP_to_real(Salt_chg_EFP)
+    Salt_chg = kg_to_RZL2 * EFP_to_real(Salt_chg_EFP)
     Salt_anom_EFP = Salt_chg_EFP - CS%net_salt_in_EFP
-    Salt_anom = EFP_to_real(Salt_anom_EFP)
+    Salt_anom = kg_to_RZL2 * EFP_to_real(Salt_anom_EFP)
     Heat_chg_EFP = Heat_EFP - CS%heat_prev_EFP
-    Heat_chg = EFP_to_real(Heat_chg_EFP)
+    Heat_chg = J_to_QRZL2 * EFP_to_real(Heat_chg_EFP)
     Heat_anom_EFP = Heat_chg_EFP - CS%net_heat_in_EFP
-    Heat_anom = EFP_to_real(Heat_anom_EFP)
+    Heat_anom = J_to_QRZL2 * EFP_to_real(Heat_anom_EFP)
   endif
 
   mass_chg_EFP = mass_EFP - CS%mass_prev_EFP
   mass_anom_EFP = mass_chg_EFP - CS%fresh_water_in_EFP
-  mass_anom = EFP_to_real(mass_anom_EFP)
+  mass_anom = kg_to_RZL2 * EFP_to_real(mass_anom_EFP)
   if (CS%use_temperature .and. .not.GV%Boussinesq) then
-    ! net_salt_input needs to be converted from ppt m s-1 to kg m-2 s-1.
-    mass_anom = mass_anom - 0.001*EFP_to_real(CS%net_salt_in_EFP)
+    ! net_salt_input needs to be converted from ppt kg to [R Z L2 ~> kg]
+    mass_anom = mass_anom - 0.001*kg_to_RZL2*EFP_to_real(CS%net_salt_in_EFP)
   endif
-  mass_chg = EFP_to_real(mass_chg_EFP)
+  mass_chg = kg_to_RZL2 * EFP_to_real(mass_chg_EFP)
 
-  mass_tot = US%RZL2_to_kg * mass_tot_RZL2
   if (CS%use_temperature) then
     salin = Salt / mass_tot
     salin_anom = Salt_anom / mass_tot
    ! salin_chg = Salt_chg / mass_tot
-    temp = heat / (mass_tot*US%Q_to_J_kg*US%degC_to_C*tv%C_p)
-    temp_anom = Heat_anom / (mass_tot*US%Q_to_J_kg*US%degC_to_C*tv%C_p)
+    temp = Heat / (mass_tot*tv%C_p)
+    temp_anom = Heat_anom / (mass_tot*tv%C_p)
   endif
-  toten = RZL4_to_J * (KE_tot + PE_tot)
+  toten = KE_tot + PE_tot
+
   En_mass = toten / mass_tot
 
   call get_time(day, start_of_day, num_days)
@@ -850,7 +855,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   if (date_stamped) then
     write(date_str,'("MOM Date",i7,2("/",i2.2)," ",i2.2,2(":",i2.2))') &
-       iyear, imonth, iday, ihour, iminute, isecond
+          iyear, imonth, iday, ihour, iminute, isecond
   else
     date_str = trim(mesg_intro)//trim(day_str)
   endif
@@ -858,46 +863,44 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (CS%use_temperature) then
         write(stdout,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-                & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
-          trim(date_str), trim(n_str), En_mass, max_CFL(1), mass_tot, salin, temp
+                    & ES18.12, ", Salt ", F15.11,", Temp ", F15.11)') &
+            trim(date_str), trim(n_str), US%L_T_to_m_s**2*En_mass, max_CFL(1), US%RZL2_to_kg*mass_tot, &
+            salin, US%C_to_degC*temp
     else
-        write(stdout,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", &
-                & ES18.12)') &
-          trim(date_str), trim(n_str), En_mass, max_CFL(1), mass_tot
+        write(stdout,'(A," ",A,": En ",ES12.6, ", MaxCFL ", F8.5, ", Mass ", ES18.12)') &
+            trim(date_str), trim(n_str), US%L_T_to_m_s**2*En_mass, max_CFL(1), US%RZL2_to_kg*mass_tot
     endif
 
     if (CS%use_temperature) then
-      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, &
-                               &", CFL ", F8.5, ", SL ",&
+      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
                                &es11.4,", M ",ES11.5,", S",f8.4,", T",f8.4,&
                                &", Me ",ES9.2,", Se ",ES9.2,", Te ",ES9.2)') &
-            trim(n_str), trim(day_str), CS%ntrunc, En_mass, max_CFL(1), &
-            -H_0APE(1), mass_tot, salin, temp, mass_anom/mass_tot, salin_anom, &
-            temp_anom
+            trim(n_str), trim(day_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
+            -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, salin, US%C_to_degC*temp, mass_anom/mass_tot, &
+            salin_anom, US%C_to_degC*temp_anom
     else
-      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, &
-                                &", CFL ", F8.5, ", SL ",&
+      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
                                   &ES11.4,", Mass ",ES11.5,", Me ",ES9.2)') &
-            trim(n_str), trim(day_str), CS%ntrunc, En_mass, max_CFL(1), &
-            -H_0APE(1), mass_tot, mass_anom/mass_tot
+            trim(n_str), trim(day_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
+            -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, mass_anom/mass_tot
     endif
 
     if (CS%ntrunc > 0) then
       write(stdout,'(A," Energy/Mass:",ES12.5," Truncations ",I0)') &
-        trim(date_str), En_mass, CS%ntrunc
+          trim(date_str), US%L_T_to_m_s**2*En_mass, CS%ntrunc
     endif
 
     if (CS%write_stocks) then
-      write(stdout,'("    Total Energy: ",Z16.16,ES24.16)') toten, toten
+      write(stdout,'("    Total Energy: ",Z16.16,ES24.16)') RZL4_T2_to_J*toten, RZL4_T2_to_J*toten
       write(stdout,'("    Total Mass: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
-            mass_tot, mass_chg, mass_anom, mass_anom/mass_tot
+            US%RZL2_to_kg*mass_tot, US%RZL2_to_kg*mass_chg, US%RZL2_to_kg*mass_anom, mass_anom/mass_tot
       if (CS%use_temperature) then
         if (Salt == 0.) then
           write(stdout,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
-              Salt*0.001, Salt_chg*0.001, Salt_anom*0.001
+              Salt*salt_to_kg, Salt_chg*salt_to_kg, Salt_anom*salt_to_kg
         else
           write(stdout,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
-              Salt*0.001, Salt_chg*0.001, Salt_anom*0.001, Salt_anom/Salt
+              Salt*salt_to_kg, Salt_chg*salt_to_kg, Salt_anom*salt_to_kg, Salt_anom/Salt
         endif
         if (CS%write_min_max .and. CS%write_min_max_loc) then
           write(stdout,'(16X,"Salinity Global Min:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
@@ -910,10 +913,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
         if (Heat == 0.) then
           write(stdout,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
-              Heat, Heat_chg, Heat_anom
+              QRZL2_to_J*Heat, QRZL2_to_J*Heat_chg, QRZL2_to_J*Heat_anom
         else
           write(stdout,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
-              Heat, Heat_chg, Heat_anom, Heat_anom/Heat
+              QRZL2_to_J*Heat, QRZL2_to_J*Heat_chg, QRZL2_to_J*Heat_anom, Heat_anom/Heat
         endif
         if (CS%write_min_max .and. CS%write_min_max_loc) then
           write(stdout,'(16X,"Temperature Global Min:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
@@ -944,12 +947,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
     call CS%fileenergy_nc%write_field(CS%fields(1), real(CS%ntrunc), reday)
     call CS%fileenergy_nc%write_field(CS%fields(2), toten, reday)
-    do k=1,nz+1 ; PE(K) = RZL4_to_J*PE(K) ; enddo
     call CS%fileenergy_nc%write_field(CS%fields(3), PE, reday)
-    do k=1,nz ; KE(k) = RZL4_to_J*KE(k) ; enddo
     call CS%fileenergy_nc%write_field(CS%fields(4), KE, reday)
-    call CS%fileenergy_nc%write_field(CS%fields(5), H_0APE, reday)
-    do k=1,nz ; mass_lay(k) = US%RZL2_to_kg*mass_lay(k) ; enddo
+    call CS%fileenergy_nc%write_field(CS%fields(5), Z_0APE, reday)
     call CS%fileenergy_nc%write_field(CS%fields(6), mass_lay, reday)
 
     call CS%fileenergy_nc%write_field(CS%fields(7), mass_tot, reday)
@@ -958,9 +958,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     call CS%fileenergy_nc%write_field(CS%fields(10), max_CFL(1), reday)
     call CS%fileenergy_nc%write_field(CS%fields(11), max_CFL(2), reday)
     if (CS%use_temperature) then
-      call CS%fileenergy_nc%write_field(CS%fields(12), 0.001*Salt, reday)
-      call CS%fileenergy_nc%write_field(CS%fields(13), 0.001*salt_chg, reday)
-      call CS%fileenergy_nc%write_field(CS%fields(14), 0.001*salt_anom, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(12), Salt, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(13), salt_chg, reday)
+      call CS%fileenergy_nc%write_field(CS%fields(14), salt_anom, reday)
       call CS%fileenergy_nc%write_field(CS%fields(15), Heat, reday)
       call CS%fileenergy_nc%write_field(CS%fields(16), heat_chg, reday)
       call CS%fileenergy_nc%write_field(CS%fields(17), heat_anom, reday)
@@ -978,9 +978,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   if (is_NaN(En_mass)) then
     call MOM_error(FATAL, "write_energy : NaNs in total model energy forced model termination.")
-  elseif (En_mass > US%L_T_to_m_s**2*CS%max_Energy) then
+  elseif (En_mass > CS%max_Energy) then
     write(mesg,'("Energy per unit mass of ",ES11.4," exceeds ",ES11.4)') &
-                  En_mass, US%L_T_to_m_s**2*CS%max_Energy
+                  US%L_T_to_m_s**2*En_mass, US%L_T_to_m_s**2*CS%max_Energy
     call MOM_error(FATAL, "write_energy : Excessive energy per unit mass forced model termination.")
   endif
   if (CS%ntrunc>CS%maxtrunc) then
@@ -1015,7 +1015,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
   real, dimension(SZI_(G),SZJ_(G)) :: &
     FW_in, &   ! The net fresh water input, integrated over a timestep [R Z L2 ~> kg].
     salt_in, & ! The total salt added by surface fluxes, integrated
-               ! over a time step [ppt kg].
+               ! over a time step [1e-3 R Z L2 ~> g Salt].
     heat_in    ! The total heat added by surface fluxes, integrated
                ! over a time step [Q R Z L2 ~> J].
 
@@ -1023,7 +1023,7 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
     FW_in_EFP,   &   ! The net fresh water input, integrated over a timestep
                      ! and summed over space [kg].
     salt_in_EFP, &   ! The total salt added by surface fluxes, integrated
-                     ! over a time step and summed over space [R Z L2 ~> ppt kg].
+                     ! over a time step and summed over space [ppt kg].
     heat_in_EFP      ! The total heat added by boundary fluxes, integrated
                      ! over a time step and summed over space [J].
 
@@ -1341,9 +1341,9 @@ subroutine write_depth_list(G, US, DL, filename)
 
   call create_MOM_file(IO_handle, filename, vars, 3, fields, SINGLE_FILE, &
       extra_axes=extra_axes, global_atts=global_atts)
-  call MOM_write_field(IO_handle, fields(1), DL%depth, scale=US%Z_to_m)
-  call MOM_write_field(IO_handle, fields(2), DL%area, scale=US%L_to_m**2)
-  call MOM_write_field(IO_handle, fields(3), DL%vol_below, scale=US%Z_to_m*US%L_to_m**2)
+  call MOM_write_field(IO_handle, fields(1), DL%depth, unscale=US%Z_to_m)
+  call MOM_write_field(IO_handle, fields(2), DL%area, unscale=US%L_to_m**2)
+  call MOM_write_field(IO_handle, fields(3), DL%vol_below, unscale=US%Z_to_m*US%L_to_m**2)
 
   call delete_axis_info(extra_axes)
   call delete_attribute_info(global_atts)
