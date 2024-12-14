@@ -555,10 +555,10 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
     pack = 1
     if (present(checksums)) then
       fields(k) = IO_handle%register_field(axes(1:numaxes), vars(k)%name, vars(k)%units, &
-                          vars(k)%longname, pack=pack, checksum=checksums(k,:))
+                          vars(k)%longname, pack=pack, checksum=checksums(k,:), conversion=vars(k)%conversion)
     else
       fields(k) = IO_handle%register_field(axes(1:numaxes), vars(k)%name, vars(k)%units, &
-                          vars(k)%longname, pack=pack)
+                          vars(k)%longname, pack=pack, conversion=vars(k)%conversion)
     endif
   enddo
 
@@ -1880,6 +1880,8 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   if (present(cmor_longname))   call safe_string_copy(cmor_longname, vd%cmor_longname, &
                                      "vd%cmor_longname of "//trim(vd%name), cllr)
 
+  if (present(conversion)) vd%conversion = conversion
+
   if (present(dim_names)) then
     do n=1,min(5,size(dim_names)) ; if (len_trim(dim_names(n)) > 0) then
       call safe_string_copy(dim_names(n), vd%dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
@@ -2084,6 +2086,9 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                      "vd%cmor_units of "//trim(vd%name), cllr)
   if (present(cmor_longname))   call safe_string_copy(vd%cmor_longname, cmor_longname, &
                                      "vd%cmor_longname of "//trim(vd%name), cllr)
+
+  if (present(conversion)) conversion = vd%conversion
+
   if (present(position)) then
     position = vd%position
     if (position == -1) position = position_from_horgrid(vd%hor_grid)

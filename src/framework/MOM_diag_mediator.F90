@@ -972,7 +972,7 @@ subroutine register_cell_measure(G, diag, Time)
   ! Local variables
   integer :: id
   id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
-                           Time, 'Ocean grid-cell volume', 'm3', &
+                           Time, 'Ocean grid-cell volume', units='m3', conversion=1.0, &
                            standard_name='ocean_volume', v_extensive=.true., &
                            x_cell_method='sum', y_cell_method='sum')
   call diag_associate_volume_cell_measure(diag, id)
@@ -3153,10 +3153,13 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
+  real :: conversion ! A multiplicative factor for unit conversions for output,
+                     ! as might be needed to convert from intensive to extensive
+                     ! or for dimensional consistency testing [various] or [a A-1 ~> 1]
   type(axes_grp), pointer :: axes => NULL()
 
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
-                     z_grid=z_grid, caller="ocean_register_diag")
+                     z_grid=z_grid, conversion=conversion, caller="ocean_register_diag")
 
   ! Use the hor_grid and z_grid components of vardesc to determine the
   ! desired axes to register the diagnostic field for.
@@ -3211,8 +3214,8 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
         "ocean_register_diag: unknown z_grid component "//trim(z_grid))
   end select
 
-  ocean_register_diag = register_diag_field("ocean_model", trim(var_name), &
-          axes, day, trim(longname), trim(units), missing_value=-1.0e+34)
+  ocean_register_diag = register_diag_field("ocean_model", trim(var_name), axes, day, &
+          trim(longname), units=trim(units), conversion=conversion, missing_value=-1.0e+34)
 
 end function ocean_register_diag
 
