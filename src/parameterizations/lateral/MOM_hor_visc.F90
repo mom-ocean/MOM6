@@ -2584,8 +2584,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "biharmonic viscosity when no Laplacian viscosity is applied.  The default "//&
                  "is true for historical reasons, but this option probably should not be used "//&
                  "because it can contribute to numerical instabilities.", &
-                 default=.true., do_not_log=.not.((CS%better_bound_Kh).and.(CS%better_bound_Ah)))
-                 !### The default for BACKSCATTER_UNDERBOUND should be false.
+                 default=.false., do_not_log=.not.((CS%better_bound_Kh).and.(CS%better_bound_Ah)))
 
   call get_param(param_file, mdl, "SMAG_BI_CONST",Smag_bi_const, &
                  "The nondimensional biharmonic Smagorinsky constant, "//&

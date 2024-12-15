@@ -219,7 +219,7 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
                  "Values of 20240330 or below recover the answers from the original form of the "//&
                  "neutral diffusion code, while higher values use mathematically equivalent "//&
                  "expressions that recover rotational symmetry.", &
-                 default=20240101) !### Change this default later to default_answer_date.
+                 default=default_answer_date)
 
   ! Initialize and configure remapping
   if ( .not.CS%continuous_reconstruction ) then

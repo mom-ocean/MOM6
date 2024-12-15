@@ -411,9 +411,12 @@ DEBUG = True
 
 INTERPOLATE_RES_FN = True       !   [Boolean] default = True
 GILL_EQUATORIAL_LD = False      !   [Boolean] default = False
-FIX_UNSPLIT_DT_VISC_BUG = False !   [Boolean] default = False
 USE_LAND_MASK_FOR_HVISC = False !   [Boolean] default = False
 KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
 KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
 USE_MLD_ITERATION = False       !   [Boolean] default = False
 
+! Explicitly use the defaults from early 2025
+VISC_REM_BUG = True
+FRICTWORK_BUG = True
+MASS_WEIGHT_IN_PRESSURE_GRADIENT_TOP = False

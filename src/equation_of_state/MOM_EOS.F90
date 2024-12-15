@@ -179,7 +179,7 @@ character*(12), parameter :: EOS_NEMO_STRING   = "NEMO"   !< A string for specif
 character*(12), parameter :: EOS_ROQUET_RHO_STRING = "ROQUET_RHO"   !< A string for specifying the equation of state
 character*(12), parameter :: EOS_ROQUET_SPV_STRING = "ROQUET_SPV"   !< A string for specifying the equation of state
 character*(12), parameter :: EOS_JACKETT06_STRING = "JACKETT_06" !< A string for specifying the equation of state
-character*(12), parameter :: EOS_DEFAULT = EOS_WRIGHT_STRING !< The default equation of state
+character*(12), parameter :: EOS_DEFAULT = EOS_WRIGHT_FULL_STRING !< The default equation of state
 
 integer, parameter :: TFREEZE_LINEAR = 1  !< A named integer specifying a freezing point expression
 integer, parameter :: TFREEZE_MILLERO = 2 !< A named integer specifying a freezing point expression
