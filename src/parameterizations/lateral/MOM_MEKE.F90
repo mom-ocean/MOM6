@@ -227,6 +227,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     Kh_v, &         ! The meridional diffusivity that is actually used [L2 T-1 ~> m2 s-1].
     baroHv, &       ! Depth integrated accumulated meridional mass flux [R Z L2 ~> kg].
     drag_vel_v      ! A piston velocity associated with bottom drag at v-points [H T-1 ~> m s-1 or kg m-2 s-1]
+  real :: bh_coeff  ! Biharmonic part of efficiency conversion in total MEKE [nondim]
   real :: Kh_here   ! The local horizontal viscosity [L2 T-1 ~> m2 s-1]
   real :: Inv_Kh_max ! The inverse of the local horizontal viscosity [T L-2 ~> s m-2]
   real :: K4_here   ! The local horizontal biharmonic viscosity [L4 T-1 ~> m4 s-1]
@@ -412,22 +413,51 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     !$OMP parallel do default(shared)
     do j=js,je ; do i=is,ie
       src(i,j) = CS%MEKE_BGsrc
-      src_adv(i,j) = 0.
-      src_mom_K4(i,j) = 0.
-      src_btm_drag(i,j) = 0.
-      src_GM(i,j) = 0.
-      src_mom_lp(i,j) = 0.
-      src_mom_bh(i,j) = 0.
     enddo ; enddo
+
+    ! Initialize diagnostics
+    ! TODO: Remove these after the damping is only computed if the diagnostic
+    !   is registered.
+    if (CS%id_src_adv > 0) src_adv(is:ie, js:je) = 0.
+    if (CS%id_src_GM > 0) src_GM(is:ie, js:je) = 0.
+    if (CS%id_src_mom_lp > 0) src_mom_lp(is:ie, js:je) = 0.
+    if (CS%id_src_mom_bh > 0) src_mom_bh(is:ie, js:je) = 0.
+    if (CS%id_src_mom_K4 > 0) src_mom_K4(is:ie, js:je) = 0.
+    if (CS%id_src_btm_drag > 0) src_btm_drag(is:ie, js:je) = 0.
 
     if (allocated(MEKE%mom_src)) then
       !$OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
-        src(i,j) = src(i,j) - CS%MEKE_FrCoeff*I_mass(i,j)*MEKE%mom_src(i,j) &
-                   - (CS%MEKE_bhFrCoeff-CS%MEKE_FrCoeff)*I_mass(i,j)*MEKE%mom_src_bh(i,j)
-        src_mom_lp(i,j) = - CS%MEKE_FrCoeff*I_mass(i,j)*(MEKE%mom_src(i,j)-MEKE%mom_src_bh(i,j))
-        src_mom_bh(i,j) = - CS%MEKE_bhFrCoeff*I_mass(i,j)*MEKE%mom_src_bh(i,j)
+        src(i,j) = src(i,j) - CS%MEKE_FrCoeff * I_mass(i,j) * MEKE%mom_src(i,j)
       enddo ; enddo
+    endif
+
+    if (allocated(MEKE%mom_src_bh)) then
+      if (CS%MEKE_bhFrCoeff > 0. .and. CS%MEKE_FrCoeff > 0.) then
+        bh_coeff = CS%MEKE_bhFrCoeff - CS%MEKE_FrCoeff
+      else
+        bh_coeff = CS%MEKE_bhFrCoeff
+      endif
+
+      !$OMP parallel do default(shared)
+      do j=js,je ; do i=is,ie
+        src(i,j) = src(i,j) - bh_coeff * I_mass(i,j) * MEKE%mom_src_bh(i,j)
+      enddo ; enddo
+
+      if (CS%id_src_mom_lp > 0) then
+        !$OMP parallel do default(shared)
+        do j=js,je ; do i=is,ie
+          src_mom_lp(i,j) = -CS%MEKE_FrCoeff * I_mass(i,j) &
+              * (MEKE%mom_src(i,j) - MEKE%mom_src_bh(i,j))
+        enddo ; enddo
+      endif
+
+      if (CS%id_src_mom_bh > 0) then
+        !$OMP parallel do default(shared)
+        do j=js,je ; do i=is,ie
+          src_mom_bh(i,j) = -CS%MEKE_bhFrCoeff * I_mass(i,j) * MEKE%mom_src_bh(i,j)
+        enddo ; enddo
+      endif
     endif
 
     if (allocated(MEKE%GME_snk)) then
@@ -488,6 +518,9 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
         drag_rate(i,j) = 0.
       enddo ; enddo
     endif
+
+    ! TODO: All of these diagnostics needs to be pulled out of the MEKE damping
+    !   loop and handled separately, and only if they are registered.
 
     ! First stage of Strang splitting
     !$OMP parallel do default(shared)
@@ -1890,10 +1923,10 @@ subroutine MEKE_alloc_register_restart(HI, US, param_file, MEKE, restart_CS)
            longname="Mesoscale Eddy Kinetic Energy", units="m2 s-2", conversion=US%L_T_to_m_s**2)
 
   if (MEKE_GMcoeff>=0.) allocate(MEKE%GM_src(isd:ied,jsd:jed), source=0.0)
-  if (MEKE_FrCoeff>=0. .or. MEKE_bhFrCoeff>=0. .or. MEKE_GMECoeff>=0.) then
+  if (MEKE_FrCoeff>=0. .or. MEKE_bhFrCoeff>=0. .or. MEKE_GMECoeff>=0.) &
     allocate(MEKE%mom_src(isd:ied,jsd:jed), source=0.0)
+  if (MEKE_bhFrCoeff >= 0.) &
     allocate(MEKE%mom_src_bh(isd:ied,jsd:jed), source=0.0)
-  endif
   if (MEKE_FrCoeff<0.) MEKE_FrCoeff = 0.
   if (MEKE_bhFrCoeff<0.) MEKE_bhFrCoeff = 0.
   if (MEKE_GMECoeff>=0.) allocate(MEKE%GME_snk(isd:ied,jsd:jed), source=0.0)
