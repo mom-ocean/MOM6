@@ -2509,7 +2509,7 @@ end subroutine MOM_read_vector_3d
 
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   type(file_type),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2526,6 +2526,8 @@ subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tst
                                                         !! from its internal units to the desired units for output.
                                                         !! Here scale and unscale are synonymous, but unscale
                                                         !! takes precedence if both are present.
+  logical,        optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                        !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units [a] or
@@ -2537,13 +2539,13 @@ subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tst
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2553,7 +2555,7 @@ end subroutine MOM_write_field_legacy_4d
 
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2570,6 +2572,8 @@ subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tst
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units [a] or
@@ -2581,13 +2585,13 @@ subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tst
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2597,7 +2601,7 @@ end subroutine MOM_write_field_legacy_3d
 
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2614,6 +2618,8 @@ subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tst
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units [a] or
@@ -2625,13 +2631,13 @@ subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tst
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2640,7 +2646,7 @@ end subroutine MOM_write_field_legacy_2d
 
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2654,22 +2660,30 @@ subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_va
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, dimension(:), allocatable :: array ! A rescaled copy of field [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
+  logical :: design_zeros ! If true, convert negative zeros into ordinary signless zeros.
   integer :: i
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if (scale_fac == 1.0) then
+  design_zeros = .false. ; if (present(zero_zeros)) design_zeros = zero_zeros
+
+  if ((scale_fac == 1.0) .and. (.not.design_zeros)) then
     call write_field(IO_handle, field_md, field, tstamp=tstamp)
   else
     allocate(array(size(field)))
     array(:) = scale_fac * field(:)
     if (present(fill_value)) then
       do i=1,size(field) ; if (field(i) == fill_value) array(i) = fill_value ; enddo
+    endif
+    if (design_zeros) then ! Convert negative zeros into zeros
+      do i=1,size(field) ; if (array(i) == 0.0) array(i) = 0.0 ; enddo
     endif
     call write_field(IO_handle, field_md, array, tstamp=tstamp)
     deallocate(array)
@@ -2678,7 +2692,7 @@ end subroutine MOM_write_field_legacy_1d
 
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2692,6 +2706,8 @@ subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_va
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real :: scale_fac  ! A scaling factor to use before writing the field [a A-1 ~> 1]
@@ -2703,6 +2719,7 @@ subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_va
   scaled_val = field * scale_fac
 
   if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
+  if (present(zero_zeros)) then ; if (zero_zeros .and. (scaled_val == 0.0)) scaled_val = 0.0 ; endif
 
   call write_field(IO_handle, field_md, scaled_val, tstamp=tstamp)
 end subroutine MOM_write_field_legacy_0d
@@ -2710,7 +2727,7 @@ end subroutine MOM_write_field_legacy_0d
 
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   class(MOM_file),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2727,6 +2744,8 @@ subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, ti
                                                         !! from its internal units to the desired units for output.
                                                         !! Here scale and unscale are synonymous, but unscale
                                                         !! takes precedence if both are present.
+  logical,        optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                        !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled [a]
@@ -2737,13 +2756,13 @@ subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call IO_handle%write_field(field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2752,7 +2771,7 @@ end subroutine MOM_write_field_4d
 
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2769,6 +2788,8 @@ subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, ti
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled [a]
@@ -2779,13 +2800,13 @@ subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call IO_handle%write_field(field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2794,7 +2815,7 @@ end subroutine MOM_write_field_3d
 
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2811,6 +2832,8 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units or rescaled [a]
@@ -2821,13 +2844,13 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call IO_handle%write_field(field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2835,7 +2858,7 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
 end subroutine MOM_write_field_2d
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2849,16 +2872,21 @@ subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, sc
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, dimension(:), allocatable :: array ! A rescaled copy of field in arbtrary unscaled units [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
+  logical :: design_zeros ! If true, convert negative zeros into ordinary signless zeros.
   integer :: i
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if (scale_fac == 1.0) then
+  design_zeros = .false. ; if (present(zero_zeros)) design_zeros = zero_zeros
+
+  if ((scale_fac == 1.0) .and. (.not.design_zeros)) then
     call IO_handle%write_field(field_md, field, tstamp=tstamp)
   else
     allocate(array(size(field)))
@@ -2866,13 +2894,16 @@ subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, sc
     if (present(fill_value)) then
       do i=1,size(field) ; if (field(i) == fill_value) array(i) = fill_value ; enddo
     endif
+    if (design_zeros) then ! Convert negative zeros into zeros
+      do i=1,size(field) ; if (array(i) == 0.0) array(i) = 0.0 ; enddo
+    endif
     call IO_handle%write_field(field_md, array, tstamp=tstamp)
     deallocate(array)
   endif
 end subroutine MOM_write_field_1d
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2886,6 +2917,8 @@ subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, sc
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real :: scale_fac  ! A scaling factor to use before writing the field [a A-1 ~> 1]
@@ -2897,6 +2930,7 @@ subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, sc
   scaled_val = field * scale_fac
 
   if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
+  if (present(zero_zeros)) then ; if (zero_zeros .and. (scaled_val == 0.0)) scaled_val = 0.0 ; endif
 
   call IO_handle%write_field(field_md, scaled_val, tstamp=tstamp)
 end subroutine MOM_write_field_0d
