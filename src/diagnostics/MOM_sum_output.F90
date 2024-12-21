@@ -4,8 +4,8 @@ module MOM_sum_output
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use iso_fortran_env, only : int64
-use MOM_checksums,     only : is_NaN
-use MOM_coms,          only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs, field_chksum
+use MOM_checksums,     only : is_NaN, field_checksum
+use MOM_coms,          only : sum_across_PEs, PE_here, root_PE, num_PEs, max_across_PEs
 use MOM_coms,          only : reproducing_sum, reproducing_sum_EFP, EFP_to_real, real_to_EFP
 use MOM_coms,          only : EFP_type, operator(+), operator(-), assignment(=), EFP_sum_across_PEs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
@@ -1439,22 +1439,23 @@ subroutine get_depth_list_checksums(G, US, depth_chksum, area_chksum)
   character(len=16), intent(out) :: depth_chksum  !< Depth checksum hexstring
   character(len=16), intent(out) :: area_chksum   !< Area checksum hexstring
 
+  ! Local variables
+  real, allocatable :: field(:,:)  ! A temporary array with no halos [Z ~> m] or [L2 ~> m2]
   integer :: i, j
-  real, allocatable :: field(:,:)  ! A temporary array for output converted to MKS units [m] or [m2]
 
   allocate(field(G%isc:G%iec, G%jsc:G%jec))
 
   ! Depth checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = US%Z_to_m*(G%bathyT(i,j) + G%Z_ref)
+    field(i,j) = G%bathyT(i,j) + G%Z_ref
   enddo ; enddo
-  write(depth_chksum, '(Z16)') field_chksum(field(:,:))
+  write(depth_chksum, '(Z16)') field_checksum(field(:,:), unscale=US%Z_to_m)
 
   ! Area checksum
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    field(i,j) = G%mask2dT(i,j) * US%L_to_m**2*G%areaT(i,j)
+    field(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
-  write(area_chksum, '(Z16)') field_chksum(field(:,:))
+  write(area_chksum, '(Z16)') field_checksum(field(:,:), unscale=US%L_to_m**2)
 
   deallocate(field)
 end subroutine get_depth_list_checksums
