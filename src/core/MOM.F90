@@ -986,7 +986,11 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       do j=js,je ; do i=is,ie
         CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
       enddo ; enddo
-      if (CS%IDs%id_ssh_inst > 0) call post_data(CS%IDs%id_ssh_inst, ssh, CS%diag)
+      if (CS%IDs%id_ssh_inst > 0) then
+        call enable_averages(dt, Time_local, CS%diag)
+        call post_data(CS%IDs%id_ssh_inst, ssh, CS%diag)
+        call disable_averaging(CS%diag)
+      endif
       call cpu_clock_end(id_clock_dynamics)
     endif
 
