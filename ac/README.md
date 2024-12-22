@@ -28,8 +28,9 @@ support.
 The following instructions will allow a new user to quickly create a MOM6
 executable for ocean-only simulations.
 
-Before starting, ensure that all submodules have been updated.
+First, clone the `git` repository and ensure that all submodules have been updated:
 ```
+$ git clone git@github.com:mom-ocean/MOM6.git
 $ git submodule update --init --recursive
 ```
 
