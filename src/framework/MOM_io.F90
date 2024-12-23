@@ -2131,9 +2131,8 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                   !! as 4d arrays in the file.
 
   call read_field(filename, fieldname, data, &
-    timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
-    global_file=global_file, file_may_be_4d=file_may_be_4d &
-  )
+                  timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
+                  global_file=global_file, file_may_be_4d=file_may_be_4d)
 end subroutine MOM_read_data_0d
 
 
@@ -2164,9 +2163,9 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                   !! as 4d arrays in the file.
 
   call read_field(filename, fieldname, data, &
-    timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
-    global_file=global_file, file_may_be_4d=file_may_be_4d &
-  )
+                  timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
+                  global_file=global_file, file_may_be_4d=file_may_be_4d)
+
 end subroutine MOM_read_data_1d
 
 
@@ -2182,12 +2181,13 @@ end subroutine MOM_read_data_1d_int
 
 
 !> Read a 2d array from file using infrastructure I/O.
-subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file, file_may_be_4d)
+subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, timelevel, position, &
+                            scale, global_file, file_may_be_4d, turns)
   character(len=*), intent(in)  :: filename  !< Input filename
   character(len=*), intent(in)  :: fieldname !< Field variable name
   real, dimension(:,:), intent(inout) :: data   !< Field value in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel !< Time level to read in file
   integer, optional, intent(in) :: position  !< Grid positioning flag
   real, optional, intent(in)    :: scale     !< A scaling factor that the variable is multiplied by
@@ -2196,31 +2196,39 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   logical, optional, intent(in) :: global_file    !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns    ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns   ! Number of quarter-turns from input to model grid
   real, allocatable :: data_in(:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_field(filename, fieldname, data, MOM_Domain, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
   else
-    call allocate_rotated_array(data, [1,1], -turns, data_in)
-    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
-    call rotate_array(data_in, turns, data)
+    call allocate_rotated_array(data, [1,1], -qturns, data_in)
+    call rotate_array(data, -qturns, data_in)
+    call read_field(filename, fieldname, data_in, domain_ptr, &
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
+    call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
+
 end subroutine MOM_read_data_2d
 
 
 !> Read a 2d array (which might have halos) from a file using native netCDF I/O.
 subroutine read_netCDF_data_2d(filename, fieldname, values, MOM_Domain, &
-                            timelevel, position, rescale)
+                            timelevel, position, rescale, turns)
   character(len=*), intent(in) :: filename
     !< Input filename
   character(len=*), intent(in)  :: fieldname
@@ -2236,8 +2244,11 @@ subroutine read_netCDF_data_2d(filename, fieldname, values, MOM_Domain, &
     !< Grid positioning flag
   real, optional, intent(in) :: rescale
     !< Rescale factor, omitting this is the same as setting it to 1.
+  integer, optional, intent(in) :: turns
+    !< Number of quarter-turns to rotate the data.  If absent the number of turns is taken
+    !! from MOM_Domain.
 
-  integer :: turns
+  integer :: qturns
     ! Number of quarter-turns from input to model grid
   real, allocatable :: values_in(:,:)
     ! Field array on the unrotated input grid
@@ -2258,13 +2269,15 @@ subroutine read_netCDF_data_2d(filename, fieldname, values, MOM_Domain, &
   call handle%open(filename, action=READONLY_FILE, MOM_domain=MOM_domain)
   call handle%update()
 
-  turns = MOM_domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
     call handle%read(fieldname, values, rescale=rescale)
   else
-    call allocate_rotated_array(values, [1,1], -turns, values_in)
+    call allocate_rotated_array(values, [1,1], -qturns, values_in)
+    call rotate_array(values, -qturns, values_in)
     call handle%read(fieldname, values_in, rescale=rescale)
-    call rotate_array(values_in, turns, values)
+    call rotate_array(values_in, qturns, values)
     deallocate(values_in)
   endif
 
@@ -2299,13 +2312,17 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
 
   if (qturns == 0) then
     call read_field(filename, fieldname, data, start, nread, &
-      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
-    )
+                    MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
   else
     call allocate_rotated_array(data, [1,1], -qturns, data_in)
-    call read_field(filename, fieldname, data_in, start, nread, &
-      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale &
-    )
+    call rotate_array(data, -qturns, data_in)
+    if (associated(MOM_Domain%domain_in)) then
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale)
+    else
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
+    endif
     call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
@@ -2313,12 +2330,13 @@ end subroutine MOM_read_data_2d_region
 
 
 !> Read a 3d array from file using infrastructure I/O.
-subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file, file_may_be_4d)
+subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, timelevel, position, &
+                            scale, global_file, file_may_be_4d, turns)
   character(len=*), intent(in)  :: filename     !< Input filename
   character(len=*), intent(in)  :: fieldname    !< Field variable name
   real, dimension(:,:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
   real, optional, intent(in)    :: scale        !< A scaling factor that the variable is multiplied by
@@ -2327,25 +2345,32 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   logical, optional, intent(in) :: global_file  !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns    ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns   ! Number of quarter-turns from input to model grid
   real, allocatable :: data_in(:,:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_domain%turns
-  if (turns == 0) then
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+  if (qturns == 0) then
     call read_field(filename, fieldname, data, MOM_Domain, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
   else
-    call allocate_rotated_array(data, [1,1,1], -turns, data_in)
-    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
-    call rotate_array(data_in, turns, data)
+    call allocate_rotated_array(data, [1,1,1], -qturns, data_in)
+    call rotate_array(data, -qturns, data_in)
+    call read_field(filename, fieldname, data_in, domain_ptr, &
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
+    call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
+
 end subroutine MOM_read_data_3d
 
 !> Read a 3d region array from file using infrastructure I/O.
@@ -2373,13 +2398,17 @@ subroutine MOM_read_data_3d_region(filename, fieldname, data, start, nread, MOM_
 
   if (qturns == 0) then
     call read_field(filename, fieldname, data, start, nread, &
-      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
-    )
+                    MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
   else
     call allocate_rotated_array(data, [1,1,1], -qturns, data_in)
-    call read_field(filename, fieldname, data_in, start, nread, &
-      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale &
-    )
+    call rotate_array(data, -qturns, data_in)
+    if (associated(MOM_Domain%domain_in)) then
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale)
+    else
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
+    endif
     call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
@@ -2387,124 +2416,157 @@ end subroutine MOM_read_data_3d_region
 
 !> Read a 4d array from file using infrastructure I/O.
 subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file)
+                            timelevel, position, scale, global_file, turns)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: fieldname     !< Field variable name
   real, dimension(:,:,:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
-  real, optional, intent(in)    :: scale        !< A scaling factor that the variable is multiplied by
+  real,    optional, intent(in) :: scale        !< A scaling factor that the variable is multiplied by
                                                 !! before it is returned to convert from the units in the file
                                                 !! to the internal units for this variable [A a-1 ~> 1]
   logical, optional, intent(in) :: global_file  !< If true, read from a single file
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns    ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns   ! Number of quarter-turns from input to model grid
   real, allocatable :: data_in(:,:,:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_domain%turns
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
 
-  if (turns == 0) then
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_field(filename, fieldname, data, MOM_Domain, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file &
-    )
+        timelevel=timelevel, position=position, scale=scale, &
+        global_file=global_file)
   else
     ! Read field along the input grid and rotate to the model grid
-    call allocate_rotated_array(data, [1,1,1,1], -turns, data_in)
-    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file &
-    )
-    call rotate_array(data_in, turns, data)
+    call allocate_rotated_array(data, [1,1,1,1], -qturns, data_in)
+    call rotate_array(data, -qturns, data_in)
+    call read_field(filename, fieldname, data_in, domain_ptr, timelevel=timelevel, &
+                    position=position, scale=scale, global_file=global_file)
+    call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
+
 end subroutine MOM_read_data_4d
 
 
 !> Read a 2d vector tuple from file using infrastructure I/O.
 subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+                              timelevel, stagger, scalar_pair, scale, turns)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
   real, dimension(:,:), intent(inout) :: u_data !< Field value at u points in arbitrary units [A ~> a]
   real, dimension(:,:), intent(inout) :: v_data !< Field value at v points in arbitrary units  [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
   logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
-  real, optional, intent(in) :: scale           !< A scaling factor that the vector is multiplied by
+  real,    optional, intent(in) :: scale        !< A scaling factor that the vector is multiplied by
                                                 !! before it is returned to convert from the units in the file
                                                 !! to the internal units for this variable [A a-1 ~> 1]
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns  ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns ! Number of quarter-turns from input to model grid
   real, allocatable :: u_data_in(:,:), v_data_in(:,:)   ! [uv] on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_Domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_vector(filename, u_fieldname, v_fieldname, &
-        u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
-        scalar_pair=scalar_pair, scale=scale &
-    )
+                     u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
+                     scalar_pair=scalar_pair, scale=scale)
   else
-    call allocate_rotated_array(u_data, [1,1], -turns, u_data_in)
-    call allocate_rotated_array(v_data, [1,1], -turns, v_data_in)
-    call read_vector(filename, u_fieldname, v_fieldname, &
-      u_data_in, v_data_in, MOM_domain%domain_in, timelevel=timelevel, &
-        stagger=stagger, scalar_pair=scalar_pair, scale=scale &
-    )
+    call allocate_rotated_array(u_data, [1,1], -qturns, u_data_in)
+    call allocate_rotated_array(v_data, [1,1], -qturns, v_data_in)
     if (scalar_pair) then
-      call rotate_array_pair(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_array_pair(u_data, v_data, -qturns, u_data_in, v_data_in)
     else
-      call rotate_vector(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_vector(u_data, v_data, -qturns, u_data_in, v_data_in)
+    endif
+    call read_vector(filename, u_fieldname, v_fieldname, u_data_in, v_data_in, &
+                     domain_ptr, timelevel=timelevel, &
+                     stagger=stagger, scalar_pair=scalar_pair, scale=scale)
+    if (scalar_pair) then
+      call rotate_array_pair(u_data_in, v_data_in, qturns, u_data, v_data)
+    else
+      call rotate_vector(u_data_in, v_data_in, qturns, u_data, v_data)
     endif
     deallocate(v_data_in)
     deallocate(u_data_in)
   endif
+
 end subroutine MOM_read_vector_2d
 
 
 !> Read a 3d vector tuple from file using infrastructure I/O.
 subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+                              timelevel, stagger, scalar_pair, scale, turns)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
   real, dimension(:,:,:), intent(inout) :: u_data !< Field value in u in arbitrary units [A ~> a]
   real, dimension(:,:,:), intent(inout) :: v_data !< Field value in v in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
   logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
-  real, optional, intent(in) :: scale           !< A scaling factor that the vector is multiplied by
+  real,    optional, intent(in) :: scale        !< A scaling factor that the vector is multiplied by
                                                 !! before it is returned to convert from the units in the file
                                                 !! to the internal units for this variable [A a-1 ~> 1]
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns  ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns ! Number of quarter-turns from input to model grid
   real, allocatable :: u_data_in(:,:,:), v_data_in(:,:,:) ! [uv] on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_Domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_vector(filename, u_fieldname, v_fieldname, &
-        u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
-        scalar_pair=scalar_pair, scale=scale &
-    )
+                     u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
+                     scalar_pair=scalar_pair, scale=scale)
   else
-    call allocate_rotated_array(u_data, [1,1,1], -turns, u_data_in)
-    call allocate_rotated_array(v_data, [1,1,1], -turns, v_data_in)
-    call read_vector(filename, u_fieldname, v_fieldname, &
-        u_data_in, v_data_in, MOM_domain%domain_in, timelevel=timelevel, &
-        stagger=stagger, scalar_pair=scalar_pair, scale=scale &
-    )
+    call allocate_rotated_array(u_data, [1,1,1], -qturns, u_data_in)
+    call allocate_rotated_array(v_data, [1,1,1], -qturns, v_data_in)
     if (scalar_pair) then
-      call rotate_array_pair(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_array_pair(u_data, v_data, -qturns, u_data_in, v_data_in)
     else
-      call rotate_vector(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_vector(u_data, v_data, -qturns, u_data_in, v_data_in)
+    endif
+    call read_vector(filename, u_fieldname, v_fieldname, u_data_in, v_data_in, &
+                     domain_ptr, timelevel=timelevel, &
+                     stagger=stagger, scalar_pair=scalar_pair, scale=scale)
+    if (scalar_pair) then
+      call rotate_array_pair(u_data_in, v_data_in, qturns, u_data, v_data)
+    else
+      call rotate_vector(u_data_in, v_data_in, qturns, u_data, v_data)
     endif
     deallocate(v_data_in)
     deallocate(u_data_in)
   endif
+
 end subroutine MOM_read_vector_3d
 
 !> Write a 4d field to an output file, potentially with rotation
