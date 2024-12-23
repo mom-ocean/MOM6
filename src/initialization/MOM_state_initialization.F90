@@ -29,8 +29,8 @@ use MOM_open_boundary, only : fill_temp_salt_segments
 use MOM_open_boundary, only : update_OBC_segment_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
-use MOM_restart, only : restore_state, is_new_run, MOM_restart_CS
-use MOM_restart, only : restart_registry_lock
+use MOM_restart, only : restore_state, is_new_run, copy_restart_var, copy_restart_vector
+use MOM_restart, only : restart_registry_lock, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, set_up_ALE_sponge_vel_field
@@ -161,7 +161,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
 
   logical :: from_Z_file, useALE
-  logical :: new_sim
+  logical :: new_sim, rotate_index
   logical :: use_temperature, use_sponge, use_OBC, use_oda_incupd
   logical :: verify_restart_time
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
@@ -545,6 +545,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       if (verify_restart_time .and. (Time /= Time_in)) call MOM_error(FATAL, &
         "MOM6 attempted to restart from a file from a different time than given by Time_in.")
       Time = Time_in
+    endif
+    call get_param(PF, mdl, "ROTATE_INDEX", rotate_index, &
+                 "Enable rotation of the horizontal indices.", &
+                 default=.false., debuggingParam=.true., do_not_log=.true.)
+    if (rotate_index) then
+      ! This model is using a rotated grid, so the unrotated variables used here have not been set yet.
+      call copy_restart_var(h, "h", restart_CS, .true.)
+      call copy_restart_vector(u, v, "u", "v", restart_CS, .true.)
+      if ( use_temperature ) then
+        call copy_restart_var(tv%T, "Temp", restart_CS, .true.)
+        call copy_restart_var(tv%S, "Salt", restart_CS, .true.)
+      endif
     endif
   endif
 
