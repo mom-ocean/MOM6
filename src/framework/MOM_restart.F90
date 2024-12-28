@@ -5,7 +5,7 @@ module MOM_restart
 
 use, intrinsic :: iso_fortran_env, only : int64
 use MOM_array_transform, only : rotate_array, rotate_vector, rotate_array_pair
-use MOM_checksums, only : chksum => rotated_field_chksum
+use MOM_checksums, only : chksum => field_checksum
 use MOM_domains, only : PE_here, num_PEs, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, NOTE, is_root_pe, MOM_get_verbosity
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
@@ -1738,15 +1738,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
 
       conv = CS%restart_field(m)%conv
       if (associated(CS%var_ptr3d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns, unscale=conv)
       elseif (associated(CS%var_ptr2d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns, unscale=conv)
       elseif (associated(CS%var_ptr4d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns, unscale=conv)
       elseif (associated(CS%var_ptr1d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr1d(m)%p(:))
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr1d(m)%p(:), unscale=conv)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr0d(m)%p, pelist=(/PE_here()/))
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr0d(m)%p, pelist=(/PE_here()/), unscale=conv)
       endif
     enddo
 
@@ -1924,11 +1924,11 @@ subroutine restore_state(filename, directory, day, G, CS)
             ! Read a 1d array, which should be invariant to domain decomposition.
             call MOM_read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
                                timelevel=1, scale=scale, MOM_Domain=G%Domain)
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr1d(m)%p(:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr1d(m)%p(:), unscale=conv)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call MOM_read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
                                timelevel=1, scale=scale, MOM_Domain=G%Domain)
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr0d(m)%p, pelist=(/PE_here()/))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr0d(m)%p, pelist=(/PE_here()/), unscale=conv)
           elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
@@ -1938,7 +1938,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                         "MOM_restart does not support 2-d arrays without domain decomposition.")
               ! call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p,no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), unscale=conv)
           elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
@@ -1948,7 +1948,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                         "MOM_restart does not support 3-d arrays without domain decomposition.")
               ! call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), unscale=conv)
           elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
@@ -1959,7 +1959,7 @@ subroutine restore_state(filename, directory, day, G, CS)
                         "MOM_restart does not support 4-d arrays without domain decomposition.")
               ! call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), unscale=conv)
           else
             call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
           endif
