@@ -699,6 +699,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
         if (CS%debug .or. (CS%id_BBL_Vel_Scale>0)) then ; do k=1,nz
           BBL_Vel_Scale(i,j,k) = mixvel_BBL(k)
         enddo ; endif
+        if (CS%id_TKE_BBL>0) &
+          diag_TKE_BBL(i,j) = diag_TKE_BBL(i,j) + BBL_TKE
       endif
       if (CS%id_MSTAR_MIX > 0) diag_mStar_mix(i,j) = eCD%mstar
       if (CS%id_MSTAR_LT > 0) diag_mStar_lt(i,j) = eCD%mstar_LT
