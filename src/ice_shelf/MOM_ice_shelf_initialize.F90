@@ -321,7 +321,7 @@ subroutine initialize_ice_shelf_boundary_channel(u_face_mask_bdry, v_face_mask_b
 
   call get_param(PF, mdl, "INPUT_VEL_ICE_SHELF", input_vel, &
                  "inflow ice velocity at upstream boundary", &
-                 units="m s-1", default=0., scale=US%m_s_to_L_T*US%m_to_Z) !### This conversion factor is wrong?
+                 units="m s-1", default=0., scale=US%m_s_to_L_T)
   call get_param(PF, mdl, "INPUT_THICK_ICE_SHELF", input_thick, &
                  "flux thickness at upstream boundary", &
                  units="m", default=1000., scale=US%m_to_Z)
@@ -556,7 +556,7 @@ end subroutine initialize_ice_shelf_boundary_from_file
 subroutine initialize_ice_C_basal_friction(C_basal_friction, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: C_basal_friction !< Ice-stream basal friction
+                         intent(inout) :: C_basal_friction !< Ice-stream basal friction [Pa (s m-1)^(n_basal_fric)]
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 

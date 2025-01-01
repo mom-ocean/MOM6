@@ -108,10 +108,10 @@ type, public :: ice_shelf_dyn_CS ; private
 
   real, pointer, dimension(:,:) :: basal_traction => NULL() !< The area-integrated taub_beta field
                                                             !! (m2 Pa s m-1, or kg s-1) related to the nonlinear part
-                                                            !! of "linearized" basal stress (Pa) [R L3 T-1 ~> kg s-1]
+                                                            !! of "linearized" basal stress (Pa) [R Z L2 T-1 ~> kg s-1]
                 !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
   real, pointer, dimension(:,:) :: C_basal_friction => NULL()!< Coefficient in sliding law tau_b = C u^(n_basal_fric),
-                                                            !!  units= Pa (s m-1)^(n_basal_fric)
+                                                            !!  units= [Pa (s m-1)^(n_basal_fric)]
   real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av [Z ~> m].
   real, pointer, dimension(:,:) :: ground_frac_rt => NULL() !< A running total for calculating ground_frac.
   real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth [Z ~> m].
@@ -169,7 +169,7 @@ type, public :: ice_shelf_dyn_CS ; private
                             !! i.e. dt <= CFL_factor * min(dx / u) [nondim]
 
   real :: min_h_shelf !< The minimum ice thickness used during ice dynamics [L ~> m].
-  real :: min_basal_traction !< The minimum basal traction for grounded ice (Pa m-1 s) [R L T-1 ~> kg m-2 s-1]
+  real :: min_basal_traction !< The minimum basal traction for grounded ice (Pa m-1 s) [R Z T-1 ~> kg m-2 s-1]
   real :: max_surface_slope !< The maximum allowed ice-sheet surface slope (to ignore, set to zero) [nondim]
   real :: min_ice_visc !< The minimum allowed Glen's law ice viscosity (Pa s), in [R L2 T-1 ~> kg m-1 s-1].
 
@@ -358,7 +358,7 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
     allocate(CS%t_shelf(isd:ied,jsd:jed), source=T_shelf_missing) ! [C ~> degC]
     allocate(CS%ice_visc(isd:ied,jsd:jed,CS%visc_qps), source=0.0)
     allocate(CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25) ! [Pa-3 s-1]
-    allocate(CS%basal_traction(isd:ied,jsd:jed), source=0.0)   ! [R L3 T-1 ~> kg s-1]
+    allocate(CS%basal_traction(isd:ied,jsd:jed), source=0.0)   ! [R Z L2 T-1 ~> kg s-1]
     allocate(CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10) ! [Pa (s m-1)^n_sliding]
     allocate(CS%OD_av(isd:ied,jsd:jed), source=0.0)
     allocate(CS%ground_frac(isd:ied,jsd:jed), source=0.0)
@@ -838,7 +838,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
     CS%id_visc_shelf = register_diag_field('ice_shelf_model','ice_visc',CS%diag%axesT1, Time, &
        'vi-viscosity', 'Pa m s', conversion=US%RL2_T2_to_Pa*US%Z_to_m*US%T_to_s) !vertically integrated viscosity
     CS%id_taub = register_diag_field('ice_shelf_model','taub_beta',CS%diag%axesT1, Time, &
-       'taub', 'MPa s m-1', conversion=1e-6*US%RL2_T2_to_Pa/(365.0*86400.0*US%L_T_to_m_s))
+       'taub', units='MPa yr m-1', conversion=1e-6*US%RLZ_T2_to_Pa/(365.0*86400.0*US%L_T_to_m_s))
     CS%id_OD_av = register_diag_field('ice_shelf_model','OD_av',CS%diag%axesT1, Time, &
        'intermediate ocean column thickness passed to ice model', 'm', conversion=US%Z_to_m)
 
@@ -1010,10 +1010,10 @@ subroutine volume_above_floatation(CS, G, ISS, vaf, hemisphere)
   type(ocean_grid_type),  intent(in) :: G  !< The grid structure used by the ice shelf.
   type(ice_shelf_state),  intent(in) :: ISS !< A structure with elements that describe
                                             !! the ice-shelf state
-  real, intent(out) :: vaf !< area integrated volume above floatation [m3]
+  real, intent(out) :: vaf !< area integrated volume above floatation [Z L2 ~> m3]
   integer, optional, intent(in) :: hemisphere !< 0 for Antarctica only, 1 for Greenland only. Otherwise, all ice sheets
   integer :: IS_ID ! local copy of hemisphere
-  real, dimension(SZI_(G),SZJ_(G))  :: vaf_cell !< cell-wise volume above floatation [m3]
+  real, dimension(SZI_(G),SZJ_(G))  :: vaf_cell !< cell-wise volume above floatation [Z L2 ~> m3]
   integer, dimension(SZI_(G),SZJ_(G))  :: mask ! a mask for active cells depending on hemisphere indicated
   integer :: is,ie,js,je,i,j
   real :: rhoi_rhow, rhow_rhoi
@@ -1057,7 +1057,7 @@ subroutine volume_above_floatation(CS, G, ISS, vaf, hemisphere)
     endif
   enddo; enddo
 
-  vaf = G%US%Z_to_m*G%US%L_to_m**2 * reproducing_sum(vaf_cell, unscale=G%US%Z_to_m*G%US%L_to_m**2)
+  vaf = reproducing_sum(vaf_cell, unscale=G%US%Z_to_m*G%US%L_to_m**2)
 end subroutine volume_above_floatation
 
 !> multiplies a variable with the ice sheet grounding fraction
@@ -2642,7 +2642,7 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
                                                  !! relative to sea-level [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                          intent(in)    :: basal_trac  !< Area-integrated taub_beta field related to the nonlinear
-                                                !! part of the "linearized" basal stress [R L3 T-1 ~> kg s-1].
+                                                !! part of the "linearized" basal stress [R Z L2 T-1 ~> kg s-1].
 
   real,                  intent(in)    :: dens_ratio !< The density of ice divided by the density
                                                      !! of seawater, nondimensional
@@ -2675,10 +2675,11 @@ subroutine CG_action(CS, uret, vret, u_shlf, v_shlf, Phi, Phisub, umask, vmask, 
   real :: uq, vq  ! Interpolated velocities [L T-1 ~> m s-1]
   integer :: iq, jq, iphi, jphi, i, j, ilq, jlq, Itgt, Jtgt, qp, qpv
   logical :: visc_qp4
-  real, dimension(2) :: xquad
-  real, dimension(2,2) :: Ucell, Vcell, Hcell, Usub, Vsub
-  real, dimension(2,2,4) :: uret_qp, vret_qp
-  real, dimension(SZDIB_(G),SZDJB_(G),4) :: uret_b, vret_b
+  real, dimension(2) :: xquad  ! Nondimensional quadrature ratios [nondim]
+  real, dimension(2,2) :: Ucell, Vcell, Usub, Vsub  ! Velocities at the nodal points around the cell [L T-1 ~> m s-1]
+  real, dimension(2,2) :: Hcell   ! Ice shelf thickness at notal (corner) points [Z ~> m]
+  real, dimension(2,2,4) :: uret_qp, vret_qp                ! Temporary arrays in [R Z L3 T-2 ~> kg m s-2]
+  real, dimension(SZDIB_(G),SZDJB_(G),4) :: uret_b, vret_b  ! Temporary arrays in [R Z L3 T-2 ~> kg m s-2]
 
   xquad(1) = .5 * (1-sqrt(1./3)) ; xquad(2) = .5 * (1+sqrt(1./3))
 
