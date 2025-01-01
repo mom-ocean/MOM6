@@ -1188,7 +1188,7 @@ subroutine initialize_obc_tides(OBC, US, param_file)
 
   call get_param(param_file, mdl, "OBC_TIDE_NODAL_REF_DATE", nodal_ref_date, &
       "Fixed reference date to use for nodal modulation of boundary tides.", &
-      fail_if_missing=.false., default=0)
+      fail_if_missing=.false., defaults=(/0, 0, 0/))
 
   if (.not. OBC%add_eq_phase) then
     ! If equilibrium phase argument is not added, the input phases
@@ -1200,7 +1200,7 @@ subroutine initialize_obc_tides(OBC, US, param_file)
   read(tide_constituent_str, *) OBC%tide_names
 
   ! Set reference time (t = 0) for boundary tidal forcing.
-  OBC%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3))
+  OBC%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3), 0, 0, 0)
 
   ! Find relevant lunar and solar longitudes at the reference time
   if (OBC%add_eq_phase) call astro_longitudes_init(OBC%time_ref, OBC%tidal_longitudes)
@@ -1210,7 +1210,7 @@ subroutine initialize_obc_tides(OBC, US, param_file)
   if (OBC%add_nodal_terms) then
     if (sum(nodal_ref_date) /= 0) then
       ! A reference date was provided for the nodal correction
-      nodal_time = set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3))
+      nodal_time = set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3), 0, 0, 0)
       call astro_longitudes_init(nodal_time, nodal_longitudes)
     elseif (OBC%add_eq_phase) then
       ! Astronomical longitudes were already calculated for use in equilibrium phases,

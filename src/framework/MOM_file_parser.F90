@@ -125,7 +125,7 @@ end interface
 
 contains
 
-!> Make the contents of a parameter input file availalble in a param_file_type
+!> Make the contents of a parameter input file available in a param_file_type
 subroutine open_param_file(filename, CS, checkable, component, doc_file_dir, ensemble_num)
   character(len=*),           intent(in) :: filename !< An input file name, optionally with the full path
   type(param_file_type),   intent(inout) :: CS      !< The control structure for the file_parser module,
@@ -562,10 +562,10 @@ function removeComments(string)
   removeComments(:last)=adjustl(string(:last)) ! Copy only the non-comment part of string
 end function removeComments
 
-!> Constructs a string with all repeated whitespace replaced with single blanks
+!> Constructs a string with all repeated white space replaced with single blanks
 !! and insert white space where it helps delineate tokens (e.g. around =)
 function simplifyWhiteSpace(string)
-  character(len=*), intent(in) :: string !< A string to modify to simpify white space
+  character(len=*), intent(in) :: string !< A string to modify to simplify white space
   character(len=len(string)+16)   :: simplifyWhiteSpace
 
   ! Local variables
@@ -583,7 +583,7 @@ function simplifyWhiteSpace(string)
       if (string(j:j)==quoteChar) insideString=.false. ! End of string
     else ! The following is outside of string delimiters
       if (string(j:j)==" " .or. string(j:j)==achar(9)) then ! Space or tab
-        if (nonBlank) then ! Only copy a blank if the preceeding character was non-blank
+        if (nonBlank) then ! Only copy a blank if the preceding character was non-blank
           i=i+1
           simplifyWhiteSpace(i:i)=" " ! Not string(j:j) so that tabs are replace by blanks
           nonBlank=.false.
@@ -989,7 +989,7 @@ function max_input_line_length(CS, pf_num) result(max_len)
 end function max_input_line_length
 
 !> This subroutine extracts the contents of lines in the param_file_type that refer to
-!! a named parameter.  The value_string that is returned must be interepreted in a way
+!! a named parameter.  The value_string that is returned must be interpreted in a way
 !! that depends on the type of this variable.
 subroutine get_variable_line(CS, varname, found, defined, value_string, paramIsLogical)
   type(param_file_type),  intent(in) :: CS      !< The control structure for the file_parser module,
@@ -1391,7 +1391,7 @@ end subroutine log_param_int
 
 !> Log the name and values of an array of integer model parameter in documentation files.
 subroutine log_param_int_array(CS, modulename, varname, value, desc, &
-                               units, default, layoutParam, debuggingParam, like_default)
+                               units, default, defaults, layoutParam, debuggingParam, like_default)
   type(param_file_type),      intent(in) :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
   character(len=*),           intent(in) :: modulename !< The name of the module using this parameter
@@ -1400,7 +1400,8 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
   character(len=*), optional, intent(in) :: desc    !< A description of this variable; if not
                                          !! present, this parameter is not written to a doc file
   character(len=*), optional, intent(in) :: units   !< The units of this parameter
-  integer,          optional, intent(in) :: default !< The default value of the parameter
+  integer,          optional, intent(in) :: default !< The uniform default value of this parameter
+  integer,          optional, intent(in) :: defaults(:) !< The element-wise default values of this parameter
   logical,          optional, intent(in) :: layoutParam !< If present and true, this parameter is
                                          !! logged in the layout parameter file
   logical,          optional, intent(in) :: debuggingParam !< If present and true, this parameter is
@@ -1419,7 +1420,7 @@ subroutine log_param_int_array(CS, modulename, varname, value, desc, &
 
   myunits=" "; if (present(units)) write(myunits(1:240),'(A)') trim(units)
   if (present(desc)) &
-    call doc_param(CS%doc, varname, desc, myunits, value, default, &
+    call doc_param(CS%doc, varname, desc, myunits, value, default, defaults, &
                    layoutParam=layoutParam, debuggingParam=debuggingParam, like_default=like_default)
 
 end subroutine log_param_int_array
@@ -1745,7 +1746,7 @@ end subroutine get_param_int
 !> This subroutine reads the values of an array of integer model parameters from a parameter file
 !! and logs them in documentation files.
 subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
-               default, fail_if_missing, do_not_read, do_not_log, &
+               default, defaults, fail_if_missing, do_not_read, do_not_log, &
                layoutParam, debuggingParam)
   type(param_file_type),      intent(in)    :: CS      !< The control structure for the file_parser module,
                                          !! it is also a structure to parse for run-time parameters
@@ -1756,7 +1757,8 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
   character(len=*), optional, intent(in)    :: desc    !< A description of this variable; if not
                                          !! present, this parameter is not written to a doc file
   character(len=*), optional, intent(in)    :: units   !< The units of this parameter
-  integer,          optional, intent(in)    :: default !< The default value of the parameter
+  integer,          optional, intent(in)    :: default !< The uniform default value of this parameter
+  integer,          optional, intent(in)    :: defaults(:) !< The element-wise default values of this parameter
   logical,          optional, intent(in)    :: fail_if_missing !< If present and true, a fatal error occurs
                                          !! if this variable is not found in the parameter file
   logical,          optional, intent(in)    :: do_not_read  !< If present and true, do not read a
@@ -1773,14 +1775,22 @@ subroutine get_param_int_array(CS, modulename, varname, value, desc, units, &
   do_read = .true. ; if (present(do_not_read)) do_read = .not.do_not_read
   do_log  = .true. ; if (present(do_not_log))  do_log  = .not.do_not_log
 
+  if (present(defaults)) then
+    if (present(default)) call MOM_error(FATAL, &
+          "get_param_int_array: Only one of default and defaults can be specified at a time.")
+    if (size(defaults) /= size(value)) call MOM_error(FATAL, &
+          "get_param_int_array: The size of defaults and value are not the same.")
+  endif
+
   if (do_read) then
     if (present(default)) value(:) = default
+    if (present(defaults)) value(:) = defaults(:)
     call read_param_int_array(CS, varname, value, fail_if_missing)
   endif
 
   if (do_log) then
-    call log_param_int_array(CS, modulename, varname, value, desc, &
-                             units, default, layoutParam, debuggingParam)
+    call log_param_int_array(CS, modulename, varname, value, desc, units, &
+                             default, defaults, layoutParam, debuggingParam)
   endif
 
 end subroutine get_param_int_array
@@ -1871,7 +1881,7 @@ subroutine get_param_real_array(CS, modulename, varname, value, desc, units, &
     if (present(default)) call MOM_error(FATAL, &
           "get_param_real_array: Only one of default and defaults can be specified at a time.")
     if (size(defaults) /= size(value)) call MOM_error(FATAL, &
-          "get_param_real_array: The size of defaults nad value are not the same.")
+          "get_param_real_array: The size of defaults and value are not the same.")
   endif
 
   if (do_read) then

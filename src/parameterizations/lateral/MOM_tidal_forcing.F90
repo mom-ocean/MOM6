@@ -95,8 +95,8 @@ subroutine astro_longitudes_init(time_ref, longitudes)
   real :: T                                          !> Time in Julian centuries [centuries]
   real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159... [nondim]
 
-  ! Find date at time_ref in days since 1900-01-01
-  D = time_type_to_real(time_ref - set_date(1900, 1, 1)) / (24.0 * 3600.0)
+  ! Find date at time_ref in days since midnight at the start of 1900-01-01
+  D = time_type_to_real(time_ref - set_date(1900, 1, 1, 0, 0, 0)) / (24.0 * 3600.0)
   ! Time since 1900-01-01 in Julian centuries
   ! Kowalik and Luick use 36526, but Schureman uses 36525 which I think is correct.
   T = D / 36525.0
@@ -385,14 +385,14 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
   call get_param(param_file, mdl, "TIDE_REF_DATE", tide_ref_date, &
                  "Year,month,day to use as reference date for tidal forcing. "//&
                  "If not specified, defaults to 0.", &
-                 default=0)
+                 defaults=(/0, 0, 0/))
 
   call get_param(param_file, mdl, "TIDE_USE_EQ_PHASE", CS%use_eq_phase, &
                  "Correct phases by calculating equilibrium phase arguments for TIDE_REF_DATE. ", &
                  default=.false., fail_if_missing=.false.)
 
   if (sum(tide_ref_date) == 0) then  ! tide_ref_date defaults to 0.
-    CS%time_ref = set_date(1, 1, 1)
+    CS%time_ref = set_date(1, 1, 1, 0, 0, 0)
   else
     if (.not. CS%use_eq_phase) then
       ! Using a reference date but not using phase relative to equilibrium.
@@ -400,7 +400,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
       ! correctly simulating tidal phases is not desired.
       call MOM_mesg('Tidal phases will *not* be corrected with equilibrium arguments.')
     endif
-    CS%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3))
+    CS%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3), 0, 0, 0)
   endif
 
   ! Initialize reference time for tides and find relevant lunar and solar
