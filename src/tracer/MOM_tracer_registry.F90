@@ -586,11 +586,11 @@ subroutine register_tracer_diagnostics(Reg, h, Time, diag, G, GV, US, use_ALE, u
     ! KPP nonlocal term diagnostics
     if (use_KPP) then
       Tr%id_net_surfflux = register_diag_field('ocean_model', Tr%net_surfflux_name, diag%axesT1, Time, &
-          Tr%net_surfflux_longname, trim(units)//' m s-1', conversion=GV%H_to_m*US%s_to_T)
+          Tr%net_surfflux_longname, trim(units)//' m s-1', conversion=Tr%conc_scale*GV%H_to_m*US%s_to_T)
       Tr%id_NLT_tendency = register_diag_field('ocean_model', "KPP_NLT_d"//trim(shortnm)//"dt", &
           diag%axesTL, Time, &
           trim(longname)//' tendency due to non-local transport of '//trim(lowercase(flux_longname))//&
-          ', as calculated by [CVMix] KPP', trim(units)//' s-1', conversion=US%s_to_T)
+          ', as calculated by [CVMix] KPP', trim(units)//' s-1', conversion=Tr%conc_scale*US%s_to_T)
       if (Tr%conv_scale == 0.001*GV%H_to_kg_m2) then
         conversion = GV%H_to_kg_m2
       else

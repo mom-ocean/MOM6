@@ -1296,7 +1296,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
                     bfsfc=surfBuoyFlux, & ! surface buoyancy flux [m2 s-3]
                     uStar=surfFricVel,  & ! surface friction velocity [m s-1]
                     CVmix_kpp_params_user=CS%KPP_params ) ! KPP parameters
-        CS%Vt2(i,j,:) = US%m_to_Z*US%T_to_s * Vt2_1d(:)
+        CS%Vt2(i,j,:) = US%m_to_Z**2*US%T_to_s**2 * Vt2_1d(:)
       endif
 
       ! recompute wscale for diagnostics, now that we in fact know boundary layer depth
