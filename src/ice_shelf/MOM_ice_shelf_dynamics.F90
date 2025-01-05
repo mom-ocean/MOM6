@@ -111,7 +111,7 @@ type, public :: ice_shelf_dyn_CS ; private
                                                             !! of "linearized" basal stress (Pa) [R Z L2 T-1 ~> kg s-1]
                 !!  The exact form depends on basal law exponent and/or whether flow is "hybridized" a la Goldberg 2011
   real, pointer, dimension(:,:) :: C_basal_friction => NULL()!< Coefficient in sliding law tau_b = C u^(n_basal_fric),
-                                                            !!  units= [Pa (s m-1)^(n_basal_fric)]
+                               !! units of [R L Z T-2 (s m-1)^(n_basal_fric) ~> Pa (s m-1)^(n_basal_fric)]
   real, pointer, dimension(:,:) :: OD_rt => NULL()         !< A running total for calculating OD_av [Z ~> m].
   real, pointer, dimension(:,:) :: ground_frac_rt => NULL() !< A running total for calculating ground_frac.
   real, pointer, dimension(:,:) :: OD_av => NULL()         !< The time average open ocean depth [Z ~> m].
@@ -168,7 +168,7 @@ type, public :: ice_shelf_dyn_CS ; private
   real    :: CFL_factor     !< A factor used to limit subcycled advective timestep in uncoupled runs
                             !! i.e. dt <= CFL_factor * min(dx / u) [nondim]
 
-  real :: min_h_shelf !< The minimum ice thickness used during ice dynamics [L ~> m].
+  real :: min_h_shelf !< The minimum ice thickness used during ice dynamics [Z ~> m].
   real :: min_basal_traction !< The minimum basal traction for grounded ice (Pa m-1 s) [R Z T-1 ~> kg m-2 s-1]
   real :: max_surface_slope !< The maximum allowed ice-sheet surface slope (to ignore, set to zero) [nondim]
   real :: min_ice_visc !< The minimum allowed Glen's law ice viscosity (Pa s), in [R L2 T-1 ~> kg m-1 s-1].
@@ -177,7 +177,7 @@ type, public :: ice_shelf_dyn_CS ; private
   real :: eps_glen_min      !< Min. strain rate to avoid infinite Glen's law viscosity, [T-1 ~> s-1].
   real :: n_basal_fric      !< Exponent in sliding law tau_b = C u^(m_slide) [nondim]
   logical :: CoulombFriction !< Use Coulomb friction law (Schoof 2005, Gagliardini et al 2007)
-  real :: CF_MinN           !< Minimum Coulomb friction effective pressure [Pa]
+  real :: CF_MinN           !< Minimum Coulomb friction effective pressure [R Z L T-2 ~> Pa]
   real :: CF_PostPeak       !< Coulomb friction post peak exponent [nondim]
   real :: CF_Max            !< Coulomb friction maximum coefficient [nondim]
   real :: density_ocean_avg !< A typical ocean density [R ~> kg m-3].  This does not affect ocean
@@ -359,7 +359,8 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
     allocate(CS%ice_visc(isd:ied,jsd:jed,CS%visc_qps), source=0.0)
     allocate(CS%AGlen_visc(isd:ied,jsd:jed), source=2.261e-25) ! [Pa-3 s-1]
     allocate(CS%basal_traction(isd:ied,jsd:jed), source=0.0)   ! [R Z L2 T-1 ~> kg s-1]
-    allocate(CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10) ! [Pa (s m-1)^n_sliding]
+    allocate(CS%C_basal_friction(isd:ied,jsd:jed), source=5.0e10*US%Pa_to_RLZ_T2)
+             ! Units of [R L Z T-2 (s m-1)^n_sliding ~> Pa (s m-1)^n_sliding]
     allocate(CS%OD_av(isd:ied,jsd:jed), source=0.0)
     allocate(CS%ground_frac(isd:ied,jsd:jed), source=0.0)
     allocate(CS%taudx_shelf(IsdB:IedB,JsdB:JedB), source=0.0)
@@ -396,7 +397,7 @@ subroutine register_ice_shelf_dyn_restarts(G, US, param_file, CS, restart_CS)
     call register_restart_field(CS%ground_frac, "ground_frac", .true., restart_CS, &
                                 "fractional degree of grounding", "nondim")
     call register_restart_field(CS%C_basal_friction, "C_basal_friction", .true., restart_CS, &
-                                "basal sliding coefficients", "Pa (s m-1)^n_sliding")
+                                "basal sliding coefficients", "Pa (s m-1)^n_sliding", conversion=US%RLZ_T2_to_Pa)
     call register_restart_field(CS%AGlen_visc, "AGlen_visc", .true., restart_CS, &
                                 "ice-stiffness parameter", "Pa-3 s-1")
     call register_restart_field(CS%h_bdry_val, "h_bdry_val", .false., restart_CS, &
@@ -511,7 +512,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
 
     call get_param(param_file, mdl, "MIN_H_SHELF", CS%min_h_shelf, &
                  "min. ice thickness used during ice dynamics", &
-                  units="m", default=0.,scale=US%m_to_L)
+                  units="m", default=0.,scale=US%m_to_Z)
     call get_param(param_file, mdl, "MIN_BASAL_TRACTION", CS%min_basal_traction, &
                  "min. allowed basal traction. Input is in [Pa m-1 yr], but is converted when read in to [Pa m-1 s]", &
                  units="Pa m-1 yr", default=0., scale=365.0*86400.0*US%Pa_to_RLZ_T2*US%L_T_to_m_s)
@@ -536,7 +537,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                  units="none", default=.false., fail_if_missing=.false.)
     call get_param(param_file, mdl, "CF_MinN", CS%CF_MinN, &
                  "Minimum Coulomb friction effective pressure", &
-                 units="Pa", default=1.0, fail_if_missing=.false.)
+                 units="Pa", default=1.0, scale=US%Pa_to_RLZ_T2, fail_if_missing=.false.)
     call get_param(param_file, mdl, "CF_PostPeak", CS%CF_PostPeak, &
                  "Coulomb friction post peak exponent", &
                  units="none", default=1.0, fail_if_missing=.false.)
@@ -1192,8 +1193,8 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
   ! Local variables
   type(time_type) :: dt ! A time_type version of the timestep.
   real, dimension(SZDI_(G),SZDJ_(G)) :: tmp1 ! A temporary array used in reproducing sums [various]
-  real :: KE_tot    ! THe total kinetic energy [J]
-  real :: mass_tot  ! The total mass [kg]
+  real :: KE_tot    ! The total kinetic energy [R Z L4 T-2 ~> J]
+  real :: mass_tot  ! The total mass [R Z L2 ~> kg]
   integer :: is, ie, js, je, isr, ier, jsr, jer, i, j
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   integer :: start_of_day, num_days
@@ -1250,8 +1251,7 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
        (((CS%v_shelf(I-1,J-1)+CS%v_shelf(I,J))+(CS%v_shelf(I,J-1)+CS%v_shelf(I-1,J)))**2))
   enddo; enddo
 
-  KE_tot = US%RZL2_to_kg*US%L_T_to_m_s**2 * &
-           reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=(US%RZL2_to_kg*US%L_T_to_m_s**2))
+  KE_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=(US%RZL2_to_kg*US%L_T_to_m_s**2))
 
   !calculate mass
   tmp1(:,:) = 0.0
@@ -1259,7 +1259,7 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
     tmp1(i,j) = mass(i,j) * area(i,j)
   enddo; enddo
 
-  mass_tot = US%RZL2_to_kg * reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=US%RZL2_to_kg)
+  mass_tot = reproducing_sum(tmp1, isr, ier, jsr, jer, unscale=US%RZL2_to_kg)
 
   if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (day > CS%Start_time) then
@@ -1305,7 +1305,7 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
     else                        ; write(n_str, '(I10)') CS%prev_IS_energy_calls ; endif
 
     write(CS%IS_fileenergy_ascii,'(A,",",A,", En ",ES22.16,", M ",ES11.5)') &
-      trim(n_str), trim(day_str), KE_tot/mass_tot, mass_tot
+      trim(n_str), trim(day_str), US%L_T_to_m_s**2*KE_tot/mass_tot, US%RZL2_to_kg*mass_tot
   endif
 
   CS%prev_IS_energy_calls = CS%prev_IS_energy_calls + 1
@@ -3380,11 +3380,10 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
   real :: umid, vmid ! Velocities [L T-1 ~> m s-1]
   real :: eps_min ! A minimal strain rate used in the Glens flow law expression [T-1 ~> s-1]
   real :: unorm ! The magnitude of the velocity in mks units for use with fractional powers [m s-1]
-  real :: alpha !Coulomb coefficient [nondim]
+  real :: alpha ! Coulomb coefficient [nondim]
   real :: Hf !"floatation thickness" for Coulomb friction [Z ~> m]
-  real :: fN !Effective pressure (ice pressure - ocean pressure) for Coulomb friction [Pa]
+  real :: fN ! Effective pressure (ice pressure - ocean pressure) for Coulomb friction [R Z L T-2 ~> Pa]
   real :: fB !for Coulomb Friction [(T L-1)^CS%CF_PostPeak ~> (s m-1)^CS%CF_PostPeak]
-  real :: fN_scale !To convert effective pressure to mks units during Coulomb friction [Pa T2 R-1 L-2 ~> 1]
 
   isc = G%isc ; jsc = G%jsc ; iec = G%iec ; jec = G%jec
   iscq = G%iscB ; iecq = G%iecB ; jscq = G%jscB ; jecq = G%jecB
@@ -3402,7 +3401,6 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
     else
       alpha = 1.0
     endif
-    fN_scale = US%R_to_kg_m3 * US%L_T_to_m_s**2  ! Unscaling factor for use in the fractional power law.
   endif
 
   do j=jsd+1,jed
@@ -3416,16 +3414,16 @@ subroutine calc_shelf_taub(CS, ISS, G, US, u_shlf, v_shlf)
         if (CS%CoulombFriction) then
           !Effective pressure
           Hf = max((CS%density_ocean_avg/CS%density_ice) * CS%bed_elev(i,j), 0.0)
-          fN = max(fN_scale*((CS%density_ice * CS%g_Earth) * (max(ISS%h_shelf(i,j),CS%min_h_shelf) - Hf)),CS%CF_MinN)
+          fN = max((US%L_to_Z*(CS%density_ice * CS%g_Earth) * (max(ISS%h_shelf(i,j),CS%min_h_shelf) - Hf)), CS%CF_MinN)
           fB = alpha * (CS%C_basal_friction(i,j) / (CS%CF_Max * fN))**(CS%CF_PostPeak/CS%n_basal_fric)
 
           CS%basal_traction(i,j) = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * &
               (unorm**(CS%n_basal_fric-1.0) / (1.0 + fB * unorm**CS%CF_PostPeak)**(CS%n_basal_fric))) * &
-              (US%Pa_to_RLZ_T2*US%L_T_to_m_s)   ! Restore the scaling after the fractional power law.
+              US%L_T_to_m_s   ! Restore the scaling after the fractional power law.
         else
           !linear (CS%n_basal_fric=1) or "Weertman"/power-law (CS%n_basal_fric /= 1)
           CS%basal_traction(i,j) = ((G%areaT(i,j) * CS%C_basal_friction(i,j)) * (unorm**(CS%n_basal_fric-1))) * &
-                                   (US%Pa_to_RLZ_T2*US%L_T_to_m_s) ! Rescale after the fractional power law.
+                                   US%L_T_to_m_s ! Rescale after the fractional power law.
         endif
 
         CS%basal_traction(i,j)=max(CS%basal_traction(i,j), CS%min_basal_traction * G%areaT(i,j))
@@ -3945,7 +3943,7 @@ subroutine interpolate_H_to_B(G, h_shelf, hmask, H_node, min_h_shelf)
   real, dimension(SZDIB_(G),SZDJB_(G)), &
                          intent(inout) :: H_node !< The ice shelf thickness at nodal (corner)
                                              !! points [Z ~> m].
-  real, intent(in) :: min_h_shelf !< The minimum ice thickness used during ice dynamics [L ~> m].
+  real, intent(in) :: min_h_shelf !< The minimum ice thickness used during ice dynamics [Z ~> m].
 
   integer :: i, j, isc, iec, jsc, jec, num_h, k, l, ic, jc
   real    :: h_arr(2,2)
