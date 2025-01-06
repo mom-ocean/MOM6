@@ -412,6 +412,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
 
   do_sum_across_PEs = .true. ; if (present(only_on_PE)) do_sum_across_PEs = .not.only_on_PE
   do_unscale = .false. ; if (present(unscale)) do_unscale = (unscale /= 1.0)
+  descale = 1.0 ; if (do_unscale) descale = unscale
 
   if (present(sums) .or. present(EFP_lay_sums)) then
     if (present(sums)) then ; if (size(sums) < ke) then
