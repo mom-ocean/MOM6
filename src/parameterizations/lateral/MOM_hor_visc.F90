@@ -483,12 +483,14 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   inv_PI2 = 1.0/((4.0*atan(1.0))**2)
   inv_PI6 = inv_PI3 * inv_PI3
 
-  visc_limit_h(:,:,:) = 0.
-  visc_limit_q(:,:,:) = 0.
-  visc_limit_h_flag(:,:,:) = 0.
-  visc_limit_q_flag(:,:,:) = 0.
-  visc_limit_h_frac(:,:,:) = 0.
-  visc_limit_q_frac(:,:,:) = 0.
+  if (CS%EY24_EBT_BS) then
+    visc_limit_h(:,:,:) = 0.
+    visc_limit_q(:,:,:) = 0.
+    visc_limit_h_flag(:,:,:) = 0.
+    visc_limit_q_flag(:,:,:) = 0.
+    visc_limit_h_frac(:,:,:) = 0.
+    visc_limit_q_frac(:,:,:) = 0.
+  endif
 
   skeb_use_frict = .false.
   if (present(STOCH)) skeb_use_frict = STOCH%skeb_use_frict
@@ -1944,33 +1946,27 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     if (find_FrictWork) then
       if (CS%FrictWork_bug) then
+        ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
+        ! This is the old formulation that includes energy diffusion
         do j=js,je ; do i=is,ie
-          ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
-          ! This is the old formulation that includes energy diffusion
-          if (visc_limit_h_flag(i,j,k) > 0) then
-            FrictWork(i,j,k) = 0
-          else
-            FrictWork(i,j,k) = GV%H_to_RZ * ( &
-                    ((str_xx(i,j) * (u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j))    &
-                   - (str_xx(i,j) * (v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)))   &
-                + 0.25*(( (str_xy(I,J) *                                  &
-                           (((u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J))          &
-                          + ((v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J))))        &
-                        + (str_xy(I-1,J-1) *                              &
-                           (((u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1))  &
-                          + ((v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1)))) ) &
-                      + ( (str_xy(I-1,J) *                                &
-                           (((u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J))    &
-                          + ((v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J))))      &
-                        + (str_xy(I,J-1) *                                &
-                           (((u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1))        &
-                          + ((v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1)))) ) ) )
-          endif
+          FrictWork(i,j,k) = GV%H_to_RZ * ( &
+                  ((str_xx(i,j) * (u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j))    &
+                 - (str_xx(i,j) * (v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j)))   &
+              + 0.25*(( (str_xy(I,J) *                                  &
+                         (((u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J))          &
+                        + ((v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J))))        &
+                      + (str_xy(I-1,J-1) *                              &
+                         (((u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1))  &
+                        + ((v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1)))) ) &
+                    + ( (str_xy(I-1,J) *                                &
+                         (((u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J))    &
+                        + ((v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J))))      &
+                      + (str_xy(I,J-1) *                                &
+                         (((u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1))        &
+                        + ((v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1)))) ) ) )
         enddo ; enddo
-      else ; do j=js,je ; do i=is,ie
-        if (visc_limit_h_flag(i,j,k) > 0) then
-          FrictWork(i,j,k) = 0
-        else
+      else
+        do j=js,je ; do i=is,ie
           FrictWork(i,j,k) = GV%H_to_RZ * G%IareaT(i,j) * ( &
             ((str_xx(i,j)*CS%dy2h(i,j) * ( &
                   (uh(I,j,k)*G%dxCu(I,j)*G%IdyCu(I,j)*G%IareaCu(I,j)/(h_u(I,j)+h_neglect)) &
@@ -1999,40 +1995,39 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
                    + (CS%dy2q(I,J-1)*((vh(i+1,J-1,k)*G%IareaCv(i+1,J-1)/(h_v(i+1,J-1)+h_neglect)) &
                                     - (vh(i,J-1,k)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)))) )) ) )) )
 
-        endif
-      enddo ; enddo ; endif
+        enddo ; enddo
+      endif
+
+      if (CS%EY24_EBT_BS) then
+        do j=js,je ; do i=is,ie
+          FrictWork(i,j,k) = (1. - visc_limit_h_flag(i,j,k)) * FrictWork(i,j,k)
+        enddo ; enddo
+      endif
     endif
 
     if (CS%id_FrictWork_bh>0 .or. CS%id_FrictWorkIntz_bh > 0 .or. allocated(MEKE%mom_src_bh)) then
-      if (CS%FrictWork_bug) then ; do j=js,je ; do i=is,ie
-      ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
-      ! This is the old formulation that includes energy diffusion
-        if (visc_limit_h_flag(i,j,k) > 0) then
-          FrictWork_bh(i,j,k) = 0
-        else
+      if (CS%FrictWork_bug) then
         ! Diagnose   bhstr_xx*d_x u - bhstr_yy*d_y v + bhstr_xy*(d_y u + d_x v)
         ! This is the old formulation that includes energy diffusion !cyc
+        do j=js,je ; do i=is,ie
           FrictWork_bh(i,j,k) = GV%H_to_RZ * ( &
-                  (bhstr_xx(i,j) * (u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j)    &
-                 - bhstr_xx(i,j) * (v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))   &
-              + 0.25*((bhstr_xy(I,J) *                                  &
-                       ((u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J)            &
-                      + (v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J))           &
-                     + bhstr_xy(I-1,J-1) *                            &
-                       ((u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1)    &
-                      + (v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1)) ) &
-                    + (bhstr_xy(I-1,J) *                              &
-                       ((u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J)      &
-                      + (v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J))         &
-                     + bhstr_xy(I,J-1) *                              &
-                       ((u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1)          &
-                      + (v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1)) ) ) )
-        endif
-      enddo ; enddo
-      else ; do j=js,je ; do i=is,ie
-        if (visc_limit_h_flag(i,j,k) > 0) then
-          FrictWork_bh(i,j,k) = 0
-        else
+                  ((bhstr_xx(i,j) * (u(I,j,k)-u(I-1,j,k))*G%IdxT(i,j))  &
+                 - (bhstr_xx(i,j) * (v(i,J,k)-v(i,J-1,k))*G%IdyT(i,j))) &
+              + 0.25*(( (bhstr_xy(I,J) *                              &
+                       (((u(I,j+1,k)-u(I,j,k))*G%IdyBu(I,J))          &
+                      + ((v(i+1,J,k)-v(i,J,k))*G%IdxBu(I,J))))        &
+                    + (bhstr_xy(I-1,J-1) *                            &
+                       (((u(I-1,j,k)-u(I-1,j-1,k))*G%IdyBu(I-1,J-1))  &
+                      + ((v(i,J-1,k)-v(i-1,J-1,k))*G%IdxBu(I-1,J-1)))) ) &
+                  + ( (bhstr_xy(I-1,J) *                              &
+                       (((u(I-1,j+1,k)-u(I-1,j,k))*G%IdyBu(I-1,J))    &
+                      + ((v(i,J,k)-v(i-1,J,k))*G%IdxBu(I-1,J))))      &
+                    + (bhstr_xy(I,J-1) *                              &
+                       (((u(I,j,k)-u(I,j-1,k))*G%IdyBu(I,J-1))        &
+                      + ((v(i+1,J-1,k)-v(i,J-1,k))*G%IdxBu(I,J-1)))) ) ) )
+        enddo ; enddo
+      else
+        do j=js,je ; do i=is,ie
           ! Diagnose   bhstr_xx*d_x u - bhstr_yy*d_y v + bhstr_xy*(d_y u + d_x v)
           FrictWork_bh(i,j,k) = GV%H_to_RZ * G%IareaT(i,j) * ( &
             ((bhstr_xx(i,j)*CS%dy2h(i,j) * ( &
@@ -2061,11 +2056,15 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
                                     - (uh(I,j-1,k)*G%IareaCu(I,j-1)/(h_u(I,j-1)+h_neglect))))          &
                    + (CS%dy2q(I,J-1)*((vh(i+1,J-1,k)*G%IareaCv(i+1,J-1)/(h_v(i+1,J-1)+h_neglect)) &
                                     - (vh(i,J-1,k)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)))) )) ) )) )
-        endif
-      enddo ; enddo ; endif
+        enddo ; enddo
+      endif
+
+      if (CS%EY24_EBT_BS) then
+        do j=js,je ; do i=is,ie
+          FrictWork_bh(i,j,k) = (1. - visc_limit_h_flag(i,j,k)) * FrictWork_bh(i,j,k)
+        enddo ; enddo
+      endif
     endif
-
-
 
     if (CS%use_GME) then
       if (CS%FrictWork_bug) then ; do j=js,je ; do i=is,ie
@@ -2115,7 +2114,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
                                     - (uh(I,j-1,k)*G%IareaCu(I,j-1)/(h_u(I,j-1)+h_neglect))))          &
                    + (CS%dy2q(I,J-1)*((vh(i+1,J-1,k)*G%IareaCv(i+1,J-1)/(h_v(i+1,J-1)+h_neglect)) &
                                     - (vh(i,J-1,k)*G%IareaCv(i,J-1)/(h_v(i,J-1)+h_neglect)))) )) ) )) )
-
       enddo ; enddo ; endif
     endif
 
@@ -2132,8 +2130,14 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       if (k==1) then
         do j=js,je ; do i=is,ie
           MEKE%mom_src(i,j) = 0.
-          MEKE%mom_src_bh(i,j) = 0.
         enddo ; enddo
+
+        if (allocated(MEKE%mom_src_bh)) then
+          do j=js,je ; do i=is,ie
+            MEKE%mom_src_bh(i,j) = 0.
+          enddo ; enddo
+        endif
+
         if (allocated(MEKE%GME_snk)) then
           do j=js,je ; do i=is,ie
             MEKE%GME_snk(i,j) = 0.
@@ -2166,15 +2170,21 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
 
           MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + (FrictWork(i,j,k) - RoScl*FrictWork_bh(i,j,k))
-          MEKE%mom_src_bh(i,j) = MEKE%mom_src_bh(i,j) + &
-                                 (FrictWork_bh(i,j,k) - RoScl*FrictWork_bh(i,j,k))
+
+          if (allocated(MEKE%mom_src_bh)) &
+            MEKE%mom_src_bh(i,j) = MEKE%mom_src_bh(i,j) &
+                + (FrictWork_bh(i,j,k) - RoScl * FrictWork_bh(i,j,k))
         enddo ; enddo
       else
+        do j=js,je ; do i=is,ie
+          MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
+        enddo ; enddo
 
-      do j=js,je ; do i=is,ie
-        MEKE%mom_src(i,j) = MEKE%mom_src(i,j) + FrictWork(i,j,k)
-        MEKE%mom_src_bh(i,j) = MEKE%mom_src_bh(i,j) + FrictWork_bh(i,j,k)
-      enddo ; enddo
+        if (allocated(MEKE%mom_src_bh)) then
+          do j=js,je ; do i=is,ie
+            MEKE%mom_src_bh(i,j) = MEKE%mom_src_bh(i,j) + FrictWork_bh(i,j,k)
+          enddo ; enddo
+        endif
       endif ! MEKE%backscatter_Ro_c
 
       if (CS%use_GME .and. allocated(MEKE%GME_snk)) then
@@ -2182,9 +2192,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           MEKE%GME_snk(i,j) = MEKE%GME_snk(i,j) + FrictWork_GME(i,j,k)
         enddo ; enddo
       endif
-
     endif ! find_FrictWork and associated(mom_src)
-
   enddo ! end of k loop
 
   ! Offer fields for diagnostic averaging.
@@ -2213,16 +2221,15 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     if (CS%id_dudy_bt > 0) call post_data(CS%id_dudy_bt, dudy_bt, CS%diag)
     if (CS%id_dvdx_bt > 0) call post_data(CS%id_dvdx_bt, dvdx_bt, CS%diag)
   endif
-  if (CS%id_visc_limit_h>0)      call post_data(CS%id_visc_limit_h, visc_limit_h, CS%diag)
-  if (CS%id_visc_limit_q>0)      call post_data(CS%id_visc_limit_q, visc_limit_q, CS%diag)
-  if (CS%id_visc_limit_h_frac>0)      call post_data(CS%id_visc_limit_h_frac, visc_limit_h_frac, CS%diag)
-  if (CS%id_visc_limit_q_frac>0)      call post_data(CS%id_visc_limit_q_frac, visc_limit_q_frac, CS%diag)
-  if (CS%id_visc_limit_h_flag>0)      call post_data(CS%id_visc_limit_h_flag, visc_limit_h_flag, CS%diag)
-  if (CS%id_visc_limit_q_flag>0)      call post_data(CS%id_visc_limit_q_flag, visc_limit_q_flag, CS%diag)
-
   if (CS%EY24_EBT_BS) then
-    if (CS%id_BS_coeff_h>0)      call post_data(CS%id_BS_coeff_h, BS_coeff_h, CS%diag)
-    if (CS%id_BS_coeff_q>0)      call post_data(CS%id_BS_coeff_q, BS_coeff_q, CS%diag)
+    if (CS%id_visc_limit_h>0) call post_data(CS%id_visc_limit_h, visc_limit_h, CS%diag)
+    if (CS%id_visc_limit_q>0) call post_data(CS%id_visc_limit_q, visc_limit_q, CS%diag)
+    if (CS%id_visc_limit_h_frac>0) call post_data(CS%id_visc_limit_h_frac, visc_limit_h_frac, CS%diag)
+    if (CS%id_visc_limit_q_frac>0) call post_data(CS%id_visc_limit_q_frac, visc_limit_q_frac, CS%diag)
+    if (CS%id_visc_limit_h_flag>0) call post_data(CS%id_visc_limit_h_flag, visc_limit_h_flag, CS%diag)
+    if (CS%id_visc_limit_q_flag>0) call post_data(CS%id_visc_limit_q_flag, visc_limit_q_flag, CS%diag)
+    if (CS%id_BS_coeff_h>0) call post_data(CS%id_BS_coeff_h, BS_coeff_h, CS%diag)
+    if (CS%id_BS_coeff_q>0) call post_data(CS%id_BS_coeff_q, BS_coeff_q, CS%diag)
   endif
 
   if (CS%debug) then
@@ -3178,18 +3185,20 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         'Biharmonic Horizontal Viscosity at q Points', 'm4 s-1', conversion=US%L_to_m**4*US%s_to_T)
     CS%id_grid_Re_Ah = register_diag_field('ocean_model', 'grid_Re_Ah', diag%axesTL, Time, &
         'Grid Reynolds number for the Biharmonic horizontal viscosity at h points', 'nondim')
-    CS%id_visc_limit_h_flag = register_diag_field('ocean_model', 'visc_limit_h_flag', diag%axesTL, Time, &
-        'Locations where the biharmonic viscosity reached the better_bound limiter at h points', 'nondim')
-    CS%id_visc_limit_q_flag = register_diag_field('ocean_model', 'visc_limit_q_flag', diag%axesBL, Time, &
-        'Locations where the biharmonic viscosity reached the better_bound limiter at q points', 'nondim')
-    CS%id_visc_limit_h = register_diag_field('ocean_model', 'visc_limit_h', diag%axesTL, Time, &
-        'Value of the biharmonic viscosity limiter at h points', 'nondim')
-    CS%id_visc_limit_q = register_diag_field('ocean_model', 'visc_limit_q', diag%axesBL, Time, &
-        'Value of the biharmonic viscosity limiter at q points', 'nondim')
-    CS%id_visc_limit_h_frac = register_diag_field('ocean_model', 'visc_limit_h_frac', diag%axesTL, Time, &
-        'Value of the biharmonic viscosity limiter at h points', 'nondim')
-    CS%id_visc_limit_q_frac = register_diag_field('ocean_model', 'visc_limit_q_frac', diag%axesBL, Time, &
-        'Value of the biharmonic viscosity limiter at q points', 'nondim')
+    if (CS%EY24_EBT_BS) then
+      CS%id_visc_limit_h_flag = register_diag_field('ocean_model', 'visc_limit_h_flag', diag%axesTL, Time, &
+          'Locations where the biharmonic viscosity reached the better_bound limiter at h points', 'nondim')
+      CS%id_visc_limit_q_flag = register_diag_field('ocean_model', 'visc_limit_q_flag', diag%axesBL, Time, &
+          'Locations where the biharmonic viscosity reached the better_bound limiter at q points', 'nondim')
+      CS%id_visc_limit_h = register_diag_field('ocean_model', 'visc_limit_h', diag%axesTL, Time, &
+          'Value of the biharmonic viscosity limiter at h points', 'nondim')
+      CS%id_visc_limit_q = register_diag_field('ocean_model', 'visc_limit_q', diag%axesBL, Time, &
+          'Value of the biharmonic viscosity limiter at q points', 'nondim')
+      CS%id_visc_limit_h_frac = register_diag_field('ocean_model', 'visc_limit_h_frac', diag%axesTL, Time, &
+          'Value of the biharmonic viscosity limiter at h points', 'nondim')
+      CS%id_visc_limit_q_frac = register_diag_field('ocean_model', 'visc_limit_q_frac', diag%axesBL, Time, &
+          'Value of the biharmonic viscosity limiter at q points', 'nondim')
+    endif
 
     if (CS%id_grid_Re_Ah > 0) &
       ! Compute the smallest biharmonic viscosity capable of modifying the
