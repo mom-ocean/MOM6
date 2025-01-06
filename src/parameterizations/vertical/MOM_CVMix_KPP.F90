@@ -1031,11 +1031,11 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
   call cpu_clock_begin(id_clock_KPP_compute_BLD)
 
   ! some constants
-  GoRho = US%Z_to_m*US%s_to_T**2 * (US%L_to_Z**2 * GV%g_Earth / GV%Rho0)
+  GoRho = US%Z_to_m*US%s_to_T**2 * (GV%g_Earth_Z_T2 / GV%Rho0)
   if (GV%Boussinesq) then
-    GoRho_Z_L2 = US%L_to_Z**2 * GV%Z_to_H * GV%g_Earth / GV%Rho0
+    GoRho_Z_L2 = GV%Z_to_H * GV%g_Earth_Z_T2 / GV%Rho0
   else
-    GoRho_Z_L2 = US%L_to_Z**2 * GV%g_Earth * GV%RZ_to_H
+    GoRho_Z_L2 = GV%g_Earth_Z_T2 * GV%RZ_to_H
   endif
   buoy_scale = US%L_to_m**2*US%s_to_T**3
 
@@ -1191,7 +1191,7 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
         if (GV%Boussinesq .or. GV%semi_Boussinesq) then
           deltaBuoy(k) = GoRho*(rho_1D(kk+2) - rho_1D(kk+1))
         else
-          deltaBuoy(k) = (US%Z_to_m*US%s_to_T**2) * (US%L_to_Z**2 * GV%g_Earth) * &
+          deltaBuoy(k) = (US%Z_to_m*US%s_to_T**2) * GV%g_Earth_Z_T2 * &
               ( (rho_1D(kk+2) - rho_1D(kk+1)) / (0.5 * (rho_1D(kk+2) + rho_1D(kk+1))) )
         endif
         N2_1d(k)    = (GoRho_Z_L2 * (rho_1D(kk+2) - rho_1D(kk+3)) ) / &

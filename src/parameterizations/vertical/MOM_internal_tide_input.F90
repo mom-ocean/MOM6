@@ -251,7 +251,7 @@ subroutine find_N2_bottom(G, GV, US, tv, fluxes, h, T_f, S_f, h2, N2_bot, Rho_bo
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%H_to_RZ
+  G_Rho0 = GV%g_Earth_Z_T2 / GV%H_to_RZ
   EOSdom(:) = EOS_domain(G%HI)
 
   ! Find the (limited) density jump across each interface.

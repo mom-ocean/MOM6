@@ -93,7 +93,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
     endif
   endif
 
-  gE_rho0 = (US%L_to_Z**2 * GV%g_Earth) / GV%H_to_RZ
+  gE_rho0 = GV%g_Earth_Z_T2 / GV%H_to_RZ
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -322,7 +322,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   PE_Threshold_fraction = 1.e-4 !Fixed threshold of 0.01%, could be runtime.
 
   do iM=1,3
-    PE_threshold(iM) = Mixing_Energy(iM) / (US%L_to_Z**2*GV%g_Earth)
+    PE_threshold(iM) = Mixing_Energy(iM) / GV%g_Earth_Z_T2
   enddo
 
   MLD(:,:,:) = 0.0

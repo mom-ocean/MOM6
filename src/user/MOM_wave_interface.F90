@@ -315,7 +315,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   CS%diag => diag
   CS%Time => Time
 
-  CS%g_Earth = US%L_to_Z**2*GV%g_Earth
+  CS%g_Earth = GV%g_Earth_Z_T2
   CS%I_g_Earth = 1.0 / CS%g_Earth
 
   ! Add any initializations needed here

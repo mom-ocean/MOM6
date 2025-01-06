@@ -69,7 +69,8 @@ type, public :: energetic_PBL_CS ; private
                              !! 2 is more KPP like.
   real    :: MKE_to_TKE_effic !< The efficiency with which mean kinetic energy released by
                              !!  mechanically forced entrainment of the mixed layer is converted to
-                             !!  TKE [nondim].
+                             !!  TKE, times conversion factors between the natural units of mean
+                             !!  kinetic energy and those used for TKE [Z2 L-2 ~> nondim].
   logical :: direct_calc     !< If true and there is no conversion from mean kinetic energy to ePBL
                              !! turbulent kinetic energy, use a direct calculation of the
                              !! diffusivity that is supported by a given energy input instead of the
@@ -1140,7 +1141,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
   pres_Z(1) = 0.0
   do k=1,nz
     dMass = GV%H_to_RZ * h(k)
-    dPres = US%L_to_Z**2 * GV%g_Earth * dMass
+    dPres = GV%g_Earth_Z_T2 * dMass
     dT_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dT(k)
     dS_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dS(k)
     dT_to_dColHt(k) = dMass * dSV_dT(k)
@@ -1443,7 +1444,7 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
           if ((CS%MKE_to_TKE_effic > 0.0) .and. (htot*h(k) > 0.0)) then
             ! This is the energy that would be available from homogenizing the
             ! velocities between layer k and the layers above.
-            dMKE_max = (US%L_to_Z**2*GV%H_to_RZ * CS%MKE_to_TKE_effic) * 0.5 * &
+            dMKE_max = (GV%H_to_RZ * CS%MKE_to_TKE_effic) * 0.5 * &
                 (h(k) / ((htot + h(k))*htot)) * &
                 (((uhtot-u(k)*htot)**2) + ((vhtot-v(k)*htot)**2))
             ! A fraction (1-exp(Kddt_h*MKE2_Hharm)) of this energy would be
@@ -2144,7 +2145,7 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
     pres_Z(1) = 0.0
     do k=1,nz
       dMass = GV%H_to_RZ * h(k)
-      dPres = US%L_to_Z**2 * GV%g_Earth * dMass
+      dPres = GV%g_Earth_Z_T2 * dMass
       dT_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dT(k)
       dS_to_dPE(k) = (dMass * (pres_Z(K) + 0.5*dPres)) * dSV_dS(k)
       dT_to_dColHt(k) = dMass * dSV_dT(k)
@@ -2351,7 +2352,7 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
          !  if ((CS%MKE_to_TKE_effic > 0.0) .and. (htot*h(k-1) > 0.0)) then
          !    ! This is the energy that would be available from homogenizing the
          !    ! velocities between layer k-1 and the layers below.
-         !    dMKE_max = (US%L_to_Z**2*GV%H_to_RZ * CS%MKE_to_TKE_effic) * 0.5 * &
+         !    dMKE_max = (GV%H_to_RZ * CS%MKE_to_TKE_effic) * 0.5 * &
          !        (h(k-1) / ((htot + h(k-1))*htot)) * &
          !        ((uhtot-u(k-1)*htot)**2 + (vhtot-v(k-1)*htot)**2)
          !    ! A fraction (1-exp(Kddt_h*MKE2_Hharm)) of this energy would be
@@ -3478,7 +3479,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "The efficiency with which mean kinetic energy released "//&
                  "by mechanically forced entrainment of the mixed layer "//&
                  "is converted to turbulent kinetic energy.", &
-                 units="nondim", default=0.0)
+                 units="nondim", default=0.0, scale=US%L_to_Z**2)
   call get_param(param_file, mdl, "TKE_DECAY", CS%TKE_decay, &
                  "TKE_DECAY relates the vertical rate of decay of the TKE available "//&
                  "for mechanical entrainment to the natural Ekman depth.", &

@@ -766,7 +766,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
 
   Ri_crit = CS%Rino_crit
   gR0 = GV%H_to_RZ * GV%g_Earth
-  g_R0 = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
+  g_R0 = GV%g_Earth_Z_T2 / GV%Rho0
   k0dt = dt*CS%kappa_0
 
   I_lz_rescale_sqr = 1.0; if (CS%lz_rescale > 0) I_lz_rescale_sqr = 1/(CS%lz_rescale*CS%lz_rescale)
@@ -901,19 +901,19 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
                                     tv%eqn_of_state, (/2,nzc/) )
       call calculate_density(T_int, Sal_int, pressure, rho_int, tv%eqn_of_state, (/2,nzc/) )
       do K=2,nzc
-        dbuoy_dT(K) = (US%L_to_Z**2 * GV%g_Earth) * (rho_int(K) * dSpV_dT(K))
-        dbuoy_dS(K) = (US%L_to_Z**2 * GV%g_Earth) * (rho_int(K) * dSpV_dS(K))
+        dbuoy_dT(K) = GV%g_Earth_Z_T2 * (rho_int(K) * dSpV_dT(K))
+        dbuoy_dS(K) = GV%g_Earth_Z_T2 * (rho_int(K) * dSpV_dS(K))
       enddo
     endif
   elseif (GV%Boussinesq .or. GV%semi_Boussinesq) then
     do K=1,nzc+1 ; dbuoy_dT(K) = -g_R0 ; dbuoy_dS(K) = 0.0 ; enddo
   else
     do K=1,nzc+1 ; dbuoy_dS(K) = 0.0 ; enddo
-    dbuoy_dT(1) = -(US%L_to_Z**2 * GV%g_Earth) / GV%Rlay(1)
+    dbuoy_dT(1) = -GV%g_Earth_Z_T2 / GV%Rlay(1)
     do K=2,nzc
-      dbuoy_dT(K) = -(US%L_to_Z**2 * GV%g_Earth) / (0.5*(GV%Rlay(k-1) + GV%Rlay(k)))
+      dbuoy_dT(K) = -GV%g_Earth_Z_T2 / (0.5*(GV%Rlay(k-1) + GV%Rlay(k)))
     enddo
-    dbuoy_dT(nzc+1) = -(US%L_to_Z**2 * GV%g_Earth) / GV%Rlay(nzc)
+    dbuoy_dT(nzc+1) = -GV%g_Earth_Z_T2 / GV%Rlay(nzc)
   endif
 
   ! N2_debug(1) = 0.0 ; N2_debug(nzc+1) = 0.0

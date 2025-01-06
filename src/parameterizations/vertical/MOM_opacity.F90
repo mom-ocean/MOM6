@@ -649,9 +649,9 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   TKE_calc = (present(TKE) .and. present(dSV_dT))
 
   if (optics%answer_date < 20190101) then
-    g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
+    g_Hconv2 = (GV%g_Earth_Z_T2 * GV%H_to_RZ) * GV%H_to_RZ
   else
-    g_Hconv2 = US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ**2
+    g_Hconv2 = GV%g_Earth_Z_T2 * GV%H_to_RZ**2
   endif
 
   h_heat(:) = 0.0
