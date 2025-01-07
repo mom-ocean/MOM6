@@ -1032,28 +1032,49 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     e(i,j,nz+1) = -G%bathyT(i,j)
   enddo ; enddo
 
-  ! Self-attraction and loading (SAL) and tides (old answers)
-  ! SAL and tidal geopotential height anomalies are calculated and added as corrections to interface heights.
-  ! The following code is for recovering old answers only. The algorithm moves interface heights before density
-  ! calculations, and therefore is incorrect without SSH_IN_EOS_PRESSURE_FOR_PGF=True (added in August 2024).
-  ! See the code right after Pa calculation loop for the new method.
-  if (CS%tides .and. CS%tides_answer_date<=20230630) then
+  ! The following two if-blocks are used to recover old answers for self-attraction and loading
+  ! (SAL) and tides only. The old algorithm moves interface heights before density calculations,
+  ! and therefore is incorrect without SSH_IN_EOS_PRESSURE_FOR_PGF=True (added in August 2024).
+  ! See the code right after Pa calculation loop for the new algorithm.
+
+  ! Calculate and add SAL geopotential anomaly to interface height (old answers)
+  if (CS%calculate_SAL .and. CS%tides_answer_date<=20250131) then
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
       do i=Isq,Ieq+1
-        SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0) ! reference bottom pressure
+        SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
       enddo
       do k=1,nz ; do i=Isq,Ieq+1
         SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
     enddo
     call calc_SAL(SSH, e_sal, G, CS%SAL_CSp, tmp_scale=US%Z_to_m)
-    call calc_tidal_forcing_legacy(CS%Time, e_sal, e_sal_and_tide, e_tidal_eq, e_tidal_sal, &
-                                   G, US, CS%tides_CSp)
-    !$OMP parallel do default(shared)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      e(i,j,nz+1) = e(i,j,nz+1) - e_sal_and_tide(i,j)
-    enddo ; enddo
+
+    if (CS%tides_answer_date>20230630) then ! answers_date between [20230701, 20250131]
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e(i,j,nz+1) = e(i,j,nz+1) - e_sal(i,j)
+      enddo ; enddo
+    endif
+  endif
+
+  ! Calculate and add tidal geopotential anomaly to interface height (old answers)
+  if (CS%tides .and. CS%tides_answer_date<=20250131) then
+    if (CS%tides_answer_date>20230630) then ! answers_date between [20230701, 20250131]
+      call calc_tidal_forcing(CS%Time, e_tidal_eq, e_tidal_sal, G, US, CS%tides_CSp)
+     !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e(i,j,nz+1) = e(i,j,nz+1) - (e_tidal_eq(i,j) + e_tidal_sal(i,j))
+      enddo ; enddo
+    else  ! answers_date before 20230701
+      if (.not.CS%calculate_SAL) e_sal(:,:) = 0.0
+      call calc_tidal_forcing_legacy(CS%Time, e_sal, e_sal_and_tide, e_tidal_eq, e_tidal_sal, &
+                                     G, US, CS%tides_CSp)
+      !$OMP parallel do default(shared)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        e(i,j,nz+1) = e(i,j,nz+1) - e_sal_and_tide(i,j)
+      enddo ; enddo
+    endif
   endif
 
   !$OMP parallel do default(shared)
@@ -1201,8 +1222,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo ; enddo
   enddo
 
-  ! Self-attraction and loading (SAL) (new answers)
-  if (CS%calculate_SAL .and. CS%tides_answer_date>20230630) then
+  ! Calculate and add SAL geopotential anomaly to interface height (new answers)
+  if (CS%calculate_SAL .and. CS%tides_answer_date>20250131) then
     if (CS%sal_use_bpa) then
       !$OMP parallel do default(shared)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -1225,8 +1246,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo ; endif
   endif
 
-  ! Tides (new answers)
-  if (CS%tides .and. CS%tides_answer_date>20230630) then
+  ! Calculate and add tidal geopotential anomaly to interface height (new answers)
+  if (CS%tides .and. CS%tides_answer_date>20250131) then
     call calc_tidal_forcing(CS%Time, e_tidal_eq, e_tidal_sal, G, US, CS%tides_CSp)
     if (.not.CS%bq_sal_tides) then ; do K=1,nz+1
       !$OMP parallel do default(shared)
@@ -1812,11 +1833,13 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   call get_param(param_file, '', "DEFAULT_ANSWER_DATE", default_answer_date, default=99991231)
   if (CS%tides) &
     call get_param(param_file, mdl, "TIDES_ANSWER_DATE", CS%tides_answer_date, "The vintage of "//&
-                  "self-attraction and loading (SAL) and tidal forcing calculations.  In both "//&
-                  "Boussinesq and non-Boussinesq modes, values below 20230701 recover the old "//&
-                  "answers in which the SAL is part of the tidal forcing calculation.  The "//&
-                  "change is due to a reordered summation and the difference is only at bit "//&
-                  "level.", default=20230630, do_not_log=(.not.CS%tides))
+                  "self-attraction and loading (SAL) and tidal forcing calculations.  Setting "//&
+                  "dates before 20230701 recovers old answers (Boussinesq and non-Boussinesq "//&
+                  "modes) when SAL is part of the tidal forcing calculation.  The answer "//&
+                  "difference is only at bit level and due to a reordered summation.  Setting "//&
+                  "dates before 20250201 recovers answers (Boussinesq mode) that interface "//&
+                  "heights are modified before pressure force integrals are calculated.", &
+                  default=20230630, do_not_log=(.not.CS%tides))
   call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
                  "If true, calculate self-attraction and loading.", default=CS%tides)
   if (CS%calculate_SAL) &
@@ -1844,9 +1867,9 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
                  "pressure used in the equation of state calculations for the Boussinesq pressure "//&
                  "gradient forces, including adjustments for atmospheric or sea-ice pressure.", &
                  default=.false., do_not_log=.not.GV%Boussinesq)
-  if (CS%tides .and. CS%tides_answer_date<=20230630 .and. CS%use_SSH_in_Z0p) &
+  if (CS%tides .and. CS%tides_answer_date<=20250131 .and. CS%use_SSH_in_Z0p) &
     call MOM_error(FATAL, trim(mdl) // ", PressureForce_FV_init: SSH_IN_EOS_PRESSURE_FOR_PGF "//&
-                   "needs to be FALSE to recover tide answers before 20230701.")
+                   "needs to be FALSE to recover tide answers before 20250131.")
 
   call get_param(param_file, "MOM", "USE_REGRIDDING", use_ALE, &
                  "If True, use the ALE algorithm (regridding/remapping). "//&

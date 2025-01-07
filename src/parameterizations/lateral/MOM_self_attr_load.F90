@@ -187,7 +187,7 @@ subroutine SAL_init(G, GV, US, param_file, CS)
   character(len=200) :: ebot_ref_varname                  ! Variable name in file
   logical :: calculate_sal=.false.
   logical :: tides=.false., use_tidal_sal_file=.false., bq_sal_tides_bug=.false.
-  integer :: tides_answer_date=99991203 ! Recover old answers with tides
+  integer :: tides_answer_date=99991231 ! Recover old answers with tides
   real :: sal_scalar_value, tide_sal_scalar_value ! Scaling SAL factors [nondim]
   integer :: isd, ied, jsd, jed
 
@@ -231,9 +231,9 @@ subroutine SAL_init(G, GV, US, param_file, CS)
                        scale=US%Pa_to_RL2_T2)
     call pass_var(CS%ebot_ref, G%Domain)
   endif
-  if (tides_answer_date<=20230630 .and. CS%use_bpa) &
+  if (tides_answer_date<=20250131 .and. CS%use_bpa) &
     call MOM_error(FATAL, trim(mdl) // ", SAL_init: SAL_USE_BPA needs to be false to recover "//&
-                   "tide answers before 20230630.")
+                   "tide answers before 20250131.")
   call get_param(param_file, mdl, "SAL_SCALAR_APPROX", CS%use_sal_scalar, &
                  "If true, use the scalar approximation to calculate self-attraction and "//&
                  "loading.", default=tides .and. (.not. use_tidal_sal_file))
