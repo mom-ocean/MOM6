@@ -964,7 +964,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
             / (f2_h * max(little_h(i,j), GV%Angstrom_H))
     enddo ; enddo
 
-    ! Rescale from [Z2 H-1 to L]
+    ! Rescale from [Z2 H-1 ~> m or m4 kg-1] to [L ~> m]
     if (allocated(tv%SpV_avg) .and. .not.(GV%Boussinesq .or. GV%semi_Boussinesq)) then
       do j=js-1,je+1 ; do i=is-1,ie+1
         lf_bodner_diag(i,j) = lf_bodner_diag(i,j) &
@@ -1036,12 +1036,12 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
 
     if (GV%Boussinesq .or. GV%semi_Boussinesq) then
       do i=is-1,ie+1
-        ! Buoy_av has units (L2 H-1 T-2 R-1) * (R H) * H-1 = L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2
+        ! Buoy_av has units (L2 H-1 T-2 R-1) * (R H) * H-1 = [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
         buoy_av(i,j) = -( g_Rho0 * Rml_int(i) ) / (htot(i,j) + h_neglect)
       enddo
     else
       do i=is-1,ie+1
-        ! Buoy_av has units (R L2 H-1 T-2) * (R-1 H) * H-1 = L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2
+        ! Buoy_av has units (R L2 H-1 T-2) * (R-1 H) * H-1 = [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
         buoy_av(i,j) = (GV%H_to_RZ*GV%g_Earth * SpV_int(i)) / (htot(i,j) + h_neglect)
       enddo
     endif
@@ -1058,24 +1058,24 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   !$OMP do
   do j=js,je ; do I=is-1,ie
     if (G%OBCmaskCu(I,j) > 0.) then
-      grid_dsd = sqrt(0.5*( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 )) * G%dyCu(I,j) ! L2 ~> m2
-      absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))  ! T-1 ~> s-1
-      h_sml = 0.5*( little_h(i,j) + little_h(i+1,j) )                 ! H ~> m or kg m-3
-      h_big = 0.5*( big_H(i,j) + big_H(i+1,j) )                       ! H ~> m or kg m-3
-      grd_b = ( buoy_av(i+1,j) - buoy_av(i,j) ) * G%IdxCu(I,j)        ! L H-1 T-2 ~> s-2 or m3 kg-1 s-2
-      r_wpup = 2. / ( wpup(i,j) + wpup(i+1,j) )                       ! T2 L-1 H-1 ~> s2 m-2 or m s2 kg-1
-      psi_mag = ( ( ( (0.5*(CS%Cr_space(i,j) + CS%Cr_space(i+1,j))) * grid_dsd ) & ! L2 H T-1 ~> m3 s-1 or kg s-1
+      grid_dsd = sqrt(0.5*( G%dxCu(I,j)**2 + G%dyCu(I,j)**2 )) * G%dyCu(I,j) ! [L2 ~> m2]
+      absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))  ! [T-1 ~> s-1]
+      h_sml = 0.5*( little_h(i,j) + little_h(i+1,j) )                 ! [H ~> m or kg m-2]
+      h_big = 0.5*( big_H(i,j) + big_H(i+1,j) )                       ! [H ~> m or kg m-2]
+      grd_b = ( buoy_av(i+1,j) - buoy_av(i,j) ) * G%IdxCu(I,j)        ! [L H-1 T-2 ~> s-2 or m3 kg-1 s-2]
+      r_wpup = 2. / ( wpup(i,j) + wpup(i+1,j) )                       ! [T2 L-1 H-1 ~> s2 m-2 or m s2 kg-1]
+      psi_mag = ( ( ( (0.5*(CS%Cr_space(i,j) + CS%Cr_space(i+1,j))) * grid_dsd ) & ! [L2 H T-1 ~> m3 s-1 or kg s-1]
                   * ( absf * h_sml ) ) * ( ( h_big**2 ) * grd_b ) ) * r_wpup
     else  ! There is no flux on land and no gradient at open boundary points.
       psi_mag = 0.0
     endif
 
-    IhTot = 2.0 / ((htot(i,j) + htot(i+1,j)) + h_neglect) ! [H-1]
+    IhTot = 2.0 / ((htot(i,j) + htot(i+1,j)) + h_neglect) ! [H-1 ~> m-1 or m2 kg-1]
     sigint = 0.0
     muzb = 0.0 ! This will be the first value of muza = mu(z=0)
     do k=1,nz
       muza = muzb                           ! mu(z/MLD) for upper interface [nondim]
-      hAtVel = 0.5*(h(i,j,k) + h(i+1,j,k))  ! Thickness at velocity point [H]
+      hAtVel = 0.5*(h(i,j,k) + h(i+1,j,k))  ! Thickness at velocity point [H ~> m or kg m-2]
       sigint = sigint - (hAtVel * IhTot)    ! z/H for lower interface [nondim]
       muzb = mu(sigint, CS%MLE_tail_dh)     ! mu(z/MLD) for lower interface [nondim]
       dmu(k) = muza - muzb                  ! Change in mu(z) across layer [nondim]
@@ -1088,8 +1088,8 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
       endif
     enddo ! These loops cannot be fused because psi_mag applies to the whole column
     do k=1,nz
-      uhml(I,j,k) = dmu(k) * psi_mag ! [ L2 H T-1 ]
-      uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k) * dt ! [ L2 H ]
+      uhml(I,j,k) = dmu(k) * psi_mag  ! [L2 H T-1 ~> m3 s-1 or kg s-1]
+      uhtr(I,j,k) = uhtr(I,j,k) + uhml(I,j,k) * dt ! [L2 H ~> m3 or kg]
     enddo
 
     uDml_diag(I,j) = psi_mag
@@ -1099,28 +1099,28 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   !$OMP do
   do J=js-1,je ; do i=is,ie
     if (G%OBCmaskCv(i,J) > 0.) then
-      grid_dsd = sqrt(0.5*( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 )) * G%dxCv(i,J) ! L2 ~> m2
-      absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))  ! T-1 ~> s-1
-      h_sml = 0.5*( little_h(i,j) + little_h(i,j+1) )                 ! H ~> m or kg m-3
-      h_big = 0.5*( big_H(i,j) + big_H(i,j+1) )                       ! H ~> m or kg m-3
-      grd_b = ( buoy_av(i,j+1) - buoy_av(i,j) ) * G%IdyCv(I,j)        ! L H-1 T-2 ~> s-2 or m3 kg-1 s-2
-      r_wpup = 2. / ( wpup(i,j) + wpup(i,j+1) )                       ! T2 L-1 H-1 ~> s2 m-2 or m s2 kg-1
-      psi_mag = ( ( ( (0.5*(CS%Cr_space(i,j) + CS%Cr_space(i,j+1))) * grid_dsd ) & ! L2 H T-1 ~> m3 s-1 or kg s-1
+      grid_dsd = sqrt(0.5*( G%dxCv(i,J)**2 + G%dyCv(i,J)**2 )) * G%dxCv(i,J) ! [L2 ~> m2]
+      absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))  ! [T-1 ~> s-1]
+      h_sml = 0.5*( little_h(i,j) + little_h(i,j+1) )                 ! [H ~> m or kg m-2]
+      h_big = 0.5*( big_H(i,j) + big_H(i,j+1) )                       ! [H ~> m or kg m-2]
+      grd_b = ( buoy_av(i,j+1) - buoy_av(i,j) ) * G%IdyCv(I,j)        ! [L H-1 T-2 ~> s-2 or m3 kg-1 s-2]
+      r_wpup = 2. / ( wpup(i,j) + wpup(i,j+1) )                       ! [T2 L-1 H-1 ~> s2 m-2 or m s2 kg-1]
+      psi_mag = ( ( ( (0.5*(CS%Cr_space(i,j) + CS%Cr_space(i,j+1))) * grid_dsd ) & ! [L2 H T-1 ~> m3 s-1 or kg s-1]
                   * ( absf * h_sml ) ) * ( ( h_big**2 ) * grd_b ) ) * r_wpup
     else  ! There is no flux on land and no gradient at open boundary points.
       psi_mag = 0.0
     endif
 
-    IhTot = 2.0 / ((htot(i,j) + htot(i,j+1)) + h_neglect) ! [H-1]
+    IhTot = 2.0 / ((htot(i,j) + htot(i,j+1)) + h_neglect) ! [H-1 ~> m-1 or m2 kg-1]
     sigint = 0.0
     muzb = 0.0 ! This will be the first value of muza = mu(z=0)
     do k=1,nz
       muza = muzb                           ! mu(z/MLD) for upper interface [nondim]
-      hAtVel = 0.5*(h(i,j,k) + h(i,j+1,k))  ! Thickness at velocity point [H]
+      hAtVel = 0.5*(h(i,j,k) + h(i,j+1,k))  ! Thickness at velocity point [H ~> m or kg m-2]
       sigint = sigint - (hAtVel * IhTot)    ! z/H for lower interface [nondim]
       muzb = mu(sigint, CS%MLE_tail_dh)     ! mu(z/MLD) for lower interface [nondim]
       dmu(k) = muza - muzb                  ! Change in mu(z) across layer [nondim]
-      ! dmu(k)*psi_mag is the transport in this layer [L2 H T-1 ~> m3 s-1]
+      ! dmu(k)*psi_mag is the transport in this layer [L2 H T-1 ~> m3 s-1 or kg s-1]
       ! Limit magnitude (psi_mag) if it would violate CFL
       if (dmu(k)*psi_mag > 0.0) then
         if (dmu(k)*psi_mag > vol_dt_avail(i,j,k)) psi_mag = vol_dt_avail(i,j,k) / dmu(k)
@@ -1129,8 +1129,8 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
       endif
     enddo ! These loops cannot be fused because psi_mag applies to the whole column
     do k=1,nz
-      vhml(i,J,k) = dmu(k) * psi_mag ! [ L2 H T-1 ]
-      vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k) * dt ! [ L2 H ]
+      vhml(i,J,k) = dmu(k) * psi_mag   ! [L2 H T-1 ~> m3 s-1 or kg s-1]
+      vhtr(i,J,k) = vhtr(i,J,k) + vhml(i,J,k) * dt ! [L2 H ~> m3 or kg]
     enddo
 
     vDml_diag(i,J) = psi_mag

@@ -3583,7 +3583,7 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, SpV0, Rcv, RcvTgt, dt, dt_diag, d_e
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: R0   !< Potential density referenced to
                                                             !! surface pressure [R ~> kg m-3].
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: SpV0 !< Specific volume referenced to
-                                                            !! surface pressure [R-1 ~> m3 kg]
+                                                            !! surface pressure [R-1 ~> m-3 kg]
   real, dimension(SZI_(G),SZK0_(GV)), intent(inout) :: Rcv  !< The coordinate defining potential
                                                             !! density [R ~> kg m-3].
   real, dimension(SZK_(GV)),          intent(in)    :: RcvTgt !< The target value of Rcv for each
@@ -3641,10 +3641,10 @@ subroutine mixedlayer_detrain_1(h, T, S, R0, SpV0, Rcv, RcvTgt, dt, dt_diag, d_e
                               ! [L2 Z H-2 T-3 ~> m s-3 or m7 kg-2 s-3].
   real :: nB_g_H_2dt          ! Half the gravitational acceleration times the conversion from
                               ! H to RZ divided by the diagnostic time step
-                              ! [L2 R H-1 T-3 ~> kg m s-3 or m4 s-3].
+                              ! [L2 R H-1 T-3 ~> kg m-2 s-3 or m s-3].
   real :: nB_gRZ_H2_2dt       ! Half the gravitational acceleration times the conversion from
                               ! H to RZ squared divided by the diagnostic time step
-                              ! [L2 R2 Z H-2 T-3 ~> kg2 m-2 s-3 or m4 s-3].
+                              ! [L2 R2 Z H-2 T-3 ~> kg2 m-5 s-3 or m s-3].
   real :: x1  ! A temporary work variable [various]
   logical :: splittable_BL(SZI_(G)), orthogonal_extrap
   logical :: must_unmix

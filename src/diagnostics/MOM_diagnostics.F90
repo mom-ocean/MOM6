@@ -1574,7 +1574,7 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   real :: wave_speed_tol      ! The fractional tolerance for finding the wave speeds [nondim]
   real :: convert_H           ! A conversion factor from internal thickness units to the appropriate
                               ! MKS units (m or kg m-2) for thicknesses depending on whether the
-                              ! Boussinesq approximation is being made [m H-1 or kg m-2 H-1 ~> 1]
+                              ! Boussinesq approximation is being made [m H-1 ~> 1] or [kg m-2 H-1 ~> 1]
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
   logical :: split            ! True if using the barotropic-baroclinic split algorithm

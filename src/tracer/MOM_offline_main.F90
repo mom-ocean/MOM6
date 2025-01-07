@@ -670,7 +670,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_p
   real, dimension(SZI_(G),SZJ_(G)) :: &
     sw, sw_vis, sw_nir !< Save old values of shortwave radiation [Q R Z T-1 ~> W m-2]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Vertical distance across layers [Z ~> m]
-  real :: I_dZval  ! An inverse distance between layer centers [Z-1 ~> m]
+  real :: I_dZval  ! An inverse distance between layer centers [Z-1 ~> m-1]
   integer :: i, j, k, is, ie, js, je, nz
   integer :: k_nonzero
   real :: Kd_bot  ! Near-bottom diffusivity [H Z T-1 ~> m2 s-1 or kg m-1 s-1]

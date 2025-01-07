@@ -196,7 +196,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     S_vel, &    ! Arithmetic mean of the layer salinities adjacent to a
                 ! velocity point [S ~> ppt].
     SpV_vel, &  ! Arithmetic mean of the layer averaged specific volumes adjacent to a
-                ! velocity point [R-1 ~> kg m-3].
+                ! velocity point [R-1 ~> m3 kg-1].
     Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
                 ! to a velocity point [R ~> kg m-3].
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Height change across layers [Z ~> m]

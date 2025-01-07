@@ -68,7 +68,7 @@ type, public :: tracer_type
   real                            :: conc_underflow = 0.0     !< A magnitude of tracer concentrations below
                                                               !! which values should be set to 0. [CU ~> conc]
   real                            :: conc_scale = 1.0         !< A scaling factor used to convert the concentrations
-                                                              !! of this tracer to its desired units [conc CU ~> 1]
+                                                              !! of this tracer to its desired units [CU conc-1 ~> 1]
   character(len=64)               :: cmor_name                !< CMOR name of this tracer
   character(len=64)               :: cmor_units               !< CMOR physical dimensions of the tracer
   character(len=240)              :: cmor_longname            !< CMOR long name of the tracer

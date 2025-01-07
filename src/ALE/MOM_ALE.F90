@@ -756,7 +756,7 @@ subroutine ALE_remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: work_conc ! The rate of change of concentrations [Conc T-1 ~> Conc s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: work_cont ! The rate of change of cell-integrated tracer
                                                        ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1] or
-                                                       ! cell thickness [H T-1 ~> m s-1 or Conc kg m-2 s-1]
+                                                       ! cell thickness [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G),SZJ_(G))          :: work_2d ! The rate of change of column-integrated tracer
                                                        ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1]
   logical :: PCM(GV%ke) ! If true, do PCM remapping from a cell.

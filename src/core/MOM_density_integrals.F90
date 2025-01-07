@@ -1360,7 +1360,7 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
   real :: S5((5*HI%isd+1):(5*(HI%ied+2)))  ! Salinities along a line of subgrid locations [S ~> ppt]
   real :: p5((5*HI%isd+1):(5*(HI%ied+2)))  ! Pressures along a line of subgrid locations [R L2 T-2 ~> Pa]
   real :: a5((5*HI%isd+1):(5*(HI%ied+2)))  ! Specific volumes anomalies along a line of subgrid
-                                           ! locations [R-1 ~> m3 kg-3]
+                                           ! locations [R-1 ~> m3 kg-1]
   real :: T15((15*HI%isd+1):(15*(HI%ied+1))) ! Temperatures at an array of subgrid locations [C ~> degC]
   real :: S15((15*HI%isd+1):(15*(HI%ied+1))) ! Salinities at an array of subgrid locations [S ~> ppt]
   real :: p15((15*HI%isd+1):(15*(HI%ied+1))) ! Pressures at an array of subgrid locations [R L2 T-2 ~> Pa]
@@ -1621,7 +1621,7 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   real :: S5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Salinities along a line of subgrid locations [S ~> ppt]
   real :: p5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Pressures along a line of subgrid locations [R L2 T-2 ~> Pa]
   real :: a5((5*HI%iscB+1):(5*(HI%iecB+2)))  ! Specific volumes anomalies along a line of subgrid
-                                             ! locations [R-1 ~> m3 kg-3]
+                                             ! locations [R-1 ~> m3 kg-1]
   real :: T15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Temperatures at an array of subgrid locations [C ~> degC]
   real :: S15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Salinities at an array of subgrid locations [S ~> ppt]
   real :: p15((15*HI%iscB+1):(15*(HI%iecB+1))) ! Pressures at an array of subgrid locations [R L2 T-2 ~> Pa]

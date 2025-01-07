@@ -35,7 +35,7 @@ type, public :: CVMix_ddiff_cs ; private
   real    :: kappa_ddiff_param1 !< exterior coefficient in diffusive convection regime [nondim]
   real    :: kappa_ddiff_param2 !< middle coefficient in diffusive convection regime [nondim]
   real    :: kappa_ddiff_param3 !< interior coefficient in diffusive convection regime [nondim]
-  real    :: min_thickness      !< Minimum thickness allowed [H ~> m or kg-2]
+  real    :: min_thickness      !< Minimum thickness allowed [H ~> m or kg m-2]
   character(len=4) :: diff_conv_type !< type of diffusive convection to use. Options are Marmorino &
                                 !! Caldwell 1976 ("MC76"; default) and Kelley 1988, 1990 ("K90")
   logical :: debug              !< If true, turn on debugging

@@ -237,7 +237,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
   real :: pi, Cemp_CG, tmp, cos_tmp, sin_tmp  !< constants and dummy variables [nondim]
   real :: omega_tmp        !< A dummy angle [radians]
   real :: du, dv           !< Velocity increments [L T-1 ~> m s-1]
-  real :: depth            !< Cumulative layer thicknesses [H ~> m or kg m=2]
+  real :: depth            !< Cumulative layer thicknesses [H ~> m or kg m-2]
   real :: sigma            !< Fractional depth in the mixed layer [nondim]
   real :: Wind_x, Wind_y   !< intermediate wind stress componenents [L2 T-2 ~> m2 s-2]
   real :: taux, tauy, tauxDG, tauyDG, tauxDGup, tauyDGup, ustar2, tauh !< intermediate variables [L2 T-2 ~> m2 s-2]

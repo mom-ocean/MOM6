@@ -604,7 +604,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     Datv          ! Basin depth at v-velocity grid points times the x-grid
                   ! spacing [H L ~> m2 or kg m-1].
   real, dimension(:,:,:), pointer :: ufilt, vfilt
-                  ! Filtered velocities from the output of streaming filters [m s-1]
+                  ! Filtered velocities from the output of streaming filters [L T-1 ~> m s-1]
   real, target, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta, &        ! The barotropic free surface height anomaly or column mass
                   ! anomaly [H ~> m or kg m-2]

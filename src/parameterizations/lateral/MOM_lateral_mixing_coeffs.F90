@@ -557,9 +557,9 @@ subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE)
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzSyN ! |Sy| N times dz at v-points [Z T-1 ~> m s-1]
   real, dimension(SZI_(G), SZJ_(G)) :: f  ! Absolute value of the Coriolis parameter at h point [T-1 ~> s-1]
   real :: N2             ! Positive buoyancy frequency square or zero [L2 Z-2 T-2 ~> s-2]
-  real :: dzc            ! Spacing between two adjacent layers in stretched vertical coordinate [m]
+  real :: dzc            ! Spacing between two adjacent layers in stretched vertical coordinate [Z ~> m]
   real :: f_subround     ! The minimal resolved value of Coriolis parameter to prevent division by zero [T-1 ~> s-1]
-  real, dimension(SZI_(G), SZJ_(G)) :: Le  ! Eddy length scale [m]
+  real, dimension(SZI_(G), SZJ_(G)) :: Le  ! Eddy length scale [L ~> m]
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

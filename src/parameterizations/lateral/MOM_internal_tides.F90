@@ -163,7 +163,7 @@ type, public :: int_tide_CS ; private
   real :: gamma_osborn  !< Mixing efficiency from Osborn 1980 [nondim]
   real :: Kd_min        !< The minimum diapycnal diffusivity. [L2 T-1 ~> m2 s-1]
   real :: max_TKE_to_Kd !< Maximum allowed value for TKE_to_kd [H Z2 T-3 ~> m3 s-3 or W m-2]
-  real :: min_thick_layer_Kd !< minimum layer thickness allowed to use with TKE_to_kd [H ~> m]
+  real :: min_thick_layer_Kd !< minimum layer thickness allowed to use with TKE_to_kd [H ~> m or kg m-2]
   logical :: apply_background_drag
                         !< If true, apply a drag due to background processes as a sink.
   logical :: apply_bottom_drag
@@ -331,10 +331,10 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
   real :: En_sumtmp                                  ! Energies for debugging [H Z2 T-2 ~> m3 s-2 or J m-2]
   real :: En_initial, Delta_E_check                  ! Energies for debugging [H Z2 T-2 ~> m3 s-2 or J m-2]
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! Energy losses for debugging [H Z2 T-3 ~> m3 s-3 or W m-2]
-  real :: HZ2_T2_to_J_m2                             ! unit conversion factor for Energy from internal to mks
-                                                     ! [H Z2 T-2 ~> m3 s-2 or J m-2]
+  real :: HZ2_T2_to_J_m2                             ! unit conversion factor for Energy from internal units
+                                                     ! to mks [T2 kg H-1 Z-2 s-2 ~> kg m-3 or 1]
   real :: J_m2_to_HZ2_T2                             ! unit conversion factor for Energy from mks to internal
-                                                     ! [m3 s-2 or J m-2 ~> H Z2 T-2]
+                                                     ! units [H Z2 s2 T-2 kg-1 ~> m3 kg-1 or 1]
   character(len=160) :: mesg  ! The text of an error message
   integer :: En_halo_ij_stencil ! The halo size needed for energy advection
   integer :: a, m, fr, i, j, k, is, ie, js, je, isd, ied, jsd, jed, nAngle
@@ -1280,7 +1280,8 @@ subroutine itidal_lowmode_loss(G, GV, US, CS, Nb, Rho_bot, Ub, En, TKE_loss_fixe
   real    :: En_negl         ! negligibly small number to prevent division by zero [H Z2 T-2 ~> m3 s-2 or J m-2]
   real    :: En_a, En_b      ! energy before and after timestep [H Z2 T-2 ~> m3 s-2 or J m-2]
   real    :: I_dt            ! The inverse of the timestep [T-1 ~> s-1]
-  real    :: J_m2_to_HZ2_T2  ! unit conversion factor for Energy from mks to internal [m3 s-2 or J m-2 ~> H Z2 T-2]
+  real    :: J_m2_to_HZ2_T2  ! unit conversion factor for Energy from mks to internal
+                             ! units [H Z2 s2 T-2 kg-1 ~> m3 kg-1 or 1]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -1408,54 +1409,56 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
   real, dimension(SZI_(G),SZK_(GV)+1),  intent(inout) :: Kd_int       !< The diapycnal diffusivity at interfaces
                                                                       !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   real, dimension(SZI_(G), SZK_(GV)),   intent(out) :: profile_leak   !< Normalized profile for background drag
-                                                                      !! [H-1 ~> m-1]
+                                                                      !! [H-1 ~> m-1 or m2 kg-1]
   real, dimension(SZI_(G), SZK_(GV)),   intent(out) :: profile_quad   !< Normalized profile for  bottom drag
-                                                                      !! [H-1 ~> m-1]
+                                                                      !! [H-1 ~> m-1 or m2 kg-1]
   real, dimension(SZI_(G), SZK_(GV)),   intent(out) :: profile_itidal !< Normalized profile for wave drag
-                                                                      !! [H-1 ~> m-1]
+                                                                      !! [H-1 ~> m-1 or m2 kg-1]
   real, dimension(SZI_(G), SZK_(GV)),   intent(out) :: profile_Froude !< Normalized profile for Froude drag
-                                                                      !! [H-1 ~> m-1]
+                                                                      !! [H-1 ~> m-1 or m2 kg-1]
   real, dimension(SZI_(G), SZK_(GV)),   intent(out) :: profile_slope  !< Normalized profile for critical slopes
-                                                                      !! [H-1 ~> m-1]
+                                                                      !! [H-1 ~> m-1 or m2 kg-1]
 
   ! local variables
-  real :: TKE_loss          ! temp variable to pass value of internal tides TKE loss [R Z-3 T-3 ~> W/m2]
-  real :: renorm_N          ! renormalization for N profile [H T-1 ~> m s-1]
-  real :: renorm_N2         ! renormalization for N2 profile [H T-2 ~> m s-2]
+  real :: TKE_loss          ! temp variable to pass value of internal tides TKE loss [R Z-3 T-3 ~> W m-2]
+  real :: renorm_N          ! renormalization for N profile [H T-1 ~> m s-1 or kg m-2 s-1]
+  real :: renorm_N2         ! renormalization for N2 profile [H T-2 ~> m s-2 or kg m-2 s-2]
   real :: tmp_StLau         ! tmp var for renormalization for StLaurent profile [nondim]
   real :: tmp_StLau_slope   ! tmp var for renormalization for StLaurent profile [nondim]
   real :: renorm_StLau      ! renormalization for StLaurent profile [nondim]
   real :: renorm_StLau_slope! renormalization for StLaurent profile [nondim]
-  real :: htot              ! total depth of water column [H ~> m]
-  real :: htmp              ! local value of thickness in layers [H ~> m]
-  real :: h_d               ! expomential decay length scale [H ~> m]
-  real :: h_s               ! expomential decay length scale on the slope [H ~> m]
-  real :: I_h_d             ! inverse of expomential decay length scale [H-1 ~> m-1]
-  real :: I_h_s             ! inverse of expomential decay length scale on the slope [H-1 ~> m-1]
+  real :: htot              ! total depth of water column [H ~> m or kg m-2]
+  real :: htmp              ! local value of thickness in layers [H ~> m or kg m-2]
+  real :: h_d               ! expomential decay length scale [H ~> m or kg m-2]
+  real :: h_s               ! expomential decay length scale on the slope [H ~> m or kg m-2]
+  real :: I_h_d             ! inverse of expomential decay length scale [H-1 ~> m-1 or m2 kg-1]
+  real :: I_h_s             ! inverse of expomential decay length scale on the slope [H-1 ~> m-1 or m2 kg-1]
   real :: TKE_to_Kd_lim     ! limited version of TKE_to_Kd [T2 Z-1 ~> s2 m-1]
 
   ! vertical profiles have units Z-1 for conversion to Kd to be dim correct (see eq 2 of St Laurent GRL 2002)
-  real, dimension(SZK_(GV)) :: profile_N               ! vertical profile varying with N [H-1 ~> m-1]
-  real, dimension(SZK_(GV)) :: profile_N2              ! vertical profile varying with N2 [H-1 ~> m-1]
-  real, dimension(SZK_(GV)) :: profile_StLaurent       ! vertical profile according to St Laurent 2002 [H-1 ~> m-1]
-  real, dimension(SZK_(GV)) :: profile_StLaurent_slope ! vertical profile according to St Laurent 2002 [H-1 ~> m-1]
-  real, dimension(SZK_(GV)) :: profile_BBL             ! vertical profile Heavyside BBL  [H-1 ~> m-1]
+  real, dimension(SZK_(GV)) :: profile_N               ! vertical profile varying with N [H-1 ~> m-1 or m2 kg-1]
+  real, dimension(SZK_(GV)) :: profile_N2              ! vertical profile varying with N2 [H-1 ~> m-1 or m2 kg-1]
+  real, dimension(SZK_(GV)) :: profile_StLaurent       ! vertical profile according to St Laurent 2002
+                                                       ! [H-1 ~> m-1 or m2 kg-1]
+  real, dimension(SZK_(GV)) :: profile_StLaurent_slope ! vertical profile according to St Laurent 2002
+                                                       ! [H-1 ~> m-1 or m2 kg-1]
+  real, dimension(SZK_(GV)) :: profile_BBL             ! vertical profile Heavyside BBL  [H-1 ~> m-1 or m2 kg-1]
   real, dimension(SZK_(GV)) :: Kd_leak_lay   ! Diffusivity due to background drag [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZK_(GV)) :: Kd_quad_lay   ! Diffusivity due to bottom drag [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZK_(GV)) :: Kd_itidal_lay ! Diffusivity due to wave drag [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZK_(GV)) :: Kd_Froude_lay ! Diffusivity due to high Froude breaking [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
   real, dimension(SZK_(GV)) :: Kd_slope_lay  ! Diffusivity due to critical slopes [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
 
-  real :: hmin                  ! A minimum allowable thickness [H ~> m]
-  real :: h_rmn                 ! Remaining thickness in k-loop [H ~> m]
+  real :: hmin                  ! A minimum allowable thickness [H ~> m or kg m-2]
+  real :: h_rmn                 ! Remaining thickness in k-loop [H ~> m or kg m-2]
   real :: frac                  ! A fraction of thicknesses [nondim]
   real :: verif_N,   &          ! profile verification [nondim]
           verif_N2,  &          ! profile verification [nondim]
           verif_bbl, &          ! profile verification [nondim]
           verif_stl1,&          ! profile verification [nondim]
           verif_stl2,&          ! profile verification [nondim]
-          threshold_renorm_N2,& ! Maximum allowable error on N2 profile [H T-2 ~> m.s-2]
-          threshold_renorm_N, & ! Maximum allowable error on N profile [H T-1 ~> m.s-1]
+          threshold_renorm_N2,& ! Maximum allowable error on N2 profile [H T-2 ~> m s-2 or kg m-2 s-2]
+          threshold_renorm_N, & ! Maximum allowable error on N profile [H T-1 ~> m s-1 or kg m-2 s-1]
           threshold_verif       ! Maximum allowable error on verification [nondim]
 
   logical :: non_Bous ! fully Non-Boussinesq
@@ -3394,9 +3397,12 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                                 ! nominal ocean depth, or a negative value for no limit [nondim]
   real    :: period_1           ! The period of the gravest modeled mode [T ~> s]
   real    :: period             ! A tidal period read from namelist [T ~> s]
-  real    :: HZ2_T2_to_J_m2     ! unit conversion factor for Energy from internal to mks [H Z2 T-2 ~> m3 s-2 or J m-2]
-  real    :: HZ2_T3_to_W_m2     ! unit conversion factor for TKE from internal to mks [H Z2 T-3 ~> m3 s-3 or W m-2]
-  real    :: J_m2_to_HZ2_T2     ! unit conversion factor for Energy from mks to internal [m3 s-2 or J m-2 ~> H Z2 T-2]
+  real    :: HZ2_T2_to_J_m2     ! unit conversion factor for Energy from internal units
+                                ! to mks [T2 kg H-1 Z-2 s-2 ~> kg m-3 or 1]
+  real    :: HZ2_T3_to_W_m2     ! unit conversion factor for TKE from internal units
+                                ! to mks [T3 kg H-1 Z-2 s-3 ~> kg m-3 or 1]
+  real    :: J_m2_to_HZ2_T2     ! unit conversion factor for Energy from mks to internal
+                                ! units [H Z2 s2 T-2 kg-1 ~> m3 kg-1 or 1]
   integer :: num_angle, num_freq, num_mode, m, fr
   integer :: isd, ied, jsd, jed, a, id_ang, i, j, nz
   type(axes_grp) :: axes_ang

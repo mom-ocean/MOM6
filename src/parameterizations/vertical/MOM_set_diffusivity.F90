@@ -864,7 +864,7 @@ subroutine find_TKE_to_Kd(h, tv, dRho_int, N2_lay, j, dt, G, GV, US, CS, &
                       ! entraining all fluid in the layers above or below [H ~> m or kg m-2]
   real :: dRho_lay    ! density change across a layer [R ~> kg m-3]
   real :: Omega2      ! rotation rate squared [T-2 ~> s-2]
-  real :: grav        ! Gravitational acceleration [Z T-1 ~> m s-2]
+  real :: grav        ! Gravitational acceleration [Z T-2 ~> m s-2]
   real :: G_Rho0      ! Gravitational acceleration divided by Boussinesq reference density
                       ! [Z R-1 T-2 ~> m4 s-2 kg-1]
   real :: G_IRho0     ! Alternate calculation of G_Rho0 with thickness rescaling factors

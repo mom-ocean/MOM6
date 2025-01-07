@@ -78,7 +78,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
   real :: absf   ! The absolute value of the Coriolis parameter [T-1 ~> s-1]
   real :: htot   ! The sum of the thicknesses [H ~> m or kg m-2].
   real :: energy_Kd ! The energy used by diapycnal mixing [R Z L2 T-3 ~> W m-2].
-  real :: tmp1  ! A temporary array [H2 ~> m2 or kg2 m-6]
+  real :: tmp1  ! A temporary array [H2 ~> m2 or kg2 m-4]
   integer :: i, j, k, is, ie, js, je, nz
   logical :: may_print
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke

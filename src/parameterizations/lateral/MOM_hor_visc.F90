@@ -325,8 +325,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
                   ! at some points in the code it is not yet layer integrated, so is in [L2 T-2 ~> m2 s-2].
     str_xx_GME,&  ! smoothed diagonal term in the stress tensor from GME [L2 T-2 ~> m2 s-2]
     bhstr_xx, &   ! A copy of str_xx that only contains the biharmonic contribution [H L2 T-2 ~> m3 s-2 or kg s-2]
-    FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [R L2 T-3 ~> W m-2]
-    FrictWorkIntz_bh, & ! depth integrated energy dissipated by biharmonic lateral friction [R L2 T-3 ~> W m-2]
+    FrictWorkIntz, & ! depth integrated energy dissipated by lateral friction [R Z L2 T-3 ~> W m-2]
+    FrictWorkIntz_bh, & ! depth integrated energy dissipated by biharmonic lateral friction [R Z L2 T-3 ~> W m-2]
     grad_vort_mag_h, & ! Magnitude of vorticity gradient at h-points [L-1 T-1 ~> m-1 s-1]
     grad_vort_mag_h_2d, & ! Magnitude of 2d vorticity gradient at h-points [L-1 T-1 ~> m-1 s-1]
     grad_div_mag_h, &     ! Magnitude of divergence gradient at h-points [L-1 T-1 ~> m-1 s-1]
@@ -387,9 +387,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     Ah_h, &          ! biharmonic viscosity at thickness points [L4 T-1 ~> m4 s-1]
     Kh_h, &          ! Laplacian viscosity at thickness points [L2 T-1 ~> m2 s-1]
     dz, &            ! Height change across layers [Z ~> m]
-    FrictWork, &     ! work done by MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
-    FrictWork_bh, &  ! work done by the biharmonic MKE dissipation mechanisms [R L2 T-3 ~> W m-2]
-    FrictWork_GME, & ! work done by GME [R L2 T-3 ~> W m-2]
+    FrictWork, &     ! work done by MKE dissipation mechanisms [R Z L2 T-3 ~> W m-2]
+    FrictWork_bh, &  ! work done by the biharmonic MKE dissipation mechanisms [R Z L2 T-3 ~> W m-2]
+    FrictWork_GME, & ! work done by GME [R Z L2 T-3 ~> W m-2]
     div_xx_h,      & ! horizontal divergence [T-1 ~> s-1]
     sh_xx_h,       & ! horizontal tension (du/dx - dv/dy) including metric terms [T-1 ~> s-1]
     NoSt, &          ! A diagnostic array of normal stress [T-1 ~> s-1].

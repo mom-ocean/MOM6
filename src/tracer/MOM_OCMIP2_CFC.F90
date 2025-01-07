@@ -451,7 +451,7 @@ subroutine OCMIP2_CFC_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
   ! These two calls unpack the fluxes from the input arrays.
   !   The -GV%Rho0 changes the sign convention of the flux and with the scaling factors changes
-  ! the units of the flux from [Conc. m s-1] to [Conc. R Z T-1 ~> Conc. kg m-2 s-1].
+  ! the units of the flux from [conc m s-1] to [conc R Z T-1 ~> conc kg m-2 s-1].
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_11_flux, CFC11_flux, &
                                  scale_factor=-GV%Rho0*US%m_to_Z*US%T_to_s, idim=idim, jdim=jdim, turns=G%HI%turns)
   call extract_coupler_type_data(fluxes%tr_fluxes, CS%ind_cfc_12_flux, CFC12_flux, &

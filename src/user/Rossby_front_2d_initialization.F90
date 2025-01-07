@@ -221,7 +221,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   real    :: I_f          ! The Adcroft reciprocal of the local Coriolis parameter [T ~> s]
   real    :: Ty           ! The meridional temperature gradient [C L-1 ~> degC m-1]
   real    :: hAtU         ! Interpolated layer thickness in height units [H ~> m or kg m-2].
-  real    :: u_int        ! The zonal velocity at an interface [L T-1 ~> m s=1]
+  real    :: u_int        ! The zonal velocity at an interface [L T-1 ~> m s-1]
   real    :: max_depth    ! Maximum depth of the model bathymetry [H ~> m or kg m-2]
   integer :: i, j, k, is, ie, js, je, nz
   character(len=40) :: verticalCoordinate

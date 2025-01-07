@@ -61,9 +61,9 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, sy
   logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                    !! computational domain.
   logical,       optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,          optional, intent(in) :: vel_scale !< The scaling factor to convert velocities to [m s-1]
+  real,          optional, intent(in) :: vel_scale !< The scaling factor to convert velocities to [T m L-1 s-1 ~> 1]
 
-  real :: scale_vel ! The scaling factor to convert velocities to [m s-1]
+  real :: scale_vel ! The scaling factor to convert velocities to mks units [T m L-1 s-1 ~> 1]
   logical :: sym
   integer :: hs
 
