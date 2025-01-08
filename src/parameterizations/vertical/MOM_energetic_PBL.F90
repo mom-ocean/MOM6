@@ -162,7 +162,9 @@ type, public :: energetic_PBL_CS ; private
   real :: Max_Enhance_M = 5. !< The maximum allowed LT enhancement to the mixing [nondim].
 
   !/ Bottom boundary layer mixing related options
-  real :: ePBL_BBL_effic     !< The efficiency of bottom boundary layer mixing via ePBL [nondim]
+  real :: ePBL_BBL_effic     !< The efficiency of bottom boundary layer mixing via ePBL, times
+                             !! conversion factors between the natural units of mean kinetic energy
+                             !! and those those used for TKE [Z2 L-2 ~> nondim].
   logical :: Use_BBLD_iteration !< If true, use the proximity to the top of the actively turbulent
                              !! bottom boundary layer to constrain the mixing lengths.
   real    :: TKE_decay_BBL   !< The ratio of the natural Ekman depth to the TKE decay scale for
@@ -654,7 +656,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
       if (CS%ePBL_BBL_effic > 0.0) then
         if (CS%MLD_iteration_guess .and. (CS%BBL_depth(i,j) > 0.0)) BBLD_io = CS%BBL_depth(i,j)
         BBLD_in = BBLD_io
-        BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%TKE_BBL(i,j)
+        BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
         u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)
         call ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, SpV_dt, absf, dt, Kd, BBL_TKE, &
                              u_star_BBL, Kd_BBL, BBLD_io, mixvel_BBL, mixlen_BBL, GV, US, CS, eCD)
@@ -730,7 +732,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
                            mixvel, mixlen, GV, US, CS_tmp2, eCD_tmp, Waves, G, i, j)
         else
           BLD_1 = BBLD_in ; BLD_2 = BBLD_in
-          BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%TKE_BBL(i,j)
+          BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
           u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)
           call ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, SpV_dt, absf, dt, Kd, BBL_TKE, &
                                u_star_BBL, Kd_1, BLD_1, mixvel_BBL, mixlen_BBL, GV, US, CS_tmp1, eCD_tmp)
@@ -760,7 +762,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   enddo ! j-loop
 
   if (CS%debug .and. (CS%ePBL_BBL_effic > 0.0)) then
-    call hchksum(visc%TKE_BBL, "ePBL visc%TKE_BBL", G%HI, unscale=GV%H_to_MKS*US%Z_to_m**2*US%s_to_T**3)
+    call hchksum(visc%BBL_meanKE_loss, "ePBL visc%BBL_meanKE_loss", G%HI, &
+                 unscale=GV%H_to_MKS*US%L_T_to_m_s**2*US%s_to_T)
     call hchksum(visc%ustar_BBL, "ePBL visc%ustar_BBL", G%HI, unscale=GV%H_to_MKS*US%s_to_T)
     call hchksum(Kd_int, "End of ePBL Kd_int", G%HI, unscale=GV%H_to_MKS*US%Z_to_m*US%s_to_T)
     call hchksum(diag_Velocity_Scale, "ePBL Velocity_Scale", G%HI, unscale=US%Z_to_m*US%s_to_T)
@@ -3670,7 +3673,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "EPBL_BBL_EFFIC", CS%ePBL_BBL_effic, &
                  "The efficiency of bottom boundary layer mixing via ePBL.  Setting this to a "//&
                  "value that is greater than 0 to enable bottom boundary layer mixing from EPBL.", &
-                 units="nondim", default=0.0)
+                 units="nondim", default=0.0, scale=US%L_to_Z**2)
   no_BBL = (CS%ePBL_BBL_effic<=0.0)
   call get_param(param_file, mdl, "USE_BBLD_ITERATION", CS%Use_BBLD_iteration, &
                  "A logical that specifies whether or not to use the distance to the top of the "//&
