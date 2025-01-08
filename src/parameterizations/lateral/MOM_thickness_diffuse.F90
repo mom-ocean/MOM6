@@ -56,7 +56,8 @@ type, public :: thickness_diffuse_CS ; private
   real    :: FGNV_c_min          !< A minimum wave speed used in the Ferrari et al., 2010,
                                  !! streamfunction formulation [L T-1 ~> m s-1].
   real    :: N2_floor            !< A floor for squared buoyancy frequency in the Ferrari et al., 2010,
-                                 !! streamfunction formulation [T-2 ~> s-2].
+                                 !! streamfunction formulation divided by aspect ratio rescaling factors
+                                 !! [L2 Z-2 T-2 ~> s-2].
   logical :: detangle_interfaces !< If true, add 3-d structured interface height
                                  !! diffusivities to horizontally smooth jagged layers.
   real    :: detangle_time       !< If detangle_interfaces is true, this is the
@@ -782,7 +783,7 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
   h_neglect = GV%H_subroundoff ; h_neglect2 = h_neglect**2 ; hn_2 = 0.5*h_neglect
   dz_neglect = GV%dZ_subroundoff ; dz_neglect2 = dz_neglect**2
   if (GV%Boussinesq) G_rho0 = GV%g_Earth / GV%Rho0
-  N2_floor = CS%N2_floor * US%Z_to_L**2
+  N2_floor = CS%N2_floor
 
   use_EOS = associated(tv%eqn_of_state)
   present_slope_x = PRESENT(slope_x)
@@ -2122,7 +2123,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   real :: omega        ! The Earth's rotation rate [T-1 ~> s-1]
   real :: strat_floor  ! A floor for buoyancy frequency in the Ferrari et al. 2010,
                        ! streamfunction formulation, expressed as a fraction of planetary
-                       ! rotation [nondim].
+                       ! rotation divided by an aspect ratio rescaling factor [L Z-1 ~> nondim]
   real :: Stanley_coeff ! Coefficient relating the temperature gradient and sub-gridscale
                         ! temperature variance [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
@@ -2241,7 +2242,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "A floor for Brunt-Vasaila frequency in the Ferrari et al., 2010, "//&
                  "streamfunction formulation, expressed as a fraction of planetary "//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
-                 default=1.e-15, units="nondim", do_not_log=.not.CS%use_FGNV_streamfn)
+                 default=1.e-15, units="nondim", scale=US%Z_to_L, do_not_log=.not.CS%use_FGNV_streamfn)
   call get_param(param_file, mdl, "USE_STANLEY_GM", CS%use_stanley_gm, &
                  "If true, turn on Stanley SGS T variance parameterization "// &
                  "in GM code.", default=.false.)
