@@ -168,7 +168,8 @@ type, public :: forcing
 
   ! tide related inputs
   real, pointer, dimension(:,:) :: &
-    TKE_tidal     => NULL(), & !< tidal energy source driving mixing in bottom boundary layer [R Z3 T-3 ~> W m-2]
+    BBL_tidal_dis => NULL(), & !< Tidal energy dissipation in the bottom boundary layer that can act
+                               !! as a source of energy for bottom boundary layer mixing [R Z L2 T-3 ~> W m-2]
     ustar_tidal   => NULL()    !< tidal contribution to bottom ustar [Z T-1 ~> m s-1]
 
   ! iceberg related inputs
@@ -1313,8 +1314,9 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
     call hchksum(fluxes%ice_fraction, mesg//" fluxes%ice_fraction", G%HI, haloshift=hshift)
   if (associated(fluxes%salt_flux)) &
     call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
-  if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal", G%HI, haloshift=hshift, unscale=US%RZ3_T3_to_W_m2)
+  if (associated(fluxes%BBL_tidal_dis)) &
+    call hchksum(fluxes%BBL_tidal_dis, mesg//" fluxes%BBL_tidal_dis", G%HI, haloshift=hshift, &
+                 unscale=US%L_to_Z**2*US%RZ3_T3_to_W_m2)
   if (associated(fluxes%ustar_tidal)) &
     call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal", G%HI, haloshift=hshift, unscale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%lrunoff)) &
@@ -1438,7 +1440,7 @@ subroutine forcing_SinglePointPrint(fluxes, G, i, j, mesg)
   call locMsg(fluxes%seaice_melt_heat,'seaice_melt_heat')
   call locMsg(fluxes%p_surf,'p_surf')
   call locMsg(fluxes%salt_flux,'salt_flux')
-  call locMsg(fluxes%TKE_tidal,'TKE_tidal')
+  call locMsg(fluxes%BBL_tidal_dis,'BBL_tidal_dis')
   call locMsg(fluxes%ustar_tidal,'ustar_tidal')
   call locMsg(fluxes%lrunoff,'lrunoff')
   call locMsg(fluxes%frunoff,'frunoff')
@@ -1546,7 +1548,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         cmor_standard_name='sea_water_pressure_at_sea_water_surface')
 
   handles%id_TKE_tidal = register_diag_field('ocean_model', 'TKE_tidal', diag%axesT1, Time, &
-        'Tidal source of BBL mixing', 'W m-2', conversion=US%RZ3_T3_to_W_m2)
+        'Tidal source of BBL mixing', 'W m-2', conversion=US%L_to_Z**2*US%RZ3_T3_to_W_m2)
 
   if (.not. use_temperature) then
     handles%id_buoy = register_diag_field('ocean_model', 'buoy', diag%axesT1, Time, &
@@ -3174,8 +3176,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_psurf > 0) .and. associated(fluxes%p_surf))                      &
       call post_data(handles%id_psurf, fluxes%p_surf, diag)
 
-    if ((handles%id_TKE_tidal > 0) .and. associated(fluxes%TKE_tidal))               &
-      call post_data(handles%id_TKE_tidal, fluxes%TKE_tidal, diag)
+    if ((handles%id_TKE_tidal > 0) .and. associated(fluxes%BBL_tidal_dis))    &
+      call post_data(handles%id_TKE_tidal, fluxes%BBL_tidal_dis, diag)
 
     if ((handles%id_buoy > 0) .and. associated(fluxes%buoy))                         &
       call post_data(handles%id_buoy, fluxes%buoy, diag)
@@ -3362,8 +3364,8 @@ subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes, turns)
   call myAlloc(fluxes%buoy, G%isd, G%ied, G%jsd, G%jed, &
       associated(fluxes_ref%buoy))
 
-  call myAlloc(fluxes%TKE_tidal, G%isd, G%ied, G%jsd, G%jed, &
-      associated(fluxes_ref%TKE_tidal))
+  call myAlloc(fluxes%BBL_tidal_dis, G%isd, G%ied, G%jsd, G%jed, &
+      associated(fluxes_ref%BBL_tidal_dis))
   call myAlloc(fluxes%ustar_tidal, G%isd, G%ied, G%jsd, G%jed, &
       associated(fluxes_ref%ustar_tidal))
 
@@ -3580,7 +3582,7 @@ subroutine deallocate_forcing_type(fluxes)
   if (associated(fluxes%salt_flux))            deallocate(fluxes%salt_flux)
   if (associated(fluxes%p_surf_full))          deallocate(fluxes%p_surf_full)
   if (associated(fluxes%p_surf))               deallocate(fluxes%p_surf)
-  if (associated(fluxes%TKE_tidal))            deallocate(fluxes%TKE_tidal)
+  if (associated(fluxes%BBL_tidal_dis))        deallocate(fluxes%BBL_tidal_dis)
   if (associated(fluxes%ustar_tidal))          deallocate(fluxes%ustar_tidal)
   if (associated(fluxes%ustar_shelf))          deallocate(fluxes%ustar_shelf)
   if (associated(fluxes%iceshelf_melt))        deallocate(fluxes%iceshelf_melt)
@@ -3727,8 +3729,8 @@ subroutine rotate_forcing(fluxes_in, fluxes, turns)
   if (associated(fluxes_in%buoy)) &
     call rotate_array(fluxes_in%buoy, turns, fluxes%buoy)
 
-  if (associated(fluxes_in%TKE_tidal)) &
-    call rotate_array(fluxes_in%TKE_tidal, turns, fluxes%TKE_tidal)
+  if (associated(fluxes_in%BBL_tidal_dis)) &
+    call rotate_array(fluxes_in%BBL_tidal_dis, turns, fluxes%BBL_tidal_dis)
   if (associated(fluxes_in%ustar_tidal)) &
     call rotate_array(fluxes_in%ustar_tidal, turns, fluxes%ustar_tidal)
 
@@ -3999,8 +4001,8 @@ subroutine homogenize_forcing(fluxes, G, GV, US)
   if (associated(fluxes%buoy)) &
     call homogenize_field_t(fluxes%buoy, G, tmp_scale=US%L_to_m**2*US%s_to_T**3)
 
-  if (associated(fluxes%TKE_tidal)) &
-    call homogenize_field_t(fluxes%TKE_tidal, G, tmp_scale=US%RZ3_T3_to_W_m2)
+  if (associated(fluxes%BBL_tidal_dis)) &
+    call homogenize_field_t(fluxes%BBL_tidal_dis, G, tmp_scale=US%L_to_Z**2*US%RZ3_T3_to_W_m2)
 
   if (associated(fluxes%ustar_tidal)) &
     call homogenize_field_t(fluxes%ustar_tidal, G, tmp_scale=US%Z_to_m*US%s_to_T)

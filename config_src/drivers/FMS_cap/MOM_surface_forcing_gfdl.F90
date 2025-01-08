@@ -88,8 +88,8 @@ type, public :: surface_forcing_CS ; private
   real :: gust_const            !< Constant unresolved background gustiness for ustar [R L Z T-2 ~> Pa]
   logical :: read_gust_2d       !< If true, use a 2-dimensional gustiness supplied from an input file.
   real, pointer, dimension(:,:) :: &
-    TKE_tidal => NULL()         !< Turbulent kinetic energy introduced to the bottom boundary layer
-                                !! by drag on the tidal flows [R Z3 T-3 ~> W m-2].
+    BBL_tidal_dis => NULL()     !< Tidal energy dissipation in the bottom boundary layer that can act as a
+                                !! source of energy for bottom boundary layer mixing [R Z L2 T-3 ~> W m-2]
   real, pointer, dimension(:,:) :: &
     gust => NULL()              !< A spatially varying unresolved background gustiness that
                                 !! contributes to ustar [R L Z T-2 ~> Pa].  gust is used when read_gust_2d is true.
@@ -302,7 +302,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     call safe_alloc_ptr(fluxes%salt_flux,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%salt_flux_in,isd,ied,jsd,jed)
 
-    call safe_alloc_ptr(fluxes%TKE_tidal,isd,ied,jsd,jed)
+    call safe_alloc_ptr(fluxes%BBL_tidal_dis,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%ustar_tidal,isd,ied,jsd,jed)
 
     call safe_alloc_ptr(fluxes%heat_added,isd,ied,jsd,jed)
@@ -311,7 +311,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (associated(IOB%excess_salt)) call safe_alloc_ptr(fluxes%salt_left_behind,isd,ied,jsd,jed)
 
     do j=js-2,je+2 ; do i=is-2,ie+2
-      fluxes%TKE_tidal(i,j)   = CS%TKE_tidal(i,j)
+      fluxes%BBL_tidal_dis(i,j)   = CS%BBL_tidal_dis(i,j)
       fluxes%ustar_tidal(i,j) = CS%ustar_tidal(i,j)
     enddo ; enddo
 
@@ -1304,11 +1304,15 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
 
   ! Local variables
   real :: utide             ! The RMS tidal velocity [Z T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    utide_2d                ! A 2d array of RMS tidal velocities [Z T-1 ~> m s-1].
   real :: Flux_const_dflt   ! A default piston velocity for restoring surface properties [m day-1]
   logical :: Boussinesq       ! If true, this run is fully Boussinesq
   logical :: semi_Boussinesq  ! If true, this run is partially non-Boussinesq
-  real :: rho_TKE_tidal     ! The constant bottom density used to translate tidal amplitudes into the
-                            ! tidal bottom TKE input used with INT_TIDE_DISSIPATION [R ~> kg m-3]
+  real :: rho_TKE_tidal     ! The constant bottom density used to translate tidal amplitudes into
+                            ! the tidal bottom TKE input used with INT_TIDE_DISSIPATION, times the
+                            ! factor rescaling from the units of TKE to those of mean kinetic
+                            ! energy [R L2 Z-2 ~> kg m-3]
   logical :: new_sim              ! False if this simulation was started from a restart file
                                   ! or other equivalent files.
   logical :: iceberg_flux_diags   ! If true, diagnostics of fluxes from icebergs are available.
@@ -1573,27 +1577,28 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call get_param(param_file, mdl, "TKE_TIDAL_RHO", rho_TKE_tidal, &
                  "The constant bottom density used to translate tidal amplitudes into the tidal "//&
                  "bottom TKE input used with INT_TIDE_DISSIPATION.", &
-                 units="kg m-3", default=CS%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R, &
+                 units="kg m-3", default=CS%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R*US%Z_to_L**2, &
                  do_not_log=.not.(CS%read_TIDEAMP.or.(CS%utide>0.0)))
 
-  call safe_alloc_ptr(CS%TKE_tidal,isd,ied,jsd,jed)
+  call safe_alloc_ptr(CS%BBL_tidal_dis,isd,ied,jsd,jed)
   call safe_alloc_ptr(CS%ustar_tidal,isd,ied,jsd,jed)
 
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
     ! NOTE: There are certain cases where FMS is unable to read this file, so
     ! we use read_netCDF_data in place of MOM_read_data.
-    call read_netCDF_data(TideAmp_file, 'tideamp', CS%TKE_tidal, G%Domain, &
+    utide_2d(:,:) = 0.0
+    call read_netCDF_data(TideAmp_file, 'tideamp', utide_2d, G%Domain, &
         rescale=US%m_to_Z*US%T_to_s)
     do j=jsd, jed; do i=isd, ied
-      utide = CS%TKE_tidal(i,j)
-      CS%TKE_tidal(i,j) = G%mask2dT(i,j)*rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
+      utide = utide_2d(i,j)
+      CS%BBL_tidal_dis(i,j) = G%mask2dT(i,j)*rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
     do j=jsd,jed; do i=isd,ied
       utide = CS%utide
-      CS%TKE_tidal(i,j) = rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
+      CS%BBL_tidal_dis(i,j) = rho_TKE_tidal*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   endif
