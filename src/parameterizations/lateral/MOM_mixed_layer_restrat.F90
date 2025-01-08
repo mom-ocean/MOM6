@@ -99,7 +99,7 @@ type, public :: mixedlayer_restrat_CS ; private
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
   type(external_field) :: sbc_fl   !< A handle used in time interpolation of
-                                   !! front-lenght scales read from a file.
+                                   !! front-length scales read from a file.
   type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   logical :: use_Stanley_ML        !< If true, use the Stanley parameterization of SGS T variance
   real    :: ustar_min             !< A minimum value of ustar in thickness units to avoid numerical
@@ -216,7 +216,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
     Rml_av_fast, &        ! Negative g_Rho0 times the average mixed layer density or G_Earth
                           ! times the average specific volume [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
     MLD_slow,  &          ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
-    mle_fl_2d, &          ! MLE frontal lengh-scale                                 [H ~> m or kg m-2]
+    mle_fl_2d, &          ! MLE frontal length-scale                                [H ~> m or kg m-2]
     htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av_slow           ! Negative g_Rho0 times the average mixed layer density or G_Earth
                           ! times the average specific volume [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
@@ -357,7 +357,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
     call pass_var(mle_fl_2d, G%domain, halo=1)
     do j=js,je ; do i=is,ie
       if ((G%mask2dT(i,j) > 0.0) .and. (mle_fl_2d(i,j) < 0.0)) then
-        write(mesg,'(" Time_interp negative MLE frontal-lenght scale of ",(1pe12.4)," at i,j = ",&
+        write(mesg,'(" Time_interp negative MLE frontal-length scale of ",(1pe12.4)," at i,j = ",&
                   & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                   mle_fl_2d(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
         call MOM_error(FATAL, "MOM_mixed_layer_restrat mixedlayer_restrat_OM4: "//trim(mesg))
@@ -1619,9 +1619,9 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   ! This include declares and sets the variable "version".
   character(len=200) :: inputdir   ! The directory where NetCDF input files
   character(len=240) :: mle_fl_filename ! A file from which chl_a concentrations are to be read.
-  character(len=128) :: mle_fl_file ! Data containing MLE front-lenght scale. Used
+  character(len=128) :: mle_fl_file ! Data containing MLE front-length scale. Used
                                     ! when reading from file.
-  character(len=32)  :: fl_varname ! Name of front-lenght scale variable in mle_fl_file.
+  character(len=32)  :: fl_varname ! Name of front-length scale variable in mle_fl_file.
 
 # include "version_variable.h"
   integer :: i, j
@@ -1772,18 +1772,18 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.",&
              units="m", default=0.0, scale=US%m_to_L)
       call get_param(param_file, mdl, "MLE_FRONT_LENGTH_FROM_FILE", CS%fl_from_file, &
-                   "If true, the MLE front-lenght scale is read from a file.", default=.false.)
+                   "If true, the MLE front-length scale is read from a file.", default=.false.)
       if (CS%fl_from_file) then
         call time_interp_external_init()
 
         call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
         call get_param(param_file, mdl, "MLE_FL_FILE", mle_fl_file, &
-                   "MLE_FL_FILE is the file containing MLE front-lenght scale. "//&
+                   "MLE_FL_FILE is the file containing MLE front-length scale. "//&
                    "It is used when MLE_FRONT_LENGTH_FROM_FILE is true.", fail_if_missing=.true.)
         mle_fl_filename = trim(slasher(inputdir))//trim(mle_fl_file)
         call log_param(param_file, mdl, "INPUTDIR/MLE_FL_FILE", mle_fl_filename)
         call get_param(param_file, mdl, "FL_VARNAME", fl_varname, &
-                   "Name of MLE front-lenght scale variable in MLE_FL_FILE.", default='mle_fl')
+                   "Name of MLE front-length scale variable in MLE_FL_FILE.", default='mle_fl')
         if (modulo(G%Domain%turns, 4) /= 0) then
           CS%sbc_fl = init_external_field(mle_fl_filename, trim(fl_varname), MOM_domain=G%Domain%domain_in)
         else
