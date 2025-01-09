@@ -680,9 +680,6 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   integer :: EOSdom(2,2)     ! The computational domain for the equation of state
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
-  !$acc data &
-  !$acc   present(GV, e, pbce) &
-  !$acc   create(Ihtot)
   !$omp target data map(alloc: Ihtot)
 
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
@@ -692,7 +689,6 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
   if (use_EOS) then
     if (present(rho_star)) then
-      !$acc kernels present(rho_star)
       !$omp target
 
       !$omp parallel loop collapse(2)
@@ -706,12 +702,8 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
         pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) &
             * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
       enddo ; enddo ; enddo
-      !$acc end kernels
       !$omp end target
     else
-      !$acc data &
-      !$acc   present(G, tv, tv%T, tv%S) &
-      !$acc   create(EOSdom, press, T_int, S_int, rho_in_situ, dR_dT, dR_dS)
       !$omp target data &
       !$omp   map(alloc: EOSdom, press, T_int, S_int, rho_in_situ) &
       !$omp   map(alloc: dR_dT, dR_dS)
@@ -722,44 +714,37 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       EOSdom(1,:) = [Isq - (G%isd-1), G%iec+1 - (G%isd-1)]
       EOSdom(2,:) = [Jsq - (G%jsd-1), G%jec+1 - (G%jsd-1)]
 
-      !$acc kernels
       !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         Ihtot(i,j) = GV%H_to_Z / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
         press(i,j) = -Rho0xG * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
-      !$acc end kernels
       !$omp end target
 
       call calculate_density(tv%T(:,:,1), tv%S(:,:,1), press, rho_in_situ, &
                              tv%eqn_of_state, EOSdom)
 
-      !$acc kernels
       !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         pbce(i,j,1) = G_Rho0 * (GFS_scale * rho_in_situ(i,j)) * GV%H_to_Z
       enddo ; enddo
-      !$acc end kernels
       !$omp end target
 
       do k=2,nz
         !$omp target
-        !$acc kernels
         !$omp parallel loop collapse(2)
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
           press(i,j) = -Rho0xG * (e(i,j,K) - G%Z_ref)
           T_int(i,j) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
           S_int(i,j) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
         enddo ; enddo
-        !$acc end kernels
         !$omp end target
 
         call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, &
                                       tv%eqn_of_state, EOSdom)
 
-        !$acc kernels
         !$omp target
         !$omp parallel loop collapse(2)
         do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -768,14 +753,11 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
              (dR_dT(i,j) * (tv%T(i,j,k) - tv%T(i,j,k-1)) + &
               dR_dS(i,j) * (tv%S(i,j,k) - tv%S(i,j,k-1)))
         enddo ; enddo
-        !$acc end kernels
         !$omp end target
       enddo
-      !$acc end data
       !$omp end target data
     endif
   else
-    !$acc kernels
     !$omp target
     !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -787,10 +769,8 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       pbce(i,j,k) = pbce(i,j,k-1) + (GV%g_prime(K) * GV%H_to_Z) &
           * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
     enddo ; enddo ; enddo
-    !$acc end kernels
     !$omp end target
   endif
-  !$acc end data
   !$omp end target data
 end subroutine Set_pbce_Bouss
 

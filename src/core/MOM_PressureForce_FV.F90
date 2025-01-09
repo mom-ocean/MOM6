@@ -1118,7 +1118,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   EOSdom2d(2,:) = [Jsq - (G%isd - 1), (je + 1) - (G%jsd - 1)]
 
   ! TODO: This would be done outside of the function!
-  !$acc enter data copyin(CS)
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
        "MOM_PressureForce_FV_Bouss: Module must be initialized before it is used.")
@@ -1151,7 +1150,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   endif
 
   ! TODO: Ideally, these will be only be computed on the GPU...
-  !$acc enter data copyin(h_neglect, I_Rho0, G_Rho0)
 
   if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
     MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
@@ -1839,21 +1837,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !   temporarily being used to set up the data regions below.
   ! Eventually, they should be set up *outside* of the function.
 
-  !$acc enter data create(PFu, PFv)
-  !$acc enter data copyin(e)
-
-  !$acc enter data if (use_EOS) &
-  !$acc   copyin(tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
-  !$acc enter data if (use_p_atm) copyin(p_atm)
-  !$acc enter data if (.not. use_p_atm) copyin(p0)
-  !$acc enter data if (present(pbce)) copyin(pbce)
-
-  ! Compute pressure gradient in x direction
-  !$acc data &
-  !$acc   present(CS, G, GV, e, PFu, PFv) &
-  !$acc   copyin(pa, h, intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa) &
-  !$acc   create(rho_in_situ, dM)
-
   !$omp target enter data map(to: e)
 
   !$omp target enter data if(use_EOS) &
@@ -1869,7 +1852,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp   map(to: pbce)
 
   !$omp target
-  !$acc kernels
   !$omp parallel loop collapse(3)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     PFu(I,j,k) = (((pa(i,j,K)*h(i,j,k) + intz_dpa(i,j,k)) - &
@@ -1890,7 +1872,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                  ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                   ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
   enddo ; enddo ; enddo
-  !$acc end kernels
 
   ! NOTE: PF[uv] stays on the GPU until the next loop!
 
@@ -1938,28 +1919,23 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                                tv%eqn_of_state, EOSdom2d)
       endif
 
-      !$acc kernels
       !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * rho_in_situ(i,j)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
-      !$acc end kernels
       !$omp end target
 
       !$omp end target data
     else
-      !$acc kernels
       !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * (e(i,j,1) - G%Z_ref)
       enddo ; enddo
-      !$acc end kernels
       !$omp end target
     endif
 
-    !$acc kernels
     !$omp target
     do k=1,nz
       !$omp parallel loop collapse(2)
@@ -1971,7 +1947,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
       enddo ; enddo
     enddo
-    !$acc end kernels
     !$omp end target
 
     !$omp end target data
@@ -1980,7 +1955,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   if (present(pbce)) then
     call set_pbce_Bouss(e, tv_tmp, G, GV, US, rho0_set_pbce, CS%GFS_scale, pbce)
   endif
-  !$acc end data
 
   !$omp target exit data if (use_EOS) &
   !$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
@@ -2000,20 +1974,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   ! NOTE: As above, these are here until data is set up outside of the function.
 
-  !$acc exit data if (present(pbce)) copyout(pbce)
-  !$acc exit data if (use_EOS) &
-  !$acc   delete(tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
-  !$acc exit data if (use_p_atm) delete(p_atm)
-  !$acc exit data if (.not. use_p_atm) delete(p0)
-  !$acc exit data delete(e)
-  !$acc exit data copyout(PFu, PFv)
-
   if (present(eta)) then
-    !$acc enter data copyin(CS, e)
-    !$acc enter data if (CS%tides) copyin(e_tide_eq, e_tide_sal)
-    !$acc enter data if (CS%calculate_SAL) copyin(e_sal)
-    !$acc enter data create(eta)
-
     ! NOTE: Many of these would normally be allocated and computed above.
     !   The following are temporary data transfers.
 
@@ -2030,11 +1991,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
     !$omp target enter data map(alloc: eta)
 
-    !$acc data present(CS, e, eta)
-
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
     ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
-    !$acc kernels
     !$omp target
     !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -2059,15 +2017,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
       enddo ; enddo
     endif
-    !$acc end kernels
     !$omp end target
-
-    !$acc end data
-
-    !$acc exit data if (CS%calculate_SAL) delete(e_sal)
-    !$acc exit data if (CS%tides) delete(e_tide_eq, e_tide_sal)
-    !$acc exit data delete(e)
-    !$acc exit data copyout(eta)
 
     ! TODO: These may be needed for the diagnostics below!
     !$omp target exit data if(CS%tides .and. CS%tides_answer_date > 20230630) &

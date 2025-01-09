@@ -961,7 +961,6 @@ subroutine calculate_density_array_2d_buggy_Wright(this, T, S, pressure, rho, &
   ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
   !   Possibly because Nvidia cannot associate `this` with `EOS%type`.
 
-  !$acc kernels present(T, S, pressure, rho_ref, rho)
   !$omp target
   if (present(rho_ref)) then
     !$omp parallel loop
@@ -975,7 +974,6 @@ subroutine calculate_density_array_2d_buggy_Wright(this, T, S, pressure, rho, &
       rho(i,j) = density_elem_buggy_Wright(this, T(i,j), S(i,j), pressure(i,j))
     enddo ; enddo
   endif
-  !$acc end kernels
   !$omp end target
 end subroutine calculate_density_array_2d_buggy_Wright
 
@@ -1032,14 +1030,12 @@ subroutine calculate_density_derivs_2d_buggy_Wright(this, T, S, pressure, &
 
   ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
 
-  !$acc kernels present(T, S, pressure, drho_dT, drho_dS)
   !$omp target
   !$omp parallel loop collapse(2)
   do j = js, je ; do i = is, ie
     call calculate_density_derivs_elem_buggy_Wright(this, T(i,j), S(i,j), &
         pressure(i,j), drho_dT(i,j), drho_dS(i,j))
   enddo ; enddo
-  !$acc end kernels
   !$omp end target
 end subroutine calculate_density_derivs_2d_buggy_Wright
 

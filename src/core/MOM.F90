@@ -2877,8 +2877,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! Copy the grid metrics and bathymetry to the ocean_grid_type
   call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
 
-  !$acc enter data copyin(G)
-  !$acc enter data copyin(G%IdxCu, G%IdyCv)
   !$omp target enter data map(to: G)
   !$omp target enter data map(to: G%IdxCu, G%IdyCv)
 
@@ -3457,9 +3455,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! XXX: Where to put this??
   ! XXX: G transfer should possibly also be here.
 
-  !$acc enter data copyin(GV)
-  !$acc enter data copyin(GV%Rlay)
-  !$acc enter data copyin(GV%g_prime)
   !$omp target enter data map(to: GV, GV%Rlay, GV%g_prime)
 
   diag => CS%diag
