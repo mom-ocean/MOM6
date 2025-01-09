@@ -1269,18 +1269,30 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo ; enddo
   endif
 
-  if (CS%use_SSH_in_Z0p .and. use_p_atm) then
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      Z_0p(i,j) = e(i,j,1) + p_atm(i,j) * I_g_rho
-    enddo ; enddo
-  elseif (CS%use_SSH_in_Z0p) then
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      Z_0p(i,j) = e(i,j,1)
-    enddo ; enddo
-  else
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      Z_0p(i,j) = G%Z_ref
-    enddo ; enddo
+  !$omp target enter data map(to: e)
+  !$omp target enter data map(to: p_atm) if (use_p_atm)
+
+  if (use_EOS) then
+    !$omp target enter data map(alloc: Z_0p) if (use_EOS)
+    !$omp target
+    if (CS%use_SSH_in_Z0p .and. use_p_atm) then
+      !$omp parallel loop collapse(2)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        Z_0p(i,j) = e(i,j,1) + p_atm(i,j) * I_g_rho
+      enddo ; enddo
+    elseif (CS%use_SSH_in_Z0p) then
+      !$omp parallel loop collapse(2)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        Z_0p(i,j) = e(i,j,1)
+      enddo ; enddo
+    else
+      !$omp parallel loop collapse(2)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        Z_0p(i,j) = G%Z_ref
+      enddo ; enddo
+    endif
+    !$omp end target
+    !$omp target update from(Z_0p) if (use_EOS)
   endif
 
   !$omp target enter data &
@@ -1837,13 +1849,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !   temporarily being used to set up the data regions below.
   ! Eventually, they should be set up *outside* of the function.
 
-  !$omp target enter data map(to: e)
-
   !$omp target enter data if(use_EOS) &
   !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
-
-  !$omp target enter data if(use_p_atm) &
-  !$omp   map(to: p_atm)
 
   !$omp target enter data if(.not. use_p_atm) &
   !$omp   map(to: p0)
@@ -1958,6 +1965,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   !$omp target exit data if (use_EOS) &
   !$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
+
+  !$omp target exit data map(delete: Z_0p) if (use_EOS)
 
   !$omp target exit data if (use_p_atm) &
   !$omp   map(delete: p_atm)
