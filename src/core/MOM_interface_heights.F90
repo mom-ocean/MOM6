@@ -307,11 +307,11 @@ subroutine calc_derived_thermo(tv, h, G, GV, US, halo, debug)
     tv%valid_SpV_halo = halos
 
     if (do_debug) then
-      call hchksum(h, "derived_thermo h", G%HI, haloshift=halos, scale=GV%H_to_MKS)
+      call hchksum(h, "derived_thermo h", G%HI, haloshift=halos, unscale=GV%H_to_MKS)
       if (associated(tv%p_surf)) call hchksum(tv%p_surf, "derived_thermo p_surf", G%HI, &
-                                              haloshift=halos, scale=US%RL2_T2_to_Pa)
-      call hchksum(tv%T, "derived_thermo T", G%HI, haloshift=halos, scale=US%C_to_degC)
-      call hchksum(tv%S, "derived_thermo S", G%HI, haloshift=halos, scale=US%S_to_ppt)
+                                              haloshift=halos, unscale=US%RL2_T2_to_Pa)
+      call hchksum(tv%T, "derived_thermo T", G%HI, haloshift=halos, unscale=US%C_to_degC)
+      call hchksum(tv%S, "derived_thermo S", G%HI, haloshift=halos, unscale=US%S_to_ppt)
     endif
   elseif (allocated(tv%Spv_avg)) then
     do k=1,nz ; SpV_lay(k) = 1.0 / GV%Rlay(k) ; enddo
@@ -394,10 +394,12 @@ end subroutine find_col_avg_SpV
 
 !> Determine the in situ density averaged over a specified distance from the bottom,
 !! calculating it as the inverse of the mass-weighted average specific volume.
-subroutine find_rho_bottom(h, dz, pres_int, dz_avg, tv, j, G, GV, US, Rho_bot)
+subroutine find_rho_bottom(G, GV, US, tv, h, dz, pres_int, dz_avg, j, Rho_bot, h_bot, k_bot)
   type(ocean_grid_type),    intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type),  intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)  :: US   !< A dimensional unit scaling type
+  type(thermo_var_ptrs),    intent(in)  :: tv   !< Structure containing pointers to any available
+                                                !! thermodynamic fields.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                             intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZK_(GV)), &
@@ -405,10 +407,10 @@ subroutine find_rho_bottom(h, dz, pres_int, dz_avg, tv, j, G, GV, US, Rho_bot)
   real, dimension(SZI_(G),SZK_(GV)+1), &
                             intent(in)  :: pres_int !< Pressure at each interface [R L2 T-2 ~> Pa]
   real, dimension(SZI_(G)), intent(in)  :: dz_avg !< The vertical distance over which to average [Z ~> m]
-  type(thermo_var_ptrs),    intent(in)  :: tv   !< Structure containing pointers to any available
-                                                !! thermodynamic fields.
   integer,                  intent(in)  :: j    !< j-index of row to work on
   real, dimension(SZI_(G)), intent(out) :: Rho_bot  !< Near-bottom density [R ~> kg m-3].
+  real, dimension(SZI_(G)), intent(out) :: h_bot !< Bottom boundary layer thickness [H ~> m or kg m-2]
+  integer, dimension(SZI_(G)), intent(out) :: k_bot !< Bottom boundary layer top layer index
 
   ! Local variables
   real :: hb(SZI_(G))         ! Running sum of the thickness in the bottom boundary layer [H ~> m or kg m-2]
@@ -441,6 +443,53 @@ subroutine find_rho_bottom(h, dz, pres_int, dz_avg, tv, j, G, GV, US, Rho_bot)
     do i=is,ie
       rho_bot(i) = GV%Rho0
     enddo
+
+    ! Obtain bottom boundary layer thickness and index of top layer
+    do i=is,ie
+      hb(i) = 0.0 ; h_bot(i) = 0.0 ; k_bot(i) = nz
+      dz_bbl_rem(i) = G%mask2dT(i,j) * max(0.0, dz_avg(i))
+      do_i(i) = .true.
+      if (G%mask2dT(i,j) <= 0.0) then
+        h_bbl_frac(i) = 0.0
+        do_i(i) = .false.
+      endif
+    enddo
+
+    do k=nz,1,-1
+      do_any = .false.
+      do i=is,ie ; if (do_i(i)) then
+        if (dz(i,k) < dz_bbl_rem(i)) then
+          ! This layer is fully within the averaging depth.
+          dz_bbl_rem(i) = dz_bbl_rem(i) - dz(i,k)
+          hb(i) = hb(i) + h(i,j,k)
+          k_bot(i) = k
+          do_any = .true.
+        else
+          if (dz(i,k) > 0.0) then
+            frac_in = dz_bbl_rem(i) / dz(i,k)
+            if (frac_in >= 0.5) k_bot(i) = k ! update bbl top index if >= 50% of layer
+          else
+            frac_in = 0.0
+          endif
+          h_bbl_frac(i) = frac_in * h(i,j,k)
+          dz_bbl_rem(i) = 0.0
+          do_i(i) = .false.
+        endif
+      endif ; enddo
+      if (.not.do_any) exit
+    enddo
+    do i=is,ie ; if (do_i(i)) then
+      ! The nominal bottom boundary layer is thicker than the water column, but layer 1 is
+      ! already included in the averages.  These values are set so that the call to find
+      ! the layer-average specific volume will behave sensibly.
+      h_bbl_frac(i) = 0.0
+    endif ; enddo
+
+    do i=is,ie
+      if (hb(i) + h_bbl_frac(i) < GV%H_subroundoff) h_bbl_frac(i) = GV%H_subroundoff
+      h_bot(i) = hb(i) + h_bbl_frac(i)
+    enddo
+
   else
     ! Check that SpV_avg has been set.
     if (tv%valid_SpV_halo < 0) call MOM_error(FATAL, &
@@ -450,7 +499,7 @@ subroutine find_rho_bottom(h, dz, pres_int, dz_avg, tv, j, G, GV, US, Rho_bot)
     ! specified distance, with care taken to avoid having compressibility lead to an imprint
     ! of the layer thicknesses on this density.
     do i=is,ie
-      hb(i) = 0.0 ; SpV_h_bot(i) = 0.0
+      hb(i) = 0.0 ; SpV_h_bot(i) = 0.0 ; h_bot(i) = 0.0 ; k_bot(i) = nz
       dz_bbl_rem(i) = G%mask2dT(i,j) * max(0.0, dz_avg(i))
       do_i(i) = .true.
       if (G%mask2dT(i,j) <= 0.0) then
@@ -470,10 +519,12 @@ subroutine find_rho_bottom(h, dz, pres_int, dz_avg, tv, j, G, GV, US, Rho_bot)
           SpV_h_bot(i) = SpV_h_bot(i) + h(i,j,k) * tv%SpV_avg(i,j,k)
           dz_bbl_rem(i) = dz_bbl_rem(i) - dz(i,k)
           hb(i) = hb(i) + h(i,j,k)
+          k_bot(i) = k
           do_any = .true.
         else
           if (dz(i,k) > 0.0) then
             frac_in = dz_bbl_rem(i) / dz(i,k)
+            if (frac_in >= 0.5) k_bot(i) = k ! update bbl top index if >= 50% of layer
           else
             frac_in = 0.0
           endif
@@ -516,6 +567,7 @@ subroutine find_rho_bottom(h, dz, pres_int, dz_avg, tv, j, G, GV, US, Rho_bot)
     do i=is,ie
       if (hb(i) + h_bbl_frac(i) < GV%H_subroundoff) h_bbl_frac(i) = GV%H_subroundoff
       rho_bot(i) = G%mask2dT(i,j) * (hb(i) + h_bbl_frac(i)) / (SpV_h_bot(i) + h_bbl_frac(i)*SpV_bbl(i))
+      h_bot(i) = hb(i) + h_bbl_frac(i)
     enddo
   endif
 

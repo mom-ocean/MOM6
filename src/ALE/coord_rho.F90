@@ -105,7 +105,7 @@ subroutine build_rho_column(CS, nz, depth, h, T, S, eqn_of_state, z_interface, &
                                              !! units as depth) [H ~> m or kg m-2]
   real, optional,      intent(in)    :: eta_orig !< The actual original height of the top in the same
                                                    !! units as depth) [H ~> m or kg m-2]
-  real,      optional, intent(in)    :: h_neglect !< A negligibly small width for the purpose
+  real,                intent(in)    :: h_neglect !< A negligibly small width for the purpose
                                              !! of cell reconstructions [H ~> m or kg m-2]
   real,      optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose
                                              !! of edge value calculations [H ~> m or kg m-2]
@@ -201,7 +201,7 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
   real, dimension(nz),   intent(in)    :: S  !< S for column [S ~> ppt]
   type(EOS_type),        intent(in)    :: eqn_of_state !< Equation of state structure
   real, dimension(nz+1), intent(inout) :: zInterface !< Absolute positions of interfaces [Z ~> m]
-  real,        optional, intent(in)    :: h_neglect !< A negligibly small width for the
+  real,                  intent(in)    :: h_neglect !< A negligibly small width for the
                                              !! purpose of cell reconstructions
                                              !! in the same units as h [Z ~> m]
   real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
@@ -272,9 +272,9 @@ subroutine build_rho_column_iteratively(CS, remapCS, nz, depth, h, T, S, eqn_of_
       h1(k) = x1(k+1) - x1(k)
     enddo
 
-    call remapping_core_h(remapCS, nz, h0, S, nz, h1, S_tmp, h_neglect, h_neglect_edge)
+    call remapping_core_h(remapCS, nz, h0, S, nz, h1, S_tmp)
 
-    call remapping_core_h(remapCS, nz, h0, T, nz, h1, T_tmp, h_neglect, h_neglect_edge)
+    call remapping_core_h(remapCS, nz, h0, T, nz, h1, T_tmp)
 
     ! Compute the deviation between two successive grids
     deviation = 0.0

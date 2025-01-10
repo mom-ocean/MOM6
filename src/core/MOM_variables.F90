@@ -31,11 +31,11 @@ public rotate_surface_state
 
 !> A structure for creating arrays of pointers to 3D arrays
 type, public :: p3d
-  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array
+  real, dimension(:,:,:), pointer :: p => NULL() !< A pointer to a 3D array [various]
 end type p3d
 !> A structure for creating arrays of pointers to 2D arrays
 type, public :: p2d
-  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array
+  real, dimension(:,:), pointer :: p => NULL() !< A pointer to a 2D array [various]
 end type p2d
 
 !> Pointers to various fields which may be used describe the surface state of MOM, and which
@@ -324,7 +324,6 @@ type, public :: BT_cont_type
 end type BT_cont_type
 
 !> Container for grids modifying cell metric at porous barriers
-! TODO: rename porous_barrier_type to porous_barrier_type
 type, public :: porous_barrier_type
   ! Each of the following fields has nz layers.
   real, allocatable :: por_face_areaU(:,:,:) !< fractional open area of U-faces [nondim]
@@ -340,14 +339,14 @@ contains
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                   gas_fields_ocn, use_meltpot, use_iceshelves, &
-                                  omit_frazil, use_marbl_tracers)
+                                  omit_frazil, sfc_state_in, turns, use_marbl_tracers)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
   logical,     optional, intent(in)    :: do_integrals     !< If true, allocate the space for vertically
                                                            !! integrated fields.
   type(coupler_1d_bc_type), &
-               optional, intent(in)    :: gas_fields_ocn  !< If present, this type describes the ocean
+               optional, intent(in)    :: gas_fields_ocn   !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate
                                               !! in the calculation of additional gas or other
                                               !! tracer fluxes, and can be used to spawn related
@@ -357,10 +356,21 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                                            !! under ice shelves.
   logical,     optional, intent(in)    :: omit_frazil      !< If present and false, do not allocate the space to
                                                            !! pass frazil fluxes to the coupler
+  type(surface), &
+               optional, intent(in)    :: sfc_state_in     !< If present and its tr_fields are initialized,
+                                              !! this type describes the ocean and surface-ice fields that
+                                              !! will participate in the calculation of additional gas or
+                                              !! other tracer fluxes, and can be used to spawn related
+                                              !! internal variables in the ice model.  If gas_fields_ocn
+                                              !! is present, it is used and tr_fields_in is ignored.
+  integer,     optional, intent(in)    :: turns  !< If present, the number of counterclockwise quarter
+                                                 !! turns to use on the new grid.
   logical,     optional, intent(in)    :: use_marbl_tracers  !< If true, allocate the space for CO2 flux from MARBL
 
   ! local variables
   logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves, alloc_frazil, alloc_fco2
+  logical :: even_turns  ! True if turns is absent or even
+  integer :: tr_field_i_mem(4), tr_field_j_mem(4)
   integer :: is, ie, js, je, isd, ied, jsd, jed
   integer :: isdB, iedB, jsdB, jedB
 
@@ -409,9 +419,22 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
     allocate(sfc_state%tauy_shelf(isd:ied,JsdB:JedB), source=0.0)
   endif
 
-  if (present(gas_fields_ocn)) &
+  ! The data fields in the coupler_2d_bc_type are never rotated.
+  even_turns = .true. ; if (present(turns)) even_turns = (modulo(turns, 2) == 0)
+  if (even_turns) then
+    tr_field_i_mem(1:4) = (/is,is,ie,ie/) ; tr_field_j_mem(1:4) = (/js,js,je,je/)
+  else
+    tr_field_i_mem(1:4) = (/js,js,je,je/) ; tr_field_j_mem(1:4) = (/is,is,ie,ie/)
+  endif
+  if (present(gas_fields_ocn)) then
     call coupler_type_spawn(gas_fields_ocn, sfc_state%tr_fields, &
-                            (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
+                            tr_field_i_mem, tr_field_j_mem, as_needed=.true.)
+  elseif (present(sfc_state_in)) then
+    if (coupler_type_initialized(sfc_state_in%tr_fields)) then
+      call coupler_type_spawn(sfc_state_in%tr_fields, sfc_state%tr_fields, &
+                              tr_field_i_mem, tr_field_j_mem, as_needed=.true.)
+    endif
+  endif
 
   if (alloc_fco2) then
     allocate(sfc_state%fco2(isd:ied,jsd:jed), source=0.0)
@@ -447,10 +470,10 @@ end subroutine deallocate_surface_state
 
 !> Rotate the surface state fields from the input to the model indices.
 subroutine rotate_surface_state(sfc_state_in, sfc_state, G, turns)
-  type(surface), intent(in) :: sfc_state_in
-  type(surface), intent(inout) :: sfc_state
-  type(ocean_grid_type), intent(in) :: G
-  integer, intent(in) :: turns
+  type(surface), intent(in) :: sfc_state_in  !< The input unrotated surface state type that is the data source.
+  type(surface), intent(inout) :: sfc_state  !< The rotated surface state type whose arrays will be filled in
+  type(ocean_grid_type), intent(in) :: G     !< The ocean grid structure
+  integer, intent(in) :: turns   !< The number of counterclockwise quarter turns to use on the rotated grid.
 
   logical :: use_temperature, do_integrals, use_melt_potential, use_iceshelves
 
@@ -463,13 +486,9 @@ subroutine rotate_surface_state(sfc_state_in, sfc_state, G, turns)
       .and. allocated(sfc_state_in%tauy_shelf)
 
   if (.not. sfc_state%arrays_allocated) then
-    call allocate_surface_state(sfc_state, G, &
-        use_temperature=use_temperature, &
-        do_integrals=do_integrals, &
-        use_meltpot=use_melt_potential, &
-        use_iceshelves=use_iceshelves &
-    )
-    sfc_state%arrays_allocated = .true.
+    call allocate_surface_state(sfc_state, G, use_temperature=use_temperature, &
+            do_integrals=do_integrals, use_meltpot=use_melt_potential, &
+            use_iceshelves=use_iceshelves, sfc_state_in=sfc_state_in, turns=turns)
   endif
 
   if (use_temperature) then
@@ -585,15 +604,15 @@ subroutine MOM_thermovar_chksum(mesg, tv, G, US)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(tv%T)) &
-    call hchksum(tv%T, mesg//" tv%T", G%HI, scale=US%C_to_degC)
+    call hchksum(tv%T, mesg//" tv%T", G%HI, unscale=US%C_to_degC)
   if (associated(tv%S)) &
-    call hchksum(tv%S, mesg//" tv%S", G%HI, scale=US%S_to_ppt)
+    call hchksum(tv%S, mesg//" tv%S", G%HI, unscale=US%S_to_ppt)
   if (associated(tv%frazil)) &
-    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
+    call hchksum(tv%frazil, mesg//" tv%frazil", G%HI, unscale=US%Q_to_J_kg*US%RZ_to_kg_m2)
   if (associated(tv%salt_deficit)) &
-    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, scale=US%RZ_to_kg_m2*US%S_to_ppt)
+    call hchksum(tv%salt_deficit, mesg//" tv%salt_deficit", G%HI, unscale=US%RZ_to_kg_m2*US%S_to_ppt)
   if (associated(tv%TempxPmE)) &
-    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, scale=US%RZ_to_kg_m2*US%C_to_degC)
+    call hchksum(tv%TempxPmE, mesg//" tv%TempxPmE", G%HI, unscale=US%RZ_to_kg_m2*US%C_to_degC)
 end subroutine MOM_thermovar_chksum
 
 end module MOM_variables

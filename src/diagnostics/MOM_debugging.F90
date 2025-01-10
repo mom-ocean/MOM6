@@ -25,6 +25,7 @@ public :: check_redundant_C, check_redundant_B, check_redundant_T, check_redunda
 public :: vec_chksum, vec_chksum_C, vec_chksum_B, vec_chksum_A
 public :: MOM_debugging_init, totalStuff, totalTandS
 public :: check_column_integral, check_column_integrals
+public :: query_debugging_checks
 
 ! These interfaces come from MOM_checksums.
 public :: hchksum, Bchksum, qchksum, is_NaN, chksum, uvchksum, hchksum_pair
@@ -99,6 +100,18 @@ subroutine MOM_debugging_init(param_file)
   call MOM_checksums_init(param_file)
 
 end subroutine MOM_debugging_init
+
+!> Returns logicals indicating which debugging checks should be performed.
+subroutine query_debugging_checks(do_debug, do_chksums, do_redundant)
+  logical, optional, intent(out) :: do_debug     !< True if verbose debugging is to be output
+  logical, optional, intent(out) :: do_chksums   !< True if checksums are to be output
+  logical, optional, intent(out) :: do_redundant !< True if redundant points are to be checked
+
+  if (present(do_debug)) do_debug = debug
+  if (present(do_chksums)) do_chksums = debug_chksums
+  if (present(do_redundant)) do_redundant = debug_redundant
+
+end subroutine query_debugging_checks
 
 !> Check for consistency between the duplicated points of a 3-D C-grid vector
 subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &

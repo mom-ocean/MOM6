@@ -565,7 +565,7 @@ subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US
   if (CS%debug) then
     do m=1,NTR
       call hchksum(CS%CFC_data(m)%sfc_flux, trim(CS%CFC_data(m)%name)//" sfc_flux", G%HI, &
-                   scale=US%RZ_T_to_kg_m2s)
+                   unscale=US%RZ_T_to_kg_m2s)
     enddo
   endif
 

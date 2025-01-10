@@ -117,9 +117,9 @@ end function cuberoot
 !> Rescale `a` to the range [0.125, 1) and compute its cube-root exponent.
 pure subroutine rescale_cbrt(a, x, e_r, s_a)
   real, intent(in) :: a
-    !< The real parameter to be rescaled for cube root
+    !< The real parameter to be rescaled for cube root in abitrary units cubed [A3]
   real, intent(out) :: x
-    !< The rescaled value of a
+    !< The rescaled value of a in the range from 0.125 < asx <= 1.0, in ambiguous units cubed [B3]
   integer(kind=int64), intent(out) :: e_r
     !< Cube root of the exponent of the rescaling of `a`
   integer(kind=int64), intent(out) :: s_a
@@ -162,13 +162,13 @@ end subroutine rescale_cbrt
 !> Undo the rescaling of a real number back to its original base.
 pure function descale(x, e_a, s_a) result(a)
   real, intent(in) :: x
-    !< The rescaled value which is to be restored.
+    !< The rescaled value which is to be restored in ambiguous units [B]
   integer(kind=int64), intent(in) :: e_a
     !< Exponent of the unscaled value
   integer(kind=int64), intent(in) :: s_a
     !< Sign bit of the unscaled value
   real :: a
-    !< Restored value with the corrected exponent and sign
+    !< Restored value with the corrected exponent and sign in abitrary units [A]
 
   integer(kind=int64) :: xb
     ! Bit-packed real number into integer form
@@ -176,7 +176,7 @@ pure function descale(x, e_a, s_a) result(a)
     ! Biased exponent of x
 
   ! Apply the corrected exponent and sign to x.
-  xb = transfer(x, 1_8)
+  xb = transfer(x, 1_int64)
   e_x = ibits(xb, expbit, explen)
   call mvbits(e_a + e_x, 0, explen, xb, expbit)
   call mvbits(s_a, 0, 1, xb, signbit)

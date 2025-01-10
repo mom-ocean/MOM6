@@ -600,8 +600,8 @@ subroutine write_vertgrid_file(GV, US, param_file, directory)
   call create_MOM_file(IO_handle, trim(filepath), vars, 2, fields, &
       SINGLE_FILE, GV=GV)
 
-  call MOM_write_field(IO_handle, fields(1), GV%Rlay, scale=US%R_to_kg_m3)
-  call MOM_write_field(IO_handle, fields(2), GV%g_prime, scale=US%L_T_to_m_s**2*US%m_to_Z)
+  call MOM_write_field(IO_handle, fields(1), GV%Rlay, unscale=US%R_to_kg_m3)
+  call MOM_write_field(IO_handle, fields(2), GV%g_prime, unscale=US%L_T_to_m_s**2*US%m_to_Z)
 
   call IO_handle%close()
 

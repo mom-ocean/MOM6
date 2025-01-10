@@ -92,6 +92,7 @@ type :: diag_remap_ctrl
                                       !! vertical extents in [Z ~> m] for remapping extensive variables
   integer :: interface_axes_id = 0 !< Vertical axes id for remapping at interfaces
   integer :: layer_axes_id = 0 !< Vertical axes id for remapping on layers
+  logical :: om4_remap_via_sub_cells !< Use the OM4-era ramap_via_sub_cells
   integer :: answer_date      !< The vintage of the order of arithmetic and expressions
                               !! to use for remapping.  Values below 20190101 recover
                               !! the answers from 2018, while higher values use more
@@ -102,10 +103,11 @@ end type diag_remap_ctrl
 contains
 
 !> Initialize a diagnostic remapping type with the given vertical coordinate.
-subroutine diag_remap_init(remap_cs, coord_tuple, answer_date, GV)
+subroutine diag_remap_init(remap_cs, coord_tuple, om4_remap_via_sub_cells, answer_date, GV)
   type(diag_remap_ctrl), intent(inout) :: remap_cs    !< Diag remapping control structure
   character(len=*),      intent(in)    :: coord_tuple !< A string in form of
                                                       !! MODULE_SUFFIX PARAMETER_SUFFIX COORDINATE_NAME
+  logical,               intent(in)    :: om4_remap_via_sub_cells !< Use the OM4-era ramap_via_sub_cells
   integer,               intent(in)    :: answer_date !< The vintage of the order of arithmetic and expressions
                                                       !! to use for remapping.  Values below 20190101 recover
                                                       !! the answers from 2018, while higher values use more
@@ -127,6 +129,7 @@ subroutine diag_remap_init(remap_cs, coord_tuple, answer_date, GV)
   remap_cs%configured = .false.
   remap_cs%initialized = .false.
   remap_cs%used = .false.
+  remap_cs%om4_remap_via_sub_cells = om4_remap_via_sub_cells
   remap_cs%answer_date = answer_date
   remap_cs%nz = 0
 
@@ -309,7 +312,9 @@ subroutine diag_remap_update(remap_cs, G, GV, US, h, T, S, eqn_of_state, h_targe
   if (.not. remap_cs%initialized) then
     ! Initialize remapping and regridding on the first call
     call initialize_remapping(remap_cs%remap_cs, 'PPM_IH4', boundary_extrapolation=.false., &
-                              answer_date=remap_cs%answer_date)
+                              om4_remap_via_sub_cells=remap_cs%om4_remap_via_sub_cells, &
+                              answer_date=remap_cs%answer_date, &
+                              h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
     remap_cs%initialized = .true.
   endif
 
@@ -428,15 +433,8 @@ subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggere
   ! Local variables
   real, dimension(remap_cs%nz) :: h_dest ! Destination thicknesses [H ~> m or kg m-2] or [Z ~> m]
   real, dimension(size(h,3)) :: h_src    ! A column of source thicknesses [H ~> m or kg m-2] or [Z ~> m]
-  real :: h_neglect, h_neglect_edge ! Negligible thicknesses [H ~> m or kg m-2] or [Z ~> m]
   integer :: nz_src, nz_dest        ! The number of layers on the native and remapped grids
   integer :: i, j                   ! Grid index
-
-  if (remap_cs%Z_based_coord) then
-    h_neglect = set_dz_neglect(GV, US, remap_cs%answer_date, h_neglect_edge)
-  else
-    h_neglect = set_h_neglect(GV, remap_cs%answer_date, h_neglect_edge)
-  endif
 
   nz_src = size(field,3)
   nz_dest = remap_cs%nz
@@ -449,14 +447,14 @@ subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggere
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I,j,:), h_neglect, h_neglect_edge)
+                              nz_dest, h_dest(:), remapped_field(I,j,:))
       endif ; enddo ; enddo
     else
       do j=G%jsc,G%jec ; do I=G%IscB,G%IecB
         h_src(:) = 0.5 * (h(i,j,:) + h(i+1,j,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i+1,j,:))
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(I,j,:), &
-                              nz_dest, h_dest(:), remapped_field(I,j,:), h_neglect, h_neglect_edge)
+                              nz_dest, h_dest(:), remapped_field(I,j,:))
       enddo ; enddo
     endif
   elseif (staggered_in_y .and. .not. staggered_in_x) then
@@ -466,14 +464,14 @@ subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggere
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J,:), h_neglect, h_neglect_edge)
+                              nz_dest, h_dest(:), remapped_field(i,J,:))
       endif ; enddo ; enddo
     else
       do J=G%jscB,G%jecB ; do i=G%isc,G%iec
         h_src(:) = 0.5 * (h(i,j,:) + h(i,j+1,:))
         h_dest(:) = 0.5 * (remap_cs%h(i,j,:) + remap_cs%h(i,j+1,:))
         call remapping_core_h(remap_cs%remap_cs, nz_src, h_src(:), field(i,J,:), &
-                              nz_dest, h_dest(:), remapped_field(i,J,:), h_neglect, h_neglect_edge)
+                              nz_dest, h_dest(:), remapped_field(i,J,:))
       enddo ; enddo
     endif
   elseif ((.not. staggered_in_x) .and. (.not. staggered_in_y)) then
@@ -481,14 +479,12 @@ subroutine do_remap(remap_cs, G, GV, US, isdf, jsdf, h, staggered_in_x, staggere
     if (present(mask)) then
       do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (mask(i,j) > 0.) then
         call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
-                              nz_dest, remap_cs%h(i,j,:), remapped_field(i,j,:), &
-                              h_neglect, h_neglect_edge)
+                              nz_dest, remap_cs%h(i,j,:), remapped_field(i,j,:))
       endif ; enddo ; enddo
     else
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
         call remapping_core_h(remap_cs%remap_cs, nz_src, h(i,j,:), field(i,j,:), &
-                              nz_dest, remap_cs%h(i,j,:), remapped_field(i,j,:), &
-                              h_neglect, h_neglect_edge)
+                              nz_dest, remap_cs%h(i,j,:), remapped_field(i,j,:))
       enddo ; enddo
     endif
   else

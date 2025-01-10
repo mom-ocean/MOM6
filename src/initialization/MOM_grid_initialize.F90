@@ -128,28 +128,28 @@ subroutine grid_metrics_chksum(parent, G, US)
   halo = min(G%ied-G%iec, G%jed-G%jec, 1)
 
   call hchksum_pair(trim(parent)//': d[xy]T', G%dxT, G%dyT, G%HI, &
-                    haloshift=halo, scale=US%L_to_m, scalar_pair=.true.)
+                    haloshift=halo, unscale=US%L_to_m, scalar_pair=.true.)
 
-  call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo, scale=US%L_to_m)
+  call uvchksum(trim(parent)//': dxC[uv]', G%dxCu, G%dyCv, G%HI, haloshift=halo, unscale=US%L_to_m)
 
-  call uvchksum(trim(parent)//': dxC[uv]', G%dyCu, G%dxCv, G%HI, haloshift=halo, scale=US%L_to_m)
+  call uvchksum(trim(parent)//': dxC[uv]', G%dyCu, G%dxCv, G%HI, haloshift=halo, unscale=US%L_to_m)
 
-  call Bchksum_pair(trim(parent)//': dxB[uv]', G%dxBu, G%dyBu, G%HI, haloshift=halo, scale=US%L_to_m)
+  call Bchksum_pair(trim(parent)//': dxB[uv]', G%dxBu, G%dyBu, G%HI, haloshift=halo, unscale=US%L_to_m)
 
   call hchksum_pair(trim(parent)//': Id[xy]T', G%IdxT, G%IdyT, G%HI, &
-                    haloshift=halo, scale=US%m_to_L, scalar_pair=.true.)
+                    haloshift=halo, unscale=US%m_to_L, scalar_pair=.true.)
 
-  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdxCu, G%IdyCv, G%HI, haloshift=halo, scale=US%m_to_L)
+  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdxCu, G%IdyCv, G%HI, haloshift=halo, unscale=US%m_to_L)
 
-  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdyCu, G%IdxCv, G%HI, haloshift=halo, scale=US%m_to_L)
+  call uvchksum(trim(parent)//': Id[xy]C[uv]', G%IdyCu, G%IdxCv, G%HI, haloshift=halo, unscale=US%m_to_L)
 
-  call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', G%IdxBu, G%IdyBu, G%HI, haloshift=halo, scale=US%m_to_L)
+  call Bchksum_pair(trim(parent)//': Id[xy]B[uv]', G%IdxBu, G%IdyBu, G%HI, haloshift=halo, unscale=US%m_to_L)
 
-  call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo, scale=US%L_to_m**2)
-  call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo, scale=US%L_to_m**2)
+  call hchksum(G%areaT, trim(parent)//': areaT',G%HI, haloshift=halo, unscale=US%L_to_m**2)
+  call Bchksum(G%areaBu, trim(parent)//': areaBu',G%HI, haloshift=halo, unscale=US%L_to_m**2)
 
-  call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo, scale=US%m_to_L**2)
-  call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo, scale=US%m_to_L**2)
+  call hchksum(G%IareaT, trim(parent)//': IareaT',G%HI, haloshift=halo, unscale=US%m_to_L**2)
+  call Bchksum(G%IareaBu, trim(parent)//': IareaBu',G%HI, haloshift=halo, unscale=US%m_to_L**2)
 
   call hchksum(G%geoLonT,trim(parent)//': geoLonT',G%HI, haloshift=halo)
   call hchksum(G%geoLatT,trim(parent)//': geoLatT',G%HI, haloshift=halo)

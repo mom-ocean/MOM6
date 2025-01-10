@@ -437,6 +437,7 @@ function setjmp_missing(env) result(rc) bind(c)
   error stop
 
   ! NOTE: compilers may expect a return value, even if it is unreachable
+  read env%state
   rc = -1
 end function setjmp_missing
 
@@ -450,6 +451,9 @@ subroutine longjmp_missing(env, val) bind(c)
   print '(a)', 'ERROR: longjmp() is not implemented in this build.'
   print '(a)', 'Recompile with autoconf or -DLONGJMP_NAME=\"<symbol name>\".'
   error stop
+
+  read env%state
+  read char(val)
 end subroutine longjmp_missing
 
 !> Placeholder function for a missing or unconfigured sigsetjmp
@@ -466,6 +470,8 @@ function sigsetjmp_missing(env, savesigs) result(rc) bind(c)
   error stop
 
   ! NOTE: compilers may expect a return value, even if it is unreachable
+  read env%state
+  read char(savesigs)
   rc = -1
 end function sigsetjmp_missing
 
@@ -478,6 +484,8 @@ subroutine siglongjmp_missing(env, val) bind(c)
 
   print '(a)', 'ERROR: siglongjmp() is not implemented in this build.'
   print '(a)', 'Recompile with autoconf or -DSIGLONGJMP_NAME=\"<symbol name>\".'
+  read env%state
+  read char(val)
   error stop
 end subroutine siglongjmp_missing
 

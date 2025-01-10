@@ -102,13 +102,17 @@ logical :: checkForNaNs=.true. !< If true, checks array for NaNs and cause
 contains
 
 !> Checksum a scalar field (consistent with array checksums)
-subroutine chksum0(scalar, mesg, scale, logunit)
+subroutine chksum0(scalar, mesg, scale, logunit, unscale)
   real,              intent(in) :: scalar  !< The array to be checksummed in
                                            !! arbitrary, possibly rescaled units [A ~> a]
   character(len=*),  intent(in) :: mesg    !< An identifying message
   real,    optional, intent(in) :: scale   !< A factor to convert this array back to unscaled units
                                            !! for checksums and output [a A-1 ~> 1]
   integer, optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,    optional, intent(in) :: unscale !< A factor to convert this array back to unscaled units
+                                           !! for checksums and output [a A-1 ~> 1].
+                                           !! Here scale and unscale are synonymous, but unscale
+                                           !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -122,7 +126,10 @@ subroutine chksum0(scalar, mesg, scale, logunit)
   if (checkForNaNs .and. is_NaN(scalar)) &
     call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
@@ -141,13 +148,17 @@ end subroutine chksum0
 
 
 !> Checksum a 1d array (typically a column).
-subroutine zchksum(array, mesg, scale, logunit)
+subroutine zchksum(array, mesg, scale, logunit, unscale)
   real, dimension(:), intent(in) :: array   !< The array to be checksummed in
                                             !! arbitrary, possibly rescaled units [A ~> a]
   character(len=*),   intent(in) :: mesg    !< An identifying message
   real,     optional, intent(in) :: scale   !< A factor to convert this array back to unscaled units
                                             !! for checksums and output [a A-1 ~> 1]
   integer,  optional, intent(in) :: logunit !< IO unit for checksum logging
+  real,     optional, intent(in) :: unscale !< A factor to convert this array back to unscaled units
+                                            !! for checksums and output [a A-1 ~> 1].
+                                            !! Here scale and unscale are synonymous, but unscale
+                                            !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -165,14 +176,17 @@ subroutine zchksum(array, mesg, scale, logunit)
       call chksum_error(FATAL, 'NaN detected: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate(rescaled_array(LBOUND(array,1):UBOUND(array,1)), source=0.0)
       do k=1, size(array, 1)
-        rescaled_array(k) = scale * array(k)
+        rescaled_array(k) = scaling * array(k)
       enddo
 
       call subStats(rescaled_array, aMean, aMin, aMax)
@@ -192,15 +206,15 @@ subroutine zchksum(array, mesg, scale, logunit)
 
   contains
 
-  integer function subchk(array, scale)
+  integer function subchk(array, unscale)
     real, dimension(:), intent(in) :: array !< The array to be checksummed in
                                             !! arbitrary, possibly rescaled units [A ~> a]
-    real, intent(in) :: scale !< A factor to convert this array back to unscaled units
-                              !! for checksums and output [a A-1 ~> 1]
+    real, intent(in) :: unscale !< A factor to convert this array back to unscaled units
+                                !! for checksums and output [a A-1 ~> 1]
     integer :: k, bc
     subchk = 0
     do k=LBOUND(array, 1), UBOUND(array, 1)
-      bc = bitcount(abs(scale * array(k)))
+      bc = bitcount(abs(unscale * array(k)))
       subchk = subchk + bc
     enddo
     subchk=mod(subchk, bc_modulus)
@@ -228,7 +242,7 @@ end subroutine zchksum
 
 !> Checksums on a pair of 2d arrays staggered at tracer points.
 subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
-                            scale, logunit, scalar_pair)
+                            scale, logunit, scalar_pair, unscale)
   character(len=*),                 intent(in) :: mesg !< Identifying messages
   type(hor_index_type),   target,   intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed in
@@ -242,6 +256,10 @@ subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
   integer,                optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
                                                             !! a scalar, rather than vector
+  real,                   optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                            !! for checksums and output [a A-1 ~> 1].
+                                                            !! Here scale and unscale are synonymous, but unscale
+                                                            !! takes precedence if both are present.
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
@@ -271,18 +289,18 @@ subroutine chksum_pair_h_2d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
 
   if (present(haloshift)) then
     call chksum_h_2d(arrayA_in, 'x '//mesg, HI_in, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
     call chksum_h_2d(arrayB_in, 'y '//mesg, HI_in, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
   else
-    call chksum_h_2d(arrayA_in, 'x '//mesg, HI_in, scale=scale, logunit=logunit)
-    call chksum_h_2d(arrayB_in, 'y '//mesg, HI_in, scale=scale, logunit=logunit)
+    call chksum_h_2d(arrayA_in, 'x '//mesg, HI_in, scale=scale, logunit=logunit, unscale=unscale)
+    call chksum_h_2d(arrayB_in, 'y '//mesg, HI_in, scale=scale, logunit=logunit, unscale=unscale)
   endif
 end subroutine chksum_pair_h_2d
 
 !> Checksums on a pair of 3d arrays staggered at tracer points.
 subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
-                            scale, logunit, scalar_pair)
+                            scale, logunit, scalar_pair, unscale)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),      target,   intent(in) :: HI   !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:, :), target, intent(in) :: arrayA !< The first array to be checksummed in
@@ -296,6 +314,11 @@ subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
   integer,                   optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                   optional, intent(in) :: scalar_pair !< If true, then the arrays describe
                                                                !! a scalar, rather than vector
+  real,                      optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                               !! for checksums and output [a A-1 ~> 1].
+                                                               !! Here scale and unscale are synonymous, but unscale
+                                                               !! takes precedence if both are present.
+  ! Local variables
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
@@ -325,19 +348,19 @@ subroutine chksum_pair_h_3d(mesg, arrayA, arrayB, HI, haloshift, omit_corners, &
 
   if (present(haloshift)) then
     call chksum_h_3d(arrayA_in, 'x '//mesg, HI_in, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
     call chksum_h_3d(arrayB_in, 'y '//mesg, HI_in, haloshift, omit_corners, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
   else
-    call chksum_h_3d(arrayA_in, 'x '//mesg, HI_in, scale=scale, logunit=logunit)
-    call chksum_h_3d(arrayB_in, 'y '//mesg, HI_in, scale=scale, logunit=logunit)
+    call chksum_h_3d(arrayA_in, 'x '//mesg, HI_in, scale=scale, logunit=logunit, unscale=unscale)
+    call chksum_h_3d(arrayB_in, 'y '//mesg, HI_in, scale=scale, logunit=logunit, unscale=unscale)
   endif
 
   ! NOTE: automatic deallocation of array[AB]_in
 end subroutine chksum_pair_h_3d
 
 !> Checksums a 2d array staggered at tracer points.
-subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit)
+subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit, unscale)
   type(hor_index_type), target, intent(in) :: HI_m         !< Horizontal index bounds of the model grid
   real, dimension(HI_m%isd:,HI_m%jsd:), target, intent(in) :: array_m !< Field array on the model grid in
                                                            !! arbitrary, possibly rescaled units [A ~> a]
@@ -347,6 +370,10 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   real,                  optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                            !! for checksums and output [a A-1 ~> 1]
   integer,               optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,                  optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                           !! for checksums and output [a A-1 ~> 1].
+                                                           !! Here scale and unscale are synonymous, but unscale
+                                                           !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -383,15 +410,18 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2)), source=0.0 )
       do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-        rescaled_array(i,j) = scale*array(i,j)
+        rescaled_array(i,j) = scaling*array(i,j)
       enddo ; enddo
       call subStats(HI, rescaled_array, aMean, aMin, aMax)
       deallocate(rescaled_array)
@@ -445,18 +475,18 @@ subroutine chksum_h_2d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   endif
 
   contains
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(i,j)))
+      bc = bitcount(abs(unscale*array(i,j)))
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
@@ -491,7 +521,7 @@ end subroutine chksum_h_2d
 
 !> Checksums on a pair of 2d arrays staggered at q-points.
 subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
-                            omit_corners, scale, logunit, scalar_pair)
+                            omit_corners, scale, logunit, scalar_pair, unscale)
   character(len=*),                 intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),   target,   intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%isd:,HI%jsd:), target, intent(in) :: arrayA !< The first array to be checksummed in
@@ -507,6 +537,10 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
   integer,                optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                optional, intent(in) :: scalar_pair !< If true, then the arrays describe
                                                             !! a scalar, rather than vector
+  real,                   optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                            !! for checksums and output [a A-1 ~> 1].
+                                                            !! Here scale and unscale are synonymous, but unscale
+                                                            !! takes precedence if both are present.
 
   logical :: sym
   logical :: vector_pair
@@ -540,21 +574,21 @@ subroutine chksum_pair_B_2d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
 
   if (present(haloshift)) then
     call chksum_B_2d(arrayA_in, 'x '//mesg, HI_in, haloshift, symmetric=sym, &
-                     omit_corners=omit_corners, scale=scale, logunit=logunit)
+                     omit_corners=omit_corners, scale=scale, logunit=logunit, unscale=unscale)
     call chksum_B_2d(arrayB_in, 'y '//mesg, HI_in, haloshift, symmetric=sym, &
-                     omit_corners=omit_corners, scale=scale, logunit=logunit)
+                     omit_corners=omit_corners, scale=scale, logunit=logunit, unscale=unscale)
   else
-    call chksum_B_2d(arrayA_in, 'x '//mesg, HI_in, symmetric=sym, scale=scale, &
-                     logunit=logunit)
-    call chksum_B_2d(arrayB_in, 'y '//mesg, HI_in, symmetric=sym, scale=scale, &
-                     logunit=logunit)
+    call chksum_B_2d(arrayA_in, 'x '//mesg, HI_in, symmetric=sym, &
+                     scale=scale, logunit=logunit, unscale=unscale)
+    call chksum_B_2d(arrayB_in, 'y '//mesg, HI_in, symmetric=sym, &
+                     scale=scale, logunit=logunit, unscale=unscale)
   endif
 
 end subroutine chksum_pair_B_2d
 
 !> Checksums on a pair of 3d arrays staggered at q-points.
 subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
-                            omit_corners, scale, logunit, scalar_pair)
+                            omit_corners, scale, logunit, scalar_pair, unscale)
   character(len=*),                    intent(in) :: mesg !< Identifying messages
   type(hor_index_type),      target,   intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%JsdB:, :), target, intent(in) :: arrayA !< The first array to be checksummed in
@@ -570,7 +604,11 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
   integer,                   optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                   optional, intent(in) :: scalar_pair !< If true, then the arrays describe
                                                                !! a scalar, rather than vector
-
+  real,                      optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                               !! for checksums and output [a A-1 ~> 1].
+                                                               !! Here scale and unscale are synonymous, but unscale
+                                                               !! takes precedence if both are present.
+  ! Local variables
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
@@ -600,20 +638,20 @@ subroutine chksum_pair_B_3d(mesg, arrayA, arrayB, HI, haloshift, symmetric, &
 
   if (present(haloshift)) then
     call chksum_B_3d(arrayA_in, 'x '//mesg, HI_in, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
+                     omit_corners, scale=scale, logunit=logunit, unscale=unscale)
     call chksum_B_3d(arrayB_in, 'y '//mesg, HI_in, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
+                     omit_corners, scale=scale, logunit=logunit, unscale=unscale)
   else
-    call chksum_B_3d(arrayA_in, 'x '//mesg, HI_in, symmetric=symmetric, scale=scale, &
-                     logunit=logunit)
-    call chksum_B_3d(arrayB_in, 'y '//mesg, HI_in, symmetric=symmetric, scale=scale, &
-                     logunit=logunit)
+    call chksum_B_3d(arrayA_in, 'x '//mesg, HI_in, symmetric=symmetric, &
+                     scale=scale, logunit=logunit, unscale=unscale)
+    call chksum_B_3d(arrayB_in, 'y '//mesg, HI_in, symmetric=symmetric, &
+                     scale=scale, logunit=logunit, unscale=unscale)
   endif
 end subroutine chksum_pair_B_3d
 
 !> Checksums a 2d array staggered at corner points.
 subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
-                       scale, logunit)
+                       scale, logunit, unscale)
   type(hor_index_type), target, intent(in) :: HI_m     !< A horizontal index type
   real, dimension(HI_m%IsdB:,HI_m%JsdB:), &
                         target, intent(in) :: array_m !< The array to be checksummed in
@@ -626,6 +664,10 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   real,       optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                 !! for checksums and output [a A-1 ~> 1]
   integer,    optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,       optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                !! for checksums and output [a A-1 ~> 1].
+                                                !! Here scale and unscale are synonymous, but unscale
+                                                !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -662,19 +704,22 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2)), source=0.0 )
       Is = HI%isc ; if (sym_stats) Is = HI%isc-1
       Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
       do J=Js,HI%JecB ; do I=Is,HI%IecB
-        rescaled_array(I,J) = scale*array(I,J)
+        rescaled_array(I,J) = scaling*array(I,J)
       enddo ; enddo
       call subStats(HI, rescaled_array, sym_stats, aMean, aMin, aMax)
       deallocate(rescaled_array)
@@ -736,19 +781,19 @@ subroutine chksum_B_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   contains
 
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%JsdB:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do J=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(I,J)))
+      bc = bitcount(abs(unscale*array(I,J)))
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
@@ -787,7 +832,7 @@ end subroutine chksum_B_2d
 
 !> Checksums a pair of 2d velocity arrays staggered at C-grid locations
 subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
-                        omit_corners, scale, logunit, scalar_pair)
+                        omit_corners, scale, logunit, scalar_pair, unscale)
   character(len=*),                  intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),    target,   intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%jsd:), target, intent(in) :: arrayU !< The u-component array to be checksummed in
@@ -803,6 +848,11 @@ subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
   integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                 optional, intent(in) :: scalar_pair !< If true, then the arrays describe a
                                                              !! a scalar, rather than vector
+  real,                    optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                             !! for checksums and output [a A-1 ~> 1].
+                                                             !! Here scale and unscale are synonymous, but unscale
+                                                             !! takes precedence if both are present.
+  ! Local variables
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
@@ -832,20 +882,20 @@ subroutine chksum_uv_2d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
 
   if (present(haloshift)) then
     call chksum_u_2d(arrayU_in, 'u '//mesg, HI_in, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
+                     omit_corners, scale=scale, logunit=logunit, unscale=unscale)
     call chksum_v_2d(arrayV_in, 'v '//mesg, HI_in, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
+                     omit_corners, scale=scale, logunit=logunit, unscale=unscale)
   else
     call chksum_u_2d(arrayU_in, 'u '//mesg, HI_in, symmetric=symmetric, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
     call chksum_v_2d(arrayV_in, 'v '//mesg, HI_in, symmetric=symmetric, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
   endif
 end subroutine chksum_uv_2d
 
 !> Checksums a pair of 3d velocity arrays staggered at C-grid locations
 subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
-                        omit_corners, scale, logunit, scalar_pair)
+                        omit_corners, scale, logunit, scalar_pair, unscale)
   character(len=*),                    intent(in) :: mesg   !< Identifying messages
   type(hor_index_type),      target,   intent(in) :: HI     !< A horizontal index type
   real, dimension(HI%IsdB:,HI%jsd:,:), target, intent(in) :: arrayU !< The u-component array to be checksummed in
@@ -861,6 +911,11 @@ subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
   integer,                   optional, intent(in) :: logunit   !< IO unit for checksum logging
   logical,                 optional, intent(in) :: scalar_pair !< If true, then the arrays describe a
                                                                !! a scalar, rather than vector
+  real,                      optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                               !! for checksums and output [a A-1 ~> 1].
+                                                               !! Here scale and unscale are synonymous, but unscale
+                                                               !! takes precedence if both are present.
+  ! Local variables
   logical :: vector_pair
   integer :: turns
   type(hor_index_type), pointer :: HI_in
@@ -890,20 +945,20 @@ subroutine chksum_uv_3d(mesg, arrayU, arrayV, HI, haloshift, symmetric, &
 
   if (present(haloshift)) then
     call chksum_u_3d(arrayU_in, 'u '//mesg, HI_in, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
+                     omit_corners, scale=scale, logunit=logunit, unscale=unscale)
     call chksum_v_3d(arrayV_in, 'v '//mesg, HI_in, haloshift, symmetric, &
-                     omit_corners, scale=scale, logunit=logunit)
+                     omit_corners, scale=scale, logunit=logunit, unscale=unscale)
   else
     call chksum_u_3d(arrayU_in, 'u '//mesg, HI_in, symmetric=symmetric, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
     call chksum_v_3d(arrayV_in, 'v '//mesg, HI_in, symmetric=symmetric, &
-                     scale=scale, logunit=logunit)
+                     scale=scale, logunit=logunit, unscale=unscale)
   endif
 end subroutine chksum_uv_3d
 
 !> Checksums a 2d array staggered at C-grid u points.
 subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
-                       scale, logunit)
+                       scale, logunit, unscale)
   type(hor_index_type),  target,   intent(in) :: HI_m      !< A horizontal index type
   real, dimension(HI_m%IsdB:,HI_m%jsd:), target, intent(in) :: array_m !< The array to be checksummed in
                                                            !! arbitrary, possibly rescaled units [A ~> a]
@@ -915,6 +970,10 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   real,                  optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                            !! for checksums and output [a A-1 ~> 1]
   integer,               optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,                  optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                           !! for checksums and output [a A-1 ~> 1].
+                                                           !! Here scale and unscale are synonymous, but unscale
+                                                           !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -941,7 +1000,8 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       ! Arrays originating from v-points must be handled by vchksum
       allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB))
       call rotate_array(array_m, -turns, array)
-      call vchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      call vchksum(array, mesg, HI, haloshift, symmetric, omit_corners, &
+                   scale=scale, logunit=logunit, unscale=unscale)
       return
     else
       allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed))
@@ -959,18 +1019,21 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2)), source=0.0 )
       Is = HI%isc ; if (sym_stats) Is = HI%isc-1
       do j=HI%jsc,HI%jec ; do I=Is,HI%IecB
-        rescaled_array(I,j) = scale*array(I,j)
+        rescaled_array(I,j) = scaling*array(I,j)
       enddo ; enddo
       call subStats(HI, rescaled_array, sym_stats, aMean, aMin, aMax)
       deallocate(rescaled_array)
@@ -1039,19 +1102,19 @@ subroutine chksum_u_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   contains
 
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%jsd:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do j=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(I,j)))
+      bc = bitcount(abs(unscale*array(I,j)))
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
@@ -1089,7 +1152,7 @@ end subroutine chksum_u_2d
 
 !> Checksums a 2d array staggered at C-grid v points.
 subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
-                       scale, logunit)
+                       scale, logunit, unscale)
   type(hor_index_type),  target,   intent(in) :: HI_m      !< A horizontal index type
   real, dimension(HI_m%isd:,HI_m%JsdB:), target, intent(in) :: array_m !< The array to be checksummed in
                                                            !! arbitrary, possibly rescaled units [A ~> a]
@@ -1101,6 +1164,10 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   real,                  optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                            !! for checksums and output [a A-1 ~> 1]
   integer,               optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,                  optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                           !! for checksums and output [a A-1 ~> 1].
+                                                           !! Here scale and unscale are synonymous, but unscale
+                                                           !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -1127,7 +1194,8 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       ! Arrays originating from u-points must be handled by uchksum
       allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed))
       call rotate_array(array_m, -turns, array)
-      call uchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      call uchksum(array, mesg, HI, haloshift, symmetric, omit_corners, &
+                   scale=scale, logunit=logunit, unscale=unscale)
       return
     else
       allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB))
@@ -1145,18 +1213,21 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2)), source=0.0 )
       Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
       do J=Js,HI%JecB ; do i=HI%isc,HI%iec
-        rescaled_array(i,J) = scale*array(i,J)
+        rescaled_array(i,J) = scaling*array(i,J)
       enddo ; enddo
       call subStats(HI, rescaled_array, sym_stats, aMean, aMin, aMax)
       deallocate(rescaled_array)
@@ -1225,19 +1296,19 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   contains
 
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%JsdB:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do J=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(i,J)))
+      bc = bitcount(abs(unscale*array(i,J)))
       subchk = subchk + bc
     enddo ; enddo
     call sum_across_PEs(subchk)
@@ -1274,7 +1345,7 @@ subroutine chksum_v_2d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 end subroutine chksum_v_2d
 
 !> Checksums a 3d array staggered at tracer points.
-subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit)
+subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logunit, unscale)
   type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
   real, dimension(HI_m%isd:,HI_m%jsd:,:), target, intent(in) :: array_m !< The array to be checksummed in
                                                              !! arbitrary, possibly rescaled units [A ~> a]
@@ -1284,6 +1355,10 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
   real,                    optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                              !! for checksums and output [a A-1 ~> 1]
   integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,                    optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                             !! for checksums and output [a A-1 ~> 1].
+                                                             !! Here scale and unscale are synonymous, but unscale
+                                                             !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -1320,16 +1395,19 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2), &
                                LBOUND(array,3):UBOUND(array,3)), source=0.0 )
       do k=1,size(array,3) ; do j=HI%jsc,HI%jec ; do i=HI%isc,HI%iec
-        rescaled_array(i,j,k) = scale*array(i,j,k)
+        rescaled_array(i,j,k) = scaling*array(i,j,k)
       enddo ; enddo ; enddo
 
       call subStats(HI, rescaled_array, aMean, aMin, aMax)
@@ -1385,18 +1463,18 @@ subroutine chksum_h_3d(array_m, mesg, HI_m, haloshift, omit_corners, scale, logu
 
   contains
 
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(i,j,k)))
+      bc = bitcount(abs(unscale*array(i,j,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
@@ -1431,7 +1509,7 @@ end subroutine chksum_h_3d
 
 !> Checksums a 3d array staggered at corner points.
 subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
-                       scale, logunit)
+                       scale, logunit, unscale)
   type(hor_index_type),     target,   intent(in) :: HI_m !< A horizontal index type
   real, dimension(HI_m%IsdB:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed in
                                                               !! arbitrary, possibly rescaled units [A ~> a]
@@ -1443,6 +1521,10 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   real,                     optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                               !! for checksums and output [a A-1 ~> 1]
   integer,                  optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,                     optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                              !! for checksums and output [a A-1 ~> 1].
+                                                              !! Here scale and unscale are synonymous, but unscale
+                                                              !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -1479,20 +1561,23 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2), &
                                LBOUND(array,3):UBOUND(array,3)), source=0.0 )
       Is = HI%isc ; if (sym_stats) Is = HI%isc-1
       Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
       do k=1,size(array,3) ; do J=Js,HI%JecB ; do I=Is,HI%IecB
-        rescaled_array(I,J,k) = scale*array(I,J,k)
+        rescaled_array(I,J,k) = scaling*array(I,J,k)
       enddo ; enddo ; enddo
       call subStats(HI, rescaled_array, sym_stats, aMean, aMin, aMax)
       deallocate(rescaled_array)
@@ -1560,19 +1645,19 @@ subroutine chksum_B_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   contains
 
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(I,J,k)))
+      bc = bitcount(abs(unscale*array(I,J,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
@@ -1610,7 +1695,7 @@ end subroutine chksum_B_3d
 
 !> Checksums a 3d array staggered at C-grid u points.
 subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
-                       scale, logunit)
+                       scale, logunit, unscale)
   type(hor_index_type),    target,   intent(in) :: HI_m !< A horizontal index type
   real, dimension(HI_m%isdB:,HI_m%Jsd:,:), target, intent(in) :: array_m !< The array to be checksummed in
                                                              !! arbitrary, possibly rescaled units [A ~> a]
@@ -1622,6 +1707,10 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   real,                    optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                              !! for checksums and output [a A-1 ~> 1]
   integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,                    optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                             !! for checksums and output [a A-1 ~> 1].
+                                                             !! Here scale and unscale are synonymous, but unscale
+                                                             !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -1648,7 +1737,8 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       ! Arrays originating from v-points must be handled by vchksum
       allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB, size(array_m, 3)))
       call rotate_array(array_m, -turns, array)
-      call vchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      call vchksum(array, mesg, HI, haloshift, symmetric, omit_corners, &
+                   scale=scale, logunit=logunit, unscale=unscale)
       return
     else
       allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed, size(array_m, 3)))
@@ -1666,19 +1756,22 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2), &
                                LBOUND(array,3):UBOUND(array,3)), source=0.0 )
       Is = HI%isc ; if (sym_stats) Is = HI%isc-1
       do k=1,size(array,3) ; do j=HI%jsc,HI%jec ; do I=Is,HI%IecB
-        rescaled_array(I,j,k) = scale*array(I,j,k)
+        rescaled_array(I,j,k) = scaling*array(I,j,k)
       enddo ; enddo ; enddo
       call subStats(HI, rescaled_array, sym_stats, aMean, aMin, aMax)
       deallocate(rescaled_array)
@@ -1746,19 +1839,19 @@ subroutine chksum_u_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   contains
 
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%IsdB:,HI%jsd:,:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do j=HI%jsc+dj,HI%jec+dj ; do I=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(I,j,k)))
+      bc = bitcount(abs(unscale*array(I,j,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
@@ -1796,7 +1889,7 @@ end subroutine chksum_u_3d
 
 !> Checksums a 3d array staggered at C-grid v points.
 subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, &
-                       scale, logunit)
+                       scale, logunit, unscale)
   type(hor_index_type),    target,   intent(in) :: HI_m      !< A horizontal index type
   real, dimension(HI_m%isd:,HI_m%JsdB:,:), target, intent(in) :: array_m !< The array to be checksummed in
                                                              !! arbitrary, possibly rescaled units [A ~> a]
@@ -1808,6 +1901,10 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
   real,                    optional, intent(in) :: scale     !< A factor to convert this array back to unscaled units
                                                              !! for checksums and output [a A-1 ~> 1]
   integer,                 optional, intent(in) :: logunit   !< IO unit for checksum logging
+  real,                    optional, intent(in) :: unscale   !< A factor to convert this array back to unscaled units
+                                                             !! for checksums and output [a A-1 ~> 1].
+                                                             !! Here scale and unscale are synonymous, but unscale
+                                                             !! takes precedence if both are present.
 
   ! Local variables
   ! In the following comments, [A] is used to indicate the arbitrary, possibly rescaled units
@@ -1834,7 +1931,8 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
       ! Arrays originating from u-points must be handled by uchksum
       allocate(array(HI%IsdB:HI%IedB, HI%jsd:HI%jed, size(array_m, 3)))
       call rotate_array(array_m, -turns, array)
-      call uchksum(array, mesg, HI, haloshift, symmetric, omit_corners, scale, logunit)
+      call uchksum(array, mesg, HI, haloshift, symmetric, omit_corners, &
+                   scale=scale, logunit=logunit, unscale=unscale)
       return
     else
       allocate(array(HI%isd:HI%ied, HI%JsdB:HI%JedB, size(array_m, 3)))
@@ -1852,19 +1950,22 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 !     call chksum_error(FATAL, 'NaN detected in halo: '//trim(mesg))
   endif
 
-  scaling = 1.0 ; if (present(scale)) scaling = scale
+  scaling = 1.0
+  if (present(unscale)) then ; scaling = unscale
+  elseif (present(scale)) then ; scaling = scale ; endif
+
   iounit = error_unit ; if (present(logunit)) iounit = logunit
   sym_stats = .false. ; if (present(symmetric)) sym_stats = symmetric
   if (present(haloshift)) then ; if (haloshift > 0) sym_stats = .true. ; endif
 
   if (calculateStatistics) then
-    if (present(scale)) then
+    if (present(unscale) .or. present(scale)) then
       allocate( rescaled_array(LBOUND(array,1):UBOUND(array,1), &
                                LBOUND(array,2):UBOUND(array,2), &
                                LBOUND(array,3):UBOUND(array,3)), source=0.0 )
       Js = HI%jsc ; if (sym_stats) Js = HI%jsc-1
       do k=1,size(array,3) ; do J=Js,HI%JecB ; do i=HI%isc,HI%iec
-        rescaled_array(i,J,k) = scale*array(i,J,k)
+        rescaled_array(i,J,k) = scaling*array(i,J,k)
       enddo ; enddo ; enddo
       call subStats(HI, rescaled_array, sym_stats, aMean, aMin, aMax)
       deallocate(rescaled_array)
@@ -1932,19 +2033,19 @@ subroutine chksum_v_3d(array_m, mesg, HI_m, haloshift, symmetric, omit_corners, 
 
   contains
 
-  integer function subchk(array, HI, di, dj, scale)
+  integer function subchk(array, HI, di, dj, unscale)
     type(hor_index_type), intent(in) ::  HI     !< A horizontal index type
     real, dimension(HI%isd:,HI%JsdB:,:), intent(in) :: array !< The array to be checksummed in
                                  !! arbitrary, possibly rescaled units [A ~> a]
     integer, intent(in) :: di    !< i- direction array shift for this checksum
     integer, intent(in) :: dj    !< j- direction array shift for this checksum
-    real, intent(in)    :: scale !< A factor to convert this array back to unscaled units
+    real, intent(in)    :: unscale !< A factor to convert this array back to unscaled units
                                  !! for checksums and output [a A-1 ~> 1]
     integer :: i, j, k, bc
     subchk = 0
     ! This line deliberately uses the h-point computational domain.
     do k=LBOUND(array,3),UBOUND(array,3) ; do J=HI%jsc+dj,HI%jec+dj ; do i=HI%isc+di,HI%iec+di
-      bc = bitcount(abs(scale*array(i,J,k)))
+      bc = bitcount(abs(unscale*array(i,J,k)))
       subchk = subchk + bc
     enddo ; enddo ; enddo
     call sum_across_PEs(subchk)
