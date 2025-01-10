@@ -1777,8 +1777,7 @@ subroutine add_MLrad_diffusivity(dz, fluxes, tv, j, Kd_int, G, GV, US, CS, TKE_t
   real :: ustar_sq          ! ustar squared [Z2 T-2 ~> m2 s-2]
   real :: Kd_mlr            ! A diffusivity associated with mixed layer turbulence radiation
                             ! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
-  real :: I_rho             ! The inverse of the reference density times a ratio of scaling
-                            ! factors [Z L-1 R-1 ~> m3 kg-1]
+  real :: I_rho             ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1]
   real :: C1_6              ! 1/6 [nondim]
   real :: Omega2            ! rotation rate squared [T-2 ~> s-2].
   real :: z1                ! layer thickness times I_decay [nondim]
@@ -1794,7 +1793,7 @@ subroutine add_MLrad_diffusivity(dz, fluxes, tv, j, Kd_int, G, GV, US, CS, TKE_t
   C1_6      = 1.0 / 6.0
   kml       = GV%nkml
   dz_neglect = GV%dz_subroundoff
-  I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0 ! This is not used when fully non-Boussinesq.
+  I_rho = GV%H_to_Z * GV%RZ_to_H ! == 1.0 / GV%Rho0 ! This is not used when fully non-Boussinesq.
 
   if (.not.CS%ML_radiation) return
 
@@ -1816,12 +1815,12 @@ subroutine add_MLrad_diffusivity(dz, fluxes, tv, j, Kd_int, G, GV, US, CS, TKE_t
       ustar_sq = max(fluxes%ustar(i,j), CS%ustar_min)**2
       u_star_H = GV%Z_to_H * fluxes%ustar(i,j)
     elseif (allocated(tv%SpV_avg)) then
-      ustar_sq = max(US%L_to_Z*fluxes%tau_mag(i,j) * tv%SpV_avg(i,j,1), CS%ustar_min**2)
-      u_star_H = GV%RZ_to_H * sqrt(US%L_to_Z*fluxes%tau_mag(i,j) / tv%SpV_avg(i,j,1))
+      ustar_sq = max(fluxes%tau_mag(i,j) * tv%SpV_avg(i,j,1), CS%ustar_min**2)
+      u_star_H = GV%RZ_to_H * sqrt(fluxes%tau_mag(i,j) / tv%SpV_avg(i,j,1))
     else  ! This semi-Boussinesq form is mathematically equivalent to the Boussinesq version above.
      ! Differs at roundoff:  ustar_sq = max(fluxes%tau_mag(i,j) * I_rho, CS%ustar_min**2)
       ustar_sq = max((sqrt(fluxes%tau_mag(i,j) * I_rho))**2, CS%ustar_min**2)
-      u_star_H = GV%RZ_to_H * sqrt(US%L_to_Z*fluxes%tau_mag(i,j) * GV%Rho0)
+      u_star_H = GV%RZ_to_H * sqrt(fluxes%tau_mag(i,j) * GV%Rho0)
     endif
     TKE_ml_flux(i) = (CS%mstar * CS%ML_rad_coeff) * (ustar_sq * u_star_H)
     I_decay_len2_TKE = CS%TKE_decay**2 * (f_sq / ustar_sq)

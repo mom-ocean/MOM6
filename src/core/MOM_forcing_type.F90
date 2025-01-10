@@ -79,12 +79,14 @@ type, public :: forcing
     ustar         => NULL(), & !< surface friction velocity scale [Z T-1 ~> m s-1].
     tau_mag       => NULL(), & !< Magnitude of the wind stress averaged over tracer cells,
                                !! including any contributions from sub-gridscale variability
-                               !! or gustiness [R L Z T-2 ~> Pa]
+                               !! or gustiness, rescaled to units that are more convenient for
+                               !! calculating turbulent fluxes and friction velocities [R Z2 T-2 ~> Pa]
     ustar_gustless => NULL(), & !< surface friction velocity scale without any
                                !! any augmentation for gustiness [Z T-1 ~> m s-1].
     tau_mag_gustless => NULL() !< Magnitude of the wind stress averaged over tracer cells,
                                !! without any augmentation for sub-gridscale variability
-                               !! or gustiness [R L Z T-2 ~> Pa]
+                               !! or gustiness, rescaled to units that are more convenient for
+                               !! calculating turbulent fluxes and friction velocities [R Z2 T-2 ~> Pa]
 
   ! surface buoyancy force, used when temperature is not a state variable
   real, pointer, dimension(:,:) :: &
@@ -1132,9 +1134,9 @@ subroutine find_ustar_fluxes(fluxes, tv, U_star, G, GV, US, halo, H_T_units)
                                                !! of [H T-1 ~> m s-1 or kg m-2 s-1]
 
   ! Local variables
-  real :: I_rho        ! The inverse of the reference density times a ratio of scaling
-                       ! factors [Z L-1 R-1 ~> m3 kg-1] or in some semi-Boussinesq cases
-                       ! the rescaled reference density [H2 Z-1 L-1 R-1 ~> m3 kg-1 or kg m-3]
+  real :: I_rho        ! The inverse of the reference density [R-1 ~> m3 kg-1]
+                       ! or in some semi-Boussinesq cases the reference
+                       ! density [H2 R-1 ~> m3 kg-1 or kg m-3]
   logical :: Z_T_units ! If true, U_star is returned in units of [Z T-1 ~> m s-1], otherwise it is
                        ! returned in [H T-1 ~> m s-1 or kg m-2 s-1]
   integer :: i, j, k, is, ie, js, je, hs
@@ -1164,16 +1166,16 @@ subroutine find_ustar_fluxes(fluxes, tv, U_star, G, GV, US, halo, H_T_units)
         "find_ustar_fluxes called in non-Boussinesq mode with insufficient valid values of SpV_avg.")
     if (Z_T_units) then
       do j=js,je ; do i=is,ie
-        U_star(i,j) = sqrt(US%L_to_Z*fluxes%tau_mag(i,j) * tv%SpV_avg(i,j,1))
+        U_star(i,j) = sqrt(fluxes%tau_mag(i,j) * tv%SpV_avg(i,j,1))
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        U_star(i,j) = GV%RZ_to_H * sqrt(US%L_to_Z*fluxes%tau_mag(i,j) / tv%SpV_avg(i,j,1))
+        U_star(i,j) = GV%RZ_to_H * sqrt(fluxes%tau_mag(i,j) / tv%SpV_avg(i,j,1))
       enddo ; enddo
     endif
   else
-    I_rho = US%L_to_Z * GV%Z_to_H * GV%RZ_to_H
-    if (Z_T_units) I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0
+    I_rho = GV%Z_to_H * GV%RZ_to_H
+    if (Z_T_units) I_rho = GV%H_to_Z * GV%RZ_to_H ! == 1.0 / GV%Rho0
     do j=js,je ; do i=is,ie
       U_star(i,j) = sqrt(fluxes%tau_mag(i,j) * I_rho)
     enddo ; enddo
@@ -1198,9 +1200,8 @@ subroutine find_ustar_mech_forcing(forces, tv, U_star, G, GV, US, halo, H_T_unit
                                                !! of [H T-1 ~> m s-1 or kg m-2 s-1]
 
   ! Local variables
-  real :: I_rho        ! The inverse of the reference density times a ratio of scaling
-                       ! factors [Z L-1 R-1 ~> m3 kg-1] or in some semi-Boussinesq cases
-                       ! the rescaled reference density [H2 Z-1 L-1 R-1 ~> m3 kg-1 or kg m-3]
+  real :: I_rho        ! The inverse of the reference density [R-1 ~> m3 kg-1] or in some semi-Boussinesq cases
+                       ! the rescaled reference density [H2 R-1 ~> m3 kg-1 or kg m-3]
   logical :: Z_T_units ! If true, U_star is returned in units of [Z T-1 ~> m s-1], otherwise it is
                        ! returned in [H T-1 ~> m s-1 or kg m-2 s-1]
   integer :: i, j, k, is, ie, js, je, hs
@@ -1230,16 +1231,16 @@ subroutine find_ustar_mech_forcing(forces, tv, U_star, G, GV, US, halo, H_T_unit
         "find_ustar_mech called in non-Boussinesq mode with insufficient valid values of SpV_avg.")
     if (Z_T_units) then
       do j=js,je ; do i=is,ie
-        U_star(i,j) = sqrt(US%L_to_Z*forces%tau_mag(i,j) * tv%SpV_avg(i,j,1))
+        U_star(i,j) = sqrt(forces%tau_mag(i,j) * tv%SpV_avg(i,j,1))
       enddo ; enddo
     else
       do j=js,je ; do i=is,ie
-        U_star(i,j) = GV%RZ_to_H * sqrt(US%L_to_Z*forces%tau_mag(i,j) / tv%SpV_avg(i,j,1))
+        U_star(i,j) = GV%RZ_to_H * sqrt(forces%tau_mag(i,j) / tv%SpV_avg(i,j,1))
       enddo ; enddo
     endif
   else
-    I_rho = US%L_to_Z * GV%Z_to_H * GV%RZ_to_H
-    if (Z_T_units) I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0
+    I_rho = GV%Z_to_H * GV%RZ_to_H
+    if (Z_T_units) I_rho = GV%H_to_Z * GV%RZ_to_H ! == 1.0 / GV%Rho0
     do j=js,je ; do i=is,ie
       U_star(i,j) = sqrt(forces%tau_mag(i,j) * I_rho)
     enddo ; enddo
@@ -1266,7 +1267,7 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   if (associated(fluxes%ustar)) &
     call hchksum(fluxes%ustar, mesg//" fluxes%ustar", G%HI, haloshift=hshift, unscale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%tau_mag)) &
-    call hchksum(fluxes%tau_mag, mesg//" fluxes%tau_mag", G%HI, haloshift=hshift, unscale=US%RLZ_T2_to_Pa)
+    call hchksum(fluxes%tau_mag, mesg//" fluxes%tau_mag", G%HI, haloshift=hshift, unscale=US%RLZ_T2_to_Pa*US%Z_to_L)
   if (associated(fluxes%buoy)) &
     call hchksum(fluxes%buoy, mesg//" fluxes%buoy ", G%HI, haloshift=hshift, unscale=US%L_to_m**2*US%s_to_T**3)
   if (associated(fluxes%sw)) &
@@ -1373,7 +1374,7 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   if (associated(forces%ustar)) &
     call hchksum(forces%ustar, mesg//" forces%ustar", G%HI, haloshift=hshift, unscale=US%Z_to_m*US%s_to_T)
   if (associated(forces%tau_mag)) &
-    call hchksum(forces%tau_mag, mesg//" forces%tau_mag", G%HI, haloshift=hshift, unscale=US%RLZ_T2_to_Pa)
+    call hchksum(forces%tau_mag, mesg//" forces%tau_mag", G%HI, haloshift=hshift, unscale=US%RLZ_T2_to_Pa*US%Z_to_L)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
     call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
         forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true., &
@@ -1503,7 +1504,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_tau_mag = register_diag_field('ocean_model', 'tau_mag', diag%axesT1, Time, &
         'Average magnitude of the wind stress including contributions from gustiness', &
-        'Pa', conversion=US%RLZ_T2_to_Pa)
+        'Pa', conversion=US%RLZ_T2_to_Pa*US%Z_to_L)
 
   handles%id_ustar = register_diag_field('ocean_model', 'ustar', diag%axesT1, Time, &
       'Surface friction velocity = [(gustiness + tau_magnitude)/rho0]^(1/2)', &
@@ -2460,7 +2461,7 @@ subroutine set_derived_forcing_fields(forces, fluxes, G, US, Rho0)
         endif
       endif
       if (associated(fluxes%tau_mag_gustless)) then
-        fluxes%tau_mag_gustless(i,j) = sqrt(taux2 + tauy2)
+        fluxes%tau_mag_gustless(i,j) = US%L_to_Z*sqrt(taux2 + tauy2)
       endif
     enddo ; enddo
   endif
@@ -3830,14 +3831,14 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
                                                  !! or updated from mean tau.
 
   real :: tx_mean, ty_mean ! Mean wind stresses [R L Z T-2 ~> Pa]
-  real :: tau_mag      ! The magnitude of the wind stresses [R L Z T-2 ~> Pa]
-  real :: Irho0        ! Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
+  real :: tau_mag      ! The magnitude of the wind stresses [R Z2 T-2 ~> Pa]
+  real :: Irho0        ! Inverse of the mean density [R-1 ~> m3 kg-1]
   logical :: do_stress, do_ustar, do_taumag, do_shelf, do_press, do_iceberg, tau2ustar
   integer :: i, j, is, ie, js, je, isB, ieB, jsB, jeB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isB = G%iscB ; ieB = G%iecB ; jsB = G%jscB ; jeB = G%jecB
 
-  Irho0 = US%L_to_Z / Rho0
+  Irho0 = 1.0 / Rho0
 
   tau2ustar = .false.
   if (present(UpdateUstar)) tau2ustar = UpdateUstar
@@ -3855,7 +3856,7 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
       if (G%mask2dCv(i,J) > 0.0) forces%tauy(i,J) = ty_mean
     enddo ; enddo
     if (tau2ustar) then
-      tau_mag = sqrt((tx_mean**2) + (ty_mean**2))
+      tau_mag = US%L_to_Z*sqrt((tx_mean**2) + (ty_mean**2))
       if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
         forces%tau_mag(i,j) = tau_mag
       endif ; enddo ; enddo ; endif
@@ -3866,13 +3867,13 @@ subroutine homogenize_mech_forcing(forces, G, US, Rho0, UpdateUstar)
       if (associated(forces%ustar)) &
         call homogenize_field_t(forces%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
       if (associated(forces%tau_mag)) &
-        call homogenize_field_t(forces%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa)
+        call homogenize_field_t(forces%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa*US%Z_to_L)
     endif
   else
     if (associated(forces%ustar)) &
       call homogenize_field_t(forces%ustar, G, tmp_scale=US%Z_to_m*US%s_to_T)
     if (associated(forces%tau_mag)) &
-      call homogenize_field_t(forces%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa)
+      call homogenize_field_t(forces%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa*US%Z_to_L)
   endif
 
   if (do_shelf) then
@@ -3915,9 +3916,9 @@ subroutine homogenize_forcing(fluxes, G, GV, US)
     call homogenize_field_t(fluxes%ustar_gustless, G, tmp_scale=US%Z_to_m*US%s_to_T)
 
   if (associated(fluxes%tau_mag)) &
-    call homogenize_field_t(fluxes%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa)
+    call homogenize_field_t(fluxes%tau_mag, G, tmp_scale=US%RLZ_T2_to_Pa*US%Z_to_L)
   if (associated(fluxes%tau_mag_gustless)) &
-    call homogenize_field_t(fluxes%tau_mag_gustless, G, tmp_scale=US%RLZ_T2_to_Pa)
+    call homogenize_field_t(fluxes%tau_mag_gustless, G, tmp_scale=US%RLZ_T2_to_Pa*US%Z_to_L)
 
   if (do_water) then
     call homogenize_field_t(fluxes%evap, G, tmp_scale=US%RZ_T_to_kg_m2s)

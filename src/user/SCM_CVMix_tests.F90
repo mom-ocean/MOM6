@@ -202,7 +202,7 @@ subroutine SCM_CVMix_tests_wind_forcing(sfc_state, forces, day, G, US, CS)
   ! Local variables
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real    :: mag_tau  ! The magnitude of the wind stress [R L Z T-2 ~> Pa]
+  real    :: mag_tau  ! The magnitude of the wind stress [R Z2 T-2 ~> Pa]
   ! Bounds for loops and memory allocation
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -217,9 +217,9 @@ subroutine SCM_CVMix_tests_wind_forcing(sfc_state, forces, day, G, US, CS)
   enddo ; enddo
   call pass_vector(forces%taux, forces%tauy, G%Domain, To_All)
 
-  mag_tau = sqrt((CS%tau_x*CS%tau_x) + (CS%tau_y*CS%tau_y))
+  mag_tau = US%L_to_Z * sqrt((CS%tau_x*CS%tau_x) + (CS%tau_y*CS%tau_y))
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    forces%ustar(i,j) = sqrt( US%L_to_Z * mag_tau / CS%Rho0 )
+    forces%ustar(i,j) = sqrt( mag_tau / CS%Rho0 )
   enddo ; enddo ; endif
 
   if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie

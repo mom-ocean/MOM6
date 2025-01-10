@@ -85,14 +85,14 @@ type, public :: surface_forcing_CS ; private
                                 !! type without any further adjustments to drive the ocean dynamics.
                                 !! The actual net mass source may differ due to corrections.
 
-  real :: gust_const            !< Constant unresolved background gustiness for ustar [R L Z T-2 ~> Pa]
+  real :: gust_const            !< Constant unresolved background gustiness for ustar [R Z2 T-2 ~> Pa]
   logical :: read_gust_2d       !< If true, use a 2-dimensional gustiness supplied from an input file.
   real, pointer, dimension(:,:) :: &
     BBL_tidal_dis => NULL()     !< Tidal energy dissipation in the bottom boundary layer that can act as a
                                 !! source of energy for bottom boundary layer mixing [R Z L2 T-3 ~> W m-2]
   real, pointer, dimension(:,:) :: &
     gust => NULL()              !< A spatially varying unresolved background gustiness that
-                                !! contributes to ustar [R L Z T-2 ~> Pa].  gust is used when read_gust_2d is true.
+                                !! contributes to ustar [R Z2 T-2 ~> Pa].  gust is used when read_gust_2d is true.
   real, pointer, dimension(:,:) :: &
     ustar_tidal => NULL()       !< Tidal contribution to the bottom friction velocity [Z T-1 ~> m s-1]
   real :: cd_tides              !< Drag coefficient that applies to the tides [nondim]
@@ -698,7 +698,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS, dt_
     rigidity_at_h, &  ! Ice rigidity at tracer points [L4 Z-1 T-1 ~> m3 s-1]
     net_mass_src, &   ! A temporary of net mass sources [R Z T-1 ~> kg m-2 s-1].
     ustar_tmp, &      ! A temporary array of ustar values [Z T-1 ~> m s-1].
-    tau_mag_tmp       ! A temporary array of surface stress magnitudes [R Z L T-2 ~> Pa]
+    tau_mag_tmp       ! A temporary array of surface stress magnitudes [R Z2 T-2 ~> Pa]
 
   real :: I_GEarth      ! The inverse of the gravitational acceleration [T2 Z L-2 ~> s2 m-1]
   real :: Kv_rho_ice    ! (CS%Kv_sea_ice / CS%density_sea_ice) [L4 Z-2 T-1 R-1 ~> m5 s-1 kg-1]
@@ -939,10 +939,10 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
                                                  !! any contributions from gustiness [Z T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(inout) :: mag_tau !< The magintude of the wind stress at tracer points
-                                                 !! including subgridscale variability and gustiness [R Z L T-2 ~> Pa]
+                                                 !! including subgridscale variability and gustiness [R Z2 T-2 ~> Pa]
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(out) :: gustless_mag_tau !< The magintude of the wind stress at tracer points
-                                                 !! without any contributions from gustiness [R Z L T-2 ~> Pa]
+                                                 !! without any contributions from gustiness [R Z2 T-2 ~> Pa]
   integer,       optional, intent(in)    :: tau_halo !< The halo size of wind stresses to set, 0 by default.
 
   ! Local variables
@@ -953,11 +953,12 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real, dimension(SZIB_(G),SZJB_(G)) :: taux_in_B ! Zonal wind stresses [R Z L T-2 ~> Pa] at q points
   real, dimension(SZIB_(G),SZJB_(G)) :: tauy_in_B ! Meridional wind stresses [R Z L T-2 ~> Pa] at q points
 
-  real :: gustiness     ! unresolved gustiness that contributes to ustar [R Z L T-2 ~> Pa]
-  real :: Irho0         ! Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
+  real :: gustiness     ! unresolved gustiness that contributes to ustar [R Z2 T-2 ~> Pa]
+  real :: Irho0         ! Inverse of the Boussinesq mean density [R-1 ~> m3 kg-1]
   real :: taux2, tauy2  ! squared wind stresses [R2 Z2 L2 T-4 ~> Pa2]
-  real :: tau_mag       ! magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: tau_mag       ! magnitude of the wind stress [R Z2 T-2 ~> Pa]
   real :: stress_conversion ! A unit conversion factor from Pa times any stress multiplier [R Z L T-2 Pa-1 ~> 1]
+  real :: Pa_to_RZ2_T2  ! The combination of unit conversion factors used for mag_tau [R Z2 T-2 Pa-1 ~> 1]
 
   logical :: do_ustar, do_gustless, do_tau_mag, do_gustless_tau_mag
   integer :: wind_stagger  ! AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
@@ -969,7 +970,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   Isqh = G%IscB-halo ; Ieqh  = G%IecB+halo ; Jsqh = G%JscB-halo ; Jeqh = G%JecB+halo
   i0 = is - index_bounds(1) ; j0 = js - index_bounds(3)
 
-  IRho0 = US%L_to_Z / CS%Rho0
+  IRho0 = 1.0 / CS%Rho0
   stress_conversion = US%Pa_to_RLZ_T2 * CS%wind_stress_multiplier
 
   do_ustar = present(ustar) ; do_gustless = present(gustless_ustar)
@@ -1073,6 +1074,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
     ! parametizations. The background gustiness (for example with a relatively small value
     ! of 0.02 Pa) is intended to give reasonable behavior in regions of very weak winds.
     if (associated(IOB%stress_mag)) then
+      Pa_to_RZ2_T2 = US%Pa_to_RLZ_T2 * US%L_to_Z
+
       if (do_ustar .or. do_tau_mag) then ; do j=js,je ; do i=is,ie
         gustiness = CS%gust_const
         if (CS%read_gust_2d) then
@@ -1084,19 +1087,19 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
             gustiness = CS%gust(i,j)
         endif
         if (do_tau_mag) &
-          mag_tau(i,j) = gustiness + US%Pa_to_RLZ_T2*IOB%stress_mag(i-i0,j-j0)
+          mag_tau(i,j) = gustiness + Pa_to_RZ2_T2*IOB%stress_mag(i-i0,j-j0)
         if (do_gustless_tau_mag) &
-          gustless_mag_tau(i,j) = US%Pa_to_RLZ_T2*IOB%stress_mag(i-i0,j-j0)
+          gustless_mag_tau(i,j) = Pa_to_RZ2_T2*IOB%stress_mag(i-i0,j-j0)
         if (do_ustar) &
-          ustar(i,j) = sqrt(gustiness*IRho0 + IRho0*US%Pa_to_RLZ_T2*IOB%stress_mag(i-i0,j-j0))
+          ustar(i,j) = sqrt(gustiness*IRho0 + IRho0*Pa_to_RZ2_T2*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
       if (CS%answer_date < 20190101) then
         if (do_gustless) then ; do j=js,je ; do i=is,ie
-          gustless_ustar(i,j) = sqrt(US%Pa_to_RLZ_T2*US%L_to_Z*IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
+          gustless_ustar(i,j) = sqrt(Pa_to_RZ2_T2*IOB%stress_mag(i-i0,j-j0) / CS%Rho0)
         enddo ; enddo ; endif
       else
         if (do_gustless) then ; do j=js,je ; do i=is,ie
-          gustless_ustar(i,j) = sqrt(IRho0 * US%Pa_to_RLZ_T2*IOB%stress_mag(i-i0,j-j0))
+          gustless_ustar(i,j) = sqrt(IRho0 * Pa_to_RZ2_T2*IOB%stress_mag(i-i0,j-j0))
         enddo ; enddo ; endif
       endif
     elseif (wind_stagger == BGRID_NE) then
@@ -1104,7 +1107,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         tau_mag = 0.0 ; gustiness = CS%gust_const
         if (((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + &
              (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) > 0.0) then
-          tau_mag = sqrt(((G%mask2dBu(I,J)*((taux_in_B(I,J)**2) + (tauy_in_B(I,J)**2)) + &
+          tau_mag = US%L_to_Z * sqrt(((G%mask2dBu(I,J)*((taux_in_B(I,J)**2) + (tauy_in_B(I,J)**2)) + &
               G%mask2dBu(I-1,J-1)*((taux_in_B(I-1,J-1)**2) + (tauy_in_B(I-1,J-1)**2))) + &
              (G%mask2dBu(I,J-1)*((taux_in_B(I,J-1)**2) + (tauy_in_B(I,J-1)**2)) + &
               G%mask2dBu(I-1,J)*((taux_in_B(I-1,J)**2) + (tauy_in_B(I-1,J)**2))) ) / &
@@ -1115,21 +1118,21 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         if (do_tau_mag) mag_tau(i,j) = gustiness + tau_mag
         if (do_gustless_tau_mag) gustless_mag_tau(i,j) = tau_mag
         if (CS%answer_date < 20190101) then
-          if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
         else
           if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
         endif
       enddo ; enddo
     elseif (wind_stagger == AGRID) then
       do j=js,je ; do i=is,ie
-        tau_mag = G%mask2dT(i,j) * sqrt((taux_in_A(i,j)**2) + (tauy_in_A(i,j)**2))
+        tau_mag = G%mask2dT(i,j) * US%L_to_Z * sqrt((taux_in_A(i,j)**2) + (tauy_in_A(i,j)**2))
         gustiness = CS%gust_const
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0.0)) gustiness = CS%gust(i,j)
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
         if (do_tau_mag) mag_tau(i,j) = gustiness + tau_mag
         if (do_gustless_tau_mag) gustless_mag_tau(i,j) = tau_mag
         if (CS%answer_date < 20190101) then
-          if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
         else
           if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
         endif
@@ -1143,7 +1146,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         if ((G%mask2dCv(i,J-1) + G%mask2dCv(i,J)) > 0.0) &
           tauy2 = (G%mask2dCv(i,J-1)*(tauy_in_C(i,J-1)**2) + G%mask2dCv(i,J)*(tauy_in_C(i,J)**2)) / &
                   (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
-        tau_mag = sqrt(taux2 + tauy2)
+        tau_mag = US%L_to_Z * sqrt(taux2 + tauy2)
 
         gustiness = CS%gust_const
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
@@ -1152,7 +1155,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         if (do_tau_mag) mag_tau(i,j) = gustiness + tau_mag
         if (do_gustless_tau_mag) gustless_mag_tau(i,j) = tau_mag
         if (CS%answer_date < 20190101) then
-          if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
+          if (do_gustless) gustless_ustar(i,j) = sqrt(tau_mag / CS%Rho0)
         else
           if (do_gustless) gustless_ustar(i,j) = sqrt(IRho0 * tau_mag)
         endif
@@ -1616,7 +1619,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "an input file", default=.false.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2)
+                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2*US%L_to_Z)
   if (CS%read_gust_2d) then
     call get_param(param_file, mdl, "GUST_2D_FILE", gust_file, &
                  "The file in which the wind gustiness is found in "//&
@@ -1627,7 +1630,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
     ! NOTE: There are certain cases where FMS is unable to read this file, so
     ! we use read_netCDF_data in place of MOM_read_data.
     call read_netCDF_data(gust_file, 'gustiness', CS%gust, G%Domain, &
-                          rescale=US%Pa_to_RLZ_T2) ! units in file should be [Pa]
+                          rescale=US%Pa_to_RLZ_T2*US%L_to_Z) ! units in file should be [Pa]
   endif
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &

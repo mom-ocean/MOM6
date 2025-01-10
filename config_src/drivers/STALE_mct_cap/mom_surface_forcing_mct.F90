@@ -774,7 +774,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
              ((G%mask2dBu(I,J) + G%mask2dBu(I-1,J-1)) + (G%mask2dBu(I,J-1) + G%mask2dBu(I-1,J))) )
         if (CS%read_gust_2d) gustiness = CS%gust(i,j)
       endif
-      forces%tau_mag(i,j) = gustiness + tau_mag
+      forces%tau_mag(i,j) = US%L_to_Z*(gustiness + tau_mag)
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0*tau_mag)
     enddo ; enddo
 
@@ -800,7 +800,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
     do j=js,je ; do i=is,ie
       gustiness = CS%gust_const
       if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0.0)) gustiness = CS%gust(i,j)
-      forces%tau_mag(i,j) = gustiness + G%mask2dT(i,j) * sqrt((taux_at_h(i,j)**2) + (tauy_at_h(i,j)**2))
+      forces%tau_mag(i,j) = US%L_to_Z*(gustiness + G%mask2dT(i,j) * sqrt((taux_at_h(i,j)**2) + (tauy_at_h(i,j)**2)))
       forces%ustar(i,j) = sqrt(gustiness*Irho0 + Irho0 * G%mask2dT(i,j) * &
                                sqrt((taux_at_h(i,j)**2) + (tauy_at_h(i,j)**2)))
     enddo ; enddo
@@ -822,10 +822,10 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
                  G%mask2dCv(i,J)*(forces%tauy(i,J)**2)) / (G%mask2dCv(i,J-1) + G%mask2dCv(i,J))
 
       if (CS%read_gust_2d) then
-        forces%tau_mag(i,j) = CS%gust(i,j) + sqrt(taux2 + tauy2)
+        forces%tau_mag(i,j) = US%L_to_Z*(CS%gust(i,j) + sqrt(taux2 + tauy2))
         forces%ustar(i,j) = sqrt(CS%gust(i,j)*Irho0 + Irho0*sqrt(taux2 + tauy2))
       else
-        forces%tau_mag(i,j) = CS%gust_const + sqrt(taux2 + tauy2)
+        forces%tau_mag(i,j) = US%L_to_Z*(CS%gust_const + sqrt(taux2 + tauy2))
         forces%ustar(i,j) = sqrt(CS%gust_const*Irho0 + Irho0*sqrt(taux2 + tauy2))
       endif
     enddo ; enddo

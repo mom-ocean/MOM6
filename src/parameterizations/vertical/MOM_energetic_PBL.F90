@@ -410,8 +410,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   real :: u_star_BBL ! The bottom boundary layer friction velocity [H T-1 ~> m s-1 or kg m-2 s-1].
   real :: BBL_TKE   ! The mechanically generated turbulent kinetic energy available for bottom
                     ! boundary layer mixing within a timestep [R Z3 T-2 ~> J m-2]
-  real :: I_rho     ! The inverse of the Boussinesq reference density times a ratio of scaling
-                    ! factors [Z L-1 R-1 ~> m3 kg-1]
+  real :: I_rho     ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1]
   real :: I_dt      ! The Adcroft reciprocal of the timestep [T-1 ~> s-1]
   real :: I_rho0dt  ! The inverse of the Boussinesq reference density times the time
                     ! step [R-1 T-1 ~> m3 kg-1 s-1]
@@ -493,7 +492,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
 
 
   h_neglect = GV%H_subroundoff
-  I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0 ! This is not used when fully non-Boussinesq.
+  I_rho = GV%H_to_Z * GV%RZ_to_H ! == 1.0 / GV%Rho0 ! This is not used when fully non-Boussinesq.
   I_dt = 0.0 ; if (dt > 0.0) I_dt = 1.0 / dt
   I_rho0dt = 1.0 / (GV%Rho0 * dt)  ! This is not used when fully non-Boussinesq.
   BBL_mixing = ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0))
@@ -604,14 +603,14 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
         u_star_Mean = fluxes%ustar_gustless(i,j)
         mech_TKE = dt * GV%Rho0 * u_star**3
       elseif (allocated(tv%SpV_avg)) then
-        u_star = sqrt(US%L_to_Z*fluxes%tau_mag(i,j) * tv%SpV_avg(i,j,1))
-        u_star_Mean = sqrt(US%L_to_Z*fluxes%tau_mag_gustless(i,j) * tv%SpV_avg(i,j,1))
-        mech_TKE = dt * u_star * US%L_to_Z*fluxes%tau_mag(i,j)
+        u_star = sqrt(fluxes%tau_mag(i,j) * tv%SpV_avg(i,j,1))
+        u_star_Mean = sqrt(fluxes%tau_mag_gustless(i,j) * tv%SpV_avg(i,j,1))
+        mech_TKE = dt * u_star * fluxes%tau_mag(i,j)
       else
         u_star = sqrt(fluxes%tau_mag(i,j) * I_rho)
-        u_star_Mean = sqrt(US%L_to_Z*fluxes%tau_mag_gustless(i,j) * I_rho)
+        u_star_Mean = sqrt(fluxes%tau_mag_gustless(i,j) * I_rho)
         mech_TKE = dt * GV%Rho0 * u_star**3
-        ! The line above is equivalent to: mech_TKE = dt * u_star * US%L_to_Z*fluxes%tau_mag(i,j)
+        ! The line above is equivalent to: mech_TKE = dt * u_star * fluxes%tau_mag(i,j)
       endif
 
       if (allocated(tv%SpV_avg) .and. .not.GV%Boussinesq) then

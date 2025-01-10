@@ -51,7 +51,7 @@ type, public :: idealized_hurricane_CS ; private
   real    :: max_windspeed        !< Maximum wind speeds [L T-1 ~> m s-1]
   real    :: hurr_translation_spd !< Hurricane translation speed [L T-1 ~> m s-1]
   real    :: hurr_translation_dir !< Hurricane translation direction [radians]
-  real    :: gustiness            !< Gustiness (optional, used in u*) [R L Z T-2 ~> Pa]
+  real    :: gustiness            !< Gustiness (used in u*) [R Z2 T-2 ~> Pa]
   real    :: Rho0                 !< A reference ocean density [R ~> kg m-3]
   real    :: Hurr_cen_Y0          !< The initial y position of the hurricane
                                   !!  This experiment is conducted in a Cartesian
@@ -313,7 +313,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gustiness, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.0, scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, do_not_log=.true.)
+                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2*US%L_to_Z, do_not_log=.true.)
 
   if (CS%rad_edge >= CS%rad_ambient) call MOM_error(FATAL, &
     "idealized_hurricane_wind_init: IDL_HURR_RAD_AMBIENT must be larger than IDL_HURR_RAD_EDGE.")
@@ -437,16 +437,16 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   !> Get Ustar
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
-                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0))
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
+            US%L_to_Z * sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                             0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0)
   enddo ; enddo ; endif
 
-  !> Get tau_mag [R L Z T-2 ~> Pa]
+  !> Get tau_mag [R Z2 T-2 ~> Pa]
   if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
     forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
-            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
-                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
+            US%L_to_Z * sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                             0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
   enddo ; enddo ; endif
 
 end subroutine idealized_hurricane_wind_forcing
