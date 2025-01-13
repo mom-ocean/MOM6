@@ -23,7 +23,7 @@ runs:
       run: |
         echo "::group::config.mk"
         cd .testing
-        echo "FCFLAGS_DEBUG = -g -O0 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds" >> config.mk
+        echo "FCFLAGS_DEBUG = -g -O0 -std=f2018 -Wextra -Wno-compare-reals -fbacktrace -ffpe-trap=invalid,zero,overflow -fcheck=bounds" >> config.mk
         echo "FCFLAGS_REPRO = -g -O2 -fbacktrace" >> config.mk
         echo "FCFLAGS_INIT = -finit-real=snan -finit-integer=2147483647 -finit-derived" >> config.mk
         echo "FCFLAGS_FMS = -g -fbacktrace -O0" >> config.mk

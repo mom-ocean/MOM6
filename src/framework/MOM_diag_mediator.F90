@@ -3248,6 +3248,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
                                   ! answers from 2018, while higher values use more robust
                                   ! forms of the same remapping expressions.
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for diagnostics
   character(len=8)   :: this_pe
   character(len=240) :: doc_file, doc_file_dflt, doc_path
   character(len=240), allocatable :: diag_coords(:)
@@ -3279,6 +3280,10 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
+  call get_param(param_file, mdl, "DIAG_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for diagnostics. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
+                 "We recommend setting this option to false.", default=.true.)
   call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
@@ -3308,7 +3313,7 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
     allocate(diag_cs%diag_remap_cs(diag_cs%num_diag_coords))
     ! Initialize each diagnostic vertical coordinate
     do i=1, diag_cs%num_diag_coords
-      call diag_remap_init(diag_cs%diag_remap_cs(i), diag_coords(i), answer_date=remap_answer_date, GV=GV)
+      call diag_remap_init(diag_cs%diag_remap_cs(i), diag_coords(i), om4_remap_via_sub_cells, remap_answer_date, GV)
     enddo
     deallocate(diag_coords)
   endif

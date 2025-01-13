@@ -81,8 +81,8 @@ AS_IF([test "x$with_driver" != "x"],
 
 
 # Explicitly assume free-form Fortran
-AC_LANG(Fortran)
-AC_FC_SRCEXT(f90)
+AC_LANG([Fortran])
+AC_FC_SRCEXT([f90])
 
 
 # Determine MPI compiler wrappers
