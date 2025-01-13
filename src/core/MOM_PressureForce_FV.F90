@@ -1296,12 +1296,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp target update from(Z_0p) if (use_EOS)
   endif
 
-  !$omp target enter data &
-  !$omp   map(to: h) &
-  !$omp   map(alloc: dpa, intx_dpa, inty_dpa, intz_dpa)
-
   ! Calculate 4 integrals through the layer that are required in the
   ! subsequent calculation.
+  !$omp target enter data map(alloc: dpa, intx_dpa, inty_dpa, intz_dpa)
+
   if (use_EOS) then
     ! The following routine computes the integrals that are needed to
     ! calculate the pressure gradient force. Linear profiles for T and S are
@@ -1977,7 +1975,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp   map(from: pbce)
 
   !$omp target exit data &
-  !$omp   map(delete: pa, dpa, h) &
+  !$omp   map(delete: pa, dpa) &
   !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
 
   ! NOTE: As above, these are here until data is set up outside of the function.

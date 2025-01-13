@@ -2997,6 +2997,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                            diag_form=2, underflow_conc=salin_underflow, Tr_out=CS%tv%tr_S)
     endif
   endif
+  !$omp target enter data map(alloc: CS%h)
 
   if (use_p_surf_in_EOS) allocate(CS%tv%p_surf(isd:ied,jsd:jed), source=0.0)
   if (use_frazil) then
