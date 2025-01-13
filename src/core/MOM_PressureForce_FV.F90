@@ -1149,8 +1149,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     I_g_rho = 1.0 / (GV%rho0 * GV%g_Earth)
   endif
 
-  ! TODO: Ideally, these will be only be computed on the GPU...
-
   if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) then
     MassWt_u(:,:,:) = 0.0 ; MassWt_v(:,:,:) = 0.0
   endif
@@ -1254,23 +1252,26 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo ; enddo ; enddo
   endif
 
+  !$omp target enter data map(to: e)
+  !$omp target enter data map(to: p_atm) if (use_p_atm)
+  !$omp target enter data map(alloc: pa)
+
+  !$omp target
   ! Set the surface boundary conditions on pressure anomaly and its horizontal
   ! integrals, assuming that the surface pressure anomaly varies linearly
   ! in x and y.
   if (use_p_atm) then
-    !$OMP parallel do default(shared)
+    !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       pa(i,j,1) = GxRho_ref * (e(i,j,1) - G%Z_ref) + p_atm(i,j)
     enddo ; enddo
   else
-    !$OMP parallel do default(shared)
+    !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       pa(i,j,1) = GxRho_ref * (e(i,j,1) - G%Z_ref)
     enddo ; enddo
   endif
-
-  !$omp target enter data map(to: e)
-  !$omp target enter data map(to: p_atm) if (use_p_atm)
+  !$omp end target
 
   if (use_EOS) then
     !$omp target enter data map(alloc: Z_0p) if (use_EOS)
@@ -1371,10 +1372,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp end target
   endif
 
-  !$omp target enter data map(to: pa)
-
-  ! Set the pressure anomalies at the interfaces.
   !$omp target
+  ! Set the pressure anomalies at the interfaces.
   do k=1,nz
     !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
