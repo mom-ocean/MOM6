@@ -75,10 +75,10 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, sy
   scale_vel = US%L_T_to_m_s ; if (present(vel_scale)) scale_vel = vel_scale
 
   call uvchksum(mesg//" [uv]", u, v, G%HI, haloshift=hs, symmetric=sym, &
-                omit_corners=omit_corners, scale=scale_vel)
-  call hchksum(h, mesg//" h", G%HI, haloshift=hs, omit_corners=omit_corners, scale=GV%H_to_MKS)
+                omit_corners=omit_corners, unscale=scale_vel)
+  call hchksum(h, mesg//" h", G%HI, haloshift=hs, omit_corners=omit_corners, unscale=GV%H_to_MKS)
   call uvchksum(mesg//" [uv]h", uh, vh, G%HI, haloshift=hs, symmetric=sym, &
-                omit_corners=omit_corners, scale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+                omit_corners=omit_corners, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
 end subroutine MOM_state_chksum_5arg
 
 ! =============================================================================
@@ -110,8 +110,8 @@ subroutine MOM_state_chksum_3arg(mesg, u, v, h, G, GV, US, haloshift, symmetric,
   hs = 1 ; if (present(haloshift)) hs = haloshift
   sym = .false. ; if (present(symmetric)) sym = symmetric
   call uvchksum(mesg//" u", u, v, G%HI, haloshift=hs, symmetric=sym, &
-                omit_corners=omit_corners, scale=US%L_T_to_m_s)
-  call hchksum(h, mesg//" h",G%HI, haloshift=hs, omit_corners=omit_corners, scale=GV%H_to_MKS)
+                omit_corners=omit_corners, unscale=US%L_T_to_m_s)
+  call hchksum(h, mesg//" h",G%HI, haloshift=hs, omit_corners=omit_corners, unscale=GV%H_to_MKS)
 end subroutine MOM_state_chksum_3arg
 
 ! =============================================================================
@@ -130,22 +130,22 @@ subroutine MOM_thermo_chksum(mesg, tv, G, US, haloshift, omit_corners)
   hs=1 ; if (present(haloshift)) hs=haloshift
 
   if (associated(tv%T)) &
-    call hchksum(tv%T, mesg//" T", G%HI, haloshift=hs, omit_corners=omit_corners, scale=US%C_to_degC)
+    call hchksum(tv%T, mesg//" T", G%HI, haloshift=hs, omit_corners=omit_corners, unscale=US%C_to_degC)
   if (associated(tv%S)) &
-    call hchksum(tv%S, mesg//" S", G%HI, haloshift=hs, omit_corners=omit_corners, scale=US%S_to_ppt)
+    call hchksum(tv%S, mesg//" S", G%HI, haloshift=hs, omit_corners=omit_corners, unscale=US%S_to_ppt)
   if (associated(tv%frazil)) &
     call hchksum(tv%frazil, mesg//" frazil", G%HI, haloshift=hs, omit_corners=omit_corners, &
-                 scale=US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m)
+                 unscale=US%Q_to_J_kg*US%R_to_kg_m3*US%Z_to_m)
   if (associated(tv%salt_deficit)) &
     call hchksum(tv%salt_deficit, mesg//" salt deficit", G%HI, haloshift=hs, omit_corners=omit_corners, &
-                 scale=US%S_to_ppt*US%RZ_to_kg_m2)
+                 unscale=US%S_to_ppt*US%RZ_to_kg_m2)
   if (associated(tv%varT)) &
-    call hchksum(tv%varT, mesg//" varT", G%HI, haloshift=hs, omit_corners=omit_corners, scale=US%C_to_degC**2)
+    call hchksum(tv%varT, mesg//" varT", G%HI, haloshift=hs, omit_corners=omit_corners, unscale=US%C_to_degC**2)
   if (associated(tv%varS)) &
-    call hchksum(tv%varS, mesg//" varS", G%HI, haloshift=hs, omit_corners=omit_corners, scale=US%S_to_ppt**2)
+    call hchksum(tv%varS, mesg//" varS", G%HI, haloshift=hs, omit_corners=omit_corners, unscale=US%S_to_ppt**2)
   if (associated(tv%covarTS)) &
     call hchksum(tv%covarTS, mesg//" covarTS", G%HI, haloshift=hs, omit_corners=omit_corners, &
-                 scale=US%S_to_ppt*US%C_to_degC)
+                 unscale=US%S_to_ppt*US%C_to_degC)
 
 end subroutine MOM_thermo_chksum
 
@@ -170,26 +170,26 @@ subroutine MOM_surface_chksum(mesg, sfc_state, G, US, haloshift, symmetric)
   hs = 0 ; if (present(haloshift)) hs = haloshift
 
   if (allocated(sfc_state%SST)) call hchksum(sfc_state%SST, mesg//" SST", G%HI, haloshift=hs, &
-                                             scale=US%C_to_degC)
+                                             unscale=US%C_to_degC)
   if (allocated(sfc_state%SSS)) call hchksum(sfc_state%SSS, mesg//" SSS", G%HI, haloshift=hs, &
-                                             scale=US%S_to_ppt)
+                                             unscale=US%S_to_ppt)
   if (allocated(sfc_state%sea_lev)) call hchksum(sfc_state%sea_lev, mesg//" sea_lev", G%HI, &
-                                                 haloshift=hs, scale=US%Z_to_m)
+                                                 haloshift=hs, unscale=US%Z_to_m)
   if (allocated(sfc_state%Hml)) call hchksum(sfc_state%Hml, mesg//" Hml", G%HI, haloshift=hs, &
-                                             scale=US%Z_to_m)
+                                             unscale=US%Z_to_m)
   if (allocated(sfc_state%u) .and. allocated(sfc_state%v)) &
     call uvchksum(mesg//" SSU", sfc_state%u, sfc_state%v, G%HI, haloshift=hs, symmetric=sym, &
-                  scale=US%L_T_to_m_s)
+                  unscale=US%L_T_to_m_s)
   if (allocated(sfc_state%frazil)) call hchksum(sfc_state%frazil, mesg//" frazil", G%HI, &
-                                                haloshift=hs, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
+                                                haloshift=hs, unscale=US%Q_to_J_kg*US%RZ_to_kg_m2)
   if (allocated(sfc_state%melt_potential)) call hchksum(sfc_state%melt_potential, mesg//" melt_potential", &
-                      G%HI, haloshift=hs, scale=US%Q_to_J_kg*US%RZ_to_kg_m2)
+                      G%HI, haloshift=hs, unscale=US%Q_to_J_kg*US%RZ_to_kg_m2)
   if (allocated(sfc_state%ocean_mass)) call hchksum(sfc_state%ocean_mass, mesg//" ocean_mass", &
-                      G%HI, haloshift=hs, scale=US%RZ_to_kg_m2)
+                      G%HI, haloshift=hs, unscale=US%RZ_to_kg_m2)
   if (allocated(sfc_state%ocean_heat)) call hchksum(sfc_state%ocean_heat, mesg//" ocean_heat", &
-                      G%HI, haloshift=hs, scale=US%C_to_degC*US%RZ_to_kg_m2)
+                      G%HI, haloshift=hs, unscale=US%C_to_degC*US%RZ_to_kg_m2)
   if (allocated(sfc_state%ocean_salt)) call hchksum(sfc_state%ocean_salt, mesg//" ocean_salt", &
-                      G%HI, haloshift=hs, scale=US%S_to_ppt*US%RZ_to_kg_m2)
+                      G%HI, haloshift=hs, unscale=US%S_to_ppt*US%RZ_to_kg_m2)
 
 end subroutine MOM_surface_chksum
 
@@ -240,14 +240,14 @@ subroutine MOM_accel_chksum(mesg, CAu, CAv, PFu, PFv, diffu, diffv, G, GV, US, p
   ! Note that for the chksum calls to be useful for reproducing across PE
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
-  call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
-  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
-  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym, scale=US%L_T2_to_m_s2)
+  call uvchksum(mesg//" CA[uv]", CAu, CAv, G%HI, haloshift=0, symmetric=sym, unscale=US%L_T2_to_m_s2)
+  call uvchksum(mesg//" PF[uv]", PFu, PFv, G%HI, haloshift=0, symmetric=sym, unscale=US%L_T2_to_m_s2)
+  call uvchksum(mesg//" diffu", diffu, diffv, G%HI,haloshift=0, symmetric=sym, unscale=US%L_T2_to_m_s2)
   if (present(pbce)) &
-    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, scale=GV%m_to_H*US%L_T_to_m_s**2)
+    call hchksum(pbce, mesg//" pbce",G%HI,haloshift=0, unscale=GV%m_to_H*US%L_T_to_m_s**2)
   if (present(u_accel_bt) .and. present(v_accel_bt)) &
     call uvchksum(mesg//" [uv]_accel_bt", u_accel_bt, v_accel_bt, G%HI,haloshift=0, symmetric=sym, &
-                  scale=US%L_T2_to_m_s2)
+                  unscale=US%L_T2_to_m_s2)
 end subroutine MOM_accel_chksum
 
 ! =============================================================================

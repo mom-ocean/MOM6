@@ -20,6 +20,7 @@ use MOM_io,            only : field_size, read_variable, read_attribute, open_AS
 use MOM_io,            only : axis_info, set_axis_info, delete_axis_info, get_filename_appendix
 use MOM_io,            only : attribute_info, set_attribute_info, delete_attribute_info
 use MOM_io,            only : APPEND_FILE, SINGLE_FILE, WRITEONLY_FILE
+use MOM_spatial_means, only : array_global_min_max
 use MOM_time_manager,  only : time_type, get_time, get_date, set_time, operator(>)
 use MOM_time_manager,  only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,  only : operator(/=), operator(<=), operator(>=), operator(<)
@@ -124,6 +125,12 @@ type, public :: sum_output_CS ; private
                                 !! interval at which the run is stopped.
   logical :: write_stocks       !< If true, write the integrated tracer amounts
                                 !! to stdout when the energy files are written.
+  logical :: write_min_max      !< If true, write the maximum and minimum values of temperature,
+                                !! salinity and some tracer concentrations to stdout when the energy
+                                !! files are written.
+  logical :: write_min_max_loc  !< If true, write the locations of the maximum and minimum values
+                                !! of temperature, salinity and some tracer concentrations to stdout
+                                !! when the energy files are written.
   integer :: previous_calls = 0 !< The number of times write_energy has been called.
   integer :: prev_n = 0         !< The value of n from the last call.
   type(MOM_netcdf_file) :: fileenergy_nc !< The file handle for the netCDF version of the energy file.
@@ -179,6 +186,15 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
   call get_param(param_file, mdl, "ENABLE_THERMODYNAMICS", CS%use_temperature, &
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true.)
+  call get_param(param_file, mdl, "WRITE_TRACER_MIN_MAX", CS%write_min_max, &
+                 "If true, write the maximum and minimum values of temperature, salinity and "//&
+                 "some tracer concentrations to stdout when the energy files are written.", &
+                 default=.false., do_not_log=.not.CS%write_stocks, debuggingParam=.true.)
+  call get_param(param_file, mdl, "WRITE_TRACER_MIN_MAX_LOC", CS%write_min_max_loc, &
+                 "If true, write the locations of the maximum and minimum values of "//&
+                 "temperature, salinity and some tracer concentrations to stdout when the "//&
+                 "energy files are written.", &
+                 default=.false., do_not_log=.not.CS%write_min_max, debuggingParam=.true.)
   call get_param(param_file, mdl, "DT", CS%dt_in_T, &
                  "The (baroclinic) dynamics time step.", &
                  units="s", scale=US%s_to_T, fail_if_missing=.true.)
@@ -404,6 +420,34 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   logical :: date_stamped
   type(time_type) :: dt_force ! A time_type version of the forcing timestep.
+
+  real :: S_min   ! The global minimum unmasked value of the salinity [ppt]
+  real :: S_max   ! The global maximum unmasked value of the salinity [ppt]
+  real :: S_min_x ! The x-positions of the global salinity minima
+                  ! in the units of G%geoLonT, often [degrees_E] or [km]
+  real :: S_min_y ! The y-positions of the global salinity minima
+                  ! in the units of G%geoLatT, often [degrees_N] or [km]
+  real :: S_min_z ! The z-positions of the global salinity minima [layer]
+  real :: S_max_x ! The x-positions of the global salinity maxima
+                  ! in the units of G%geoLonT, often [degrees_E] or [km]
+  real :: S_max_y ! The y-positions of the global salinity maxima
+                  ! in the units of G%geoLatT, often [degrees_N] or [km]
+  real :: S_max_z ! The z-positions of the global salinity maxima [layer]
+
+  real :: T_min   ! The global minimum unmasked value of the temperature [degC]
+  real :: T_max   ! The global maximum unmasked value of the temperature [degC]
+  real :: T_min_x ! The x-positions of the global temperature minima
+                  ! in the units of G%geoLonT, often [degreeT_E] or [km]
+  real :: T_min_y ! The y-positions of the global temperature minima
+                  ! in the units of G%geoLatT, often [degreeT_N] or [km]
+  real :: T_min_z ! The z-positions of the global temperature minima [layer]
+  real :: T_max_x ! The x-positions of the global temperature maxima
+                  ! in the units of G%geoLonT, often [degreeT_E] or [km]
+  real :: T_max_y ! The y-positions of the global temperature maxima
+                  ! in the units of G%geoLatT, often [degreeT_N] or [km]
+  real :: T_max_z ! The z-positions of the global temperature maxima [layer]
+
+
   ! The units of the tracer stock vary between tracers, with [conc] given explicitly by Tr_units.
   real :: Tr_stocks(MAX_FIELDS_) ! The total amounts of each of the registered tracers [kg conc]
   real :: Tr_min(MAX_FIELDS_)   ! The global minimum unmasked value of the tracers [conc]
@@ -527,17 +571,33 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   nTr_stocks = 0
   Tr_minmax_avail(:) = .false.
-  call call_tracer_stocks(h, Tr_stocks, G, GV, US, tracer_CSp, stock_names=Tr_names, &
-                          stock_units=Tr_units, num_stocks=nTr_stocks,&
-                          got_min_max=Tr_minmax_avail, global_min=Tr_min, global_max=Tr_max, &
-                          xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
-                          xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
+  if (CS%write_min_max .and. CS%write_min_max_loc) then
+    call call_tracer_stocks(h, Tr_stocks, G, GV, US, tracer_CSp, stock_names=Tr_names, &
+                            stock_units=Tr_units, num_stocks=nTr_stocks,&
+                            got_min_max=Tr_minmax_avail, global_min=Tr_min, global_max=Tr_max, &
+                            xgmin=Tr_min_x, ygmin=Tr_min_y, zgmin=Tr_min_z,&
+                            xgmax=Tr_max_x, ygmax=Tr_max_y, zgmax=Tr_max_z)
+  elseif (CS%write_min_max) then
+    call call_tracer_stocks(h, Tr_stocks, G, GV, US, tracer_CSp, stock_names=Tr_names, &
+                            stock_units=Tr_units, num_stocks=nTr_stocks,&
+                            got_min_max=Tr_minmax_avail, global_min=Tr_min, global_max=Tr_max)
+  else
+    call call_tracer_stocks(h, Tr_stocks, G, GV, US, tracer_CSp, stock_names=Tr_names, &
+                            stock_units=Tr_units, num_stocks=nTr_stocks)
+  endif
   if (nTr_stocks > 0) then
     do m=1,nTr_stocks
       vars(num_nc_fields+m) = var_desc(Tr_names(m), units=Tr_units(m), &
                     longname=Tr_names(m), hor_grid='1', z_grid='1')
     enddo
     num_nc_fields = num_nc_fields + nTr_stocks
+  endif
+
+  if (CS%use_temperature .and. CS%write_stocks) then
+    call array_global_min_max(tv%T, G, nz, T_min, T_max, &
+                              T_min_x, T_min_y, T_min_z, T_max_x, T_max_y, T_max_z, unscale=US%C_to_degC)
+    call array_global_min_max(tv%S, G, nz, S_min, S_max, &
+                              S_min_x, S_min_y, S_min_z, S_max_x, S_max_y, S_max_z, unscale=US%S_to_ppt)
   endif
 
   if (CS%previous_calls == 0) then
@@ -847,6 +907,15 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
           write(stdout,'("    Total Salt: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
               Salt*0.001, Salt_chg*0.001, Salt_anom*0.001, Salt_anom/Salt
         endif
+        if (CS%write_min_max .and. CS%write_min_max_loc) then
+          write(stdout,'(16X,"Salinity Global Min:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
+                S_min, S_min_x, S_min_y, S_min_z
+          write(stdout,'(16X,"Salinity Global Max:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
+                S_max, S_max_x, S_max_y, S_max_z
+        elseif (CS%write_min_max) then
+          write(stdout,'(16X,"Salinity Global Min & Max:",ES24.16,1X,ES24.16)') S_min, S_max
+        endif
+
         if (Heat == 0.) then
           write(stdout,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5)') &
               Heat, Heat_chg, Heat_anom
@@ -854,17 +923,28 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
           write(stdout,'("    Total Heat: ",ES24.16,", Change: ",ES24.16," Error: ",ES12.5," (",ES8.1,")")') &
               Heat, Heat_chg, Heat_anom, Heat_anom/Heat
         endif
+        if (CS%write_min_max .and. CS%write_min_max_loc) then
+          write(stdout,'(16X,"Temperature Global Min:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
+                T_min, T_min_x, T_min_y, T_min_z
+          write(stdout,'(16X,"Temperature Global Max:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
+                T_max, T_max_x, T_max_y, T_max_z
+        elseif (CS%write_min_max) then
+          write(stdout,'(16X,"Temperature Global Min & Max:",ES24.16,1X,ES24.16)') T_min, T_max
+        endif
       endif
       do m=1,nTr_stocks
 
-         write(stdout,'("      Total ",a,": ",ES24.16,1X,a)') &
+        write(stdout,'("      Total ",a,": ",ES24.16,1X,a)') &
               trim(Tr_names(m)), Tr_stocks(m), trim(Tr_units(m))
 
-         if (Tr_minmax_avail(m)) then
-           write(stdout,'(64X,"Global Min:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
-                Tr_min(m),Tr_min_x(m),Tr_min_y(m),Tr_min_z(m)
-           write(stdout,'(64X,"Global Max:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
-                Tr_max(m),Tr_max_x(m),Tr_max_y(m),Tr_max_z(m)
+        if (CS%write_min_max .and. CS%write_min_max_loc .and. Tr_minmax_avail(m)) then
+          write(stdout,'(18X,a," Global Min:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
+               trim(Tr_names(m)), Tr_min(m), Tr_min_x(m), Tr_min_y(m), Tr_min_z(m)
+          write(stdout,'(18X,a," Global Max:",ES24.16,1X,"at: (",f7.2,",",f7.2,",",f8.2,")"  )') &
+               trim(Tr_names(m)), Tr_max(m), Tr_max_x(m), Tr_max_y(m), Tr_max_z(m)
+        elseif (CS%write_min_max .and. Tr_minmax_avail(m)) then
+          write(stdout,'(18X,a," Global Min & Max:",ES24.16,1X,ES24.16)') &
+               trim(Tr_names(m)), Tr_min(m), Tr_max(m)
         endif
 
       enddo

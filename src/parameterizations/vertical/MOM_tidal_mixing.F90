@@ -602,7 +602,7 @@ logical function tidal_mixing_init(Time, G, GV, US, param_file, int_tide_CSp, di
                           local_mixing_frac       = CS%Gamma_itides,          &
                           depth_cutoff            = CS%min_zbot_itides*US%Z_to_m)
 
-    call read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
+    call read_tidal_energy(G, GV, US, tidal_energy_type, param_file, CS)
 
     !call closeParameterBlock(param_file)
 
@@ -912,7 +912,7 @@ subroutine calculate_CVMix_tidal(dz, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_in
       ! remap from input z coordinate to model coordinate:
       tidal_qe_md(:) = 0.0
       call remapping_core_h(CS%remap_cs, size(CS%h_src), CS%h_src, CS%tidal_qe_3d_in(i,j,:), &
-                            GV%ke, h_m, tidal_qe_md, GV%H_subroundoff, GV%H_subroundoff)
+                            GV%ke, h_m, tidal_qe_md)
 
       ! form the Schmittner coefficient that is based on 3D q*E, which is formed from
       ! summing q_i*TidalConstituent_i over the number of constituents.
@@ -1571,8 +1571,9 @@ end subroutine tidal_mixing_h_amp
 
 ! TODO: move this subroutine to MOM_internal_tide_input module (?)
 !> This subroutine read tidal energy inputs from a file.
-subroutine read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
+subroutine read_tidal_energy(G, GV, US, tidal_energy_type, param_file, CS)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< Vertical grid structure
   type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
   character(len=20),       intent(in) :: tidal_energy_type !< The type of tidal energy inputs to read
   type(param_file_type),   intent(in)    :: param_file !< Run-time parameter file handle
@@ -1606,7 +1607,7 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
     enddo ; enddo
     deallocate(tidal_energy_flux_2d)
   case ('ER03') ! Egbert & Ray 2003
-    call read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
+    call read_tidal_constituents(G, GV, US, tidal_energy_file, param_file, CS)
   case default
     call MOM_error(FATAL, "read_tidal_energy: Unknown tidal energy file type.")
   end select
@@ -1614,8 +1615,9 @@ subroutine read_tidal_energy(G, US, tidal_energy_type, param_file, CS)
 end subroutine read_tidal_energy
 
 !> This subroutine reads tidal input energy from a file by constituent.
-subroutine read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
+subroutine read_tidal_constituents(G, GV, US, tidal_energy_file, param_file, CS)
   type(ocean_grid_type), intent(in) :: G    !< The ocean's grid structure
+  type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
   type(unit_scale_type), intent(in) :: US   !< A dimensional unit scaling type
   character(len=200),    intent(in) :: tidal_energy_file !< The file from which to read tidal energy inputs
   type(param_file_type), intent(in)    :: param_file !< Run-time parameter file handle
@@ -1700,7 +1702,8 @@ subroutine read_tidal_constituents(G, US, tidal_energy_file, param_file, CS)
   ! initialize input remapping:
   call initialize_remapping(CS%remap_cs, remapping_scheme="PLM", &
                             boundary_extrapolation=.false., check_remapping=CS%debug, &
-                            answer_date=CS%remap_answer_date)
+                            answer_date=CS%remap_answer_date, &
+                            h_neglect=GV%H_subroundoff, h_neglect_edge=GV%H_subroundoff)
 
   deallocate(tc_m2)
   deallocate(tc_s2)

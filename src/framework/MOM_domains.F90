@@ -680,10 +680,10 @@ subroutine write_auto_mask_file(mask_table, layout, npes, filename)
   true_num_masked_blocks = layout(1) * layout(2) - npes
 
   call open_ASCII_file(file_ascii, trim(filename), action=WRITEONLY_FILE)
-  write(file_ascii, '(I0)'), true_num_masked_blocks
-  write(file_ascii, '(I0,",",I0)'), layout(1), layout(2)
+  write(file_ascii, '(I0)') true_num_masked_blocks
+  write(file_ascii, '(I0,",",I0)') layout(1), layout(2)
   do p = 1, true_num_masked_blocks
-    write(file_ascii, '(I0,",",I0)'), mask_table(p,1), mask_table(p,2)
+    write(file_ascii, '(I0,",",I0)') mask_table(p,1), mask_table(p,2)
   enddo
   call close_file(file_ascii)
 end subroutine write_auto_mask_file

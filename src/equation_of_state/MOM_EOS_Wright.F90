@@ -387,8 +387,8 @@ end subroutine EoS_fit_range_buggy_Wright
 !! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
 !! that assumes that |eps| < 0.34.
 subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                                 dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, dz_neglect, &
-                                 useMassWghtInterp, rho_scale, pres_scale, temp_scale, saln_scale, Z_0p)
+                                 dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, &
+                                 MassWghtInterp, rho_scale, pres_scale, temp_scale, saln_scale, Z_0p)
   type(hor_index_type), intent(in)  :: HI       !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T        !< Potential temperature relative to the surface
@@ -424,9 +424,11 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                                 !! layer divided by the y grid spacing [R L2 T-2 ~> Pa].
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyT   !< The depth of the bathymetry [Z ~> m].
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: SSH       !< The sea surface height [Z ~> m]
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting to
-                                                !! interpolate T/S for top and bottom integrals.
+  integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
+                                                 !! mass weighting to interpolate T/S in integrals
   real,       optional, intent(in)  :: rho_scale !< A multiplicative factor by which to scale density
                                                  !! from kg m-3 to the desired units [R m3 kg-1 ~> 1]
   real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
@@ -435,12 +437,14 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                             !! temperature into degC [degC C-1 ~> 1]
   real,       optional, intent(in)  :: saln_scale !< A multiplicative factor to convert pressure
                             !! into PSU [PSU S-1 ~> 1].
-  real,       optional, intent(in)  :: Z_0p      !< The height at which the pressure is 0 [Z ~> m]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: Z_0p      !< The height at which the pressure is 0 [Z ~> m]
 
   ! Local variables
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: al0_2d ! A term in the Wright EOS [m3 kg-1]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: p0_2d  ! A term in the Wright EOS [Pa]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: lambda_2d ! A term in the Wright EOS [m2 s-2]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: z0pres ! The height at which the pressure is zero [Z ~> m]
   real :: al0        ! A term in the Wright EOS [m3 kg-1]
   real :: p0         ! A term in the Wright EOS [Pa]
   real :: lambda     ! A term in the Wright EOS [m2 s-2]
@@ -466,7 +470,6 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                      ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa].
   real :: Pa_to_RL2_T2 ! A conversion factor of pressures from Pa to the output units indicated by
                        ! pres_scale [R L2 T-2 Pa-1 ~> 1].
-  real :: z0pres     ! The height at which the pressure is zero [Z ~> m]
   real :: a1s        ! Partly rescaled version of a1 [m3 kg-1 C-1 ~> m3 kg-1 degC-1]
   real :: a2s        ! Partly rescaled version of a2 [m3 kg-1 S-1 ~> m3 kg-1 PSU-1]
   real :: b1s        ! Partly rescaled version of b1 [Pa C-1 ~> Pa degC-1]
@@ -480,6 +483,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: c4s        ! Partly rescaled version of c4 [m2 s-2 S-1 ~> m2 s-2 PSU-1]
   real :: c5s        ! Partly rescaled version of c5 [m2 s-2 C-1 S-1 ~> m2 s-2 degC-1 PSU-1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
+  logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants [nondim]
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants [nondim]
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j, m
@@ -504,7 +508,13 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   else
     rho_ref_mks = rho_ref ; I_Rho = 1.0 / rho_0
   endif
-  z0pres = 0.0 ; if (present(Z_0p)) z0pres = Z_0p
+  if (present(Z_0p)) then
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      z0pres(i,j) = Z_0p(i,j)
+    enddo ; enddo
+  else
+    z0pres(:,:) = 0.0
+  endif
 
   a1s = a1 ; a2s = a2
   b1s = b1 ; b2s = b2 ; b3s = b3 ; b4s = b4 ; b5s = b5
@@ -524,14 +534,11 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     c4s = c4s * saln_scale ; c5s = c5s * saln_scale
   endif ; endif
 
-  do_massWeight = .false.
-  if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
-    do_massWeight = .true.
-  ! if (.not.present(bathyT)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !     "bathyT must be present if useMassWghtInterp is present and true.")
-  ! if (.not.present(dz_neglect)) call MOM_error(FATAL, "int_density_dz_generic: "//&
-  !     "dz_neglect must be present if useMassWghtInterp is present and true.")
-  endif ; endif
+  do_massWeight = .false. ; top_massWeight = .false.
+  if (present(MassWghtInterp)) then
+    do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+    top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
+  endif
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     al0_2d(i,j) = (a0 + a1s*T(i,j)) + a2s*S(i,j)
@@ -541,7 +548,7 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     al0 = al0_2d(i,j) ; p0 = p0_2d(i,j) ; lambda = lambda_2d(i,j)
 
     dz = z_t(i,j) - z_b(i,j)
-    p_ave = -GxRho*(0.5*(z_t(i,j)+z_b(i,j)) - z0pres)
+    p_ave = -GxRho*(0.5*(z_t(i,j)+z_b(i,j)) - z0pres(i,j))
 
     I_al0 = 1.0 / al0
     I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
@@ -564,6 +571,8 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     hWght = 0.0
     if (do_massWeight) &
       hWght = max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
+    if (top_massWeight) &
+      hWght = max(hWght, z_b(i+1,j)-SSH(i,j), z_b(i,j)-SSH(i+1,j))
     if (hWght > 0.) then
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
@@ -585,7 +594,8 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       lambda = (wtT_L*lambda_2d(i,j)) + (wtT_R*lambda_2d(i+1,j))
 
       dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i+1,j) - z_b(i+1,j)))
-      p_ave = -GxRho*(0.5*((wt_L*(z_t(i,j)+z_b(i,j))) + (wt_R*(z_t(i+1,j)+z_b(i+1,j)))) - z0pres)
+      p_ave = -GxRho*((wt_L * (0.5*(z_t(i,j)+z_b(i,j)) - z0pres(i,j))) + &
+                      (wt_R * (0.5*(z_t(i+1,j)+z_b(i+1,j)) - z0pres(i+1,j))))
 
       I_al0 = 1.0 / al0
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
@@ -605,6 +615,8 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
     hWght = 0.0
     if (do_massWeight) &
       hWght = max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
+    if (top_massWeight) &
+      hWght = max(hWght, z_b(i,j+1)-SSH(i,j), z_b(i,j)-SSH(i,j+1))
     if (hWght > 0.) then
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
@@ -626,7 +638,8 @@ subroutine int_density_dz_wright(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
       lambda = (wtT_L*lambda_2d(i,j)) + (wtT_R*lambda_2d(i,j+1))
 
       dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i,j+1) - z_b(i,j+1)))
-      p_ave = -GxRho*(0.5*((wt_L*(z_t(i,j)+z_b(i,j))) + (wt_R*(z_t(i,j+1)+z_b(i,j+1)))) - z0pres)
+      p_ave = -GxRho*((wt_L*(0.5*(z_t(i,j)+z_b(i,j))-z0pres(i,j))) + &
+                      (wt_R*(0.5*(z_t(i,j+1)+z_b(i,j+1))-z0pres(i,j+1))))
 
       I_al0 = 1.0 / al0
       I_Lzz = 1.0 / (p0 + (lambda * I_al0) + p_ave)
@@ -647,8 +660,8 @@ end subroutine int_density_dz_wright
 !! rule to do the horizontal integrals, and from a truncation in the series for log(1-eps/1+eps)
 !! that assumes that |eps| < 0.34.
 subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
-                                  intp_dza, intx_dza, inty_dza, halo_size, bathyP, dP_neglect, &
-                                  useMassWghtInterp, SV_scale, pres_scale, temp_scale, saln_scale)
+                                  intp_dza, intx_dza, inty_dza, halo_size, bathyP, P_surf, dP_neglect, &
+                                  MassWghtInterp, SV_scale, pres_scale, temp_scale, saln_scale)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -684,10 +697,12 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
                                                  !! dza.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: bathyP    !< The pressure at the bathymetry [R L2 T-2 ~> Pa]
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: P_surf    !< The pressure at the ocean surface [R L2 T-2 ~> Pa]
   real,       optional, intent(in)  :: dP_neglect !< A miniscule pressure change with
                                                  !! the same units as p_t [R L2 T-2 ~> Pa]
-  logical,    optional, intent(in)  :: useMassWghtInterp !< If true, uses mass weighting
-                            !! to interpolate T/S for top and bottom integrals.
+  integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
+                                                 !! mass weighting to interpolate T/S in integrals
   real,       optional, intent(in)  :: SV_scale  !< A multiplicative factor by which to scale specific
                             !! volume from m3 kg-1 to the desired units [kg m-3 R-1 ~> 1]
   real,       optional, intent(in)  :: pres_scale !< A multiplicative factor to convert pressure
@@ -734,6 +749,8 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: c4s        ! Partly rescaled version of c4 [m2 s-2 S-1 ~> m2 s-2 PSU-1]
   real :: c5s        ! Partly rescaled version of c5 [m2 s-2 C-1 S-1 ~> m2 s-2 degC-1 PSU-1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
+  logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
+  logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants [nondim]
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants [nondim]
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
@@ -770,14 +787,12 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
     c4s = c4s * saln_scale ; c5s = c5s * saln_scale
   endif ; endif
 
-  do_massWeight = .false.
-  if (present(useMassWghtInterp)) then ; if (useMassWghtInterp) then
-    do_massWeight = .true.
-!    if (.not.present(bathyP)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "bathyP must be present if useMassWghtInterp is present and true.")
-!    if (.not.present(dP_neglect)) call MOM_error(FATAL, "int_spec_vol_dp_generic: "//&
-!        "dP_neglect must be present if useMassWghtInterp is present and true.")
-  endif ; endif
+  do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
+  if (present(MassWghtInterp)) then
+    do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
+    top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
+    massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
+  endif
 
   !  alpha(j) = (lambda + al0*(pressure(j) + p0)) / (pressure(j) + p0)
   do j=jsh,jeh ; do i=ish,ieh
@@ -802,8 +817,13 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight) &
+    if (do_massWeight .and. massWeight_bug) then
       hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
+    elseif (do_massWeight) then
+      hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
+    endif
+    if (top_massWeight) &
+      hWght = max(hWght, P_surf(i,j)-p_b(i+1,j), P_surf(i+1,j)-p_b(i,j))
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
@@ -843,8 +863,13 @@ subroutine int_spec_vol_dp_wright(T, S, p_t, p_b, spv_ref, HI, dza, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight) &
+    if (do_massWeight .and. massWeight_bug) then
       hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
+    elseif (do_massWeight) then
+      hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
+    endif
+    if (top_massWeight) &
+      hWght = max(hWght, P_surf(i,j)-p_b(i,j+1), P_surf(i,j+1)-p_b(i,j))
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect

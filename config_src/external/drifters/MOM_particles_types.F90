@@ -3,6 +3,7 @@ module particles_types_mod
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use, intrinsic :: iso_fortran_env, only : int64
 use MOM_grid, only : ocean_grid_type
 use MOM_domains, only: domain2D
 
@@ -75,7 +76,7 @@ type, public :: xyt
   real :: vvel_old !< Previous meridional velocity component (m/s)
   integer :: year  !< Year of this record
   integer :: particle_num  !< Current particle number
-  integer(kind=8) :: id = -1 !< Particle Identifier
+  integer(kind=int64) :: id = -1 !< Particle Identifier
   type(xyt), pointer :: next=>null()  !< Pointer to the next position in the list
 end type xyt
 
@@ -98,8 +99,8 @@ type, public :: particle
   real :: start_day       !< origination position (degrees) and day
   integer :: start_year                         !< origination year
   real :: halo_part  !< equal to zero for particles on the computational domain, and 1 for particles on the halo
-  integer(kind=8) :: id                      !< particle identifier
-  integer(kind=8) :: drifter_num             !< particle identifier
+  integer(kind=int64) :: id                      !< particle identifier
+  integer(kind=int64) :: drifter_num             !< particle identifier
   integer :: ine                           !< nearest i-index in NE direction (for convenience)
   integer :: jne                           !< nearest j-index in NE direction (for convenience)
   real :: xi                               !< non-dimensional x-coordinate within current cell (0..1)
@@ -147,7 +148,7 @@ type, public :: particles !; private
   logical :: ignore_traj=.False. !< If true, then model does not write trajectory data at all
   logical :: use_new_predictive_corrective =.False. !< Flag to use Bob's predictive corrective particle scheme
   !Added by Alon
-  integer(kind=8) :: debug_particle_with_id = -1 !< If positive, monitors a part with this id
+  integer(kind=int64) :: debug_particle_with_id = -1 !< If positive, monitors a part with this id
   type(buffer), pointer :: obuffer_n=>null() !< Buffer for outgoing parts to the north
   type(buffer), pointer :: ibuffer_n=>null() !< Buffer for incoming parts from the north
   type(buffer), pointer :: obuffer_s=>null() !< Buffer for outgoing parts to the south

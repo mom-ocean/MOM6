@@ -122,16 +122,20 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
       A_layer_prev(I,j) = A_layer
     endif ; enddo ; enddo ; enddo
   else
-    do k=nk,1,-1 ; do j=js,je ; do I=Isq,Ieq ; if (do_I(I,j)) then
-      call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
-                          eta_u(I,j,K), A_layer, do_I(I,j))
-      if (eta_u(I,j,K) - (eta_u(I,j,K+1)+dz_min) > 0.0) then
-        pbv%por_face_areaU(I,j,k) = min(1.0, (A_layer - A_layer_prev(I,j)) / (eta_u(I,j,K) - eta_u(I,j,K+1)))
+    do k=nk,1,-1 ; do j=js,je ; do I=Isq,Ieq
+      if (do_I(I,j)) then
+        call calc_por_layer(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
+                            eta_u(I,j,K), A_layer, do_I(I,j))
+        if (eta_u(I,j,K) - (eta_u(I,j,K+1)+dz_min) > 0.0) then
+          pbv%por_face_areaU(I,j,k) = min(1.0, (A_layer - A_layer_prev(I,j)) / (eta_u(I,j,K) - eta_u(I,j,K+1)))
+        else
+          pbv%por_face_areaU(I,j,k) = 0.0 ! use calc_por_interface() might be a better choice
+        endif
+        A_layer_prev(I,j) = A_layer
       else
-        pbv%por_face_areaU(I,j,k) = 0.0 ! use calc_por_interface() might be a better choice
+        pbv%por_face_areaU(I,j,k) = 1.0
       endif
-      A_layer_prev(I,j) = A_layer
-    endif ; enddo ; enddo ; enddo
+    enddo ; enddo ; enddo
   endif
 
   ! v-points
@@ -154,16 +158,20 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
       A_layer_prev(i,J) = A_layer
     endif ; enddo ; enddo ; enddo
   else
-    do k=nk,1,-1 ; do J=Jsq,Jeq ; do i=is,ie ; if (do_I(i,J)) then
-      call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
-                          eta_v(i,J,K), A_layer, do_I(i,J))
-      if (eta_v(i,J,K) - (eta_v(i,J,K+1)+dz_min) > 0.0) then
-        pbv%por_face_areaV(i,J,k) = min(1.0, (A_layer - A_layer_prev(i,J)) / (eta_v(i,J,K) - eta_v(i,J,K+1)))
+    do k=nk,1,-1 ; do J=Jsq,Jeq ; do i=is,ie
+      if (do_I(i,J)) then
+        call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
+                            eta_v(i,J,K), A_layer, do_I(i,J))
+        if (eta_v(i,J,K) - (eta_v(i,J,K+1)+dz_min) > 0.0) then
+          pbv%por_face_areaV(i,J,k) = min(1.0, (A_layer - A_layer_prev(i,J)) / (eta_v(i,J,K) - eta_v(i,J,K+1)))
+        else
+          pbv%por_face_areaV(i,J,k) = 0.0 ! use calc_por_interface() might be a better choice
+        endif
+        A_layer_prev(i,J) = A_layer
       else
-        pbv%por_face_areaV(i,J,k) = 0.0 ! use calc_por_interface() might be a better choice
+        pbv%por_face_areaV(i,J,k) = 1.0
       endif
-      A_layer_prev(i,J) = A_layer
-    endif ; enddo ; enddo ; enddo
+    enddo ; enddo ; enddo
   endif
 
   if (CS%debug) then
@@ -231,10 +239,14 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
                               eta_u(I,j,K), pbv%por_layer_widthU(I,j,K), do_I(I,j))
    endif ; enddo ; enddo ; enddo
   else
-    do K=1,nk+1 ; do j=js,je ; do I=Isq,Ieq ; if (do_I(I,j)) then
-      call calc_por_interface(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
-                              eta_u(I,j,K), pbv%por_layer_widthU(I,j,K), do_I(I,j))
-    endif ; enddo ; enddo ; enddo
+    do K=1,nk+1 ; do j=js,je ; do I=Isq,Ieq
+      if (do_I(I,j)) then
+        call calc_por_interface(G%porous_DminU(I,j), G%porous_DmaxU(I,j), G%porous_DavgU(I,j), &
+                                eta_u(I,j,K), pbv%por_layer_widthU(I,j,K), do_I(I,j))
+      else
+        pbv%por_layer_widthU(I,j,K) = 1.0
+      endif
+    enddo ; enddo ; enddo
   endif
 
   ! v-points
@@ -249,10 +261,14 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
                               eta_v(i,J,K), pbv%por_layer_widthV(i,J,K), do_I(i,J))
     endif ; enddo ; enddo ; enddo
   else
-    do K=1,nk+1 ; do J=Jsq,Jeq ; do i=is,ie ; if (do_I(i,J)) then
-      call calc_por_interface(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
-                              eta_v(i,J,K), pbv%por_layer_widthV(i,J,K), do_I(i,J))
-    endif ; enddo ; enddo ; enddo
+    do K=1,nk+1 ; do J=Jsq,Jeq ; do i=is,ie
+      if (do_I(i,J)) then
+        call calc_por_interface(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
+                                eta_v(i,J,K), pbv%por_layer_widthV(i,J,K), do_I(i,J))
+      else
+        pbv%por_layer_widthV(i,J,K) = 1.0
+      endif
+    enddo ; enddo ; enddo
   endif
 
   if (CS%debug) then
