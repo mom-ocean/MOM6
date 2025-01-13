@@ -73,7 +73,7 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
     Kd, &        ! A column of diapycnal diffusivities at interfaces [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
   real :: dz_h_int  ! The ratio of the vertical distances across the layers surrounding an interface
-                 ! over the layer thicknesses [H Z-1 ~> nonodim or kg m-3]
+                 ! over the layer thicknesses [H Z-1 ~> nondim or kg m-3]
   real :: ustar  ! The local friction velocity [Z T-1 ~> m s-1]
   real :: absf   ! The absolute value of the Coriolis parameter [T-1 ~> s-1]
   real :: htot   ! The sum of the thicknesses [H ~> m or kg m-2].

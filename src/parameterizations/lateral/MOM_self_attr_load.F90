@@ -38,12 +38,12 @@ type, public :: SAL_CS ; private
   type(sht_CS), allocatable :: sht
     !< Spherical harmonic transforms (SHT) control structure
   integer :: sal_sht_Nd
-    !< Maximum degree for spherical harmonic transforms [nodim]
+    !< Maximum degree for spherical harmonic transforms [nondim]
   real, allocatable :: ebot_ref(:,:)
     !< Reference bottom pressure scaled by Rho_0 and G_Earth[Z ~> m]
   real, allocatable :: Love_scaling(:)
     !< Dimensional coefficients for harmonic SAL, which are functions of Love numbers
-    !! [nondim or Z T2 L-2 R-1 ~> m Pa-1]
+    !! [nondim] or [Z T2 L-2 R-1 ~> m Pa-1], depending on the value of use_ppa.
   real, allocatable :: Snm_Re(:), &    !< Real SHT coefficient for SHT SAL [Z ~> m]
                        Snm_Im(:)       !< Imaginary SHT coefficient for SHT SAL [Z ~> m]
 end type SAL_CS
@@ -69,7 +69,7 @@ subroutine calc_SAL(eta, eta_sal, G, CS, tmp_scale)
               !! to MKS units in reproducing sumes [m Z-1 ~> 1]
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G)) :: bpa ! SSH or bottom pressure anomaly [Z ~> m or R L2 T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJ_(G)) :: bpa ! SSH or bottom pressure anomaly [Z ~> m] or [R L2 T-2 ~> Pa]
   integer :: n, m, l
   integer :: Isq, Ieq, Jsq, Jeq
   integer :: i, j
@@ -136,6 +136,8 @@ subroutine calc_love_scaling(rhoW, rhoE, grav, CS)
   type(SAL_CS), intent(inout) :: CS !< The control structure returned by a previous call to SAL_init.
 
   ! Local variables
+  real :: coef_rhoE ! A scaling coefficient of solid Earth density. coef_rhoE = rhoW / rhoE with USE_BPA=False
+      ! and coef_rhoE = 1.0 / (rhoE * grav) with USE_BPA=True. [nondim] or [Z T2 L-2 R-1 ~> m Pa-1]
   real, dimension(:), allocatable :: HDat, LDat, KDat ! Love numbers converted in CF reference frames [nondim]
   real :: H1, L1, K1 ! Temporary variables to store degree 1 Love numbers [nondim]
   integer :: n_tot ! Size of the stored Love numbers [nondim]
@@ -160,13 +162,16 @@ subroutine calc_love_scaling(rhoW, rhoE, grav, CS)
     KDat(2) = (-1.0 / 3.0) * H1 - (2.0 / 3.0) * L1 - 1.0
   endif
 
+  if (CS%use_bpa) then
+    coef_rhoE = 1.0 / (rhoE * grav) ! [Z T2 L-2 R-1 ~> m Pa-1]
+  else
+    coef_rhoE = rhoW / rhoE ! [nondim]
+  endif
+
   do m=0,nlm ; do n=m,nlm
-    l = order2index(m,nlm)
-    if (CS%use_bpa) then
-      CS%Love_scaling(l+n-m) = (3.0 / real(2*n+1)) * (1.0 / (rhoE * grav)) * (1.0 + KDat(n+1) - HDat(n+1))
-    else
-      CS%Love_scaling(l+n-m) = (3.0 / real(2*n+1)) * (rhoW / rhoE) * (1.0 + KDat(n+1) - HDat(n+1))
-    endif
+    l = order2index(m, nlm)
+    ! Love_scaling has the same as coef_rhoE.
+    CS%Love_scaling(l+n-m) = (3.0 / real(2*n+1)) * coef_rhoE * (1.0 + KDat(n+1) - HDat(n+1))
   enddo ; enddo
 end subroutine calc_love_scaling
 
@@ -314,6 +319,8 @@ subroutine SAL_end(CS)
 end subroutine SAL_end
 
 !> \namespace self_attr_load
+!!
+!! \section section_SAL Self attraction and loading
 !!
 !! This module contains methods to calculate self-attraction and loading (SAL) as a function of sea surface height or
 !! bottom pressure anomaly. SAL is primarily used for fast evolving processes like tides or storm surges, but the

@@ -5470,7 +5470,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
           endif
           I_scale = 1.0 ; if (segment%tr_Reg%Tr(m)%scale /= 0.0) I_scale = 1.0 / segment%tr_Reg%Tr(m)%scale
           if (allocated(segment%tr_Reg%Tr(m)%tres)) then ; do k=1,nz
-            ! Calculate weights. Both a and u_L are nodim. Adding them together has no meaning.
+            ! Calculate weights. Both a and u_L are nondim. Adding them together has no meaning.
             ! However, since they cannot be both non-zero, adding them works like a switch.
             ! When InvLscale_out is 0 and outflow, only interior data is applied to reservoirs
             ! When InvLscale_in is 0 and inflow, only nudged data is applied to reservoirs
