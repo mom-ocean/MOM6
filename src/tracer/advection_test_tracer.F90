@@ -226,13 +226,13 @@ subroutine initialize_advection_test_tracer(restart, day, G, GV, h,diag, OBC, CS
       do j=js,je ; do i=is,ie
         locx = abs(G%geoLonT(i,j)-CS%x_origin)/CS%x_width
         locy = abs(G%geoLatT(i,j)-CS%y_origin)/CS%y_width
-        if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
+        if ((locx**2) + (locy**2) <= 1.0) CS%tr(i,j,k,m) = 1.0
       enddo ; enddo
       k=5 ! Cut cylinder
       do j=js,je ; do i=is,ie
         locx = (G%geoLonT(i,j)-CS%x_origin)/CS%x_width
         locy = (G%geoLatT(i,j)-CS%y_origin)/CS%y_width
-        if (locx**2+locy**2<=1.0) CS%tr(i,j,k,m) = 1.0
+        if ((locx**2) + (locy**2) <= 1.0) CS%tr(i,j,k,m) = 1.0
         if (locx>0.0 .and. abs(locy)<0.2) CS%tr(i,j,k,m) = 0.0
       enddo ; enddo
 

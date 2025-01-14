@@ -83,19 +83,21 @@ export FMS_URL
 # TODO: This needs more automated configuration
 MPIRUN ?= mpirun
 
-# Generic compiler variables are pass through to the builds
+# Generic compiler variables are passed through to the builds
 export CC
 export MPICC
 export FC
 export MPIFC
 
 # Builds are distinguished by FCFLAGS
-FCFLAGS_DEBUG ?= -g -O0
+FCFLAGS ?= -g -O0
+
+FCFLAGS_DEBUG ?= $(FCFLAGS)
 FCFLAGS_REPRO ?= -g -O2
 FCFLAGS_OPT ?= -g -O3 -mavx -fno-omit-frame-pointer
 FCFLAGS_INIT ?=
 FCFLAGS_COVERAGE ?= -g -O0 -fbacktrace --coverage
-FCFLAGS_FMS ?= $(FCFLAGS_DEBUG)
+FCFLAGS_FMS ?= $(FCFLAGS)
 # Additional notes:
 # - These default values are simple, minimalist flags, supported by nearly all
 #   compilers, and are somewhat analogous to GFDL's DEBUG and REPRO builds.
@@ -220,8 +222,6 @@ build.prof: $(foreach b,opt opt_target,$(BUILD)/$(b)/MOM6)
 # Compiler flags
 
 # .testing dependencies
-# TODO: We should probably build TARGET with the FMS that it was configured
-#   to use.  But for now we use the same FMS over all builds.
 FCFLAGS_DEPS = -I$(abspath $(DEPS)/include)
 LDFLAGS_DEPS = -L$(abspath $(DEPS)/lib)
 PATH_DEPS = PATH="${PATH}:$(abspath $(DEPS)/bin)"
@@ -280,7 +280,7 @@ $(BUILD)/%/MOM6: $(BUILD)/%/Makefile FORCE
 
 # Target codebase should use its own build system
 $(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
-	$(MAKE) -C $(TARGET_CODEBASE)/.testing build/symmetric/MOM6
+	$(MAKE) -C $(TARGET_CODEBASE)/.testing BUILD=build build/symmetric/MOM6
 
 $(BUILD)/target: | $(TARGET_CODEBASE)
 	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/symmetric $@
@@ -659,7 +659,7 @@ test.summary:
 
 # NOTE: Using file parser gcov report as a proxy for test completion
 .PHONY: run.cov.unit
-run.cov.unit: $(BUILD)/unit/MOM_file_parser_tests.F90.gcov
+run.cov.unit: $(foreach t,$(UNIT_EXECS),$(BUILD)/unit/$(t).F90.gcov)
 
 .PHONY: build.unit
 build.unit: $(foreach f, $(UNIT_EXECS), $(BUILD)/unit/$(f))
@@ -700,6 +700,7 @@ $(WORK)/unit/%.out: $(BUILD)/unit/%
 	@mkdir -p $(@D)
 	cd $(@D) ; $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> >(tee $*.err) > $*.out
 
+# The file parser uses a separate rule to support two-core tests.
 $(WORK)/unit/test_MOM_file_parser.out: $(BUILD)/unit/test_MOM_file_parser
 	if [ $(REPORT_COVERAGE) ]; then \
 	  find $(BUILD)/unit -name *.gcda -exec rm -f '{}' \; ; \
@@ -719,15 +720,13 @@ $(WORK)/unit/test_MOM_file_parser.out: $(BUILD)/unit/test_MOM_file_parser
 	    cat p2.test_MOM_file_parser.err | tail -n 100 ; \
 	  )
 
-# NOTE: .gcov actually depends on .gcda, but .gcda is produced with std.out
-# TODO: Replace $(WORK)/unit/std.out with *.gcda?
-$(BUILD)/unit/MOM_file_parser_tests.F90.gcov: $(WORK)/unit/test_MOM_file_parser.out
+$(BUILD)/unit/test_%.F90.gcov: $(WORK)/unit/test_%.out
 	cd $(@D) \
 	  && gcov -b *.gcda > gcov.unit.out
 	find $(@D) -name "*.gcov" -exec sed -i -r 's/^( *[0-9]*)\*:/ \1:/g' {} \;
 
 .PHONY: report.cov.unit
-report.cov.unit: $(BUILD)/unit/MOM_file_parser_tests.F90.gcov codecov
+report.cov.unit: $(foreach t,$(UNIT_EXECS),$(BUILD)/unit/$(t).F90.gcov) codecov
 	./codecov $(CODECOV_TOKEN_ARG) -R $(BUILD)/unit -f "*.gcov" -Z -n "Unit tests" \
 	    > $(BUILD)/unit/codecov.out \
 	    2> $(BUILD)/unit/codecov.err \

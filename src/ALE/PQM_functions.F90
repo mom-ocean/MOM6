@@ -9,8 +9,6 @@ implicit none ; private
 
 public PQM_reconstruction, PQM_boundary_extrapolation, PQM_boundary_extrapolation_v1
 
-real, parameter :: hNeglect_dflt = 1.E-30 !< Default negligible cell thickness
-
 contains
 
 !> Reconstruction by quartic polynomials within each cell.
@@ -24,7 +22,7 @@ subroutine PQM_reconstruction( N, h, u, edge_values, edge_slopes, ppoly_coef, h_
   real, dimension(:,:), intent(inout) :: edge_values    !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: edge_slopes    !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
-  real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
+  real,                 intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
@@ -78,7 +76,7 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
   real, dimension(:),   intent(in)    :: u !< cell average properties (size N) [A]
   real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values [A]
   real, dimension(:,:), intent(inout) :: edge_slopes !< Potentially modified edge slopes [A H-1]
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+  real,                 intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
@@ -98,12 +96,9 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
   real    :: sqrt_rho       ! The square root of rho [A]
   real    :: gradient1, gradient2 ! Normalized gradients [A]
   real    :: x1, x2         ! Fractional inflection point positions in a cell [nondim]
-  real    :: hNeglect       ! A negligibly small width for the purpose of cell reconstructions [H]
-
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Bound edge values
-  call bound_edge_values( N, h, u, edge_values, hNeglect, answer_date=answer_date )
+  call bound_edge_values( N, h, u, edge_values, h_neglect, answer_date=answer_date )
 
   ! Make discontinuous edge values monotonic (thru averaging)
   call check_discontinuous_edge_values( N, u, edge_values )
@@ -132,9 +127,9 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
     u_r = u(k+1)
 
     ! Compute limited slope
-    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
-    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect )
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + h_neglect )
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + h_neglect )
 
     if ( (sigma_l * sigma_r) > 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
@@ -272,8 +267,8 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
 
       ! We modify the edge slopes so that both inflexion points
       ! collapse onto the left edge
-      u1_l = ( 10.0 * u_c - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h_c + hNeglect )
-      u1_r = ( -10.0 * u_c + 6.0 * u0_r + 4.0 * u0_l ) / ( h_c + hNeglect )
+      u1_l = ( 10.0 * u_c - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h_c + h_neglect )
+      u1_r = ( -10.0 * u_c + 6.0 * u0_r + 4.0 * u0_l ) / ( h_c + h_neglect )
 
       ! One of the modified slopes might be inconsistent. When that happens,
       ! the inconsistent slope is set equal to zero and the opposite edge value
@@ -283,13 +278,13 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
 
         u1_l = 0.0
         u0_r = 5.0 * u_c - 4.0 * u0_l
-        u1_r = 20.0 * (u_c - u0_l) / ( h_c + hNeglect )
+        u1_r = 20.0 * (u_c - u0_l) / ( h_c + h_neglect )
 
       elseif ( u1_r * slope < 0.0 ) then
 
         u1_r = 0.0
         u0_l = (5.0*u_c - 3.0*u0_r) / 2.0
-        u1_l = 10.0 * (-u_c + u0_r) / (3.0 * h_c + hNeglect)
+        u1_l = 10.0 * (-u_c + u0_r) / (3.0 * h_c + h_neglect)
 
       endif
 
@@ -297,8 +292,8 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
 
       ! We modify the edge slopes so that both inflexion points
       ! collapse onto the right edge
-      u1_r = ( -10.0 * u_c + 8.0 * u0_r + 2.0 * u0_l ) / (3.0 * h_c + hNeglect)
-      u1_l = ( 10.0 * u_c - 4.0 * u0_r - 6.0 * u0_l ) / (h_c + hNeglect)
+      u1_r = ( -10.0 * u_c + 8.0 * u0_r + 2.0 * u0_l ) / (3.0 * h_c + h_neglect)
+      u1_l = ( 10.0 * u_c - 4.0 * u0_r - 6.0 * u0_l ) / (h_c + h_neglect)
 
       ! One of the modified slopes might be inconsistent. When that happens,
       ! the inconsistent slope is set equal to zero and the opposite edge value
@@ -308,13 +303,13 @@ subroutine PQM_limiter( N, h, u, edge_values, edge_slopes, h_neglect, answer_dat
 
         u1_l = 0.0
         u0_r = ( 5.0 * u_c - 3.0 * u0_l ) / 2.0
-        u1_r = 10.0 * (u_c - u0_l) / (3.0 * h_c + hNeglect)
+        u1_r = 10.0 * (u_c - u0_l) / (3.0 * h_c + h_neglect)
 
       elseif ( u1_r * slope < 0.0 ) then
 
         u1_r = 0.0
         u0_l = 5.0 * u_c - 4.0 * u0_r
-        u1_l = 20.0 * ( -u_c + u0_r ) / (h_c + hNeglect)
+        u1_l = 20.0 * ( -u_c + u0_r ) / (h_c + h_neglect)
 
       endif
 
@@ -506,7 +501,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
   real, dimension(:,:), intent(inout) :: edge_values    !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: edge_slopes    !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial, mainly [A]
-  real,       optional, intent(in)    :: h_neglect  !< A negligibly small width for
+  real,                 intent(in)    :: h_neglect  !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   ! Local variables
   integer :: i0, i1
@@ -526,9 +521,6 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
   real    :: sqrt_rho       ! The square root of rho [A]
   real    :: gradient1, gradient2 ! Normalized gradients [A]
   real    :: x1, x2         ! Fractional inflection point positions in a cell [nondim]
-  real    :: hNeglect       ! A negligibly small width for the purpose of cell reconstructions [H]
-
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! ----- Left boundary (TOP) -----
   i0 = 1
@@ -541,7 +533,7 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
 
   ! Compute real slope and express it w.r.t. local coordinate system
   ! within boundary cell
-  slope = 2.0 * ( u1 - u0 ) / ( ( h0 + h1 ) + hNeglect )
+  slope = 2.0 * ( u1 - u0 ) / ( ( h0 + h1 ) + h_neglect )
   slope = slope * h0
 
   ! The right edge value and slope of the boundary cell are taken to be the
@@ -550,12 +542,12 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
   b = ppoly_coef(i1,2)
 
   u0_r = a          ! edge value
-  u1_r = b / (h1 + hNeglect) ! edge slope (w.r.t. global coord.)
+  u1_r = b / (h1 + h_neglect) ! edge slope (w.r.t. global coord.)
 
   ! Compute coefficient for rational function based on mean and right
   ! edge value and slope
   if (u1_r /= 0.) then ! HACK by AJA
-    beta = 2.0 * ( u0_r - um ) / ( (h0 + hNeglect)*u1_r) - 1.0
+    beta = 2.0 * ( u0_r - um ) / ( (h0 + h_neglect)*u1_r) - 1.0
   else
     beta = 0.
   endif ! HACK by AJA
@@ -574,10 +566,10 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
   ! compute corresponding slope.
   if ( abs(um-u0_l) < abs(um-u_plm) ) then
     u1_l = 2.0 * ( br - ar*beta)
-    u1_l = u1_l / (h0 + hNeglect)
+    u1_l = u1_l / (h0 + h_neglect)
   else
     u0_l = u_plm
-    u1_l = slope / (h0 + hNeglect)
+    u1_l = slope / (h0 + h_neglect)
   endif
 
   ! Monotonize quartic
@@ -635,8 +627,8 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
 
     ! We modify the edge slopes so that both inflexion points
     ! collapse onto the left edge
-    u1_l = ( 10.0 * um - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h0 + hNeglect)
-    u1_r = ( -10.0 * um + 6.0 * u0_r + 4.0 * u0_l ) / (h0 + hNeglect)
+    u1_l = ( 10.0 * um - 2.0 * u0_r - 8.0 * u0_l ) / (3.0*h0 + h_neglect)
+    u1_r = ( -10.0 * um + 6.0 * u0_r + 4.0 * u0_l ) / (h0 + h_neglect)
 
     ! One of the modified slopes might be inconsistent. When that happens,
     ! the inconsistent slope is set equal to zero and the opposite edge value
@@ -646,13 +638,13 @@ subroutine PQM_boundary_extrapolation_v1( N, h, u, edge_values, edge_slopes, ppo
 
       u1_l = 0.0
       u0_r = 5.0 * um - 4.0 * u0_l
-      u1_r = 20.0 * (um - u0_l) / ( h0 + hNeglect )
+      u1_r = 20.0 * (um - u0_l) / ( h0 + h_neglect )
 
     elseif ( u1_r * slope < 0.0 ) then
 
       u1_r = 0.0
       u0_l = (5.0*um - 3.0*u0_r) / 2.0
-      u1_l = 10.0 * (-um + u0_r) / (3.0 * h0 + hNeglect )
+      u1_l = 10.0 * (-um + u0_r) / (3.0 * h0 + h_neglect )
 
     endif
 

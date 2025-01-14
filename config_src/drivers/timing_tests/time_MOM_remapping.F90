@@ -17,8 +17,9 @@ real, dimension(nschemes) :: tstd ! Standard deviation of time for a call [s]
 real, dimension(nschemes) :: tmin ! Shortest time for a call [s]
 real, dimension(nschemes) :: tmax ! Longest time for a call [s]
 real, dimension(:,:), allocatable :: u0, u1 ! Source/target values [arbitrary but same units as each other]
-real, dimension(:,:), allocatable :: h0, h1 ! Source target thicknesses [0..1]
+real, dimension(:,:), allocatable :: h0, h1 ! Source target thicknesses [0..1] [nondim]
 real :: start, finish ! Times [s]
+real :: h_neglect    ! A negligible thickness [nondim]
 real :: h0sum, h1sum ! Totals of h0 and h1 [nondim]
 integer :: ij, k, isamp, iter, ischeme ! Indices and counters
 integer :: seed_size ! Number of integers used by seed
@@ -50,6 +51,7 @@ do ij = 1, nij
   h0(:,ij) = h0(:,ij) / h0sum
   h1(:,ij) = h1(:,ij) / h1sum
 enddo
+h_neglect = 1.0-30
 
 ! Loop over many samples of timing loop to collect statistics
 tmean(:) = 0.
@@ -59,7 +61,8 @@ tmax(:) = 0.
 do isamp = 1, nsamp
   ! Time reconstruction + remapping
   do ischeme = 1, nschemes
-    call initialize_remapping(CS, remapping_scheme=trim(scheme_labels(ischeme)))
+    call initialize_remapping(CS, remapping_scheme=trim(scheme_labels(ischeme)), &
+                 h_neglect=h_neglect, h_neglect_edge=h_neglect)
     call cpu_time(start)
     do iter = 1, nits ! Make many passes to reduce sampling error
       do ij = 1, nij ! Calling nij times to make similar to cost in MOM_ALE()

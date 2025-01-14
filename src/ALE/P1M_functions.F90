@@ -31,7 +31,7 @@ subroutine P1M_interpolation( N, h, u, edge_values, ppoly_coef, h_neglect, answe
   real, dimension(:,:), intent(inout) :: edge_values !< Potentially modified edge values [A]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Potentially modified
                                            !! piecewise polynomial coefficients, mainly [A]
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width [H]
+  real,                 intent(in)    :: h_neglect !< A negligibly small width [H]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
   ! Local variables

@@ -181,6 +181,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
   logical           :: om4_remap_via_sub_cells
   type(hybgen_regrid_CS), pointer :: hybgen_regridCS => NULL() ! Control structure for hybgen regridding
                                                          ! for sharing parameters.
+  real :: h_neglect, h_neglect_edge ! small thicknesses [H ~> m or kg m-2]
 
   if (associated(CS)) then
     call MOM_error(WARNING, "ALE_init called with an associated "// &
@@ -248,20 +249,30 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
+  if (CS%answer_date >= 20190101) then
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  elseif (GV%Boussinesq) then
+    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
+  else
+    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
+  endif
+
   call initialize_remapping( CS%remapCS, string, &
                              boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
                              om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
-                             answer_date=CS%answer_date)
+                             answer_date=CS%answer_date, &
+                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
   call initialize_remapping( CS%vel_remapCS, vel_string, &
                              boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
                              force_bounds_in_subcell=force_bounds_in_subcell, &
                              om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
-                             answer_date=CS%answer_date)
+                             answer_date=CS%answer_date, &
+                             h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
   call get_param(param_file, mdl, "PARTIAL_CELL_VELOCITY_REMAP", CS%partial_cell_vel_remap, &
                  "If true, use partial cell thicknesses at velocity points that are masked out "//&
@@ -345,7 +356,7 @@ subroutine ALE_set_OM4_remap_algorithm( CS, om4_remap_via_sub_cells )
   type(ALE_CS), pointer :: CS !< Module control structure
   logical, intent(in)   :: om4_remap_via_sub_cells !< If true, use OM4 remapping algorithm
 
-  call remapping_set_param(CS%remapCS, om4_remap_via_sub_cells =om4_remap_via_sub_cells )
+  call remapping_set_param(CS%remapCS, om4_remap_via_sub_cells=om4_remap_via_sub_cells )
 
 end subroutine ALE_set_OM4_remap_algorithm
 
@@ -591,8 +602,8 @@ subroutine ALE_offline_inputs(CS, G, GV, US, h, tv, Reg, uhtr, vhtr, Kd, debug, 
     endif
   enddo ; enddo
 
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T, answer_date=CS%answer_date)
-  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S, answer_date=CS%answer_date)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%T, h_new, tv%T)
+  call ALE_remap_scalar(CS%remapCS, G, GV, nk, h, tv%S, h_new, tv%S)
 
   if (debug) call MOM_tracer_chkinv("After ALE_offline_inputs", G, GV, h_new, Reg%Tr, Reg%ntr)
 
@@ -653,7 +664,6 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzInterface ! Interface height changes within
                                                              ! an iteration [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: dzIntTotal  ! Cumulative interface position changes [H ~> m or kg m-2]
-  real :: h_neglect, h_neglect_edge ! small thicknesses [H ~> m or kg m-2]
 
   nz = GV%ke
 
@@ -680,14 +690,6 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
   if (present(dt)) &
     call ALE_update_regrid_weights(dt, CS)
 
-  if (CS%answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H * 1.0e-30 ; h_neglect_edge = GV%m_to_H * 1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
-  endif
-
   do itt = 1, n_itt
 
     call do_group_pass(pass_T_S_h, G%domain)
@@ -704,10 +706,8 @@ subroutine ALE_regrid_accelerated(CS, G, GV, US, h, tv, n_itt, u, v, OBC, Reg, d
 
     ! remap from original grid onto new grid
     do j = G%jsc-1,G%jec+1 ; do i = G%isc-1,G%iec+1
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h(i,j,:), tv_local%S(i,j,:), &
-                            h_neglect, h_neglect_edge)
-      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h(i,j,:), tv_local%T(i,j,:), &
-                            h_neglect, h_neglect_edge)
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%S(i,j,:), nz, h(i,j,:), tv_local%S(i,j,:))
+      call remapping_core_h(CS%remapCS, nz, h_orig(i,j,:), tv%T(i,j,:), nz, h(i,j,:), tv_local%T(i,j,:))
     enddo ; enddo
 
     ! starting grid for next iteration
@@ -763,21 +763,12 @@ subroutine ALE_remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
   real :: Idt           ! The inverse of the timestep [T-1 ~> s-1]
   real :: h1(GV%ke)     ! A column of source grid layer thicknesses [H ~> m or kg m-2]
   real :: h2(GV%ke)     ! A column of target grid layer thicknesses [H ~> m or kg m-2]
-  real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
   logical :: show_call_tree
   type(tracer_type), pointer :: Tr => NULL()
   integer :: i, j, k, m, nz, ntr
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
-
-  if (CS%answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
-  endif
 
   if (show_call_tree) call callTree_enter("ALE_remap_tracers(), MOM_ALE.F90")
 
@@ -803,11 +794,9 @@ subroutine ALE_remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
         h2(:) = h_new(i,j,:)
         if (present(PCM_cell)) then
           PCM(:) = PCM_cell(i,j,:)
-          call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column, &
-                                h_neglect, h_neglect_edge, PCM_cell=PCM)
+          call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column, PCM_cell=PCM)
         else
-          call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column, &
-                                h_neglect, h_neglect_edge)
+          call remapping_core_h(CS%remapCS, nz, h1, Tr%t(i,j,:), nz, h2, tr_column)
         endif
 
         ! Possibly underflow any very tiny tracer concentrations to 0.  Note that this is not conservative!
@@ -1091,21 +1080,12 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
   real :: v_tgt(GV%ke)  ! A column of v-velocities on the target grid [L T-1 ~> m s-1]
   real :: h1(GV%ke)     ! A column of source grid layer thicknesses [H ~> m or kg m-2]
   real :: h2(GV%ke)     ! A column of target grid layer thicknesses [H ~> m or kg m-2]
-  real :: h_neglect, h_neglect_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
   logical :: show_call_tree
   integer :: i, j, k, nz
 
   show_call_tree = .false.
   if (present(debug)) show_call_tree = debug
   if (show_call_tree) call callTree_enter("ALE_remap_velocities()")
-
-  if (CS%answer_date >= 20190101) then
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  elseif (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%kg_m2_to_H*1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H*1.0e-10
-  endif
 
   nz = GV%ke
 
@@ -1120,8 +1100,7 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
       u_src(k) = u(I,j,k)
     enddo
 
-    call remapping_core_h(CS%vel_remapCS, nz, h1, u_src, nz, h2, u_tgt, &
-                          h_neglect, h_neglect_edge)
+    call remapping_core_h(CS%vel_remapCS, nz, h1, u_src, nz, h2, u_tgt)
 
     if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) &
       call mask_near_bottom_vel(u_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
@@ -1146,8 +1125,7 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
       v_src(k) = v(i,J,k)
     enddo
 
-    call remapping_core_h(CS%vel_remapCS, nz, h1, v_src, nz, h2, v_tgt, &
-                          h_neglect, h_neglect_edge)
+    call remapping_core_h(CS%vel_remapCS, nz, h1, v_src, nz, h2, v_tgt)
 
     if ((CS%BBL_h_vel_mask > 0.0) .and. (CS%h_vel_mask > 0.0)) then
       call mask_near_bottom_vel(v_tgt, h2, CS%BBL_h_vel_mask, CS%h_vel_mask, nz)
@@ -1300,8 +1278,7 @@ end subroutine mask_near_bottom_vel
 !> Remaps a single scalar between grids described by thicknesses h_src and h_dst.
 !! h_dst must be dimensioned as a model array with GV%ke layers while h_src can
 !! have an arbitrary number of layers specified by nk_src.
-subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap, &
-                            answers_2018, answer_date, h_neglect, h_neglect_edge)
+subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_cells, old_remap)
   type(remapping_CS),                      intent(in)    :: CS        !< Remapping control structure
   type(ocean_grid_type),                   intent(in)    :: G         !< Ocean grid structure
   type(verticalGrid_type),                 intent(in)    :: GV        !< Ocean vertical grid structure
@@ -1319,44 +1296,16 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
                                                                       !! layers otherwise (default).
   logical, optional,                       intent(in)    :: old_remap !< If true, use the old "remapping_core_w"
                                                                       !! method, otherwise use "remapping_core_h".
-  logical,                       optional, intent(in)    :: answers_2018 !< If true, use the order of arithmetic
-                                                                      !! and expressions that recover the answers for
-                                                                      !! remapping from the end of 2018. Otherwise,
-                                                                      !! use more robust forms of the same expressions.
-  integer,                       optional, intent(in)    :: answer_date !< The vintage of the expressions to use
-                                                                      !! for remapping
-  real,                          optional, intent(in)    :: h_neglect !< A negligibly small thickness used in
-                                                                      !! remapping cell reconstructions, in the same
-                                                                      !! units as h_src, often [H ~> m or kg m-2]
-  real,                          optional, intent(in)    :: h_neglect_edge !< A negligibly small thickness used in
-                                                                      !! remapping edge value calculations, in the same
-                                                                      !! units as h_src, often [H ~> m or kg m-2]
-  ! Local variables
+   ! Local variables
   integer :: i, j, k, n_points
   real :: dx(GV%ke+1) ! Change in interface position [H ~> m or kg m-2]
-  real :: h_neg, h_neg_edge  ! Tiny thicknesses used in remapping [H ~> m or kg m-2]
-  logical :: ignore_vanished_layers, use_remapping_core_w, use_2018_remap
+  logical :: ignore_vanished_layers, use_remapping_core_w
 
   ignore_vanished_layers = .false.
   if (present(all_cells)) ignore_vanished_layers = .not. all_cells
   use_remapping_core_w = .false.
   if (present(old_remap)) use_remapping_core_w = old_remap
   n_points = nk_src
-  use_2018_remap = .true. ; if (present(answers_2018)) use_2018_remap = answers_2018
-  if (present(answer_date)) use_2018_remap = (answer_date < 20190101)
-
-  if (present(h_neglect)) then
-    h_neg = h_neglect
-    h_neg_edge = h_neg ; if (present(h_neglect_edge)) h_neg_edge = h_neglect_edge
-  else
-    if (.not.use_2018_remap) then
-      h_neg = GV%H_subroundoff ; h_neg_edge = GV%H_subroundoff
-    elseif (GV%Boussinesq) then
-      h_neg = GV%m_to_H*1.0e-30 ; h_neg_edge = GV%m_to_H*1.0e-10
-    else
-      h_neg = GV%kg_m2_to_H*1.0e-30 ; h_neg_edge = GV%kg_m2_to_H*1.0e-10
-    endif
-  endif
 
   !$OMP parallel do default(shared) firstprivate(n_points,dx)
   do j = G%jsc,G%jec ; do i = G%isc,G%iec
@@ -1371,10 +1320,10 @@ subroutine ALE_remap_scalar(CS, G, GV, nk_src, h_src, s_src, h_dst, s_dst, all_c
       if (use_remapping_core_w) then
         call dzFromH1H2( n_points, h_src(i,j,1:n_points), GV%ke, h_dst(i,j,:), dx )
         call remapping_core_w(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
-                              GV%ke, dx, s_dst(i,j,:), h_neg, h_neg_edge)
+                              GV%ke, dx, s_dst(i,j,:))
       else
         call remapping_core_h(CS, n_points, h_src(i,j,1:n_points), s_src(i,j,1:n_points), &
-                              GV%ke, h_dst(i,j,:), s_dst(i,j,:), h_neg, h_neg_edge)
+                              GV%ke, h_dst(i,j,:), s_dst(i,j,:))
       endif
     else
       s_dst(i,j,:) = 0.

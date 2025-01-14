@@ -72,7 +72,7 @@ subroutine seamount_initialize_topography( D, G, param_file, max_depth )
     ! Compute normalized zonal coordinates (x,y=0 at center of domain)
     x = ( G%geoLonT(i,j) - G%west_lon ) / G%len_lon - 0.5
     y = ( G%geoLatT(i,j) - G%south_lat ) / G%len_lat - 0.5
-    D(i,j) = G%max_depth * ( 1.0 - delta * exp(-(rLx*x)**2 -(rLy*y)**2) )
+    D(i,j) = G%max_depth * ( 1.0 - delta * exp(-((rLx*x)**2) - ((rLy*y)**2)) )
   enddo ; enddo
 
 end subroutine seamount_initialize_topography

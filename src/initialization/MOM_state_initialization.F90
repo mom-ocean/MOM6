@@ -92,7 +92,7 @@ use MOM_ALE, only : ALE_initRegridding, ALE_CS, ALE_initThicknessToCoord
 use MOM_ALE, only : ALE_remap_scalar, ALE_regrid_accelerated, TS_PLM_edge_values
 use MOM_regridding, only : regridding_CS, set_regrid_params, getCoordinateResolution
 use MOM_regridding, only : regridding_main, regridding_preadjust_reqs, convective_adjustment
-use MOM_regridding, only : set_dz_neglect
+use MOM_regridding, only : set_dz_neglect, set_h_neglect
 use MOM_remapping, only : remapping_CS, initialize_remapping, remapping_core_h
 use MOM_horizontal_regridding, only : horiz_interp_and_extrap_tracer, homogenize_field
 use MOM_oda_incupd, only: oda_incupd_CS, initialize_oda_incupd_fixed, initialize_oda_incupd
@@ -1189,7 +1189,13 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
 
   if (use_remapping) then
     allocate(remap_CS)
-    call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true.)
+    if (remap_answer_date < 20190101) then
+      call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true., &
+                                h_neglect=1.0e-30*GV%m_to_H, h_neglect_edge=1.0e-10*GV%m_to_H)
+    else
+      call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true., &
+                                h_neglect=GV%H_subroundoff,  h_neglect_edge=GV%H_subroundoff)
+    endif
   endif
 
   ! Find edge values of T and S used in reconstructions
@@ -1204,10 +1210,9 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   endif
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j)+G%Z_ref, &
-               min_thickness, tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), &
-               tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), p_surf(i,j), h(i,j,:), remap_CS, &
-               z_tol=z_tolerance, remap_answer_date=remap_answer_date)
+    call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j)+G%Z_ref, min_thickness, &
+               tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
+               p_surf(i,j), h(i,j,:), remap_CS, z_tol=z_tolerance)
   enddo ; enddo
 
 end subroutine trim_for_ice
@@ -1298,7 +1303,7 @@ end subroutine calc_sfc_displacement
 !> Adjust the layer thicknesses by removing the top of the water column above the
 !! depth where the hydrostatic pressure matches p_surf
 subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, T_t, T_b, &
-                              S, S_t, S_b, p_surf, h, remap_CS, z_tol, remap_answer_date)
+                              S, S_t, S_b, p_surf, h, remap_CS, z_tol)
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
@@ -1318,10 +1323,6 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
                                                    !! if associated
   real,                  intent(in)    :: z_tol !< The tolerance with which to find the depth
                                                 !! matching the specified pressure [Z ~> m].
-  integer,     optional, intent(in)    :: remap_answer_date !< The vintage of the order of arithmetic and
-                                                !! expressions to use for remapping.  Values below 20190101
-                                                !! recover the remapping answers from 2018, while higher
-                                                !! values use more robust forms of the same remapping expressions.
 
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge positions for reconstructions [Z ~> m]
@@ -1332,10 +1333,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
   real :: z_out, e_top ! Interface height positions [Z ~> m]
   real :: min_dz       ! The minimum thickness in depth units [Z ~> m]
   real :: dh_surf_rem  ! The remaining thickness to remove in non-Bousinesq mode [H ~> kg m-2]
-  logical :: answers_2018
   integer :: k
-
-  answers_2018 = .true. ; if (present(remap_answer_date)) answers_2018 = (remap_answer_date < 20190101)
 
   ! Keep a copy of the initial thicknesses in reverse order to use in remapping
   do k=1,nk ; h0(k) = h(nk+1-k) ; enddo
@@ -1407,13 +1405,8 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
       T0(k) = T(nk+1-k)
       h1(k) = h(nk+1-k)
     enddo
-    if (answers_2018) then
-      call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
-      call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, 1.0e-30*GV%m_to_H, 1.0e-10*GV%m_to_H)
-    else
-      call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1, GV%H_subroundoff, GV%H_subroundoff)
-      call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1, GV%H_subroundoff, GV%H_subroundoff)
-    endif
+    call remapping_core_h(remap_CS, nk, h0, T0, nk, h1, T1)
+    call remapping_core_h(remap_CS, nk, h0, S0, nk, h1, S1)
     do k=1,nk
       S(k) = S1(nk+1-k)
       T(k) = T1(nk+1-k)
@@ -1595,7 +1588,7 @@ subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read)
 
     x = 2.0*(G%geoLonBu(ig,jg)-G%west_lon) / G%len_lon - 1.0  ! -1<x<1
     y = 2.0*(G%geoLatBu(ig,jg)-G%south_lat) / G%len_lat - 1.0 ! -1<y<1
-    r = sqrt( x**2 + y**2 ) ! Circular stream function is a function of radius only
+    r = sqrt( (x**2) + (y**2) ) ! Circular stream function is a function of radius only
     r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
     my_psi = my_psi * (circular_max_u * G%US%m_to_L*G%len_lon*1e3 / dpi) ! len_lon is in km
@@ -2758,8 +2751,14 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     ! Build the target grid (and set the model thickness to it)
 
     call ALE_initRegridding( GV, US, G%max_depth, PF, mdl, regridCS ) ! sets regridCS
+    if (remap_general) then
+      dz_neglect = set_h_neglect(GV, remap_answer_date, dz_neglect_edge)
+    else
+      dz_neglect = set_dz_neglect(GV, US, remap_answer_date, dz_neglect_edge)
+    endif
     call initialize_remapping( remapCS, remappingScheme, boundary_extrapolation=.false., &
-                               om4_remap_via_sub_cells=om4_remap_via_sub_cells, answer_date=remap_answer_date )
+                               om4_remap_via_sub_cells=om4_remap_via_sub_cells, answer_date=remap_answer_date, &
+                               h_neglect=dz_neglect, h_neglect_edge=dz_neglect_edge)
 
     ! Now remap from source grid to target grid, first setting reconstruction parameters
     if (remap_general) then
@@ -2774,9 +2773,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
       deallocate( dz_interface )
 
       call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpT1dIn, h, tv%T, all_cells=remap_full_column, &
-                            old_remap=remap_old_alg, answer_date=remap_answer_date )
+                            old_remap=remap_old_alg )
       call ALE_remap_scalar(remapCS, G, GV, nkd, h1, tmpS1dIn, h, tv%S, all_cells=remap_full_column, &
-                            old_remap=remap_old_alg, answer_date=remap_answer_date )
+                            old_remap=remap_old_alg )
     else
       ! This is the old way of initializing to z* coordinates only
       allocate( hTarget(nz) )
@@ -2799,11 +2798,9 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
 
       dz_neglect = set_dz_neglect(GV, US, remap_answer_date, dz_neglect_edge)
       call ALE_remap_scalar(remapCS, G, GV, nkd, dz1, tmpT1dIn, dz, tv%T, all_cells=remap_full_column, &
-                            old_remap=remap_old_alg, answer_date=remap_answer_date, &
-                            H_neglect=dz_neglect, H_neglect_edge=dz_neglect_edge)
+                            old_remap=remap_old_alg)
       call ALE_remap_scalar(remapCS, G, GV, nkd, dz1, tmpS1dIn, dz, tv%S, all_cells=remap_full_column, &
-                            old_remap=remap_old_alg, answer_date=remap_answer_date, &
-                            H_neglect=dz_neglect, H_neglect_edge=dz_neglect_edge)
+                            old_remap=remap_old_alg)
 
       if (GV%Boussinesq .or. GV%semi_Boussinesq) then
         ! This is a simple conversion of the target grid to thickness units that is not
@@ -3106,9 +3103,17 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   write(0,*) ' ==================================================================== '
   write(0,*) ''
   write(0,*) GV%H_to_m*h(:)
+
+  ! For consistency with the usual call, add the following:
+  ! if (use_remapping) then
+  !   allocate(remap_CS)
+  !   call initialize_remapping(remap_CS, 'PLM', boundary_extrapolation=.true., &
+  !                             h_neglect=GV%H_subroundoff, h_neglect_edge=GV%H_subroundoff)
+  ! endif
   call cut_off_column_top(nk, tv, GV, US, GV%g_Earth, -e(nk+1), GV%Angstrom_H, &
                           T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS, z_tol=z_tol)
   write(0,*) GV%H_to_m*h(:)
+  if (associated(remap_CS)) deallocate(remap_CS)
 
 end subroutine MOM_state_init_tests
 

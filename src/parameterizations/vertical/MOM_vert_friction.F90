@@ -390,7 +390,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
         do k=1,nz
           kp1 = MIN(k+1 , nz)
-          tau_u(I,j,k+1) = sqrt( tauxDG_u(I,j,k+1)*tauxDG_u(I,j,k+1) + tauyDG_u(I,j,k+1)*tauyDG_u(I,j,k+1))
+          tau_u(I,j,k+1) = sqrt( (tauxDG_u(I,j,k+1)*tauxDG_u(I,j,k+1)) + (tauyDG_u(I,j,k+1)*tauyDG_u(I,j,k+1)) )
           Omega_tau2x  = atan2( tauyDG_u(I,j,k+1) , tauxDG_u(I,j,k+1) )
           omega_tmp = Omega_tau2x !- omega_w2x_u(I,j)
           if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
@@ -412,7 +412,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
         do k=1,nz-1
           kp1 = MIN(k+1 , nz)
-          tau_v(i,J,k+1) = sqrt ( tauxDG_v(i,J,k+1)*tauxDG_v(i,J,k+1) + tauyDG_v(i,J,k+1)*tauyDG_v(i,J,k+1) )
+          tau_v(i,J,k+1) = sqrt ( (tauxDG_v(i,J,k+1)*tauxDG_v(i,J,k+1)) + (tauyDG_v(i,J,k+1)*tauyDG_v(i,J,k+1)) )
           omega_tau2x  =  atan2( tauyDG_v(i,J,k+1) , tauxDG_v(i,J,k+1) )
           omega_tmp  = omega_tau2x !- omega_w2x_v(i,J)
           if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
@@ -472,7 +472,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
           ! diagnostics
           Omega_tau2s_u(I,j,k+1) = atan2(tauNL_CG  , (tau_u(I,j,k+1)+tauNL_DG))
-          tau_u(I,j,k+1)         = sqrt((tauxDG_u(I,j,k+1) + tauNL_X)**2 + (tauyDG_u(I,j,k+1) + tauNL_Y)**2)
+          tau_u(I,j,k+1)         = sqrt(((tauxDG_u(I,j,k+1) + tauNL_X)**2) + ((tauyDG_u(I,j,k+1) + tauNL_Y)**2))
           omega_tau2x            = atan2((tauyDG_u(I,j,k+1) + tauNL_Y), (tauxDG_u(I,j,k+1) + tauNL_X))
           omega_tau2w            = omega_tau2x !-  omega_w2x_u(I,j)
           if (omega_tau2w >= pi ) omega_tau2w = omega_tau2w - 2.*pi
@@ -532,7 +532,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OB
 
           ! diagnostics
           Omega_tau2s_v(i,J,k+1) = atan2(tauNL_CG, tau_v(i,J,k+1) + tauNL_DG)
-          tau_v(i,J,k+1)         = sqrt((tauxDG_v(i,J,k+1) + tauNL_X)**2 + (tauyDG_v(i,J,k+1) + tauNL_Y)**2)
+          tau_v(i,J,k+1)         = sqrt(((tauxDG_v(i,J,k+1) + tauNL_X)**2) + ((tauyDG_v(i,J,k+1) + tauNL_Y)**2))
           !omega_tau2x            = atan2((tauyDG_v(i,J,k+1) + tauNL_Y) , (tauxDG_v(i,J,k+1) + tauNL_X))
           !omega_tau2w            = omega_tau2x - omega_w2x_v(i,J)
           if (omega_tau2w > pi)  omega_tau2w = omega_tau2w - 2.*pi
@@ -616,7 +616,7 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
                                                                      !! otherwise they are v-points.
 
   ! local variables
-  logical :: kdgl90_use_ebt_struct
+  logical :: kdgl90_use_vert_struct  ! use vertical structure for GL90 coefficient
   integer :: i, k, is, ie, nz, Isq, Ieq
   real    :: f2         !< Squared Coriolis parameter at a velocity grid point [T-2 ~> s-2].
   real    :: h_neglect  ! A vertical distance that is so small it is usually lost in roundoff error
@@ -629,9 +629,9 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
   nz = GV%ke
 
   h_neglect = GV%dZ_subroundoff
-  kdgl90_use_ebt_struct = .false.
+  kdgl90_use_vert_struct = .false.
   if (VarMix%use_variable_mixing) then
-    kdgl90_use_ebt_struct = VarMix%kdgl90_use_ebt_struct
+    kdgl90_use_vert_struct = allocated(VarMix%kdgl90_struct)
   endif
 
   if (work_on_u) then
@@ -647,8 +647,9 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
           else
             a_cpl_gl90(I,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
           endif
-          if (kdgl90_use_ebt_struct) then
-            a_cpl_gl90(I,K) = a_cpl_gl90(I,K) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+          if (kdgl90_use_vert_struct) then
+            a_cpl_gl90(I,K) = a_cpl_gl90(I,K) * 0.5 * &
+                    ( VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i+1,j,k-1) )
           endif
         endif
         ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
@@ -671,8 +672,9 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
           else
             a_cpl_gl90(i,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
           endif
-          if (kdgl90_use_ebt_struct) then
-            a_cpl_gl90(i,K) = a_cpl_gl90(i,K) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+          if (kdgl90_use_vert_struct) then
+            a_cpl_gl90(i,K) = a_cpl_gl90(i,K) * 0.5 * &
+                    ( VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i,j+1,k-1) )
           endif
         endif
         ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,

@@ -11,7 +11,7 @@ jobs:
         working-directory: .testing
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
       with:
         submodules: recursive
 
@@ -19,17 +19,11 @@ jobs:
 
     - uses: ./.github/actions/testing-setup
 
-    - name: Compile file parser unit tests
-      run: make -j build/unit/test_MOM_file_parser
-
-    - name: Run file parser unit tests
-      run: make run.cov.unit
-
-    - name: Compile unit testing
+    - name: Compile unit tests
       run: make -j build.unit
 
-    - name: Run (single processor) unit tests
-      run: make run.unit
+    - name: Run unit tests
+      run: make run.cov.unit
 
     - name: Report unit test coverage to CI
       run: make report.cov.unit
@@ -40,7 +34,7 @@ jobs:
       run: make -j build/cov/MOM6
 
     - name: Run coverage tests
-      run: make -j -k run.cov
+      run: make -k run.cov
 
     - name: Report coverage to CI
       run: make report.cov

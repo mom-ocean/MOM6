@@ -75,6 +75,9 @@ MIXEDLAYER_RESTRAT = True       !   [Boolean] default = False
                                 ! If true, a density-gradient dependent re-stratifying
                                 ! flow is imposed in the mixed layer.
                                 ! This is only used if BULKMIXEDLAYER is true.
+USE_POROUS_BARRIER = False      !   [Boolean] default = False
+                                ! If true, use porous barrier to constrain the widths and face areas at the
+                                ! edges of the grid cells.
 DT = 3600.0                     !   [s]
                                 ! The (baroclinic) dynamics time step.  The time-step that
                                 ! is actually used will be an integer fraction of the
@@ -302,11 +305,16 @@ PGF_STANLEY_T2_DET_COEFF = -1.0 !   [nondim] default = -1.0
                                 ! gradient in the deterministic part of the Stanley form of the Brankart
                                 ! correction. Negative values disable the scheme.
 
+! === module MOM_PressureForce_FV ===
+MASS_WEIGHT_IN_PRESSURE_GRADIENT = True !   [Boolean] default = False
+                                ! If true, use mass weighting when interpolating T/S for integrals
+                                ! near the bathymetry in FV pressure gradient calculations.
+
 ! === module MOM_hor_visc ===
 LAPLACIAN = True
 KH_VEL_SCALE = 0.05
 SMAGORINSKY_KH = True           !   [Boolean] default = False
-SMAG_LAP_CONST = 0.06            !   [nondim] default = 0.0
+SMAG_LAP_CONST = 0.06           !   [nondim] default = 0.0
 AH_VEL_SCALE = 0.05             !   [m s-1] default = 0.0
                                 ! The velocity scale which is multiplied by the cube of
                                 ! the grid spacing to calculate the Laplacian viscosity.

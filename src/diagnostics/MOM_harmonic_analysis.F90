@@ -39,7 +39,7 @@ end type HA_node
 
 !> The public control structure of the MOM_harmonic_analysis module
 type, public :: harmonic_analysis_CS ; private
-  logical :: HAready = .true.                !< If true, perform harmonic analysis
+  logical :: HAready = .false.               !< If true, perform harmonic analysis
   type(time_type) :: &
     time_start, &                            !< Start time of harmonic analysis
     time_end, &                              !< End time of harmonic analysis
@@ -106,6 +106,8 @@ subroutine HA_init(Time, US, param_file, time_ref, nc, freq, phase0, const_name,
                   'Harmonic analysis will not be performed.')
     CS%HAready = .false. ; return
   endif
+
+  CS%HAready = .true.
 
   if (HA_start_time < 0.0) then
     HA_start_time = HA_end_time + HA_start_time

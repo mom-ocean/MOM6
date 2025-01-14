@@ -283,8 +283,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
 
-      f2 = 0.25 * ((G%CoriolisBu(I,j)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-                   (G%CoriolisBu(I,J-1)**2 + G%CoriolisBu(I-1,J)**2))
+      f2 = 0.25 * ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+                   (G%Coriolis2Bu(I,J-1) + G%Coriolis2Bu(I-1,J)))
       surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
 
     ! ----------------------------------------------------    I_Ld2_1d, dz_Int_1d
@@ -446,26 +446,26 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 
     ! Interpolate the various quantities to the corners, using masks.
     do k=1,nz ; do I=IsB,IeB
-      u_2d(I,k) = (u_in(I,j,k)   * (G%mask2dCu(I,j)   * (h(i,j,k)   + h(i+1,j,k))) + &
-                   u_in(I,j+1,k) * (G%mask2dCu(I,j+1) * (h(i,j+1,k) + h(i+1,j+1,k))) ) / &
+      u_2d(I,k) = (G%mask2dCu(I,j)   * (u_in(I,j,k)   * (h(i,j,k)   + h(i+1,j,k))) + &
+                   G%mask2dCu(I,j+1) * (u_in(I,j+1,k) * (h(i,j+1,k) + h(i+1,j+1,k))) ) / &
                   ((G%mask2dCu(I,j)   * (h(i,j,k)   + h(i+1,j,k)) + &
                     G%mask2dCu(I,j+1) * (h(i,j+1,k) + h(i+1,j+1,k))) + GV%H_subroundoff)
-      v_2d(I,k) = (v_in(i,J,k)   * (G%mask2dCv(i,J)   * (h(i,j,k)   + h(i,j+1,k))) + &
-                   v_in(i+1,J,k) * (G%mask2dCv(i+1,J) * (h(i+1,j,k) + h(i+1,j+1,k))) ) / &
+      v_2d(I,k) = (G%mask2dCv(i,J)   * (v_in(i,J,k)   * (h(i,j,k)   + h(i,j+1,k))) + &
+                   G%mask2dCv(i+1,J) * (v_in(i+1,J,k) * (h(i+1,j,k) + h(i+1,j+1,k))) ) / &
                   ((G%mask2dCv(i,J)   * (h(i,j,k)   + h(i,j+1,k)) + &
                     G%mask2dCv(i+1,J) * (h(i+1,j,k) + h(i+1,j+1,k))) + GV%H_subroundoff)
       I_hwt = 1.0 / (((G%mask2dT(i,j) * h(i,j,k) + G%mask2dT(i+1,j+1) * h(i+1,j+1,k)) + &
                       (G%mask2dT(i+1,j) * h(i+1,j,k) + G%mask2dT(i,j+1) * h(i,j+1,k))) + &
                      GV%H_subroundoff)
       if (use_temperature) then
-        T_2d(I,k) = ( ((G%mask2dT(i,j) * h(i,j,k)) * T_in(i,j,k) + &
-                       (G%mask2dT(i+1,j+1) * h(i+1,j+1,k)) * T_in(i+1,j+1,k)) + &
-                      ((G%mask2dT(i+1,j) * h(i+1,j,k)) * T_in(i+1,j,k) + &
-                       (G%mask2dT(i,j+1) * h(i,j+1,k)) * T_in(i,j+1,k)) ) * I_hwt
-        S_2d(I,k) = ( ((G%mask2dT(i,j) * h(i,j,k)) * S_in(i,j,k) + &
-                       (G%mask2dT(i+1,j+1) * h(i+1,j+1,k)) * S_in(i+1,j+1,k)) + &
-                      ((G%mask2dT(i+1,j) * h(i+1,j,k)) * S_in(i+1,j,k) + &
-                       (G%mask2dT(i,j+1) * h(i,j+1,k)) * S_in(i,j+1,k)) ) * I_hwt
+        T_2d(I,k) = ( (G%mask2dT(i,j) * (h(i,j,k) * T_in(i,j,k)) + &
+                       G%mask2dT(i+1,j+1) * (h(i+1,j+1,k) * T_in(i+1,j+1,k))) + &
+                      (G%mask2dT(i+1,j) * (h(i+1,j,k) * T_in(i+1,j,k)) + &
+                       G%mask2dT(i,j+1) * (h(i,j+1,k) * T_in(i,j+1,k))) ) * I_hwt
+        S_2d(I,k) = ( (G%mask2dT(i,j) * (h(i,j,k) * S_in(i,j,k)) + &
+                       G%mask2dT(i+1,j+1) * (h(i+1,j+1,k) * S_in(i+1,j+1,k))) + &
+                      (G%mask2dT(i+1,j) * (h(i+1,j,k) * S_in(i+1,j,k)) + &
+                       G%mask2dT(i,j+1) * (h(i,j+1,k) * S_in(i,j+1,k))) ) * I_hwt
       endif
       h_2d(I,k) = ((G%mask2dT(i,j) * h(i,j,k) + G%mask2dT(i+1,j+1) * h(i+1,j+1,k)) + &
                    (G%mask2dT(i+1,j) * h(i+1,j,k) + G%mask2dT(i,j+1) * h(i,j+1,k)) ) / &
@@ -476,8 +476,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                    ((G%mask2dT(i,j) + G%mask2dT(i+1,j+1)) + &
                     (G%mask2dT(i+1,j) + G%mask2dT(i,j+1)) + 1.0e-36 )
 !      h_2d(I,k) = 0.25*((h(i,j,k) + h(i+1,j+1,k)) + (h(i+1,j,k) + h(i,j+1,k)))
-!      h_2d(I,k) = ((h(i,j,k)**2 + h(i+1,j+1,k)**2) + &
-!                   (h(i+1,j,k)**2 + h(i,j+1,k)**2)) * I_hwt
+!      h_2d(I,k) = (((h(i,j,k)**2) + (h(i+1,j+1,k)**2)) + &
+!                   ((h(i+1,j,k)**2) + (h(i,j+1,k)**2))) * I_hwt
     enddo ; enddo
     if (.not.use_temperature) then ; do k=1,nz ; do I=IsB,IeB
       rho_2d(I,k) = GV%Rlay(k)
@@ -555,7 +555,7 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
 
-      f2 = G%CoriolisBu(I,J)**2
+      f2 = G%Coriolis2Bu(I,J)
       surface_pres = 0.0
       if (associated(p_surf)) then
         if (CS%psurf_bug) then
@@ -1234,12 +1234,12 @@ subroutine calculate_projected_state(kappa, u0, v0, T0, S0, dt, nz, dz, I_dz_int
   ! Store the squared shear at interfaces
   S2(1) = 0.0 ; S2(nz+1) = 0.0
   if (ks > 1) &
-    S2(ks) = ((u(ks)-u0(ks-1))**2 + (v(ks)-v0(ks-1))**2) * (US%L_to_Z*I_dz_int(ks))**2
+    S2(ks) = (((u(ks)-u0(ks-1))**2) + ((v(ks)-v0(ks-1))**2)) * (US%L_to_Z*I_dz_int(ks))**2
   do K=ks+1,ke
-    S2(K) = ((u(k)-u(k-1))**2 + (v(k)-v(k-1))**2) * (US%L_to_Z*I_dz_int(K))**2
+    S2(K) = (((u(k)-u(k-1))**2) + ((v(k)-v(k-1))**2)) * (US%L_to_Z*I_dz_int(K))**2
   enddo
   if (ke<nz) &
-    S2(ke+1) = ((u0(ke+1)-u(ke))**2 + (v0(ke+1)-v(ke))**2) * (US%L_to_Z*I_dz_int(ke+1))**2
+    S2(ke+1) = (((u0(ke+1)-u(ke))**2) + ((v0(ke+1)-v(ke))**2)) * (US%L_to_Z*I_dz_int(ke+1))**2
 
   ! Store the buoyancy frequency at interfaces
   N2(1) = 0.0 ; N2(nz+1) = 0.0

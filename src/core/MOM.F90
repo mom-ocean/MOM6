@@ -113,6 +113,7 @@ use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
+use MOM_open_boundary,         only : open_boundary_setup_vert
 use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
@@ -750,7 +751,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     if (CS%VarMix%use_variable_mixing) then
       call enable_averages(cycle_time, Time_start + real_to_time(US%T_to_s*cycle_time), CS%diag)
-      call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix)
+      call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix, CS%MEKE, dt)
       call calc_depth_function(G, CS%VarMix)
       call disable_averaging(CS%diag)
     endif
@@ -1898,7 +1899,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         if (.not. skip_diffusion) then
           if (CS%VarMix%use_variable_mixing) then
             call pass_var(CS%h, G%Domain)
-            call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
+            call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix, CS%MEKE, dt_offline)
             call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
@@ -1925,7 +1926,7 @@ subroutine step_offline(forces, fluxes, sfc_state, Time_start, time_interval, CS
         if (.not. skip_diffusion) then
           if (CS%VarMix%use_variable_mixing) then
             call pass_var(CS%h, G%Domain)
-            call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix)
+            call calc_resoln_function(CS%h, CS%tv, G, GV, US, CS%VarMix, CS%MEKE, dt_offline)
             call calc_depth_function(G, CS%VarMix)
             call calc_slope_functions(CS%h, CS%tv, dt_offline, G, GV, US, CS%VarMix, OBC=CS%OBC)
           endif
@@ -2312,7 +2313,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, "MOM", "USE_POROUS_BARRIER", CS%use_porbar, &
                  "If true, use porous barrier to constrain the widths "//&
                  "and face areas at the edges of the grid cells. ", &
-                 default=.true.) ! The default should be false after tests.
+                 default=.false.)
   call get_param(param_file, "MOM", "BATHYMETRY_AT_VEL", bathy_at_vel, &
                  "If true, there are separate values for the basin depths "//&
                  "at velocity points.  Otherwise the effects of topography "//&
@@ -2652,6 +2653,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
   CS%HFrz = (US%Z_to_m * GV%m_to_H) * HFrz_z
 
+  ! Finish OBC configuration that depend on the vertical grid
+  call open_boundary_setup_vert(GV, US, OBC_in)
+
   !   Shift from using the temporary dynamic grid type to using the final (potentially static)
   ! and properly rotated ocean-specific grid type and horizontal index type.
   if (CS%rotate_index) then
@@ -2706,7 +2710,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     CS%tv%T => CS%T ; CS%tv%S => CS%S
     if (CS%tv%T_is_conT) then
       vd_T = var_desc(name="contemp", units="Celsius", longname="Conservative Temperature", &
-                      cmor_field_name="thetao", cmor_longname="Sea Water Potential Temperature", &
+                      cmor_field_name="bigthetao", cmor_longname="Sea Water Conservative Temperature", &
                       conversion=US%Q_to_J_kg*CS%tv%C_p)
     else
       vd_T = var_desc(name="temp", units="degC", longname="Potential Temperature", &
@@ -2715,7 +2719,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     endif
     if (CS%tv%S_is_absS) then
       vd_S = var_desc(name="abssalt", units="g kg-1", longname="Absolute Salinity", &
-                      cmor_field_name="so", cmor_longname="Sea Water Salinity", &
+                      cmor_field_name="absso", cmor_longname="Sea Water Absolute Salinity", &
                       conversion=0.001*US%S_to_ppt)
     else
       vd_S = var_desc(name="salt", units="psu", longname="Salinity", &
@@ -2799,10 +2803,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   CS%time_in_cycle = 0.0 ; CS%time_in_thermo_cycle = 0.0
 
   !allocate porous topography variables
-  allocate(CS%pbv%por_face_areaU(IsdB:IedB,jsd:jed,nz)) ; CS%pbv%por_face_areaU(:,:,:) = 1.0
-  allocate(CS%pbv%por_face_areaV(isd:ied,JsdB:JedB,nz)) ; CS%pbv%por_face_areaV(:,:,:) = 1.0
-  allocate(CS%pbv%por_layer_widthU(IsdB:IedB,jsd:jed,nz+1)) ; CS%pbv%por_layer_widthU(:,:,:) = 1.0
-  allocate(CS%pbv%por_layer_widthV(isd:ied,JsdB:JedB,nz+1)) ; CS%pbv%por_layer_widthV(:,:,:) = 1.0
+  allocate(CS%pbv%por_face_areaU(IsdB:IedB,jsd:jed,nz), source=1.0)
+  allocate(CS%pbv%por_face_areaV(isd:ied,JsdB:JedB,nz), source=1.0)
+  allocate(CS%pbv%por_layer_widthU(IsdB:IedB,jsd:jed,nz+1), source=1.0)
+  allocate(CS%pbv%por_layer_widthV(isd:ied,JsdB:JedB,nz+1), source=1.0)
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
@@ -2890,7 +2894,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
 
   if (.not. CS%adiabatic) then
-    call register_diabatic_restarts(G, US, param_file, CS%int_tide_CSp, restart_CSp)
+    call register_diabatic_restarts(G, GV, US, param_file, CS%int_tide_CSp, restart_CSp)
   endif
 
   call callTree_waypoint("restart registration complete (initialize_MOM)")
@@ -2955,20 +2959,20 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       ! These arrays are not initialized in most solo cases, but are needed
       ! when using an ice shelf. Passing the ice shelf diagnostics CS from MOM
       ! for legacy reasons. The actual ice shelf diag CS is internal to the ice shelf
-      call initialize_ice_shelf(param_file, G_in, Time, ice_shelf_CSp, diag_ptr, &
+      call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr, &
                                 Time_init, dirs%output_directory, calve_ice_shelf_bergs=point_calving)
       allocate(frac_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
       allocate(mass_shelf_in(G_in%isd:G_in%ied, G_in%jsd:G_in%jed), source=0.0)
       allocate(CS%frac_shelf_h(isd:ied, jsd:jed), source=0.0)
       allocate(CS%mass_shelf(isd:ied, jsd:jed), source=0.0)
-      call ice_shelf_query(ice_shelf_CSp,G,CS%frac_shelf_h, CS%mass_shelf)
+      call ice_shelf_query(ice_shelf_CSp, G, CS%frac_shelf_h, CS%mass_shelf)
       ! MOM_initialize_state is using the  unrotated metric
       call rotate_array(CS%frac_shelf_h, -turns, frac_shelf_in)
       call rotate_array(CS%mass_shelf, -turns, mass_shelf_in)
       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           sponge_in_CSp, ALE_sponge_in_CSp, oda_incupd_in_CSp, OBC_in, Time_in, &
-          frac_shelf_h=frac_shelf_in, mass_shelf = mass_shelf_in)
+          frac_shelf_h=frac_shelf_in, mass_shelf=mass_shelf_in)
     else
       call MOM_initialize_state(u_in, v_in, h_in, CS%tv, Time, G_in, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
@@ -4173,9 +4177,14 @@ subroutine save_MOM_restart(CS, directory, time, G, time_stamped, filename, &
   logical, optional, intent(in) :: write_IC
     !< If present and true, initial conditions are being written
 
+  logical :: showCallTree
+  showCallTree = callTree_showQuery()
+
+  if (showCallTree) call callTree_waypoint("About to call save_restart (step_MOM)")
   call save_restart(directory, time, G, CS%restart_CS, &
       time_stamped=time_stamped, filename=filename, GV=GV, &
       num_rest_files=num_rest_files, write_IC=write_IC)
+  if (showCallTree) call callTree_waypoint("Done with call to save_restart (step_MOM)")
 
   if (CS%use_particles) call particles_save_restart(CS%particles, CS%h, directory, time, time_stamped)
 end subroutine save_MOM_restart

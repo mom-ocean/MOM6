@@ -64,9 +64,6 @@ type, public :: continuity_PPM_CS ; private
                              !! continuity solver for use as the weights in the
                              !! barotropic solver.  Otherwise use the transport
                              !! averaged areas.
-  logical :: visc_rem_hvel_fix = .False. !< If true, thickness at velocity points
-                             !! h_[uv] (used by barotropic solver) is not multiplied
-                             !! by visc_rem_[uv].
 end type continuity_PPM_CS
 
 !> A container for loop bounds
@@ -809,22 +806,12 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   endif
 
   if  (set_BT_cont) then ; if (allocated(BT_cont%h_u)) then
-    if (CS%visc_rem_hvel_fix) then
-      if (present(u_cor)) then
-        call zonal_flux_thickness(u_cor, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU)
-      else
-        call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU)
-      endif
+    if (present(u_cor)) then
+      call zonal_flux_thickness(u_cor, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     else
-      if (present(u_cor)) then
-        call zonal_flux_thickness(u_cor, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
-      else
-        call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                  CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
-      endif
+      call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     endif
   endif ; endif
 
@@ -950,14 +937,14 @@ subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, j, &
     if (u(I) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
       else ; CFL = u(I) * dt * G%IdxT(i,j) ; endif
-      curv_3 = h_W(i) + h_E(i) - 2.0*h(i)
+      curv_3 = (h_W(i) + h_E(i)) - 2.0*h(i)
       uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * &
           (h_E(i) + CFL * (0.5*(h_W(i) - h_E(i)) + curv_3*(CFL - 1.5)))
       h_marg = h_E(i) + CFL * ((h_W(i) - h_E(i)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I) * dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
       else ; CFL = -u(I) * dt * G%IdxT(i+1,j) ; endif
-      curv_3 = h_W(i+1) + h_E(i+1) - 2.0*h(i+1)
+      curv_3 = (h_W(i+1) + h_E(i+1)) - 2.0*h(i+1)
       uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * &
           (h_W(i+1) + CFL * (0.5*(h_E(i+1)-h_W(i+1)) + curv_3*(CFL - 1.5)))
       h_marg = h_W(i+1) + CFL * ((h_E(i+1)-h_W(i+1)) + 3.0*curv_3*(CFL - 1.0))
@@ -1032,13 +1019,13 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
     if (u(I,j,k) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
       else ; CFL = u(I,j,k) * dt * G%IdxT(i,j) ; endif
-      curv_3 = h_W(i,j,k) + h_E(i,j,k) - 2.0*h(i,j,k)
+      curv_3 = (h_W(i,j,k) + h_E(i,j,k)) - 2.0*h(i,j,k)
       h_avg = h_E(i,j,k) + CFL * (0.5*(h_W(i,j,k) - h_E(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_E(i,j,k) + CFL * ((h_W(i,j,k) - h_E(i,j,k)) + 3.0*curv_3*(CFL - 1.0))
     elseif (u(I,j,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I,j,k)*dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
       else ; CFL = -u(I,j,k) * dt * G%IdxT(i+1,j) ; endif
-      curv_3 = h_W(i+1,j,k) + h_E(i+1,j,k) - 2.0*h(i+1,j,k)
+      curv_3 = (h_W(i+1,j,k) + h_E(i+1,j,k)) - 2.0*h(i+1,j,k)
       h_avg = h_W(i+1,j,k) + CFL * (0.5*(h_E(i+1,j,k)-h_W(i+1,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_W(i+1,j,k) + CFL * ((h_E(i+1,j,k)-h_W(i+1,j,k)) + &
                                     3.0*curv_3*(CFL - 1.0))
@@ -1709,22 +1696,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   endif
 
   if (set_BT_cont) then ; if (allocated(BT_cont%h_v)) then
-    if (CS%visc_rem_hvel_fix) then
-      if (present(v_cor)) then
-        call meridional_flux_thickness(v_cor, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
-                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV)
-      else
-        call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
-                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV)
-      endif
+    if (present(v_cor)) then
+      call meridional_flux_thickness(v_cor, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
+                                    CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
     else
-      if (present(v_cor)) then
-        call meridional_flux_thickness(v_cor, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
-                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
-      else
-        call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
-                                      CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
-      endif
+      call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
+                                    CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
     endif
   endif ; endif
 
@@ -1855,7 +1832,7 @@ subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, US, J, &
     if (v(i) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
       else ; CFL = v(i) * dt * G%IdyT(i,j) ; endif
-      curv_3 = h_S(i,j) + h_N(i,j) - 2.0*h(i,j)
+      curv_3 = (h_S(i,j) + h_N(i,j)) - 2.0*h(i,j)
       vh(i) = (G%dx_Cv(i,J)*por_face_areaV(i,J)) * v(i) * ( h_N(i,j) + CFL * &
           (0.5*(h_S(i,j) - h_N(i,j)) + curv_3*(CFL - 1.5)) )
       h_marg = h_N(i,j) + CFL * ((h_S(i,j) - h_N(i,j)) + &
@@ -1863,7 +1840,7 @@ subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, US, J, &
     elseif (v(i) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
       else ; CFL = -v(i) * dt * G%IdyT(i,j+1) ; endif
-      curv_3 = h_S(i,j+1) + h_N(i,j+1) - 2.0*h(i,j+1)
+      curv_3 = (h_S(i,j+1) + h_N(i,j+1)) - 2.0*h(i,j+1)
       vh(i) = (G%dx_Cv(i,J)*por_face_areaV(i,J)) * v(i) * ( h_S(i,j+1) + CFL * &
           (0.5*(h_N(i,j+1)-h_S(i,j+1)) + curv_3*(CFL - 1.5)) )
       h_marg = h_S(i,j+1) + CFL * ((h_N(i,j+1)-h_S(i,j+1)) + &
@@ -1942,14 +1919,14 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
     if (v(i,J,k) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
       else ; CFL = v(i,J,k) * dt * G%IdyT(i,j) ; endif
-      curv_3 = h_S(i,j,k) + h_N(i,j,k) - 2.0*h(i,j,k)
+      curv_3 = (h_S(i,j,k) + h_N(i,j,k)) - 2.0*h(i,j,k)
       h_avg = h_N(i,j,k) + CFL * (0.5*(h_S(i,j,k) - h_N(i,j,k)) + curv_3*(CFL - 1.5))
       h_marg = h_N(i,j,k) + CFL * ((h_S(i,j,k) - h_N(i,j,k)) + &
                                 3.0*curv_3*(CFL - 1.0))
     elseif (v(i,J,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i,J,k)*dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
       else ; CFL = -v(i,J,k) * dt * G%IdyT(i,j+1) ; endif
-      curv_3 = h_S(i,j+1,k) + h_N(i,j+1,k) - 2.0*h(i,j+1,k)
+      curv_3 = (h_S(i,j+1,k) + h_N(i,j+1,k)) - 2.0*h(i,j+1,k)
       h_avg = h_S(i,j+1,k) + CFL * (0.5*(h_N(i,j+1,k)-h_S(i,j+1,k)) + curv_3*(CFL - 1.5))
       h_marg = h_S(i,j+1,k) + CFL * ((h_N(i,j+1,k)-h_S(i,j+1,k)) + &
                                     3.0*curv_3*(CFL - 1.0))
@@ -2624,7 +2601,7 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
   do j=jis,jie ; do i=iis,iie
     ! This limiter prevents undershooting minima within the domain with
     ! values less than h_min.
-    curv = 3.0*(h_L(i,j) + h_R(i,j) - 2.0*h_in(i,j))
+    curv = 3.0*((h_L(i,j) + h_R(i,j)) - 2.0*h_in(i,j))
     if (curv > 0.0) then ! Only minima are limited.
       dh = h_R(i,j) - h_L(i,j)
       if (abs(dh) < curv) then ! The parabola's minimum is within the cell.
@@ -2713,7 +2690,6 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
   !> This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
-  logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
 
   CS%initialized = .true.
 
@@ -2774,11 +2750,6 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the marginal face areas from the continuity "//&
                  "solver for use as the weights in the barotropic solver. "//&
                  "Otherwise use the transport averaged areas.", default=.true.)
-  call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, default=.true., do_not_log=.true.)
-  call get_param(param_file, mdl, "VISC_REM_CONT_HVEL_FIX", CS%visc_rem_hvel_fix, &
-                 "If true, velocity cell thickness h_[uv] from the continuity solver "//&
-                 "is not multiplied by visc_rem_[uv]. Default of this flag is set by "//&
-                 "VISC_REM_BUG.", default=.not.visc_rem_bug)
   CS%diag => diag
 
   id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)

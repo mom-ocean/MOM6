@@ -26,6 +26,8 @@ use MOM_restart, only : register_restart_field, register_restart_pair
 use MOM_restart, only : query_initialized, MOM_restart_CS
 use MOM_self_attr_load, only : scalar_SAL_sensitivity
 use MOM_self_attr_load, only : SAL_CS
+use MOM_streaming_filter, only : Filt_register, Filt_accum, Filter_CS
+use MOM_tidal_forcing, only : tidal_frequency
 use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(-)
 use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
@@ -248,6 +250,10 @@ type, public :: barotropic_CS ; private
   logical :: linearized_BT_PV  !< If true, the PV and interface thicknesses used
                              !! in the barotropic Coriolis calculation is time
                              !! invariant and linearized.
+  logical :: use_filter_m2   !< If true, apply streaming band-pass filter for detecting
+                             !! instantaneous tidal signals.
+  logical :: use_filter_k1   !< If true, apply streaming band-pass filter for detecting
+                             !! instantaneous tidal signals.
   logical :: use_wide_halos  !< If true, use wide halos and march in during the
                              !! barotropic time stepping for efficiency.
   logical :: clip_velocity   !< If true, limit any velocity components that are
@@ -283,7 +289,7 @@ type, public :: barotropic_CS ; private
   logical :: tidal_sal_flather !< Apply adjustment to external gravity wave speed
                              !! consistent with tidal self-attraction and loading
                              !! used within the barotropic solver
-  logical :: wt_uv_fix       !< If true, use a normalized wt_[uv] for vertical averages.
+  logical :: wt_uv_bug = .true. !< If true, recover a bug that wt_[uv] that is not normalized.
   type(time_type), pointer :: Time  => NULL() !< A pointer to the ocean models clock.
   type(diag_ctrl), pointer :: diag => NULL()  !< A structure that is used to regulate
                              !! the timing of diagnostic output.
@@ -291,6 +297,10 @@ type, public :: barotropic_CS ; private
   type(hor_index_type), pointer :: debug_BT_HI => NULL() !< debugging copy of horizontal index_type
   type(SAL_CS), pointer :: SAL_CSp => NULL() !< Control structure for SAL
   type(harmonic_analysis_CS), pointer :: HA_CSp => NULL() !< Control structure for harmonic analysis
+  type(Filter_CS) :: Filt_CS_um2, & !< Control structures for the M2 streaming filter
+                     Filt_CS_vm2, & !< Control structures for the M2 streaming filter
+                     Filt_CS_uk1, & !< Control structures for the K1 streaming filter
+                     Filt_CS_vk1    !< Control structures for the K1 streaming filter
   logical :: module_is_initialized = .false.  !< If true, module has been initialized
 
   integer :: isdw !< The lower i-memory limit for the wide halo arrays.
@@ -598,6 +608,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     DCor_v, &     ! An averaged total thickness at v points [H ~> m or kg m-2].
     Datv          ! Basin depth at v-velocity grid points times the x-grid
                   ! spacing [H L ~> m2 or kg m-1].
+  real, dimension(:,:), pointer :: um2, uk1, vm2, vk1
+                  ! M2 and K1 velocities from the output of streaming filters [m s-1]
   real, target, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta, &        ! The barotropic free surface height anomaly or column mass
                   ! anomaly [H ~> m or kg m-2]
@@ -921,10 +933,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       do J=js-1,je ; do I=is-1,ie
         q(I,J) = 0.25 * (CS%BT_Coriolis_scale * G%CoriolisBu(I,J)) * &
              ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
-             (max((G%areaT(i,j) * max(GV%Z_to_H*G%bathyT(i,j) + eta_in(i,j), 0.0) + &
-               G%areaT(i+1,j+1) * max(GV%Z_to_H*G%bathyT(i+1,j+1) + eta_in(i+1,j+1), 0.0)) + &
-              (G%areaT(i+1,j) * max(GV%Z_to_H*G%bathyT(i+1,j) + eta_in(i+1,j), 0.0) + &
-               G%areaT(i,j+1) * max(GV%Z_to_H*G%bathyT(i,j+1) + eta_in(i,j+1), 0.0)), h_neglect) )
+             (max(((G%areaT(i,j) * max(GV%Z_to_H*G%bathyT(i,j) + eta_in(i,j), 0.0)) + &
+                   (G%areaT(i+1,j+1) * max(GV%Z_to_H*G%bathyT(i+1,j+1) + eta_in(i+1,j+1), 0.0))) + &
+                  ((G%areaT(i+1,j) * max(GV%Z_to_H*G%bathyT(i+1,j) + eta_in(i+1,j), 0.0)) + &
+                   (G%areaT(i,j+1) * max(GV%Z_to_H*G%bathyT(i,j+1) + eta_in(i,j+1), 0.0))), h_neglect) )
       enddo ; enddo
     else
       !$OMP parallel do default(shared)
@@ -939,8 +951,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       do J=js-1,je ; do I=is-1,ie
         q(I,J) = 0.25 * (CS%BT_Coriolis_scale * G%CoriolisBu(I,J)) * &
              ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
-             (max((G%areaT(i,j) * eta_in(i,j) + G%areaT(i+1,j+1) * eta_in(i+1,j+1)) + &
-                  (G%areaT(i+1,j) * eta_in(i+1,j) + G%areaT(i,j+1) * eta_in(i,j+1)), h_neglect) )
+             (max(((G%areaT(i,j) * eta_in(i,j)) + (G%areaT(i+1,j+1) * eta_in(i+1,j+1))) + &
+                  ((G%areaT(i+1,j) * eta_in(i+1,j)) + (G%areaT(i,j+1) * eta_in(i,j+1))), h_neglect) )
       enddo ; enddo
     endif
 
@@ -1058,7 +1070,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     wt_v(i,J,k) = CS%frhatv(i,J,k) * visc_rem
   enddo ; enddo ; enddo
 
-  if (CS%wt_uv_fix) then
+  if (.not. CS%wt_uv_bug) then
     do j=js,je ; do I=is-1,ie ; Iwt_u_tot(I,j) = wt_u(I,j,1) ; enddo ; enddo
     do k=2,nz ; do j=js,je ; do I=is-1,ie
       Iwt_u_tot(I,j) = Iwt_u_tot(I,j) + wt_u(I,j,k)
@@ -1507,14 +1519,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$OMP parallel do default(shared)
   do j=js,je ; do I=is-1,ie
     Cor_ref_u(I,j) =  &
-        ((azon(I,j) * vbt_Cor(i+1,j) + czon(I,j) * vbt_Cor(i  ,j-1)) + &
-         (bzon(I,j) * vbt_Cor(i  ,j) + dzon(I,j) * vbt_Cor(i+1,j-1)))
+        (((azon(I,j) * vbt_Cor(i+1,j)) + (czon(I,j) * vbt_Cor(i  ,j-1))) + &
+         ((bzon(I,j) * vbt_Cor(i  ,j)) + (dzon(I,j) * vbt_Cor(i+1,j-1))))
   enddo ; enddo
   !$OMP parallel do default(shared)
   do J=js-1,je ; do i=is,ie
     Cor_ref_v(i,J) = -1.0 * &
-        ((amer(I-1,j) * ubt_Cor(I-1,j) + cmer(I  ,j+1) * ubt_Cor(I  ,j+1)) + &
-         (bmer(I  ,j) * ubt_Cor(I  ,j) + dmer(I-1,j+1) * ubt_Cor(I-1,j+1)))
+        (((amer(I-1,j) * ubt_Cor(I-1,j)) + (cmer(I  ,j+1) * ubt_Cor(I  ,j+1))) + &
+         ((bmer(I  ,j) * ubt_Cor(I  ,j)) + (dmer(I-1,j+1) * ubt_Cor(I-1,j+1))))
   enddo ; enddo
 
   ! Now start new halo updates.
@@ -1584,6 +1596,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
       Rayleigh_v(i,J) = CS%lin_drag_v(i,J) / Htot
     endif ; enddo ; enddo
+  endif
+
+  ! Here is an example of how the filter equations are time stepped to determine the M2 and K1 velocities.
+  ! The filters are initialized and registered in subroutine barotropic_init.
+  if (CS%use_filter_m2) then
+    call Filt_accum(ubt, um2, CS%Time, US, CS%Filt_CS_um2)
+    call Filt_accum(vbt, vm2, CS%Time, US, CS%Filt_CS_vm2)
+  endif
+  if (CS%use_filter_k1) then
+    call Filt_accum(ubt, uk1, CS%Time, US, CS%Filt_CS_uk1)
+    call Filt_accum(vbt, vk1, CS%Time, US, CS%Filt_CS_vk1)
   endif
 
   ! Zero out the arrays for various time-averaged quantities.
@@ -1675,16 +1698,16 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ! gravity waves, but it is a conservative estimate since it ignores the
       ! stabilizing effect of the bottom drag.
       Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*bebt)) * (G%IareaT(i,j) * &
-            ((gtot_E(i,j) * (Datu(I,j)*G%IdxCu(I,j)) + &
-              gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
-             (gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J)) + &
-              gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1)))) + &
-            ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-             (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)) * CS%BT_Coriolis_scale**2 )
-      H_eff_dx2 = max(H_min_dyn * ((G%IdxT(i,j))**2 + (G%IdyT(i,j))**2), &
+            (((gtot_E(i,j) * (Datu(I,j)*G%IdxCu(I,j))) + &
+              (gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j)))) + &
+             ((gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J))) + &
+              (gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1))))) + &
+            ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+             (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))) * CS%BT_Coriolis_scale**2 )
+      H_eff_dx2 = max(H_min_dyn * ((G%IdxT(i,j)**2) + (G%IdyT(i,j)**2)), &
                       G%IareaT(i,j) * &
-                        ((Datu(I,j)*G%IdxCu(I,j) + Datu(I-1,j)*G%IdxCu(I-1,j)) + &
-                         (Datv(i,J)*G%IdyCv(i,J) + Datv(i,J-1)*G%IdyCv(i,J-1)) ) )
+                        (((Datu(I,j)*G%IdxCu(I,j)) + (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
+                         ((Datv(i,J)*G%IdyCv(i,J)) + (Datv(i,J-1)*G%IdyCv(i,J-1))) ) )
       dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
                      (dtbt**2 * H_eff_dx2)
 
@@ -2004,10 +2027,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ! On odd-steps, update v first.
       !$OMP do schedule(static)
       do J=jsv-1,jev ; do i=isv-1,iev+1
-        Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
-               (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-        PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
-                     (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
+        Cor_v(i,J) = -1.0*(((amer(I-1,j) * ubt(I-1,j)) + (cmer(I,j+1) * ubt(I,j+1))) + &
+               ((bmer(I,j) * ubt(I,j)) + (dmer(I-1,j+1) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
+        PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
+                    ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                    dgeo_de * CS%IdyCv(i,J)
       enddo ; enddo
       !$OMP end do nowait
@@ -2079,11 +2102,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ! Now update the zonal velocity.
       !$OMP do schedule(static)
       do j=jsv,jev ; do I=isv-1,iev
-        Cor_u(I,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
-                      (bzon(I,j) * vbt(i,J) + dzon(I,j) * vbt(i+1,J-1))) - &
+        Cor_u(I,j) = (((azon(I,j) * vbt(i+1,J)) + (czon(I,j) * vbt(i,J-1))) + &
+                      ((bzon(I,j) * vbt(i,J)) + (dzon(I,j) * vbt(i+1,J-1)))) - &
                      Cor_ref_u(I,j)
-        PFu(I,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
-                     (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
+        PFu(I,j) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j)) - &
+                    ((eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j))) * &
                     dgeo_de * CS%IdxCu(I,j)
       enddo ; enddo
       !$OMP end do nowait
@@ -2158,11 +2181,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ! On even steps, update u first.
       !$OMP do schedule(static)
       do j=jsv-1,jev+1 ; do I=isv-1,iev
-        Cor_u(I,j) = ((azon(I,j) * vbt(i+1,J) + czon(I,j) * vbt(i,J-1)) + &
-                      (bzon(I,j) * vbt(i,J) +  dzon(I,j) * vbt(i+1,J-1))) - &
+        Cor_u(I,j) = (((azon(I,j) * vbt(i+1,J)) + (czon(I,j) * vbt(i,J-1))) + &
+                      ((bzon(I,j) * vbt(i,J)) +  (dzon(I,j) * vbt(i+1,J-1)))) - &
                      Cor_ref_u(I,j)
-        PFu(I,j) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j) - &
-                     (eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j)) * &
+        PFu(I,j) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j)) - &
+                    ((eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j))) * &
                      dgeo_de * CS%IdxCu(I,j)
       enddo ; enddo
       !$OMP end do nowait
@@ -2236,20 +2259,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       if (CS%use_old_coriolis_bracket_bug) then
         !$OMP do schedule(static)
         do J=jsv-1,jev ; do i=isv,iev
-          Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
-                  (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-          PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
-                       (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
+          Cor_v(i,J) = -1.0*(((amer(I-1,j) * ubt(I-1,j)) + (bmer(I,j) * ubt(I,j))) + &
+                  ((cmer(I,j+1) * ubt(I,j+1)) + (dmer(I-1,j+1) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
+          PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
+                      ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                       dgeo_de * CS%IdyCv(i,J)
         enddo ; enddo
         !$OMP end do nowait
       else
         !$OMP do schedule(static)
         do J=jsv-1,jev ; do i=isv,iev
-          Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
-                  (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
-          PFv(i,J) = ((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j) - &
-                       (eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1)) * &
+          Cor_v(i,J) = -1.0*(((amer(I-1,j) * ubt(I-1,j)) + (cmer(I,j+1) * ubt(I,j+1))) + &
+                  ((bmer(I,j) * ubt(I,j)) + (dmer(I-1,j+1) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
+          PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
+                      ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                       dgeo_de * CS%IdyCv(i,J)
         enddo ; enddo
         !$OMP end do nowait
@@ -2613,14 +2636,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   do k=1,nz
     do j=js,je ; do I=is-1,ie
       accel_layer_u(I,j,k) = (u_accel_bt(I,j) - &
-           ((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j) - &
-            (pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j)) * CS%IdxCu(I,j) )
+           (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
+            ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j) )
       if (abs(accel_layer_u(I,j,k)) < accel_underflow) accel_layer_u(I,j,k) = 0.0
     enddo ; enddo
     do J=js-1,je ; do i=is,ie
       accel_layer_v(i,J,k) = (v_accel_bt(i,J) - &
-           ((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1) - &
-            (pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j)) * CS%IdyCv(i,J) )
+           (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
+            ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J) )
       if (abs(accel_layer_v(i,J,k)) < accel_underflow) accel_layer_v(i,J,k) = 0.0
     enddo ; enddo
   enddo
@@ -2941,10 +2964,10 @@ subroutine set_dtbt(G, GV, US, CS, eta, pbce, BT_cont, gtot_est, SSH_add)
     !   This is pretty accurate for gravity waves, but it is a conservative
     ! estimate since it ignores the stabilizing effect of the bottom drag.
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
-      ((gtot_E(i,j)*Datu(I,j)*G%IdxCu(I,j) + gtot_W(i,j)*Datu(I-1,j)*G%IdxCu(I-1,j)) + &
-       (gtot_N(i,j)*Datv(i,J)*G%IdyCv(i,J) + gtot_S(i,j)*Datv(i,J-1)*G%IdyCv(i,J-1))) + &
-      ((G%CoriolisBu(I,J)**2 + G%CoriolisBu(I-1,J-1)**2) + &
-       (G%CoriolisBu(I-1,J)**2 + G%CoriolisBu(I,J-1)**2)) * CS%BT_Coriolis_scale**2 )
+      (((gtot_E(i,j)*Datu(I,j)*G%IdxCu(I,j)) + (gtot_W(i,j)*Datu(I-1,j)*G%IdxCu(I-1,j))) + &
+       ((gtot_N(i,j)*Datv(i,J)*G%IdyCv(i,J)) + (gtot_S(i,j)*Datv(i,J-1)*G%IdyCv(i,J-1)))) + &
+      ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+       (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))) * CS%BT_Coriolis_scale**2 )
     if (Idt_max2 * min_max_dt2 > 1.0) min_max_dt2 = 1.0 / Idt_max2
   enddo ; enddo
   dtbt_max = sqrt(min_max_dt2 / dgeo_de)
@@ -4504,9 +4527,6 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   if (present(SAL_CSp)) then
     CS%SAL_CSp => SAL_CSp
   endif
-  if (present(HA_CSp)) then
-    CS%HA_CSp  => HA_CSp
-  endif
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "SPLIT", CS%split, default=.true., do_not_log=.true.)
@@ -4632,13 +4652,13 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, default=.true., do_not_log=.true.)
-  call get_param(param_file, mdl, "VISC_REM_BT_WEIGHT_FIX", CS%wt_uv_fix, &
-                 "If true, use a normalized weight function for vertical averages of "//&
-                 "baroclinic velocity and forcing. Default of this flag is set by "//&
-                 "VISC_REM_BUG. This flag should be used with VISC_REM_TIMESTEP_FIX.", &
-                 default=.not.visc_rem_bug)
+  call get_param(param_file, mdl, "VISC_REM_BT_WEIGHT_BUG", CS%wt_uv_bug, &
+                 "If true, recover a bug in barotropic solver that uses an unnormalized weight "//&
+                 "function for vertical averages of baroclinic velocity and forcing. Default "//&
+                 "of this flag is set by VISC_REM_BUG.", default=visc_rem_bug)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
+  if (use_tides .and. present(HA_CSp)) CS%HA_CSp => HA_CSp
   call get_param(param_file, mdl, "CALCULATE_SAL", CS%calculate_SAL, &
                  "If true, calculate self-attraction and loading.", default=use_tides)
   det_de = 0.0
@@ -4912,10 +4932,10 @@ subroutine barotropic_init(u, v, h, eta, Time, G, GV, US, param_file, diag, CS, 
       if (G%mask2dT(i,j)+G%mask2dT(i,j+1)+G%mask2dT(i+1,j)+G%mask2dT(i+1,j+1)>0.) then
         CS%q_D(I,J) = 0.25 * (CS%BT_Coriolis_scale * G%CoriolisBu(I,J)) * &
            ((G%areaT(i,j) + G%areaT(i+1,j+1)) + (G%areaT(i+1,j) + G%areaT(i,j+1))) / &
-           (Z_to_H * max(((G%areaT(i,j) * max(Mean_SL+G%bathyT(i,j),0.0) + &
-                           G%areaT(i+1,j+1) * max(Mean_SL+G%bathyT(i+1,j+1),0.0)) + &
-                          (G%areaT(i+1,j) * max(Mean_SL+G%bathyT(i+1,j),0.0) + &
-                           G%areaT(i,j+1) * max(Mean_SL+G%bathyT(i,j+1),0.0))), GV%H_subroundoff) )
+           (Z_to_H * max((((G%areaT(i,j) * max(Mean_SL+G%bathyT(i,j),0.0)) + &
+                           (G%areaT(i+1,j+1) * max(Mean_SL+G%bathyT(i+1,j+1),0.0))) + &
+                          ((G%areaT(i+1,j) * max(Mean_SL+G%bathyT(i+1,j),0.0)) + &
+                           (G%areaT(i,j+1) * max(Mean_SL+G%bathyT(i,j+1),0.0)))), GV%H_subroundoff) )
       else ! All four h points are masked out so q_D(I,J) will is meaningless
         CS%q_D(I,J) = 0.
       endif
@@ -5249,6 +5269,8 @@ subroutine register_barotropic_restarts(HI, GV, US, param_file, CS, restart_CS)
   type(vardesc) :: vd(3)
   character(len=40)  :: mdl = "MOM_barotropic"  ! This module's name.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  real :: am2, ak1      !< Bandwidth parameters of the M2 and K1 streaming filters [nondim]
+  real :: om2, ok1      !< Target frequencies of the M2 and K1 streaming filters [T-1 ~> s-1]
 
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
@@ -5260,6 +5282,33 @@ subroutine register_barotropic_restarts(HI, GV, US, param_file, CS, restart_CS)
                  "This is a decent approximation to the inclusion of "//&
                  "sum(u dh_dt) while also correcting for truncation errors.", &
                  default=.false., do_not_log=.true.)
+
+  call get_param(param_file, mdl, "STREAMING_FILTER_M2", CS%use_filter_m2, &
+                 "If true, turn on streaming band-pass filter for detecting "//&
+                 "instantaneous tidal signals.", default=.false.)
+  call get_param(param_file, mdl, "STREAMING_FILTER_K1", CS%use_filter_k1, &
+                 "If true, turn on streaming band-pass filter for detecting "//&
+                 "instantaneous tidal signals.", default=.false.)
+  call get_param(param_file, mdl, "FILTER_ALPHA_M2", am2, &
+                 "Bandwidth parameter of the streaming filter targeting the M2 frequency. "//&
+                 "Must be positive. To turn off filtering, set FILTER_ALPHA_M2 <= 0.0.", &
+                 default=0.0, units="nondim", do_not_log=.not.CS%use_filter_m2)
+  call get_param(param_file, mdl, "FILTER_ALPHA_K1", ak1, &
+                 "Bandwidth parameter of the streaming filter targeting the K1 frequency. "//&
+                 "Must be positive. To turn off filtering, set FILTER_ALPHA_K1 <= 0.0.", &
+                 default=0.0, units="nondim", do_not_log=.not.CS%use_filter_k1)
+  call get_param(param_file, mdl, "TIDE_M2_FREQ", om2, &
+                 "Frequency of the M2 tidal constituent. "//&
+                 "This is only used if TIDES and TIDE_M2"// &
+                 " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and M2"// &
+                 " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=tidal_frequency("M2"), &
+                 scale=US%T_to_s, do_not_log=.true.)
+  call get_param(param_file, mdl, "TIDE_K1_FREQ", ok1, &
+                 "Frequency of the K1 tidal constituent. "//&
+                 "This is only used if TIDES and TIDE_K1"// &
+                 " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and K1"// &
+                 " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=tidal_frequency("K1"), &
+                 scale=US%T_to_s, do_not_log=.true.)
 
   ALLOC_(CS%ubtav(IsdB:IedB,jsd:jed))      ; CS%ubtav(:,:) = 0.0
   ALLOC_(CS%vbtav(isd:ied,JsdB:JedB))      ; CS%vbtav(:,:) = 0.0
@@ -5288,6 +5337,24 @@ subroutine register_barotropic_restarts(HI, GV, US, param_file, CS, restart_CS)
 
   call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, &
                               longname="Barotropic timestep", units="seconds", conversion=US%T_to_s)
+
+  ! Initialize and register streaming filters
+  if (CS%use_filter_m2) then
+    if (am2 > 0.0 .and. om2 > 0.0) then
+      call Filt_register(am2, om2, 'u', HI, CS%Filt_CS_um2)
+      call Filt_register(am2, om2, 'v', HI, CS%Filt_CS_vm2)
+    else
+      CS%use_filter_m2 = .false.
+    endif
+  endif
+  if (CS%use_filter_k1) then
+    if (ak1 > 0.0 .and. ok1 > 0.0) then
+      call Filt_register(ak1, ok1, 'u', HI, CS%Filt_CS_uk1)
+      call Filt_register(ak1, ok1, 'v', HI, CS%Filt_CS_vk1)
+    else
+      CS%use_filter_k1 = .false.
+    endif
+  endif
 
 end subroutine register_barotropic_restarts
 

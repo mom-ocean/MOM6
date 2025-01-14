@@ -25,6 +25,7 @@ use MOM_get_input,       only : directories, Get_MOM_input
 use MOM_grid,            only : ocean_grid_type
 use MOM_io,              only : vardesc, var_desc
 use MOM_remapping,       only : remapping_cs, remapping_core_h, initialize_remapping
+use MOM_remapping,       only : remappingSchemesDoc
 use MOM_restart,         only : register_restart_field, register_restart_pair, MOM_restart_CS
 use MOM_restart,         only : restart_init, save_restart, query_initialized
 use MOM_spatial_means,   only : global_i_mean
@@ -144,6 +145,7 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
   character(len=256) :: mesg
   character(len=64)  :: remapScheme
   logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
+  real :: h_neglect, h_neglect_edge  ! Negligible thicknesses [H ~> m or kg m-2]
 
   if (.not.associated(CS)) then
     call MOM_error(WARNING, "initialize_oda_incupd called without an associated "// &
@@ -183,22 +185,29 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
                  "use U,V increments.", &
                  default=.true.)
   call get_param(param_file, mdl, "REMAPPING_SCHEME", remapScheme, &
-                 "This sets the reconstruction scheme used "//&
-                 " for vertical remapping for all variables.", &
                  default="PLM", do_not_log=.true.)
+  call get_param(param_file, mdl, "ODA_REMAPPING_SCHEME", remapScheme, &
+                 "This sets the reconstruction scheme used "//&
+                 "for vertical remapping for all ODA variables. "//&
+                 "It can be one of the following schemes: "//&
+                 trim(remappingSchemesDoc), default=remapScheme)
 
+  !The default should be REMAP_BOUNDARY_EXTRAP
   call get_param(param_file, mdl, "BOUNDARY_EXTRAPOLATION", bndExtrapolation, &
-                 "When defined, a proper high-order reconstruction "//&
-                 "scheme is used within boundary cells rather "//&
-                 "than PCM. E.g., if PPM is used for remapping, a "//&
-                 "PPM reconstruction will also be used within boundary cells.", &
                  default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "ODA_BOUNDARY_EXTRAP", bndExtrapolation, &
+                 "If true, values at the interfaces of boundary cells are "//&
+                 "extrapolated instead of piecewise constant", default=bndExtrapolation)
   call get_param(param_file, mdl, "ODA_INCUPD_DATA_ONGRID", CS%incupdDataOngrid, &
                  "When defined, the incoming oda_incupd data are "//&
                  "assumed to be on the model horizontal grid " , &
                  default=.true.)
   call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  do_not_log=.true., default=.true.)
+  call get_param(param_file, mdl, "ODA_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+       "If true, use the OM4 remapping-via-subcells algorithm for ODA. "//&
+       "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
+       "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
 
   CS%nz = GV%ke
 
@@ -239,8 +248,15 @@ subroutine initialize_oda_incupd( G, GV, US, param_file, CS, data_h, nz_data, re
 
   ! Call the constructor for remapping control structure
   !### Revisit this hard-coded answer_date.
+  if (GV%Boussinesq) then
+    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
+  else
+    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
+  endif
+
   call initialize_remapping(CS%remap_cs, remapScheme, boundary_extrapolation=bndExtrapolation, &
-                            om4_remap_via_sub_cells=om4_remap_via_sub_cells, answer_date=20190101)
+                            om4_remap_via_sub_cells=om4_remap_via_sub_cells, answer_date=20190101, &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 end subroutine initialize_oda_incupd
 
 
@@ -347,7 +363,6 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
 
   integer ::  i, j, k, is, ie, js, je, nz, nz_data
   integer :: isB, ieB, jsB, jeB
-  real :: h_neglect, h_neglect_edge  ! Negligible thicknesses [H ~> m or kg m-2]
   real :: sum_h1, sum_h2 ! vertical sums of h's [H ~> m or kg m-2]
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -358,13 +373,6 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
   ! increments calculated on if CS%ncount = 0.0
   if (CS%ncount /= 0.0) call MOM_error(FATAL,'calc_oda_increments: '// &
            'CS%ncount should be 0.0 to get accurate increments.')
-
-
-  if (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  endif
 
   ! get h_obs
   nz_data = CS%Inc(1)%nz_data
@@ -404,8 +412,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
       enddo
       ! remap tracer on h_obs
       call remapping_core_h(CS%remap_cs, nz, h(i,j,1:nz), tmp_val1, &
-                            nz_data, tmp_h(1:nz_data), tmp_val2, &
-                            h_neglect, h_neglect_edge)
+                            nz_data, tmp_h(1:nz_data), tmp_val2)
       ! get increment from full field on h_obs
       do k=1,nz_data
         CS%Inc(1)%p(i,j,k) = CS%Inc(1)%p(i,j,k) - tmp_val2(k)
@@ -417,8 +424,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
       enddo
       ! remap tracer on h_obs
       call remapping_core_h(CS%remap_cs, nz, h(i,j,1:nz), tmp_val1, &
-                            nz_data, tmp_h(1:nz_data), tmp_val2, &
-                            h_neglect, h_neglect_edge)
+                            nz_data, tmp_h(1:nz_data), tmp_val2)
       ! get increment from full field on h_obs
       do k=1,nz_data
         CS%Inc(2)%p(i,j,k) = CS%Inc(2)%p(i,j,k) - tmp_val2(k)
@@ -456,8 +462,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
         enddo
         ! remap model u on hu_obs
         call remapping_core_h(CS%remap_cs, nz, hu(1:nz), tmp_val1, &
-                              nz_data, hu_obs(1:nz_data), tmp_val2, &
-                              h_neglect, h_neglect_edge)
+                              nz_data, hu_obs(1:nz_data), tmp_val2)
         ! get increment from full field on h_obs
         do k=1,nz_data
           CS%Inc_u%p(i,j,k) = CS%Inc_u%p(i,j,k) - tmp_val2(k)
@@ -492,8 +497,7 @@ subroutine calc_oda_increments(h, tv, u, v, G, GV, US, CS)
         enddo
         ! remap model v on hv_obs
         call remapping_core_h(CS%remap_cs, nz, hv(1:nz), tmp_val1, &
-                              nz_data, hv_obs(1:nz_data), tmp_val2, &
-                              h_neglect, h_neglect_edge)
+                              nz_data, hv_obs(1:nz_data), tmp_val2)
         ! get increment from full field on h_obs
         do k=1,nz_data
           CS%Inc_v%p(i,j,k) = CS%Inc_v%p(i,j,k) - tmp_val2(k)
@@ -554,7 +558,6 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   integer :: isB, ieB, jsB, jeB
 !  integer :: ncount      ! time step counter
   real :: inc_wt           ! weight of the update for this time-step [nondim]
-  real :: h_neglect, h_neglect_edge  ! Negligible thicknesses [H ~> m or kg m-2]
   real :: sum_h1, sum_h2 ! vertical sums of h's [H ~> m or kg m-2]
   character(len=256) :: mesg
 
@@ -577,12 +580,6 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
   if (is_root_pe()) call MOM_error(NOTE,"updating fields with increments ncount:"//trim(mesg))
   write(mesg,'(f10.8)') inc_wt
   if (is_root_pe()) call MOM_error(NOTE,"updating fields with weight inc_wt:"//trim(mesg))
-
-  if (GV%Boussinesq) then
-    h_neglect = GV%m_to_H*1.0e-30 ; h_neglect_edge = GV%m_to_H*1.0e-10
-  else
-    h_neglect = GV%H_subroundoff ; h_neglect_edge = GV%H_subroundoff
-  endif
 
   ! get h_obs
   nz_data = CS%Inc(1)%nz_data
@@ -621,7 +618,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
       enddo
       ! remap increment profile on model h
       call remapping_core_h(CS%remap_cs, nz_data, tmp_h(1:nz_data), tmp_val2, &
-                            nz, h(i,j,1:nz),tmp_val1, h_neglect, h_neglect_edge)
+                            nz, h(i,j,1:nz), tmp_val1)
       do k=1,nz
       ! add increment to tracer on model h
         tv%T(i,j,k) = tv%T(i,j,k) + inc_wt * tmp_val1(k)
@@ -633,8 +630,8 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
         tmp_val2(k) = CS%Inc(2)%p(i,j,k)
       enddo
       ! remap increment profile on model h
-      call remapping_core_h(CS%remap_cs, nz_data, tmp_h(1:nz_data),tmp_val2,&
-                            nz, h(i,j,1:nz),tmp_val1, h_neglect, h_neglect_edge)
+      call remapping_core_h(CS%remap_cs, nz_data, tmp_h(1:nz_data), tmp_val2, &
+                            nz, h(i,j,1:nz), tmp_val1)
       ! add increment to tracer on model h
       do k=1,nz
         tv%S(i,j,k) = tv%S(i,j,k) + inc_wt * tmp_val1(k)
@@ -680,7 +677,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
         enddo
         ! remap increment profile on hu
         call remapping_core_h(CS%remap_cs, nz_data, hu_obs(1:nz_data), tmp_val2, &
-                              nz, hu(1:nz), tmp_val1, h_neglect, h_neglect_edge)
+                              nz, hu(1:nz), tmp_val1)
         ! add increment to u-velocity on hu
         do k=1,nz
           u(i,j,k) = u(i,j,k) + inc_wt * tmp_val1(k)
@@ -718,7 +715,7 @@ subroutine apply_oda_incupd(h, tv, u, v, dt, G, GV, US, CS)
         enddo
         ! remap increment profile on hv
         call remapping_core_h(CS%remap_cs, nz_data, hv_obs(1:nz_data), tmp_val2, &
-                              nz, hv(1:nz), tmp_val1, h_neglect, h_neglect_edge)
+                              nz, hv(1:nz), tmp_val1)
         ! add increment to v-velocity on hv
         do k=1,nz
           v(i,j,k) = v(i,j,k) + inc_wt * tmp_val1(k)
