@@ -1855,6 +1855,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp target enter data if(present(pbce)) &
   !$omp   map(to: pbce)
 
+  ! NOTE: e_sal condition could be sharpened, but this is close enough.
+  !$omp target enter data map(to: e_tidal_eq, e_tidal_sal, e_sal_and_tide) if (CS%tides)
+  !$omp target enter data map(to: e_sal) if (CS%calculate_SAL)
+
   !$omp target
   !$omp parallel loop collapse(3)
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
@@ -1877,30 +1881,34 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                   ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
   enddo ; enddo ; enddo
 
-  ! Calculate SAL geopotential anomaly and add its gradient to pressure gradient force
-  if (CS%calculate_SAL .and. CS%tides_answer_date>20230630 .and. CS%bq_sal_tides) then
-    do k=1,nz
-      do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = PFu(I,j,k) + (e_sal(i+1,j) - e_sal(i,j)) * GV%g_Earth * G%IdxCu(I,j)
-      enddo ; enddo
-      do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = PFv(i,J,k) + (e_sal(i,j+1) - e_sal(i,j)) * GV%g_Earth * G%IdyCv(i,J)
-      enddo ; enddo
-    enddo
-  endif
+  if (CS%tides_answer_date>20230630 .and. CS%bq_sal_tides) then
+    ! Calculate SAL geopotential anomaly and add its gradient to pressure
+    ! gradient force
+    if (CS%calculate_SAL) then
+      !$omp parallel loop collapse(3)
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+          PFu(I,j,k) = PFu(I,j,k) + (e_sal(i+1,j) - e_sal(i,j)) * GV%g_Earth * G%IdxCu(I,j)
+      enddo ;  enddo ; enddo
+      !$omp parallel loop collapse(3)
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+          PFv(i,J,k) = PFv(i,J,k) + (e_sal(i,j+1) - e_sal(i,j)) * GV%g_Earth * G%IdyCv(i,J)
+      enddo ; enddo ; enddo
+    endif
 
-  ! Calculate tidal geopotential anomaly and add its gradient to pressure gradient force
-  if (CS%tides .and. CS%tides_answer_date>20230630 .and. CS%bq_sal_tides) then
-    do k=1,nz
-      do j=js,je ; do I=Isq,Ieq
-        PFu(I,j,k) = PFu(I,j,k) + ((e_tidal_eq(i+1,j) + e_tidal_sal(i+1,j)) &
-          - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdxCu(I,j)
-      enddo ; enddo
-      do J=Jsq,Jeq ; do i=is,ie
-        PFv(i,J,k) = PFv(i,J,k) + ((e_tidal_eq(i,j+1) + e_tidal_sal(i,j+1)) &
-          - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdyCv(i,J)
-      enddo ; enddo
-    enddo
+    ! Calculate tidal geopotential anomaly and add its gradient to pressure
+    ! gradient force
+    if (CS%tides) then
+      !$omp parallel loop collapse(3)
+      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+          PFu(I,j,k) = PFu(I,j,k) + ((e_tidal_eq(i+1,j) + e_tidal_sal(i+1,j)) &
+              - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdxCu(I,j)
+      enddo ; enddo ; enddo
+      !$omp parallel loop collapse(3)
+      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+          PFv(i,J,k) = PFv(i,J,k) + ((e_tidal_eq(i,j+1) + e_tidal_sal(i,j+1)) &
+              - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdyCv(i,J)
+      enddo ; enddo ; enddo
+    endif
   endif
   !$omp end target
 
@@ -1977,9 +1985,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   ! NOTE: As above, these are here until data is set up outside of the function.
 
   if (present(eta)) then
-    ! Most of this is conditional but do it all for now
-    !$omp target enter data map(to: e_tidal_eq, e_tidal_sal, e_sal_and_tide)
-    !$omp target enter data map(to: e_sal)
     !$omp target enter data map(alloc: eta)
 
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
@@ -1989,6 +1994,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       eta(i,j) = e(i,j,1)*GV%Z_to_H
     enddo ; enddo
+
     if (CS%tides .and. (.not.CS%bq_sal_tides)) then
       if (CS%tides_answer_date>20230630) then
         !$omp parallel loop collapse(2)
@@ -2002,6 +2008,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         enddo ; enddo
       endif
     endif
+
     if (CS%calculate_SAL .and. (CS%tides_answer_date>20230630) .and. (.not.CS%bq_sal_tides)) then
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -2010,13 +2017,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     endif
     !$omp end target
 
-    ! TODO: These may be needed for the diagnostics below!
-    !$omp target exit data map(delete: e_tidal_eq, e_tidal_sal, e_sal_and_tide)
-    !$omp target exit data map(delete: e_sal)
     !$omp target exit data map(from: eta)
   endif
 
   !$omp target exit data map(delete: e)
+  !$omp target exit data map(delete: e_tidal_eq, e_tidal_sal, e_sal_and_tide) if (CS%tides)
+  !$omp target exit data map(delete: e_sal) if (CS%calculate_SAL)
 
   if (CS%use_stanley_pgf) then
     ! Calculated diagnostics related to the Stanley parameterization
