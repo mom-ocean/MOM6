@@ -1877,11 +1877,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                   ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
   enddo ; enddo ; enddo
 
-  ! NOTE: PF[uv] stays on the GPU until the next loop!
-
   ! Calculate SAL geopotential anomaly and add its gradient to pressure gradient force
   if (CS%calculate_SAL .and. CS%tides_answer_date>20230630 .and. CS%bq_sal_tides) then
-    !$OMP parallel do default(shared)
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         PFu(I,j,k) = PFu(I,j,k) + (e_sal(i+1,j) - e_sal(i,j)) * GV%g_Earth * G%IdxCu(I,j)
@@ -1894,7 +1891,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   ! Calculate tidal geopotential anomaly and add its gradient to pressure gradient force
   if (CS%tides .and. CS%tides_answer_date>20230630 .and. CS%bq_sal_tides) then
-    !$OMP parallel do default(shared)
     do k=1,nz
       do j=js,je ; do I=Isq,Ieq
         PFu(I,j,k) = PFu(I,j,k) + ((e_tidal_eq(i+1,j) + e_tidal_sal(i+1,j)) &
@@ -1981,20 +1977,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   ! NOTE: As above, these are here until data is set up outside of the function.
 
   if (present(eta)) then
-    ! NOTE: Many of these would normally be allocated and computed above.
-    !   The following are temporary data transfers.
-
-    !$omp target enter data if(CS%tides .and. CS%tides_answer_date > 20230630) &
-    !$omp   map(to: e_tide_eq, e_tide_sal)
-    !$omp target enter data if(CS%tides .and. CS%tides_answer_date <= 20230630) &
-    !$omp   map(to: e_sal_tide)
-    ! NOTE: e_sal is used with legacy tides when tides is false.
-    !   Most likely a bug but innocuous since e_sal is initialized to zero.
-    !   This has been fixed by He in a PR, but for now we use it as-is.
-    !$omp target enter data &
-    !$omp   if((CS%calculate_SAL .and. CS%tides_answer_date > 20230630) .or. .not. CS%tides) &
-    !$omp   map(to: e_sal)
-
+    ! Most of this is conditional but do it all for now
+    !$omp target enter data map(to: e_tidal_eq, e_tidal_sal, e_sal_and_tide)
+    !$omp target enter data map(to: e_sal)
     !$omp target enter data map(alloc: eta)
 
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
@@ -2026,14 +2011,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp end target
 
     ! TODO: These may be needed for the diagnostics below!
-    !$omp target exit data if(CS%tides .and. CS%tides_answer_date > 20230630) &
-    !$omp   map(delete: e_tide_eq, e_tide_sal)
-    !$omp target exit data if(CS%tides .and. CS%tides_answer_date <= 20230630) &
-    !$omp   map(delete: e_sal_tide)
-    !$omp target exit data &
-    !$omp   if((CS%Calculate_SAL .and. CS%tides_answer_date > 20230630) .or. .not. CS%tides) &
-    !$omp   map(delete: e_sal)
-
+    !$omp target exit data map(delete: e_tidal_eq, e_tidal_sal, e_sal_and_tide)
+    !$omp target exit data map(delete: e_sal)
     !$omp target exit data map(from: eta)
   endif
 
