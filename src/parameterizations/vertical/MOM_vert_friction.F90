@@ -447,7 +447,7 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
                                                                      !! otherwise they are v-points.
 
   ! local variables
-  logical :: kdgl90_use_ebt_struct
+  logical :: kdgl90_use_vert_struct  ! use vertical structure for GL90 coefficient
   integer :: i, k, is, ie, nz, Isq, Ieq
   real    :: f2         !< Squared Coriolis parameter at a velocity grid point [T-2 ~> s-2].
   real    :: h_neglect  ! A vertical distance that is so small it is usually lost in roundoff error
@@ -460,9 +460,9 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
   nz = GV%ke
 
   h_neglect = GV%dZ_subroundoff
-  kdgl90_use_ebt_struct = .false.
+  kdgl90_use_vert_struct = .false.
   if (VarMix%use_variable_mixing) then
-    kdgl90_use_ebt_struct = VarMix%kdgl90_use_ebt_struct
+    kdgl90_use_vert_struct = allocated(VarMix%kdgl90_struct)
   endif
 
   if (work_on_u) then
@@ -478,8 +478,9 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
           else
             a_cpl_gl90(I,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
           endif
-          if (kdgl90_use_ebt_struct) then
-            a_cpl_gl90(I,K) = a_cpl_gl90(I,K) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+          if (kdgl90_use_vert_struct) then
+            a_cpl_gl90(I,K) = a_cpl_gl90(I,K) * 0.5 * &
+                    ( VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i+1,j,k-1) )
           endif
         endif
         ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
@@ -502,8 +503,9 @@ subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, j, G, GV, CS, Va
           else
             a_cpl_gl90(i,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
           endif
-          if (kdgl90_use_ebt_struct) then
-            a_cpl_gl90(i,K) = a_cpl_gl90(i,K) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+          if (kdgl90_use_vert_struct) then
+            a_cpl_gl90(i,K) = a_cpl_gl90(i,K) * 0.5 * &
+                    ( VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i,j+1,k-1) )
           endif
         endif
         ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
@@ -1739,12 +1741,12 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
 
   if (CS%debug) then
     call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
-                  scale=GV%H_to_m, scalar_pair=.true.)
+                  unscale=GV%H_to_m, scalar_pair=.true.)
     call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, &
-                  scale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
+                  unscale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(hML_u) .and. allocated(hML_v)) &
       call uvchksum("vertvisc_coef hML_[uv]", hML_u, hML_v, G%HI, &
-                    haloshift=0, scale=US%Z_to_m, scalar_pair=.true.)
+                    haloshift=0, unscale=US%Z_to_m, scalar_pair=.true.)
   endif
 
 ! Offer diagnostic fields for averaging.

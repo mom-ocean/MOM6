@@ -20,9 +20,12 @@ function aof_set_coupler_flux(name, flux_type, implementation, atm_tr_index,    
   character(len=*),                intent(in) :: flux_type !< An unused argument
   character(len=*),                intent(in) :: implementation !< An unused argument
   integer,               optional, intent(in) :: atm_tr_index !< An unused argument
-  real,    dimension(:), optional, intent(in) :: param !< An unused argument
+  real,    dimension(:), optional, intent(in) :: param !< An unused argument that would be used to
+                                                   !! pass parameters for flux parameterizations
+                                                   !! in other contexts [various]
   logical, dimension(:), optional, intent(in) :: flag !< An unused argument
-  real,                  optional, intent(in) :: mol_wt !< An unused argument
+  real,                  optional, intent(in) :: mol_wt !< An unused argument that would usually be
+                                                   !! the tracer's molecular weight [g mol-1]
   character(len=*),      optional, intent(in) :: ice_restart_file !< An unused argument
   character(len=*),      optional, intent(in) :: ocean_restart_file !< An unused argument
   character(len=*),      optional, intent(in) :: units !< An unused argument

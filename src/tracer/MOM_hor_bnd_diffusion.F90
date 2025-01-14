@@ -89,6 +89,7 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
   ! local variables
   character(len=80)  :: string ! Temporary strings
   logical :: boundary_extrap   ! controls if boundary extrapolation is used in the HBD code
+  logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for HBD
   logical :: debug             !< If true, write verbose checksums for debugging purposes
 
   if (ASSOCIATED(CS)) then
@@ -142,10 +143,16 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
+  call get_param(param_file, mdl, "HBD_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 "If true, use the OM4 remapping-via-subcells algorithm for horizontal boundary diffusion. "//&
+                 "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
+                 "We recommend setting this option to false.", default=.true.)
 
   ! GMM, TODO: add HBD params to control optional arguments in initialize_remapping.
-  call initialize_remapping( CS%remap_CS, string, boundary_extrapolation = boundary_extrap ,&
-       check_reconstruction=.false., check_remapping=.false.)
+  call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=boundary_extrap, &
+                             om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
+                             check_reconstruction=.false., check_remapping=.false., &
+                             h_neglect=CS%H_subroundoff, h_neglect_edge=CS%H_subroundoff)
   call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   call get_param(param_file, mdl, "DEBUG", debug, &
                  default=.false., debuggingParam=.true., do_not_log=.true.)
@@ -734,10 +741,8 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   allocate(khtr_ul_z(nk), source=0.0)
 
   ! remap tracer to dz_top
-  call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:), &
-                        CS%H_subroundoff, CS%H_subroundoff)
-  call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:), &
-                        CS%H_subroundoff, CS%H_subroundoff)
+  call remapping_core_h(CS%remap_cs, ke, h_L(:), phi_L(:), nk, dz_top(:), phi_L_z(:))
+  call remapping_core_h(CS%remap_cs, ke, h_R(:), phi_R(:), nk, dz_top(:), phi_R_z(:))
 
   ! thicknesses at velocity points & khtr_u at layer centers
   do k = 1,ke
@@ -748,8 +753,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
   enddo
 
   ! remap khtr_ul to khtr_ul_z
-  call remapping_core_h(CS%remap_cs, ke, h_vel(:), khtr_ul(:), nk, dz_top(:), khtr_ul_z(:), &
-                        CS%H_subroundoff, CS%H_subroundoff)
+  call remapping_core_h(CS%remap_cs, ke, h_vel(:), khtr_ul(:), nk, dz_top(:), khtr_ul_z(:))
 
   ! Calculate vertical indices containing the boundary layer in dz_top
   call boundary_k_range(boundary, nk, dz_top, hbl_L, k_top_L, zeta_top_L, k_bot_L, zeta_bot_L)
@@ -850,14 +854,16 @@ logical function near_boundary_unit_tests( verbose )
   allocate(CS)
   ! fill required fields in CS
   CS%linear=.false.
-  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation=.true. ,&
-       check_reconstruction=.true., check_remapping=.true.)
-  call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   CS%H_subroundoff = 1.0E-20
   CS%debug=.false.
   CS%limiter=.false.
   CS%limiter_remap=.false.
   CS%hbd_nk = 2 + (2*2)
+  call initialize_remapping( CS%remap_CS, 'PLM', boundary_extrapolation=.true., &
+                             om4_remap_via_sub_cells=.true., & ! ### see fail below when using fixed remapping alg.
+                             check_reconstruction=.true., check_remapping=.true., &
+                             h_neglect=CS%H_subroundoff, h_neglect_edge=CS%H_subroundoff)
+  call extract_member_remapping_CS(CS%remap_CS, degree=CS%deg)
   allocate(CS%hbd_grd_u(1,1,CS%hbd_nk), source=0.0)
   allocate(CS%hbd_u_kmax(1,1), source=0)
   near_boundary_unit_tests = .false.
@@ -1041,6 +1047,7 @@ logical function near_boundary_unit_tests( verbose )
   call hbd_grid_test(SURFACE, hbl_L, hbl_R, h_L, h_R, CS)
   call fluxes_layer_method(SURFACE, nk, hbl_L, hbl_R, h_L, h_R, phi_L, phi_R, &
                            khtr_u, F_layer, 1., 1., CS%hbd_u_kmax(1,1), CS%hbd_grd_u(1,1,:), CS)
+ ! ### This test fails when om4_remap_via_sub_cells=.false.
   near_boundary_unit_tests = near_boundary_unit_tests .or. &
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.0,-4.0/) )
 

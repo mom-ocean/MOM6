@@ -8,3 +8,6 @@ coverage:
             default:
                 threshold: 100%
                 base: parent
+
+fixes:
+  - "MOM6/::"

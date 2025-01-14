@@ -1452,16 +1452,18 @@ real, dimension(4, lmax+1), parameter :: &
             /), (/4, lmax+1/)) !< Load Love numbers
 
 !> \namespace mom_load_love_numbers
+!! \section section_Love_numbers The Love numbers
+!!
 !! This module serves the sole purpose of storing load Love number. The Love numbers are used for the spherical harmonic
 !! self-attraction and loading (SAL) calculation in MOM_self_attr_load module. This separate module ensures readability
 !! of the SAL module.
 !!
 !! Variable Love_Data stores the Love numbers up to degree 1440. From left to right: degree, h, l, and k. Data in this
 !! module is imported from SAL calculation in Model for Prediction Across Scales (MPAS)-Ocean developed by Los Alamos
-!! National Laboratory and University of Michigan [Barton et al. (2022) and Brus et al. (2022)]. The load Love numbers
-!! are from Wang et al. (2012), which are in the center of mass of total Earth system reference frame (CM). When used,
-!! Love numbers with degree<2 should be converted to center of mass solid Earth reference frame (CF) [Blewitt (2003)],
-!! as in subroutine calc_love_scaling in MOM_tidal_forcing module.
+!! National Laboratory and University of Michigan [\cite Barton2022 and \cite Brus2023]. The load Love numbers
+!! are from \cite Wang2012-2, which are in the center of mass of total Earth system reference frame (CM). When used,
+!! Love numbers with degree<2 should be converted to center of mass solid Earth reference frame (CF)
+!! [\cite Blewitt2003], as in subroutine calc_love_scaling in MOM_tidal_forcing module.
 !!
 !! References:
 !!

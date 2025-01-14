@@ -12,8 +12,6 @@ public PLM_reconstruction
 public PLM_slope_wa
 public PLM_slope_cw
 
-real, parameter :: hNeglect_dflt = 1.E-30 !< Default negligible cell thickness
-
 contains
 
 !> Returns a limited PLM slope following White and Adcroft, 2008, in the same arbitrary
@@ -195,7 +193,7 @@ subroutine PLM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect )
                                            !! with the same units as u [A].
   real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly
                                            !! with the same units as u [A].
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+  real,                 intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions
                                            !! in the same units as h [H]
 
@@ -208,15 +206,12 @@ subroutine PLM_reconstruction( N, h, u, edge_values, ppoly_coef, h_neglect )
   real          :: almost_one  ! A value that is slightly smaller than 1 [nondim]
   real, dimension(N) :: slp    ! The first guess at the normalized tracer slopes [A]
   real, dimension(N) :: mslp   ! The monotonized normalized tracer slopes [A]
-  real    :: hNeglect          ! A negligibly small width used in cell reconstructions [H]
-
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   almost_one = 1. - epsilon(slope)
 
   ! Loop on interior cells
   do k = 2,N-1
-    slp(k) = PLM_slope_wa(h(k-1), h(k), h(k+1), hNeglect, u(k-1), u(k), u(k+1))
+    slp(k) = PLM_slope_wa(h(k-1), h(k), h(k+1), h_neglect, u(k-1), u(k), u(k+1))
   enddo ! end loop on interior cells
 
   ! Boundary cells use PCM. Extrapolation is handled after monotonization.
@@ -277,17 +272,14 @@ subroutine PLM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_negle
                                            !! with the same units as u [A].
   real, dimension(:,:), intent(inout) :: ppoly_coef !< coefficients of piecewise polynomials, mainly
                                            !! with the same units as u [A].
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+  real,                 intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions
                                            !! in the same units as h [H]
   ! Local variables
   real    :: slope     ! retained PLM slope for a normalized cell width [A]
-  real    :: hNeglect  ! A negligibly small width used in cell reconstructions [H]
-
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   ! Extrapolate from 2 to 1 to estimate slope
-  slope = - PLM_extrapolate_slope( h(2), h(1), hNeglect, u(2), u(1) )
+  slope = - PLM_extrapolate_slope( h(2), h(1), h_neglect, u(2), u(1) )
 
   edge_values(1,1) = u(1) - 0.5 * slope
   edge_values(1,2) = u(1) + 0.5 * slope
@@ -296,7 +288,7 @@ subroutine PLM_boundary_extrapolation( N, h, u, edge_values, ppoly_coef, h_negle
   ppoly_coef(1,2) = edge_values(1,2) - edge_values(1,1)
 
   ! Extrapolate from N-1 to N to estimate slope
-  slope = PLM_extrapolate_slope( h(N-1), h(N), hNeglect, u(N-1), u(N) )
+  slope = PLM_extrapolate_slope( h(N-1), h(N), h_neglect, u(N-1), u(N) )
 
   edge_values(N,1) = u(N) - 0.5 * slope
   edge_values(N,2) = u(N) + 0.5 * slope

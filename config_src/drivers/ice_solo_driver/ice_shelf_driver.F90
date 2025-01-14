@@ -143,7 +143,6 @@ program Shelf_main
   integer :: yr, mon, day, hr, mins, sec   ! Temp variables for writing the date.
   type(param_file_type) :: param_file      ! The structure indicating the file(s)
                                            ! containing all run-time parameters.
-  real :: smb !A constant surface mass balance that can be specified in the param_file
   character(len=9)  :: month
   character(len=16) :: calendar = 'noleap'
   integer :: calendar_type=-1

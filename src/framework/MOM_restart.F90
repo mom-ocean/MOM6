@@ -3,6 +3,7 @@ module MOM_restart
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
+use, intrinsic :: iso_fortran_env, only : int64
 use MOM_checksums, only : chksum => rotated_field_chksum
 use MOM_domains, only : PE_here, num_PEs, AGRID, BGRID_NE, CGRID_NE
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
@@ -1348,12 +1349,12 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   character(len=256) :: restartname     ! The restart file name (no dir).
   character(len=8)   :: suffix          ! A suffix (like _2) that is appended
                                         ! to the name of files after the first.
-  integer(kind=8) :: var_sz, size_in_file ! The size in bytes of each variable
+  integer(kind=int64) :: var_sz, size_in_file ! The size in bytes of each variable
                                         ! and the variables already in a file.
-  integer(kind=8), parameter :: max_file_size = 4294967292_8 ! The maximum size in bytes for the
+  integer(kind=int64), parameter :: max_file_size = 4294967292_int64 ! The maximum size in bytes for the
                                         ! starting position of each variable in a file's record,
                                         ! based on the use of NetCDF 3.6 or later.  For earlier
-                                        ! versions of NetCDF, the value was 2147483647_8.
+                                        ! versions of NetCDF, the value was 2147483647_int64.
   integer :: start_var, next_var        ! The starting variables of the
                                         ! current and next files.
   type(MOM_infra_file) :: IO_handle     ! The I/O handle of the open fileset
@@ -1365,7 +1366,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   real :: restart_time                  ! The model time at whic the restart file is being written [days]
   character(len=32) :: filename_appendix = '' ! Appendix to filename for ensemble runs
   integer :: length                     ! The length of a text string.
-  integer(kind=8) :: check_val(CS%max_fields,1)
+  integer(kind=int64) :: check_val(CS%max_fields,1)
   integer :: isL, ieL, jsL, jeL, pos
   integer :: turns
   integer, parameter :: nmax_extradims = 5
@@ -1512,19 +1513,19 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr3d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
       elseif (associated(CS%var_ptr2d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr2d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
       elseif (associated(CS%var_ptr4d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr4d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
       elseif (associated(CS%var_ptr1d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv)
+                             restart_time, unscale=CS%restart_field(m)%conv)
       elseif (associated(CS%var_ptr0d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
-                             restart_time, scale=CS%restart_field(m)%conv)
+                             restart_time, unscale=CS%restart_field(m)%conv)
       endif
     enddo
 
@@ -1570,8 +1571,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   real, allocatable :: time_vals(:)  ! Times from a file extracted with getl_file_times [days]
   type(MOM_field), allocatable :: fields(:)
   logical            :: is_there_a_checksum ! Is there a valid checksum that should be checked.
-  integer(kind=8)    :: checksum_file  ! The checksum value recorded in the input file.
-  integer(kind=8)    :: checksum_data  ! The checksum value for the data that was read in.
+  integer(kind=int64) :: checksum_file  ! The checksum value recorded in the input file.
+  integer(kind=int64) :: checksum_data  ! The checksum value for the data that was read in.
 
   if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
       "restore_state: Module must be initialized before it is used.")
@@ -2182,7 +2183,7 @@ function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_z) result(var_s
   character(len=8),      intent(in) :: t_grid   !< A time string to interpret
   type(ocean_grid_type), intent(in) :: G        !< The ocean's grid structure
   integer,               intent(in) :: num_z    !< The number of vertical layers in the grid
-  integer(kind=8) :: var_sz !< The function result, the size in bytes of a variable
+  integer(kind=int64) :: var_sz !< The function result, the size in bytes of a variable
 
   ! Local variables
   integer :: var_periods  ! The number of entries in a time-periodic axis

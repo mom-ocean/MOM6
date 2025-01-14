@@ -824,7 +824,7 @@ subroutine tracer_array_chksum(mesg, Tr, ntr, G)
   integer :: m
 
   do m=1,ntr
-    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI, scale=Tr(m)%conc_scale)
+    call hchksum(Tr(m)%t, mesg//trim(Tr(m)%name), G%HI, unscale=Tr(m)%conc_scale)
   enddo
 
 end subroutine tracer_array_chksum
@@ -840,7 +840,7 @@ subroutine tracer_Reg_chksum(mesg, Reg, G)
   if (.not.associated(Reg)) return
 
   do m=1,Reg%ntr
-    call hchksum(Reg%Tr(m)%t, mesg//trim(Reg%Tr(m)%name), G%HI, scale=Reg%Tr(m)%conc_scale)
+    call hchksum(Reg%Tr(m)%t, mesg//trim(Reg%Tr(m)%name), G%HI, unscale=Reg%Tr(m)%conc_scale)
   enddo
 
 end subroutine tracer_Reg_chksum
