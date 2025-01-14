@@ -1205,6 +1205,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
                                   ! answers from 2018, while higher values use more robust
                                   ! forms of the same remapping expressions.
   logical :: use_remapping ! If true, remap the initial conditions.
+  logical :: use_frac_dp_bugfix   ! If true, use bugfix. Otherwise, pressure input to EOS is negative.
   type(remapping_CS), pointer :: remap_CS => NULL()
 
   call get_param(PF, mdl, "SURFACE_PRESSURE_FILE", p_surf_file, &
@@ -1227,7 +1228,10 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
                  "The tolerance with which to find the depth matching the specified "//&
                  "surface pressure with TRIM_IC_FOR_P_SURF.", &
                  units="m", default=1.0e-5, scale=US%m_to_Z, do_not_log=just_read)
-
+  call get_param(PF, mdl, "FRAC_DP_AT_POS_NEGATIVE_P_BUGFIX", use_frac_dp_bugfix, &
+                 "If true, use bugfix in ice shelf TRIM_IC initialization. "//&
+                 "Otherwise, pressure input to density EOS is negative.", &
+                 default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
                  default=.false., do_not_log=just_read)
@@ -1277,7 +1281,8 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j)+G%Z_ref, min_thickness, &
                tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
-               p_surf(i,j), h(i,j,:), remap_CS, z_tol=z_tolerance)
+               p_surf(i,j), h(i,j,:), remap_CS, z_tol=z_tolerance, &
+               frac_dp_bugfix=use_frac_dp_bugfix)
   enddo ; enddo
 
 end subroutine trim_for_ice
@@ -1368,7 +1373,7 @@ end subroutine calc_sfc_displacement
 !> Adjust the layer thicknesses by removing the top of the water column above the
 !! depth where the hydrostatic pressure matches p_surf
 subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, T_t, T_b, &
-                              S, S_t, S_b, p_surf, h, remap_CS, z_tol)
+                              S, S_t, S_b, p_surf, h, remap_CS, z_tol, frac_dp_bugfix)
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
@@ -1388,6 +1393,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
                                                    !! if associated
   real,                  intent(in)    :: z_tol !< The tolerance with which to find the depth
                                                 !! matching the specified pressure [Z ~> m].
+  logical,               intent(in)    :: frac_dp_bugfix !< If true, use bugfix in frac_dp_at_pos
 
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge positions for reconstructions [Z ~> m]
@@ -1416,7 +1422,8 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
     do k=1,nk
       call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
                                           P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, &
-                                          US, P_b, z_out, z_tol=z_tol)
+                                          US, P_b, z_out, z_tol=z_tol, &
+                                          frac_dp_bugfix=frac_dp_bugfix)
       if (z_out>=e(K)) then
         ! Imposed pressure was less that pressure at top of cell
         exit
@@ -3139,7 +3146,8 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   P_t = 0.
   do k = 1, nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), P_t, 0.5*P_tot, &
-                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out, z_tol=z_tol)
+                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out, z_tol=z_tol, &
+                                        frac_dp_bugfix=.false.)
     write(0,*) k, US%RL2_T2_to_Pa*P_t, US%RL2_T2_to_Pa*P_b, 0.5*US%RL2_T2_to_Pa*P_tot, &
                US%Z_to_m*e(K), US%Z_to_m*e(K+1), US%Z_to_m*z_out
     P_t = P_b
@@ -3158,7 +3166,8 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   !                             h_neglect=GV%H_subroundoff, h_neglect_edge=GV%H_subroundoff)
   ! endif
   call cut_off_column_top(nk, tv, GV, US, GV%g_Earth, -e(nk+1), GV%Angstrom_H, &
-                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS, z_tol=z_tol)
+                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS, z_tol=z_tol, &
+                          frac_dp_bugfix=.false.)
   write(0,*) GV%H_to_m*h(:)
   if (associated(remap_CS)) deallocate(remap_CS)
 
