@@ -673,7 +673,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
   !$OMP   is_vort, ie_vort, js_vort, je_vort, &
   !$OMP   is_Kh, ie_Kh, js_Kh, je_Kh, &
-  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, use_kh_struct, skeb_use_frict&
+  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, use_kh_struct, skeb_use_frict, &
   !$OMP   use_MEKE_Ku, use_MEKE_Au, u_smooth, v_smooth, use_cont_huv, slope_x, slope_y, dz, &
   !$OMP   backscat_subround, GME_effic_h, GME_effic_q, &
   !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
