@@ -162,9 +162,14 @@ type, public :: energetic_PBL_CS ; private
   real :: Max_Enhance_M = 5. !< The maximum allowed LT enhancement to the mixing [nondim].
 
   !/ Bottom boundary layer mixing related options
-  real :: ePBL_BBL_effic     !< The efficiency of bottom boundary layer mixing via ePBL, times
+  real :: ePBL_BBL_effic     !< The efficiency of bottom boundary layer mixing via ePBL driven by
+                             !! the bottom drag dissipation of mean kinetic energy, times
                              !! conversion factors between the natural units of mean kinetic energy
-                             !! and those those used for TKE [Z2 L-2 ~> nondim].
+                             !! and those used for TKE [Z2 L-2 ~> nondim].
+  real :: ePBL_tidal_effic   !< The efficiency of bottom boundary layer mixing via ePBL driven by
+                             !! the bottom drag dissipation of tides, times conversion factors
+                             !! between the natural units of mean kinetic energy and those used for
+                             !! TKE [Z2 L-2 ~> nondim].
   logical :: Use_BBLD_iteration !< If true, use the proximity to the top of the actively turbulent
                              !! bottom boundary layer to constrain the mixing lengths.
   real    :: TKE_decay_BBL   !< The ratio of the natural Ekman depth to the TKE decay scale for
@@ -464,7 +469,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   type(ePBL_column_diags) :: eCD_tmp   ! A container for not passing around diagnostics.
   type(energetic_PBL_CS)  :: CS_tmp1, CS_tmp2 ! Copies of the energetic PBL control structure that
                                        ! can be modified to test for sensitivities
-
+  logical :: BBL_mixing ! If true, there is bottom boundary layer mixing.
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -487,6 +492,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   I_rho = US%L_to_Z * GV%H_to_Z * GV%RZ_to_H ! == US%L_to_Z / GV%Rho0 ! This is not used when fully non-Boussinesq.
   I_dt = 0.0 ; if (dt > 0.0) I_dt = 1.0 / dt
   I_rho0dt = 1.0 / (GV%Rho0 * dt)  ! This is not used when fully non-Boussinesq.
+  BBL_mixing = ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0))
 
   ! Zero out diagnostics before accumulation.
   if (CS%TKE_diagnostics) then
@@ -497,7 +503,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
       diag_TKE_mixing(i,j) = 0.0 ; diag_TKE_mech_decay(i,j) = 0.0
       diag_TKE_conv_decay(i,j) = 0.0 !; diag_TKE_unbalanced(i,j) = 0.0
     enddo ; enddo
-    if (CS%ePBL_BBL_effic > 0.0) then
+    if (BBL_mixing) then
       !!OMP parallel do default(shared)
       do j=js,je ; do i=is,ie
         diag_TKE_BBL(i,j) = 0.0 ; diag_TKE_BBL_mixing(i,j) = 0.0
@@ -507,7 +513,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   endif
   if (CS%debug .or. (CS%id_Mixing_Length>0)) diag_Mixing_Length(:,:,:) = 0.0
   if (CS%debug .or. (CS%id_Velocity_Scale>0)) diag_Velocity_Scale(:,:,:) = 0.0
-  if (CS%ePBL_BBL_effic > 0.0) then
+  if (BBL_mixing) then
     if (CS%debug .or. (CS%id_BBL_Mix_Length>0)) BBL_Mix_Length(:,:,:) = 0.0
     if (CS%debug .or. (CS%id_BBL_Vel_Scale>0)) BBL_Vel_Scale(:,:,:) = 0.0
     if (CS%id_Kd_BBL > 0) Kd_BBL_3d(:,:,:) = 0.0
@@ -545,7 +551,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
     if (CS%id_opt_diff_hML_depth > 0)  diff_hML_depth(:,:) = 0.0
   endif
 
-  !!OMP parallel do default(private) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,I_dt, &
+  !!OMP parallel do default(private) shared(js,je,nz,is,ie,h_3d,u_3d,v_3d,tv,dt,I_dt,BBL_mixing, &
   !!OMP                                  CS,G,GV,US,fluxes,TKE_forced,dSV_dT,dSV_dS,Kd_int)
   do j=js,je
     ! Copy the thicknesses and other fields to 2-d arrays.
@@ -653,11 +659,17 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
       endif
 
       ! Add the diffusivity due to bottom boundary layer mixing, if there is energy to drive this mixing.
-      if (CS%ePBL_BBL_effic > 0.0) then
+      if (BBL_mixing) then
         if (CS%MLD_iteration_guess .and. (CS%BBL_depth(i,j) > 0.0)) BBLD_io = CS%BBL_depth(i,j)
         BBLD_in = BBLD_io
         BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
         u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)
+
+        ! Add in tidal dissipation energy at the bottom, noting that fluxes%BBL_tidal_dis is
+        ! in [R Z L2 T-3 ~> W m-2], unlike visc%BBL_meanKE_loss.
+        if ((CS%ePBL_tidal_effic > 0.0) .and. associated(fluxes%BBL_tidal_dis)) &
+          BBL_TKE = BBL_TKE + CS%ePBL_tidal_effic * dt * fluxes%BBL_tidal_dis(i,j)
+
         call ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, SpV_dt, absf, dt, Kd, BBL_TKE, &
                              u_star_BBL, Kd_BBL, BBLD_io, mixvel_BBL, mixlen_BBL, GV, US, CS, eCD)
 
@@ -694,7 +706,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
       if (CS%debug .or. (CS%id_Velocity_Scale > 0)) then ; do K=1,nz+1
         diag_Velocity_Scale(i,j,K) = mixvel(K)
       enddo ; endif
-      if (CS%ePBL_BBL_effic > 0.0) then
+      if (BBL_mixing) then
         if (CS%debug .or. (CS%id_BBL_Mix_Length>0)) then ; do k=1,nz
           BBL_Mix_Length(i,j,k) = mixlen_BBL(k)
         enddo ; endif
@@ -711,7 +723,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
       if (report_avg_its) then
         CS%sum_its(1) = CS%sum_its(1) + real_to_EFP(real(eCD%OBL_its))
         CS%sum_its(2) = CS%sum_its(2) + real_to_EFP(1.0)
-        if (CS%ePBL_BBL_effic > 0.0) then
+        if (BBL_mixing) then
           CS%sum_its_BBL(1) = CS%sum_its_BBL(1) + real_to_EFP(real(eCD%BBL_its))
           CS%sum_its_BBL(2) = CS%sum_its_BBL(2) + real_to_EFP(1.0)
         endif
@@ -733,6 +745,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
         else
           BLD_1 = BBLD_in ; BLD_2 = BBLD_in
           BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
+          if ((CS%ePBL_tidal_effic > 0.0) .and. associated(fluxes%BBL_tidal_dis)) &
+            BBL_TKE = BBL_TKE + CS%ePBL_tidal_effic * dt * fluxes%BBL_tidal_dis(i,j)
           u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)
           call ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, SpV_dt, absf, dt, Kd, BBL_TKE, &
                                u_star_BBL, Kd_1, BLD_1, mixvel_BBL, mixlen_BBL, GV, US, CS_tmp1, eCD_tmp)
@@ -761,7 +775,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
 
   enddo ! j-loop
 
-  if (CS%debug .and. (CS%ePBL_BBL_effic > 0.0)) then
+  if (CS%debug .and. BBL_mixing) then
     call hchksum(visc%BBL_meanKE_loss, "ePBL visc%BBL_meanKE_loss", G%HI, &
                  unscale=GV%H_to_MKS*US%L_T_to_m_s**2*US%s_to_T)
     call hchksum(visc%ustar_BBL, "ePBL visc%ustar_BBL", G%HI, unscale=GV%H_to_MKS*US%s_to_T)
@@ -786,7 +800,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   if (CS%id_Mixing_Length > 0) call post_data(CS%id_Mixing_Length, diag_Mixing_Length, CS%diag)
   if (CS%id_Velocity_Scale >0) call post_data(CS%id_Velocity_Scale, diag_Velocity_Scale, CS%diag)
   if (CS%id_MSTAR_MIX > 0)     call post_data(CS%id_MSTAR_MIX, diag_mStar_MIX, CS%diag)
-  if (CS%ePBL_BBL_effic > 0.0) then
+  if (BBL_mixing) then
     if (CS%id_Kd_BBL > 0) call post_data(CS%id_Kd_BBL, Kd_BBL_3d, CS%diag)
     if (CS%id_BBL_Mix_Length > 0) call post_data(CS%id_BBL_Mix_Length, BBL_Mix_Length, CS%diag)
     if (CS%id_BBL_Vel_Scale > 0) call post_data(CS%id_BBL_Vel_Scale, BBL_Vel_Scale, CS%diag)
@@ -2095,7 +2109,7 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
   no_MKE_conversion = ((CS%direct_calc) ) ! .and. (CS%MKE_to_TKE_effic == 0.0))
 
   ! Add bottom boundary layer mixing if there is energy to support it.
-  if ((CS%ePBL_BBL_effic <= 0.0) .or. (BBL_TKE_in <= 0.0)) then
+  if (((CS%ePBL_BBL_effic <= 0.0) .and. (CS%ePBL_tidal_effic <= 0.0)) .or. (BBL_TKE_in <= 0.0)) then
     ! There is no added bottom boundary layer mixing.
     BBLD_io = 0.0
     Kd_BBL(:) = 0.0
@@ -3393,7 +3407,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   integer :: mstar_mode, LT_enhance, wT_mode
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: use_omega
-  logical :: no_BBL  ! If true, EPBL_BBL_EFFIC < 0 and bottom boundary layer mixing is not enabled.
+  logical :: no_BBL  ! If true, EPBL_BBL_EFFIC < 0 and EPBL_BBL_TIDAL_EFFIC < 0, so
+                     ! bottom boundary layer mixing is not enabled.
   logical :: use_la_windsea
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
@@ -3674,7 +3689,12 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "The efficiency of bottom boundary layer mixing via ePBL.  Setting this to a "//&
                  "value that is greater than 0 to enable bottom boundary layer mixing from EPBL.", &
                  units="nondim", default=0.0, scale=US%L_to_Z**2)
-  no_BBL = (CS%ePBL_BBL_effic<=0.0)
+  call get_param(param_file, mdl, "EPBL_BBL_TIDAL_EFFIC", CS%ePBL_tidal_effic, &
+                 "The efficiency of bottom boundary layer mixing via ePBL driven by the "//&
+                 "bottom drag dissipation of tides, as provided in fluxes%BBL_tidal_dis.", &
+                 units="nondim", default=0.0, scale=US%L_to_Z**2) !### Change the default to follow EPBL_BBL_EFFIC?
+  no_BBL = ((CS%ePBL_BBL_effic <= 0.0) .and. (CS%ePBL_tidal_effic <= 0.0))
+
   call get_param(param_file, mdl, "USE_BBLD_ITERATION", CS%Use_BBLD_iteration, &
                  "A logical that specifies whether or not to use the distance to the top of the "//&
                  "actively turbulent bottom boundary layer to help set the EPBL length scale.", &
@@ -3885,7 +3905,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'Velocity Scale that is used.', units='m s-1', conversion=US%Z_to_m*US%s_to_T)
   CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'Total mstar that is used.', 'nondim')
-  if (CS%ePBL_BBL_effic > 0.0) then
+  if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0)) then
     CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_ePBL_BBL', diag%axesTi, &
         Time, 'ePBL bottom boundary layer diffusivity', units='m2 s-1', conversion=GV%HZ_T_to_m2_s)
     CS%id_BBL_Mix_Length = register_diag_field('ocean_model', 'BBL_Mixing_Length', diag%axesTi, &
@@ -3936,7 +3956,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   CS%TKE_diagnostics = (max(CS%id_TKE_wind, CS%id_TKE_MKE, CS%id_TKE_conv, &
                             CS%id_TKE_mixing, CS%id_TKE_mech_decay, CS%id_TKE_forcing, &
                             CS%id_TKE_conv_decay) > 0)
-  if (CS%ePBL_BBL_effic > 0.0) then
+  if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0)) then
     CS%TKE_diagnostics = CS%TKE_diagnostics .or. &
         (max(CS%id_TKE_BBL, CS%id_TKE_BBL_mixing, CS%id_TKE_BBL_decay) > 0)
   endif
@@ -3962,7 +3982,7 @@ subroutine energetic_PBL_end(CS)
     write (mesg,*) "Average ePBL iterations = ", avg_its
     call MOM_mesg(mesg)
 
-    if (CS%ePBL_BBL_effic > 0.0) then
+    if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0)) then
       call EFP_sum_across_PEs(CS%sum_its_BBL, 2)
       avg_its = EFP_to_real(CS%sum_its_BBL(1)) / EFP_to_real(CS%sum_its_BBL(2))
       write (mesg,*) "Average ePBL BBL iterations = ", avg_its
