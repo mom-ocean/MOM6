@@ -296,7 +296,7 @@ type, public :: mech_forcing
 end type mech_forcing
 
 !> Structure that defines the id handles for the forcing type
-type, public :: forcing_diags
+type, public :: forcing_diags ; private
 
   !>@{ Forcing diagnostic handles
   ! mass flux diagnostic handles
@@ -1485,15 +1485,15 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
 
   handles%id_taux = register_diag_field('ocean_model', 'taux', diag%axesCu1, Time,  &
-        'Zonal surface stress from ocean interactions with atmos and ice', &
-        'Pa', conversion=US%RLZ_T2_to_Pa, &
+        'Zonal surface stress from ocean interactions with atmos and ice',          &
+        'Pa', conversion=US%RLZ_T2_to_Pa,                                           &
         standard_name='surface_downward_x_stress', cmor_field_name='tauuo',         &
         cmor_units='N m-2', cmor_long_name='Surface Downward X Stress',             &
         cmor_standard_name='surface_downward_x_stress')
 
   handles%id_tauy = register_diag_field('ocean_model', 'tauy', diag%axesCv1, Time,  &
-        'Meridional surface stress ocean interactions with atmos and ice', &
-        'Pa', conversion=US%RLZ_T2_to_Pa, &
+        'Meridional surface stress ocean interactions with atmos and ice',         &
+        'Pa', conversion=US%RLZ_T2_to_Pa,                                          &
         standard_name='surface_downward_y_stress', cmor_field_name='tauvo',        &
         cmor_units='N m-2', cmor_long_name='Surface Downward Y Stress',            &
         cmor_standard_name='surface_downward_y_stress')
@@ -1559,8 +1559,8 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   ! surface mass flux maps
 
   handles%id_prcme = register_diag_field('ocean_model', 'PRCmE', diag%axesT1, Time, &
-        'Net surface water flux (precip+melt+lrunoff+ice calving-evap)', &
-        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        'Net surface water flux (precip+melt+lrunoff+ice calving-evap)',  &
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                       &
         standard_name='water_flux_into_sea_water', cmor_field_name='wfo', &
         cmor_standard_name='water_flux_into_sea_water',cmor_long_name='Water Flux Into Sea Water')
 
@@ -1574,7 +1574,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   ! smg: seaice_melt field requires updates to the sea ice model
   handles%id_seaice_melt = register_diag_field('ocean_model', 'seaice_melt',       &
         diag%axesT1, Time, 'water flux to ocean from snow/sea ice melting(> 0) or formation(< 0)', &
-        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                                  &
         standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',     &
         cmor_field_name='fsitherm',                                                  &
         cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics',&
@@ -1584,33 +1584,33 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         'Liquid + frozen precipitation into ocean', 'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_fprec = register_diag_field('ocean_model', 'fprec', diag%axesT1, Time,     &
-        'Frozen precipitation into ocean', &
-        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,   &
+        'Frozen precipitation into ocean',                                              &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                               &
         standard_name='snowfall_flux', cmor_field_name='prsn',                          &
         cmor_standard_name='snowfall_flux', cmor_long_name='Snowfall Flux where Ice Free Ocean over Sea')
 
   handles%id_lprec = register_diag_field('ocean_model', 'lprec', diag%axesT1, Time,       &
-        'Liquid precipitation into ocean', &
-        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                 &
+        'Liquid precipitation into ocean',                                                &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                                 &
         standard_name='rainfall_flux',                                                    &
         cmor_field_name='prlq', cmor_standard_name='rainfall_flux',                       &
         cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea')
 
   handles%id_vprec = register_diag_field('ocean_model', 'vprec', diag%axesT1, Time, &
-        'Virtual liquid precip into ocean due to SSS restoring', &
+        'Virtual liquid precip into ocean due to SSS restoring',                    &
         units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_frunoff = register_diag_field('ocean_model', 'frunoff', diag%axesT1, Time,    &
-        'Frozen runoff (calving) and iceberg melt into ocean', &
-        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        'Frozen runoff (calving) and iceberg melt into ocean',                             &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                                  &
         standard_name='water_flux_into_sea_water_from_icebergs',                           &
         cmor_field_name='ficeberg',                                                        &
         cmor_standard_name='water_flux_into_sea_water_from_icebergs',                      &
         cmor_long_name='Water Flux into Seawater from Icebergs')
 
   handles%id_lrunoff = register_diag_field('ocean_model', 'lrunoff', diag%axesT1, Time, &
-        'Liquid runoff (rivers) into ocean', &
-        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        'Liquid runoff (rivers) into ocean',                                                  &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                                     &
         standard_name='water_flux_into_sea_water_from_rivers', cmor_field_name='friver',      &
         cmor_standard_name='water_flux_into_sea_water_from_rivers',                           &
         cmor_long_name='Water Flux into Sea Water From Rivers')
@@ -1635,64 +1635,75 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   ! area integrated surface mass transport, all are rescaled to MKS units before area integration.
 
   handles%id_total_prcme = register_scalar_field('ocean_model', 'total_PRCmE', Time, diag,         &
-      long_name='Area integrated net surface water flux (precip+melt+liq runoff+ice calving-evap)',&
-      units='kg s-1', standard_name='water_flux_into_sea_water_area_integrated',                   &
+      long_name='Area integrated net surface water flux (precip+melt+liq runoff+ice calving-evap)', &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T,                                          &
+      standard_name='water_flux_into_sea_water_area_integrated',                                   &
       cmor_field_name='total_wfo',                                                                 &
       cmor_standard_name='water_flux_into_sea_water_area_integrated',                              &
       cmor_long_name='Water Transport Into Sea Water Area Integrated')
 
   handles%id_total_evap = register_scalar_field('ocean_model', 'total_evap', Time, diag,&
       long_name='Area integrated evap/condense at ocean surface',                       &
-      units='kg s-1', standard_name='water_evaporation_flux_area_integrated',           &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T,                               &
+      standard_name='water_evaporation_flux_area_integrated',                           &
       cmor_field_name='total_evs',                                                      &
       cmor_standard_name='water_evaporation_flux_area_integrated',                      &
       cmor_long_name='Evaporation Where Ice Free Ocean over Sea Area Integrated')
 
   ! seaice_melt field requires updates to the sea ice model
   handles%id_total_seaice_melt = register_scalar_field('ocean_model', 'total_icemelt', Time, diag, &
-      long_name='Area integrated sea ice melt (>0) or form (<0)', units='kg s-1',                      &
+      long_name='Area integrated sea ice melt (>0) or form (<0)',                                      &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T,                                              &
       standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',         &
       cmor_field_name='total_fsitherm',                                                                &
       cmor_standard_name='water_flux_into_sea_water_due_to_sea_ice_thermodynamics_area_integrated',    &
       cmor_long_name='Water Melt/Form from Sea Ice Area Integrated')
 
   handles%id_total_precip = register_scalar_field('ocean_model', 'total_precip', Time, diag, &
-      long_name='Area integrated liquid+frozen precip into ocean', units='kg s-1')
+      long_name='Area integrated liquid+frozen precip into ocean', &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T)
 
   handles%id_total_fprec = register_scalar_field('ocean_model', 'total_fprec', Time, diag,&
-      long_name='Area integrated frozen precip into ocean', units='kg s-1',               &
+      long_name='Area integrated frozen precip into ocean',                               &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T,                                 &
       standard_name='snowfall_flux_area_integrated',                                      &
       cmor_field_name='total_prsn',                                                       &
       cmor_standard_name='snowfall_flux_area_integrated',                                 &
       cmor_long_name='Snowfall Flux where Ice Free Ocean over Sea Area Integrated')
 
   handles%id_total_lprec = register_scalar_field('ocean_model', 'total_lprec', Time, diag,&
-      long_name='Area integrated liquid precip into ocean', units='kg s-1',               &
+      long_name='Area integrated liquid precip into ocean',                               &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T,                                 &
       standard_name='rainfall_flux_area_integrated',                                      &
       cmor_field_name='total_pr',                                                         &
       cmor_standard_name='rainfall_flux_area_integrated',                                 &
       cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea Area Integrated')
 
   handles%id_total_vprec = register_scalar_field('ocean_model', 'total_vprec', Time, diag, &
-      long_name='Area integrated virtual liquid precip due to SSS restoring', units='kg s-1')
+      long_name='Area integrated virtual liquid precip due to SSS restoring', &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T)
 
   handles%id_total_frunoff = register_scalar_field('ocean_model', 'total_frunoff', Time, diag,    &
-      long_name='Area integrated frozen runoff (calving) & iceberg melt into ocean', units='kg s-1',&
+      long_name='Area integrated frozen runoff (calving) & iceberg melt into ocean',              &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T,                                         &
       cmor_field_name='total_ficeberg',                                                           &
       cmor_standard_name='water_flux_into_sea_water_from_icebergs_area_integrated',               &
       cmor_long_name='Water Flux into Seawater from Icebergs Area Integrated')
 
   handles%id_total_lrunoff = register_scalar_field('ocean_model', 'total_lrunoff', Time, diag,&
-      long_name='Area integrated liquid runoff into ocean', units='kg s-1',                   &
+      long_name='Area integrated liquid runoff into ocean',                                   &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T,                                     &
       cmor_field_name='total_friver',                                                         &
       cmor_standard_name='water_flux_into_sea_water_from_rivers_area_integrated',             &
       cmor_long_name='Water Flux into Sea Water From Rivers Area Integrated')
 
   handles%id_total_net_massout = register_scalar_field('ocean_model', 'total_net_massout', Time, diag, &
-      long_name='Area integrated mass leaving ocean due to evap and seaice form', units='kg s-1')
+      long_name='Area integrated mass leaving ocean due to evap and seaice form', &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T)
 
   handles%id_total_net_massin = register_scalar_field('ocean_model', 'total_net_massin', Time, diag, &
-      long_name='Area integrated mass entering ocean due to predip, runoff, ice melt', units='kg s-1')
+      long_name='Area integrated mass entering ocean due to predip, runoff, ice melt', &
+      units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T)
 
   !=========================================================================
   ! area averaged surface mass transport
@@ -1719,8 +1730,8 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
       cmor_long_name='Rainfall Flux where Ice Free Ocean over Sea Area Averaged')
 
   handles%id_fprec_ga = register_scalar_field('ocean_model', 'fprec_ga', Time, diag, &
-      long_name='Area integrated frozen precip into ocean', &
-      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+      long_name='Area integrated frozen precip into ocean',                        &
+      units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                            &
       standard_name='snowfall_flux_area_averaged',                                 &
       cmor_field_name='ave_prsn',cmor_standard_name='snowfall_flux_area_averaged', &
       cmor_long_name='Snowfall Flux where Ice Free Ocean over Sea Area Averaged')
@@ -1748,7 +1759,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_hfrunoffds = register_diag_field('ocean_model', 'hfrunoffds',                            &
         diag%axesT1, Time, 'Heat content (relative to 0C) of liquid+solid runoff into ocean', &
-        'W m-2', conversion=US%QRZ_T_to_W_m2, &
+        'W m-2', conversion=US%QRZ_T_to_W_m2,                                                 &
         standard_name='temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water')
 
   handles%id_heat_content_lprec = register_diag_field('ocean_model', 'heat_content_lprec',             &
@@ -1806,7 +1817,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         cmor_long_name='Surface ocean heat flux from SW+LW+latent+sensible+masstransfer+frazil+seaice_melt_heat')
 
   handles%id_sw = register_diag_field('ocean_model', 'SW', diag%axesT1, Time,  &
-        'Shortwave radiation flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2,                        &
+        'Shortwave radiation flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
         standard_name='net_downward_shortwave_flux_at_sea_water_surface',      &
         cmor_field_name='rsntds',                                              &
         cmor_standard_name='net_downward_shortwave_flux_at_sea_water_surface', &
@@ -1819,7 +1830,8 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         'W m-2', conversion=US%QRZ_T_to_W_m2)
 
   handles%id_LwLatSens = register_diag_field('ocean_model', 'LwLatSens', diag%axesT1, Time, &
-        'Combined longwave, latent, and sensible heating at ocean surface', 'W m-2', conversion=US%QRZ_T_to_W_m2)
+        'Combined longwave, latent, and sensible heating at ocean surface', &
+        'W m-2', conversion=US%QRZ_T_to_W_m2)
 
   handles%id_lw = register_diag_field('ocean_model', 'LW', diag%axesT1, Time, &
         'Longwave radiation flux into ocean', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
@@ -1838,8 +1850,8 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
         'Latent heat flux into ocean due to evaporation/condensation', 'W m-2', conversion=US%QRZ_T_to_W_m2)
 
   handles%id_lat_fprec = register_diag_field('ocean_model', 'latent_fprec_diag', diag%axesT1, Time,&
-        'Latent heat flux into ocean due to melting of frozen precipitation', 'W m-2', conversion=US%QRZ_T_to_W_m2, &
-        cmor_field_name='hfsnthermds',                                                             &
+        'Latent heat flux into ocean due to melting of frozen precipitation',                      &
+        'W m-2', conversion=US%QRZ_T_to_W_m2, cmor_field_name='hfsnthermds',                       &
         cmor_standard_name='heat_flux_into_sea_water_due_to_snow_thermodynamics',                  &
         cmor_long_name='Latent Heat to Melt Frozen Precipitation')
 
@@ -1873,7 +1885,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_heat_content_frunoff = register_scalar_field('ocean_model',                     &
       'total_heat_content_frunoff', Time, diag,                                                    &
       long_name='Area integrated heat content (relative to 0C) of solid runoff',                   &
-      units='W', cmor_field_name='total_hfsolidrunoffds',                                          &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2, cmor_field_name='total_hfsolidrunoffds', &
       cmor_standard_name=                                                                          &
       'temperature_flux_due_to_solid_runoff_expressed_as_heat_flux_into_sea_water_area_integrated',&
       cmor_long_name=                                                                              &
@@ -1882,7 +1894,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_heat_content_lrunoff = register_scalar_field('ocean_model',               &
       'total_heat_content_lrunoff', Time, diag,                                              &
       long_name='Area integrated heat content (relative to 0C) of liquid runoff',            &
-      units='W', cmor_field_name='total_hfrunoffds',                                         &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2, cmor_field_name='total_hfrunoffds', &
       cmor_standard_name=                                                                    &
       'temperature_flux_due_to_runoff_expressed_as_heat_flux_into_sea_water_area_integrated',&
       cmor_long_name=                                                                        &
@@ -1891,7 +1903,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_heat_content_lprec = register_scalar_field('ocean_model',                   &
       'total_heat_content_lprec', Time, diag,                                                  &
       long_name='Area integrated heat content (relative to 0C) of liquid precip',              &
-      units='W', cmor_field_name='total_hfrainds',                                             &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2, cmor_field_name='total_hfrainds',   &
       cmor_standard_name=                                                                      &
       'temperature_flux_due_to_rainfall_expressed_as_heat_flux_into_sea_water_area_integrated',&
       cmor_long_name=                                                                          &
@@ -1900,32 +1912,32 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_heat_content_fprec = register_scalar_field('ocean_model',     &
       'total_heat_content_fprec', Time, diag,                                    &
       long_name='Area integrated heat content (relative to 0C) of frozen precip',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_heat_content_vprec = register_scalar_field('ocean_model',      &
       'total_heat_content_vprec', Time, diag,                                     &
       long_name='Area integrated heat content (relative to 0C) of virtual precip',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_heat_content_cond = register_scalar_field('ocean_model',   &
       'total_heat_content_cond', Time, diag,                                  &
       long_name='Area integrated heat content (relative to 0C) of condensate',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_heat_content_evap = register_scalar_field('ocean_model',    &
       'total_heat_content_evap', Time, diag,                                   &
       long_name='Area integrated heat content (relative to 0C) of evaporation',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_heat_content_surfwater = register_scalar_field('ocean_model',          &
       'total_heat_content_surfwater', Time, diag,                                         &
       long_name='Area integrated heat content (relative to 0C) of water crossing surface',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_heat_content_massout = register_scalar_field('ocean_model',                      &
       'total_heat_content_massout', Time, diag,                                                     &
       long_name='Area integrated heat content (relative to 0C) of water leaving ocean',             &
-      units='W',                                                                                    &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,                                          &
       cmor_field_name='total_hfevapds',                                                             &
       cmor_standard_name=                                                                           &
       'temperature_flux_due_to_evaporation_expressed_as_heat_flux_out_of_sea_water_area_integrated',&
@@ -1934,17 +1946,17 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_heat_content_massin = register_scalar_field('ocean_model',           &
       'total_heat_content_massin', Time, diag,                                          &
       long_name='Area integrated heat content (relative to 0C) of water entering ocean',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_net_heat_coupler = register_scalar_field('ocean_model',                       &
       'total_net_heat_coupler', Time, diag,                                                      &
       long_name='Area integrated surface heat flux from SW+LW+latent+sensible+seaice_melt_heat (via the coupler)',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_net_heat_surface = register_scalar_field('ocean_model',                      &
       'total_net_heat_surface', Time, diag,                                                     &
       long_name='Area integrated surface heat flux from SW+LW+lat+sens+mass+frazil+restore or flux adjustments', &
-      units='W',                                                                                &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,   &
       cmor_field_name='total_hfds',                                                             &
       cmor_standard_name='surface_downward_heat_flux_in_sea_water_area_integrated',             &
       cmor_long_name=                                                                           &
@@ -1953,7 +1965,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_sw = register_scalar_field('ocean_model',                                &
       'total_sw', Time, diag,                                                               &
       long_name='Area integrated net downward shortwave at sea water surface',              &
-      units='W',                                                                            &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,                                  &
       cmor_field_name='total_rsntds',                                                       &
       cmor_standard_name='net_downward_shortwave_flux_at_sea_water_surface_area_integrated',&
       cmor_long_name=                                                                       &
@@ -1962,12 +1974,12 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_LwLatSens = register_scalar_field('ocean_model',&
       'total_LwLatSens', Time, diag,                               &
       long_name='Area integrated longwave+latent+sensible heating',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_lw = register_scalar_field('ocean_model',                  &
       'total_lw', Time, diag,                                                 &
       long_name='Area integrated net downward longwave at sea water surface', &
-      units='W',                                                              &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,      &
       cmor_field_name='total_rlntds',                                         &
       cmor_standard_name='surface_net_downward_longwave_flux_area_integrated',&
       cmor_long_name=                                                         &
@@ -1976,7 +1988,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_lat = register_scalar_field('ocean_model',                &
       'total_lat', Time, diag,                                               &
       long_name='Area integrated surface downward latent heat flux',         &
-      units='W',                                                             &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,                   &
       cmor_field_name='total_hflso',                                         &
       cmor_standard_name='surface_downward_latent_heat_flux_area_integrated',&
       cmor_long_name=                                                        &
@@ -1985,12 +1997,12 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_lat_evap = register_scalar_field('ocean_model',      &
       'total_lat_evap', Time, diag,                                     &
       long_name='Area integrated latent heat flux due to evap/condense',&
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_lat_fprec = register_scalar_field('ocean_model',                            &
       'total_lat_fprec', Time, diag,                                                           &
       long_name='Area integrated latent heat flux due to melting frozen precip',               &
-      units='W',                                                                               &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,                                     &
       cmor_field_name='total_hfsnthermds',                                                     &
       cmor_standard_name='heat_flux_into_sea_water_due_to_snow_thermodynamics_area_integrated',&
       cmor_long_name=                                                                          &
@@ -1999,7 +2011,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_lat_frunoff = register_scalar_field('ocean_model',                             &
       'total_lat_frunoff', Time, diag,                                                            &
       long_name='Area integrated latent heat flux due to melting icebergs',                       &
-      units='W',                                                                                  &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,                                        &
       cmor_field_name='total_hfibthermds',                                                        &
       cmor_standard_name='heat_flux_into_sea_water_due_to_iceberg_thermodynamics_area_integrated',&
       cmor_long_name=                                                                             &
@@ -2008,7 +2020,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_sens = register_scalar_field('ocean_model',                 &
       'total_sens', Time, diag,                                                &
       long_name='Area integrated downward sensible heat flux',                 &
-      units='W',                                                               &
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2,                     &
       cmor_field_name='total_hfsso',                                           &
       cmor_standard_name='surface_downward_sensible_heat_flux_area_integrated',&
       cmor_long_name=                                                          &
@@ -2017,12 +2029,12 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_total_heat_added = register_scalar_field('ocean_model',&
       'total_heat_adjustment', Time, diag,                               &
       long_name='Area integrated surface heat flux from restoring and/or flux adjustment',   &
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   handles%id_total_seaice_melt_heat = register_scalar_field('ocean_model',&
       'total_seaice_melt_heat', Time, diag,                               &
       long_name='Area integrated surface heat flux from snow and sea ice melt',   &
-      units='W')
+      units='W', conversion=US%QRZ_T_to_W_m2*US%L_to_m**2)
 
   !===============================================================
   ! area averaged surface heat fluxes
@@ -2033,7 +2045,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
       units='W m-2', conversion=US%QRZ_T_to_W_m2)
 
   handles%id_net_heat_surface_ga = register_scalar_field('ocean_model',                       &
-      'net_heat_surface_ga', Time, diag, long_name=                                                     &
+      'net_heat_surface_ga', Time, diag, long_name=                                           &
       'Area averaged surface heat flux from SW+LW+lat+sens+mass+frazil+restore+seaice_melt_heat or flux adjustments', &
       units='W m-2', conversion=US%QRZ_T_to_W_m2,                                             &
       cmor_field_name='ave_hfds',                                                             &
@@ -2088,7 +2100,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
 
   handles%id_saltflux = register_diag_field('ocean_model', 'salt_flux', diag%axesT1, Time,&
         'Net salt flux into ocean at surface (restoring + sea-ice)',                      &
-        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s, &
+        units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s,                               &
         cmor_field_name='sfdsi', cmor_standard_name='downward_sea_ice_basal_salt_flux', &
         cmor_long_name='Downward Sea Ice Basal Salt Flux')
 
@@ -2137,18 +2149,20 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   !===============================================================
   ! area integrals of surface salt fluxes
 
-  handles%id_total_saltflux = register_scalar_field('ocean_model',          &
-      'total_salt_flux', Time, diag,                                        &
-      long_name='Area integrated surface salt flux', units='kg s-1',        &
+  handles%id_total_saltflux = register_scalar_field('ocean_model', 'total_salt_flux', &
+      Time, diag,  long_name='Area integrated surface salt flux',           &
+      units='kg s-1', conversion=1e-3*US%RZL2_to_kg*US%s_to_T,              &
       cmor_field_name='total_sfdsi',                                        &
       cmor_standard_name='downward_sea_ice_basal_salt_flux_area_integrated',&
       cmor_long_name='Downward Sea Ice Basal Salt Flux Area Integrated')
 
   handles%id_total_saltFluxIn = register_scalar_field('ocean_model', 'total_salt_Flux_In', &
-      Time, diag, long_name='Area integrated surface salt flux at surface from coupler', units='kg s-1')
+      Time, diag, long_name='Area integrated surface salt flux at surface from coupler', &
+      units='kg s-1', conversion=1e-3*US%RZL2_to_kg*US%s_to_T)
 
   handles%id_total_saltFluxAdded = register_scalar_field('ocean_model', 'total_salt_Flux_Added', &
-      Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', units='kg s-1')
+      Time, diag, long_name='Area integrated surface salt flux due to restoring or flux adjustment', &
+      units='kg s-1', conversion=1e-3*US%RZL2_to_kg*US%s_to_T)
 
   !===============================================================
   ! wave forcing diagnostics
@@ -2607,11 +2621,13 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
   type(ocean_grid_type), pointer :: G   ! Grid metric on model index map
   type(forcing), pointer :: fluxes      ! Fluxes on the model index map
   real, dimension(SZI_(diag%G),SZJ_(diag%G)) :: res ! A temporary array for combinations
-                          ! of fluxes [R Z T-1 ~> kg m-2 s-1] or [Q R Z T-1 ~> W m-2]
-  real :: total_transport ! for diagnosing integrated boundary transport, in MKS units of [kg s-1] or [W]
-  real :: ave_flux        ! for diagnosing averaged boundary flux in [R Z T-1 ~> kg m-2 s-1] or [Q R Z T-1 ~> W m-2]
+                          ! of mass fluxes [R Z T-1 ~> kg m-2 s-1] or heat fluxes [Q R Z T-1 ~> W m-2]
+  real :: total_mass_flux ! Diagnostic of an integrated boundary mass flux in [R Z L2 T-1 ~> kg s-1]
+  real :: total_heat_flux ! Diagnostic of an integrated boundary heat flux in [Q R Z L2 T-1 ~> W]
+  real :: total_salt_flux ! Diagnostic of an integrated boundary salt flux in [R Z L2 T-1 ~> kg s-1]
+  real :: ave_mass_flux   ! Diagnostic of the average of a surface mass flux in [R Z T-1 ~> kg m-2 s-1]
+  real :: ave_heat_flux   ! Diagnostic of the average of a surface heat flux in [Q R Z T-1 ~> W m-2]
   real :: I_dt            ! inverse time step [T-1 ~> s-1]
-  real :: ppt2mks         ! conversion between ppt and mks units [nondim]
   integer :: turns        ! Number of index quarter turns
   logical :: mom_enthalpy ! If true (default) enthalpy terms are computed in MOM6
   integer :: i, j, is, ie, js, je
@@ -2635,7 +2651,6 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
   endif
 
   I_dt    = 1.0 / fluxes%dt_buoy_accum
-  ppt2mks = 1e-3
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
   call enable_averages(fluxes%dt_buoy_accum, time_end, diag)
@@ -2657,12 +2672,12 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_prcme > 0) call post_data(handles%id_prcme, res, diag)
       if (handles%id_total_prcme > 0) then
-        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_prcme, total_transport, diag)
+        total_mass_flux = global_area_integral(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_prcme, total_mass_flux, diag)
       endif
       if (handles%id_prcme_ga > 0) then
-        ave_flux = global_area_mean(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_prcme_ga, ave_flux, diag)
+        ave_mass_flux = global_area_mean(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_prcme_ga, ave_mass_flux, diag)
       endif
     endif
 
@@ -2684,8 +2699,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_net_massout > 0) call post_data(handles%id_net_massout, res, diag)
       if (handles%id_total_net_massout > 0) then
-        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_net_massout, total_transport, diag)
+        total_mass_flux = global_area_integral(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_net_massout, total_mass_flux, diag)
       endif
     endif
 
@@ -2695,7 +2710,6 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (handles%id_net_massin > 0 .or. handles%id_total_net_massin > 0) then
       do j=js,je ; do i=is,ie
         res(i,j) = 0.0
-
         if (associated(fluxes%fprec)) res(i,j) = res(i,j) + fluxes%fprec(i,j)
         if (associated(fluxes%lrunoff)) res(i,j) = res(i,j) + fluxes%lrunoff(i,j)
         if (associated(fluxes%frunoff)) res(i,j) = res(i,j) + fluxes%frunoff(i,j)
@@ -2716,8 +2730,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_net_massin > 0) call post_data(handles%id_net_massin, res, diag)
       if (handles%id_total_net_massin > 0) then
-        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_net_massin, total_transport, diag)
+        total_mass_flux = global_area_integral(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_net_massin, total_mass_flux, diag)
       endif
     endif
 
@@ -2727,12 +2741,12 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_evap > 0) .and. associated(fluxes%evap)) &
       call post_data(handles%id_evap, fluxes%evap, diag)
     if ((handles%id_total_evap > 0) .and. associated(fluxes%evap)) then
-      total_transport = global_area_integral(fluxes%evap, G, unscale=US%RZ_T_to_kg_m2s)
-      call post_data(handles%id_total_evap, total_transport, diag)
+      total_mass_flux = global_area_integral(fluxes%evap, G, tmp_scale=US%RZ_T_to_kg_m2s)
+      call post_data(handles%id_total_evap, total_mass_flux, diag)
     endif
     if ((handles%id_evap_ga > 0) .and. associated(fluxes%evap)) then
-      ave_flux = global_area_mean(fluxes%evap, G, tmp_scale=US%RZ_T_to_kg_m2s)
-      call post_data(handles%id_evap_ga, ave_flux, diag)
+      ave_mass_flux = global_area_mean(fluxes%evap, G, tmp_scale=US%RZ_T_to_kg_m2s)
+      call post_data(handles%id_evap_ga, ave_mass_flux, diag)
     endif
 
     if (associated(fluxes%lprec) .and. associated(fluxes%fprec)) then
@@ -2741,72 +2755,72 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_precip > 0) call post_data(handles%id_precip, res, diag)
       if (handles%id_total_precip > 0) then
-        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_precip, total_transport, diag)
+        total_mass_flux = global_area_integral(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_precip, total_mass_flux, diag)
       endif
       if (handles%id_precip_ga > 0) then
-        ave_flux = global_area_mean(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_precip_ga, ave_flux, diag)
+        ave_mass_flux = global_area_mean(res, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_precip_ga, ave_mass_flux, diag)
       endif
     endif
 
     if (associated(fluxes%lprec)) then
       if (handles%id_lprec > 0) call post_data(handles%id_lprec, fluxes%lprec, diag)
       if (handles%id_total_lprec > 0) then
-        total_transport = global_area_integral(fluxes%lprec, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_lprec, total_transport, diag)
+        total_mass_flux = global_area_integral(fluxes%lprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_lprec, total_mass_flux, diag)
       endif
       if (handles%id_lprec_ga > 0) then
-        ave_flux = global_area_mean(fluxes%lprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_lprec_ga, ave_flux, diag)
+        ave_mass_flux = global_area_mean(fluxes%lprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_lprec_ga, ave_mass_flux, diag)
       endif
     endif
 
     if (associated(fluxes%fprec)) then
       if (handles%id_fprec > 0) call post_data(handles%id_fprec, fluxes%fprec, diag)
       if (handles%id_total_fprec > 0) then
-        total_transport = global_area_integral(fluxes%fprec, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_fprec, total_transport, diag)
+        total_mass_flux = global_area_integral(fluxes%fprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_fprec, total_mass_flux, diag)
       endif
       if (handles%id_fprec_ga > 0) then
-        ave_flux = global_area_mean(fluxes%fprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_fprec_ga, ave_flux, diag)
+        ave_mass_flux = global_area_mean(fluxes%fprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_fprec_ga, ave_mass_flux, diag)
       endif
     endif
 
     if (associated(fluxes%vprec)) then
       if (handles%id_vprec > 0) call post_data(handles%id_vprec, fluxes%vprec, diag)
       if (handles%id_total_vprec > 0) then
-        total_transport = global_area_integral(fluxes%vprec, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_vprec, total_transport, diag)
+        total_mass_flux = global_area_integral(fluxes%vprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_vprec, total_mass_flux, diag)
       endif
       if (handles%id_vprec_ga > 0) then
-        ave_flux = global_area_mean(fluxes%vprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_vprec_ga, ave_flux, diag)
+        ave_mass_flux = global_area_mean(fluxes%vprec, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_vprec_ga, ave_mass_flux, diag)
       endif
     endif
 
     if (associated(fluxes%lrunoff)) then
     if (handles%id_lrunoff > 0) call post_data(handles%id_lrunoff, fluxes%lrunoff, diag)
       if (handles%id_total_lrunoff > 0) then
-        total_transport = global_area_integral(fluxes%lrunoff, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_lrunoff, total_transport, diag)
+        total_mass_flux = global_area_integral(fluxes%lrunoff, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_lrunoff, total_mass_flux, diag)
       endif
     endif
 
     if (associated(fluxes%frunoff)) then
       if (handles%id_frunoff > 0) call post_data(handles%id_frunoff, fluxes%frunoff, diag)
       if (handles%id_total_frunoff > 0) then
-        total_transport = global_area_integral(fluxes%frunoff, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_frunoff, total_transport, diag)
+        total_mass_flux = global_area_integral(fluxes%frunoff, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_frunoff, total_mass_flux, diag)
       endif
     endif
 
     if (associated(fluxes%seaice_melt)) then
       if (handles%id_seaice_melt > 0) call post_data(handles%id_seaice_melt, fluxes%seaice_melt, diag)
       if (handles%id_total_seaice_melt > 0) then
-        total_transport = global_area_integral(fluxes%seaice_melt, G, unscale=US%RZ_T_to_kg_m2s)
-        call post_data(handles%id_total_seaice_melt, total_transport, diag)
+        total_mass_flux = global_area_integral(fluxes%seaice_melt, G, tmp_scale=US%RZ_T_to_kg_m2s)
+        call post_data(handles%id_total_seaice_melt, total_mass_flux, diag)
       endif
     endif
 
@@ -2815,64 +2829,64 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_heat_content_lrunoff > 0) .and. associated(fluxes%heat_content_lrunoff))  &
       call post_data(handles%id_heat_content_lrunoff, fluxes%heat_content_lrunoff, diag)
     if ((handles%id_total_heat_content_lrunoff > 0) .and. associated(fluxes%heat_content_lrunoff)) then
-      total_transport = global_area_integral(fluxes%heat_content_lrunoff, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_lrunoff, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_lrunoff, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_lrunoff, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_frunoff > 0) .and. associated(fluxes%heat_content_frunoff))  &
       call post_data(handles%id_heat_content_frunoff, fluxes%heat_content_frunoff, diag)
     if ((handles%id_total_heat_content_frunoff > 0) .and. associated(fluxes%heat_content_frunoff)) then
-      total_transport = global_area_integral(fluxes%heat_content_frunoff, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_frunoff, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_frunoff, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_frunoff, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_lprec > 0) .and. associated(fluxes%heat_content_lprec))      &
       call post_data(handles%id_heat_content_lprec, fluxes%heat_content_lprec, diag)
     if ((handles%id_total_heat_content_lprec > 0) .and. associated(fluxes%heat_content_lprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_lprec, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_lprec, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_lprec, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_lprec, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_fprec > 0) .and. associated(fluxes%heat_content_fprec))      &
       call post_data(handles%id_heat_content_fprec, fluxes%heat_content_fprec, diag)
     if ((handles%id_total_heat_content_fprec > 0) .and. associated(fluxes%heat_content_fprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_fprec, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_fprec, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_fprec, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_fprec, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec))      &
       call post_data(handles%id_heat_content_vprec, fluxes%heat_content_vprec, diag)
     if ((handles%id_total_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_vprec, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_vprec, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_vprec, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_vprec, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_cond > 0) .and. associated(fluxes%heat_content_cond))        &
       call post_data(handles%id_heat_content_cond, fluxes%heat_content_cond, diag)
     if ((handles%id_total_heat_content_cond > 0) .and. associated(fluxes%heat_content_cond)) then
-      total_transport = global_area_integral(fluxes%heat_content_cond, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_cond, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_cond, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_cond, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_evap > 0) .and. associated(fluxes%heat_content_evap))        &
       call post_data(handles%id_heat_content_evap, fluxes%heat_content_evap, diag)
     if ((handles%id_total_heat_content_evap > 0) .and. associated(fluxes%heat_content_evap)) then
-      total_transport = global_area_integral(fluxes%heat_content_evap, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_evap, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_evap, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_evap, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_massout > 0) .and. associated(fluxes%heat_content_massout))  &
       call post_data(handles%id_heat_content_massout, fluxes%heat_content_massout, diag)
     if ((handles%id_total_heat_content_massout > 0) .and. associated(fluxes%heat_content_massout)) then
-      total_transport = global_area_integral(fluxes%heat_content_massout, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_massout, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_massout, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_massout, total_heat_flux, diag)
     endif
 
     if ((handles%id_heat_content_massin > 0) .and. associated(fluxes%heat_content_massin))  &
       call post_data(handles%id_heat_content_massin, fluxes%heat_content_massin, diag)
     if ((handles%id_total_heat_content_massin > 0) .and. associated(fluxes%heat_content_massin)) then
-      total_transport = global_area_integral(fluxes%heat_content_massin, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_content_massin, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_content_massin, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_content_massin, total_heat_flux, diag)
     endif
 
     if (handles%id_net_heat_coupler > 0 .or. handles%id_total_net_heat_coupler > 0 .or. &
@@ -2887,12 +2901,12 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_net_heat_coupler > 0) call post_data(handles%id_net_heat_coupler, res, diag)
       if (handles%id_total_net_heat_coupler > 0) then
-        total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
-        call post_data(handles%id_total_net_heat_coupler, total_transport, diag)
+        total_heat_flux = global_area_integral(res, G, tmp_scale=US%QRZ_T_to_W_m2)
+        call post_data(handles%id_total_net_heat_coupler, total_heat_flux, diag)
       endif
       if (handles%id_net_heat_coupler_ga > 0) then
-        ave_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
-        call post_data(handles%id_net_heat_coupler_ga, ave_flux, diag)
+        ave_heat_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
+        call post_data(handles%id_net_heat_coupler_ga, ave_heat_flux, diag)
       endif
     endif
 
@@ -2930,12 +2944,12 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       if (handles%id_net_heat_surface > 0) call post_data(handles%id_net_heat_surface, res, diag)
 
       if (handles%id_total_net_heat_surface > 0) then
-        total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
-        call post_data(handles%id_total_net_heat_surface, total_transport, diag)
+        total_heat_flux = global_area_integral(res, G, tmp_scale=US%QRZ_T_to_W_m2)
+        call post_data(handles%id_total_net_heat_surface, total_heat_flux, diag)
       endif
       if (handles%id_net_heat_surface_ga > 0) then
-        ave_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
-        call post_data(handles%id_net_heat_surface_ga, ave_flux, diag)
+        ave_heat_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
+        call post_data(handles%id_net_heat_surface_ga, ave_heat_flux, diag)
       endif
     endif
 
@@ -2956,8 +2970,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_heat_content_surfwater > 0) call post_data(handles%id_heat_content_surfwater, res, diag)
       if (handles%id_total_heat_content_surfwater > 0) then
-        total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
-        call post_data(handles%id_total_heat_content_surfwater, total_transport, diag)
+        total_heat_flux = global_area_integral(res, G, tmp_scale=US%QRZ_T_to_W_m2)
+        call post_data(handles%id_total_heat_content_surfwater, total_heat_flux, diag)
       endif
     endif
 
@@ -2995,8 +3009,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       do j=js,je ; do i=is,ie
         res(i,j) = (fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
       enddo ; enddo
-      total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_LwLatSens, total_transport, diag)
+      total_heat_flux = global_area_integral(res, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_LwLatSens, total_heat_flux, diag)
     endif
 
     if ((handles%id_LwLatSens_ga > 0) .and. associated(fluxes%lw) .and. &
@@ -3004,8 +3018,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       do j=js,je ; do i=is,ie
         res(i,j) = ((fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j))
       enddo ; enddo
-      ave_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_LwLatSens_ga, ave_flux, diag)
+      ave_heat_flux = global_area_mean(res, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_LwLatSens_ga, ave_heat_flux, diag)
     endif
 
     if ((handles%id_sw > 0) .and. associated(fluxes%sw)) then
@@ -3020,60 +3034,60 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_sw_nir, fluxes%sw_nir_dir+fluxes%sw_nir_dif, diag)
     endif
     if ((handles%id_total_sw > 0) .and. associated(fluxes%sw)) then
-      total_transport = global_area_integral(fluxes%sw, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_sw, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%sw, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_sw, total_heat_flux, diag)
     endif
     if ((handles%id_sw_ga > 0) .and. associated(fluxes%sw)) then
-      ave_flux = global_area_mean(fluxes%sw, G, tmp_scale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_sw_ga, ave_flux, diag)
+      ave_heat_flux = global_area_mean(fluxes%sw, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_sw_ga, ave_heat_flux, diag)
     endif
 
     if ((handles%id_lw > 0) .and. associated(fluxes%lw)) then
       call post_data(handles%id_lw, fluxes%lw, diag)
     endif
     if ((handles%id_total_lw > 0) .and. associated(fluxes%lw)) then
-      total_transport = global_area_integral(fluxes%lw, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_lw, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%lw, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_lw, total_heat_flux, diag)
     endif
     if ((handles%id_lw_ga > 0) .and. associated(fluxes%lw)) then
-      ave_flux = global_area_mean(fluxes%lw, G, tmp_scale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_lw_ga, ave_flux, diag)
+      ave_heat_flux = global_area_mean(fluxes%lw, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_lw_ga, ave_heat_flux, diag)
     endif
 
     if ((handles%id_lat > 0) .and. associated(fluxes%latent)) then
       call post_data(handles%id_lat, fluxes%latent, diag)
     endif
     if ((handles%id_total_lat > 0) .and. associated(fluxes%latent)) then
-      total_transport = global_area_integral(fluxes%latent, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_lat, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%latent, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_lat, total_heat_flux, diag)
     endif
     if ((handles%id_lat_ga > 0) .and. associated(fluxes%latent)) then
-      ave_flux = global_area_mean(fluxes%latent, G, tmp_scale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_lat_ga, ave_flux, diag)
+      ave_heat_flux = global_area_mean(fluxes%latent, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_lat_ga, ave_heat_flux, diag)
     endif
 
     if ((handles%id_lat_evap > 0) .and. associated(fluxes%latent_evap_diag)) then
       call post_data(handles%id_lat_evap, fluxes%latent_evap_diag, diag)
     endif
     if ((handles%id_total_lat_evap > 0) .and. associated(fluxes%latent_evap_diag)) then
-      total_transport = global_area_integral(fluxes%latent_evap_diag, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_lat_evap, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%latent_evap_diag, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_lat_evap, total_heat_flux, diag)
     endif
 
     if ((handles%id_lat_fprec > 0) .and. associated(fluxes%latent_fprec_diag)) then
       call post_data(handles%id_lat_fprec, fluxes%latent_fprec_diag, diag)
     endif
     if ((handles%id_total_lat_fprec > 0) .and. associated(fluxes%latent_fprec_diag)) then
-      total_transport = global_area_integral(fluxes%latent_fprec_diag, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_lat_fprec, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%latent_fprec_diag, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_lat_fprec, total_heat_flux, diag)
     endif
 
     if ((handles%id_lat_frunoff > 0) .and. associated(fluxes%latent_frunoff_diag)) then
       call post_data(handles%id_lat_frunoff, fluxes%latent_frunoff_diag, diag)
     endif
     if (handles%id_total_lat_frunoff > 0 .and. associated(fluxes%latent_frunoff_diag)) then
-      total_transport = global_area_integral(fluxes%latent_frunoff_diag, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_lat_frunoff, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%latent_frunoff_diag, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_lat_frunoff, total_heat_flux, diag)
     endif
 
     if ((handles%id_sens > 0) .and. associated(fluxes%sens)) then
@@ -3085,17 +3099,17 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     endif
 
     if ((handles%id_total_seaice_melt_heat > 0) .and. associated(fluxes%seaice_melt_heat)) then
-      total_transport = global_area_integral(fluxes%seaice_melt_heat, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_seaice_melt_heat, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%seaice_melt_heat, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_seaice_melt_heat, total_heat_flux, diag)
     endif
 
     if ((handles%id_total_sens > 0) .and. associated(fluxes%sens)) then
-      total_transport = global_area_integral(fluxes%sens, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_sens, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%sens, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_sens, total_heat_flux, diag)
     endif
     if ((handles%id_sens_ga > 0) .and. associated(fluxes%sens)) then
-      ave_flux = global_area_mean(fluxes%sens, G, tmp_scale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_sens_ga, ave_flux, diag)
+      ave_heat_flux = global_area_mean(fluxes%sens, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_sens_ga, ave_heat_flux, diag)
     endif
 
     if ((handles%id_heat_added > 0) .and. associated(fluxes%heat_added)) then
@@ -3103,8 +3117,8 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     endif
 
     if ((handles%id_total_heat_added > 0) .and. associated(fluxes%heat_added)) then
-      total_transport = global_area_integral(fluxes%heat_added, G, unscale=US%QRZ_T_to_W_m2)
-      call post_data(handles%id_total_heat_added, total_transport, diag)
+      total_heat_flux = global_area_integral(fluxes%heat_added, G, tmp_scale=US%QRZ_T_to_W_m2)
+      call post_data(handles%id_total_heat_added, total_heat_flux, diag)
     endif
 
 
@@ -3113,22 +3127,22 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_saltflux > 0) .and. associated(fluxes%salt_flux)) &
       call post_data(handles%id_saltflux, fluxes%salt_flux, diag)
     if ((handles%id_total_saltflux > 0) .and. associated(fluxes%salt_flux)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux, G, unscale=US%RZ_T_to_kg_m2s)
-      call post_data(handles%id_total_saltflux, total_transport, diag)
+      total_salt_flux = global_area_integral(fluxes%salt_flux, G, tmp_scale=US%RZ_T_to_kg_m2s)
+      call post_data(handles%id_total_saltflux, total_salt_flux, diag)
     endif
 
     if ((handles%id_saltFluxAdded > 0) .and. associated(fluxes%salt_flux_added)) &
       call post_data(handles%id_saltFluxAdded, fluxes%salt_flux_added, diag)
     if ((handles%id_total_saltFluxAdded > 0) .and. associated(fluxes%salt_flux_added)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_added, G, unscale=US%RZ_T_to_kg_m2s)
-      call post_data(handles%id_total_saltFluxAdded, total_transport, diag)
+      total_salt_flux = global_area_integral(fluxes%salt_flux_added, G, tmp_scale=US%RZ_T_to_kg_m2s)
+      call post_data(handles%id_total_saltFluxAdded, total_salt_flux, diag)
     endif
 
     if (handles%id_saltFluxIn > 0 .and. associated(fluxes%salt_flux_in)) &
       call post_data(handles%id_saltFluxIn, fluxes%salt_flux_in, diag)
     if ((handles%id_total_saltFluxIn > 0) .and. associated(fluxes%salt_flux_in)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_in, G, unscale=US%RZ_T_to_kg_m2s)
-      call post_data(handles%id_total_saltFluxIn, total_transport, diag)
+      total_salt_flux = global_area_integral(fluxes%salt_flux_in, G, tmp_scale=US%RZ_T_to_kg_m2s)
+      call post_data(handles%id_total_saltFluxIn, total_salt_flux, diag)
     endif
 
     if (handles%id_saltFluxBehind > 0 .and. associated(fluxes%salt_left_behind)) &
