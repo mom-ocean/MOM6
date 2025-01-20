@@ -198,6 +198,9 @@ type, public :: energetic_PBL_CS ; private
                              !! energetics that accounts for an exponential decay of TKE from a
                              !! near-bottom source and an assumed piecewise linear linear profile
                              !! of the buoyancy flux response to a change in a diffusivity.
+  logical :: BBL_effic_bug   !< If true, overestimate the efficiency of the non-tidal ePBL bottom boundary
+                             !! layer diffusivity by a factor of 1/sqrt(CDRAG), which is often a factor of
+                             !! about 18.3.
 
   !/ Options for documenting differences from parameter choices
   integer :: options_diff    !< If positive, this is a coded integer indicating a pair of
@@ -662,7 +665,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
       if (BBL_mixing) then
         if (CS%MLD_iteration_guess .and. (CS%BBL_depth(i,j) > 0.0)) BBLD_io = CS%BBL_depth(i,j)
         BBLD_in = BBLD_io
-        BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
+        if (CS%BBL_effic_bug) then
+          BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss_sqrtCd(i,j)
+        else
+          BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
+        endif
         u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)
 
         ! Add in tidal dissipation energy at the bottom, noting that fluxes%BBL_tidal_dis is
@@ -3752,6 +3759,10 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "length scale by rotation in the bottom boundary layer.  Making this larger "//&
                  "decreases the bottom boundary layer diffusivity.", &
                  units="nondim", default=CS%Ekman_scale_coef, do_not_log=no_BBL)
+  call get_param(param_file, mdl, "EPBL_BBL_EFFIC_BUG", CS%BBL_effic_bug, &
+                 "If true, overestimate the efficiency of the non-tidal ePBL bottom boundary "//&
+                 "layer diffusivity by a factor of 1/sqrt(CDRAG), which is often a factor of "//&
+                 "about 18.3.", default=.false., do_not_log=(CS%ePBL_BBL_effic<=0.0))
 
   call get_param(param_file, mdl, "DECAY_ADJUSTED_BBL_TKE", CS%decay_adjusted_BBL_TKE, &
                  "If true, include an adjustment factor in the bottom boundary layer energetics "//&

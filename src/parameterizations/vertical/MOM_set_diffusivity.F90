@@ -163,11 +163,17 @@ type, public :: set_diffusivity_CS ; private
                               !! calculations.  Values below 20190101 recover the answers from the
                               !! end of 2018, while higher values use updated and more robust forms
                               !! of the same expressions.  Values above 20240630 use more accurate
-                              !! expressions for cases where USE_LOTW_BBL_DIFFUSIVITY is true.
+                              !! expressions for cases where USE_LOTW_BBL_DIFFUSIVITY is true.  Values
+                              !! above 20250301 use less confusing expressions to set the bottom-drag
+                              !! generated diffusivity when USE_LOTW_BBL_DIFFUSIVITY is false.
   integer :: LOTW_BBL_answer_date !< The vintage of the order of arithmetic and expressions
                               !! in the LOTW_BBL calculations.  Values below 20240630 recover the
                               !! original answers, while higher values use more accurate expressions.
                               !! This only applies when USE_LOTW_BBL_DIFFUSIVITY is true.
+  integer :: drag_diff_answer_date !< The vintage of the order of arithmetic in the drag diffusivity
+                              !! calculations.  Values above 20250301 use less confusing expressions
+                              !! to set the bottom-drag generated diffusivity when
+                              !! USE_LOTW_BBL_DIFFUSIVITY is false.
 
   character(len=200) :: inputdir !< The directory in which input files are found
   type(user_change_diff_CS), pointer :: user_change_diff_CSp => NULL() !< Control structure for a child module
@@ -1414,7 +1420,11 @@ subroutine add_drag_diffusivity(h, u, v, tv, fluxes, visc, j, TKE_to_Kd, maxTKE,
       ! If ustar_h = 0, this is land so this value doesn't matter.
       I2decay(i) = 0.5*CS%IMax_decay
     endif
-    TKE(i) = ((CS%BBL_effic * cdrag_sqrt) * exp(-I2decay(i)*h(i,j,nz)) ) * visc%BBL_meanKE_loss(i,j)
+    if (CS%drag_diff_answer_date <= 20250301) then
+      TKE(i) = ((CS%BBL_effic * cdrag_sqrt) * exp(-I2decay(i)*h(i,j,nz)) ) * visc%BBL_meanKE_loss_sqrtCd(i,j)
+    else
+      TKE(i) = (CS%BBL_effic * exp(-I2decay(i)*h(i,j,nz)) ) * visc%BBL_meanKE_loss(i,j)
+    endif
 
     if (associated(fluxes%BBL_tidal_dis)) &
       TKE(i) = TKE(i) + fluxes%BBL_tidal_dis(i,j) * GV%RZ_to_H * &
@@ -1644,8 +1654,7 @@ subroutine add_LOTW_BBL_diffusivity(h, u, v, tv, fluxes, visc, j, N2_int, Rho_bo
 
     ! Energy input at the bottom [H Z2 T-3 ~> m3 s-3 or W m-2].
     ! (Note that visc%BBL_meanKE_loss is in [H L2 T-3 ~> m3 s-3 or W m-2], set in set_BBL_TKE().)
-    !### I am still unsure about sqrt(cdrag) in this expressions - AJA
-    BBL_meanKE_dis = cdrag_sqrt * visc%BBL_meanKE_loss(i,j)
+    BBL_meanKE_dis = visc%BBL_meanKE_loss(i,j)
     ! Add in tidal dissipation energy at the bottom [H Z2 T-3 ~> m3 s-3 or W m-2].
     ! Note that BBL_tidal_dis is in [R Z L2 T-3 ~> W m-2].
     if (associated(fluxes%BBL_tidal_dis)) &
@@ -1956,6 +1965,9 @@ subroutine set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS, OBC)
     if (allocated(visc%BBL_meanKE_loss)) then
       do j=js,je ; do i=is,ie ; visc%BBL_meanKE_loss(i,j) = 0.0 ; enddo ; enddo
     endif
+    if (allocated(visc%BBL_meanKE_loss_sqrtCd)) then
+      do j=js,je ; do i=is,ie ; visc%BBL_meanKE_loss_sqrtCd(i,j) = 0.0 ; enddo ; enddo
+    endif
     return
   endif
 
@@ -2079,7 +2091,13 @@ subroutine set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS, OBC)
                   (G%areaCu(I,j)*(ustar(I)*ustar(I)))) + &
                  ((G%areaCv(i,J-1)*(vstar(i,J-1)*vstar(i,J-1))) + &
                   (G%areaCv(i,J)*(vstar(i,J)*vstar(i,J)))) ) )
-      visc%BBL_meanKE_loss(i,j) = &
+      visc%BBL_meanKE_loss(i,j) = cdrag_sqrt * &
+                 ((((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1))) + &
+                    (G%areaCu(I,j) * (ustar(I)*u2_bbl(I)))) + &
+                   ((G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1))) + &
+                    (G%areaCv(i,J) * (vstar(i,J)*v2_bbl(i,J)))) )*G%IareaT(i,j))
+      ! The following line could be omitted if SET_DIFF_ANSWER_DATE > 20250301 and EPBL_BBL_EFFIC_BUG is false.
+      visc%BBL_meanKE_loss_sqrtCd(i,j) = &
                  ((((G%areaCu(I-1,j)*(ustar(I-1)*u2_bbl(I-1))) + &
                     (G%areaCu(I,j) * (ustar(I)*u2_bbl(I)))) + &
                    ((G%areaCv(i,J-1)*(vstar(i,J-1)*v2_bbl(i,J-1))) + &
@@ -2289,7 +2307,9 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
   call get_param(param_file, mdl, "SET_DIFF_ANSWER_DATE", CS%answer_date, &
                "The vintage of the order of arithmetic and expressions in the set diffusivity "//&
                "calculations.  Values below 20190101 recover the answers from the end of 2018, "//&
-               "while higher values use updated and more robust forms of the same expressions.", &
+               "while higher values use updated and more robust forms of the same expressions.  "//&
+               "Values above 20250301 also use less confusing expressions to set the bottom-drag "//&
+               "generated diffusivity when USE_LOTW_BBL_DIFFUSIVITY is false.", &
                default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
@@ -2404,6 +2424,12 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                "higher values use more accurate expressions.  This only applies when "//&
                "USE_LOTW_BBL_DIFFUSIVITY is true.", &
                default=20190101, do_not_log=.not.CS%use_LOTW_BBL_diffusivity)
+               !### Set default as default=default_answer_date, or use SET_DIFF_ANSWER_DATE.
+  call get_param(param_file, mdl, "DRAG_DIFFUSIVITY_ANSWER_DATE", CS%drag_diff_answer_date, &
+               "The vintage of the order of arithmetic in the drag diffusivity calculations.  "//&
+               "Values above 20250301 use less confusing expressions to set the bottom-drag "//&
+               "generated diffusivity when USE_LOTW_BBL_DIFFUSIVITY is false. ", &
+               default=20250101, do_not_log=CS%use_LOTW_BBL_diffusivity.or.(CS%BBL_effic<=0.0))
                !### Set default as default=default_answer_date, or use SET_DIFF_ANSWER_DATE.
 
   CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &

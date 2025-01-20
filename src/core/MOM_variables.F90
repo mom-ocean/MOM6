@@ -239,6 +239,9 @@ type, public :: vertvisc_type
                    !! h points [H T-1 ~> m s-1 or kg m-2 s-1].
     BBL_meanKE_loss, & !< The viscous loss of mean kinetic energy in the bottom boundary layer
                    !! [H L2 T-3 ~> m3 s-3 or W m-2].
+    BBL_meanKE_loss_sqrtCd, & !< The viscous loss of mean kinetic energy in the bottom boundary layer
+                   !! divided by the square root of the drag coefficient [H L2 T-3 ~> m3 s-3 or W m-2].
+                   !! This is being set only to retain old answers, and should be phased out.
     taux_shelf, &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
     tauy_shelf     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
   real, allocatable, dimension(:,:) :: tbl_thick_shelf_u
