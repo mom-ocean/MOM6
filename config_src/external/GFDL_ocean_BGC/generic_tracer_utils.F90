@@ -99,8 +99,9 @@ implicit none ; private
 contains
 
   !> Unknown
-  subroutine g_tracer_flux_init(g_tracer)
+  subroutine g_tracer_flux_init(g_tracer, verbosity)
     type(g_tracer_type), pointer :: g_tracer !< Pointer to this tracer node
+    integer, optional, intent(in) :: verbosity !< A 0-9 integer indicating a level of verbosity
   end subroutine g_tracer_flux_init
 
   !> Unknown

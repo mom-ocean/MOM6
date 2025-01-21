@@ -10,7 +10,16 @@ AC_INIT(
 AC_CONFIG_SRCDIR([fms/fms.F90])
 AC_CONFIG_MACRO_DIR([m4])
 
+
 # C configuration
+
+# Autoconf assumes that LDFLAGS can be passed to CFLAGS, even though this is
+# not valid in some compilers.  This can cause basic CC tests to fail.
+# Since we do not link with CC, we can safely disable LDFLAGS for AC_PROG_CC.
+FC_LDFLAGS="$LDFLAGS"
+LDFLAGS=""
+
+# C compiler verification
 AC_PROG_CC
 AX_MPI
 CC=$MPICC
@@ -55,10 +64,13 @@ AC_CHECK_FUNCS([gettid], [], [
 # FMS 2019.01.03 uses __APPLE__ to disable Linux CPU affinity calls.
 AC_CHECK_FUNCS([sched_getaffinity], [], [AC_DEFINE([__APPLE__])])
 
+# Restore LDFLAGS
+LDFLAGS="$FC_LDFLAGS"
+
 
 # Standard Fortran configuration
-AC_LANG(Fortran)
-AC_FC_SRCEXT(f90)
+AC_LANG([Fortran])
+AC_FC_SRCEXT([f90])
 AC_PROG_FC
 
 

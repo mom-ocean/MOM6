@@ -9,7 +9,7 @@ stages:
 # that is unique to this pipeline.
 # We use the "fetch" strategy to speed up the startup of stages
 variables:
-  JOB_DIR: "/gpfs/f5/gfdl_o/scratch/oar.gfdl.ogrp-account/runner/builds/$CI_PIPELINE_ID"
+  JOB_DIR: "/gpfs/f5/gfdl_o/scratch/oar.gfdl.mom6-account/runner/builds/$CI_PIPELINE_ID"
   GIT_STRATEGY: fetch
 
 # Always eport value of $JOB_DIR
@@ -20,7 +20,7 @@ before_script:
 p:merge:
   stage: setup
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - git pull --no-edit https://github.com/NOAA-GFDL/MOM6.git dev/gfdl
 
@@ -30,7 +30,7 @@ p:merge:
 p:clone:
   stage: setup
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     # NOTE: We could sweep any builds older than 3 days here if needed
     #- find $HOME/ci/[0-9]* -mtime +3 -delete 2> /dev/null || true
@@ -45,7 +45,7 @@ p:clone:
 s:work-space:pgi:
   stage: setup
   tags:
-    - ncrc5
+    - mom6-ci-c5
   needs: ["p:clone"]
   script:
     - .gitlab/pipeline-ci-tool.sh copy-test-space pgi
@@ -53,7 +53,7 @@ s:work-space:pgi:
 s:work-space:intel:
   stage: setup
   tags:
-    - ncrc5
+    - mom6-ci-c5
   needs: ["p:clone"]
   script:
     - .gitlab/pipeline-ci-tool.sh copy-test-space intel
@@ -61,7 +61,7 @@ s:work-space:intel:
 s:work-space:gnu:
   stage: setup
   tags:
-    - ncrc5
+    - mom6-ci-c5
   needs: ["p:clone"]
   script:
     - .gitlab/pipeline-ci-tool.sh copy-test-space gnu
@@ -69,7 +69,7 @@ s:work-space:gnu:
 s:work-space:gnu-restarts:
   stage: setup
   tags:
-    - ncrc5
+    - mom6-ci-c5
   needs: ["p:clone"]
   script:
     - .gitlab/pipeline-ci-tool.sh copy-test-space gnu-rst
@@ -83,7 +83,7 @@ compile:pgi:repro:
   stage: builds
   needs: ["p:clone"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh mrs-compile repro_pgi
 
@@ -91,7 +91,7 @@ compile:intel:repro:
   stage: builds
   needs: ["p:clone"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh mrs-compile repro_intel
 
@@ -99,7 +99,7 @@ compile:gnu:repro:
   stage: builds
   needs: ["p:clone"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh mrs-compile repro_gnu mrs-compile static_gnu
 
@@ -107,7 +107,7 @@ compile:gnu:debug:
   stage: builds
   needs: ["p:clone"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh mrs-compile debug_gnu
 
@@ -115,7 +115,7 @@ compile:gnu:ocean-only-nolibs:
   stage: builds
   needs: ["p:clone"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh nolibs-ocean-only-compile gnu
 
@@ -123,7 +123,7 @@ compile:gnu:ice-ocean-nolibs:
   stage: builds
   needs: ["p:clone"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh nolibs-ocean-ice-compile gnu
 
@@ -133,36 +133,36 @@ run:pgi:
   stage: run
   needs: ["s:work-space:pgi","compile:pgi:repro"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
-    - sbatch --clusters=c5 --nodes=12 --time=15:00 --account=gfdl_o --qos=debug --job-name=mom6_pgi_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite pgi SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c5 --nodes=12 --time=${MOM6_RUN_JOB_DURATION:=15:00} --account=gfdl_o --qos=debug --job-name=mom6_pgi_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite pgi SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-pgi-SNL || ( echo Batch job did not complete ; exit 911 )
 
 run:intel:
   stage: run
   needs: ["s:work-space:intel","compile:intel:repro"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
-    - sbatch --clusters=c5 --nodes=12 --time=15:00 --account=gfdl_o --qos=debug --job-name=mom6_intel_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite intel SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c5 --nodes=12 --time=${MOM6_RUN_JOB_DURATION:=15:00} --account=gfdl_o --qos=debug --job-name=mom6_intel_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite intel SNL && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-intel-SNL || ( echo Batch job did not complete ; exit 911 )
 
 run:gnu:
   stage: run
   needs: ["s:work-space:gnu","compile:gnu:repro","compile:gnu:debug"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
-    - sbatch --clusters=c5 --nodes=12 --time=15:00 --account=gfdl_o --qos=debug --job-name=mom6_gnu_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu SNLDT && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c5 --nodes=12 --time=${MOM6_RUN_JOB_DURATION:=15:00} --account=gfdl_o --qos=debug --job-name=mom6_gnu_tests --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu SNLDT && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-gnu-SNLDT || ( echo Batch job did not complete ; exit 911 )
 
 run:gnu-restarts:
   stage: run
   needs: ["s:work-space:gnu-restarts","compile:gnu:repro"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
-    - sbatch --clusters=c5 --nodes=12 --time=15:00 --account=gfdl_o --qos=debug --job-name=mom6_gnu_restarts --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu R && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
+    - sbatch --clusters=c5 --nodes=12 --time=${MOM6_RUN_JOB_DURATION:=15:00} --account=gfdl_o --qos=debug --job-name=mom6_gnu_restarts --output=log.$CI_JOB_ID --wait .gitlab/pipeline-ci-tool.sh run-suite gnu R && ( egrep -v 'pagefaults|HiWaterMark=' log.$CI_JOB_ID ; echo Job returned normally ) || ( cat log.$CI_JOB_ID ; echo Job failed ; exit 911 )
     - test -f $JOB_DIR/CI-BATCH-SUCCESS-gnu-R || ( echo Batch job did not complete ; exit 911 )
 
 # GH/autoconf tests (duplicates the GH actions tests)
@@ -174,7 +174,7 @@ actions:gnu:
   stage: tests
   needs: []
   tags:
-    - ncrc5
+    - mom6-ci-c5
   before_script:
     - echo -e "\e[0Ksection_start:`date +%s`:submodules[collapsed=true]\r\e[0KCloning submodules"
     - git submodule init ; git submodule update
@@ -182,9 +182,9 @@ actions:gnu:
   script:
     - echo -e "\e[0Ksection_start:`date +%s`:compile[collapsed=true]\r\e[0KCompiling executables"
     - cd .testing
-    - module unload PrgEnv-gnu PrgEnv-intel PrgEnv-nvhpc ; module load PrgEnv-gnu ; module unload gcc ; module load gcc/12.2.0 cray-hdf5 cray-netcdf
-    - make -s -j
-    - MPIRUN= make preproc -s -j
+    - module unload darshan-runtime intel PrgEnv-intel ; module load PrgEnv-gnu/8.5.0 cray-hdf5 cray-netcdf ; module switch gcc-native/12.3
+    - FC=ftn MPIFC=ftn CC=cc  make -s -j
+    - MPIRUN= FC=ftn MPIFC=ftn CC=cc make preproc -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
     - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
     - sbatch --clusters=c5 --nodes=2 --time=0:10:00 --account=gfdl_o --qos=debug --job-name=MOM6.gnu.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 ) && make test -s
@@ -194,7 +194,7 @@ actions:intel:
   stage: tests
   needs: []
   tags:
-    - ncrc5
+    - mom6-ci-c5
   before_script:
     - echo -e "\e[0Ksection_start:`date +%s`:submodules[collapsed=true]\r\e[0KCloning submodules"
     - git submodule init ; git submodule update
@@ -202,9 +202,9 @@ actions:intel:
   script:
     - echo -e "\e[0Ksection_start:`date +%s`:compile[collapsed=true]\r\e[0KCompiling executables"
     - cd .testing
-    - module unload PrgEnv-pgi PrgEnv-intel PrgEnv-gnu ; module load PrgEnv-intel; module unload intel; module load intel-classic/2022.0.2 cray-hdf5 cray-netcdf
-    - make -s -j
-    - MPIRUN= make preproc -s -j
+    - module unload darshan-runtime ; module unload intel cray-libsci cray-mpich PrgEnv-intel ; module load PrgEnv-intel intel/2023.2.0 cray-hdf5 cray-netcdf cray-mpich
+    - FC=ftn MPIFC=ftn CC=cc make -s -j
+    - MPIRUN= FC=ftn MPIFC=ftn CC=cc make preproc -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"
     - (echo '#!/bin/bash';echo 'make MPIRUN="srun -mblock --exclusive" test -s -j') > job.sh
     - sbatch --clusters=c5 --nodes=2 --time=0:10:00 --account=gfdl_o --qos=debug --job-name=MOM6.intel.testing --output=log.$CI_JOB_ID --wait job.sh || ( cat log.$CI_JOB_ID ; exit 911 ) && make test -s
@@ -219,7 +219,7 @@ t:pgi:symmetric:
   stage: tests
   needs: ["run:pgi"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats pgi S
 
@@ -227,7 +227,7 @@ t:pgi:non-symmetric:
   stage: tests
   needs: ["run:pgi"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats pgi N
 
@@ -235,7 +235,7 @@ t:pgi:layout:
   stage: tests
   needs: ["run:pgi"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats pgi L
 
@@ -243,7 +243,7 @@ t:pgi:params:
   stage: tests
   needs: ["run:pgi"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-params pgi
   allow_failure: true
@@ -252,7 +252,7 @@ t:intel:symmetric:
   stage: tests
   needs: ["run:intel"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats intel S
 
@@ -260,7 +260,7 @@ t:intel:non-symmetric:
   stage: tests
   needs: ["run:intel"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats intel N
 
@@ -268,7 +268,7 @@ t:intel:layout:
   stage: tests
   needs: ["run:intel"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats intel L
 
@@ -276,7 +276,7 @@ t:intel:params:
   stage: tests
   needs: ["run:intel"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-params intel
   allow_failure: true
@@ -285,7 +285,7 @@ t:gnu:symmetric:
   stage: tests
   needs: ["run:gnu"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats gnu S
 
@@ -293,7 +293,7 @@ t:gnu:non-symmetric:
   stage: tests
   needs: ["run:gnu"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats gnu N
 
@@ -301,7 +301,7 @@ t:gnu:layout:
   stage: tests
   needs: ["run:gnu"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats gnu L
 
@@ -309,7 +309,7 @@ t:gnu:static:
   stage: tests
   needs: ["run:gnu"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats gnu T
 
@@ -317,7 +317,7 @@ t:gnu:symmetric-debug:
   stage: tests
   needs: ["run:gnu"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats gnu D
 
@@ -325,7 +325,7 @@ t:gnu:restart:
   stage: tests
   needs: ["run:gnu-restarts"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-stats gnu R
 
@@ -333,7 +333,7 @@ t:gnu:params:
   stage: tests
   needs: ["run:gnu"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-params gnu
   allow_failure: true
@@ -342,7 +342,7 @@ t:gnu:diags:
   stage: tests
   needs: ["run:gnu"]
   tags:
-    - ncrc5
+    - mom6-ci-c5
   script:
     - .gitlab/pipeline-ci-tool.sh check-diags gnu
   allow_failure: true
@@ -351,7 +351,7 @@ t:gnu:diags:
 cleanup:
   stage: cleanup
   tags:
-    - ncrc5
+    - mom6-ci-c5
   before_script:
     - echo Skipping usual preamble
   script:

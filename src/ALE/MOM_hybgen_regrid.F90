@@ -258,9 +258,9 @@ subroutine write_Hybgen_coord_file(GV, CS, filepath)
   call create_MOM_file(IO_handle, trim(filepath), vars, 3, fields, &
       SINGLE_FILE, GV=GV)
 
-  call MOM_write_field(IO_handle, fields(1), CS%dp0k, scale=CS%coord_scale)
-  call MOM_write_field(IO_handle, fields(2), CS%ds0k, scale=CS%coord_scale)
-  call MOM_write_field(IO_handle, fields(3), CS%target_density, scale=CS%Rho_coord_scale)
+  call MOM_write_field(IO_handle, fields(1), CS%dp0k, unscale=CS%coord_scale)
+  call MOM_write_field(IO_handle, fields(2), CS%ds0k, unscale=CS%coord_scale)
+  call MOM_write_field(IO_handle, fields(3), CS%target_density, unscale=CS%Rho_coord_scale)
 
   call IO_handle%close()
 end subroutine write_Hybgen_coord_file

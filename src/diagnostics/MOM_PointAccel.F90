@@ -121,11 +121,11 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     do_k(:) = .false.
 
   ! Open up the file for output if this is the first call.
-    if (CS%u_file < 0) then
+    if (CS%u_file == -1) then
       if (len_trim(CS%u_trunc_file) < 1) return
       call open_ASCII_file(CS%u_file, trim(CS%u_trunc_file), action=APPEND_FILE, &
                            threading=MULTIPLE, fileset=SINGLE_FILE)
-      if (CS%u_file < 0) then
+      if (CS%u_file == -1) then
         call MOM_error(NOTE, 'Unable to open file '//trim(CS%u_trunc_file)//'.')
         return
       endif
@@ -462,11 +462,11 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     do_k(:) = .false.
 
   ! Open up the file for output if this is the first call.
-    if (CS%v_file < 0) then
+    if (CS%v_file == -1) then
       if (len_trim(CS%v_trunc_file) < 1) return
       call open_ASCII_file(CS%v_file, trim(CS%v_trunc_file), action=APPEND_FILE, &
                            threading=MULTIPLE, fileset=SINGLE_FILE)
-      if (CS%v_file < 0) then
+      if (CS%v_file == -1) then
         call MOM_error(NOTE, 'Unable to open file '//trim(CS%v_trunc_file)//'.')
         return
       endif

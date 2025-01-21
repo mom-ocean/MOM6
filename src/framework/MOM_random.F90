@@ -99,7 +99,7 @@ end function random_norm
 subroutine random_2d_01(CS, HI, rand)
   type(PRNG),           intent(inout) :: CS !< Container for pseudo-random number generators
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1 [nondim]
   ! Local variables
   integer :: i,j
 
@@ -116,7 +116,7 @@ end subroutine random_2d_01
 subroutine random_2d_norm(CS, HI, rand)
   type(PRNG),           intent(inout) :: CS !< Container for pseudo-random number generators
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
-  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1 [nondim]
   ! Local variables
   integer :: i,j,n
 
@@ -318,14 +318,14 @@ logical function random_unit_tests(verbose)
   ! Local variables
   type(PRNG) :: test_rng ! Generator
   type(time_type) :: Time ! Model time
-  real :: r1, r2, r3 ! Some random numbers and re-used work variables
-  real :: mean, var, ar1, std ! Some statistics
+  real :: r1, r2, r3 ! Some random numbers and re-used work variables [nondim]
+  real :: mean, var, ar1, std ! Some statistics [nondim]
   integer :: stdunit ! For messages
   integer, parameter :: n_samples = 800
   integer :: i, j, ni, nj
   ! Fake being on a decomposed domain
   type(hor_index_type), pointer :: HI => null() !< Not the real HI
-  real, dimension(:,:), allocatable :: r2d ! Random numbers
+  real, dimension(:,:), allocatable :: r2d ! Random numbers [nondim]
 
   ! Fake a decomposed domain
   ni = 6
@@ -547,7 +547,7 @@ logical function test_fn(verbose, good, label, rvalue, ivalue)
   logical,          intent(in) :: verbose !< Verbosity
   logical,          intent(in) :: good !< True if pass, false otherwise
   character(len=*), intent(in) :: label !< Label for messages
-  real,             intent(in) :: rvalue !< Result of calculation
+  real,             intent(in) :: rvalue !< Result of calculation [nondim]
   integer,          intent(in) :: ivalue !< Result of calculation
   optional :: rvalue, ivalue
 

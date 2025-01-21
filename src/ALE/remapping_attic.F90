@@ -28,11 +28,6 @@ integer, parameter  :: INTEGRATION_PQM = 5  !< Piecewise Quartic Method
 ! outside of the range 0 to 1.
 #define __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
 
-real, parameter :: hNeglect_dflt = 1.E-30 !< A thickness [H ~> m or kg m-2] that can be
-                                      !! added to thicknesses in a denominator without
-                                      !! changing the numerical result, except where
-                                      !! a division by zero would otherwise occur.
-
 contains
 
 !> Compare two summation estimates of positive data and judge if due to more
@@ -83,7 +78,7 @@ subroutine remapByProjection( n0, h0, u0, ppoly0_E, ppoly0_coefs, &
   real,          intent(in)    :: h1(:)  !< Target grid widths (size n1) [H]
   integer,       intent(in)    :: method !< Remapping scheme to use
   real,          intent(out)   :: u1(:)  !< Target cell averages (size n1) [A]
-  real, optional, intent(in)   :: h_neglect !< A negligibly small width for the
+  real,          intent(in)    :: h_neglect !< A negligibly small width for the
                                            !! purpose of cell reconstructions
                                            !! in the same units as h [H].
   ! Local variables
@@ -132,7 +127,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, dx1, &
   real, dimension(:),   intent(out) :: u1     !< Target cell averages (size n1) [A]
   real, dimension(:), &
               optional, intent(out) :: h1     !< Target grid widths (size n1) [H]
-  real,       optional, intent(in)  :: h_neglect !< A negligibly small width for the
+  real,                 intent(in)  :: h_neglect !< A negligibly small width for the
                                            !! purpose of cell reconstructions
                                            !! in the same units as h [H].
   ! Local variables
@@ -181,7 +176,7 @@ subroutine remapByDeltaZ( n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, dx1, &
     ! hFlux is the positive width of the remapped volume
     hFlux = abs(dx1(iTarget+1))
     call integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method, &
-                                   xL, xR, hFlux, uAve, jStart, xStart )
+                                   xL, xR, hFlux, uAve, jStart, xStart, h_neglect )
     ! uAve is the average value of u, independent of sign of dx1
     fluxR = dx1(iTarget+1)*uAve ! Includes sign of dx1
 
@@ -218,7 +213,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
                                    !< On exit, contains index of last cell used
   real,                 intent(inout) :: xStart !< The left edge position of cell jStart [H]
                                    !< On first entry should be 0.
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
+  real,                 intent(in)    :: h_neglect !< A negligibly small width for the
                                           !! purpose of cell reconstructions
                                           !! in the same units as h [H]
   ! Local variables
@@ -232,10 +227,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
                           ! (notionally xR - xL) which differs due to roundoff [H].
   real    :: x0_2, x1_2   ! Squares of normalized positions used to evaluate polynomials [nondim]
   real    :: x0px1, x02px12 ! Sums of normalized positions and their squares [nondim]
-  real    :: hNeglect     ! A negligible thickness in the same units as h [H]
   real, parameter :: r_3 = 1.0/3.0 ! Used in evaluation of integrated polynomials [nondim]
-
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
 
   q = -1.E30
   x0jLl = -1.E30
@@ -288,7 +280,7 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
       uAve = 0.5 * ( ppoly0_E(jL,1) + ppoly0_E(jL,2) )
     else
       ! WHY IS THIS NOT WRITTEN AS xi0 = ( xL - x0jLl ) / h0(jL) ---AJA
-      xi0 = xL / ( h0(jL) + hNeglect ) - x0jLl / ( h0(jL) + hNeglect )
+      xi0 = xL / ( h0(jL) + h_neglect ) - x0jLl / ( h0(jL) + h_neglect )
 
       select case ( method )
         case ( INTEGRATION_PCM )
@@ -347,11 +339,11 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
       !
       ! Determine normalized coordinates
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
-      xi0 = max( 0., min( 1., ( xL - x0jLl ) / ( h0(jL) + hNeglect ) ) )
-      xi1 = max( 0., min( 1., ( xR - x0jLl ) / ( h0(jL) + hNeglect ) ) )
+      xi0 = max( 0., min( 1., ( xL - x0jLl ) / ( h0(jL) + h_neglect ) ) )
+      xi1 = max( 0., min( 1., ( xR - x0jLl ) / ( h0(jL) + h_neglect ) ) )
 #else
-      xi0 = xL / h0(jL) - x0jLl / ( h0(jL) + hNeglect )
-      xi1 = xR / h0(jL) - x0jLl / ( h0(jL) + hNeglect )
+      xi0 = xL / h0(jL) - x0jLl / ( h0(jL) + h_neglect )
+      xi1 = xR / h0(jL) - x0jLl / ( h0(jL) + h_neglect )
 #endif
 
       hAct = h0(jL) * ( xi1 - xi0 )
@@ -403,9 +395,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
 
       ! Integrate from xL up to right boundary of cell jL
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
-      xi0 = max( 0., min( 1., ( xL - x0jLl ) / ( h0(jL) + hNeglect ) ) )
+      xi0 = max( 0., min( 1., ( xL - x0jLl ) / ( h0(jL) + h_neglect ) ) )
 #else
-      xi0 = (xL - x0jLl) / ( h0(jL) + hNeglect )
+      xi0 = (xL - x0jLl) / ( h0(jL) + h_neglect )
 #endif
       xi1 = 1.0
 
@@ -449,9 +441,9 @@ subroutine integrateReconOnInterval( n0, h0, u0, ppoly0_E, ppoly0_coefs, method,
       ! Integrate from left boundary of cell jR up to xR
       xi0 = 0.0
 #ifdef __USE_ROUNDOFF_SAFE_ADJUSTMENTS__
-      xi1 = max( 0., min( 1., ( xR - x0jRl ) / ( h0(jR) + hNeglect ) ) )
+      xi1 = max( 0., min( 1., ( xR - x0jRl ) / ( h0(jR) + h_neglect ) ) )
 #else
-      xi1 = (xR - x0jRl) / ( h0(jR) + hNeglect )
+      xi1 = (xR - x0jRl) / ( h0(jR) + h_neglect )
 #endif
 
       hAct = hAct + h0(jR) * ( xi1 - xi0 )
@@ -568,8 +560,8 @@ logical function remapping_attic_unit_tests(verbose)
 
   v = verbose
   answer_date = 20190101 ! 20181231
-  h_neglect = hNeglect_dflt
-  h_neglect_edge = hNeglect_dflt ; if (answer_date < 20190101) h_neglect_edge = 1.0e-10
+  h_neglect = 1.0E-30
+  h_neglect_edge = h_neglect ; if (answer_date < 20190101) h_neglect_edge = 1.0e-10
 
   write(stdout,*) '==== remapping_attic: remapping_attic_unit_tests ================='
   remapping_attic_unit_tests = .false. ! Normally return false

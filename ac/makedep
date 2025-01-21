@@ -214,68 +214,91 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
     # Create new makefile
     with open(makefile, 'w') as file:
         print("# %s created by makedep" % (makefile), file=file)
-        print("", file=file)
+        print(file=file)
         print("# Invoked as", file=file)
         print('#   '+' '.join(sys.argv), file=file)
-        print("", file=file)
+        print(file=file)
         print("all:", " ".join(targets), file=file)
-        print("", file=file)
 
+        # print(file=file)
         # print("# SRC_DIRS is usually set in the parent Makefile but in case is it not we", file=file)
         # print("# record it here from when makedep was previously invoked.", file=file)
         # print("SRC_DIRS ?= ${SRC_DIRS}", file=file)
-        # print("", file=file)
 
+        # print(file=file)
         # print("# all_files:", ' '.join(all_files), file=file)
-        # print("", file=file)
 
         # Write rule for each object from Fortran
-        for o in sorted(o2F90.keys()):
-            found_mods = [m for m in o2uses[o] if m in all_modules]
-            found_objs = [mod2o[m] for m in o2uses[o] if m in all_modules]
+        for obj in sorted(o2F90.keys()):
+            found_mods = [m for m in o2uses[obj] if m in all_modules]
+            found_objs = [mod2o[m] for m in o2uses[obj] if m in all_modules]
             found_deps = [
                 dep for pair in zip(found_mods, found_objs) for dep in pair
             ]
-            missing_mods = [m for m in o2uses[o] if m not in all_modules]
+            missing_mods = [m for m in o2uses[obj] if m not in all_modules]
 
-            incs, inc_used = nested_inc(o2h[o] + o2inc[o], f2F, defines)
-            inc_mods = [u for u in inc_used if u not in found_mods and u in all_modules]
+            incs, inc_used = nested_inc(o2h[obj] + o2inc[obj], f2F, defines)
+            inc_mods = [
+                u for u in inc_used if u not in found_mods and u in all_modules
+            ]
 
             incdeps = sorted(set([f2F[f] for f in incs if f in f2F]))
-            incargs = sorted(set(['-I'+os.path.dirname(f) for f in incdeps]))
+            incargs = sorted(set(['-I' + os.path.dirname(f) for f in incdeps]))
+
+            # Header
+            print(file=file)
             if debug:
-                print("# Source file {} produces:".format(o2F90[o]), file=file)
-                print("#   object:", o, file=file)
-                print("#   modules:", ' '.join(o2mods[o]), file=file)
-                print("#   uses:", ' '.join(o2uses[o]), file=file)
+                print("# Source file {} produces:".format(o2F90[obj]), file=file)
+                print("#   object:", obj, file=file)
+                print("#   modules:", ' '.join(o2mods[obj]), file=file)
+                print("#   uses:", ' '.join(o2uses[obj]), file=file)
                 print("#   found mods:", ' '.join(found_mods), file=file)
                 print("#   found objs:", ' '.join(found_objs), file=file)
                 print("#   missing:", ' '.join(missing_mods), file=file)
                 print("#   includes_all:", ' '.join(incs), file=file)
                 print("#   includes_pth:", ' '.join(incdeps), file=file)
                 print("#   incargs:", ' '.join(incargs), file=file)
-                print("#   program:", ' '.join(o2prg[o]), file=file)
-            if o2mods[o]:
-                print(' '.join(o2mods[o])+':', o, file=file)
-            print(o + ':', o2F90[o], ' '.join(inc_mods + incdeps + found_deps), file=file)
-            print('\t'+fc_rule, ' '.join(incargs), file=file)
+                print("#   program:", ' '.join(o2prg[obj]), file=file)
+
+            # Fortran Module dependencies
+            if o2mods[obj]:
+                print(' '.join(o2mods[obj]) + ':', obj, file=file)
+
+            # Fortran object dependencies
+            obj_incs = ' '.join(inc_mods + incdeps + found_deps)
+            print(obj + ':', o2F90[obj], obj_incs, file=file)
+
+            # Fortran object build rule
+            obj_rule = ' '.join([fc_rule] + incargs + ['-c', '$<'])
+            print('\t' + obj_rule, file=file)
 
         # Write rule for each object from C
-        for o in sorted(o2c.keys()):
-            incdeps = sorted(set([f2F[h] for h in o2h[o] if h in f2F]))
-            incargs = sorted(set(['-I'+os.path.dirname(f) for f in incdeps]))
+        for obj in sorted(o2c.keys()):
+            incdeps = sorted(set([f2F[h] for h in o2h[obj] if h in f2F]))
+            incargs = sorted(set(['-I' + os.path.dirname(f) for f in incdeps]))
+
+            # Header
+            print(file=file)
             if debug:
-                print("# Source file %s produces:" % (o2c[o]), file=file)
-                print("#   object:", o, file=file)
-                print("#   includes_all:", ' '.join(o2h[o]), file=file)
+                print("# Source file %s produces:" % (o2c[obj]), file=file)
+                print("#   object:", obj, file=file)
+                print("#   includes_all:", ' '.join(o2h[obj]), file=file)
                 print("#   includes_pth:", ' '.join(incdeps), file=file)
                 print("#   incargs:", ' '.join(incargs), file=file)
-            print(o+':', o2c[o], ' '.join(incdeps), file=file)
-            print('\t$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS) -c $<', ' '.join(incargs), file=file)
+
+            # C object dependencies
+            print(obj + ':', o2c[obj], ' '.join(incdeps), file=file)
+
+            # C object build rule
+            c_rule = ' '.join(
+              ['$(CC) $(DEFS) $(CPPFLAGS) $(CFLAGS)'] + incargs + ['-c', '$<']
+            )
+            #print('\t' + c_rule, ' '.join(incargs), '-c', '$<', file=file)
+            print('\t' + c_rule, file=file)
 
         # Externals (so called)
         if link_externals:
-            print("", file=file)
+            print(file=file)
             print("# Note: The following object files are not associated with "
                   "modules so we assume we should link with them:", file=file)
             print("# ", ' '.join(externals), file=file)
@@ -286,23 +309,23 @@ def create_deps(src_dirs, skip_dirs, makefile, debug, exec_target, fc_rule,
         # Write rules for linking executables
         for p in sorted(prg2o.keys()):
             o = prg2o[p]
-            print("", file=file)
+            print(file=file)
             print(p+':', ' '.join(link_obj(o, o2uses, mod2o, all_modules) + externals), file=file)
             print('\t$(LD) $(LDFLAGS) -o $@ $^ $(LIBS)', file=file)
 
         # Write rules for building libraries
         for lb in sorted(targ_libs):
-            print("", file=file)
+            print(file=file)
             print(lb+':', ' '.join(list(o2F90.keys()) + list(o2c.keys())), file=file)
             print('\t$(AR) $(ARFLAGS) $@ $^', file=file)
 
         # Write cleanup rules
-        print("", file=file)
+        print(file=file)
         print("clean:", file=file)
         print('\trm -f *.mod *.o', ' '.join(list(prg2o.keys()) + targ_libs), file=file)
 
         # Write re-generation rules
-        print("", file=file)
+        print(file=file)
         print("remakedep:", file=file)
         print('\t'+' '.join(sys.argv), file=file)
 
@@ -366,7 +389,6 @@ def scan_fortran_file(src_file, defines=None):
 
     cpp_defines = defines if defines is not None else []
 
-    #cpp_macros = [define.split('=')[0] for define in cpp_defines]
     cpp_macros = dict([t.split('=') for t in cpp_defines])
     cpp_group_stack = []
 
@@ -374,16 +396,16 @@ def scan_fortran_file(src_file, defines=None):
         lines = file.readlines()
 
         external_namespace = True
-            # True if we are in the external (i.e. global) namespace
+        # True if we are in the external (i.e. global) namespace
 
         file_has_externals = False
-            # True if the file contains any external objects
+        # True if the file contains any external objects
 
         cpp_exclude = False
-            # True if the parser excludes the subsequent lines
+        # True if the parser excludes the subsequent lines
 
         cpp_group_stack = []
-            # Stack of condition group exclusion states
+        # Stack of condition group exclusion states
 
         for line in lines:
             # Start of #ifdef condition group
@@ -446,14 +468,16 @@ def scan_fortran_file(src_file, defines=None):
             if match:
                 new_macro = line.lstrip()[1:].split()[1]
                 try:
-                    cpp_macros.remove(new_macro)
-                except:
-                    # Ignore missing macros (for now?)
+                    cpp_macros.pop(new_macro)
+                except KeyError:
+                    # C99: "[A macro] is ignored if the specified identifier is
+                    # not currently defined as a macro name."
                     continue
 
             match = re_module.match(line.lower())
             if match:
-                if match.group(1) not in 'procedure':   # avoid "module procedure" statements
+                # Avoid "module procedure" statements
+                if match.group(1) not in 'procedure':
                     module_decl.append(match.group(1))
                     external_namespace = False
 
@@ -632,9 +656,9 @@ parser.add_argument(
 )
 parser.add_argument(
     '-f', '--fc_rule',
-    default="$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<",
+    default="$(FC) $(DEFS) $(CPPFLAGS) $(FCFLAGS)",
     help="String to use in the compilation rule. Default is: "
-         "'$(FC) $(DEFS) $(FCFLAGS) $(CPPFLAGS) -c $<'"
+         "'$(FC) $(DEFS) $(CPPFLAGS) $(FCFLAGS)'"
 )
 parser.add_argument(
     '-x', '--exec_target',

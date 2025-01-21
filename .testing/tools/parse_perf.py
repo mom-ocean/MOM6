@@ -102,7 +102,7 @@ def parse_perf_report(perf_data_path):
 
                     if tok == '>':
                         bracks -= 1
-                    if tok == '(':
+                    if tok == ')':
                         parens -= 1
 
                 # Strip any whitespace tokens
