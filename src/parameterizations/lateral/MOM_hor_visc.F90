@@ -1818,14 +1818,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         else
           if (use_kh_struct) then
             Kh_BS(I,J) = 0.25*( ((MEKE%Ku(i,j)*VarMix%BS_struct(i,j,k)) + &
-                         (MEKE%Ku(i+1,j+1)*VarMix%BS_struct(i+1,j+1,k))) + &
-                         ((MEKE%Ku(i+1,j)*VarMix%BS_struct(i+1,j,k)) + &
-                         (MEKE%Ku(i,j+1)*VarMix%BS_struct(i,j+1,k))) )
+                                 (MEKE%Ku(i+1,j+1)*VarMix%BS_struct(i+1,j+1,k))) + &
+                                ((MEKE%Ku(i+1,j)*VarMix%BS_struct(i+1,j,k)) + &
+                                 (MEKE%Ku(i,j+1)*VarMix%BS_struct(i,j+1,k))) )
           else
-            Kh_BS(I,J) = 0.25*( (MEKE%Ku(i,j) + &
-                         MEKE%Ku(i+1,j+1)) + &
-                         (MEKE%Ku(i+1,j) + &
-                         MEKE%Ku(i,j+1)) )
+            Kh_BS(I,J) = 0.25*( (MEKE%Ku(i,j) + MEKE%Ku(i+1,j+1)) + &
+                                (MEKE%Ku(i+1,j) + MEKE%Ku(i,j+1)) )
           endif
         endif
       enddo ; enddo
@@ -3226,9 +3224,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
 
   if (CS%EY24_EBT_BS) then
     CS%id_BS_coeff_h = register_diag_field('ocean_model', 'BS_coeff_h', diag%axesTL, Time, &
-        'Backscatter coefficient at h points', 'm2 s-1')
+        'Backscatter coefficient at h points', units='m2 s-1', conversion=US%L_to_m**2*US%s_to_T)
     CS%id_BS_coeff_q = register_diag_field('ocean_model', 'BS_coeff_q', diag%axesBL, Time, &
-        'Backscatter coefficient at q points', 'm2 s-1')
+        'Backscatter coefficient at q points', units='m2 s-1', conversion=US%L_to_m**2*US%s_to_T)
   endif
 
   CS%id_FrictWork = register_diag_field('ocean_model','FrictWork',diag%axesTL,Time,&

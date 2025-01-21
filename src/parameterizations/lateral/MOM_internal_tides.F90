@@ -152,8 +152,10 @@ type, public :: int_tide_CS ; private
   integer :: En_restart_power !< A power factor of 2 by which to multiply the energy in restart [nondim]
   type(time_type), pointer :: Time => NULL() !< A pointer to the model's clock.
   character(len=200) :: inputdir !< directory to look for coastline angle file
-  real :: decay_rate    !< A constant rate at which internal tide energy is
-                        !! lost to the interior ocean internal wave field [T-1 ~> s-1].
+  real, allocatable, dimension(:,:,:,:) :: decay_rate_2d !< rate at which internal tide energy is
+                                                         !! lost to the interior ocean internal wave field
+                                                         !! as a function of longitude, latitude, frequency
+                                                         !! and vertical mode [T-1 ~> s-1].
   real :: cdrag         !< The bottom drag coefficient [nondim].
   real :: drag_min_depth !< The minimum total ocean thickness that will be used in the denominator
                         !! of the quadratic drag terms for internal tides when
@@ -174,6 +176,8 @@ type, public :: int_tide_CS ; private
                         !! internal tide energy [H Z2 T-2 ~> m3 s-2 or J m-2]
   logical :: apply_residual_drag
                         !< If true, apply sink from residual term of reflection/transmission.
+  logical :: use_2d_decay_rate
+                        !< If true, use a spatially varying decay rate for each harmonic.
   real, allocatable :: En(:,:,:,:,:)
                         !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
                         !! integrated within an angular and frequency band [H Z2 T-2 ~> m3 s-2 or J m-2]
@@ -677,7 +681,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
       ! Calculate loss rate and apply loss over the time step ; apply the same drag timescale
       ! to each En component (technically not correct; fix later)
       En_b = CS%En(i,j,a,fr,m) ! save previous value
-      En_a = CS%En(i,j,a,fr,m) / (1.0 + (dt * CS%decay_rate)) ! implicit update
+      En_a = CS%En(i,j,a,fr,m) / (1.0 + (dt * CS%decay_rate_2d(i,j,fr,m))) ! implicit update
       CS%TKE_leak_loss(i,j,a,fr,m) = (En_b - En_a) * I_dt ! compute exact loss rate [H Z2 T-3 ~> m3 s-3 or W m-2]
       CS%En(i,j,a,fr,m) = En_a ! update value
     enddo ; enddo ; enddo ; enddo ; enddo
@@ -3386,6 +3390,9 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   real                              :: kappa_itides ! characteristic topographic wave number [L-1 ~> m-1]
   real, dimension(:,:), allocatable :: ridge_temp ! array for temporary storage of flags
                                                   ! of cells with double-reflecting ridges [nondim]
+  real, dimension(:,:), allocatable :: tmp_decay ! a temp array to store decay rates [T-1 ~> s-1]
+  real :: decay_rate                             ! A constant rate at which internal tide energy is
+                                                 ! lost to the interior ocean internal wave field [T-1 ~> s-1].
   logical :: use_int_tides, use_temperature
   logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for calculating the EBT structure
   real    :: IGW_c1_thresh ! A threshold first mode internal wave speed below which all higher
@@ -3411,7 +3418,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   character(len=200) :: filename
   character(len=200) :: refl_angle_file
   character(len=200) :: refl_pref_file, refl_dbl_file, trans_file
-  character(len=200) :: h2_file
+  character(len=200) :: h2_file, decay_file
   character(len=80)  :: rough_var ! Input file variable names
 
   character(len=240), dimension(:), allocatable :: energy_fractions
@@ -3546,10 +3553,13 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   call get_param(param_file, mdl, "MAX_TKE_TO_KD", CS%max_TKE_to_Kd, &
                  "Limiter for TKE_to_Kd.", &
                  units="", default=1e9, scale=US%Z_to_m*US%s_to_T**2)
-  call get_param(param_file, mdl, "INTERNAL_TIDE_DECAY_RATE", CS%decay_rate, &
+  call get_param(param_file, mdl, "INTERNAL_TIDE_DECAY_RATE", decay_rate, &
                  "The rate at which internal tide energy is lost to the "//&
                  "interior ocean internal wave field.", &
                  units="s-1", default=0.0, scale=US%T_to_s)
+  call get_param(param_file, mdl, "USE_2D_INTERNAL_TIDE_DECAY_RATE", CS%use_2d_decay_rate, &
+                 "If true, use a spatially varying decay rate for leakage loss in the "// &
+                 "internal tide code.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_VOLUME_BASED_CFL", CS%vol_CFL, &
                  "If true, use the ratio of the open face lengths to the "//&
                  "tracer cell areas when estimating CFL numbers in the "//&
@@ -3679,6 +3689,32 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
   allocate(CS%TKE_itidal_loss_glo_dt(num_freq,num_mode), source=0.0)
   allocate(CS%TKE_residual_loss_glo_dt(num_freq,num_mode), source=0.0)
   allocate(CS%TKE_input_glo_dt(num_freq,num_mode), source=0.0)
+  allocate(CS%decay_rate_2d(isd:ied,jsd:jed,num_freq,num_mode), source=0.0)
+  allocate(tmp_decay(isd:ied,jsd:jed), source=0.0)
+
+  if (CS%use_2d_decay_rate) then
+    call get_param(param_file, mdl, "ITIDES_DECAY_FILE", decay_file, &
+            "The path to the file containing the decay rates "//&
+            "for internal tides with USE_2D_INTERNAL_TIDE_DECAY_RATE.", &
+            fail_if_missing=.true.)
+    do m=1,num_mode ; do fr=1,num_freq
+      ! read 2d field for each harmonic
+      filename = trim(CS%inputdir) // trim(decay_file)
+      write(var_name, '("decay_rate_freq",i1,"_mode",i1)') fr, m
+      call MOM_read_data(filename, var_name, tmp_decay, G%domain, scale=US%T_to_s)
+      do j=G%jsc,G%jec ; do i=G%isc,G%iec
+        CS%decay_rate_2d(i,j,fr,m) = tmp_decay(i,j)
+      enddo ; enddo
+    enddo ; enddo
+  else
+    do m=1,num_mode ; do fr=1,num_freq ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      CS%decay_rate_2d(i,j,fr,m) = decay_rate
+    enddo ; enddo ; enddo ; enddo
+  endif
+
+  do m=1,num_mode
+    call pass_var(CS%decay_rate_2d(:,:,:,m), G%domain)
+  enddo
 
   ! Compute the fixed part of the bottom drag loss from baroclinic modes
   call get_param(param_file, mdl, "H2_FILE", h2_file, &

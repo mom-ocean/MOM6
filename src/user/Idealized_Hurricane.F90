@@ -349,7 +349,6 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   real :: fbench      !< The benchmark 'f' value [T-1 ~> s-1]
   real :: fbench_fac  !< A factor that is set to 0 to use the
                       !!  benchmark 'f' value [nondim]
-  real :: km_to_L     !< The conversion factor from the units of latitude to L [L km-1 ~> 1e3]
   real :: rel_tau_fac !< A factor that is set to 0 to disable
                       !!  current relative stress calculation [nondim]
 
@@ -359,7 +358,8 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   isd = G%isd   ; ied = G%ied   ; jsd = G%jsd   ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  km_to_L = 1.0e3*US%m_to_L
+  if ((G%grid_unit_to_L <= 0.) .and. (.not.CS%SCM_mode)) call MOM_error(FATAL, "Idealized_Hurricane.F90: " //&
+          "idealized_hurricane_wind_forcing is only set to work with Cartesian axis units.")
 
   ! Allocate the forcing arrays, if necessary.
   call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., tau_mag=.true.)
@@ -375,7 +375,6 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
        cos(CS%hurr_translation_dir))
   YC = CS%Hurr_cen_Y0 + (time_type_to_real(day)*US%s_to_T * CS%hurr_translation_spd * &
        sin(CS%hurr_translation_dir))
-
 
   if (CS%BR_Bench) then
     ! f reset to value used in generated wind for benchmark test
@@ -403,8 +402,8 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
         YY = CS%dy_from_center - YC
         XX = -XC
       else
-        YY = G%geoLatCu(I,j)*km_to_L - YC
-        XX = G%geoLonCu(I,j)*km_to_L - XC
+        YY = G%geoLatCu(I,j) * G%grid_unit_to_L - YC
+        XX = G%geoLonCu(I,j) * G%grid_unit_to_L - XC
       endif
       call idealized_hurricane_wind_profile(CS, US, f_local, YY, XX, Uocn, Vocn, TX, TY)
       forces%taux(I,j) = G%mask2dCu(I,j) * TX
@@ -427,8 +426,8 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
         YY = CS%dy_from_center - YC
         XX = -XC
       else
-        YY = G%geoLatCv(i,J)*km_to_L - YC
-        XX = G%geoLonCv(i,J)*km_to_L - XC
+        YY = G%geoLatCv(i,J) * G%grid_unit_to_L - YC
+        XX = G%geoLonCv(i,J) * G%grid_unit_to_L - XC
       endif
       call idealized_hurricane_wind_profile(CS, US, f_local, YY, XX, Uocn, Vocn, TX, TY)
       forces%tauy(i,J) = G%mask2dCv(i,J) * TY

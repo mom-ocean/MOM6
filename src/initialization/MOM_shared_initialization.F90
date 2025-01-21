@@ -485,7 +485,6 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   real    :: f_0    ! The reference value of the Coriolis parameter [T-1 ~> s-1]
   real    :: beta   ! The meridional gradient of the Coriolis parameter [T-1 L-1 ~> s-1 m-1]
   real    :: beta_lat_ref ! The reference latitude for the beta plane [degrees_N] or [km] or [m]
-  real    :: Rad_Earth_L  ! The radius of the planet in rescaled units [L ~> m]
   real    :: y_scl  ! A scaling factor from the units of latitude [L lat-1 ~> m lat-1]
   real    :: PI     ! The ratio of the circumference of a circle to its diameter [nondim]
   character(len=40)  :: mdl = "set_rotation_beta_plane" ! This subroutine's name.
@@ -503,18 +502,16 @@ subroutine set_rotation_beta_plane(f, G, param_file, US)
   call get_param(param_file, mdl, "AXIS_UNITS", axis_units, default="degrees")
 
   PI = 4.0*atan(1.0)
+  y_scl = G%grid_unit_to_L
+  if (G%grid_unit_to_L <= 0.0) y_scl = PI * G%Rad_Earth_L / 180.
+
   select case (axis_units(1:1))
     case ("d")
-      call get_param(param_file, mdl, "RAD_EARTH", Rad_Earth_L, &
-                   "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
       beta_lat_ref_units = "degrees"
-      y_scl = PI * Rad_Earth_L / 180.
     case ("k")
       beta_lat_ref_units = "kilometers"
-      y_scl = 1.0e3 * US%m_to_L
     case ("m")
       beta_lat_ref_units = "meters"
-      y_scl = 1.0 * US%m_to_L
     case default ; call MOM_error(FATAL, &
       " set_rotation_beta_plane: unknown AXIS_UNITS = "//trim(axis_units))
   end select

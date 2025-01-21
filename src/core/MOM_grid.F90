@@ -190,11 +190,14 @@ type, public :: ocean_grid_type
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)
+  real :: grid_unit_to_L !< A factor that converts a the geoLat and geoLon variables and related
+                        !! variables like len_lat and len_lon into rescaled horizontal distance
+                        !! units on a Cartesian grid, in [L km ~> 1000] or [L m-1 ~> 1] or
+                        !! is 0 for a non-Cartesian grid.
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line [degrees_N] or [km] or [m]
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line [degrees_E] or [km] or [m]
   real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain [degrees_N] or [km] or [m]
   real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain [degrees_E] or [km] or [m]
-  real :: Rad_Earth     !< The radius of the planet [m]
   real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
   real :: max_depth     !< The maximum depth of the ocean in depth units [Z ~> m]
 end type ocean_grid_type
