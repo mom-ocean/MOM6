@@ -1124,8 +1124,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   use_p_atm = associated(p_atm)
   use_EOS = associated(tv%eqn_of_state)
-  !do i=Isq,Ieq+1 ; p0(i) = 0.0 ; enddo
-  p0(Isq:Ieq+1, Jsq:Jeq+1) = 0.
   use_ALE = .false.
   if (associated(ALE_CSp)) use_ALE = CS%reconstruct .and. use_EOS
 
@@ -1868,9 +1866,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp target enter data if(use_EOS) &
   !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
 
-  !$omp target enter data if(.not. use_p_atm) &
-  !$omp   map(to: p0)
-
   ! NOTE: e_sal condition could be sharpened, but this is close enough.
   !$omp target enter data map(to: e_tidal_eq, e_tidal_sal, e_sal_and_tide) if (CS%tides)
   !$omp target enter data map(to: e_sal) if (CS%calculate_SAL)
@@ -1939,8 +1934,18 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p_atm, rho_in_situ, &
                                tv%eqn_of_state, EOSdom2d)
       else
+        !$omp target data map(alloc: p0)
+
+        !$omp target
+        !$omp parallel loop collapse(2)
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          p0(i,j) = 0.
+        enddo ; enddo
+        !$omp end target
+
         call calculate_density(tv_tmp%T(:,:,1), tv_tmp%S(:,:,1), p0, rho_in_situ, &
                                tv%eqn_of_state, EOSdom2d)
+        !$omp end target data
       endif
 
       !$omp target
@@ -1988,14 +1993,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp target exit data if (use_p_atm) &
   !$omp   map(delete: p_atm)
 
-  !$omp target exit data if (.not. use_p_atm) &
-  !$omp   map(delete: p0)
-
   !$omp target exit data &
   !$omp   map(delete: pa, dpa) &
   !$omp   map(delete: intx_pa, inty_pa, intx_dpa, inty_dpa, intz_dpa)
-
-  ! NOTE: As above, these are here until data is set up outside of the function.
 
   if (present(eta)) then
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
