@@ -11,7 +11,10 @@ use coupler_types_mod, only : coupler_type_write_chksums, coupler_type_redistrib
 use coupler_types_mod, only : coupler_type_increment_data, coupler_type_rescale_data
 use coupler_types_mod, only : coupler_type_extract_data, coupler_type_set_data
 use coupler_types_mod, only : coupler_type_data_override
-use coupler_types_mod, only : ind_flux, ind_alpha, ind_csurf
+use coupler_types_mod, only : ind_flux, ind_deltap, ind_kw, ind_flux0
+use coupler_types_mod, only : ind_pcair, ind_u10, ind_psurf
+use coupler_types_mod, only : ind_alpha, ind_csurf, ind_sc_no
+use coupler_types_mod, only : ind_runoff, ind_deposition
 use coupler_types_mod, only : coupler_1d_bc_type, coupler_2d_bc_type, coupler_3d_bc_type
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 use MOM_domain_infra,  only : domain2D
@@ -24,7 +27,10 @@ public :: CT_set_diags, CT_send_data, CT_data_override, CT_write_chksums
 public :: CT_set_data,  CT_increment_data, CT_rescale_data
 public :: CT_copy_data, CT_extract_data, CT_redistribute_data
 public :: atmos_ocn_coupler_flux
-public :: ind_flux, ind_alpha, ind_csurf
+public :: ind_flux, ind_deltap, ind_kw, ind_flux0
+public :: ind_pcair, ind_u10, ind_psurf
+public :: ind_alpha, ind_csurf, ind_sc_no
+public :: ind_runoff, ind_deposition
 public :: coupler_1d_bc_type, coupler_2d_bc_type, coupler_3d_bc_type
 
 !> This is the interface to spawn one coupler_bc_type into another.

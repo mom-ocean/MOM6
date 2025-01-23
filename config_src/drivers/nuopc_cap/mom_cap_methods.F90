@@ -24,7 +24,14 @@ use MOM_ocean_model_nuopc,     only: ocean_public_type, ocean_state_type
 use MOM_surface_forcing_nuopc, only: ice_ocean_boundary_type
 use MOM_grid,                  only: ocean_grid_type
 use MOM_domains,               only: pass_var
+use MOM_coupler_types,         only: coupler_2d_bc_type
 use mpp_domains_mod,           only: mpp_get_compute_domain
+
+#ifdef _USE_GENERIC_TRACER
+use MOM_coupler_types,         only: set_coupler_type_data
+use MOM_coupler_types,         only: ind_pcair, ind_u10, ind_psurf, ind_runoff, ind_deposition
+use MOM_cap_gtracer_flux,      only: get_coupled_field_name, UNKNOWN_CMEPS_FIELD
+#endif
 
 ! By default make data private
 implicit none; private
@@ -77,14 +84,21 @@ end subroutine mom_set_geomtype
 !! (1) it imports surface fluxes using data from the mediator; and
 !! (2) it can apply restoring in SST and SSS.
 !! (3) it can convert imported stokes drift components to zero if they are missing.
+!! (4) optional: if atm_fields is provided, it imports and sets the fields in atm_fields required
+!! for the calculation of coupled generic tracer fluxes
 subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, &
-                      set_missing_stks_to_zero, rc)
+                      set_missing_stks_to_zero, atm_fields, rc)
   type(ocean_public_type)       , intent(in)    :: ocean_public             !< Ocean surface state
   type(ocean_grid_type)         , intent(in)    :: ocean_grid               !< Ocean model grid
   logical                       , intent(in)    :: set_missing_stks_to_zero !< If true, set
                                                                             !! missing stokes drift to zero
   type(ESMF_State)              , intent(inout) :: importState              !< incoming data from mediator
   type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary       !< Ocean boundary forcing
+  type(coupler_2d_bc_type), optional, intent(inout) :: atm_fields           !< If present, this type
+                                                                            !! describes the atmospheric
+                                                                            !! tracer fields to be imported
+                                                                            !! for the calculation of generic
+                                                                            !! tracer fluxes.
   integer                       , intent(inout) :: rc                       !< Return code
 
   ! Local Variables
@@ -97,7 +111,10 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
   real(ESMF_KIND_R8), allocatable :: tauy(:,:)
   real(ESMF_KIND_R8), allocatable :: stkx(:,:,:)
   real(ESMF_KIND_R8), allocatable :: stky(:,:,:)
+  real(ESMF_KIND_R8), allocatable :: work(:,:)
   character(len=*)  , parameter   :: subname = '(mom_import)'
+  character(len=256)              :: stdname
+  integer                         :: field_index
 
   rc = ESMF_SUCCESS
 
@@ -572,6 +589,48 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
       enddo
       deallocate(stkx,stky)
   endif
+
+  !---
+  ! Tracer flux fields for generic tracers
+  !---
+#ifdef _USE_GENERIC_TRACER
+  if (present(atm_fields)) then
+    ! Set fields in atm_fields from coupler
+    allocate (work(isc:iec,jsc:jec))
+    do n = 1, atm_fields%num_bcs
+      if (atm_fields%bc(n)%flux_type .eq. 'air_sea_deposition') then
+        field_index = ind_deposition
+      elseif (atm_fields%bc(n)%flux_type .eq. 'land_sea_runoff') then
+        field_index = ind_runoff
+      else
+        ! This is a gas flux - set ind_u10 and ind_psurf
+        ! Note, we set these fields even though the pcair field may not be set below. This
+        ! is to allow flux calculation with overridden pcair fields
+        field_index = ind_pcair
+        call set_coupler_type_data(sqrt(ice_ocean_boundary%u10_sqr), n, atm_fields, &
+              idim=(/isc,isc,iec,iec/), jdim=(/jsc,jsc,jec,jec/), field_index=ind_u10)
+        call set_coupler_type_data(ice_ocean_boundary%p, n, atm_fields, &
+              idim=(/isc,isc,iec,iec/), jdim=(/jsc,jsc,jec,jec/), field_index=ind_psurf)
+      endif
+
+      stdname = get_coupled_field_name(atm_fields%bc(n)%name)
+      if (stdname /= UNKNOWN_CMEPS_FIELD) then
+        call ESMF_LogWrite(trim(subname)//': generic_tracer flux, '//trim(atm_fields%bc(n)%name)//&
+          ': setting field index '//CHAR(48+field_index)//' to '//trim(stdname)//' if provided '//&
+          'by coupler, otherwise defaulting to zero', ESMF_LOGMSG_INFO)
+        work(:,:) = 0._ESMF_KIND_R8
+        call state_getimport(importState, trim(stdname), isc, iec, jsc, jec, work, rc=rc)
+        if (ChkErr(rc,__LINE__,u_FILE_u)) return
+        call set_coupler_type_data(work, n, atm_fields, &
+              idim=(/isc,isc,iec,iec/), jdim=(/jsc,jsc,jec,jec/), field_index=field_index)
+      else
+        call ESMF_LogWrite(trim(subname)//': generic_tracer flux, '//trim(atm_fields%bc(n)%name)//&
+              ': no fields set from coupler', ESMF_LOGMSG_INFO)
+      endif
+    enddo
+    deallocate(work)
+  endif
+#endif
 
 end subroutine mom_import
 
