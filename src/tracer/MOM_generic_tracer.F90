@@ -21,7 +21,7 @@ module MOM_generic_tracer
   use generic_tracer, only: generic_tracer_coupler_get, generic_tracer_coupler_set
   use generic_tracer, only: generic_tracer_end, generic_tracer_get_list, do_generic_tracer
   use generic_tracer, only: generic_tracer_update_from_bottom,generic_tracer_vertdiff_G
-  use generic_tracer, only: generic_tracer_coupler_accumulate
+  use generic_tracer, only: generic_tracer_coupler_accumulate, generic_tracer_update_from_coupler
 
   use g_tracer_utils,   only: g_tracer_get_name,g_tracer_set_values,g_tracer_set_common,g_tracer_get_common
   use g_tracer_utils,   only: g_tracer_get_next,g_tracer_type,g_tracer_is_prog,g_tracer_flux_init
@@ -526,6 +526,11 @@ contains
     !Niki: This is moved out to ocean_model_MOM.F90 because if dt_therm>dt_cpld we need to average
     !      the fluxes without coming into this subroutine.
     !      MOM5 has to modified to conform.
+
+    !
+    !Call the generic_tracer's update_from_coupler routine (convert salt_flux_added to g/m^2/sec)
+    !
+    call generic_tracer_update_from_coupler(G%isd, G%jsd, 1000*(US%RZ_T_to_kg_m2s*fluxes%salt_flux_added))
 
     !
     !Add contribution of river to surface flux

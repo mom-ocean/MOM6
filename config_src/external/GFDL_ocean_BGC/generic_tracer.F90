@@ -21,6 +21,7 @@ module generic_tracer
   public generic_tracer_vertdiff_G
   public generic_tracer_get_diag_list
   public generic_tracer_coupler_accumulate
+  public generic_tracer_update_from_coupler
 
   !> Turn on generic tracers (note dangerous use of module data)
   logical :: do_generic_tracer = .true.
@@ -64,6 +65,14 @@ contains
     real,                     intent(in) :: weight    !< A weight for accumulating these fluxes
     type(time_type), optional,intent(in) :: model_time !< Time
   end subroutine generic_tracer_coupler_accumulate
+
+  !> Modify the values obtained from the coupler
+  subroutine generic_tracer_update_from_coupler(ilb, jlb, salt_flux_added)
+    integer,                        intent(in) :: ilb    !< Lower bounds of x extent of input arrays on data domain
+    integer,                        intent(in) :: jlb    !< Lower bounds of y extent of input arrays on data domain
+    real, dimension(ilb:,jlb:),     intent(in) :: salt_flux_added !< Surface salt flux into ocean from restoring
+                                                                  !! or flux adjustment [g/m^2/sec]
+  end subroutine generic_tracer_update_from_coupler
 
   !> Calls the corresponding generic_X_update_from_source routine for each package X
   subroutine generic_tracer_source(Temp,Salt,rho_dzt,dzt,hblt_depth,ilb,jlb,tau,dtts,&
