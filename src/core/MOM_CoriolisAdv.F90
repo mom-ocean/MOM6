@@ -242,45 +242,62 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   eps_vel = 1.0e-10*US%m_s_to_L_T
   h_tiny = GV%Angstrom_H  ! Perhaps this should be set to h_neglect instead.
 
-  !$OMP parallel do default(private) shared(Isq,Ieq,Jsq,Jeq,G,Area_h)
+  !$omp target enter data map(alloc: Area_h, Area_q)
+
+  !$omp target
+  !$omp parallel loop collapse(2)
   do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
     Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
-  if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-    if (.not. OBC%segment(n)%on_pe) cycle
-    I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-    if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
-      do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-          Area_h(i,j+1) = Area_h(i,j)
-        else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-          Area_h(i,j) = Area_h(i,j+1)
-        endif
-      enddo
-    elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
-      do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-          Area_h(i+1,j) = Area_h(i,j)
-        else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-          Area_h(i,j) = Area_h(i+1,j)
-        endif
-      enddo
-    endif
-  enddo ; endif
-  !$OMP parallel do default(private) shared(Isq,Ieq,Jsq,Jeq,G,Area_h,Area_q)
+  !$omp end target
+
+  if (associated(OBC)) then
+    !$omp target update from(Area_h)
+
+    do n=1,OBC%number_of_segments
+      if (.not. OBC%segment(n)%on_pe) cycle
+      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+      if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
+        do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            Area_h(i,j+1) = Area_h(i,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            Area_h(i,j) = Area_h(i,j+1)
+          endif
+        enddo
+      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
+        do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            Area_h(i+1,j) = Area_h(i,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            Area_h(i,j) = Area_h(i+1,j)
+          endif
+        enddo
+      endif
+    enddo
+
+    !$omp target update to(Area_h)
+  endif
+
+  !$omp target
+  !$omp parallel loop collapse(2)
   do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo ; enddo
+  !$omp end target
 
   Stokes_VF = .false.
   if (present(Waves)) then ; if (associated(Waves)) then
     Stokes_VF = Waves%Stokes_VF
   endif ; endif
 
-  !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
-  !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vol_neglect,h_tiny,OBC,eps_vel, &
-  !$OMP                        pbv, Stokes_VF)
+  ! TODO: Keep on GPU
+  !$omp target update from(Area_h, Area_q)
+
+  !!!!$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
+  !!!!$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vol_neglect,h_tiny,OBC,eps_vel, &
+  !!!!$OMP                        pbv, Stokes_VF)
   do k=1,nz
 
     ! Here the second order accurate layer potential vorticities, q,
@@ -962,6 +979,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%id_intz_rvxu_2d > 0) call post_product_sum_v(CS%id_intz_rvxu_2d, AD%rv_x_u, AD%diag_hv, G, nz, CS%diag)
   endif
 
+  !$omp target exit data map(delete: Area_h, Area_q)
+
 end subroutine CorAdCalc
 
 
@@ -986,10 +1005,10 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   real :: um2, up2, vm2, vp2     ! Temporary variables [L2 T-2 ~> m2 s-2].
   real :: um2a, up2a, vm2a, vp2a ! Temporary variables [L4 T-2 ~> m4 s-2].
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
+  !!!$omp declare target
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
 
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
   if (CS%KE_Scheme == KE_ARAKAWA) then
