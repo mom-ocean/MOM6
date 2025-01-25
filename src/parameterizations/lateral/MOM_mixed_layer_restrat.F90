@@ -9,13 +9,15 @@ use MOM_diag_mediator, only : register_diag_field, safe_alloc_ptr, time_type
 use MOM_diag_mediator, only : diag_update_remap_grids
 use MOM_domains,       only : pass_var, To_West, To_South, Omit_Corners
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser,   only : get_param, log_version, param_file_type
+use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,  only : mech_forcing, find_ustar
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
+use MOM_interpolate,   only : init_external_field, time_interp_external, time_interp_external_init
+use MOM_interpolate,   only : external_field
 use MOM_intrinsic_functions, only : cuberoot
-use MOM_io,            only : MOM_read_data
+use MOM_io,            only : slasher, MOM_read_data
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 use MOM_restart,       only : register_restart_field, query_initialized, MOM_restart_CS
 use MOM_unit_scaling,  only : unit_scale_type
@@ -49,6 +51,7 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! upscaling of buoyancy gradients that is otherwise represented
                                    !! by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is
                                    !! non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.
+  logical :: fl_from_file          !< If true, read the MLE front-length scale from a netCDF file.
   logical :: MLE_use_PBL_MLD       !< If true, use the MLD provided by the PBL parameterization.
                                    !! if false, MLE will calculate a MLD based on a density difference
                                    !! based on the parameter MLE_DENSITY_DIFF.
@@ -95,6 +98,9 @@ type, public :: mixedlayer_restrat_CS ; private
 
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                                    !! timing of diagnostic output.
+  type(external_field) :: sbc_fl   !< A handle used in time interpolation of
+                                   !! front-length scales read from a file.
+  type(time_type), pointer :: Time => NULL() !< A pointer to the ocean model's clock.
   logical :: use_Stanley_ML        !< If true, use the Stanley parameterization of SGS T variance
   real    :: ustar_min             !< A minimum value of ustar in thickness units to avoid numerical
                                    !! problems [H T-1 ~> m s-1 or kg m-2 s-1]
@@ -128,6 +134,7 @@ type, public :: mixedlayer_restrat_CS ; private
   integer :: id_ustar = -1
   integer :: id_bflux = -1
   integer :: id_lfbod = -1
+  integer :: id_mle_fl = -1
   !>@}
 
 end type mixedlayer_restrat_CS
@@ -212,7 +219,8 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
     htot_fast, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av_fast, &        ! Negative g_Rho0 times the average mixed layer density or G_Earth
                           ! times the average specific volume [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
-    MLD_slow, &           ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
+    MLD_slow,  &          ! Mixed layer depth actually used in MLE restratification parameterization [H ~> m or kg m-2]
+    mle_fl_2d, &          ! MLE frontal length-scale                                [L ~> m]
     htot_slow, &          ! The sum of the thicknesses of layers in the mixed layer [H ~> m or kg m-2]
     Rml_av_slow           ! Negative g_Rho0 times the average mixed layer density or G_Earth
                           ! times the average specific volume [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
@@ -259,9 +267,11 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   real :: zpb       ! Fractional position within the mixed layer of the interface below a layer [nondim]
   real :: dh        ! Portion of the layer thickness that is in the mixed layer [H ~> m or kg m-2]
   real :: res_scaling_fac ! The resolution-dependent scaling factor [nondim]
+  real :: lfront    ! Frontal length scale at velocity points [L ~> m]
   real :: I_LFront  ! The inverse of the frontal length scale [L-1 ~> m-1]
   real :: vonKar_x_pi2    ! A scaling constant that is approximately the von Karman constant times
                           ! pi squared [nondim]
+  character(len=128) :: mesg
   logical :: line_is_empty, keep_going, res_upscale
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
@@ -272,7 +282,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   h_min = 0.5*GV%Angstrom_H ! This should be GV%Angstrom_H, but that value would change answers.
   covTS(:) = 0.0 !!Functionality not implemented yet; in future, should be passed in tv
   varS(:) = 0.0
-
+  mle_fl_2d(:,:) = 0.0
   vonKar_x_pi2 = CS%vonKar * 9.8696
 
   if (.not.associated(tv%eqn_of_state)) call MOM_error(FATAL, "mixedlayer_restrat_OM4: "// &
@@ -344,7 +354,21 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   h_neglect = GV%H_subroundoff
   if (CS%front_length>0.) then
     res_upscale = .true.
-    I_LFront = 1. / CS%front_length
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      mle_fl_2d(i,j) = CS%front_length
+    enddo ; enddo
+  elseif (CS%front_length == 0. .and. CS%fl_from_file) then
+    res_upscale = .true.
+    call time_interp_external(CS%sbc_fl, CS%Time, mle_fl_2d, turns=G%HI%turns, scale=US%m_to_L)
+    call pass_var(mle_fl_2d, G%domain, halo=1)
+    do j=js,je ; do i=is,ie
+      if ((G%mask2dT(i,j) > 0.0) .and. (mle_fl_2d(i,j) < 0.0)) then
+        write(mesg,'(" Time_interp negative MLE frontal-length scale of ",(1pe12.4)," at i,j = ",&
+                  & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
+                  mle_fl_2d(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
+        call MOM_error(FATAL, "MOM_mixed_layer_restrat mixedlayer_restrat_OM4: "//trim(mesg))
+      endif
+    enddo ; enddo
   else
     res_upscale = .false.
   endif
@@ -464,6 +488,10 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
     u_star = max(CS%ustar_min, 0.5*(U_star_2d(i,j) + U_star_2d(i+1,j)))
 
     absf = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+    ! Compute I_LFront = 1 / (frontal length scale) [m-1]
+    lfront = 0.5 * (mle_fl_2d(i,j) + mle_fl_2d(i+1,j))
+    ! Adcroft reciprocal
+    I_LFront = 0.0 ; if (lfront /= 0.0) I_LFront = 1.0/lfront
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
           ( sqrt( 0.5 * ( (G%dxCu(I,j)**2) + (G%dyCu(I,j)**2) ) ) * I_LFront ) &
@@ -549,7 +577,10 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   !$OMP do
   do J=js-1,je ; do i=is,ie
     u_star = max(CS%ustar_min, 0.5*(U_star_2d(i,j) + U_star_2d(i,j+1)))
-
+    ! Compute I_LFront = 1 / (frontal length scale) [m-1]
+    lfront = 0.5 * (mle_fl_2d(i,j) + mle_fl_2d(i,j+1))
+    ! Adcroft reciprocal
+    I_LFront = 0.0 ; if (lfront /= 0.0) I_LFront = 1.0/lfront
     absf = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
     ! If needed, res_scaling_fac = min( ds, L_d ) / l_f
     if (res_upscale) res_scaling_fac = &
@@ -658,6 +689,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
     if (CS%id_Rml           > 0) call post_data(CS%id_Rml, Rml_av_fast, CS%diag)
     if (CS%id_uDml          > 0) call post_data(CS%id_uDml, uDml_diag, CS%diag)
     if (CS%id_vDml          > 0) call post_data(CS%id_vDml, vDml_diag, CS%diag)
+    if (CS%id_mle_fl        > 0) call post_data(CS%id_mle_fl, mle_fl_2d, CS%diag)
 
     if (CS%id_uml > 0) then
       do j=js,je ; do I=is-1,ie
@@ -1583,7 +1615,7 @@ end function growth_time
 
 !> Initialize the mixed layer restratification module
 logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, restart_CS)
-  type(time_type),             intent(in)    :: Time       !< Current model time
+  type(time_type), target,     intent(in)    :: Time       !< Current model time
   type(ocean_grid_type),       intent(inout) :: G          !< Ocean grid structure
   type(verticalGrid_type),     intent(in)    :: GV         !< Ocean vertical grid structure
   type(unit_scale_type),       intent(in)    :: US         !< A dimensional unit scaling type
@@ -1600,9 +1632,15 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
                            ! temperature variance [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   ! This include declares and sets the variable "version".
+  character(len=200) :: inputdir   ! The directory where NetCDF input files
+  character(len=240) :: mle_fl_filename ! A file from which chl_a concentrations are to be read.
+  character(len=128) :: mle_fl_file ! Data containing MLE front-length scale. Used
+                                    ! when reading from file.
+  character(len=32)  :: fl_varname ! Name of front-length scale variable in mle_fl_file.
+
 # include "version_variable.h"
   integer :: i, j
-  character(len=200) :: filename, inputdir, varname
+  character(len=200) :: filename, varname
 
   ! Read all relevant parameters and write them to the model log.
   call get_param(param_file, mdl, "MIXEDLAYER_RESTRAT", mixedlayer_restrat_init, &
@@ -1616,6 +1654,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   if (.not. mixedlayer_restrat_init) return
 
   CS%initialized = .true.
+  CS%Time => Time
 
   ! Nonsense values to cause problems when these parameters are not used
   CS%MLE_MLD_decay_time = -9.e9*US%s_to_T
@@ -1625,6 +1664,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   CS%MLE_MLD_stretch = -9.e9
   CS%use_Stanley_ML = .false.
   CS%use_Bodner = .false.
+  CS%fl_from_file = .false.
   CS%MLD_grid = .false.
   CS%Cr_grid = .false.
 
@@ -1778,6 +1818,29 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "by the parameter FOX_KEMPER_ML_RESTRAT_COEF. If MLE_FRONT_LENGTH is "//&
              "non-zero, it is recommended to set FOX_KEMPER_ML_RESTRAT_COEF=1.0.",&
              units="m", default=0.0, scale=US%m_to_L)
+      call get_param(param_file, mdl, "MLE_FRONT_LENGTH_FROM_FILE", CS%fl_from_file, &
+                   "If true, the MLE front-length scale is read from a file.", default=.false.)
+      if (CS%fl_from_file) then
+        call time_interp_external_init()
+
+        call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+        call get_param(param_file, mdl, "MLE_FL_FILE", mle_fl_file, &
+                   "MLE_FL_FILE is the file containing MLE front-length scale. "//&
+                   "It is used when MLE_FRONT_LENGTH_FROM_FILE is true.", fail_if_missing=.true.)
+        mle_fl_filename = trim(slasher(inputdir))//trim(mle_fl_file)
+        call log_param(param_file, mdl, "INPUTDIR/MLE_FL_FILE", mle_fl_filename)
+        call get_param(param_file, mdl, "FL_VARNAME", fl_varname, &
+                   "Name of MLE front-length scale variable in MLE_FL_FILE.", default='mle_fl')
+        if (modulo(G%Domain%turns, 4) /= 0) then
+          CS%sbc_fl = init_external_field(mle_fl_filename, trim(fl_varname), MOM_domain=G%Domain%domain_in)
+        else
+          CS%sbc_fl = init_external_field(mle_fl_filename, trim(fl_varname), MOM_domain=G%Domain)
+        endif
+      endif
+      if (CS%fl_from_file .and. CS%front_length>0.0) call MOM_error(FATAL, "mixedlayer_restrat_init: "// &
+             "MLE_FRONT_LENGTH_FROM_FILE cannot be true when MLE_FRONT_LENGTH > 0.0. "// &
+             "If you want to use MLE_FRONT_LENGTH, set MLE_FRONT_LENGTH_FROM_FILE to false." // &
+             "If you want to use MLE_FRONT_LENGTH_FROM_FILE, set MLE_FRONT_LENGTH to 0.0.")
       call get_param(param_file, mdl, "MLE_USE_PBL_MLD", CS%MLE_use_PBL_MLD, &
              "If true, the MLE parameterization will use the mixed-layer "//&
              "depth provided by the active PBL parameterization. If false, "//&
@@ -1880,6 +1943,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
         'm2 s-3', conversion=(US%Z_to_m**2*US%s_to_T**3))
     CS%id_lfbod = register_diag_field('ocean_model', 'lf_bodner', diag%axesT1, Time, &
         'Front length in Bodner mixed layer restratificiation parameterization', &
+        'm', conversion=US%L_to_m)
+  else
+    CS%id_mle_fl = register_diag_field('ocean_model', 'mle_fl', diag%axesT1, Time, &
+        'Frontal length scale used in the mixed layer restratificiation parameterization', &
         'm', conversion=US%L_to_m)
   endif
 
