@@ -301,7 +301,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   !$omp target enter data map(alloc: dvdx, dudy)
   !$omp target enter data map(alloc: hArea_u, hArea_v)
-  !$omp target enter data map(alloc: dvSdx, duSdy) if (Stokes_VF)
+  !$omp target enter data map(alloc: rel_vort, abs_vort, q, Ih_q)
+  !$omp target enter data map(alloc: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
   ! TODO: Don't allocate if diagnostics are disabled
   !$omp target enter data map(alloc: uh_center, vh_center) if (CS%Coriolis_En_Dis)
 
@@ -507,28 +508,28 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       !$omp target update to(uh_center, vh_center)
     endif
 
-    !$omp target update from(dvdx, dudy)
-    !$omp target update from(hArea_u, hArea_v)
-    !$omp target update from(dvSdx, duSdy) if (Stokes_VF)
-    !$omp target update from(uh_center, vh_center) if (CS%Coriolis_En_Dis)
-
+    !$omp target
     if (CS%no_slip) then
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         rel_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo; enddo
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+          !$omp parallel loop collapse(2)
           do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
             stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
           enddo; enddo
         endif
       endif
     else
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         rel_vort(I,J) = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo; enddo
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+          !$omp parallel loop collapse(2)
           do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
             stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
           enddo; enddo
@@ -536,10 +537,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       endif
     endif
 
+    !$omp parallel loop collapse(2)
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       abs_vort(I,J) = G%CoriolisBu(I,J) + rel_vort(I,J)
     enddo ; enddo
 
+    !$omp parallel loop collapse(2)
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
       Ih_q(I,J) = Area_q(I,J) / (hArea_q + vol_neglect)
@@ -548,11 +551,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+        !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           qS(I,J) = stk_vort(I,J) * Ih_q(I,J)
         enddo; enddo
       endif
     endif
+    !$omp end target
+
+    !$omp target update from(dvdx, dudy)
+    !$omp target update from(hArea_u, hArea_v)
+    !$omp target update from(rel_vort, abs_vort, q, Ih_q)
+    !$omp target update from(dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
+    !$omp target update from(uh_center, vh_center) if (CS%Coriolis_En_Dis)
 
     if (CS%id_rv > 0) then
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
@@ -980,8 +991,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   enddo ! k-loop.
 
   !$omp target exit data map(delete: dvdx, dudy)
+  !$omp target exit data map(delete: Area_h, Area_q)
   !$omp target exit data map(delete: hArea_u, hArea_v)
-  !$omp target exit data map(delete: dvSdx, duSdy) if (Stokes_VF)
+  !$omp target exit data map(delete: rel_vort, abs_vort, q, Ih_q)
+  !$omp target exit data map(delete: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
 
   ! TODO: Move outside function
   !$omp target exit data map(delete: u, v, h)
@@ -1026,8 +1039,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%id_intz_rvxv_2d > 0) call post_product_sum_u(CS%id_intz_rvxv_2d, AD%rv_x_v, AD%diag_hu, G, nz, CS%diag)
     if (CS%id_intz_rvxu_2d > 0) call post_product_sum_v(CS%id_intz_rvxu_2d, AD%rv_x_u, AD%diag_hv, G, nz, CS%diag)
   endif
-
-  !$omp target exit data map(delete: Area_h, Area_q)
 
 end subroutine CorAdCalc
 

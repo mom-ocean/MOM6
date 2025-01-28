@@ -2880,9 +2880,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   !$omp target enter data map(to: G)
   !$omp target enter data map(to: G%dxCu, G%dyCv)
   !$omp target enter data map(to: G%IdxCu, G%IdyCv)
-  !$omp target enter data map(to: G%mask2dT)
+  !$omp target enter data map(to: G%mask2dBu, G%mask2dT)
+  !$omp target enter data map(to: G%IareaBu)
   !$omp target enter data map(to: G%areaT)
   !$omp target enter data map(to: G%bathyT)
+  !$omp target enter data map(to: G%CoriolisBu)
 
   call callTree_waypoint("returned from MOM_initialize_fixed() (initialize_MOM)")
 
