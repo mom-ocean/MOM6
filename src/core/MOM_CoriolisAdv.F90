@@ -292,20 +292,15 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     Stokes_VF = Waves%Stokes_VF
   endif ; endif
 
-  ! TODO: Keep on GPU
-  !$omp target update from(Area_h, Area_q)
-
-  !!!!$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
-  !!!!$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vol_neglect,h_tiny,OBC,eps_vel, &
-  !!!!$OMP                        pbv, Stokes_VF)
-
   !$omp target enter data map(alloc: dvdx, dudy)
   !$omp target enter data map(alloc: hArea_u, hArea_v)
   !$omp target enter data map(alloc: rel_vort, abs_vort, q, Ih_q)
   !$omp target enter data map(alloc: a, b, c, d, ep_u, ep_v)
+  ! TODO: These Stokes_VF fields seem associated with diagnostics
   !$omp target enter data map(alloc: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
-  ! TODO: Don't allocate if diagnostics are disabled
   !$omp target enter data map(alloc: uh_center, vh_center) if (CS%Coriolis_En_Dis)
+  ! TODO: May also need SADOURNEY75_ENERGY
+  !$omp target enter data map(alloc: uh_min, vh_min) if (CS%Coriolis_En_Dis)
 
   ! Diagnostics
   !$omp target enter data map(alloc: RV) if (CS%id_RV > 0)
@@ -314,9 +309,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp   if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
 
   ! TODO: Do this outside of the function
-  !$omp target enter data map(to: u, v, h)
+  !$omp target enter data map(to: u, v, h, uh, vh)
   !$omp target enter data map(to: pbv, pbv%por_face_areaU, pbv%por_face_areaV) &
   !$omp   if (CS%Coriolis_En_Dis)
+  !$omp target enter data map(to: CAu, CAv)
 
   do k=1,nz
 
@@ -384,6 +380,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! velocity points on open boundaries.
     if (associated(OBC)) then
       ! NOTE: This will run on CPU for now...
+      !$omp target update from(Area_h)
       !$omp target update from(dvdx, dudy)
       !$omp target update from(hArea_u, hArea_v)
       !$omp target update from(uh_center, vh_center)
@@ -659,25 +656,13 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ep_v(i,j) = AL_wt * (-(q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
       enddo ; enddo
     endif
-    !$omp end target
 
-    !$omp target update from(dvdx, dudy)
-    !$omp target update from(hArea_u, hArea_v)
-    !$omp target update from(rel_vort, abs_vort, q, Ih_q)
-    !$omp target update from(a, b, c, d, ep_u, ep_v)
-    !$omp target update from(dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
-    !$omp target update from(uh_center, vh_center) if (CS%Coriolis_En_Dis)
-
-    ! Diagnostics
-    !$omp target update from(RV) if (CS%id_RV > 0)
-    !$omp target update from(PV) if (CS%id_PV > 0)
-    !$omp target update from(q2) &
-    !$omp     if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
-
+    ! .and. SADOURNEY75_ENERGY ??
     if (CS%Coriolis_En_Dis) then
     !  c1 = 1.0-1.5*RANGE ; c2 = 1.0-RANGE ; c3 = 2.0 ; slope = 0.5
       c1 = 1.0-1.5*0.5 ; c2 = 1.0-0.5 ; c3 = 2.0 ; slope = 0.5
 
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=is-1,ie
         uhc = uh_center(I,j)
         uhm = uh(I,j,k)
@@ -699,6 +684,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           uh_max(I,j) = uhm ; uh_min(I,j) = uhc
         endif
       enddo ; enddo
+
+      !$omp parallel loop collapse(2)
       do J=js-1,je ; do i=Isq,Ieq+1
         vhc = vh_center(i,J)
         vhm = vh(i,J,k)
@@ -721,6 +708,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       enddo ; enddo
     endif
+    !$omp end target
+
+    !$omp target update from(abs_vort, q)
+    !$omp target update from(a, b, c, d, ep_u, ep_v)
+    !$omp target update from(uh_min, vh_min) if (CS%Coriolis_En_Dis)
+
+    ! Diagnostics
+    !$omp target update from(RV) if (CS%id_RV > 0)
+    !$omp target update from(PV) if (CS%id_PV > 0)
+    !$omp target update from(q2) &
+    !$omp     if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
 
     ! Calculate KE and the gradient of KE
     call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
@@ -1010,12 +1008,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   enddo ! k-loop.
 
-  !$omp target exit data map(delete: dvdx, dudy)
   !$omp target exit data map(delete: Area_h, Area_q)
+  !$omp target exit data map(delete: dvdx, dudy)
   !$omp target exit data map(delete: hArea_u, hArea_v)
   !$omp target exit data map(delete: rel_vort, abs_vort, q, Ih_q)
   !$omp target exit data map(delete: a, b, c, d, ep_u, ep_v)
   !$omp target exit data map(delete: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
+  !$omp target exit data map(delete: uh_center, vh_center) if (CS%Coriolis_En_Dis)
+  !$omp target exit data map(delete: uh_min, vh_min) if (CS%Coriolis_En_Dis)
 
   ! TODO: Move outside function
   !$omp target exit data map(delete: u, v, h)
