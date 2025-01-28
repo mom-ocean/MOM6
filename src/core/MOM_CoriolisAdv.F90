@@ -300,12 +300,15 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !!!!$OMP                        pbv, Stokes_VF)
 
   !$omp target enter data map(alloc: dvdx, dudy)
+  !$omp target enter data map(alloc: hArea_u, hArea_v)
   !$omp target enter data map(alloc: dvSdx, duSdy) if (Stokes_VF)
   ! TODO: Don't allocate if diagnostics are disabled
-  !$omp target enter data map(alloc: hArea_u, hArea_v)
+  !$omp target enter data map(alloc: uh_center, vh_center) if (CS%Coriolis_En_Dis)
 
   ! TODO: Do this outside of the function
   !$omp target enter data map(to: u, v, h)
+  !$omp target enter data map(to: pbv, pbv%por_face_areaU, pbv%por_face_areaV) &
+  !$omp   if (CS%Coriolis_En_Dis)
 
   do k=1,nz
 
@@ -356,145 +359,158 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
       hArea_u(I,j) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
     enddo ; enddo
-    !$omp end target
-
-    !$omp target update from(dvdx, dudy)
-    !$omp target update from(hArea_u, hArea_v)
-
-    !$omp target update from(dvSdx, duSdy) if (Stokes_VF)
 
     if (CS%Coriolis_En_Dis) then
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=is-1,ie
         uh_center(I,j) = 0.5 * ((G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
       enddo ; enddo
+      !$omp parallel loop collapse(2)
       do J=js-1,je ; do i=Isq,Ieq+1
         vh_center(i,J) = 0.5 * ((G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo
     endif
+    !$omp end target
 
     ! Adjust circulation components to relative vorticity and thickness projected onto
     ! velocity points on open boundaries.
-    if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-      if (.not. OBC%segment(n)%on_pe) cycle
-      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-      if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
-        if (OBC%zero_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-          dvdx(I,J) = 0. ; dudy(I,J) = 0.
-        enddo ; endif
-        if (OBC%freeslip_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-          dudy(I,J) = 0.
-        enddo ; endif
-        if (OBC%computed_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            dudy(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%dxCu(I,j)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            dudy(I,J) = 2.0*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dxCu(I,j+1)
-          endif
-        enddo ; endif
-        if (OBC%specified_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
-          endif
-        enddo ; endif
+    if (associated(OBC)) then
+      ! NOTE: This will run on CPU for now...
+      !$omp target update from(dvdx, dudy)
+      !$omp target update from(hArea_u, hArea_v)
+      !$omp target update from(uh_center, vh_center)
 
-        ! Project thicknesses across OBC points with a no-gradient condition.
-        do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
-          endif
-        enddo
+      do n=1,OBC%number_of_segments
+        if (.not. OBC%segment(n)%on_pe) cycle
+        I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+        if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
+          if (OBC%zero_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+            dvdx(I,J) = 0. ; dudy(I,J) = 0.
+          enddo ; endif
+          if (OBC%freeslip_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+            dudy(I,J) = 0.
+          enddo ; endif
+          if (OBC%computed_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+            if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+              dudy(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%dxCu(I,j)
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+              dudy(I,J) = 2.0*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dxCu(I,j+1)
+            endif
+          enddo ; endif
+          if (OBC%specified_vorticity) then ; do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+            if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+              dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+              dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
+            endif
+          enddo ; endif
 
-        if (CS%Coriolis_En_Dis) then
+          ! Project thicknesses across OBC points with a no-gradient condition.
           do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
             if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-              vh_center(i,J) = (G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j,k)
+              hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
             else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-              vh_center(i,J) = (G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j+1,k)
+              hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
             endif
           enddo
-        endif
-      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
-        if (OBC%zero_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-          dvdx(I,J) = 0. ; dudy(I,J) = 0.
-        enddo ; endif
-        if (OBC%freeslip_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-          dvdx(I,J) = 0.
-        enddo ; endif
-        if (OBC%computed_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            dvdx(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%dyCv(i,J)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            dvdx(I,J) = 2.0*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dyCv(i+1,J)
-          endif
-        enddo ; endif
-        if (OBC%specified_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
-          endif
-        enddo ; endif
 
-        ! Project thicknesses across OBC points with a no-gradient condition.
-        do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
+          if (CS%Coriolis_En_Dis) then
+            do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
+              if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                vh_center(i,J) = (G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j,k)
+              else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+                vh_center(i,J) = (G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j+1,k)
+              endif
+            enddo
           endif
-        enddo
-        if (CS%Coriolis_En_Dis) then
+        elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
+          if (OBC%zero_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+            dvdx(I,J) = 0. ; dudy(I,J) = 0.
+          enddo ; endif
+          if (OBC%freeslip_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+            dvdx(I,J) = 0.
+          enddo ; endif
+          if (OBC%computed_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+            if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+              dvdx(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%dyCv(i,J)
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+              dvdx(I,J) = 2.0*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dyCv(i+1,J)
+            endif
+          enddo ; endif
+          if (OBC%specified_vorticity) then ; do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+            if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+              dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+              dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
+            endif
+          enddo ; endif
+
+          ! Project thicknesses across OBC points with a no-gradient condition.
           do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
             if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-              uh_center(I,j) = (G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i,j,k)
+              hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
             else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-              uh_center(I,j) = (G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i+1,j,k)
+              hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
+            endif
+          enddo
+          if (CS%Coriolis_En_Dis) then
+            do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
+              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                uh_center(I,j) = (G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i,j,k)
+              else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+                uh_center(I,j) = (G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i+1,j,k)
+              endif
+            enddo
+          endif
+        endif
+      enddo
+
+      do n=1,OBC%number_of_segments
+        if (.not. OBC%segment(n)%on_pe) cycle
+        ! Now project thicknesses across cell-corner points in the OBCs.  The two
+        ! projections have to occur in sequence and can not be combined easily.
+        I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+        if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
+          do I = max(Isq-1,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
+            if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+              if (Area_h(i,j) + Area_h(i+1,j) > 0.0) then
+                hArea_u(I,j+1) = hArea_u(I,j) * ((Area_h(i,j+1) + Area_h(i+1,j+1)) / &
+                                                 (Area_h(i,j) + Area_h(i+1,j)))
+              else ; hArea_u(I,j+1) = 0.0 ; endif
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+              if (Area_h(i,j+1) + Area_h(i+1,j+1) > 0.0) then
+                hArea_u(I,j) = hArea_u(I,j+1) * ((Area_h(i,j) + Area_h(i+1,j)) / &
+                                                 (Area_h(i,j+1) + Area_h(i+1,j+1)))
+              else ; hArea_u(I,j) = 0.0 ; endif
+            endif
+          enddo
+        elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
+          do J = max(Jsq-1,OBC%segment(n)%HI%JsdB), min(Jeq+1,OBC%segment(n)%HI%JedB)
+            if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+              if (Area_h(i,j) + Area_h(i,j+1) > 0.0) then
+                hArea_v(i+1,J) = hArea_v(i,J) * ((Area_h(i+1,j) + Area_h(i+1,j+1)) / &
+                                                 (Area_h(i,j) + Area_h(i,j+1)))
+              else ; hArea_v(i+1,J) = 0.0 ; endif
+            else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+              hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
+              if (Area_h(i+1,j) + Area_h(i+1,j+1) > 0.0) then
+                hArea_v(i,J) = hArea_v(i+1,J) * ((Area_h(i,j) + Area_h(i,j+1)) / &
+                                                 (Area_h(i+1,j) + Area_h(i+1,j+1)))
+              else ; hArea_v(i,J) = 0.0 ; endif
             endif
           enddo
         endif
-      endif
-    enddo ; endif
+      enddo
 
-    if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-      if (.not. OBC%segment(n)%on_pe) cycle
-      ! Now project thicknesses across cell-corner points in the OBCs.  The two
-      ! projections have to occur in sequence and can not be combined easily.
-      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-      if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
-        do I = max(Isq-1,OBC%segment(n)%HI%IsdB), min(Ieq+1,OBC%segment(n)%HI%IedB)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            if (Area_h(i,j) + Area_h(i+1,j) > 0.0) then
-              hArea_u(I,j+1) = hArea_u(I,j) * ((Area_h(i,j+1) + Area_h(i+1,j+1)) / &
-                                               (Area_h(i,j) + Area_h(i+1,j)))
-            else ; hArea_u(I,j+1) = 0.0 ; endif
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            if (Area_h(i,j+1) + Area_h(i+1,j+1) > 0.0) then
-              hArea_u(I,j) = hArea_u(I,j+1) * ((Area_h(i,j) + Area_h(i+1,j)) / &
-                                               (Area_h(i,j+1) + Area_h(i+1,j+1)))
-            else ; hArea_u(I,j) = 0.0 ; endif
-          endif
-        enddo
-      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
-        do J = max(Jsq-1,OBC%segment(n)%HI%JsdB), min(Jeq+1,OBC%segment(n)%HI%JedB)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            if (Area_h(i,j) + Area_h(i,j+1) > 0.0) then
-              hArea_v(i+1,J) = hArea_v(i,J) * ((Area_h(i+1,j) + Area_h(i+1,j+1)) / &
-                                               (Area_h(i,j) + Area_h(i,j+1)))
-            else ; hArea_v(i+1,J) = 0.0 ; endif
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
-            if (Area_h(i+1,j) + Area_h(i+1,j+1) > 0.0) then
-              hArea_v(i,J) = hArea_v(i+1,J) * ((Area_h(i,j) + Area_h(i,j+1)) / &
-                                               (Area_h(i+1,j) + Area_h(i+1,j+1)))
-            else ; hArea_v(i,J) = 0.0 ; endif
-          endif
-        enddo
-      endif
-    enddo ; endif
+      !$omp target update to(dvdx, dudy)
+      !$omp target update to(hArea_u, hArea_v)
+      !$omp target update to(uh_center, vh_center)
+    endif
+
+    !$omp target update from(dvdx, dudy)
+    !$omp target update from(hArea_u, hArea_v)
+    !$omp target update from(dvSdx, duSdy) if (Stokes_VF)
+    !$omp target update from(uh_center, vh_center) if (CS%Coriolis_En_Dis)
 
     if (CS%no_slip) then
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
@@ -969,6 +985,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   ! TODO: Move outside function
   !$omp target exit data map(delete: u, v, h)
+  !$omp target exit data map(delete: pbv, pbv%por_face_areaU, pbv%por_face_areaV) &
+  !$omp   if (CS%Coriolis_En_Dis)
 
   ! Here the various Coriolis-related derived quantities are offered for averaging.
   if (query_averaging_enabled(CS%diag)) then
