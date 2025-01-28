@@ -302,9 +302,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target enter data map(alloc: dvdx, dudy)
   !$omp target enter data map(alloc: dvSdx, duSdy) if (Stokes_VF)
   ! TODO: Don't allocate if diagnostics are disabled
+  !$omp target enter data map(alloc: hArea_u, hArea_v)
 
   ! TODO: Do this outside of the function
-  !$omp target enter data map(to: u, v)
+  !$omp target enter data map(to: u, v, h)
 
   do k=1,nz
 
@@ -346,17 +347,21 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
       enddo; enddo
     endif
-    !$omp end target
 
-    !$omp target update from(dvdx, dudy)
-    !$omp target update from(dvSdx, duSdy) if (Stokes_VF)
-
+    !$omp parallel loop collapse(2)
     do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
       hArea_v(i,J) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
     enddo ; enddo
+    !$omp parallel loop collapse(2)
     do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
       hArea_u(I,j) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
     enddo ; enddo
+    !$omp end target
+
+    !$omp target update from(dvdx, dudy)
+    !$omp target update from(hArea_u, hArea_v)
+
+    !$omp target update from(dvSdx, duSdy) if (Stokes_VF)
 
     if (CS%Coriolis_En_Dis) then
       do j=Jsq,Jeq+1 ; do I=is-1,ie
@@ -959,10 +964,11 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   enddo ! k-loop.
 
   !$omp target exit data map(delete: dvdx, dudy)
+  !$omp target exit data map(delete: hArea_u, hArea_v)
   !$omp target exit data map(delete: dvSdx, duSdy) if (Stokes_VF)
 
   ! TODO: Move outside function
-  !$omp target exit data map(delete: u, v)
+  !$omp target exit data map(delete: u, v, h)
 
   ! Here the various Coriolis-related derived quantities are offered for averaging.
   if (query_averaging_enabled(CS%diag)) then
