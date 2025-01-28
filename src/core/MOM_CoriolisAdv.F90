@@ -302,9 +302,16 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target enter data map(alloc: dvdx, dudy)
   !$omp target enter data map(alloc: hArea_u, hArea_v)
   !$omp target enter data map(alloc: rel_vort, abs_vort, q, Ih_q)
+  !$omp target enter data map(alloc: a, b, c, d, ep_u, ep_v)
   !$omp target enter data map(alloc: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
   ! TODO: Don't allocate if diagnostics are disabled
   !$omp target enter data map(alloc: uh_center, vh_center) if (CS%Coriolis_En_Dis)
+
+  ! Diagnostics
+  !$omp target enter data map(alloc: RV) if (CS%id_RV > 0)
+  !$omp target enter data map(alloc: PV) if (CS%id_PV > 0)
+  !$omp target enter data map(alloc: q2) &
+  !$omp   if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
 
   ! TODO: Do this outside of the function
   !$omp target enter data map(to: u, v, h)
@@ -557,27 +564,23 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         enddo; enddo
       endif
     endif
-    !$omp end target
-
-    !$omp target update from(dvdx, dudy)
-    !$omp target update from(hArea_u, hArea_v)
-    !$omp target update from(rel_vort, abs_vort, q, Ih_q)
-    !$omp target update from(dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
-    !$omp target update from(uh_center, vh_center) if (CS%Coriolis_En_Dis)
 
     if (CS%id_rv > 0) then
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         RV(I,J,k) = rel_vort(I,J)
       enddo ; enddo
     endif
 
     if (CS%id_PV > 0) then
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         PV(I,J,k) = q(I,J)
       enddo ; enddo
     endif
 
     if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) then
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         q2(I,J) = rel_vort(I,J) * Ih_q(I,J)
       enddo ; enddo
@@ -588,17 +591,19 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! scheme.  All are defined at u grid points.
 
     if (CS%Coriolis_Scheme == ARAKAWA_HSU90) then
-      do j=Jsq,Jeq+1
-        do I=is-1,Ieq
-          a(I,j) = (q(I,J) + (q(I+1,J) + q(I,J-1))) * C1_12
-          d(I,j) = ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) * C1_12
-        enddo
-        do I=Isq,Ieq
-          b(I,j) = (q(I,J) + (q(I-1,J) + q(I,J-1))) * C1_12
-          c(I,j) = ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) * C1_12
-        enddo
-      enddo
+      !$omp parallel loop collapse(2)
+      do j=Jsq,Jeq+1 ; do I=is-1,Ieq
+        a(I,j) = (q(I,J) + (q(I+1,J) + q(I,J-1))) * C1_12
+        d(I,j) = ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) * C1_12
+      enddo ; enddo
+
+      !$omp parallel loop collapse(2)
+      do j=Jsq,Jeq+1 ; do I=Isq,Ieq
+        b(I,j) = (q(I,J) + (q(I-1,J) + q(I,J-1))) * C1_12
+        c(I,j) = ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) * C1_12
+      enddo ; enddo
     elseif (CS%Coriolis_Scheme == ARAKAWA_LAMB81) then
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
         a(I-1,j) = (2.0*(q(I,J) + q(I-1,J-1)) + (q(I-1,J) + q(I,J-1))) * C1_24
         d(I-1,j) = ((q(I,j) + q(I-1,J-1)) + 2.0*(q(I-1,J) + q(I,J-1))) * C1_24
@@ -614,6 +619,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       ! This allows the code to always give Sadourny Energy
       if (CS%F_eff_max_blend <= 2.0) then ; Fe_m2 = -1. ; rat_lin = -1.0 ; endif
 
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
         min_Ihq = MIN(Ih_q(I-1,J-1), Ih_q(I,J-1), Ih_q(I-1,J), Ih_q(I,J))
         max_Ihq = MAX(Ih_q(I-1,J-1), Ih_q(I,J-1), Ih_q(I-1,J), Ih_q(I,J))
@@ -653,6 +659,20 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ep_v(i,j) = AL_wt * (-(q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
       enddo ; enddo
     endif
+    !$omp end target
+
+    !$omp target update from(dvdx, dudy)
+    !$omp target update from(hArea_u, hArea_v)
+    !$omp target update from(rel_vort, abs_vort, q, Ih_q)
+    !$omp target update from(a, b, c, d, ep_u, ep_v)
+    !$omp target update from(dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
+    !$omp target update from(uh_center, vh_center) if (CS%Coriolis_En_Dis)
+
+    ! Diagnostics
+    !$omp target update from(RV) if (CS%id_RV > 0)
+    !$omp target update from(PV) if (CS%id_PV > 0)
+    !$omp target update from(q2) &
+    !$omp     if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
 
     if (CS%Coriolis_En_Dis) then
     !  c1 = 1.0-1.5*RANGE ; c2 = 1.0-RANGE ; c3 = 2.0 ; slope = 0.5
@@ -994,6 +1014,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target exit data map(delete: Area_h, Area_q)
   !$omp target exit data map(delete: hArea_u, hArea_v)
   !$omp target exit data map(delete: rel_vort, abs_vort, q, Ih_q)
+  !$omp target exit data map(delete: a, b, c, d, ep_u, ep_v)
   !$omp target exit data map(delete: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
 
   ! TODO: Move outside function
