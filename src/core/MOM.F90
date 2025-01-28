@@ -2878,6 +2878,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
 
   !$omp target enter data map(to: G)
+  !$omp target enter data map(to: G%dxCu, G%dyCv)
   !$omp target enter data map(to: G%IdxCu, G%IdyCv)
   !$omp target enter data map(to: G%mask2dT)
   !$omp target enter data map(to: G%areaT)

@@ -298,6 +298,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !!!!$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
   !!!!$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,nz,vol_neglect,h_tiny,OBC,eps_vel, &
   !!!!$OMP                        pbv, Stokes_VF)
+
+  !$omp target enter data map(alloc: dvdx, dudy)
+  !$omp target enter data map(alloc: dvSdx, duSdy) if (Stokes_VF)
+  ! TODO: Don't allocate if diagnostics are disabled
+
+  ! TODO: Do this outside of the function
+  !$omp target enter data map(to: u, v)
+
   do k=1,nz
 
     ! Here the second order accurate layer potential vorticities, q,
@@ -305,8 +313,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! vorticity is second order accurate everywhere with free slip b.c.s,
     ! but only first order accurate at boundaries with no slip b.c.s.
     ! First calculate the contributions to the circulation around the q-point.
+    !$omp target
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+        !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           dvSdx(I,J) = (-Waves%us_y(i+1,J,k)*G%dyCv(i+1,J)) - &
                        (-Waves%us_y(i,J,k)*G%dyCv(i,J))
@@ -315,6 +325,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         enddo; enddo
       endif
       if (.not. Waves%Passive_Stokes_VF) then
+        !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J)) - &
                       ((v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
@@ -322,17 +333,24 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
                       ((u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
         enddo; enddo
       else
+        !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
           dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
         enddo; enddo
       endif
     else
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
         dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
       enddo; enddo
     endif
+    !$omp end target
+
+    !$omp target update from(dvdx, dudy)
+    !$omp target update from(dvSdx, duSdy) if (Stokes_VF)
+
     do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
       hArea_v(i,J) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
     enddo ; enddo
@@ -939,6 +957,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     endif
 
   enddo ! k-loop.
+
+  !$omp target exit data map(delete: dvdx, dudy)
+  !$omp target exit data map(delete: dvSdx, duSdy) if (Stokes_VF)
+
+  ! TODO: Move outside function
+  !$omp target exit data map(delete: u, v)
 
   ! Here the various Coriolis-related derived quantities are offered for averaging.
   if (query_averaging_enabled(CS%diag)) then
