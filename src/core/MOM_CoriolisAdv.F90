@@ -301,6 +301,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target enter data map(alloc: uh_center, vh_center) if (CS%Coriolis_En_Dis)
   ! TODO: May also need SADOURNEY75_ENERGY
   !$omp target enter data map(alloc: uh_min, vh_min) if (CS%Coriolis_En_Dis)
+  !$omp target enter data map(alloc: uh_max, vh_max) if (CS%Coriolis_En_Dis)
+
+  !$omp target enter data map(alloc: KE, KEx, KEy)
 
   ! Diagnostics
   !$omp target enter data map(alloc: RV) if (CS%id_RV > 0)
@@ -710,18 +713,21 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     endif
     !$omp end target
 
+    ! Calculate KE and the gradient of KE
+    call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
+
+    !$omp target update from(KE, KEx, KEy)
+
     !$omp target update from(abs_vort, q)
     !$omp target update from(a, b, c, d, ep_u, ep_v)
     !$omp target update from(uh_min, vh_min) if (CS%Coriolis_En_Dis)
+    !$omp target update from(uh_max, vh_max) if (CS%Coriolis_En_Dis)
 
     ! Diagnostics
     !$omp target update from(RV) if (CS%id_RV > 0)
     !$omp target update from(PV) if (CS%id_PV > 0)
     !$omp target update from(q2) &
     !$omp     if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
-
-    ! Calculate KE and the gradient of KE
-    call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
 
     ! Calculate the tendencies of zonal velocity due to the Coriolis
     ! force and momentum advection.  On a Cartesian grid, this is
@@ -1016,6 +1022,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target exit data map(delete: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
   !$omp target exit data map(delete: uh_center, vh_center) if (CS%Coriolis_En_Dis)
   !$omp target exit data map(delete: uh_min, vh_min) if (CS%Coriolis_En_Dis)
+  !$omp target exit data map(delete: uh_max, vh_max) if (CS%Coriolis_En_Dis)
+
+  !$omp target exit data map(delete: KE, KEx, KEy)
 
   ! TODO: Move outside function
   !$omp target exit data map(delete: u, v, h)
@@ -1085,16 +1094,17 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   real :: um2, up2, vm2, vp2     ! Temporary variables [L2 T-2 ~> m2 s-2].
   real :: um2a, up2a, vm2a, vp2a ! Temporary variables [L4 T-2 ~> m4 s-2].
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
-  !!!$omp declare target
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
+  !$omp target
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
   if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
+    !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       KE(i,j) = ( ( (G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))) + &
                     (G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k))) ) + &
@@ -1104,6 +1114,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme which does not take into account any geometric factors
+    !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2 = up*up
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2 = um*um
@@ -1114,6 +1125,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
+    !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
@@ -1124,14 +1136,17 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   endif
 
   ! Term - d(KE)/dx.
+  !$omp parallel loop collapse(2)
   do j=js,je ; do I=Isq,Ieq
     KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(I,j)
   enddo ; enddo
 
   ! Term - d(KE)/dy.
+  !$omp parallel loop collapse(2)
   do J=Jsq,Jeq ; do i=is,ie
     KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
   enddo ; enddo
+  !$omp end target
 
   if (associated(OBC)) then
     do n=1,OBC%number_of_segments
@@ -1146,7 +1161,6 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
       endif
     enddo
   endif
-
 end subroutine gradKE
 
 !> Initializes the control structure for MOM_CoriolisAdv
