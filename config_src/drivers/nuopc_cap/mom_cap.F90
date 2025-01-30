@@ -2056,9 +2056,11 @@ subroutine ModelSetRunClock(gcomp, rc)
           call ESMF_LogWrite(subname//" Restarts will be written at finalize only", ESMF_LOGMSG_INFO)
         endif
       endif
+#ifndef CESMCOUPLED
       call ESMF_TimeIntervalGet(dtimestep, s=dt_cpl, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
       call init_is_restart_fh(mcurrTime, dt_cpl, is_root_pe(), restartfh_info)
+#endif
     endif
 
     if (restart_mode == 'alarms') then
