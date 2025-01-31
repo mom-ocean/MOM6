@@ -398,7 +398,7 @@ end type ocean_OBC_type
 !> Control structure for open boundaries that read from files.
 !! Probably lots to update here.
 type, public :: file_OBC_CS ; private
-  real :: tide_flow = 3.0e6         !< Placeholder for now..., perhaps in [m3 s-1]?
+  logical :: OBC_file_used = .false.     !< Placeholder for now to avoid an empty type.
 end type file_OBC_CS
 
 !> Type to carry something (what??) for the OBC registry.
