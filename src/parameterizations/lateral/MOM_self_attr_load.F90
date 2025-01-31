@@ -190,10 +190,9 @@ subroutine SAL_init(G, GV, US, param_file, CS)
   real :: rhoE    ! The average density of Earth [R ~> kg m-3].
   character(len=200) :: filename, ebot_ref_file, inputdir ! Strings for file/path
   character(len=200) :: ebot_ref_varname                  ! Variable name in file
-  logical :: calculate_sal=.false.
-  logical :: tides=.false., use_tidal_sal_file=.false., bq_sal_tides_bug=.false.
-  integer :: tides_answer_date=99991231 ! Recover old answers with tides
-  real :: sal_scalar_value, tide_sal_scalar_value ! Scaling SAL factors [nondim]
+  logical :: calculate_sal, tides, use_tidal_sal_file
+  integer :: tides_answer_date ! Recover old answers with tides
+  real :: sal_scalar_value ! Scaling SAL factors [nondim]
   integer :: isd, ied, jsd, jed
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -245,18 +244,12 @@ subroutine SAL_init(G, GV, US, param_file, CS)
   if (CS%use_sal_scalar .and. CS%use_bpa) &
     call MOM_error(WARNING, trim(mdl) // ", SAL_init: Using bottom pressure anomaly for scalar "//&
                    "approximation SAL is unsubstantiated.")
-  call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", tide_sal_scalar_value, &
-                 units="m m-1", default=0.0, do_not_log=.True.)
-  if (tide_sal_scalar_value/=0.0) &
-    call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
-                   "Use SAL_SCALAR_VALUE instead." )
-  call get_param(param_file, mdl, "SAL_SCALAR_VALUE", sal_scalar_value, &
-                 "The constant of proportionality between sea surface "//&
-                 "height (really it should be bottom pressure) anomalies "//&
-                 "and bottom geopotential anomalies. This is only used if "//&
-                 "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
-                 default=tide_sal_scalar_value, units="m m-1", &
-                 do_not_log=(.not. CS%use_sal_scalar) .and. (.not. CS%use_tidal_sal_prev))
+  call get_param(param_file, mdl, "SAL_SCALAR_VALUE", sal_scalar_value, "The constant of "//&
+                 "proportionality between self-attraction and loading (SAL) geopotential "//&
+                 "anomaly and barotropic geopotential anomaly. This is only used if "//&
+                 "SAL_SCALAR_APPROX is true or USE_PREVIOUS_TIDES is true.", default=0.0, &
+                 units="m m-1", do_not_log=.not.(CS%use_sal_scalar .or. CS%use_tidal_sal_prev), &
+                 old_name='TIDE_SAL_SCALAR_VALUE')
   call get_param(param_file, mdl, "SAL_HARMONICS", CS%use_sal_sht, &
                  "If true, use the online spherical harmonics method to calculate "//&
                  "self-attraction and loading.", default=.false.)

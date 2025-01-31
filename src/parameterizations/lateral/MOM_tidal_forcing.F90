@@ -45,9 +45,9 @@ type, public :: tidal_forcing_CS ; private
                       !! equilibrium tide. Set to false if providing tidal phases
                       !! that have already been shifted by the
                       !! astronomical/equilibrium argument.
-  real    :: sal_scalar !< The constant of proportionality between sea surface
-                      !! height (really it should be bottom pressure) anomalies
-                      !! and bottom geopotential anomalies [nondim].
+  real    :: sal_scalar = 0.0 !< The constant of proportionality between self-attraction and
+                      !! loading (SAL) geopotential anomaly and total geopotential geopotential
+                      !! anomalies. This is only used if USE_PREVIOUS_TIDES is true. [nondim].
   integer :: nc       !< The number of tidal constituents in use.
   real, dimension(MAX_CONSTITUENTS) :: &
     freq, &           !< The frequency of a tidal constituent [rad T-1 ~> rad s-1].
@@ -267,7 +267,6 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
   character(len=200) :: tidal_input_files(4*MAX_CONSTITUENTS)
-  real :: tide_sal_scalar_value ! The constant of proportionality with the scalar approximation to SAL [nondim]
   integer :: i, j, c, is, ie, js, je, isd, ied, jsd, jed, nc
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -362,18 +361,13 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
                  "If true, use the SAL from the previous iteration of the "//&
                  "tides to facilitate convergent iteration. "//&
                  "This is only used if TIDES is true.", default=.false.)
-  call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", tide_sal_scalar_value, &
-                 units="m m-1", default=0.0, do_not_log=.True.)
-  if (tide_sal_scalar_value/=0.0) &
-    call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
-                   "Use SAL_SCALAR_VALUE instead." )
-  call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, &
-                 "The constant of proportionality between sea surface "//&
-                 "height (really it should be bottom pressure) anomalies "//&
-                 "and bottom geopotential anomalies. This is only used if "//&
-                 "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
-                 default=tide_sal_scalar_value, units="m m-1", &
-                 do_not_log=(.not. CS%use_tidal_sal_prev))
+  if (CS%use_tidal_sal_prev) &
+    call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, "The constant of "//&
+                   "proportionality between self-attraction and loading (SAL) geopotential "//&
+                   "anomaly and barotropic geopotential anomalies. This is only used if "//&
+                   "SAL_SCALAR_APPROX is true or USE_PREVIOUS_TIDES is true.", default=0.0, &
+                   units="m m-1", do_not_log=(.not.CS%use_tidal_sal_prev), &
+                   old_name='TIDE_SAL_SCALAR_VALUE')
 
   if (nc > MAX_CONSTITUENTS) then
     write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
