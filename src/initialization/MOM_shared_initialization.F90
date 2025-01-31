@@ -1310,15 +1310,15 @@ subroutine compute_global_grid_integrals(G, US)
   type(unit_scale_type),  intent(in)    :: US !< A dimensional unit scaling type
 
   ! Local variables
-  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming ! Masked and unscaled cell areas [m2]
+  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: masked_area ! Masked cell areas [L2 ~> m2]
   integer :: i, j
 
-  tmpForSumming(:,:) = 0.
+  masked_area(:,:) = 0.
   G%areaT_global = 0.0 ; G%IareaT_global = 0.0
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    tmpForSumming(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
+    masked_area(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
   enddo ; enddo
-  G%areaT_global = reproducing_sum(tmpForSumming, unscale=US%L_to_m**2)
+  G%areaT_global = reproducing_sum(masked_area, unscale=US%L_to_m**2)
 
   if (G%areaT_global == 0.0) &
     call MOM_error(FATAL, "compute_global_grid_integrals: zero ocean area (check topography?)")
