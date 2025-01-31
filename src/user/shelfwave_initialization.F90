@@ -29,14 +29,12 @@ public register_shelfwave_OBC, shelfwave_OBC_end
 !> Control structure for shelfwave open boundaries.
 type, public :: shelfwave_OBC_CS ; private
   real :: my_amp        !< Amplitude of the open boundary current inflows [L T-1 ~> m s-1]
-  real :: Lx = 100.0    !< Long-shore length scale of bathymetry [km] or [m]
-  real :: Ly = 50.0     !< Cross-shore length scale [km] or [m]
-  real :: f0 = 1.e-4    !< Coriolis parameter [T-1 ~> s-1]
-  real :: jj = 1.0      !< Cross-shore wave mode [nondim]
   real :: kk            !< Cross-shore wavenumber [km-1] or [m-1]
   real :: ll            !< Longshore wavenumber [km-1] or [m-1]
   real :: alpha         !< Exponential decay rate in the y-direction [km-1] or [m-1]
   real :: omega         !< Frequency of the shelf wave [T-1 ~> s-1]
+  logical :: shelfwave_correct_amplitude !< If true, SHELFWAVE_AMPLITUDE gives the actual inflow
+                        !! velocity, rather than giving an overall scaling factor for the flow.
 end type shelfwave_OBC_CS
 
 contains
@@ -53,6 +51,11 @@ function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
   ! Local variables
   real :: PI      ! The ratio of the circumference of a circle to its diameter [nondim]
   character(len=32)  :: casename = "shelfwave"       !< This case's name.
+  real :: jj      ! Cross-shore wave mode [nondim]
+  real :: f0      ! Coriolis parameter [T-1 ~> s-1]
+  real :: Lx      ! Long-shore length scale of bathymetry [km] or [m]
+  real :: Ly      ! Cross-shore length scale [km] or [m]
+  real :: default_amp  ! The default velocity amplitude [m s-1] or amplitude scaling factor [nondim]
 
   PI = 4.0*atan(1.0)
 
@@ -65,25 +68,29 @@ function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
 
   ! Register the tracer for horizontal advection & diffusion.
   call register_OBC(casename, param_file, OBC_Reg)
-  call get_param(param_file, mdl, "F_0", CS%f0, &
+  call get_param(param_file, mdl, "F_0", f0, &
                  default=0.0, units="s-1", scale=US%T_to_s, do_not_log=.true.)
-  call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH", CS%Lx, &
+  call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH", Lx, &
                  "Length scale of shelfwave in x-direction.",&
                  units=G%x_ax_unit_short, default=100.)
-  call get_param(param_file, mdl, "SHELFWAVE_Y_LENGTH_SCALE", CS%Ly, &
+  call get_param(param_file, mdl, "SHELFWAVE_Y_LENGTH_SCALE", Ly, &
                  "Length scale of exponential dropoff of topography in the y-direction.", &
                  units=G%y_ax_unit_short, default=50.)
-  call get_param(param_file, mdl, "SHELFWAVE_Y_MODE", CS%jj, &
+  call get_param(param_file, mdl, "SHELFWAVE_Y_MODE", jj, &
                  "Cross-shore wave mode.",               &
                  units="nondim", default=1.)
+  call get_param(param_file, mdl, "SHELFWAVE_CORRECT_AMPLITUDE", CS%shelfwave_correct_amplitude, &
+                 "If true, SHELFWAVE_AMPLITUDE gives the actual inflow velocity, rather than giving "//&
+                 "an overall scaling factor for the flow.", default=.false.)  !### Make the default .true.?
+  default_amp = 1.0 ; if (CS%shelfwave_correct_amplitude) default_amp = 0.1
   call get_param(param_file, mdl, "SHELFWAVE_AMPLITUDE", CS%my_amp, &
                  "Amplitude of the open boundary current inflows in the shelfwave configuration.", &
-                 units="m s-1", default=1.0, scale=US%m_s_to_L_T)
+                 units="m s-1", default=default_amp, scale=US%m_s_to_L_T)
 
-  CS%alpha = 1. / CS%Ly
-  CS%ll = 2. * PI / CS%Lx
-  CS%kk = CS%jj * PI / G%len_lat
-  CS%omega = 2 * CS%alpha * CS%f0 * CS%ll / &
+  CS%alpha = 1. / Ly
+  CS%ll = 2. * PI / Lx
+  CS%kk = jj * PI / G%len_lat
+  CS%omega = 2 * CS%alpha * f0 * CS%ll / &
              (CS%kk*CS%kk + CS%alpha*CS%alpha + CS%ll*CS%ll)
   register_shelfwave_OBC = .true.
 
@@ -145,7 +152,10 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: time_sec ! The time in the run [T ~> s]
   real :: cos_wt, sin_wt ! Cosine and sine associated with the propagating x-direction structure [nondim]
   real :: cos_ky, sin_ky ! Cosine and sine associated with the y-direction structure [nondim]
-  real :: x, y   ! Positions relative to the western and southern boundaries [km] or [m] or [degrees]
+  real :: x   ! Position relative to the western boundary [km] or [m] or [degrees_E]
+  real :: y   ! Position relative to the southern boundary [km] or [m] or [degrees_N]
+  real :: I_yscale  ! A factor to give the correct inflow velocity [km-1] or [m-1] or [degrees_N-1] or
+                    ! to compensate for the variable units of the y-coordinate [km axis_unit-1], usually 1 [nondim]
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, n
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -157,6 +167,14 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   if (.not.associated(OBC)) return
 
   time_sec = US%s_to_T*time_type_to_real(Time)
+  if (CS%shelfwave_correct_amplitude) then
+    ! This makes the units and edge value of normal_vel_bt the same as my_amp.
+    I_yscale = 1.0 / CS%kk
+  else ! This preserves the previous answers.
+    if (G%grid_unit_to_L == 0.0) call MOM_error(FATAL, &
+          "shelfwave_set_OBC_data requires the use of Cartesian coordinates.")
+    I_yscale = (1.0e3 * US%m_to_L) / G%grid_unit_to_L
+  endif
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
@@ -172,10 +190,10 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       sin_ky = sin(CS%kk * y)
       cos_ky = cos(CS%kk * y)
       segment%normal_vel_bt(I,j) = CS%my_amp * exp(- CS%alpha * y) * cos_wt * &
-           (CS%alpha * sin_ky + CS%kk * cos_ky)
-!     segment%tangential_vel_bt(I,j) = CS%my_amp * CS%ll * exp(- CS%alpha * y) * sin_wt * sin_ky
-!     segment%vorticity_bt(I,j) = CS%my_amp * exp(- CS%alpha * y) * cos_wt * sin_ky&
-!           (CS%ll**2 + CS%kk**2 + CS%alpha**2)
+           ((CS%alpha * sin_ky + CS%kk * cos_ky) * I_yscale)
+!     segment%tangential_vel_bt(I,j) = CS%my_amp * (CS%ll * I_yscale) * exp(- CS%alpha * y) * sin_wt * sin_ky
+!     segment%vorticity_bt(I,j) = CS%my_amp * exp(- CS%alpha * y) * cos_wt * sin_ky * &
+!           ((CS%ll**2 + CS%kk**2 + CS%alpha**2) * (I_yscale / G%grid_unit_to_L))
     enddo ; enddo
   enddo
 
