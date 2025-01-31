@@ -662,11 +662,11 @@ end subroutine initialize_ice_AGlen
 subroutine initialize_ice_SMB(SMB, G, US, PF)
   type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
   real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: SMB !< Ice surface mass balance parameter, often in [kg m-2 s-1]
+                         intent(inout) :: SMB !< Ice surface mass balance parameter, often in [R Z T-1 ~> kg m-2 s-1]
   type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
   type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
 
-  real :: SMB_val  ! Constant ice surface mass balance parameter, often in [kg m-2 s-1]
+  real :: SMB_val  ! Constant ice surface mass balance parameter, often in [R Z T-1 ~> kg m-2 s-1]
   character(len=40)  :: mdl = "initialize_ice_SMB" ! This subroutine's name.
   character(len=200) :: config
   character(len=200) :: varname

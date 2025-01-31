@@ -1303,9 +1303,9 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
               ! renormalization of the integral of the profile
               w2avg = 0.0
               do k=1,kc
-                w2avg = w2avg + 0.5*(mode_struct(K)**2+mode_struct(K+1)**2)*Hc(k) ! [H L4 T-4]
+                w2avg = w2avg + 0.5*(mode_struct(K)**2+mode_struct(K+1)**2)*Hc(k) ! [H L4 T-4 ~> m5 s-4 or kg m2 s-4]
               enddo
-              renorm = sqrt(htot(i)*a_int/w2avg) ! [T2 L-2]
+              renorm = sqrt(htot(i)*a_int/w2avg) ! [T2 L-2 ~> s2 m-2]
               do K=1,kc+1 ; mode_struct(K) = renorm * mode_struct(K) ; enddo
               ! after renorm, mode_struct is again [nondim]
               if (abs(dlam) < tol_solve*lam_1) exit

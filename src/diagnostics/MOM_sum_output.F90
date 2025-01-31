@@ -439,14 +439,14 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   real :: T_min   ! The global minimum unmasked value of the temperature [degC]
   real :: T_max   ! The global maximum unmasked value of the temperature [degC]
   real :: T_min_x ! The x-positions of the global temperature minima
-                  ! in the units of G%geoLonT, often [degreeT_E] or [km]
+                  ! in the units of G%geoLonT, often [degrees_E] or [km]
   real :: T_min_y ! The y-positions of the global temperature minima
-                  ! in the units of G%geoLatT, often [degreeT_N] or [km]
+                  ! in the units of G%geoLatT, often [degrees_N] or [km]
   real :: T_min_z ! The z-positions of the global temperature minima [layer]
   real :: T_max_x ! The x-positions of the global temperature maxima
-                  ! in the units of G%geoLonT, often [degreeT_E] or [km]
+                  ! in the units of G%geoLonT, often [degrees_E] or [km]
   real :: T_max_y ! The y-positions of the global temperature maxima
-                  ! in the units of G%geoLatT, often [degreeT_N] or [km]
+                  ! in the units of G%geoLatT, often [degrees_N] or [km]
   real :: T_max_z ! The z-positions of the global temperature maxima [layer]
 
 

@@ -175,7 +175,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT ! Areas [L2 ~> m2]
   real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU ! East face supergrid spacing [L ~> m]
   real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV ! North face supergrid spacing [L ~> m]
-  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ ! Corner latitudes or longitudes [degN] or [degE]
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ ! Corner latitudes [degrees_N] or
+                                                                   ! longitudes [degrees_E]
   real, dimension(:,:), allocatable :: tmpGlbl ! A global array of axis labels [degrees_N] or [km] or [m]
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
