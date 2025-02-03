@@ -312,6 +312,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp   if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
   !$omp target enter data map(alloc: AD%gradKEu) if (associated(AD%gradKEu))
   !$omp target enter data map(alloc: AD%gradKEv) if (associated(AD%gradKEv))
+  !$omp target enter data map(alloc: AD%rv_x_u) if (associated(AD%rv_x_u))
+  !$omp target enter data map(alloc: AD%rv_x_v) if (associated(AD%rv_x_v))
 
   ! TODO: Do this outside of the function
   !$omp target enter data map(to: u, v, h, uh, vh)
@@ -986,19 +988,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         AD%gradKEv(i,J,k) = -KEy(i,J)
       enddo ; enddo
     endif
-    !$omp end target
-    !$omp target update from(CAu(:,:,k), CAv(:,:,k))
-
-    ! Diagnostics
-    !$omp target update from(RV(:,:,k)) if (CS%id_RV > 0)
-    !$omp target update from(PV(:,:,k)) if (CS%id_PV > 0)
-    !$omp target update from(q2) &
-    !$omp     if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
 
     if (associated(AD%rv_x_u) .or. associated(AD%rv_x_v)) then
       ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
         if (associated(AD%rv_x_u)) then
+          !$omp parallel loop collapse(2)
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = - 0.25* &
               ((q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
@@ -1007,6 +1002,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
         if (associated(AD%rv_x_v)) then
+          !$omp parallel loop collapse(2)
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = 0.25 * &
               ((q2(I,j) * (vh(i+1,J,k) + vh(i,J,k))) + &
@@ -1015,6 +1011,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       else
         if (associated(AD%rv_x_u)) then
+          !$omp parallel loop collapse(2)
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
               (((((q2(I,J) + q2(I-1,J-1)) + q2(I-1,J)) * uh(I-1,j,k)) + &
@@ -1025,6 +1022,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
         if (associated(AD%rv_x_v)) then
+          !$omp parallel loop collapse(2)
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
               (((((q2(I+1,J) + q2(I,J-1)) + q2(I,J)) * vh(i+1,J,k)) + &
@@ -1035,6 +1033,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       endif
     endif
+    !$omp end target
 
   enddo ! k-loop.
 
@@ -1045,19 +1044,26 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target exit data map(delete: a, b, c, d, ep_u, ep_v)
   !$omp target exit data map(delete: KE, KEx, KEy)
   !$omp target exit data map(delete: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
-  !$omp target exit data map(delete: CAuS, CAvS) if (Stokes_VF)
   !$omp target exit data map(delete: uh_center, vh_center) if (CS%Coriolis_En_Dis)
   !$omp target exit data map(delete: uh_min, vh_min) if (CS%Coriolis_En_Dis)
   !$omp target exit data map(delete: uh_max, vh_max) if (CS%Coriolis_En_Dis)
-  !$omp target exit data map(delete: AD%gradKEu) if (associated(AD%gradKEu))
-  !$omp target exit data map(delete: AD%gradKEv) if (associated(AD%gradKEv))
-
+  !$omp target exit data map(delete: q2) &
+  !$omp     if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
 
   ! TODO: Move outside function
   !$omp target exit data map(delete: u, v, h, uh, vh)
   !$omp target exit data map(delete: pbv, pbv%por_face_areaU, pbv%por_face_areaV) &
   !$omp   if (CS%Coriolis_En_Dis)
-  !$omp target exit data map(delete: CAu, CAv)
+  !$omp target exit data map(from: CAu, CAv)
+
+  ! Diagnostics
+  !$omp target exit data map(from: RV) if (CS%id_RV > 0)
+  !$omp target exit data map(from: PV) if (CS%id_RV > 0)
+  !$omp target exit data map(from: AD%gradKEu) if (associated(AD%gradKEu))
+  !$omp target exit data map(from: AD%gradKEv) if (associated(AD%gradKEv))
+  !$omp target exit data map(from: AD%rv_x_u) if (associated(AD%rv_x_u))
+  !$omp target exit data map(from: AD%rv_x_u) if (associated(AD%rv_x_u))
+  !$omp target exit data map(from: CAuS, CAvS) if (Stokes_VF)
 
   ! Here the various Coriolis-related derived quantities are offered for averaging.
   if (query_averaging_enabled(CS%diag)) then
