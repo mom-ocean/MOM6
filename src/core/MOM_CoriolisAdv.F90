@@ -1168,6 +1168,14 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
       KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
     enddo ; enddo
   endif
+  !$omp end target
+  !
+  ! This kernel needs to be split due to a dependency between KE and KE[xy].
+  ! The compiler or the GPU does not appear to completing KE before starting
+  ! the KE[xy] calculations.  Maybe there's a better way to do this than
+  ! splitting the kernel, but I don't know how.
+  !
+  !$omp target
 
   ! Term - d(KE)/dx.
   !$omp parallel loop collapse(2)
@@ -1183,6 +1191,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   !$omp end target
 
   if (associated(OBC)) then
+    !$omp target update from(KEx, KEy)
     do n=1,OBC%number_of_segments
       if (OBC%segment(n)%is_N_or_S) then
         do i=OBC%segment(n)%HI%isd,OBC%segment(n)%HI%ied
@@ -1194,6 +1203,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
         enddo
       endif
     enddo
+    !$omp target update to(KEx, KEy)
   endif
 end subroutine gradKE
 
