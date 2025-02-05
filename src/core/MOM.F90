@@ -5,7 +5,7 @@ module MOM
 
 ! Infrastructure modules
 use MOM_array_transform,      only : rotate_array, rotate_vector
-use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum
+use MOM_debugging,            only : MOM_debugging_init, hchksum, uvchksum, totalTandS
 use MOM_debugging,            only : check_redundant, query_debugging_checks
 use MOM_checksum_packages,    only : MOM_thermo_chksum, MOM_state_chksum
 use MOM_checksum_packages,    only : MOM_accel_chksum, MOM_surface_chksum
@@ -1719,6 +1719,13 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
   call cpu_clock_end(id_clock_thermo)
 
   call disable_averaging(CS%diag)
+
+! This works in general:
+!  if (associated(tv%T)) &
+!    call totalTandS(G%HI, h, G%areaT, tv%T, tv%S, "End of step_MOM", US, GV%H_to_mks)
+! This works only if there is no rescaling being used:
+!  if (associated(tv%T)) &
+!    call totalTandS(G%HI, h, G%areaT, tv%T, tv%S, "End of step_MOM")
 
   if (showCallTree) call callTree_leave("step_MOM_thermo(), MOM.F90")
 
