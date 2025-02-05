@@ -157,7 +157,7 @@ subroutine basin_builder_topography(D, G, param_file, max_depth)
 end subroutine basin_builder_topography
 
 !> Returns the value of a triangular function centered at x=x0 with value 1
-!! and linearly decreasing to 0 at x=x0+/-L, and 0 otherwise.
+!! and linearly decreasing to 0 at x=x0+/-L, and 0 otherwise [nondim].
 !! If clip is present the top of the cone is cut off at "clip", which
 !! effectively defaults to 1.
 real function cone(x, x0, L, clip)
@@ -170,7 +170,7 @@ real function cone(x, x0, L, clip)
   if (present(clip)) cone = min(clip, cone)
 end function cone
 
-!> Returns an s-curve s(x) s.t. s(x0)<=0, s(x0+L)>=1 and cubic in between.
+!> Returns an s-curve s(x) s.t. s(x0)<=0, s(x0+L)>=1 and cubic in between [nondim].
 real function scurve(x, x0, L)
   real, intent(in) :: x       !< Coordinate in arbitrary units [A]
   real, intent(in) :: x0      !< position of peak in arbitrary units [A]
@@ -181,7 +181,7 @@ real function scurve(x, x0, L)
   scurve = ( 3. - 2.*s ) * ( s * s )
 end function scurve
 
-!> Returns a "coastal" profile.
+!> Returns a "coastal" profile [nondim].
 real function cstprof(x, x0, L, lf, bf, sf, sh)
   real, intent(in) :: x       !< Coordinate in arbitrary units [A]
   real, intent(in) :: x0      !< position of peak in arbitrary units [A]
@@ -196,7 +196,7 @@ real function cstprof(x, x0, L, lf, bf, sf, sh)
   cstprof = sh * scurve(s-lf,0.,bf) + (1.-sh) * scurve(s - (1.-sf),0.,sf)
 end function cstprof
 
-!> Distance between points x,y and a line segment (x0,y0) and (x0,y1).
+!> Distance between points x,y and a line segment (x0,y0) and (x0,y1) in arbitrary units [A].
 real function dist_line_fixed_x(x, y, x0, y0, y1)
   real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
   real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
@@ -211,7 +211,7 @@ real function dist_line_fixed_x(x, y, x0, y0, y1)
   dist_line_fixed_x = sqrt( (dx*dx) + (dy*dy) )
 end function dist_line_fixed_x
 
-!> Distance between points x,y and a line segment (x0,y0) and (x1,y0).
+!> Distance between points x,y and a line segment (x0,y0) and (x1,y0) in arbitrary units [A].
 real function dist_line_fixed_y(x, y, x0, x1, y0)
   real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
   real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
@@ -222,7 +222,7 @@ real function dist_line_fixed_y(x, y, x0, x1, y0)
   dist_line_fixed_y = dist_line_fixed_x(y, x, y0, x0, x1)
 end function dist_line_fixed_y
 
-!> An "angled coast profile".
+!> An "angled coast profile" [nondim].
 real function angled_coast(lon, lat, lon_eq, lat_mer, dr, sh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -238,7 +238,7 @@ real function angled_coast(lon, lat, lon_eq, lat_mer, dr, sh)
   angled_coast = cstprof(r, 0., dr, 0.125, 0.125, 0.5, sh)
 end function angled_coast
 
-!> A "coast profile" applied in an N-S line from lonC,lat0 to lonC,lat1.
+!> A "coast profile" applied in an N-S line from lonC,lat0 to lonC,lat1 [nondim].
 real function NS_coast(lon, lat, lonC, lat0, lat1, dlon, sh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -253,7 +253,7 @@ real function NS_coast(lon, lat, lonC, lat0, lat1, dlon, sh)
   NS_coast = cstprof(r, 0., dlon, 0.125, 0.125, 0.5, sh)
 end function NS_coast
 
-!> A "coast profile" applied in an E-W line from lon0,latC to lon1,latC.
+!> A "coast profile" applied in an E-W line from lon0,latC to lon1,latC [nondim].
 real function EW_coast(lon, lat, latC, lon0, lon1, dlat, sh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -268,7 +268,7 @@ real function EW_coast(lon, lat, latC, lon0, lon1, dlat, sh)
   EW_coast = cstprof(r, 0., dlat, 0.125, 0.125, 0.5, sh)
 end function EW_coast
 
-!> A NS ridge with a cone profile
+!> A NS ridge with a cone profile [nondim]
 real function NS_conic_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -283,7 +283,7 @@ real function NS_conic_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   NS_conic_ridge = 1. - rh * cone(r, 0., dlon)
 end function NS_conic_ridge
 
-!> A NS ridge with an scurve profile
+!> A NS ridge with an scurve profile [nondim]
 real function NS_scurve_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -298,7 +298,7 @@ real function NS_scurve_ridge(lon, lat, lonC, lat0, lat1, dlon, rh)
   NS_scurve_ridge = 1. - rh * (1. - scurve(r, 0., dlon) )
 end function NS_scurve_ridge
 
-!> A circular ridge with cutoff conic profile
+!> A circular ridge with cutoff conic profile [nondim]
 real function circ_conic_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridge_height)
   real, intent(in) :: lon            !< Longitude [degrees_E]
   real, intent(in) :: lat            !< Latitude [degrees_N]
@@ -316,7 +316,7 @@ real function circ_conic_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness
   circ_conic_ridge = 1. - frac_ht ! nondim depths (1-frac_ridge_height) .. 1
 end function circ_conic_ridge
 
-!> A circular ridge with cutoff scurve profile
+!> A circular ridge with cutoff scurve profile [nondim]
 real function circ_scurve_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridge_height)
   real, intent(in) :: lon            !< Longitude [degrees_E]
   real, intent(in) :: lat            !< Latitude [degrees_N]

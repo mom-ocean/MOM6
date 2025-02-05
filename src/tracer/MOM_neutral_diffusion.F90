@@ -1131,6 +1131,7 @@ end subroutine interface_scalar
 
 !> Returns the PPM quasi-fourth order edge value at k+1/2 following
 !! equation 1.6 in Colella & Woodward, 1984: JCP 54, 174-201.
+!! The returned units are the same as those of Ak (e.g. [C ~> degC] for temperature).
 real function ppm_edge(hkm1, hk, hkp1, hkp2,  Ak, Akp1, Pk, Pkp1, h_neglect)
   real, intent(in) :: hkm1 !< Width of cell k-1 in [H ~> m or kg m-2] or other units
   real, intent(in) :: hk   !< Width of cell k in [H ~> m or kg m-2] or other units
@@ -1289,9 +1290,9 @@ subroutine PLM_diff(nk, h, S, c_method, b_method, diff)
 
 end subroutine PLM_diff
 
-!> Returns the cell-centered second-order finite volume (unlimited PLM) slope
-!! using three consecutive cell widths and average values. Slope is returned
-!! as a difference across the central cell (i.e. units of scalar S).
+!> Returns the cell-centered second-order finite volume (unlimited PLM) slope using three
+!! consecutive cell widths and average values. Slope is returned as a difference across
+!! the central cell (i.e. units of scalar S, e.g. [C ~> degC] for temperature).
 !! Discretization follows equation 1.7 in Colella & Woodward, 1984: JCP 54, 174-201.
 real function fv_diff(hkm1, hk, hkp1, Skm1, Sk, Skp1)
   real, intent(in) :: hkm1 !< Left cell width [H ~> m or kg m-2] or other arbitrary units
@@ -1572,7 +1573,7 @@ subroutine find_neutral_surface_positions_continuous(nk, Pl, Tl, Sl, dRdTl, dRdS
 end subroutine find_neutral_surface_positions_continuous
 
 !> Returns the non-dimensional position between Pneg and Ppos where the
-!! interpolated density difference equals zero.
+!! interpolated density difference equals zero [nondim].
 !! The result is always bounded to be between 0 and 1.
 real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   real, intent(in) :: dRhoNeg !< Negative density difference [R ~> kg m-3]
@@ -1875,7 +1876,8 @@ subroutine mark_unstable_cells(CS, nk, T, S, P, stable_cell)
   enddo
 end subroutine mark_unstable_cells
 
-!> Searches the "other" (searched) column for the position of the neutral surface
+!> Searches the "other" (searched) column for the position of the neutral surface, returning
+!! the fractional postion within the layer [nondim]
 real function search_other_column(CS, ksurf, pos_last, T_from, S_from, P_from, T_top, S_top, P_top, &
                                   T_bot, S_bot, P_bot, T_poly, S_poly ) result(pos)
   type(neutral_diffusion_CS), intent(in   ) :: CS       !< Neutral diffusion control structure

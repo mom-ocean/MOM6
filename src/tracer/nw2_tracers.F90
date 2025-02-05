@@ -270,7 +270,7 @@ subroutine nw2_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV, US
 
 end subroutine nw2_tracer_column_physics
 
-!> The target value of a NeverWorld2 tracer label m at non-dimensional
+!> The target value of a NeverWorld2 tracer label m [conc] at non-dimensional
 !! position x=lon/Lx, y=lat/Ly, z=eta/H
 real function nw2_tracer_dist(m, G, GV, eta, i, j, k)
   integer, intent(in) :: m !< Indicates the NW2 tracer

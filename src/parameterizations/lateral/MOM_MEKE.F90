@@ -1995,7 +1995,8 @@ subroutine predict_MEKE(G, US, CS, npts, Time, features_array, MEKE)
 
 end subroutine predict_MEKE
 
-!> Compute average of interface quantities weighted by the thickness of the surrounding layers
+!> Compute average of interface quantities weighted by the thickness of the surrounding
+!! layers [arbitrary]
 real function vertical_average_interface(h, w, h_min)
 
   real, dimension(:), intent(in) :: h  !< Layer Thicknesses [H ~> m or kg m-2]

@@ -1123,7 +1123,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
 end subroutine initialize_segment_data
 
 !> Return an appropriate dimensional scaling factor for input data based on an OBC segment data
-!! name, or 1 for tracers or other fields that do not match one of the specified names.
+!! name [various ~> 1], or 1 for tracers or other fields that do not match one of the specified names.
 !! Note that calls to register_segment_tracer can come before or after calls to scale_factor_from_name.
 
 real function scale_factor_from_name(name, GV, US, Tr_Reg)
