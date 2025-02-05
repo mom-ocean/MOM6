@@ -97,6 +97,8 @@ type, public :: Kappa_shear_CS ; private
                              !! time average TKE when there is mass in all layers.  Otherwise always
                              !! report the time-averaged TKE, as is currently done when there
                              !! are some massless layers.
+  logical :: VS_viscosity_bug !< If true, use a bug in the calculation of the viscosity that sets
+                             !! it to zero for all vertices that are on a coastline.
   logical :: restrictive_tolerance_check !< If false, uses the less restrictive tolerance check to
                              !! determine if a timestep is acceptable for the KS_it outer iteration
                              !! loop, as the code was originally written.  True uses the more
@@ -607,10 +609,17 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
       enddo
     endif ; enddo ! i-loop
 
-    do K=1,nz+1 ; do I=IsB,IeB
-      tke_io(I,J,K) = G%mask2dBu(I,J) * tke_2d(I,K)
-      kv_io(I,J,K) = ( G%mask2dBu(I,J) * kappa_2d(I,K,J2) ) * CS%Prandtl_turb
-    enddo ; enddo
+    if (CS%VS_viscosity_bug) then
+      do K=1,nz+1 ; do I=IsB,IeB
+        tke_io(I,J,K) = G%mask2dBu(I,J) * tke_2d(I,K)
+        kv_io(I,J,K) = ( G%mask2dBu(I,J) * kappa_2d(I,K,J2) ) * CS%Prandtl_turb
+      enddo; enddo
+    else
+      do K=1,nz+1 ; do I=IsB,IeB
+        tke_io(I,J,K) = tke_2d(I,K)
+        kv_io(I,J,K) = kappa_2d(I,K,J2) * CS%Prandtl_turb
+      enddo; enddo
+    endif
     if (J>=G%jsc) then ; do K=1,nz+1 ; do i=G%isc,G%iec
       ! Set the diffusivities in tracer columns from the values at vertices.
       kappa_io(i,j,K) = G%mask2dT(i,j) * 0.25 * &
@@ -1873,6 +1882,10 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, do the calculations of the shear-driven mixing "//&
                  "at the cell vertices (i.e., the vorticity points).", &
                  default=.false., do_not_log=just_read)
+  call get_param(param_file, mdl, "VERTEX_SHEAR_VISCOSITY_BUG", CS%VS_viscosity_bug, &
+                 "If true, use a bug in vertex shear that zeros out viscosities at "//&
+                 "vertices on coastlines.", &
+                 default=.true., do_not_log=just_read.or.(.not.CS%KS_at_vertex))
   call get_param(param_file, mdl, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25, do_not_log=just_read)
