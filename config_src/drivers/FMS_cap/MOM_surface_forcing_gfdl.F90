@@ -67,7 +67,7 @@ type, public :: surface_forcing_CS ; private
   real :: wind_stress_multiplier !< A multiplier applied to incoming wind stress [nondim].
 
   real :: Rho0                  !< Boussinesq reference density [R ~> kg m-3]
-  real :: area_surf = -1.0      !< Total ocean surface area [m2]
+  real :: area_surf = -1.0      !< Total ocean surface area [L2 ~> m2]
   real :: latent_heat_fusion    !< Latent heat of fusion [Q ~> J kg-1]
   real :: latent_heat_vapor     !< Latent heat of vaporization [Q ~> J kg-1]
 
@@ -242,9 +242,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     SSS_anom,      & ! Instantaneous sea surface salinity anomalies from a target value [S ~> ppt]
     SSS_mean,      & ! A (mean?) salinity about which to normalize local salinity
                      ! anomalies when calculating restorative precipitation anomalies [S ~> ppt]
-    net_FW,        & ! The area integrated net freshwater flux into the ocean [kg s-1]
-    net_FW2,       & ! The net freshwater flux into the ocean [kg m-2 s-1]
-    work_sum,      & ! A 2-d array that is used as the work space for global sums [m2] or [kg s-1]
+    net_FW,        & ! The area integrated net freshwater flux into the ocean [R Z L2 T-1 ~> kg s-1]
+    net_FW2,       & ! The area averaged net freshwater flux into the ocean [R Z T-1 ~> kg m-2 s-1]
+    work_sum,      & ! A 2-d array that is used as the work space for global sums [L2 ~> m2] or [R Z L2 T-1 ~> kg s-1]
     open_ocn_mask    ! a binary field indicating where ice is present based on frazil criteria [nondim]
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
@@ -334,9 +334,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! allocation and initialization on first call to this routine
   if (CS%area_surf < 0.0) then
     do j=js,je ; do i=is,ie
-      work_sum(i,j) = US%L_to_m**2*G%areaT(i,j) * G%mask2dT(i,j)
+      work_sum(i,j) = G%areaT(i,j) * G%mask2dT(i,j)
     enddo ; enddo
-    CS%area_surf = reproducing_sum(work_sum, isr, ier, jsr, jer)
+    CS%area_surf = reproducing_sum(work_sum, isr, ier, jsr, jer, unscale=US%L_to_m**2)
   endif    ! endif for allocation and initialization
 
 
@@ -375,11 +375,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                           unit_scale=US%RZ_T_to_kg_m2s)
           fluxes%saltFluxGlobalAdj = 0.
         else
-          work_sum(is:ie,js:je) = US%L_to_m**2*US%RZ_T_to_kg_m2s * &
-                  G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je) * G%mask2dT(is:ie,js:je)
-          fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer)/CS%area_surf
+          work_sum(is:ie,js:je) = G%areaT(is:ie,js:je)*fluxes%salt_flux(is:ie,js:je) * G%mask2dT(is:ie,js:je)
+          fluxes%saltFluxGlobalAdj = reproducing_sum(work_sum(:,:), isr,ier, jsr,jer, unscale=US%RZL2_to_kg*US%s_to_T) &
+                                     / CS%area_surf
           fluxes%salt_flux(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) - &
-                                          kg_m2_s_conversion * fluxes%saltFluxGlobalAdj * G%mask2dT(is:ie,js:je)
+                                          fluxes%saltFluxGlobalAdj * G%mask2dT(is:ie,js:je)
         endif
       endif
       fluxes%salt_flux_added(is:ie,js:je) = fluxes%salt_flux(is:ie,js:je) ! Diagnostic
@@ -399,11 +399,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
                        unit_scale=US%RZ_T_to_kg_m2s)
           fluxes%vPrecGlobalAdj = 0.
         else
-          work_sum(is:ie,js:je) = US%L_to_m**2*G%areaT(is:ie,js:je) * &
-                                  US%RZ_T_to_kg_m2s*fluxes%vprec(is:ie,js:je)
-          fluxes%vPrecGlobalAdj = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer) / CS%area_surf
+          work_sum(is:ie,js:je) = G%areaT(is:ie,js:je) * fluxes%vprec(is:ie,js:je)
+          fluxes%vPrecGlobalAdj = reproducing_sum(work_sum(:,:), isr, ier, jsr, jer, unscale=US%RZL2_to_kg*US%s_to_T) &
+                                  / CS%area_surf
           do j=js,je ; do i=is,ie
-            fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - kg_m2_s_conversion*fluxes%vPrecGlobalAdj ) * G%mask2dT(i,j)
+            fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - fluxes%vPrecGlobalAdj ) * G%mask2dT(i,j)
           enddo ; enddo
         endif
       endif
@@ -603,10 +603,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     sign_for_net_FW_bug = 1.
     if (CS%use_net_FW_adjustment_sign_bug) sign_for_net_FW_bug = -1.
     do j=js,je ; do i=is,ie
-      net_FW(i,j) = US%RZ_T_to_kg_m2s* &
-                    (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
-                      (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
-                      (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * US%L_to_m**2*G%areaT(i,j)
+      net_FW(i,j) =  (((fluxes%lprec(i,j)   + fluxes%fprec(i,j)) + &
+                       (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j))) + &
+                       (fluxes%evap(i,j)    + fluxes%vprec(i,j)) ) * G%areaT(i,j)
       !   The following contribution appears to be calculating the volume flux of sea-ice
       ! melt. This calculation is clearly WRONG if either sea-ice has variable
       ! salinity or the sea-ice is completely fresh.
@@ -614,21 +613,22 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       ! is constant.
       !   To do this correctly we will need a sea-ice melt field added to IOB. -AJA
       if (associated(IOB%salt_flux) .and. (CS%ice_salt_concentration>0.0)) &
-        net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * US%L_to_m**2*G%areaT(i,j) * &
-                     (IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
-      net_FW2(i,j) = net_FW(i,j) / (US%L_to_m**2*G%areaT(i,j))
+        net_FW(i,j) = net_FW(i,j) + sign_for_net_FW_bug * G%areaT(i,j) * &
+                     (kg_m2_s_conversion*IOB%salt_flux(i-i0,j-j0) / CS%ice_salt_concentration)
+      net_FW2(i,j) = net_FW(i,j) / G%areaT(i,j)
     enddo ; enddo
 
     if (CS%adjust_net_fresh_water_by_scaling) then
-      call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl)
+      call adjust_area_mean_to_zero(net_FW2, G, fluxes%netFWGlobalScl, unscale=US%RZ_T_to_kg_m2s)
       do j=js,je ; do i=is,ie
-        fluxes%vprec(i,j) = fluxes%vprec(i,j) + kg_m2_s_conversion * &
-            (net_FW2(i,j) - net_FW(i,j)/(US%L_to_m**2*G%areaT(i,j))) * G%mask2dT(i,j)
+        fluxes%vprec(i,j) = fluxes%vprec(i,j) + &
+            (net_FW2(i,j) - net_FW(i,j)/G%areaT(i,j)) * G%mask2dT(i,j)
       enddo ; enddo
     else
-      fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer) / CS%area_surf
+      fluxes%netFWGlobalAdj = reproducing_sum(net_FW(:,:), isr, ier, jsr, jer, unscale=US%RZL2_to_kg*US%s_to_T) / &
+                               CS%area_surf
       do j=js,je ; do i=is,ie
-        fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - kg_m2_s_conversion * fluxes%netFWGlobalAdj ) * G%mask2dT(i,j)
+        fluxes%vprec(i,j) = ( fluxes%vprec(i,j) - fluxes%netFWGlobalAdj ) * G%mask2dT(i,j)
       enddo ; enddo
     endif
 

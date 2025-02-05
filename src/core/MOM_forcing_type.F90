@@ -191,9 +191,10 @@ type, public :: forcing
                                  !! deposition from the atmosphere. [R Z T-1 ~> kg m-2 s-1]
 
   ! Scalars set by surface forcing modules
-  real :: vPrecGlobalAdj = 0.     !< adjustment to restoring vprec to zero out global net [kg m-2 s-1]
-  real :: saltFluxGlobalAdj = 0.  !< adjustment to restoring salt flux to zero out global net [kgSalt m-2 s-1]
-  real :: netFWGlobalAdj = 0.     !< adjustment to net fresh water to zero out global net [kg m-2 s-1]
+  real :: vPrecGlobalAdj = 0.     !< adjustment to restoring vprec to zero out global net [R Z T-1 ~> kg m-2 s-1]
+  real :: saltFluxGlobalAdj = 0.  !< adjustment to restoring salt flux to zero out global
+                                  !! net [R Z T-1 ~> kgSalt m-2 s-1]
+  real :: netFWGlobalAdj = 0.     !< adjustment to net fresh water to zero out global net [R Z T-1 ~> kg m-2 s-1]
   real :: vPrecGlobalScl = 0.     !< scaling of restoring vprec to zero out global net ( -1..1 ) [nondim]
   real :: saltFluxGlobalScl = 0.  !< scaling of restoring salt flux to zero out global net ( -1..1 ) [nondim]
   real :: netFWGlobalScl = 0.     !< scaling of net fresh water to zero out global net ( -1..1 ) [nondim]
@@ -2121,17 +2122,17 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
   handles%id_saltFluxGlobalAdj = register_scalar_field('ocean_model',              &
         'salt_flux_global_restoring_adjustment', Time, diag,                       &
         'Adjustment needed to balance net global salt flux into ocean at surface', &
-         units='kg m-2 s-1') !, conversion=US%RZ_T_to_kg_m2s)
+         units='kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_vPrecGlobalAdj = register_scalar_field('ocean_model',  &
         'vprec_global_adjustment', Time, diag,                      &
         'Adjustment needed to adjust net vprec into ocean to zero', &
-        'kg m-2 s-1')
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_netFWGlobalAdj = register_scalar_field('ocean_model',       &
         'net_fresh_water_global_adjustment', Time, diag,                 &
         'Adjustment needed to adjust net fresh water into ocean to zero',&
-        'kg m-2 s-1')
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   handles%id_saltFluxGlobalScl = register_scalar_field('ocean_model',            &
         'salt_flux_global_restoring_scaling', Time, diag,                        &
