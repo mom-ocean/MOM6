@@ -557,8 +557,10 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     ! Calculate a predictor-step estimate of the Coriolis and momentum advection terms,
     ! if it was not already stored from the end of the previous time step.
     call cpu_clock_begin(id_clock_Cor)
+    !$omp target update to(u_av, v_av, h_av, uh, vh)
     call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu_pred, CS%CAv_pred, CS%OBC, CS%AD_pred, &
                    G, GV, US, CS%CoriolisAdv, pbv, Waves=Waves)
+    !$omp target update from(CS%CAu_pred, CS%CAv_pred)
     call cpu_clock_end(id_clock_Cor)
     if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
   endif
@@ -897,8 +899,10 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
+  !$omp target update to(u_av, v_av, h_av, uh, vh)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, GV, US, CS%CoriolisAdv, pbv, Waves=Waves)
+  !$omp target update from(CS%CAu, CS%CAv)
   call cpu_clock_end(id_clock_Cor)
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
@@ -1092,8 +1096,10 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call cpu_clock_begin(id_clock_Cor)
     call disable_averaging(CS%diag)  ! These calculations should not be used for diagnostics.
     ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
+    !$omp target update to(u_av, v_av, h_av, uh, vh)
     call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu_pred, CS%CAv_pred, CS%OBC, CS%AD_pred, &
                    G, GV, US, CS%CoriolisAdv, pbv, Waves=Waves)
+    !$omp target update from(CS%CAu_pred, CS%CAv_pred)
     CS%CAu_pred_stored = .true.
     call enable_averages(dt, Time_local, CS%diag) ! Reenable the averaging
     call cpu_clock_end(id_clock_Cor)
@@ -1240,20 +1246,24 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
   endif
   allocate(CS)
 
+  ! TODO: Are these initializations necessary?  If not, then we can do
+  !   map(alloc:) rather than map(to:)
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
   ALLOC_(CS%diffv(isd:ied,JsdB:JedB,nz)) ; CS%diffv(:,:,:) = 0.0
   ALLOC_(CS%CAu(IsdB:IedB,jsd:jed,nz))   ; CS%CAu(:,:,:)   = 0.0
   ALLOC_(CS%CAv(isd:ied,JsdB:JedB,nz))   ; CS%CAv(:,:,:)   = 0.0
+  !$omp target enter data map(to: CS%CAu, CS%CAv)
   ALLOC_(CS%CAu_pred(IsdB:IedB,jsd:jed,nz)) ; CS%CAu_pred(:,:,:)   = 0.0
   ALLOC_(CS%CAv_pred(isd:ied,JsdB:JedB,nz)) ; CS%CAv_pred(:,:,:)   = 0.0
+  !$omp target enter data map(to: CS%CAu_pred, CS%CAv_pred)
   ALLOC_(CS%PFu(IsdB:IedB,jsd:jed,nz))   ; CS%PFu(:,:,:)   = 0.0
   ALLOC_(CS%PFv(isd:ied,JsdB:JedB,nz))   ; CS%PFv(:,:,:)   = 0.0
-  ! TODO: Replace with map(alloc:) (and remove PF[uv] = 0.)
   !$omp target enter data map(to: CS%PFu, CS%PFv)
   ALLOC_(CS%eta(isd:ied,jsd:jed))       ; CS%eta(:,:)    = 0.0
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
   ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom_H
+  !$omp target enter data map(to: CS%u_av, CS%v_av, CS%h_av)
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
@@ -1643,8 +1653,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
       endif
       call pass_vector(CS%u_av, CS%v_av, G%Domain, halo=2, clock=id_clock_pass_init, complete=.false.)
       call pass_vector(uh, vh, G%Domain, halo=2, clock=id_clock_pass_init, complete=.true.)
+      !$omp target update to(CS%u_av, CS%v_av, CS%h_av, uh, vh)
       call CorAdCalc(CS%u_av, CS%v_av, CS%h_av, uh, vh, CS%CAu_pred, CS%CAv_pred, CS%OBC, CS%ADp, &
                      G, GV, US, CS%CoriolisAdv, pbv) !, Waves=Waves)
+      !$omp target update from(CS%CAu_pred, CS%CAv_pred)
       CS%CAu_pred_stored = .true.
     endif
   else
@@ -1904,7 +1916,9 @@ subroutine end_dyn_split_RK2(CS)
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
+  !$omp target exit data map(delete: CS%CAu, CS%CAv)
   DEALLOC_(CS%CAu_pred) ; DEALLOC_(CS%CAv_pred)
+  !$omp target exit data map(delete: CS%CAu_pred, CS%CAv_pred)
   DEALLOC_(CS%PFu)   ; DEALLOC_(CS%PFv)
   !$omp target exit data map(delete: CS%PFu, CS%PFv)
 
@@ -1915,8 +1929,9 @@ subroutine end_dyn_split_RK2(CS)
   DEALLOC_(CS%visc_rem_u) ; DEALLOC_(CS%visc_rem_v)
 
   DEALLOC_(CS%eta) ; DEALLOC_(CS%eta_PF) ; DEALLOC_(CS%pbce)
-  DEALLOC_(CS%h_av) ; DEALLOC_(CS%u_av) ; DEALLOC_(CS%v_av)
   !$omp target exit data map(delete: CS%pbce, CS%eta_PF)
+  DEALLOC_(CS%h_av) ; DEALLOC_(CS%u_av) ; DEALLOC_(CS%v_av)
+  !$omp target exit data map(delete: CS%u_av, CS%v_av, CS%h_av)
 
   call dealloc_BT_cont_type(CS%BT_cont)
   deallocate(CS%AD_pred)

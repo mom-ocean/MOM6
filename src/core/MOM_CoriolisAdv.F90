@@ -316,10 +316,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target enter data map(alloc: AD%rv_x_v) if (associated(AD%rv_x_v))
 
   ! TODO: Do this outside of the function
-  !$omp target enter data map(to: u, v, h, uh, vh)
   !$omp target enter data map(to: pbv, pbv%por_face_areaU, pbv%por_face_areaV) &
   !$omp   if (CS%Coriolis_En_Dis)
-  !$omp target enter data map(alloc: CAu, CAv)
 
   do k=1,nz
 
@@ -1051,10 +1049,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp     if(associated(AD%rv_x_u) .or. associated(AD%rv_x_v))
 
   ! TODO: Move outside function
-  !$omp target exit data map(delete: u, v, h, uh, vh)
   !$omp target exit data map(delete: pbv, pbv%por_face_areaU, pbv%por_face_areaV) &
   !$omp   if (CS%Coriolis_En_Dis)
-  !$omp target exit data map(from: CAu, CAv)
 
   ! Diagnostics
   !$omp target exit data map(from: RV) if (CS%id_RV > 0)
@@ -1103,7 +1099,6 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%id_intz_rvxv_2d > 0) call post_product_sum_u(CS%id_intz_rvxv_2d, AD%rv_x_v, AD%diag_hu, G, nz, CS%diag)
     if (CS%id_intz_rvxu_2d > 0) call post_product_sum_v(CS%id_intz_rvxu_2d, AD%rv_x_u, AD%diag_hv, G, nz, CS%diag)
   endif
-
 end subroutine CorAdCalc
 
 
@@ -1206,6 +1201,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
     !$omp target update to(KEx, KEy)
   endif
 end subroutine gradKE
+
 
 !> Initializes the control structure for MOM_CoriolisAdv
 subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
