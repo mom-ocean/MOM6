@@ -106,19 +106,19 @@ type, public :: int_tide_CS ; private
   real, allocatable, dimension(:,:,:,:,:) :: TKE_slope_loss
                         !< internal tide energy loss due to the residual at slopes [H Z2 T-3 ~> m3 s-3 or W m-2]
   real, allocatable, dimension(:,:) :: TKE_input_glo_dt
-                        !< The energy input to the internal waves * dt [H Z2 T-2 ~> m3 s-2 or J m-2].
+                        !< The integrated energy input to the internal waves [H Z2 L2 T-2 ~> m5 s-2 or J]
   real, allocatable, dimension(:,:) :: TKE_leak_loss_glo_dt
-                        !< energy lost due to misc background processes * dt [H Z2 T-2 ~> m3 s-2 or J m-2]
+                        !< Integrated energy lost due to misc background processes [H Z2 L2 T-2 ~> m5 s-2 or J]
   real, allocatable, dimension(:,:) :: TKE_quad_loss_glo_dt
-                        !< energy lost due to quadratic bottom drag * dt [H Z2 T-2 ~> m3 s-2 or J m-2]
+                        !< Integrated energy lost due to quadratic bottom drag [H Z2 L2 T-2 ~> m5 s-2 or J]
   real, allocatable, dimension(:,:) :: TKE_Froude_loss_glo_dt
-                        !< energy lost due to wave breaking [H Z2 T-2 ~> m3 s-2 or J m-2]
+                        !< Integrated energy lost due to wave breaking [H Z2 L2 T-2 ~> m5 s-2 or J]
   real, allocatable, dimension(:,:) :: TKE_itidal_loss_glo_dt
                         !< energy lost due to small-scale wave drag [H Z2 T-2 ~> m3 s-2 or J m-2]
   real, allocatable, dimension(:,:) :: TKE_residual_loss_glo_dt
-                        !< internal tide energy loss due to the residual at slopes [H Z2 T-2 ~> m3 s-2 or J m-2]
+                        !< internal tide energy loss due to the residual at slopes [H Z2 L2 T-2 ~> m5 s-2 or J]
   real, allocatable, dimension(:,:) :: error_mode
-                        !< internal tide energy budget error for each mode [H Z2 T-2 ~> m3 s-2 or J m-2]
+                        !< internal tide energy budget error for each mode [H Z2 L2 T-2 ~> m5 s-2 or J]
   real, allocatable, dimension(:,:) :: tot_leak_loss !< Energy loss rates due to misc background processes,
                         !! summed over angle, frequency and mode [H Z2 T-3 ~> m3 s-3 or W m-2]
   real, allocatable, dimension(:,:) :: tot_quad_loss !< Energy loss rates due to quadratic bottom drag,
@@ -182,12 +182,12 @@ type, public :: int_tide_CS ; private
                         !< The internal wave energy density as a function of (i,j,angle,frequency,mode)
                         !! integrated within an angular and frequency band [H Z2 T-2 ~> m3 s-2 or J m-2]
   real, allocatable :: En_ini_glo(:,:)
-                        !< The internal wave energy density as a function of (frequency,mode)
-                        !! integrated within an angular and frequency band [H Z2 T-2 ~> m3 s-2 or J m-2]
+                        !< The internal wave energy density as a function of (frequency,mode) spatially
+                        !! integrated within an angular and frequency band [H Z2 L2 T-2 ~> m5 s-2 or J]
                         !! only at the start of the routine (for diags)
   real, allocatable :: En_end_glo(:,:)
-                        !< The internal wave energy density as a function of (frequency,mode)
-                        !! integrated within an angular and frequency band [H Z2 T-2 ~> m3 s-2 or J m-2]
+                        !< The internal wave energy density as a function of (frequency,mode) spatially
+                        !! integrated within an angular and frequency band [H Z2 L2 T-2 ~> m5 s-2 or J]
                         !! only at the end of the routine (for diags)
   real, allocatable :: En_restart_mode1(:,:,:,:)
                         !< The internal wave energy density as a function of (i,j,angle,freq)
@@ -328,7 +328,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
   real :: en_subRO        ! A tiny energy to prevent division by zero [H Z2 T-2 ~> m3 s-2 or J m-2]
   real :: En_a, En_b                                 ! Energies for time stepping [H Z2 T-2 ~> m3 s-2 or J m-2]
   real :: En_new, En_check                           ! Energies for debugging [H Z2 T-2 ~> m3 s-2 or J m-2]
-  real :: En_sumtmp                                  ! Energies for debugging [H Z2 T-2 ~> m3 s-2 or J m-2]
+  real :: En_sumtmp                                  ! Energies for debugging [H Z2 L2 T-2 ~> m5 s-2 or J]
   real :: En_initial, Delta_E_check                  ! Energies for debugging [H Z2 T-2 ~> m3 s-2 or J m-2]
   real :: TKE_Froude_loss_check, TKE_Froude_loss_tot ! Energy losses for debugging [H Z2 T-3 ~> m3 s-3 or W m-2]
   real :: HZ2_T2_to_J_m2                             ! unit conversion factor for Energy from internal units
@@ -447,7 +447,7 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
 
     if (CS%debug) then
       call hchksum(TKE_itidal_input(:,:,1), "TKE_itidal_input", G%HI, haloshift=0, &
-                   unscale=GV%H_to_m*(US%Z_to_m**2)*(US%s_to_T)**3)
+                   unscale=GV%H_to_mks*(US%Z_to_m**2)*(US%s_to_T)**3)
       call hchksum(CS%En(:,:,:,1,1), "EnergyIntTides bf input", G%HI, haloshift=0, unscale=HZ2_T2_to_J_m2)
     endif
 
@@ -1023,7 +1023,8 @@ subroutine propagate_int_tide(h, tv, Nb, Rho_bot, dt, G, GV, US, inttide_input_C
                             CS%TKE_quad_loss_glo_dt(fr,m) - CS%TKE_itidal_loss_glo_dt(fr,m) - &
                             CS%TKE_Froude_loss_glo_dt(fr,m) - CS%TKE_residual_loss_glo_dt(fr,m) - &
                             CS%En_end_glo(fr,m)
-      if (is_root_pe()) write(stdout,'(A,F18.10)') "error in Energy budget", HZ2_T2_to_J_m2*CS%error_mode(fr,m)
+      if (is_root_pe()) write(stdout,'(A,F18.10)') &
+          "error in Energy budget", US%L_to_m**2*HZ2_T2_to_J_m2*CS%error_mode(fr,m)
     enddo ; enddo
   endif
 
@@ -1213,16 +1214,16 @@ subroutine sum_En(G, GV, US, CS, En, label)
                           intent(in) :: En !< The energy density of the internal tides [H Z2 T-2 ~> m3 s-2 or J m-2].
   character(len=*),       intent(in) :: label !< A label to use in error messages
   ! Local variables
-  real :: En_sum   ! The total energy in MKS units for potential output [J]
+  real :: En_sum   ! The total energy in MKS units for potential output [m5 s-2 or J]
   integer :: a
-  ! real :: En_sum_diff  ! Change in energy from the expected value [J]
+  ! real :: En_sum_diff  ! Change in energy from the expected value [m5 s-2 or J]
   ! real :: En_sum_pdiff ! Percentage change in energy from the expected value [nondim]
   ! character(len=160) :: mesg  ! The text of an error message
   ! real :: days          ! The time in days for use in output messages [days]
 
   En_sum = 0.0
   do a=1,CS%nAngle
-    En_sum = En_sum + global_area_integral(En(:,:,a), G, unscale=GV%H_to_m*(US%Z_to_m**2)*(US%s_to_T)**2)
+    En_sum = En_sum + global_area_integral(En(:,:,a), G, unscale=GV%H_to_mks*(US%Z_to_m**2)*(US%s_to_T)**2)
   enddo
   CS%En_sum = En_sum
   !En_sum_diff = En_sum - CS%En_sum
@@ -2081,6 +2082,7 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
   real :: Ifreq ! The inverse of the frequency [T ~> s]
   real :: freq2 ! The frequency squared [T-2 ~> s-2]
   type(loop_bounds_type) :: LB
+  logical :: x_first
   integer :: is, ie, js, je, asd, aed, na
   integer :: ish, ieh, jsh, jeh
   integer :: i, j, a, fr, m
@@ -2105,6 +2107,8 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
   Angle_size = (8.0*atan(1.0)) / real(NAngle)
   I_Angle_size = 1.0 / Angle_size
 
+  x_first = .true. ! x_first = (MOD(G%first_direction,2) == 0)
+
   if (CS%debug) then
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
       call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: top of routine')
@@ -2112,109 +2116,88 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
     enddo ; enddo
   endif
 
-  if (CS%corner_adv) then
-    ! IMPLEMENT CORNER ADVECTION IN HORIZONTAL--------------------
-    ! FIND AVERAGE GROUP VELOCITY (SPEED) AT CELL CORNERS
-    ! NOTE: THIS HAS NOT BE ADAPTED FOR REFLECTION YET (BDM)!!
-    ! Fix indexing here later
-    speed(:,:) = 0.0
-    do J=jsh-1,jeh ; do I=ish-1,ieh
-      f2 = G%Coriolis2Bu(I,J)
-      speed(I,J) = 0.25*((cn(i,j) + cn(i+1,j+1)) + (cn(i+1,j) + cn(i,j+1))) * &
-                     sqrt(max(freq2 - f2, 0.0)) * Ifreq
-    enddo ; enddo
+  ! IMPLEMENT PPM ADVECTION IN HORIZONTAL-----------------------
+  ! These could be in the control structure, as they do not vary.
+  do A=0,na
+    ! These are the angles at the cell edges...
+    angle = (real(A) - 0.5) * Angle_size
+    cos_angle(A) = cos(angle) ; sin_angle(A) = sin(angle)
+  enddo
 
-    call pass_var(speed, G%Domain)
+  do a=1,na
+    Cgx_av(a) = (sin_angle(A) - sin_angle(A-1)) * I_Angle_size
+    Cgy_av(a) = -(cos_angle(A) - cos_angle(A-1)) * I_Angle_size
+    dCgx(a) = sqrt(0.5 + 0.5*(sin_angle(A)*cos_angle(A) - &
+                              sin_angle(A-1)*cos_angle(A-1)) * I_Angle_size - &
+                   Cgx_av(a)**2)
+    dCgy(a) = sqrt(0.5 - 0.5*(sin_angle(A)*cos_angle(A) - &
+                              sin_angle(A-1)*cos_angle(A-1)) * I_Angle_size - &
+                   Cgy_av(a)**2)
+  enddo
 
-    do a=1,na
-      ! Apply the propagation WITH CORNER ADVECTION/FINITE VOLUME APPROACH.
-      LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie
-      call propagate_corner_spread(En(:,:,a), a, NAngle, speed, dt, G, CS, LB)
-    enddo ! a-loop
-  else
-    ! IMPLEMENT PPM ADVECTION IN HORIZONTAL-----------------------
-    ! These could be in the control structure, as they do not vary.
-    do A=0,na
-      ! These are the angles at the cell edges...
-      angle = (real(A) - 0.5) * Angle_size
-      cos_angle(A) = cos(angle) ; sin_angle(A) = sin(angle)
-    enddo
+  speed_x(:,:) = 0.
+  do j=jsh,jeh ; do I=ish-1,ieh
+    f2 = 0.5 * (G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I,J-1))
+    speed_x(I,j) = 0.5*(cn(i,j) + cn(i+1,j)) * G%mask2dCu(I,j) * &
+                   sqrt(max(freq2 - f2, 0.0)) * Ifreq
+  enddo ; enddo
 
-    do a=1,na
-      Cgx_av(a) = (sin_angle(A) - sin_angle(A-1)) * I_Angle_size
-      Cgy_av(a) = -(cos_angle(A) - cos_angle(A-1)) * I_Angle_size
-      dCgx(a) = sqrt(0.5 + 0.5*(sin_angle(A)*cos_angle(A) - &
-                                sin_angle(A-1)*cos_angle(A-1)) * I_Angle_size - &
-                     Cgx_av(a)**2)
-      dCgy(a) = sqrt(0.5 - 0.5*(sin_angle(A)*cos_angle(A) - &
-                                sin_angle(A-1)*cos_angle(A-1)) * I_Angle_size - &
-                     Cgy_av(a)**2)
-    enddo
+  speed_y(:,:) = 0.
+  do J=jsh-1,jeh ; do i=ish,ieh
+    f2 = 0.5 * (G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J))
+    speed_y(i,J) = 0.5*(cn(i,j) + cn(i,j+1)) * G%mask2dCv(i,J) * &
+                   sqrt(max(freq2 - f2, 0.0)) * Ifreq
+  enddo ; enddo
 
-    speed_x(:,:) = 0.
-    do j=jsh,jeh ; do I=ish-1,ieh
-      f2 = 0.5 * (G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I,J-1))
-      speed_x(I,j) = 0.5*(cn(i,j) + cn(i+1,j)) * G%mask2dCu(I,j) * &
-                     sqrt(max(freq2 - f2, 0.0)) * Ifreq
-    enddo ; enddo
+  call pass_vector(speed_x, speed_y, G%Domain, stagger=CGRID_NE)
+  call pass_var(En, G%domain)
 
-    speed_y(:,:) = 0.
-    do J=jsh-1,jeh ; do i=ish,ieh
-      f2 = 0.5 * (G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J))
-      speed_y(i,J) = 0.5*(cn(i,j) + cn(i,j+1)) * G%mask2dCv(i,J) * &
-                     sqrt(max(freq2 - f2, 0.0)) * Ifreq
-    enddo ; enddo
-
-    call pass_vector(speed_x, speed_y, G%Domain, stagger=CGRID_NE)
-    call pass_var(En, G%domain)
-
-    ! Apply propagation in x-direction (reflection included)
-    LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
+  ! Apply propagation in the first direction (reflection included)
+  LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
+  if (x_first) then
     call propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, CS%nAngle, CS, LB, residual_loss)
-
-    ! fix underflows
-    do a=1,na ; do j=jsh,jeh ; do i=ish,ieh
-      if (abs(En(i,j,a)) < CS%En_underflow) En(i,j,a) = 0.0
-    enddo ; enddo ; enddo
-
-    if (CS%debug) then
-      do m=1,CS%nMode ; do fr=1,CS%Nfreq
-        call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after propagate_x')
-        if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after propagate_x', CS%En_sum
-      enddo ; enddo
-    endif
-
-    ! Update halos
-    call pass_var(En, G%domain)
-    call pass_var(residual_loss, G%domain)
-
-    if (CS%debug) then
-      do m=1,CS%nMode ; do fr=1,CS%Nfreq
-        call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after halo update')
-        if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after halo update', CS%En_sum
-      enddo ; enddo
-    endif
-    ! Apply propagation in y-direction (reflection included)
-    ! LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie ! Use if no teleport
-    LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
+  else
     call propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, CS%nAngle, CS, LB, residual_loss)
-
-    ! fix underflows
-    do a=1,na ; do j=jsh,jeh ; do i=ish,ieh
-      if (abs(En(i,j,a)) < CS%En_underflow) En(i,j,a) = 0.0
-    enddo ; enddo ; enddo
-
-    call pass_var(En, G%domain)
-    call pass_var(residual_loss, G%domain)
-
-    if (CS%debug) then
-      do m=1,CS%nMode ; do fr=1,CS%Nfreq
-        call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after propagate_y')
-        if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after propagate_y', CS%En_sum
-      enddo ; enddo
-    endif
-
   endif
+
+  ! fix underflows
+  do a=1,na ; do j=jsh,jeh ; do i=ish,ieh
+    if (abs(En(i,j,a)) < CS%En_underflow) En(i,j,a) = 0.0
+  enddo ; enddo ; enddo
+
+  if (CS%debug) then
+    do m=1,CS%nMode ; do fr=1,CS%Nfreq
+      call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after propagate_x')
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after propagate_x', CS%En_sum
+    enddo ; enddo
+  endif
+
+  ! Update halos
+  call pass_var(En, G%domain)
+  call pass_var(residual_loss, G%domain)
+
+  if (CS%debug) then
+    do m=1,CS%nMode ; do fr=1,CS%Nfreq
+      call sum_En(G, GV, US, CS, CS%En(:,:,:,fr,m), 'propagate: after halo update')
+      if (is_root_pe()) write(stdout,'(A,E18.10)') 'propagate: after halo update', CS%En_sum
+    enddo ; enddo
+  endif
+  ! Apply propagation in the second direction (reflection included)
+  ! LB%jsh = js ; LB%jeh = je ; LB%ish = is ; LB%ieh = ie ! Use if no teleport
+  LB%jsh = jsh ; LB%jeh = jeh ; LB%ish = ish ; LB%ieh = ieh
+  if (x_first) then
+    call propagate_y(En, speed_y, Cgy_av, dCgy, dt, G, US, CS%nAngle, CS, LB, residual_loss)
+  else
+    call propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, CS%nAngle, CS, LB, residual_loss)
+  endif
+
+  ! fix underflows
+  do a=1,na ; do j=jsh,jeh ; do i=ish,ieh
+    if (abs(En(i,j,a)) < CS%En_underflow) En(i,j,a) = 0.0
+  enddo ; enddo ; enddo
+
+  call pass_var(En, G%domain)
+  call pass_var(residual_loss, G%domain)
 
   if (CS%debug) then
     do m=1,CS%nMode ; do fr=1,CS%Nfreq
@@ -2225,296 +2208,6 @@ subroutine propagate(En, cn, freq, dt, G, GV, US, CS, NAngle, residual_loss)
 
 end subroutine propagate
 
-!> This subroutine does first-order corner advection. It was written with the hopes
-!! of smoothing out the garden sprinkler effect, but is too numerically diffusive to
-!! be of much use as of yet. It is not yet compatible with reflection schemes (BDM).
-subroutine propagate_corner_spread(En, energized_wedge, NAngle, speed, dt, G, CS, LB)
-  type(ocean_grid_type),  intent(in)    :: G     !< The ocean's grid structure.
-  real, dimension(G%isd:G%ied,G%jsd:G%jed),   &
-                          intent(inout) :: En    !< The energy density integrated over an angular
-                                                 !! band [H Z2 T-2 ~> m3 s-2 or J m-2].
-  real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed), &
-                          intent(in)    :: speed !< The magnitude of the group velocity at the cell
-                                                 !! corner points [L T-1 ~> m s-1].
-  integer,                intent(in)    :: energized_wedge !< Index of current ray direction.
-  integer,                intent(in)    :: NAngle !< The number of wave orientations in the
-                                                 !! discretized wave energy spectrum.
-  real,                   intent(in)    :: dt    !< Time increment [T ~> s].
-  type(int_tide_CS),      intent(in)    :: CS    !< Internal tide control structure
-  type(loop_bounds_type), intent(in)    :: LB    !< A structure with the active energy loop bounds.
-  ! Local variables
-  integer :: i, j, ish, ieh, jsh, jeh, m
-  real :: TwoPi        ! The radius of the circumference of a circle to its radius [nondim]
-  real :: Angle_size   ! The size of each angular wedge [radians]
-  real :: energized_angle ! angle through center of current wedge [radians]
-  real :: theta        ! angle at edge of each sub-wedge [radians]
-  real :: Nsubrays     ! number of sub-rays for averaging [nondim]
-                       ! count includes the two rays that bound the current wedge,
-                       ! i.e. those at -dtheta/2 and +dtheta/2 from energized angle
-  real :: I_Nsubwedges ! inverse of number of sub-wedges [nondim]
-  real :: cos_thetaDT, sin_thetaDT ! cos(theta)*dt, sin(theta)*dt [T ~> s]
-  real :: xNE, xNW, xSW, xSE ! corner point x-coordinates of advected fluid parcel [L ~> m]
-  real :: yNE, yNW, ySW, ySE ! corner point y-coordinates of advected fluid parcel [L ~> m]
-  real :: CFL_xNE, CFL_xNW, CFL_xSW, CFL_xSE ! Various x-direction CFL numbers for propagation [nondim]
-  real :: CFL_yNE, CFL_yNW, CFL_ySW, CFL_ySE ! Various y-direction CFL numbers for propagation [nondim]
-  real :: CFL_max ! The maximum of the x- and y-CFL numbers for propagation [nondim]
-  real :: xN, xS, xE, xW ! intersection point x-coordinates of parcel edges and grid [L ~> m]
-  real :: yN, yS, yE, yW ! intersection point y-coordinates of parcel edges and grid [L ~> m]
-  real :: xCrn, yCrn ! Coordinates of grid point contained within advected fluid parcel [L ~> m]
-  real :: xg, yg ! Positions of grid point of interest [L ~> m]
-  real :: slopeN, slopeW, slopeS, slopeE ! Coordinate-space slopes of parcel sides [nondim]
-  real :: bN, bW, bS, bE ! parameters defining parcel sides [L ~> m]
-  real :: aNE, aN, aNW, aW, aSW, aS, aSE, aE, aC ! sub-areas of advected parcel [L2 ~> m2]
-  real :: a_total ! total area of advected parcel [L2 ~> m2]
-  ! real :: a1,a2,a3,a4 ! areas used in calculating polygon areas (sub-areas) of advected parcel [L2 ~> m2]
-  real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: x, y ! coordinates of cell corners [L ~> m]
-  real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: Idx, Idy ! inverse of dx,dy at cell corners [L-1 ~> m-1]
-  real, dimension(G%IsdB:G%IedB,G%Jsd:G%Jed) :: dx, dy ! dx,dy at cell corners [L ~> m]
-  real, dimension(2) :: E_new ! Energy in cell after advection for subray [H Z2 T-2 ~> m3 s-2 or J m-2]; set size
-                              ! here to define Nsubrays - this should be made an input option later!
-
-  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh
-  TwoPi = (8.0*atan(1.0))
-  Nsubrays = real(size(E_new))
-  I_Nsubwedges = 1./(Nsubrays - 1)
-
-  Angle_size = TwoPi / real(NAngle)
-  energized_angle = Angle_size * real(energized_wedge - 1) ! for a=1 aligned with x-axis
-  !energized_angle = Angle_size * real(energized_wedge - 1) + 2.0*Angle_size !
-  !energized_angle = Angle_size * real(energized_wedge - 1) + 0.5*Angle_size !
-  do J=jsh-1,jeh ; do I=ish-1,ieh
-    !### This will only work for a Cartesian grid for which G%geoLonBu is in the same units has dx.
-    ! This needs to be extensively revised to work for a general grid.
-    x(I,J) = G%US%m_to_L*G%geoLonBu(I,J)
-    y(I,J) = G%US%m_to_L*G%geoLatBu(I,J)
-    Idx(I,J) = G%IdxBu(I,J) ; dx(I,J) = G%dxBu(I,J)
-    Idy(I,J) = G%IdyBu(I,J) ; dy(I,J) = G%dyBu(I,J)
-  enddo ; enddo
-
-  do j=jsh,jeh ; do i=ish,ieh
-    do m=1,int(Nsubrays)
-      theta = (energized_angle - 0.5*Angle_size) + real(m - 1)*Angle_size*I_Nsubwedges
-      if (theta < 0.0) then
-        theta = theta + TwoPi
-      elseif (theta > TwoPi) then
-        theta = theta - TwoPi
-      endif
-      cos_thetaDT = cos(theta)*dt
-      sin_thetaDT = sin(theta)*dt
-
-      ! corner point coordinates of advected fluid parcel ----------
-      xg = x(I,J); yg = y(I,J)
-      xNE = xg - speed(I,J)*cos_thetaDT
-      yNE = yg - speed(I,J)*sin_thetaDT
-      CFL_xNE = (xg-xNE)*Idx(I,J)
-      CFL_yNE = (yg-yNE)*Idy(I,J)
-
-      xg = x(I-1,J); yg = y(I-1,J)
-      xNW = xg - speed(I-1,J)*cos_thetaDT
-      yNW = yg - speed(I-1,J)*sin_thetaDT
-      CFL_xNW = (xg-xNW)*Idx(I-1,J)
-      CFL_yNW = (yg-yNW)*Idy(I-1,J)
-
-      xg = x(I-1,J-1); yg = y(I-1,J-1)
-      xSW = xg - speed(I-1,J-1)*cos_thetaDT
-      ySW = yg - speed(I-1,J-1)*sin_thetaDT
-      CFL_xSW = (xg-xSW)*Idx(I-1,J-1)
-      CFL_ySW = (yg-ySW)*Idy(I-1,J-1)
-
-      xg = x(I,J-1); yg = y(I,J-1)
-      xSE = xg - speed(I,J-1)*cos_thetaDT
-      ySE = yg - speed(I,J-1)*sin_thetaDT
-      CFL_xSE = (xg-xSE)*Idx(I,J-1)
-      CFL_ySE = (yg-ySE)*Idy(I,J-1)
-
-      CFL_max = max(abs(CFL_xNE),abs(CFL_xNW),abs(CFL_xSW), &
-                    abs(CFL_xSE),abs(CFL_yNE),abs(CFL_yNW), &
-                    abs(CFL_ySW),abs(CFL_ySE))
-      if (CFL_max > 1.0) then
-        call MOM_error(WARNING, "propagate_corner_spread: CFL exceeds 1.", .true.)
-      endif
-
-      ! intersection point coordinates of parcel edges and cell edges ---
-      if (0.0 <= theta .and. theta < 0.25*TwoPi) then
-          xN = x(I-1,J-1)
-          yW = y(I-1,J-1)
-      elseif (0.25*TwoPi <= theta .and. theta < 0.5*TwoPi) then
-          xN = x(I,J-1)
-          yW = y(I,J-1)
-      elseif (0.5*TwoPi <= theta .and. theta < 0.75*TwoPi) then
-          xN = x(I,J)
-          yW = y(I,J)
-      elseif (0.75*TwoPi <= theta .and. theta <= 1.00*TwoPi) then
-          xN = x(I-1,J)
-          yW = y(I-1,J)
-      endif
-      xS = xN
-      yE = yW
-
-      ! north intersection
-      slopeN = (yNE - yNW)/(xNE - xNW)
-      bN = -slopeN*xNE + yNE
-      yN = slopeN*xN + bN
-      ! west intersection
-      if (xNW == xSW) then
-        xW = xNW
-      else
-        slopeW = (yNW - ySW)/(xNW - xSW)
-        bW = -slopeW*xNW + yNW
-        xW = (yW - bW)/slopeW
-      endif
-      ! south intersection
-      slopeS = (ySW - ySE)/(xSW - xSE)
-      bS = -slopeS*xSW + ySW
-      yS = slopeS*xS + bS
-      ! east intersection
-      if (xNE == xSE) then
-        xE = xNE
-      else
-        slopeE = (ySE - yNE)/(xSE - xNE)
-        bE = -slopeE*xSE + ySE
-        xE = (yE - bE)/slopeE
-      endif
-
-      ! areas --------------------------------------------
-      aNE = 0.0; aN = 0.0; aNW = 0.0; ! initialize areas
-      aW = 0.0; aSW = 0.0; aS = 0.0; ! initialize areas
-      aSE = 0.0; aE = 0.0; aC = 0.0; ! initialize areas
-      if (0.0 <= theta .and. theta < 0.25*TwoPi) then
-          xCrn = x(I-1,J-1); yCrn = y(I-1,J-1)
-          ! west area
-          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          !a3 = (yW - yNW)*(0.5*(xW + xNW))
-          !a4 = (yNW - yN)*(0.5*(xNW + xN))
-          !aW = a1 + a2 + a3 + a4
-          aW = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
-          ! southwest area
-          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          !a2 = (yS - ySW)*(0.5*(xS + xSW))
-          !a3 = (ySW - yW)*(0.5*(xSW + xW))
-          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          !aSW = a1 + a2 + a3 + a4
-          aSW = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
-          ! south area
-          !a1 = (yE - ySE)*(0.5*(xE + xSE))
-          !a2 = (ySE - yS)*(0.5*(xSE + xS))
-          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          !aS = a1 + a2 + a3 + a4
-          aS = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
-          ! area within cell
-          !a1 = (yNE - yE)*(0.5*(xNE + xE))
-          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          !a4 = (yN - yNE)*(0.5*(xN + xNE))
-          !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
-      elseif (0.25*TwoPi <= theta .and. theta < 0.5*TwoPi) then
-          xCrn = x(I,J-1); yCrn = y(I,J-1)
-          ! south area
-          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          !a2 = (yS - ySW)*(0.5*(xS + xSW))
-          !a3 = (ySW - yW)*(0.5*(xSW + xW))
-          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          !aS = a1 + a2 + a3 + a4
-          aS = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
-          ! southeast area
-          !a1 = (yE - ySE)*(0.5*(xE + xSE))
-          !a2 = (ySE - yS)*(0.5*(xSE + xS))
-          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          !aSE = a1 + a2 + a3 + a4
-          aSE = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
-          ! east area
-          !a1 = (yNE - yE)*(0.5*(xNE + xE))
-          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          !a4 = (yN - yNE)*(0.5*(xN + xNE))
-          !aE = a1 + a2 + a3 + a4
-          aE = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
-          ! area within cell
-          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          !a3 = (yW - yNW)*(0.5*(xW + xNW))
-          !a4 = (yNW - yN)*(0.5*(xNW + xN))
-          !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
-      elseif (0.5*TwoPi <= theta .and. theta < 0.75*TwoPi) then
-          xCrn = x(I,J); yCrn = y(I,J)
-          ! east area
-          !a1 = (yE - ySE)*(0.5*(xE + xSE))
-          !a2 = (ySE - yS)*(0.5*(xSE + xS))
-          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          !aE = a1 + a2 + a3 + a4
-          aE = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
-          ! northeast area
-          !a1 = (yNE - yE)*(0.5*(xNE + xE))
-          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          !a4 = (yN - yNE)*(0.5*(xN + xNE))
-          !aNE = a1 + a2 + a3 + a4
-          aNE = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
-          ! north area
-          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          !a3 = (yW - yNW)*(0.5*(xW + xNW))
-          !a4 = (yNW - yN)*(0.5*(xNW + xN))
-          !aN = a1 + a2 + a3 + a4
-          aN = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
-          ! area within cell
-          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          !a2 = (yS - ySW)*(0.5*(xS + xSW))
-          !a3 = (ySW - yW)*(0.5*(xSW + xW))
-          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
-      elseif (0.75*TwoPi <= theta .and. theta <= 1.00*TwoPi) then
-          xCrn = x(I-1,J); yCrn = y(I-1,J)
-          ! north area
-          !a1 = (yNE - yE)*(0.5*(xNE + xE))
-          !a2 = (yE - yCrn)*(0.5*(xE + xCrn))
-          !a3 = (yCrn - yN)*(0.5*(xCrn + xN))
-          !a4 = (yN - yNE)*(0.5*(xN + xNE))
-          !aN = a1 + a2 + a3 + a4
-          aN = 0.5 * (((yCrn - yNE)*(xN - xE)) + ((xCrn - xNE)*(yE - yN)))
-          ! northwest area
-          !a1 = (yN - yCrn)*(0.5*(xN + xCrn))
-          !a2 = (yCrn - yW)*(0.5*(xCrn + xW))
-          !a3 = (yW - yNW)*(0.5*(xW + xNW))
-          !a4 = (yNW - yN)*(0.5*(xNW + xN))
-          !aNW = a1 + a2 + a3 + a4
-          aNW = 0.5 * (((yCrn - yNW)*(xW - xN)) + ((xCrn - xNW)*(yN - yW)))
-          ! west area
-          !a1 = (yCrn - yS)*(0.5*(xCrn + xS))
-          !a2 = (yS - ySW)*(0.5*(xS + xSW))
-          !a3 = (ySW - yW)*(0.5*(xSW + xW))
-          !a4 = (yW - yCrn)*(0.5*(xW + xCrn))
-          !aW = a1 + a2 + a3 + a4
-          aW = 0.5 * (((yCrn - ySW)*(xS - xW)) + ((xCrn - xSW)*(yW - yS)))
-          ! area within cell
-          !a1 = (yE - ySE)*(0.5*(xE + xSE))
-          !a2 = (ySE - yS)*(0.5*(xSE + xS))
-          !a3 = (yS - yCrn)*(0.5*(xS + xCrn))
-          !a4 = (yCrn - yE)*(0.5*(xCrn + xE))
-          !aC = a1 + a2 + a3 + a4
-          aC = 0.5 * (((yCrn - ySE)*(xE - xS)) + ((xCrn - xSE)*(yS - yE)))
-      endif
-
-      ! energy weighting ----------------------------------------
-      a_total = (((aNE + aSW) + (aNW + aSE)) + ((aN + aS) + (aW + aE))) + aC
-
-      E_new(m) = ( ( ( ( (aNE*En(i+1,j+1)) + (aSW*En(i-1,j-1)) )     + &
-                       ( (aNW*En(i-1,j+1)) + (aSE*En(i+1,j-1)) ) )   + &
-                     ( ( (aN*En(i,j+1))    + (aS*En(i,j-1))    )     + &
-                       ( (aW*En(i-1,j))    + (aE*En(i+1,j))    ) ) ) + &
-                        aC*En(i,j)  ) / ( dx(i,j)*dy(i,j) )
-    enddo ! m-loop
-    ! update energy in cell
-    En(i,j) = sum(E_new)/Nsubrays
-  enddo ; enddo
-end subroutine propagate_corner_spread
 
 !> Propagates the internal wave energy in the logical x-direction.
 subroutine propagate_x(En, speed_x, Cgx_av, dCgx, dt, G, US, Nangle, CS, LB, residual_loss)
@@ -3560,9 +3253,6 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the ratio of the open face lengths to the "//&
                  "tracer cell areas when estimating CFL numbers in the "//&
                  "internal tide code.", default=.false.)
-  call get_param(param_file, mdl, "INTERNAL_TIDE_CORNER_ADVECT", CS%corner_adv, &
-                 "If true, internal tide ray-tracing advection uses a "//&
-                 "corner-advection scheme rather than PPM.", default=.false.)
   call get_param(param_file, mdl, "INTERNAL_TIDE_SIMPLE_2ND_PPM", CS%simple_2nd, &
                  "If true, CONTINUITY_PPM uses a simple 2nd order "//&
                  "(arithmetic mean) interpolation of the edge values. "//&
@@ -4036,7 +3726,7 @@ subroutine internal_tides_init(Time, G, GV, US, param_file, diag, CS)
     write(var_name, '("Itide_Wstruct","_mode",i1)') m
     write(var_descript, '("vertical velocity profile for mode ",i1)') m
     CS%id_Wstruct_mode(m) = register_diag_field('ocean_model', var_name, &
-                 diag%axesTi, Time, var_descript, '[]')
+                 diag%axesTi, Time, var_descript, 'nondim')
     call MOM_mesg("Registering "//trim(var_name)//", Described as: "//var_descript, 5)
 
     write(var_name, '("Itide_int_w2","_mode",i1)') m
