@@ -54,6 +54,9 @@ type, public :: tracer_hor_diff_CS ; private
                                   !! locally at or below this value [nondim].
   logical :: KhTr_use_vert_struct  !< If true, uses the equivalent barotropic structure
                                   !! as the vertical structure of tracer diffusivity.
+  logical :: full_depth_khtr_min  !< If true, KHTR_MIN is enforced throughout the whole water column.
+                                  !! Otherwise, KHTR_MIN is only enforced at the surface. This parameter
+                                  !! is only available when KHTR_USE_EBT_STRUCT=True and KHTR_MIN>0.
   logical :: Diffuse_ML_interior  !< If true, diffuse along isopycnals between
                                   !! the mixed layer and the interior.
   logical :: check_diffusive_CFL  !< If true, automatically iterate the diffusion
@@ -168,7 +171,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     Kh_v          ! Tracer mixing coefficient at u-points [L2 T-1 ~> m2 s-1].
 
   real :: khdt_max ! The local limiting value of khdt_x or khdt_y [L2 ~> m2].
-  real :: max_CFL ! The global maximum of the diffusive CFL number [nondim]
+  real :: Coef_min ! The local limiting value of Coef_x or Coef_y, in [L2 ~> m2] for some
+                   ! schemes and [H L2 ~> m3 or kg] for others.
+  real :: max_CFL  ! The global maximum of the diffusive CFL number [nondim]
   logical :: use_VarMix, Resoln_scaled, do_online, use_Eady
   integer :: i, j, k, m, is, ie, js, je, nz, ntr, itt, num_itts
   real :: I_numitts  ! The inverse of the number of iterations, num_itts [nondim]
@@ -424,20 +429,41 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
       enddo
     enddo
     if (CS%KhTr_use_vert_struct) then
-      do K=2,nz+1
-        do J=js-1,je
-          do i=is,ie
-            Coef_y(i,J,K) = Coef_y(i,J,1) * 0.5 * ( VarMix%khtr_struct(i,j,k-1) + VarMix%khtr_struct(i,j+1,k-1) )
+      if (CS%full_depth_khtr_min) then
+        do K=2,nz+1
+          do J=js-1,je
+            do i=is,ie
+              Coef_y(i,J,K) = Coef_y(i,J,1) * 0.5 * ( VarMix%khtr_struct(i,j,k-1) + VarMix%khtr_struct(i,j+1,k-1) )
+              Coef_min = I_numitts * dt * (CS%KhTr_min*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
+              Coef_y(i,J,K) = max(Coef_y(i,J,K), Coef_min)
+            enddo
           enddo
         enddo
-      enddo
-      do k=2,nz+1
-        do j=js,je
-          do I=is-1,ie
-            Coef_x(I,j,K) = Coef_x(I,j,1) * 0.5 * ( VarMix%khtr_struct(i,j,k-1) + VarMix%khtr_struct(i+1,j,k-1) )
+        do k=2,nz+1
+          do j=js,je
+            do I=is-1,ie
+              Coef_x(I,j,K) = Coef_x(I,j,1) * 0.5 * ( VarMix%khtr_struct(i,j,k-1) + VarMix%khtr_struct(i+1,j,k-1) )
+              Coef_min = I_numitts * dt * (CS%KhTr_min*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
+              Coef_x(I,j,K) = max(Coef_x(I,j,K), Coef_min)
+            enddo
           enddo
         enddo
-      enddo
+      else
+        do K=2,nz+1
+          do J=js-1,je
+            do i=is,ie
+              Coef_y(i,J,K) = Coef_y(i,J,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i,j+1,k-1) )
+            enddo
+          enddo
+        enddo
+        do k=2,nz+1
+          do j=js,je
+            do I=is-1,ie
+              Coef_x(I,j,K) = Coef_x(I,j,1) * 0.5 * ( VarMix%ebt_struct(i,j,k-1) + VarMix%ebt_struct(i+1,j,k-1) )
+            enddo
+          enddo
+        enddo
+      endif
     endif
 
     do itt=1,num_itts
@@ -1643,6 +1669,13 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   call get_param(param_file, mdl, "KHTR_MIN", CS%KhTr_Min, &
                  "The minimum along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0, scale=US%m_to_L**2*US%T_to_s)
+  if (CS%KhTr_Min > 0.0) then
+    call get_param(param_file, mdl, "FULL_DEPTH_KHTR_MIN", CS%full_depth_khtr_min, &
+                   "If true, KHTR_MIN is enforced throughout the whole water column. "//&
+                   "Otherwise, KHTR_MIN is only enforced at the surface. This parameter "//&
+                   "is only available when KHTR_USE_EBT_STRUCT=True and KHTR_MIN>0.",      &
+                   default=.false.)
+  endif
   call get_param(param_file, mdl, "KHTR_MAX", CS%KhTr_Max, &
                  "The maximum along-isopycnal tracer diffusivity.", &
                  units="m2 s-1", default=0.0, scale=US%m_to_L**2*US%T_to_s)
