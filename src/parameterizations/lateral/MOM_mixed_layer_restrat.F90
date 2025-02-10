@@ -378,7 +378,7 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   !$OMP parallel default(shared) private(rho_ml,h_vel,u_star,absf,mom_mixrate,timescale, &
   !$OMP                                SpV_ml,SpV_int_fast,SpV_int_slow,Rml_int_fast,Rml_int_slow, &
   !$OMP                                line_is_empty,keep_going,res_scaling_fac, &
-  !$OMP                                a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh)         &
+  !$OMP                                a,IhTot,b,Ihtot_slow,zpb,hAtVel,zpa,dh,lfront,I_LFront)         &
   !$OMP                        firstprivate(uDml,vDml,uDml_slow,vDml_slow)
 
   if (GV%Boussinesq .or. GV%semi_Boussinesq) then

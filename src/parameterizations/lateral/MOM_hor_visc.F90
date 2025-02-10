@@ -667,7 +667,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! call pass_vector(slope_x, slope_y, G%Domain, halo=2)
   endif
 
-  !$OMP parallel do default(none) &
+  !$OMP parallel do default(none) if (.not. CS%smooth_AH) &
   !$OMP shared( &
   !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, uh, vh, &
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
