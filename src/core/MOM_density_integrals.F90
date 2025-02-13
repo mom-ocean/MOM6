@@ -40,7 +40,8 @@ contains
 !! required for calculating the finite-volume form pressure accelerations in a
 !! Boussinesq model.
 subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa, &
-                          intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p)
+                          intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p, &
+                          MassWghtInterpVanOnly, h_nv)
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the arrays
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [C ~> degC]
@@ -82,12 +83,18 @@ subroutine int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa,
   real,       optional, intent(in)  :: dz_neglect !< A minuscule thickness change [Z ~> m]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                            !! mass weighting to interpolate T/S in integrals
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: h_nv !< Nonvanished height [Z ~> m]
+
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
   if (EOS_quadrature(EOS)) then
     call int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, US, dpa, &
-                                    intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p=Z_0p)
+                                    intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, &
+                                    MassWghtInterp, Z_0p=Z_0p, MassWghtInterpVanOnly=MassWghtInterpVanOnly, &
+                                    h_nv=h_nv)
   else
     call analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS, dpa, &
                                  intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p=Z_0p)
@@ -100,7 +107,8 @@ end subroutine int_density_dz
 !! are required for calculating the finite-volume form pressure accelerations in a Boussinesq model.
 subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                                       EOS, US, dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, &
-                                      dz_neglect, MassWghtInterp, use_inaccurate_form, Z_0p)
+                                      dz_neglect, MassWghtInterp, use_inaccurate_form, Z_0p, &
+                                      MassWghtInterpVanOnly, h_nv)
   type(hor_index_type), intent(in)  :: HI  !< Horizontal index type for input variables.
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T  !< Potential temperature of the layer [C ~> degC]
@@ -142,6 +150,9 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real,       optional, intent(in)  :: dz_neglect !< A minuscule thickness change [Z ~> m]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                            !! mass weighting to interpolate T/S in integrals
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: h_nv !< Nonvanished height [Z ~> m]
   logical,    optional, intent(in)  :: use_inaccurate_form !< If true, uses an inaccurate form of
                                           !! density anomalies, as was used prior to March 2018.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
@@ -175,6 +186,9 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
                      ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa]
   logical :: do_massWeight ! Indicates whether to do mass weighting near bathymetry
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
+  real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
+                                    ! if at least one side vanished (0 or 1) [nondim]
+  real :: h_nonvanished             ! nonvanished height [Z ~> m]
   logical :: use_rho_ref ! Pass rho_ref to the equation of state for more accurate calculation
                          ! of density anomalies.
   integer, dimension(2) :: EOSdom_h5  ! The 5-point h-point i-computational domain for the equation of state
@@ -213,6 +227,14 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         "int_density_dz_generic: SSH must be present if near-surface mass weighting is in use.")
     if ((do_massWeight .or. top_massWeight) .and. .not.present(dz_neglect)) call MOM_error(FATAL, &
         "int_density_dz_generic: dz_neglect must be present if mass weighting is in use.")
+  endif
+  massWeightNVonlyToggle = 1.
+  if (present(MassWghtInterpVanOnly)) then
+    if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
+  endif
+  h_nonvanished = 0.
+  if (present(h_nv)) then
+    h_nonvanished = h_nv
   endif
 
   ! Set the loop ranges for equation of state calculations at various points.
@@ -258,6 +280,10 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         hWght = max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
       if (top_massWeight) &
         hWght = max(hWght, z_b(i+1,j)-SSH(i,j), z_b(i,j)-SSH(i+1,j))
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((z_t(i,j) - z_b(i,j)) > h_nonvanished) .and. ((z_t(i+1,j) - z_b(i+1,j)) > h_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
         hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
@@ -326,6 +352,10 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
         hWght = max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
       if (top_massWeight) &
         hWght = max(hWght, z_b(i,j+1)-SSH(i,j), z_b(i,j)-SSH(i,j+1))
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((z_t(i,j) - z_b(i,j)) > h_nonvanished) .and. ((z_t(i,j+1) - z_b(i,j+1)) > h_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
         hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
@@ -390,7 +420,7 @@ end subroutine int_density_dz_generic_pcm
 subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
                                       rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, use_stanley_eos, dpa, &
                                       intz_dpa, intx_dpa, inty_dpa, MassWghtInterp, &
-                                      use_inaccurate_form, Z_0p)
+                                      use_inaccurate_form, Z_0p, MassWghtInterpVanOnly, h_nv)
   integer,              intent(in)  :: k   !< Layer index to calculate integrals for
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the input arrays
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
@@ -434,6 +464,9 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
                                            !! mass weighting to interpolate T/S in integrals
   logical,    optional, intent(in)  :: use_inaccurate_form !< If true, uses an inaccurate form of
                                            !! density anomalies, as was used prior to March 2018.
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: h_nv !< Nonvanished height [Z ~> m]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
@@ -484,6 +517,8 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subgrid locations [Z ~> m]
   real :: massWeightToggle          ! A non-dimensional toggle factor for near-bottom mass weighting (0 or 1) [nondim]
   real :: TopWeightToggle           ! A non-dimensional toggle factor for near-surface mass weighting (0 or 1) [nondim]
+  real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
+                                    ! if at least one side vanished (0 or 1) [nondim]
   real :: Ttl, Tbl, Ttr, Tbr        ! Temperatures at the velocity cell corners [C ~> degC]
   real :: Stl, Sbl, Str, Sbr        ! Salinities at the velocity cell corners [S ~> ppt]
   real :: z0pres(HI%isd:HI%ied,HI%jsd:HI%jed) ! The height at which the pressure is zero [Z ~> m]
@@ -491,6 +526,7 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   real :: hWghtTop                  ! An ice draft limited thickness weight [Z ~> m]
   real :: hL, hR                    ! Thicknesses to the left and right [Z ~> m]
   real :: iDenom                    ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
+  real :: h_nonvanished             ! nonvanished height [Z ~> m]
   logical :: use_rho_ref ! Pass rho_ref to the equation of state for more accurate calculation
                          ! of density anomalies.
   logical :: use_varT, use_varS, use_covarTS ! Logicals for SGS variances fields
@@ -514,6 +550,14 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   if (present(MassWghtInterp)) then
     if (BTEST(MassWghtInterp, 0)) massWeightToggle = 1.
     if (BTEST(MassWghtInterp, 1)) TopWeightToggle = 1.
+  endif
+  massWeightNVonlyToggle = 1.
+  if (present(MassWghtInterpVanOnly)) then
+    if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
+  endif
+  h_nonvanished = 0.
+  if (present(h_nv)) then
+    h_nonvanished = h_nv
   endif
   use_rho_ref = .true.
   if (present(use_inaccurate_form)) use_rho_ref = .not. use_inaccurate_form
@@ -620,6 +664,10 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
       !endif
       ! Set it to be max of the bottom and top hWghts:
       hWght = max(hWght, hWghtTop)
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((e(i,j,K) - e(i,j,K+1)) > h_nonvanished) .and. ((e(i+1,j,K) - e(i+1,j,K+1)) > h_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
@@ -727,6 +775,11 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
       !endif
       ! Set it to be max of the bottom and top hWghts:
       hWght = max(hWght, hWghtTop)
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((e(i,j,K) - e(i,j,K+1)) > h_nonvanished) .and. ((e(i,j+1,K) - e(i,j+1,K+1)) > h_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
+
       if (hWght > 0.) then
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
@@ -824,7 +877,8 @@ end subroutine int_density_dz_generic_plm
 !! are parabolic profiles
 subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                                       rho_ref, rho_0, G_e, dz_subroundoff, bathyT, HI, GV, EOS, US, use_stanley_eos, &
-                                      dpa, intz_dpa, intx_dpa, inty_dpa, MassWghtInterp, Z_0p)
+                                      dpa, intz_dpa, intx_dpa, inty_dpa, MassWghtInterp, Z_0p, &
+                                      MassWghtInterpVanOnly, h_nv)
   integer,              intent(in)  :: k   !< Layer index to calculate integrals for
   type(hor_index_type), intent(in)  :: HI  !< Ocean horizontal index structures for the input arrays
   type(verticalGrid_type), intent(in) :: GV !< Vertical grid structure
@@ -866,6 +920,10 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                                            !! divided by the y grid spacing [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                            !! mass weighting to interpolate T/S in integrals
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: h_nv !< Nonvanished height [Z ~> m]
+
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
               optional, intent(in)  :: Z_0p !< The height at which the pressure is 0 [Z ~> m]
 
@@ -914,6 +972,8 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subgrid locations [Z ~> m]
   real :: massWeightToggle        ! A non-dimensional toggle factor for near-bottom mass weighting (0 or 1) [nondim]
   real :: TopWeightToggle         ! A non-dimensional toggle factor for near-surface mass weighting (0 or 1) [nondim]
+  real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
+                                    ! if at least one side vanished (0 or 1) [nondim]
   real :: Ttl, Tbl, Tml, Ttr, Tbr, Tmr ! Temperatures at the velocity cell corners [C ~> degC]
   real :: Stl, Sbl, Sml, Str, Sbr, Smr ! Salinities at the velocity cell corners [S ~> ppt]
   real :: s6 ! PPM curvature coefficient for S [S ~> ppt]
@@ -925,6 +985,7 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   real :: hWghtTop ! A surface displacement limited thickness weight [Z ~> m]
   real :: hL, hR ! Thicknesses to the left and right [Z ~> m]
   real :: iDenom ! The denominator of the thickness weight expressions [Z-2 ~> m-2]
+  real :: h_nonvanished             ! nonvanished height [Z ~> m]
   integer, dimension(2) :: EOSdom_h5  ! The 5-point h-point i-computational domain for the equation of state
   integer, dimension(2) :: EOSdom_q15 ! The 3x5-point q-point i-computational domain for the equation of state
   integer, dimension(2) :: EOSdom_h15 ! The 3x5-point h-point i-computational domain for the equation of state
@@ -947,6 +1008,14 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   if (present(MassWghtInterp)) then
     if (BTEST(MassWghtInterp, 0)) massWeightToggle = 1.
     if (BTEST(MassWghtInterp, 1)) TopWeightToggle = 1.
+  endif
+  massWeightNVonlyToggle = 1.
+  if (present(MassWghtInterpVanOnly)) then
+    if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
+  endif
+  h_nonvanished = 0.
+  if (present(h_nv)) then
+    h_nonvanished = h_nv
   endif
 
   ! In event PPM calculation is bypassed with use_PPM=False
@@ -1037,6 +1106,10 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       hWghtTop = TopWeightToggle * &
               max(0., e(i+1,j,K+1)-e(i,j,1), e(i,j,K+1)-e(i+1,j,1))
       hWght = max(hWght, hWghtTop)
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((e(i,j,K) - e(i,j,K+1)) > h_nonvanished) .and. ((e(i+1,j,K) - e(i+1,j,K+1)) > h_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i+1,j,K) - e(i+1,j,K+1)) + dz_subroundoff
@@ -1145,6 +1218,10 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
       hWghtTop = TopWeightToggle * &
               max(0., e(i,j+1,K+1)-e(i,j,1), e(i,j,K+1)-e(i,j+1,1))
       hWght = max(hWght, hWghtTop)
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((e(i,j,K) - e(i,j,K+1)) > h_nonvanished) .and. ((e(i,j+1,K) - e(i,j+1,K+1)) > h_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (e(i,j,K) - e(i,j,K+1)) + dz_subroundoff
         hR = (e(i,j+1,K) - e(i,j+1,K+1)) + dz_subroundoff
@@ -1246,7 +1323,8 @@ end subroutine int_density_dz_generic_ppm
 !! series for log(1-eps/1+eps) that assumes that |eps| < 0.34.
 subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
                                dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                               bathyP, P_surf, dP_tiny, MassWghtInterp)
+                               bathyP, P_surf, dP_tiny, MassWghtInterp, &
+                               MassWghtInterpVanOnly, p_nv)
   type(hor_index_type), intent(in)  :: HI  !< The horizontal index structure
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T   !< Potential temperature referenced to the surface [C ~> degC]
@@ -1286,11 +1364,16 @@ subroutine int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
                             !! the same units as p_t [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                            !! mass weighting to interpolate T/S in integrals
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: p_nv !< Nonvanished pressure [R L2 T-2 ~> Pa]
+
 
   if (EOS_quadrature(EOS)) then
     call int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, &
                                      dza, intp_dza, intx_dza, inty_dza, halo_size, &
-                                     bathyP, P_surf, dP_tiny, MassWghtInterp)
+                                     bathyP, P_surf, dP_tiny, MassWghtInterp, &
+                                     MassWghtInterpVanOnly, p_nv)
   else
     call analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
                                       dza, intp_dza, intx_dza, inty_dza, halo_size, &
@@ -1306,7 +1389,8 @@ end subroutine int_specific_vol_dp
 !! no free assumptions, apart from the use of Boole's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, dza, &
                                        intp_dza, intx_dza, inty_dza, halo_size, &
-                                       bathyP, P_surf, dP_neglect, MassWghtInterp)
+                                       bathyP, P_surf, dP_neglect, MassWghtInterp, &
+                                       MassWghtInterpVanOnly, p_nv)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T  !< Potential temperature of the layer [C ~> degC]
@@ -1347,6 +1431,9 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
                                            !! the same units as p_t [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                            !! mass weighting to interpolate T/S in integrals
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: p_nv !< Nonvanished pressure [R L2 T-2 ~> Pa]
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -1381,6 +1468,9 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
+  real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
+                                    ! if at least one side vanished (0 or 1) [nondim]
+  real :: p_nonvanished             ! nonvanished pressure [R L2 T-2 ~> Pa]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   integer, dimension(2) :: EOSdom_h5  ! The 5-point h-point i-computational domain for the equation of state
   integer, dimension(2) :: EOSdom_q15 ! The 3x5-point q-point i-computational domain for the equation of state
@@ -1405,6 +1495,15 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
     if ((do_massWeight .or. top_massWeight) .and. .not.present(dP_neglect)) call MOM_error(FATAL, &
         "int_spec_vol_dp_generic_pcm: dP_neglect must be present if mass weighting is in use.")
   endif
+  massWeightNVonlyToggle = 1.
+  if (present(MassWghtInterpVanOnly)) then
+    if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
+  endif
+  p_nonvanished = 0.
+  if (present(p_nv)) then
+    p_nonvanished = p_nv
+  endif
+
 
   ! Set the loop ranges for equation of state calculations at various points.
   EOSdom_h5(1) = 1 ; EOSdom_h5(2) = 5*(ieh-ish+1)
@@ -1450,6 +1549,11 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
       endif
       if (top_massWeight) &
         hWght = max(hWght, P_surf(i,j)-p_b(i+1,j), P_surf(i+1,j)-p_b(i,j))
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((p_b(i,j) - p_t(i,j)) > p_nonvanished) .and. ((p_b(i+1,j) - p_t(i+1,j)) > p_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
+
       if (hWght > 0.) then
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
@@ -1510,6 +1614,10 @@ subroutine int_spec_vol_dp_generic_pcm(T, S, p_t, p_b, alpha_ref, HI, EOS, US, d
       endif
       if (top_massWeight) &
         hWght = max(hWght, P_surf(i,j)-p_b(i,j+1), P_surf(i,j+1)-p_b(i,j))
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((p_b(i,j) - p_t(i,j)) > p_nonvanished) .and. ((p_b(i,j+1) - p_t(i,j+1)) > p_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
@@ -1565,7 +1673,8 @@ end subroutine int_spec_vol_dp_generic_pcm
 !! no free assumptions, apart from the use of Boole's rule quadrature to do the integrals.
 subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, &
                              dP_neglect, bathyP, HI, EOS, US, dza, &
-                             intp_dza, intx_dza, inty_dza, P_surf, MassWghtInterp)
+                             intp_dza, intx_dza, inty_dza, P_surf, MassWghtInterp, &
+                             MassWghtInterpVanOnly, p_nv)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: T_t  !< Potential temperature at the top of the layer [C ~> degC]
@@ -1609,6 +1718,9 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
               optional, intent(in)  :: P_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa]
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                             !! mass weighting to interpolate T/S in integrals
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: p_nv !< Nonvanished pressure [R L2 T-2 ~> Pa]
 
 !   This subroutine calculates analytical and nearly-analytical integrals in
 ! pressure across layers of geopotential anomalies, which are required for
@@ -1647,6 +1759,9 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
+  real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
+                                    ! if at least one side vanished (0 or 1) [nondim]
+  real :: p_nonvanished             ! nonvanished pressure [R L2 T-2 ~> Pa]
   integer, dimension(2) :: EOSdom_h5  ! The 5-point h-point i-computational domain for the equation of state
   integer, dimension(2) :: EOSdom_q15 ! The 3x5-point q-point i-computational domain for the equation of state
   integer, dimension(2) :: EOSdom_h15 ! The 3x5-point h-point i-computational domain for the equation of state
@@ -1661,6 +1776,14 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
     massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
     if (top_massWeight .and. .not.present(P_surf)) call MOM_error(FATAL, &
         "int_spec_vol_dp_generic_plm: P_surf must be present if near-surface mass weighting is in use.")
+  endif
+  massWeightNVonlyToggle = 1.
+  if (present(MassWghtInterpVanOnly)) then
+    if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
+  endif
+  p_nonvanished = 0.
+  if (present(p_nv)) then
+    p_nonvanished = p_nv
   endif
 
   do n = 1, 5 ! Note that these are reversed from int_density_dz.
@@ -1711,6 +1834,10 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       endif
       if (top_massWeight) &
         hWght = max(hWght, P_surf(i,j)-p_b(i+1,j), P_surf(i+1,j)-p_b(i,j))
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((p_b(i,j) - p_t(i,j)) > p_nonvanished) .and. ((p_b(i+1,j) - p_t(i+1,j)) > p_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
@@ -1777,6 +1904,10 @@ subroutine int_spec_vol_dp_generic_plm(T_t, T_b, S_t, S_b, p_t, p_b, alpha_ref, 
       endif
       if (top_massWeight) &
         hWght = max(hWght, P_surf(i,j)-p_b(i,j+1), P_surf(i,j+1)-p_b(i,j))
+      ! If both sides are nonvanished, then set it back to zero.
+      if (((p_b(i,j) - p_t(i,j)) > p_nonvanished) .and. ((p_b(i,j+1) - p_t(i,j+1)) > p_nonvanished)) then
+        hWght = massWeightNVonlyToggle * hWght
+      endif
       if (hWght > 0.) then
         hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
         hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
@@ -1835,7 +1966,7 @@ end subroutine int_spec_vol_dp_generic_plm
 
 !> Diagnose the fractional mass weighting in a layer that might be used with a Boussinesq calculation.
 subroutine diagnose_mass_weight_Z(z_t, z_b, bathyT, SSH, dz_neglect, MassWghtInterp, HI, &
-                                  MassWt_u, MassWt_v)
+                                  MassWt_u, MassWt_v, MassWghtInterpVanOnly, h_nv)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: z_t !< Height at the top of the layer in depth units [Z ~> m]
@@ -1852,6 +1983,9 @@ subroutine diagnose_mass_weight_Z(z_t, z_b, bathyT, SSH, dz_neglect, MassWghtInt
                         intent(inout) :: MassWt_u  !< The fractional mass weighting at u-points [nondim]
   real, dimension(SZI_(HI),SZJB_(HI)), &
                         intent(inout) :: MassWt_v  !< The fractional mass weighting at v-points [nondim]
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: h_nv !< Nonvanished height [Z ~> m]
 
   ! Local variables
   real :: hWght      ! A pressure-thickness below topography [Z ~> m]
@@ -1859,6 +1993,8 @@ subroutine diagnose_mass_weight_Z(z_t, z_b, bathyT, SSH, dz_neglect, MassWghtInt
   real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2]
   logical :: do_massWeight  ! Indicates whether to do mass weighting near bathymetry
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
+  real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
+  real :: h_nonvanished             ! nonvanished height [Z ~> m]
   integer :: Isq, Ieq, Jsq, Jeq, i, j
 
   Isq = HI%IscB ; Ieq = HI%IecB
@@ -1866,6 +2002,14 @@ subroutine diagnose_mass_weight_Z(z_t, z_b, bathyT, SSH, dz_neglect, MassWghtInt
 
   do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
   top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
+  massWeightNVonlyToggle = 1.
+  if (present(MassWghtInterpVanOnly)) then
+    if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
+  endif
+  h_nonvanished = 0.
+  if (present(h_nv)) then
+    h_nonvanished = h_nv
+  endif
 
   ! Calculate MassWt_u
   do j=HI%jsc,HI%jec ; do I=Isq,Ieq
@@ -1877,6 +2021,10 @@ subroutine diagnose_mass_weight_Z(z_t, z_b, bathyT, SSH, dz_neglect, MassWghtInt
       hWght = max(0., -bathyT(i,j)-z_t(i+1,j), -bathyT(i+1,j)-z_t(i,j))
     if (top_massWeight) &
       hWght = max(hWght, z_b(i+1,j)-SSH(i,j), z_b(i,j)-SSH(i+1,j))
+    ! If both sides are nonvanished, then set it back to zero.
+    if (((z_t(i,j) - z_b(i,j)) > h_nonvanished) .and. ((z_t(i+1,j) - z_b(i+1,j)) > h_nonvanished)) then
+      hWght = massWeightNVonlyToggle * hWght
+    endif
     if (hWght > 0.) then
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i+1,j) - z_b(i+1,j)) + dz_neglect
@@ -1898,6 +2046,10 @@ subroutine diagnose_mass_weight_Z(z_t, z_b, bathyT, SSH, dz_neglect, MassWghtInt
       hWght = max(0., -bathyT(i,j)-z_t(i,j+1), -bathyT(i,j+1)-z_t(i,j))
     if (top_massWeight) &
       hWght = max(hWght, z_b(i,j+1)-SSH(i,j), z_b(i,j)-SSH(i,j+1))
+    ! If both sides are nonvanished, then set it back to zero.
+    if (((z_t(i,j) - z_b(i,j)) > h_nonvanished) .and. ((z_t(i,j+1) - z_b(i,j+1)) > h_nonvanished)) then
+      hWght = massWeightNVonlyToggle * hWght
+    endif
     if (hWght > 0.) then
       hL = (z_t(i,j) - z_b(i,j)) + dz_neglect
       hR = (z_t(i,j+1) - z_b(i,j+1)) + dz_neglect
@@ -1914,7 +2066,7 @@ end subroutine diagnose_mass_weight_Z
 
 !> Diagnose the fractional mass weighting in a layer that might be used with a non-Boussinesq calculation.
 subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWghtInterp, HI, &
-                                  MassWt_u, MassWt_v)
+                                  MassWt_u, MassWt_v, MassWghtInterpVanOnly, p_nv)
   type(hor_index_type), intent(in)  :: HI !< A horizontal index type structure.
   real, dimension(SZI_(HI),SZJ_(HI)), &
                         intent(in)  :: p_t !< Pressure atop the layer [R L2 T-2 ~> Pa]
@@ -1932,6 +2084,9 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
                         intent(inout) :: MassWt_u  !< The fractional mass weighting at u-points [nondim]
   real, dimension(SZI_(HI),SZJB_(HI)), &
                         intent(inout) :: MassWt_v  !< The fractional mass weighting at v-points [nondim]
+  logical,    optional, intent(in)  :: MassWghtInterpVanOnly !< If true, does not do mass weighting
+                                           !! of T/S unless one side smaller than h_nv (i.e. vanished)
+  real,       optional, intent(in)  :: p_nv !< Nonvanished pressure [R L2 T-2 ~> Pa]
 
   ! Local variables
   real :: hWght      ! A pressure-thickness below topography [R L2 T-2 ~> Pa]
@@ -1940,6 +2095,10 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
+  real :: massWeightNVonlyToggle    ! A non-dimensional toggle factor for only using mass weighting
+                                    ! if at least one side vanished (0 or 1) [nondim]
+  real :: p_nonvanished             ! nonvanished pressure [R L2 T-2 ~> Pa]
+
   integer :: Isq, Ieq, Jsq, Jeq, i, j
 
   Isq = HI%IscB ; Ieq = HI%IecB
@@ -1948,6 +2107,14 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
   do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
   top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
   massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
+  massWeightNVonlyToggle = 1.
+  if (present(MassWghtInterpVanOnly)) then
+    if (MassWghtInterpVanOnly) massWeightNVonlyToggle = 0.
+  endif
+  p_nonvanished = 0.
+  if (present(p_nv)) then
+    p_nonvanished = p_nv
+  endif
 
   ! Calculate MassWt_u
   do j=HI%jsc,HI%jec ; do I=Isq,Ieq
@@ -1962,6 +2129,10 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
     endif
     if (top_massWeight) &
       hWght = max(hWght, P_surf(i,j)-p_b(i+1,j), P_surf(i+1,j)-p_b(i,j))
+    ! If both sides are nonvanished, then set it back to zero.
+    if (((p_b(i,j) - p_t(i,j)) > p_nonvanished) .and. ((p_b(i+1,j) - p_t(i+1,j)) > p_nonvanished)) then
+      hWght = massWeightNVonlyToggle * hWght
+    endif
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i+1,j) - p_t(i+1,j)) + dP_neglect
@@ -1986,6 +2157,10 @@ subroutine diagnose_mass_weight_p(p_t, p_b, bathyP, P_surf, dP_neglect, MassWght
     endif
     if (top_massWeight) &
       hWght = max(hWght, P_surf(i,j)-p_b(i,j+1), P_surf(i,j+1)-p_b(i,j))
+    ! If both sides are nonvanished, then set it back to zero.
+    if (((p_b(i,j) - p_t(i,j)) > p_nonvanished) .and. ((p_b(i,j+1) - p_t(i,j+1)) > p_nonvanished)) then
+      hWght = massWeightNVonlyToggle * hWght
+    endif
     if (hWght > 0.) then
       hL = (p_b(i,j) - p_t(i,j)) + dP_neglect
       hR = (p_b(i,j+1) - p_t(i,j+1)) + dP_neglect
