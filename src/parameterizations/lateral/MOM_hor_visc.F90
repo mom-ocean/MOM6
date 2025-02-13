@@ -666,44 +666,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! call pass_vector(slope_x, slope_y, G%Domain, halo=2)
   endif
 
-  !$OMP parallel do default(none) if (.not. CS%smooth_AH) &
-  !$OMP shared( &
-  !$OMP   CS, G, GV, US, OBC, VarMix, MEKE, u, v, h, uh, vh, &
-  !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
-  !$OMP   is_vort, ie_vort, js_vort, je_vort, &
-  !$OMP   is_Kh, ie_Kh, js_Kh, je_Kh, &
-  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, use_kh_struct, skeb_use_frict, &
-  !$OMP   use_MEKE_Ku, use_MEKE_Au, u_smooth, v_smooth, use_cont_huv, slope_x, slope_y, dz, &
-  !$OMP   backscat_subround, GME_effic_h, GME_effic_q, &
-  !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
-  !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_bh, FrictWork_GME, &
-  !$OMP   div_xx_h, sh_xx_h, vort_xy_q, sh_xy_q, GME_coeff_h, GME_coeff_q, &
-  !$OMP   KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, NoSt, ShSt, hu_cont, hv_cont, STOCH &
-  !$OMP ) &
-  !$OMP private( &
-  !$OMP   i, j, k, n, tmp, &
-  !$OMP   dudx, dudy, dvdx, dvdy, sh_xx, sh_xy, h_u, h_v, &
-  !$OMP   Del2u, Del2v, DY_dxBu, DX_dyBu, sh_xx_bt, sh_xy_bt, &
-  !$OMP   str_xx, str_xy, bhstr_xx, bhstr_xy, str_xx_GME, str_xy_GME, &
-  !$OMP   vort_xy, vort_xy_dx, vort_xy_dy, div_xx, div_xx_dx, div_xx_dy, &
-  !$OMP   grad_div_mag_h, grad_div_mag_q, grad_vort_mag_h, grad_vort_mag_q, &
-  !$OMP   grad_vort, grad_vort_qg, grad_vort_mag_h_2d, grad_vort_mag_q_2d, &
-  !$OMP   sh_xx_sq, sh_xy_sq, meke_res_fn, Shear_mag, Shear_mag_bc, vert_vort_mag, &
-  !$OMP   h_min, hrat_min, visc_bound_rem, Kh_max_here, &
-  !$OMP   grid_Ah, grid_Kh, d_Del2u, d_Del2v, d_str, &
-  !$OMP   Kh, Ah, AhSm, AhLth, local_strain, Sh_F_pow, &
-  !$OMP   dDel2vdx, dDel2udy, Del2vort_q, Del2vort_h, KE, &
-  !$OMP   h2uq, h2vq, hu, hv, hq, FatH, RoScl, GME_coeff, &
-  !$OMP   dudx_smooth, dudy_smooth, dvdx_smooth, dvdy_smooth, &
-  !$OMP   vort_xy_smooth, vort_xy_dx_smooth, vort_xy_dy_smooth, &
-  !$OMP   sh_xx_smooth, sh_xy_smooth, &
-  !$OMP   vert_vort_mag_smooth, m_leithy, Ah_sq, AhLthy, &
-  !$OMP   Kh_BS, str_xx_bs, str_xy_bs, bs_coeff_h, bs_coeff_q &
-  !$OMP ) &
-  !$OMP firstprivate( &
-  !$OMP   visc_limit_h, visc_limit_h_frac, visc_limit_h_flag, &
-  !$OMP   visc_limit_q, visc_limit_q_frac, visc_limit_q_flag &
-  !$OMP )
+  !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx)
+
+  ! TODO: This should be computed (and stored?) on the GPU
+  !$omp target enter data map(to: CS)
+  !$omp target enter data map(to: CS%dx_dyT, CS%dy_dxT)
+  !$omp target enter data map(to: CS%dx_dyBu, CS%dy_dxBu)
+
+  ! TODO: Do this outside the function
+  !$omp target enter data map(to: u, v)
+
   do k=1,nz
 
     ! The following are the forms of the horizontal tension and horizontal
@@ -716,12 +688,27 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     !   the dudx and dvdy terms beyond their valid bounds.
     ! TODO: Explore methods for retaining both the syntax and speedup.
 
+    ! XXX: **I don't understand why I need this**
+    !$omp target update to(u(:,:,k), v(:,:,k))
+
+    !$omp target
     ! Calculate horizontal tension
+    !$omp parallel loop collapse(2)
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       dudx(i,j) = CS%DY_dxT(i,j)*((G%IdyCu(I,j) * u(I,j,k)) - &
                                   (G%IdyCu(I-1,j) * u(I-1,j,k)))
+    enddo ; enddo
+
+    !$omp parallel loop collapse(2)
+    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       dvdy(i,j) = CS%DX_dyT(i,j)*((G%IdxCv(i,J) * v(i,J,k)) - &
                                   (G%IdxCv(i,J-1) * v(i,J-1,k)))
+    enddo ; enddo
+
+    !$omp end target
+    !$omp target update from(dudx, dvdy)
+
+    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       sh_xx(i,j) = dudx(i,j) - dvdy(i,j)
     enddo ; enddo
 
@@ -730,6 +717,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       dvdx(I,J) = CS%DY_dxBu(I,J)*((v(i+1,J,k)*G%IdyCv(i+1,J)) - (v(i,J,k)*G%IdyCv(i,J)))
       dudy(I,J) = CS%DX_dyBu(I,J)*((u(I,j+1,k)*G%IdxCu(I,j+1)) - (u(I,j,k)*G%IdxCu(I,j)))
     enddo ; enddo
+
 
     if (CS%use_Leithy) then
       ! Calculate horizontal tension from smoothed velocity
@@ -2216,6 +2204,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
     endif ! find_FrictWork and associated(mom_src)
   enddo ! end of k loop
+
+  !$omp target exit data map(delete: dudx, dudy, dvdx, dvdy, sh_xx)
+
+  ! TODO: This should should be permanently on the GPU
+  !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
+  !$omp target exit data map(delete: CS%Dx_dyBu, CS%DY_dxBu)
+  !$omp target exit data map(delete: CS)
+
+  ! TODO: Do this outside of the function
+  !$omp target exit data map(delete: u, v)
 
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
