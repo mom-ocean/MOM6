@@ -154,8 +154,7 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   logical :: split_bottom_stress  !< If true, provide the bottom stress
                                   !! calculated by the vertical viscosity to the
                                   !! barotropic solver.
-  logical :: calc_dtbt            !< If true, calculate the barotropic time-step
-                                  !! dynamically.
+  logical :: dtbt_use_bt_cont     !< If true, use BT_cont to calculate DTBT.
   logical :: store_CAu            !< If true, store the Coriolis and advective accelerations at the
                                   !! end of the timestep for use in the next predictor step.
   logical :: CAu_pred_stored      !< If true, the Coriolis and advective accelerations at the
@@ -648,7 +647,15 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   endif
 
   call cpu_clock_begin(id_clock_btstep)
-  if (calc_dtbt) call set_dtbt(G, GV, US, CS%barotropic_CSp, eta, CS%pbce)
+  if (calc_dtbt) then
+    if (CS%dtbt_use_bt_cont .and. associated(CS%BT_cont)) then
+      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, BT_cont=CS%BT_cont)
+    else
+      ! In the following call, eta is only used when NONLINEAR_BT_CONTINUITY is True. Otherwise, dtbt is effectively
+      ! calculated with eta=0. Note that NONLINEAR_BT_CONTINUITY is False if BT_CONT is used, which is the default.
+      call set_dtbt(G, GV, US, CS%barotropic_CSp, CS%pbce, eta=eta)
+    endif
+  endif
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
   ! The CS%ADp argument here stores the weights for certain integrated diagnostics.
@@ -1410,7 +1417,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
                  "If SPLIT is false and USE_RK2 is true, BEGW can be "//&
                  "between 0 and 0.5 to damp gravity waves.", &
                  units="nondim", default=0.0)
-
+  call get_param(param_file, mdl, "SET_DTBT_USE_BT_CONT", CS%dtbt_use_bt_cont, &
+                 "If true, use BT_CONT to calculate DTBT if possible.", default=.false.)
   call get_param(param_file, mdl, "SPLIT_BOTTOM_STRESS", CS%split_bottom_stress, &
                  "If true, provide the bottom stress calculated by the "//&
                  "vertical viscosity to the barotropic solver.", default=.false.)
@@ -1545,7 +1553,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
-  call barotropic_init(u, v, h, CS%eta, Time, G, GV, US, param_file, diag, &
+  call barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, CS%SAL_CSp, HA_CSp)
 
   if (.not. query_initialized(CS%diffu, "diffu", restart_CS) .or. &
