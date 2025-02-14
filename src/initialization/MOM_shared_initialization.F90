@@ -11,7 +11,7 @@ use MOM_dyn_horgrid, only : dyn_horgrid_type
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser, only : get_param, log_param, param_file_type, log_version
-use MOM_io, only : create_MOM_file, file_exists, field_size
+use MOM_io, only : create_MOM_file, file_exists, field_size, get_filename_appendix
 use MOM_io, only : MOM_infra_file, MOM_field
 use MOM_io, only : MOM_read_data, MOM_read_vector, read_variable, stdout
 use MOM_io, only : open_file_to_read, close_file_to_read, SINGLE_FILE, MULTIPLE
@@ -1348,6 +1348,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, US, geom_file)
   ! Local variables.
   character(len=240) :: filepath  ! The full path to the file to write
   character(len=40)  :: mdl = "write_ocean_geometry_file"
+  character(len=32)  :: filename_appendix = '' ! Appendix to geom filename for ensemble runs
   type(vardesc),   dimension(:), allocatable :: &
     vars     ! Types with metadata about the variables and their staggering
   type(MOM_field), dimension(:), allocatable :: &
@@ -1355,6 +1356,7 @@ subroutine write_ocean_geometry_file(G, param_file, directory, US, geom_file)
   type(MOM_infra_file) :: IO_handle ! The I/O handle of the fileset
   integer :: nFlds ! The number of variables in this file
   integer :: file_threading
+  integer :: geom_file_len ! geometry file name length
   logical :: multiple_files
 
   call callTree_enter('write_ocean_geometry_file()')
@@ -1406,6 +1408,17 @@ subroutine write_ocean_geometry_file(G, param_file, directory, US, geom_file)
     filepath = trim(directory) // trim(geom_file)
   else
     filepath = trim(directory) // "ocean_geometry"
+  endif
+
+  ! Append ensemble run number to filename if it is an ensemble run
+  call get_filename_appendix(filename_appendix)
+  if (len_trim(filename_appendix) > 0) then
+    geom_file_len = len_trim(filepath)
+    if (filepath(geom_file_len-2:geom_file_len) == ".nc") then
+      filepath = filepath(1:geom_file_len-3) // '.' // trim(filename_appendix) // ".nc"
+    else
+      filepath = filepath // '.' // trim(filename_appendix)
+    endif
   endif
 
   call get_param(param_file, mdl, "PARALLEL_RESTARTFILES", multiple_files, &
