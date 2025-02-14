@@ -99,7 +99,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   character(len=*),      optional, intent(in)    :: param_suffix !< A suffix to apply to
                                                                  !! layout-specific parameters.
   type(unit_scale_type), optional, pointer       :: US           !< A dimensional unit scaling type
-  type(MOM_domain_type), pointer, optional       :: MOM_dom_unmasked !< Unmasked MOM domain instance.
+  type(MOM_domain_type), optional, pointer       :: MOM_dom_unmasked !< Unmasked MOM domain instance.
                                                                  !! Set to null if masking is not enabled.
 
   ! Local variables
@@ -448,8 +448,6 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call create_MOM_domain(MOM_dom_unmasked, n_global, n_halo, reentrant, tripolar_N, layout_unmasked, &
                            domain_name=domain_name, symmetric=symmetric, thin_halos=thin_halos, &
                            nonblocking=nonblocking)
-  else
-    MOM_dom_unmasked => null()
   endif
 
   call create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, layout, &
