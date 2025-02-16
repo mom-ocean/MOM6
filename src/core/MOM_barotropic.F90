@@ -32,6 +32,7 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type, alloc_bt_cont_type
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_variables, only : accel_diag_ptrs
+use MOM_wave_drag, only : wave_drag_init, wave_drag_calc, wave_drag_CS
 
 implicit none ; private
 
@@ -251,6 +252,8 @@ type, public :: barotropic_CS ; private
                              !! invariant and linearized.
   logical :: use_filter      !< If true, use streaming band-pass filter to detect the
                              !! instantaneous tidal signals in the simulation.
+  logical :: linear_freq_drag  !< If true, apply a linear frequency-dependent drag to the tidal
+                             !! velocities. The streaming band-pass filter must be turned on.
   logical :: use_wide_halos  !< If true, use wide halos and march in during the
                              !! barotropic time stepping for efficiency.
   logical :: clip_velocity   !< If true, limit any velocity components that are
@@ -296,6 +299,7 @@ type, public :: barotropic_CS ; private
   type(harmonic_analysis_CS), pointer :: HA_CSp => NULL() !< Control structure for harmonic analysis
   type(Filter_CS) :: Filt_CS_u, & !< Control structures for the streaming band-pass filter of ubt
                      Filt_CS_v    !< Control structures for the streaming band-pass filter of vbt
+  type(wave_drag_CS) :: Drag_CS !< Control structures for the frequency-dependent drag
   logical :: module_is_initialized = .false.  !< If true, module has been initialized
 
   integer :: isdw !< The lower i-memory limit for the wide halo arrays.
@@ -605,6 +609,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   ! spacing [H L ~> m2 or kg m-1].
   real, dimension(:,:,:), pointer :: ufilt, vfilt
                   ! Filtered velocities from the output of streaming filters [L T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G)) :: Drag_u
+                  ! The zonal acceleration due to frequency-dependent drag [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G)) :: Drag_v
+                  ! The meridional acceleration due to frequency-dependent drag [L T-2 ~> m s-2]
   real, target, dimension(SZIW_(CS),SZJW_(CS)) :: &
     eta, &        ! The barotropic free surface height anomaly or column mass
                   ! anomaly [H ~> m or kg m-2]
@@ -1422,6 +1430,42 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo ; enddo
   endif
 
+  ! Compute instantaneous tidal velocities and apply frequency-dependent drag.
+  ! Note that the filtered velocities are only updated during the current predictor step,
+  ! and are calculated using the barotropic velocity from the previous correction step.
+  if (CS%use_filter) then
+    call Filt_accum(ubt(G%IsdB:G%IedB,G%jsd:G%jed), ufilt, CS%Time, US, CS%Filt_CS_u)
+    call Filt_accum(vbt(G%isd:G%ied,G%JsdB:G%JedB), vfilt, CS%Time, US, CS%Filt_CS_v)
+  endif
+
+  if (CS%use_filter .and. CS%linear_freq_drag) then
+    call wave_drag_calc(ufilt, vfilt, Drag_u, Drag_v, G, CS%Drag_CS)
+    !$OMP do
+    do j=js,je ; do I=is-1,ie
+      Htot = 0.5 * (eta(i,j) + eta(i+1,j))
+      if (GV%Boussinesq) &
+        Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j))
+      if (Htot > 0.0) then
+        Drag_u(I,j) = Drag_u(I,j) / Htot
+        BT_force_u(I,j) = BT_force_u(I,j) - Drag_u(I,j)
+      else
+        Drag_u(I,j) = 0.0
+      endif
+    enddo ; enddo
+    !$OMP do
+    do J=js-1,je ; do i=is,ie
+      Htot = 0.5 * (eta(i,j) + eta(i,j+1))
+      if (GV%Boussinesq) &
+        Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i,j+1))
+      if (Htot > 0.0) then
+        Drag_v(i,J) = Drag_v(i,J) / Htot
+        BT_force_v(i,J) = BT_force_v(i,J) - Drag_v(i,J)
+      else
+        Drag_v(i,J) = 0.0
+      endif
+    enddo ; enddo
+  endif
+
   if ((Isq > is-1) .or. (Jsq > js-1)) then
     ! Non-symmetric memory is being used, so the edge values need to be
     ! filled in with a halo update of a non-symmetric array.
@@ -1591,13 +1635,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
       Rayleigh_v(i,J) = CS%lin_drag_v(i,J) / Htot
     endif ; enddo ; enddo
-  endif
-
-  ! Note that the filtered velocities are only updated during the current predictor step,
-  ! and are calculated using the barotropic velocity from the previous correction step.
-  if (CS%use_filter) then
-    call Filt_accum(ubt, ufilt, CS%Time, US, CS%Filt_CS_u)
-    call Filt_accum(vbt, vfilt, CS%Time, US, CS%Filt_CS_v)
   endif
 
   ! Zero out the arrays for various time-averaged quantities.
@@ -2606,6 +2643,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     do J=js-1,je ; do i=is,ie
       CS%vbtav(i,J) = vbt_sum(i,J)
       vhbtav(i,J) = vhbt_sum(i,J)
+    enddo ; enddo
+  endif
+
+  if (CS%use_filter .and. CS%linear_freq_drag) then ! Apply frequency-dependent drag
+    !$OMP do
+    do j=js,je ; do I=is-1,ie
+      u_accel_bt(I,j) = u_accel_bt(I,j) - Drag_u(I,j)
+    enddo ; enddo
+    !$OMP do
+    do J=js-1,je ; do i=is,ie
+      v_accel_bt(i,J) = v_accel_bt(i,J) - Drag_v(i,J)
     enddo ; enddo
   endif
 
@@ -4710,9 +4758,13 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "using rates set by lin_drag_u & _v divided by the depth of "//&
                  "the ocean.  This was introduced to facilitate tide modeling.", &
                  default=.false.)
+  call get_param(param_file, mdl, "BT_LINEAR_FREQ_DRAG", CS%linear_freq_drag, &
+                 "If true, apply frequency-dependent drag to the tidal velocities. "//&
+                 "The streaming band-pass filter must be turned on.", default=.false.)
   call get_param(param_file, mdl, "BT_WAVE_DRAG_FILE", wave_drag_file, &
                  "The name of the file with the barotropic linear wave drag "//&
-                 "piston velocities.", default="", do_not_log=.not.CS%linear_wave_drag)
+                 "piston velocities.", default="", &
+                 do_not_log=.not.CS%linear_wave_drag.and..not.CS%linear_freq_drag)
   call get_param(param_file, mdl, "BT_WAVE_DRAG_VAR", wave_drag_var, &
                  "The name of the variable in BT_WAVE_DRAG_FILE with the "//&
                  "barotropic linear wave drag piston velocities at h points. "//&
@@ -4967,10 +5019,19 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     endif ! len_trim(wave_drag_file) > 0
   endif ! CS%linear_wave_drag
 
-  ! Initialize streaming band-pass filters
+  ! Initialize streaming band-pass filters and frequency-dependent drag
   if (CS%use_filter) then
     call Filt_init(param_file, US, CS%Filt_CS_u, restart_CS)
     call Filt_init(param_file, US, CS%Filt_CS_v, restart_CS)
+  endif
+
+  if (CS%use_filter .and. CS%linear_freq_drag) then
+    if (.not.CS%linear_wave_drag .and. len_trim(wave_drag_file) > 0) then
+      inputdir = "." ;  call get_param(param_file, mdl, "INPUTDIR", inputdir)
+      wave_drag_file = trim(slasher(inputdir))//trim(wave_drag_file)
+      call log_param(param_file, mdl, "INPUTDIR/BT_WAVE_DRAG_FILE", wave_drag_file)
+    endif
+    call wave_drag_init(param_file, wave_drag_file, G, GV, US, CS%Drag_CS)
   endif
 
   CS%dtbt_fraction = 0.98 ; if (dtbt_input < 0.0) CS%dtbt_fraction = -dtbt_input
@@ -5302,7 +5363,7 @@ subroutine register_barotropic_restarts(HI, GV, US, param_file, CS, restart_CS)
   call register_restart_field(CS%dtbt, "DTBT", .false., restart_CS, &
                               longname="Barotropic timestep", units="seconds", conversion=US%T_to_s)
 
-  ! Initialize and register streaming band-pass filters
+  ! Register streaming band-pass filters
   call get_param(param_file, mdl, "USE_FILTER", CS%use_filter, &
                  "If true, use streaming band-pass filters to detect the "//&
                  "instantaneous tidal signals in the simulation.", default=.false.)

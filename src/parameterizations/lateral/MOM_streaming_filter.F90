@@ -162,22 +162,22 @@ subroutine Filt_accum(u, u1, Time, US, CS)
   ! Initialize CS%old_time at the first time step
   if (CS%old_time<0.0) CS%old_time = now
 
-  ! This condition implies Filt_accum has already been called in the predictor step
-  if (CS%old_time>=now) return
+  ! Timestep the filter equations only if we are in a new time step
+  if (CS%old_time<now) then
+    dt = now - CS%old_time
+    CS%old_time = now
 
-  dt = now - CS%old_time
-  CS%old_time = now
+    do k=1,CS%nf
+      c1 = CS%filter_omega(k) * dt
+      c2 = 1.0 - CS%filter_alpha(k) * c1
 
-  ! Timestepping
-  do k=1,CS%nf
-    c1 = CS%filter_omega(k) * dt
-    c2 = 1.0 - CS%filter_alpha(k) * c1
+      do j=CS%js,CS%je ; do i=CS%is,CS%ie
+        CS%s1(i,j,k) =  c1 *  CS%u1(i,j,k) + CS%s1(i,j,k)
+        CS%u1(i,j,k) = -c1 * (CS%s1(i,j,k) - CS%filter_alpha(k) * u(i,j)) + c2 * CS%u1(i,j,k)
+      enddo; enddo
+    enddo ! k=1,CS%nf
+  endif ! (CS%old_time<now)
 
-    do j=CS%js,CS%je ; do i=CS%is,CS%ie
-      CS%s1(i,j,k) =  c1 *  CS%u1(i,j,k) + CS%s1(i,j,k)
-      CS%u1(i,j,k) = -c1 * (CS%s1(i,j,k) - CS%filter_alpha(k) * u(i,j)) + c2 * CS%u1(i,j,k)
-    enddo; enddo
-  enddo
   u1 => CS%u1
 
 end subroutine Filt_accum
