@@ -666,8 +666,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! call pass_vector(slope_x, slope_y, G%Domain, halo=2)
   endif
 
-  !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx)
+  !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target enter data map(alloc: h_u, h_v)
+
+  ! TODO: NoSt, ShSt, ...?
 
   ! TODO: This should be computed (and stored?) on the GPU
   !$omp target enter data map(to: CS)
@@ -908,22 +910,26 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     !$omp target update from(dvdx, dudy, h_u, h_v)
     endif
 
-    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx)
-    !$omp target update from(h_u, h_v)
-
     ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
     ! dudy and dvdx include modifications at OBCs from above.
+    !$omp target
     if (CS%no_slip) then
+      !$omp parallel loop collapse(2)
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
         if (CS%id_shearstress > 0) ShSt(I,J,k) = sh_xy(I,J)
       enddo ; enddo
     else
+      !$omp parallel loop collapse(2)
       do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
         sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) )
         if (CS%id_shearstress > 0) ShSt(I,J,k) = sh_xy(I,J)
       enddo ; enddo
     endif
+    !$omp end target
+
+    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
+    !$omp target update from(h_u, h_v)
 
     if (CS%use_Leithy) then
       ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
@@ -2224,7 +2230,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif ! find_FrictWork and associated(mom_src)
   enddo ! end of k loop
 
-  !$omp target exit data map(delete: dudx, dudy, dvdx, dvdy, sh_xx)
+  !$omp target exit data map(delete: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target exit data map(delete: h_u, h_v)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
 
