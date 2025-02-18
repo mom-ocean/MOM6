@@ -201,6 +201,7 @@ type, public :: ice_ocean_boundary_type
                                                             !! ice-shelves, expressed as a coefficient
                                                             !! for divergence damping, as determined
                                                             !! outside of the ocean model [m3 s-1]
+  real, pointer, dimension(:,:) :: shelf_sfc_mass_flux =>NULL() !< mass flux to surface of ice sheet [kg m-2 s-1]
   integer :: xtype                    !< The type of the exchange - REGRID, REDIST or DIRECT
   type(coupler_2d_bc_type) :: fluxes  !< A structure that may contain an array of named fields
                                       !! used for passive tracer fluxes.
@@ -462,6 +463,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       fluxes%frunoff(i,j) = kg_m2_s_conversion * IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
       if (CS%check_no_land_fluxes) &
         call check_mask_val_consistency(IOB%calving(i-i0,j-j0), G%mask2dT(i,j), i, j, 'calving', G)
+    endif
+
+    if (associated(IOB%shelf_sfc_mass_flux)) then
+       fluxes%shelf_sfc_mass_flux(i,j) = kg_m2_s_conversion * IOB%shelf_sfc_mass_flux(i-i0,j-j0)
     endif
 
     if (associated(IOB%ustar_berg)) then
@@ -1795,6 +1800,10 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   chks = field_chksum( iobt%runoff         ) ; if (root) write(outunit,100) 'iobt%runoff         ', chks
   chks = field_chksum( iobt%calving        ) ; if (root) write(outunit,100) 'iobt%calving        ', chks
   chks = field_chksum( iobt%p              ) ; if (root) write(outunit,100) 'iobt%p              ', chks
+  if (associated(iobt%shelf_sfc_mass_flux)) then
+     chks = field_chksum( iobt%shelf_sfc_mass_flux ) ; if (root) write(outunit,100) 'iobt%shelf_sfc_mass_flux     ',&
+        chks
+  endif
   if (associated(iobt%ustar_berg)) then
     chks = field_chksum( iobt%ustar_berg ) ; if (root) write(outunit,100) 'iobt%ustar_berg     ', chks
   endif

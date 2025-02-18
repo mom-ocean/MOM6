@@ -856,7 +856,8 @@ subroutine shelf_calc_flux(sfc_state_in, fluxes_in, Time, time_step_in, CS)
   if (CS%id_h_shelf > 0) call post_data(CS%id_h_shelf, ISS%h_shelf, CS%diag)
   if (CS%id_dhdt_shelf > 0) call post_data(CS%id_dhdt_shelf, ISS%dhdt_shelf, CS%diag)
   if (CS%id_h_mask > 0) call post_data(CS%id_h_mask,ISS%hmask,CS%diag)
-  call process_and_post_scalar_data(CS, vaf0, vaf0_A, vaf0_G, Itime_step, dh_adott, dh_bdott)
+  if (CS%active_shelf_dynamics) &
+      call process_and_post_scalar_data(CS, vaf0, vaf0_A, vaf0_G, Itime_step, dh_adott, dh_bdott)
   call disable_averaging(CS%diag)
 
   call cpu_clock_end(id_clock_shelf)
@@ -1875,7 +1876,12 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
 
   CS%restart_output_dir = dirs%restart_output_dir
 
-
+  if (present(fluxes_in)) then
+     call initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
+     call register_restart_field(fluxes_in%shelf_sfc_mass_flux, "sfc_mass_flux", .true., CS%restart_CSp, &
+        "ice shelf surface mass flux deposition from atmosphere", &
+        'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
+  endif
 
   if (new_sim .and. (.not. (CS%override_shelf_movement .and. CS%mass_from_file))) then
     ! This model is initialized internally or from a file.
@@ -1998,10 +2004,11 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
   if (CS%active_shelf_dynamics) then
     CS%id_h_mask = register_diag_field('ice_shelf_model', 'h_mask', CS%diag%axesT1, CS%Time, &
        'ice shelf thickness mask', 'none', conversion=1.0)
-    CS%id_shelf_sfc_mass_flux = register_diag_field('ice_shelf_model', 'sfc_mass_flux', CS%diag%axesT1, CS%Time, &
-       'ice shelf surface mass flux deposition from atmosphere', &
-       'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
   endif
+
+  CS%id_shelf_sfc_mass_flux = register_diag_field('ice_shelf_model', 'sfc_mass_flux', CS%diag%axesT1, CS%Time, &
+     'ice shelf surface mass flux deposition from atmosphere', &
+     'kg m-2 s-1', conversion=US%RZ_T_to_kg_m2s)
 
   ! Scalars (area integrated over all ice sheets)
   CS%id_vaf = register_scalar_field('ice_shelf_model', 'int_vaf', CS%diag%axesT1, CS%Time, &
@@ -2178,7 +2185,6 @@ subroutine initialize_ice_shelf(param_file, ocn_grid, Time, CS, diag, Time_init,
 
   call MOM_IS_diag_mediator_close_registration(CS%diag)
 
-  if (present(fluxes_in)) call initialize_ice_shelf_fluxes(CS, ocn_grid, US, fluxes_in)
   if (present(forces_in)) call initialize_ice_shelf_forces(CS, ocn_grid, US, forces_in)
 
 end subroutine initialize_ice_shelf
@@ -2351,8 +2357,8 @@ subroutine initialize_shelf_mass(G, param_file, CS, ISS, new_sim)
 
 end subroutine initialize_shelf_mass
 !> This subroutine applies net accumulation/ablation at the top surface to the dynamic ice shelf.
-!>>acc_rate[m-s]=surf_mass_flux/density_ice is ablation/accumulation rate
-!>>positive for accumulation negative for ablation
+!! acc_rate[m-s]=surf_mass_flux/density_ice is ablation/accumulation rate
+!! positive for accumulation negative for ablation
 subroutine change_thickness_using_precip(CS, ISS, G, US, fluxes, time_step, Time)
   type(ice_shelf_CS),    intent(in)    :: CS  !< A pointer to the ice shelf control structure
   type(ocean_grid_type), intent(inout) :: G  !< The ocean's grid structure.
