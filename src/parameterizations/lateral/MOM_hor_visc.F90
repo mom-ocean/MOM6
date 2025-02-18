@@ -667,6 +667,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   endif
 
   !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx)
+  !$omp target enter data map(alloc: h_u, h_v)
 
   ! TODO: This should be computed (and stored?) on the GPU
   !$omp target enter data map(to: CS)
@@ -674,7 +675,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%dx_dyBu, CS%dy_dxBu)
 
   ! TODO: Do this outside the function
-  !$omp target enter data map(to: u, v)
+  !$omp target enter data map(to: u, v, h)
+  !$omp target enter data map(to: hu_cont, hv_cont) if (use_cont_huv)
 
   do k=1,nz
 
@@ -689,7 +691,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! TODO: Explore methods for retaining both the syntax and speedup.
 
     ! XXX: **I don't understand why I need this**
-    !$omp target update to(u(:,:,k), v(:,:,k))
+    !$omp target update to(u(:,:,k), v(:,:,k), h(:,:,k))
 
     !$omp target
     ! Calculate horizontal tension
@@ -750,28 +752,38 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! in OBCs, which are not ordinarily be necessary, and might not be necessary
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
+    !$omp target
     if (use_cont_huv) then
+      !$omp parallel loop collapse(2)
       do j=js-2,je+2 ; do I=Isq-1,Ieq+1
         h_u(I,j) = hu_cont(I,j,k)
       enddo ; enddo
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = hv_cont(i,J,k)
       enddo ; enddo
     elseif (CS%use_land_mask) then
+      !$omp parallel loop collapse(2)
       do j=js-2,je+2 ; do I=is-2,Ieq+1
         h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
       enddo ; enddo
+      !$omp parallel loop collapse(2)
       do J=js-2,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k))
       enddo ; enddo
     else
+      !$omp parallel loop collapse(2)
       do j=js-2,je+2 ; do I=is-2,Ieq+1
         h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
       enddo ; enddo
+      !$omp parallel loop collapse(2)
       do J=js-2,Jeq+1 ; do i=is-2,ie+2
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo
     endif
+    !$omp end target
+
+    !$omp target update from(h_u, h_v)
 
     ! Adjust contributions to shearing strain and interpolated values of
     ! thicknesses on open boundaries.
@@ -2207,6 +2219,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   enddo ! end of k loop
 
   !$omp target exit data map(delete: dudx, dudy, dvdx, dvdy, sh_xx)
+  !$omp target exit data map(delete: h_u, h_v)
+  !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
 
   ! TODO: This should should be permanently on the GPU
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
@@ -2214,7 +2228,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS)
 
   ! TODO: Do this outside of the function
-  !$omp target exit data map(delete: u, v)
+  !$omp target exit data map(delete: u, v, h)
 
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
