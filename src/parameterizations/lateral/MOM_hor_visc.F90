@@ -705,19 +705,20 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
                                   (G%IdxCv(i,J-1) * v(i,J-1,k)))
     enddo ; enddo
 
-    !$omp end target
-    !$omp target update from(dudx, dvdy)
-
+    !$omp parallel loop collapse(2)
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
       sh_xx(i,j) = dudx(i,j) - dvdy(i,j)
     enddo ; enddo
 
     ! Components for the shearing strain
+    !$omp parallel loop collapse(2)
     do J=js_vort,je_vort ; do I=is_vort,ie_vort
       dvdx(I,J) = CS%DY_dxBu(I,J)*((v(i+1,J,k)*G%IdyCv(i+1,J)) - (v(i,J,k)*G%IdyCv(i,J)))
       dudy(I,J) = CS%DX_dyBu(I,J)*((u(I,j+1,k)*G%IdxCu(I,j+1)) - (u(I,j,k)*G%IdxCu(I,j)))
     enddo ; enddo
+    !$omp end target
 
+    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx)
 
     if (CS%use_Leithy) then
       ! Calculate horizontal tension from smoothed velocity
