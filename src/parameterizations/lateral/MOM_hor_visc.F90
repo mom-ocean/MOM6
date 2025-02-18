@@ -720,8 +720,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     enddo ; enddo
     !$omp end target
 
-    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx)
-
     if (CS%use_Leithy) then
       ! Calculate horizontal tension from smoothed velocity
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -783,11 +781,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
     !$omp end target
 
-    !$omp target update from(h_u, h_v)
-
     ! Adjust contributions to shearing strain and interpolated values of
     ! thicknesses on open boundaries.
-    if (apply_OBC) then ; do n=1,OBC%number_of_segments
+    if (apply_OBC) then
+      !$omp target update from(dvdx, dudy, h_u, h_v)
+      ! TODO: Reindent this later
+      do n=1,OBC%number_of_segments
+
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
       if (OBC%zero_strain .or. OBC%freeslip_strain .or. OBC%computed_strain) then
         if (OBC%segment(n)%is_N_or_S .and. (J >= Js_vort) .and. (J <= Je_vort)) then
@@ -903,7 +903,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo
         endif
       endif
-    enddo ; endif
+    enddo
+    ! TODO: Fix indentation
+    !$omp target update from(dvdx, dudy, h_u, h_v)
+    endif
+
+    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx)
+    !$omp target update from(h_u, h_v)
 
     ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
     ! dudy and dvdx include modifications at OBCs from above.
