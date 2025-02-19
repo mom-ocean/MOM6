@@ -2105,11 +2105,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       dhc = hvel(i,nz)*0.5
       ! These expressions assume that Kv_tot(i,nz+1) = CS%Kv, consistent with
       ! the suppression of turbulent mixing by the presence of a solid boundary.
-      if (dhc < bbl_thick(i)) then
-        a_cpl(i,nz+1) = kv_bbl(i) / ((dhc+h_neglect) + I_amax*kv_bbl(i))
-      else
-        a_cpl(i,nz+1) = kv_bbl(i) / ((bbl_thick(i)+h_neglect) + I_amax*kv_bbl(i))
-      endif
+      a_cpl(i,nz+1) = kv_bbl(i) / ((min(dhc, bbl_thick(i)) + h_neglect) + I_amax*kv_bbl(i))
     endif ; enddo
     do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
       !    botfn determines when a point is within the influence of the bottom
