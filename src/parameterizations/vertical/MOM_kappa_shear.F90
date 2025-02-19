@@ -1969,7 +1969,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  default=13, do_not_log=just_read)
   call get_param(param_file, mdl, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear instability.", &
-                 units="nondim", default=1.0, do_not_log=.true.)
+                 units="nondim", default=1.0, do_not_log=just_read)
   call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
                  "A negligibly small velocity magnitude below which velocity components are set "//&
                  "to 0.  A reasonable value might be 1e-30 m/s, which is less than an "//&

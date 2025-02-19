@@ -2956,9 +2956,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%RiNo_mix = kappa_shear_is_used(param_file)
   endif
 
-  call get_param(param_file, mdl, "PRANDTL_TURB", visc%Prandtl_turb, &
-                 "The turbulent Prandtl number applied to shear "//&
-                 "instability.", units="nondim", default=1.0)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mdl, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &

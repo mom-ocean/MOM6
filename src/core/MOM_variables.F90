@@ -228,8 +228,6 @@ end type cont_diag_ptrs
 
 !> Vertical viscosities, drag coefficients, and related fields.
 type, public :: vertvisc_type
-  real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
-                             !! that is captured in Kd_shear [nondim].
   real, allocatable, dimension(:,:) :: &
     bbl_thick_u, & !< The bottom boundary layer thickness at the u-points [Z ~> m].
     bbl_thick_v, & !< The bottom boundary layer thickness at the v-points [Z ~> m].
