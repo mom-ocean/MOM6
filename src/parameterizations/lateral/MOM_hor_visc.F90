@@ -533,7 +533,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   endif
 
   ! Set the halo sizes used for the thickness-point viscosities.
-  if (CS%use_Leithy) then
+  if (CS%use_Leithy .or. CS%debug) then
     js_Kh = js-1 ; je_Kh = je+1 ; is_Kh = is-1 ; ie_Kh = ie+1
   else
     js_Kh = Jsq ; je_Kh = je+1 ; is_Kh = Isq ; ie_Kh = ie+1
@@ -1812,7 +1812,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     ! Backscatter using MEKE
     if (CS%EY24_EBT_BS) then
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do J=js-1,Jeq ; do I=is-1,Ieq
         if (visc_limit_q_flag(I,J,k) > 0) then
           Kh_BS(I,J) = 0.
         else
@@ -2226,11 +2226,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   if (CS%debug) then
     if (CS%Laplacian) then
-      call hchksum(Kh_h, "Kh_h", G%HI, haloshift=0, unscale=US%L_to_m**2*US%s_to_T)
-      call Bchksum(Kh_q, "Kh_q", G%HI, haloshift=0, unscale=US%L_to_m**2*US%s_to_T)
+      call hchksum(Kh_h, "Kh_h", G%HI, haloshift=1, unscale=US%L_to_m**2*US%s_to_T)
+      call Bchksum(Kh_q, "Kh_q", G%HI, haloshift=0, symmetric=.true., unscale=US%L_to_m**2*US%s_to_T)
     endif
-    if (CS%biharmonic) call hchksum(Ah_h, "Ah_h", G%HI, haloshift=0, unscale=US%L_to_m**4*US%s_to_T)
-    if (CS%biharmonic) call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, unscale=US%L_to_m**4*US%s_to_T)
+    if (CS%biharmonic) call hchksum(Ah_h, "Ah_h", G%HI, haloshift=1, unscale=US%L_to_m**4*US%s_to_T)
+    if (CS%biharmonic) call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, symmetric=.true., unscale=US%L_to_m**4*US%s_to_T)
   endif
 
   if (CS%id_FrictWorkIntz > 0) then
