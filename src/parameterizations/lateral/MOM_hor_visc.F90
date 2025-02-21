@@ -668,13 +668,19 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target enter data map(alloc: h_u, h_v)
+  !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
 
   ! TODO: NoSt, ShSt, ...?
 
-  ! TODO: This should be computed (and stored?) on the GPU
+  ! TODO: These are static and should be computed (and stored?) on the GPU
   !$omp target enter data map(to: CS)
   !$omp target enter data map(to: CS%dx_dyT, CS%dy_dxT)
   !$omp target enter data map(to: CS%dx_dyBu, CS%dy_dxBu)
+
+  !$omp target enter data map(to: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%dx2q, CS%dy2q) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%dx2h, CS%dy2h) if (CS%biharmonic)
 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
@@ -928,9 +934,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
     !$omp end target
 
-    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
-    !$omp target update from(h_u, h_v)
-
     if (CS%use_Leithy) then
       ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
       ! dudy_smooth and dvdx_smooth do not (yet) include modifications at OBCs from above.
@@ -947,15 +950,23 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     !  Evaluate Del2u = x.Div(Grad u) and Del2v = y.Div( Grad u)
     if (CS%biharmonic) then
+      !$omp target
+
+      !$omp parallel loop collapse(2)
       do j=js-1,Jeq+1 ; do I=Isq-1,Ieq+1
         Del2u(I,j) = CS%Idx2dyCu(I,j) * ((CS%dx2q(I,J)*sh_xy(I,J)) - (CS%dx2q(I,J-1)*sh_xy(I,J-1))) + &
                      CS%Idxdy2u(I,j) * ((CS%dy2h(i+1,j)*sh_xx(i+1,j)) - (CS%dy2h(i,j)*sh_xx(i,j)))
       enddo ; enddo
+
+      !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do i=is-1,Ieq+1
         Del2v(i,J) = CS%Idxdy2v(i,J) * ((CS%dy2q(I,J)*sh_xy(I,J)) - (CS%dy2q(I-1,J)*sh_xy(I-1,J))) - &
                      CS%Idx2dyCv(i,J) * ((CS%dx2h(i,j+1)*sh_xx(i,j+1)) - (CS%dx2h(i,j)*sh_xx(i,j)))
       enddo ; enddo
+      !$omp end target
+
       if (apply_OBC) then ; if (OBC%zero_biharmonic) then
+        !$omp target update from(Del2u, Del2v)
         do n=1,OBC%number_of_segments
           I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
@@ -968,8 +979,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             enddo
           endif
         enddo
+        !$omp target update to(Del2u, Del2v)
       endif ; endif
     endif
+
+    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
+    !$omp target update from(h_u, h_v)
+    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
 
     ! Vorticity
     if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy) .or. (CS%id_vort_xy_q>0) .or. CS%use_ZB2020) then
@@ -2233,6 +2249,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target exit data map(delete: h_u, h_v)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
+  !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
 
   ! TODO: This should should be permanently on the GPU
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
