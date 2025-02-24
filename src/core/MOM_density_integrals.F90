@@ -170,7 +170,6 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   real :: rho_anom   ! The depth averaged density anomaly [R ~> kg m-3]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho      ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
-  real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz         ! The layer thickness [Z ~> m]
   real :: dz_x(5,HI%iscB:HI%iecB) ! Layer thicknesses along an x-line of subgrid locations [Z ~> m]
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subgrid locations [Z ~> m]
@@ -204,7 +203,6 @@ subroutine int_density_dz_generic_pcm(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
   js = HI%jsc ; je = HI%jec
 
   GxRho = G_e * rho_0
-  I_Rho = 1.0 / rho_0
   if (present(Z_0p)) then
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       z0pres(i,j) = Z_0p(i,j)
@@ -511,7 +509,6 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
                      ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho      ! The product of the gravitational acceleration and reference density [R L2 Z-1 T-2 ~> Pa m-1]
-  real :: I_Rho      ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz(HI%iscB:HI%iecB+1)   ! Layer thicknesses at tracer points [Z ~> m]
   real :: dz_x(5,HI%iscB:HI%iecB) ! Layer thicknesses along an x-line of subgrid locations [Z ~> m]
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subgrid locations [Z ~> m]
@@ -538,7 +535,6 @@ subroutine int_density_dz_generic_plm(k, tv, T_t, T_b, S_t, S_b, e, rho_ref, &
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
   GxRho = G_e * rho_0
-  I_Rho = 1.0 / rho_0
   if (present(Z_0p)) then
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       z0pres(i,j) = Z_0p(i,j)
@@ -966,7 +962,6 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
                   ! with height at the 5 sub-column locations [R L2 T-2 ~> Pa]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   real :: GxRho ! The gravitational acceleration times density [R L2 Z-1 T-2 ~> kg m-2 s-2]
-  real :: I_Rho ! The inverse of the Boussinesq density [R-1 ~> m3 kg-1]
   real :: dz ! Layer thicknesses at tracer points [Z ~> m]
   real :: dz_x(5,HI%iscB:HI%iecB) ! Layer thicknesses along an x-line of subgrid locations [Z ~> m]
   real :: dz_y(5,HI%isc:HI%iec)   ! Layer thicknesses along a y-line of subgrid locations [Z ~> m]
@@ -996,7 +991,6 @@ subroutine int_density_dz_generic_ppm(k, tv, T_t, T_b, S_t, S_b, e, &
   Isq = HI%IscB ; Ieq = HI%IecB ; Jsq = HI%JscB ; Jeq = HI%JecB
 
   GxRho = G_e * rho_0
-  I_Rho = 1.0 / rho_0
   if (present(Z_0p)) then
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       z0pres(i,j) = Z_0p(i,j)
