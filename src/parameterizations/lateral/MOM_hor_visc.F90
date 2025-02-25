@@ -472,6 +472,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     hrat_min, &     ! h_min divided by the thickness at the stress point (h or q) [nondim]
     visc_bound_rem  ! fraction of overall viscous bounds that remain to be applied (h or q) [nondim]
 
+  ! New variables: move these up once ready
+  logical :: use_Leith    ! True if any Leith-based parameterizations are enabled
+  logical :: use_vort_xy  ! True if vort_xy must be computed
+  logical :: use_Smag_visc  ! True if a Smagorinsky viscosity is enabled
+
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
@@ -983,17 +988,24 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif ; endif
     endif
 
-    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
-    !$omp target update from(h_u, h_v)
-    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
-
     ! Vorticity
-    if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy) .or. (CS%id_vort_xy_q>0) .or. CS%use_ZB2020) then
+    use_Leith = CS%Leith_Kh .or. CS%Leith_Ah .or. CS%use_Leithy
+    use_vort_xy = use_Leith .or. CS%id_vort_xy_q > 0 .or. CS%use_ZB2020
+
+    ! NOTE: Keep Leith code on CPU for now, but moving it should be
+    ! straightforward.
+
+    if (use_vort_xy) then
+      ! TODO: Remove this after moving Leith to GPU
+      !$omp target update from(dvdx, dudy)
+
       if (CS%no_slip) then
+        !!$omp parallel loop collapse(2)
         do J=js_vort,je_vort ; do I=is_vort,ie_vort
           vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
         enddo ; enddo
       else
+        !!$omp parallel loop collapse(2)
         do J=js_vort,je_vort ; do I=is_vort,ie_vort
           vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
         enddo ; enddo
@@ -1012,8 +1024,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
     endif
 
-
-    if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
+    if (use_Leith) then
 
       ! Vorticity gradient
       do J=js-2,je_Kh ; do i=is_Kh-1,ie_Kh+1
@@ -1053,6 +1064,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! endif
 
       if (CS%modified_Leith) then
+
+        ! TODO: Remove after moving Leith to GPU
+        !$omp target update from(dudx, dvdy)
 
         ! Divergence
         do j=js_Kh-1,je_Kh+1 ; do i=is_Kh-1,ie_Kh+1
@@ -1095,6 +1109,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif ! CS%modified_Leith
 
       ! Add in beta for the Leith viscosity
+      ! TODO: Move G%dF_dx, G%dF_dy to GPU
+
       if (CS%use_beta_in_Leith) then
         do J=js-2,Jeq+1 ; do i=is-1,ie+1
           vort_xy_dx(i,J) = vort_xy_dx(i,J) + 0.5 * ( G%dF_dx(i,j) + G%dF_dx(i,j+1))
@@ -1141,7 +1157,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     endif ! CS%Leith_Kh
 
+    !$omp target enter data map(alloc: Shear_mag) if (use_Smag_visc)
+
+    !$omp target
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
+      !$omp parallel loop collapse(2)
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         sh_xx_sq = sh_xx(i,j)**2
         sh_xy_sq = 0.25 * ( ((sh_xy(I-1,J-1)**2) + (sh_xy(I,J)**2)) &
@@ -1149,6 +1169,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         Shear_mag(i,j) = sqrt(sh_xx_sq + sh_xy_sq)
       enddo ; enddo
     endif
+    !$omp end target
+
+    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
+    !$omp target update from(h_u, h_v)
+    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
 
     if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -2250,6 +2275,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: h_u, h_v)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
   !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
+  !$omp target exit data map(delete: Shear_mag) if (use_Smag_visc)
 
   ! TODO: This should should be permanently on the GPU
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
