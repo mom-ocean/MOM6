@@ -1472,6 +1472,9 @@ subroutine EOS_init(param_file, EOS, US)
   character(len=12)  :: TFREEZE_DEFAULT ! The default freezing point expression
   character(len=40)  :: tmpstr
   logical :: EOS_quad_default
+  real :: Rho_Tref_Sref ! Density at Tref degC and Sref ppt [kg m-3]
+  real :: Tref          ! Reference temperature [degC]
+  real :: Sref          ! Reference salinity [psu]
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1512,10 +1515,19 @@ subroutine EOS_init(param_file, EOS, US)
                 trim(tmpstr)//'"', 5)
 
   if (EOS%form_of_EOS == EOS_LINEAR) then
+    ! RHO(T,S) = RHO_TREF_SREF + DRHO_DT*(T-TREF) + DRHO_DS*(S-SREF)
+    !          = RHO_TREF_SREF - DRHO_DT*TREF - DRHO_DS*SREF + DRHO_DT*T + DRHO_DS*S
+    !          = RHO_T0_S0 + DRHO_DT*T + DRHO_DS*S
     EOS%Compressible = .false.
-    call get_param(param_file, mdl, "RHO_T0_S0", EOS%Rho_T0_S0, &
+    call get_param(param_file, mdl, "RHO_TREF_SREF", Rho_Tref_Sref, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the density at T=0, S=0.", units="kg m-3", default=1000.0)
+                 "this is the density at T=TREF, S=SREF.", units="kg m-3", default=1000.0)
+    call get_param(param_file, mdl, "TREF", Tref, &
+                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
+                 "this is the reference temperature.", units="degC", default=0.0)
+    call get_param(param_file, mdl, "SREF", Sref, &
+                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
+                 "this is the reference salinity.", units="psu", default=0.0)
     call get_param(param_file, mdl, "DRHO_DT", EOS%dRho_dT, &
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
                  "this is the partial derivative of density with "//&
@@ -1524,6 +1536,10 @@ subroutine EOS_init(param_file, EOS, US)
                  "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
                  "this is the partial derivative of density with salinity.", &
                  units="kg m-3 ppt-1", default=0.8)
+    call get_param(param_file, mdl, "RHO_T0_S0", EOS%Rho_T0_S0, &
+                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
+                 "this is the density at T=0, S=0.", units="kg m-3", &
+                 default=Rho_Tref_Sref - EOS%dRho_dT *  Tref - EOS%dRho_dS * Sref)
     call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=EOS%Rho_T0_S0, dRho_dT=EOS%dRho_dT, dRho_dS=EOS%dRho_dS)
   endif
   if (EOS%form_of_EOS == EOS_WRIGHT) then
