@@ -648,6 +648,21 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
       endif
     enddo
 
+    ! Update do_i so that nothing changes outside of the OBC (problem for interior OBCs only)
+    if (associated(OBC)) then
+      if ((OBC%exterior_OBC_bug .eqv. .false.) .and. (OBC%OBC_pe)) then
+        if (OBC%specified_u_BCs_exist_globally .or. OBC%open_u_BCs_exist_globally) then
+          do i=is,ie-1 ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+              do_i(i+1,j) = .false.
+            elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+              do_i(i,j) = .false.
+            endif
+          endif ; enddo
+        endif
+      endif
+    endif
+
     ! update tracer concentration from i-flux and save some diagnostics
     do m=1,ntr
 
@@ -1038,6 +1053,26 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
         else ;  Ihnew(i) = 1.0 / hprev(i,j,k) ; endif
       else ; do_i(i,j) = .false. ; endif
     enddo
+
+    ! Update do_i so that nothing changes outside of the OBC (problem for interior OBCs only)
+    if (associated(OBC)) then
+      if ((OBC%exterior_OBC_bug .eqv. .false.) .and. (OBC%OBC_pe)) then
+        if (OBC%specified_v_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) then
+          do i=is,ie
+            if (OBC%segnum_v(i,J-1) /= OBC_NONE) then
+              if (OBC%segment(OBC%segnum_v(i,J-1))%direction == OBC_DIRECTION_N) then
+                do_i(i,j) = .false.
+              endif
+            endif
+            if (OBC%segnum_v(i,J) /= OBC_NONE) then
+              if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+                do_i(i,j) = .false.
+              endif
+            endif
+          enddo
+        endif
+      endif
+    endif
 
     ! update tracer and save some diagnostics
     do m=1,ntr
