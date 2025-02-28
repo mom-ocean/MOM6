@@ -473,9 +473,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     visc_bound_rem  ! fraction of overall viscous bounds that remain to be applied (h or q) [nondim]
 
   ! New variables: move these up once ready
-  logical :: use_Leith    ! True if any Leith-based parameterizations are enabled
+  logical :: use_Leith    ! True if any Leith parameterizations are enabled
   logical :: use_vort_xy  ! True if vort_xy must be computed
-  logical :: use_Smag_visc  ! True if a Smagorinsky viscosity is enabled
+  logical :: use_Smag     ! True if a Smagorinsky viscosity is enabled
+
+  use_Leith = CS%Leith_Kh .or. CS%Leith_Ah .or. CS%use_Leithy
+  use_vort_xy = use_Leith .or. CS%id_vort_xy_q > 0 .or. CS%use_ZB2020
+  use_Smag = CS%Smagorinsky_Kh .or. CS%Smagorinsky_Ah
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -674,6 +678,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target enter data map(alloc: h_u, h_v)
   !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
+  !$omp target enter data map(alloc: Shear_mag) if (use_Smag)
   !$omp target enter data map(alloc: hrat_min) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
   !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
@@ -996,8 +1001,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
 
     ! Vorticity
-    use_Leith = CS%Leith_Kh .or. CS%Leith_Ah .or. CS%use_Leithy
-    use_vort_xy = use_Leith .or. CS%id_vort_xy_q > 0 .or. CS%use_ZB2020
 
     ! NOTE: Keep Leith code on CPU for now, but moving it should be
     ! straightforward.
@@ -1164,8 +1167,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     endif ! CS%Leith_Kh
 
-    !$omp target enter data map(alloc: Shear_mag) if (use_Smag_visc)
-
     !$omp target
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
       !$omp parallel loop collapse(2)
@@ -1189,6 +1190,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
     !$omp target update from(h_u, h_v)
     !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
+    !$omp target update from(Shear_mag) if (use_Smag)
     !$omp target update from(hrat_min) &
     !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
@@ -2295,12 +2297,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: h_u, h_v)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
   !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
-  !$omp target exit data map(delete: Shear_mag) if (use_Smag_visc)
+  !$omp target exit data map(delete: Shear_mag) if (use_Smag)
   !$omp target exit data map(delete: hrat_min) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
   !$omp target exit data map(delete: Kh) if (CS%Laplacian)
 
-  ! TODO: This should should be permanently on the GPU
+  ! TODO: Should static CS arrays be permanently on the GPU?
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
   !$omp target exit data map(delete: CS%Dx_dyBu, CS%DY_dxBu)
   !$omp target exit data map(delete: CS)
