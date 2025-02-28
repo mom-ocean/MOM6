@@ -676,6 +676,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
   !$omp target enter data map(alloc: hrat_min) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
 
   ! TODO: NoSt, ShSt, ...?
 
@@ -688,6 +689,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
   !$omp target enter data map(to: CS%dx2q, CS%dy2q) if (CS%biharmonic)
   !$omp target enter data map(to: CS%dx2h, CS%dy2h) if (CS%biharmonic)
+
+  !$omp target enter data map(to: CS%Kh_bg_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
@@ -1206,13 +1211,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
       endif
 
+      !$omp target
+
       ! Static (pre-computed) background viscosity
+      !$omp parallel loop collapse(2)
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Kh(i,j) = CS%Kh_bg_xx(i,j)
       enddo ; enddo
 
       ! NOTE: The following do-block can be decomposed and vectorized after the
       !   stack size has been reduced.
+      !$omp parallel loop collapse(2)
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         if (CS%add_LES_viscosity) then
           if (CS%Smagorinsky_Kh) &
@@ -1226,6 +1235,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             Kh(i,j) = max(Kh(i,j), CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3)
         endif
       enddo ; enddo
+      !$omp end target
+
+      !$omp target update from(Kh)
 
       ! All viscosity contributions above are subject to resolution scaling
 
@@ -2283,11 +2295,21 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: Shear_mag) if (use_Smag_visc)
   !$omp target exit data map(delete: hrat_min) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp target exit data map(delete: Kh) if (CS%Laplacian)
 
   ! TODO: This should should be permanently on the GPU
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
   !$omp target exit data map(delete: CS%Dx_dyBu, CS%DY_dxBu)
   !$omp target exit data map(delete: CS)
+
+  !$omp target exit data map(delete: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%dx2q, CS%dy2q) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%dx2h, CS%dy2h) if (CS%biharmonic)
+
+  !$omp target exit data map(delete: CS%Kh_bg_xx) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
