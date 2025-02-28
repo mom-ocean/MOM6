@@ -674,6 +674,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target enter data map(alloc: h_u, h_v)
   !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
+  !$omp target enter data map(alloc: hrat_min) &
+  !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
   ! TODO: NoSt, ShSt, ...?
 
@@ -1169,18 +1171,21 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         Shear_mag(i,j) = sqrt(sh_xx_sq + sh_xy_sq)
       enddo ; enddo
     endif
-    !$omp end target
-
-    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
-    !$omp target update from(h_u, h_v)
-    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
 
     if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
+      !$omp parallel loop collapse(2)
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         h_min = min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1))
         hrat_min(i,j) = min(1.0, h_min / (h(i,j,k) + h_neglect))
       enddo ; enddo
     endif
+    !$omp end target
+
+    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
+    !$omp target update from(h_u, h_v)
+    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
+    !$omp target update from(hrat_min) &
+    !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
     if (CS%Laplacian) then
       ! Determine the Laplacian viscosity at h points, using the
@@ -2276,6 +2281,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
   !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
   !$omp target exit data map(delete: Shear_mag) if (use_Smag_visc)
+  !$omp target exit data map(delete: hrat_min) &
+  !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
   ! TODO: This should should be permanently on the GPU
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
