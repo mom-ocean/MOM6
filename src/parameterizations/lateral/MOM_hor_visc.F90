@@ -679,12 +679,14 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: h_u, h_v)
   !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
   !$omp target enter data map(alloc: Shear_mag) if (use_Smag)
+  !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
+  !$omp target enter data map(alloc: str_xx)
+  !$omp target enter data map(alloc: Ah) if (CS%biharmonic)
+
   !$omp target enter data map(alloc: hrat_min) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
   !$omp target enter data map(alloc: visc_bound_rem) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target enter data map(alloc: str_xx)
 
   ! TODO: NoSt, ShSt, ...?
 
@@ -702,6 +704,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
+
+  !$omp target enter data map(to: CS%Ah_bg_xx) if (CS%biharmonic)
 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
@@ -1386,6 +1390,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     !$omp target update from(str_xx)
 
+    ! TODO: GPU
     if (CS%anisotropic) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         ! Shearing-strain averaged to h-points
@@ -1393,15 +1398,21 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         ! *Add* the shear-strain contribution to the xx-component of stress
         str_xx(i,j) = str_xx(i,j) - CS%Kh_aniso * CS%n1n2_h(i,j) * CS%n1n1_m_n2n2_h(i,j) * local_strain
       enddo ; enddo
+      !$omp target update to(str_xx)
     endif
 
     if (CS%biharmonic) then
       ! Determine the biharmonic viscosity at h points, using the
       ! largest value from several parameterizations. Also get the
       ! biharmonic component of str_xx.
+      !$omp target
+      !$omp parallel loop collapse(2)
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Ah(i,j) = CS%Ah_bg_xx(i,j)
       enddo ; enddo
+      !$omp end target
+
+      !$omp target update from(Ah)
 
       if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
         if (CS%Smagorinsky_Ah) then
@@ -2326,13 +2337,15 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: h_u, h_v)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
   !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
+  !$omp target exit data map(delete: str_xx)
+
+  !$omp target exit data map(delete: Kh) if (CS%Laplacian)
+  !$omp target exit data map(delete: Ah) if (CS%biharmonic)
   !$omp target exit data map(delete: Shear_mag) if (use_Smag)
   !$omp target exit data map(delete: hrat_min) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target exit data map(delete: Kh) if (CS%Laplacian)
   !$omp target exit data map(delete: visc_bound_rem) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target exit data map(delete: str_xx)
 
   ! TODO: Should static CS arrays be permanently on the GPU?
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
@@ -2348,6 +2361,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
+
+  !$omp target exit data map(delete: CS%Ah_bg_xx) if (CS%biharmonic)
 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
