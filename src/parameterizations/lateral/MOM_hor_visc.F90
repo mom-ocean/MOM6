@@ -684,7 +684,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
   !$omp target enter data map(alloc: visc_bound_rem) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-
+  !$omp target enter data map(alloc: str_xx)
 
   ! TODO: NoSt, ShSt, ...?
 
@@ -1369,14 +1369,22 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
+      !$omp target
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = -Kh(i,j) * sh_xx(i,j)
       enddo ; enddo
+      !$omp end target
     else
+      !$omp target
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = 0.0
       enddo ; enddo
+      !$omp end target
     endif ! Get Kh at h points and get Laplacian component of str_xx
+
+    !$omp target update from(str_xx)
 
     if (CS%anisotropic) then
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -2324,6 +2332,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: Kh) if (CS%Laplacian)
   !$omp target exit data map(delete: visc_bound_rem) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp target exit data map(delete: str_xx)
 
   ! TODO: Should static CS arrays be permanently on the GPU?
   !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
