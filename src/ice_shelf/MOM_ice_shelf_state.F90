@@ -46,9 +46,13 @@ type, public :: ice_shelf_state
     tflux_shelf => NULL(), &   !< The downward diffusive heat flux in the ice
                                !! shelf at the ice-ocean interface [Q R Z T-1 ~> W m-2].
 
-    tfreeze => NULL()          !< The freezing point potential temperature
+    tfreeze => NULL(), &       !< The freezing point potential temperature
                                !! at the ice-ocean interface [C ~> degC].
 
+    !only active when calve_ice_shelf_bergs=true:
+    calving => NULL(), &       !< The mass flux per unit area of the ice shelf to convert to
+                               !! bergs [R Z T-1 ~> kg m-2 s-1].
+    calving_hflx => NULL()     !< Calving heat flux [Q R Z T-1 ~> W m-2].
 end type ice_shelf_state
 
 contains
@@ -80,6 +84,8 @@ subroutine ice_shelf_state_init(ISS, G)
   allocate(ISS%tflux_shelf(isd:ied,jsd:jed), source=0.0 )
   allocate(ISS%tfreeze(isd:ied,jsd:jed), source=0.0 )
 
+  allocate(ISS%calving(isd:ied,jsd:jed), source=0.0 )
+  allocate(ISS%calving_hflx(isd:ied,jsd:jed), source=0.0 )
 end subroutine ice_shelf_state_init
 
 
@@ -93,6 +99,8 @@ subroutine ice_shelf_state_end(ISS)
 
   deallocate(ISS%tflux_ocn, ISS%water_flux, ISS%salt_flux, ISS%tflux_shelf)
   deallocate(ISS%tfreeze)
+
+  deallocate(ISS%calving, ISS%calving_hflx)
 
   deallocate(ISS)
 

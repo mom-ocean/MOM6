@@ -635,9 +635,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   endif
 
   ! Set the wind stresses and ustar.
-  if (associated(fluxes%ustar) .and. associated(fluxes%ustar_gustless) .and. associated(fluxes%tau_mag)) then
+  if (associated(fluxes%ustar) .and. associated(fluxes%ustar_gustless) .and. associated(fluxes%tau_mag) &
+      .and. associated(fluxes%tau_mag_gustless) ) then
     call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=fluxes%ustar, &
-                              mag_tau=fluxes%tau_mag, gustless_ustar=fluxes%ustar_gustless)
+                              mag_tau=fluxes%tau_mag, gustless_ustar=fluxes%ustar_gustless, &
+                              gustless_mag_tau=fluxes%tau_mag_gustless)
   else
     if (associated(fluxes%ustar)) &
       call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, ustar=fluxes%ustar)
@@ -645,6 +647,8 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, gustless_ustar=fluxes%ustar_gustless)
     if (associated(fluxes%tau_mag)) &
       call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, mag_tau=fluxes%tau_mag)
+    if (associated(fluxes%tau_mag_gustless)) &
+      call extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, gustless_mag_tau=fluxes%tau_mag_gustless)
   endif
 
   if (coupler_type_initialized(fluxes%tr_fluxes) .and. &
@@ -908,7 +912,7 @@ end subroutine convert_IOB_to_forces
 !! Ice_ocean_boundary_type into optional argument arrays, including changes of units, sign
 !! conventions, and putting the fields into arrays with MOM-standard sized halos.
 subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, ustar, &
-                                gustless_ustar, mag_tau, tau_halo)
+                                gustless_ustar, mag_tau, gustless_mag_tau, tau_halo)
   type(ice_ocean_boundary_type), &
                    target, intent(in)    :: IOB  !< An ice-ocean boundary type with fluxes to drive
                                                  !! the ocean in a coupled model
@@ -931,6 +935,9 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(inout) :: mag_tau !< The magintude of the wind stress at tracer points
                                                  !! including subgridscale variability and gustiness [R Z L T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                 optional, intent(out) :: gustless_mag_tau !< The magintude of the wind stress at tracer points
+                                                 !! without any contributions from gustiness [R Z L T-2 ~> Pa]
   integer,       optional, intent(in)    :: tau_halo !< The halo size of wind stresses to set, 0 by default.
 
   ! Local variables
@@ -947,7 +954,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   real :: tau_mag       ! magnitude of the wind stress [R Z L T-2 ~> Pa]
   real :: stress_conversion ! A unit conversion factor from Pa times any stress multiplier [R Z L T-2 Pa-1 ~> 1]
 
-  logical :: do_ustar, do_gustless, do_tau_mag
+  logical :: do_ustar, do_gustless, do_tau_mag, do_gustless_tau_mag
   integer :: wind_stagger  ! AGRID, BGRID_NE, or CGRID_NE (integers from MOM_domains)
   integer :: i, j, is, ie, js, je, ish, ieh, jsh, jeh, Isqh, Ieqh, Jsqh, Jeqh, i0, j0, halo
 
@@ -960,7 +967,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
   IRho0 = US%L_to_Z / CS%Rho0
   stress_conversion = US%Pa_to_RLZ_T2 * CS%wind_stress_multiplier
 
-  do_ustar = present(ustar) ; do_gustless = present(gustless_ustar) ; do_tau_mag = present(mag_tau)
+  do_ustar = present(ustar) ; do_gustless = present(gustless_ustar)
+  do_tau_mag = present(mag_tau) ; do_gustless_tau_mag = present(gustless_mag_tau)
 
   wind_stagger = CS%wind_stagger
   if ((IOB%wind_stagger == AGRID) .or. (IOB%wind_stagger == BGRID_NE) .or. &
@@ -973,7 +981,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
 
   ! Set surface momentum stress related fields as a function of staggering.
   if (present(taux) .or. present(tauy) .or. &
-      ((do_ustar .or. do_tau_mag .or. do_gustless) .and. .not.associated(IOB%stress_mag)) ) then
+      ((do_ustar .or. do_tau_mag .or. do_gustless .or. do_gustless_tau_mag) &
+       .and. .not.associated(IOB%stress_mag)) ) then
 
     if (wind_stagger == BGRID_NE) then
       taux_in_B(:,:) = 0.0 ; tauy_in_B(:,:) = 0.0
@@ -1053,7 +1062,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
     endif   ! endif for extracting wind stress fields with various staggerings
   endif
 
-  if (do_ustar .or. do_tau_mag .or. do_gustless) then
+  if (do_ustar .or. do_tau_mag .or. do_gustless .or. do_gustless_tau_mag) then
     ! Set surface friction velocity directly or as a function of staggering.
     ! ustar is required for the bulk mixed layer formulation and other turbulent mixing
     ! parametizations. The background gustiness (for example with a relatively small value
@@ -1071,6 +1080,8 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         endif
         if (do_tau_mag) &
           mag_tau(i,j) = gustiness + US%Pa_to_RLZ_T2*IOB%stress_mag(i-i0,j-j0)
+        if (do_gustless_tau_mag) &
+          gustless_mag_tau(i,j) = US%Pa_to_RLZ_T2*IOB%stress_mag(i-i0,j-j0)
         if (do_ustar) &
           ustar(i,j) = sqrt(gustiness*IRho0 + IRho0*US%Pa_to_RLZ_T2*IOB%stress_mag(i-i0,j-j0))
       enddo ; enddo ; endif
@@ -1097,6 +1108,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         endif
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
         if (do_tau_mag) mag_tau(i,j) = gustiness + tau_mag
+        if (do_gustless_tau_mag) gustless_mag_tau(i,j) = tau_mag
         if (CS%answer_date < 20190101) then
           if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
@@ -1110,6 +1122,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
         if (CS%read_gust_2d .and. (G%mask2dT(i,j) > 0.0)) gustiness = CS%gust(i,j)
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
         if (do_tau_mag) mag_tau(i,j) = gustiness + tau_mag
+        if (do_gustless_tau_mag) gustless_mag_tau(i,j) = tau_mag
         if (CS%answer_date < 20190101) then
           if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else
@@ -1132,6 +1145,7 @@ subroutine extract_IOB_stresses(IOB, index_bounds, Time, G, US, CS, taux, tauy, 
 
         if (do_ustar) ustar(i,j) = sqrt(gustiness*IRho0 + IRho0 * tau_mag)
         if (do_tau_mag) mag_tau(i,j) = gustiness + tau_mag
+        if (do_gustless_tau_mag) gustless_mag_tau(i,j) = tau_mag
         if (CS%answer_date < 20190101) then
           if (do_gustless) gustless_ustar(i,j) = sqrt(US%L_to_Z*tau_mag / CS%Rho0)
         else

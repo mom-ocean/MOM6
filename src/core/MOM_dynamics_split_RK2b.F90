@@ -24,7 +24,7 @@ use MOM_domains,           only : To_South, To_West, To_All, CGRID_NE, SCALAR_PA
 use MOM_domains,           only : To_North, To_East, Omit_Corners
 use MOM_domains,           only : create_group_pass, do_group_pass, group_pass_type
 use MOM_domains,           only : start_group_pass, complete_group_pass, pass_var, pass_vector
-use MOM_debugging,         only : hchksum, uvchksum
+use MOM_debugging,         only : hchksum, uvchksum, query_debugging_checks
 use MOM_error_handler,     only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler,     only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,     only : callTree_enter, callTree_leave, callTree_waypoint
@@ -49,6 +49,7 @@ use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_CS
 use MOM_CoriolisAdv,           only : CoriolisAdv_init, CoriolisAdv_end
 use MOM_debugging,             only : check_redundant
 use MOM_grid,                  only : ocean_grid_type
+use MOM_harmonic_analysis,     only : harmonic_analysis_CS
 use MOM_hor_index,             only : hor_index_type
 use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_CS
 use MOM_hor_visc,              only : hor_visc_init, hor_visc_end
@@ -174,6 +175,8 @@ type, public :: MOM_dyn_split_RK2b_CS ; private
   logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
   logical :: fpmix = .false.                 !< If true, applies profiles of momentum flux magnitude and direction.
   logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
+  logical :: visc_rem_dt_bug = .true. !< If true, recover a bug that uses dt_pred rather than dt for vertvisc_rem
+                                      !! at the end of predictor.
 
   !>@{ Diagnostic IDs
   !  integer :: id_uold   = -1, id_vold   = -1
@@ -238,6 +241,8 @@ type, public :: MOM_dyn_split_RK2b_CS ; private
   type(SAL_CS) :: SAL_CSp
   !> A pointer to the tidal forcing control structure
   type(tidal_forcing_CS) :: tides_CSp
+  !> A pointer to the harmonic analysis control structure
+  type(harmonic_analysis_CS) :: HA_CSp
   !> A pointer to the ALE control structure.
   type(ALE_CS), pointer :: ALE_CSp => NULL()
 
@@ -385,6 +390,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   real :: dt_pred   ! The time step for the predictor part of the baroclinic time stepping [T ~> s].
   real :: Idt_bc    ! Inverse of the baroclinic timestep [T-1 ~> s-1]
   logical :: dyn_p_surf
+  logical :: debug_redundant  ! If true, check redundant values on PE boundaries when debugging
   logical :: BT_cont_BT_thick ! If true, use the BT_cont_type to estimate the
                               ! relative weightings of the layers in calculating
                               ! the barotropic accelerations.
@@ -414,9 +420,12 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp, US)
 
   if (CS%debug) then
+    call query_debugging_checks(do_redundant=debug_redundant)
     call MOM_state_chksum("Start predictor ", u_av, v_av, h, uh, vh, G, GV, US, symmetric=sym)
-    call check_redundant("Start predictor u ", u_av, v_av, G, unscale=US%L_T_to_m_s)
-    call check_redundant("Start predictor uh ", uh, vh, G, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+    if (debug_redundant) then
+      call check_redundant("Start predictor u ", u_av, v_av, G, unscale=US%L_T_to_m_s)
+      call check_redundant("Start predictor uh ", uh, vh, G, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+    endif
   endif
 
   dyn_p_surf = associated(p_surf_begin) .and. associated(p_surf_end)
@@ -552,7 +561,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, &
+  call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, &
                             tv, dt, OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, ADp=CS%AD_pred)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with predictor horizontal_viscosity (step_MOM_dyn_split_RK2b)")
@@ -577,10 +586,12 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     call MOM_accel_chksum("pre-btstep accel", CS%CAu_pred, CS%CAv_pred, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
-    call check_redundant("pre-btstep CS%CA ", CS%CAu_pred, CS%CAv_pred, G, unscale=US%L_T2_to_m_s2)
-    call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
-    call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
-    call check_redundant("pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
+    if (debug_redundant) then
+      call check_redundant("pre-btstep CS%CA ", CS%CAu_pred, CS%CAv_pred, G, unscale=US%L_T2_to_m_s2)
+      call check_redundant("pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
+      call check_redundant("pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
+      call check_redundant("pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
+    endif
   endif
 
   call cpu_clock_begin(id_clock_vertvisc)
@@ -599,7 +610,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call disable_averaging(CS%diag)
 
   if (CS%debug) then
-    call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
+    call uvchksum("before vertvisc: up", up, vp, G%HI, haloshift=0, symmetric=sym, unscale=US%L_T_to_m_s)
   endif
   call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
   call vertvisc_coef(up, vp, h, dz, forces, visc, tv, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
@@ -690,24 +701,26 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
-    call hchksum(h, "Predictor 1 h", G%HI, haloshift=1, scale=GV%H_to_MKS)
+    call uvchksum("Predictor 1 [uv]", up, vp, G%HI, haloshift=0, symmetric=sym, unscale=US%L_T_to_m_s)
+    call hchksum(h, "Predictor 1 h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
     call uvchksum("Predictor 1 [uv]h", uh, vh, G%HI,haloshift=2, &
-                  symmetric=sym, scale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+                  symmetric=sym, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
 !   call MOM_state_chksum("Predictor 1", up, vp, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Predictor accel", CS%CAu_pred, CS%CAv_pred, CS%PFu, CS%PFv, &
              CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, symmetric=sym)
     call MOM_state_chksum("Predictor 1 init", u_inst, v_inst, h, uh, vh, G, GV, US, haloshift=1, &
                           symmetric=sym)
-    call check_redundant("Predictor 1 up", up, vp, G, unscale=US%L_T_to_m_s)
-    call check_redundant("Predictor 1 uh", uh, vh, G, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+    if (debug_redundant) then
+      call check_redundant("Predictor 1 up", up, vp, G, unscale=US%L_T_to_m_s)
+      call check_redundant("Predictor 1 uh", uh, vh, G, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+    endif
   endif
 
 ! up <- up + dt_pred d/dz visc d/dz up
 ! u_av  <- u_av  + dt_pred d/dz visc d/dz u_av
   call cpu_clock_begin(id_clock_vertvisc)
   if (CS%debug) then
-    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
+    call uvchksum("0 before vertvisc: [uv]p", up, vp, G%HI,haloshift=0, symmetric=sym, unscale=US%L_T_to_m_s)
   endif
 
   !  if (CS%fpmix) then
@@ -742,7 +755,11 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     call start_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass)
     call cpu_clock_begin(id_clock_vertvisc)
   endif
-  call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt_pred, G, GV, US, CS%vertvisc_CSp)
+  if (CS%visc_rem_dt_bug) then
+    call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt_pred, G, GV, US, CS%vertvisc_CSp)
+  else
+    call vertvisc_remnant(visc, CS%visc_rem_u, CS%visc_rem_v, dt, G, GV, US, CS%vertvisc_CSp)
+  endif
   call cpu_clock_end(id_clock_vertvisc)
 
   call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
@@ -765,12 +782,12 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
   if (associated(CS%OBC)) then
     if (CS%debug) &
-      call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
+      call uvchksum("Pre OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, unscale=US%L_T_to_m_s)
 
     call radiation_open_bdry_conds(CS%OBC, u_av, u_old_rad_OBC, v_av, v_old_rad_OBC, G, GV, US, dt_pred)
 
     if (CS%debug) &
-      call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
+      call uvchksum("Post OBC avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, unscale=US%L_T_to_m_s)
   endif
 
   ! h_av = (h + hp)/2
@@ -829,17 +846,19 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
   if (CS%debug) then
     call MOM_state_chksum("Predictor ", up, vp, hp, uh, vh, G, GV, US, symmetric=sym)
-    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, scale=US%L_T_to_m_s)
-    call hchksum(h_av, "Predictor avg h", G%HI, haloshift=2, scale=GV%H_to_MKS)
+    call uvchksum("Predictor avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, unscale=US%L_T_to_m_s)
+    call hchksum(h_av, "Predictor avg h", G%HI, haloshift=2, unscale=GV%H_to_MKS)
   ! call MOM_state_chksum("Predictor avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
-    call check_redundant("Predictor up ", up, vp, G, unscale=US%L_T_to_m_s)
-    call check_redundant("Predictor uh ", uh, vh, G, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+    if (debug_redundant) then
+      call check_redundant("Predictor up ", up, vp, G, unscale=US%L_T_to_m_s)
+      call check_redundant("Predictor uh ", uh, vh, G, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+    endif
   endif
 
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
-  call horizontal_viscosity(u_av, v_av, h_av, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, &
-                            OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, ADp=CS%ADp)
+  call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, MEKE, Varmix, G, GV, US, CS%hor_visc, &
+                            tv, dt, OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, ADp=CS%ADp)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2b)")
 
@@ -872,10 +891,12 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
     call MOM_accel_chksum("corr pre-btstep accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, u_bc_accel, v_bc_accel, &
                           symmetric=sym)
-    call check_redundant("corr pre-btstep CS%CA ", CS%CAu, CS%CAv, G, unscale=US%L_T2_to_m_s2)
-    call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
-    call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
-    call check_redundant("corr pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
+    if (debug_redundant) then
+      call check_redundant("corr pre-btstep CS%CA ", CS%CAu, CS%CAv, G, unscale=US%L_T2_to_m_s2)
+      call check_redundant("corr pre-btstep CS%PF ", CS%PFu, CS%PFv, G, unscale=US%L_T2_to_m_s2)
+      call check_redundant("corr pre-btstep CS%diff ", CS%diffu, CS%diffv, G, unscale=US%L_T2_to_m_s2)
+      call check_redundant("corr pre-btstep u_bc_accel ", u_bc_accel, v_bc_accel, G, unscale=US%L_T2_to_m_s2)
+    endif
   endif
 
   ! u_accel_bt = layer accelerations due to barotropic solver
@@ -898,7 +919,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call cpu_clock_end(id_clock_btstep)
   if (showCallTree) call callTree_leave("btstep()")
 
-  if (CS%debug) then
+  if (CS%debug .and. debug_redundant) then
     call check_redundant("u_accel_bt ", CS%u_accel_bt, CS%v_accel_bt, G, unscale=US%L_T2_to_m_s2)
   endif
 
@@ -918,10 +939,10 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
   call cpu_clock_end(id_clock_mom_update)
 
   if (CS%debug) then
-    call uvchksum("Corrector 1 [uv]", u_inst, v_inst, G%HI, haloshift=0, symmetric=sym, scale=US%L_T_to_m_s)
-    call hchksum(h, "Corrector 1 h", G%HI, haloshift=1, scale=GV%H_to_MKS)
+    call uvchksum("Corrector 1 [uv]", u_inst, v_inst, G%HI, haloshift=0, symmetric=sym, unscale=US%L_T_to_m_s)
+    call hchksum(h, "Corrector 1 h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
     call uvchksum("Corrector 1 [uv]h", uh, vh, G%HI, haloshift=2, &
-                  symmetric=sym, scale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
+                  symmetric=sym, unscale=GV%H_to_MKS*US%L_to_m**2*US%s_to_T)
   ! call MOM_state_chksum("Corrector 1", u_inst, v_inst, h, uh, vh, G, GV, US, haloshift=1)
     call MOM_accel_chksum("Corrector accel", CS%CAu, CS%CAv, CS%PFu, CS%PFv, &
                           CS%diffu, CS%diffv, G, GV, US, CS%pbce, CS%u_accel_bt, CS%v_accel_bt, &
@@ -1114,7 +1135,7 @@ subroutine step_MOM_dyn_split_RK2b(u_av, v_av, h, tv, visc, Time_local, dt, forc
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u_av, v_av, h, uh, vh, G, GV, US, symmetric=sym)
-    ! call uvchksum("Corrector inst [uv]", u_inst, v_inst, G%HI, symmetric=sym, scale=US%L_T_to_m_s)
+    ! call uvchksum("Corrector inst [uv]", u_inst, v_inst, G%HI, symmetric=sym, unscale=US%L_T_to_m_s)
   endif
 
   if (showCallTree) call callTree_leave("step_MOM_dyn_split_RK2b()")
@@ -1216,7 +1237,7 @@ end subroutine remap_dyn_split_RK2b_aux_vars
 !> This subroutine initializes all of the variables that are used by this
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, param_file, &
-                      diag, CS, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
+                      diag, CS, HA_CSp, restart_CS, dt, Accel_diag, Cont_diag, MIS, &
                       VarMix, MEKE, thickness_diffuse_CSp,                  &
                       OBC, update_OBC_CSp, ALE_CSp, set_visc, &
                       visc, dirs, ntrunc, pbv, calc_dtbt, cont_stencil)
@@ -1239,6 +1260,8 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   type(param_file_type),            intent(in)    :: param_file !< parameter file for parsing
   type(diag_ctrl),          target, intent(inout) :: diag       !< to control diagnostics
   type(MOM_dyn_split_RK2b_CS),      pointer       :: CS         !< module control structure
+  type(harmonic_analysis_CS),       pointer       :: HA_CSp     !< A pointer to the control structure of the
+                                                                !! harmonic analysis module
   type(MOM_restart_CS),             intent(inout) :: restart_CS !< MOM restart control structure
   real,                             intent(in)    :: dt         !< time step [T ~> s]
   type(accel_diag_ptrs),    target, intent(inout) :: Accel_diag !< points to momentum equation terms for
@@ -1272,6 +1295,7 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   character(len=48) :: thickness_units, flux_units, eta_rest_name
   logical :: debug_truncations
   logical :: read_uv, read_h2
+  logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
 
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
@@ -1330,6 +1354,17 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   call get_param(param_file, mdl, "DEBUG_OBC", CS%debug_OBC, default=.false.)
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
+  call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, &
+                 "If true, visc_rem_[uv] in split mode is incorrectly calculated or accounted "//&
+                 "for in two places. This parameter controls the defaults of two individual "//&
+                 "flags, VISC_REM_TIMESTEP_BUG in MOM_dynamics_split_RK2(b) and "//&
+                 "VISC_REM_BT_WEIGHT_BUG in MOM_barotropic.", default=.true.)
+  call get_param(param_file, mdl, "VISC_REM_TIMESTEP_BUG", CS%visc_rem_dt_bug, &
+                 "If true, recover a bug that uses dt_pred rather than dt in "//&
+                 "vertvisc_remnant() at the end of predictor stage for the following "//&
+                 "continuity() and btstep() calls in the corrector step. Default of this flag "//&
+                 "is set by VISC_REM_BUG", default=visc_rem_bug)
+
 
   allocate(CS%taux_bot(IsdB:IedB,jsd:jed), source=0.0)
   allocate(CS%tauy_bot(isd:ied,JsdB:JedB), source=0.0)
@@ -1385,7 +1420,12 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
   if (CS%calculate_SAL) call SAL_init(G, US, param_file, CS%SAL_CSp)
-  if (CS%use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
+  if (CS%use_tides) then
+    call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp, CS%HA_CSp)
+    HA_CSp => CS%HA_CSp
+  else
+    HA_CSp => NULL()
+  endif
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%SAL_CSp, CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
@@ -1423,7 +1463,7 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
 
   call barotropic_init(u, v, h, CS%eta, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
-                       CS%SAL_CSp)
+                       CS%SAL_CSp, HA_CSp)
 
   flux_units = get_flux_units(GV)
   thickness_units = get_thickness_units(GV)

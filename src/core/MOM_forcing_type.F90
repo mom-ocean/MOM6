@@ -6,7 +6,7 @@ module MOM_forcing_type
 use MOM_array_transform, only : rotate_array, rotate_vector, rotate_array_pair
 use MOM_coupler_types, only : coupler_2d_bc_type, coupler_type_destructor
 use MOM_coupler_types, only : coupler_type_increment_data, coupler_type_initialized
-use MOM_coupler_types, only : coupler_type_copy_data
+use MOM_coupler_types, only : coupler_type_copy_data, coupler_type_spawn
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_debugging,     only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, register_diag_field, register_scalar_field
@@ -1262,89 +1262,89 @@ subroutine MOM_forcing_chksum(mesg, fluxes, G, US, haloshift)
   ! counts, there must be no redundant points, so all variables use is..ie
   ! and js...je as their extent.
   if (associated(fluxes%ustar)) &
-    call hchksum(fluxes%ustar, mesg//" fluxes%ustar", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
+    call hchksum(fluxes%ustar, mesg//" fluxes%ustar", G%HI, haloshift=hshift, unscale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%tau_mag)) &
-    call hchksum(fluxes%tau_mag, mesg//" fluxes%tau_mag", G%HI, haloshift=hshift, scale=US%RLZ_T2_to_Pa)
+    call hchksum(fluxes%tau_mag, mesg//" fluxes%tau_mag", G%HI, haloshift=hshift, unscale=US%RLZ_T2_to_Pa)
   if (associated(fluxes%buoy)) &
-    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ", G%HI, haloshift=hshift, scale=US%L_to_m**2*US%s_to_T**3)
+    call hchksum(fluxes%buoy, mesg//" fluxes%buoy ", G%HI, haloshift=hshift, unscale=US%L_to_m**2*US%s_to_T**3)
   if (associated(fluxes%sw)) &
-    call hchksum(fluxes%sw, mesg//" fluxes%sw", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%sw, mesg//" fluxes%sw", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%sw_vis_dir)) &
-    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%sw_vis_dir, mesg//" fluxes%sw_vis_dir", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%sw_vis_dif)) &
-    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%sw_vis_dif, mesg//" fluxes%sw_vis_dif", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%sw_nir_dir)) &
-    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%sw_nir_dir, mesg//" fluxes%sw_nir_dir", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%sw_nir_dif)) &
-    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%sw_nir_dif, mesg//" fluxes%sw_nir_dif", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%lw)) &
-    call hchksum(fluxes%lw, mesg//" fluxes%lw", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%lw, mesg//" fluxes%lw", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%latent)) &
-    call hchksum(fluxes%latent, mesg//" fluxes%latent", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%latent, mesg//" fluxes%latent", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%latent_evap_diag)) &
     call hchksum(fluxes%latent_evap_diag, mesg//" fluxes%latent_evap_diag", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%latent_fprec_diag)) &
     call hchksum(fluxes%latent_fprec_diag, mesg//" fluxes%latent_fprec_diag", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%latent_frunoff_diag)) &
     call hchksum(fluxes%latent_frunoff_diag, mesg//" fluxes%latent_frunoff_diag", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%sens)) &
-    call hchksum(fluxes%sens, mesg//" fluxes%sens", G%HI, haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+    call hchksum(fluxes%sens, mesg//" fluxes%sens", G%HI, haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%evap)) &
-    call hchksum(fluxes%evap, mesg//" fluxes%evap", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%evap, mesg//" fluxes%evap", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%lprec)) &
-    call hchksum(fluxes%lprec, mesg//" fluxes%lprec", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%lprec, mesg//" fluxes%lprec", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%fprec)) &
-    call hchksum(fluxes%fprec, mesg//" fluxes%fprec", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%fprec, mesg//" fluxes%fprec", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%vprec)) &
-    call hchksum(fluxes%vprec, mesg//" fluxes%vprec", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%vprec, mesg//" fluxes%vprec", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%seaice_melt)) &
-    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%seaice_melt, mesg//" fluxes%seaice_melt", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%seaice_melt_heat)) &
     call hchksum(fluxes%seaice_melt_heat, mesg//" fluxes%seaice_melt_heat", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%p_surf)) &
-    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf", G%HI, haloshift=hshift, scale=US%RL2_T2_to_Pa)
+    call hchksum(fluxes%p_surf, mesg//" fluxes%p_surf", G%HI, haloshift=hshift, unscale=US%RL2_T2_to_Pa)
   if (associated(fluxes%u10_sqr)) &
-    call hchksum(fluxes%u10_sqr, mesg//" fluxes%u10_sqr", G%HI, haloshift=hshift, scale=US%L_to_m**2*US%s_to_T**2)
+    call hchksum(fluxes%u10_sqr, mesg//" fluxes%u10_sqr", G%HI, haloshift=hshift, unscale=US%L_to_m**2*US%s_to_T**2)
   if (associated(fluxes%ice_fraction)) &
     call hchksum(fluxes%ice_fraction, mesg//" fluxes%ice_fraction", G%HI, haloshift=hshift)
   if (associated(fluxes%salt_flux)) &
-    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%salt_flux, mesg//" fluxes%salt_flux", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%TKE_tidal)) &
-    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal", G%HI, haloshift=hshift, scale=US%RZ3_T3_to_W_m2)
+    call hchksum(fluxes%TKE_tidal, mesg//" fluxes%TKE_tidal", G%HI, haloshift=hshift, unscale=US%RZ3_T3_to_W_m2)
   if (associated(fluxes%ustar_tidal)) &
-    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
+    call hchksum(fluxes%ustar_tidal, mesg//" fluxes%ustar_tidal", G%HI, haloshift=hshift, unscale=US%Z_to_m*US%s_to_T)
   if (associated(fluxes%lrunoff)) &
-    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%lrunoff, mesg//" fluxes%lrunoff", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%frunoff)) &
-    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff", G%HI, haloshift=hshift, scale=US%RZ_T_to_kg_m2s)
+    call hchksum(fluxes%frunoff, mesg//" fluxes%frunoff", G%HI, haloshift=hshift, unscale=US%RZ_T_to_kg_m2s)
   if (associated(fluxes%heat_content_lrunoff)) &
     call hchksum(fluxes%heat_content_lrunoff, mesg//" fluxes%heat_content_lrunoff", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_frunoff)) &
     call hchksum(fluxes%heat_content_frunoff, mesg//" fluxes%heat_content_frunoff", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_lprec)) &
     call hchksum(fluxes%heat_content_lprec, mesg//" fluxes%heat_content_lprec", G%HI,  &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_fprec)) &
     call hchksum(fluxes%heat_content_fprec, mesg//" fluxes%heat_content_fprec", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_cond)) &
     call hchksum(fluxes%heat_content_cond, mesg//" fluxes%heat_content_cond", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_evap)) &
     call hchksum(fluxes%heat_content_evap, mesg//" fluxes%heat_content_evap", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_massout)) &
     call hchksum(fluxes%heat_content_massout, mesg//" fluxes%heat_content_massout", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
   if (associated(fluxes%heat_content_massin)) &
     call hchksum(fluxes%heat_content_massin, mesg//" fluxes%heat_content_massin", G%HI, &
-                 haloshift=hshift, scale=US%QRZ_T_to_W_m2)
+                 haloshift=hshift, unscale=US%QRZ_T_to_W_m2)
 end subroutine MOM_forcing_chksum
 
 !> Write out chksums for the driving mechanical forces.
@@ -1364,17 +1364,17 @@ subroutine MOM_mech_forcing_chksum(mesg, forces, G, US, haloshift)
   ! and js...je as their extent.
   if (associated(forces%taux) .and. associated(forces%tauy)) &
     call uvchksum(mesg//" forces%tau[xy]", forces%taux, forces%tauy, G%HI, &
-                  haloshift=hshift, symmetric=.true., scale=US%RLZ_T2_to_Pa)
+                  haloshift=hshift, symmetric=.true., unscale=US%RLZ_T2_to_Pa)
   if (associated(forces%p_surf)) &
-    call hchksum(forces%p_surf, mesg//" forces%p_surf", G%HI, haloshift=hshift, scale=US%RL2_T2_to_Pa)
+    call hchksum(forces%p_surf, mesg//" forces%p_surf", G%HI, haloshift=hshift, unscale=US%RL2_T2_to_Pa)
   if (associated(forces%ustar)) &
-    call hchksum(forces%ustar, mesg//" forces%ustar", G%HI, haloshift=hshift, scale=US%Z_to_m*US%s_to_T)
+    call hchksum(forces%ustar, mesg//" forces%ustar", G%HI, haloshift=hshift, unscale=US%Z_to_m*US%s_to_T)
   if (associated(forces%tau_mag)) &
-    call hchksum(forces%tau_mag, mesg//" forces%tau_mag", G%HI, haloshift=hshift, scale=US%RLZ_T2_to_Pa)
+    call hchksum(forces%tau_mag, mesg//" forces%tau_mag", G%HI, haloshift=hshift, unscale=US%RLZ_T2_to_Pa)
   if (associated(forces%rigidity_ice_u) .and. associated(forces%rigidity_ice_v)) &
     call uvchksum(mesg//" forces%rigidity_ice_[uv]", forces%rigidity_ice_u, &
         forces%rigidity_ice_v, G%HI, haloshift=hshift, symmetric=.true., &
-        scale=US%L_to_m**3*US%L_to_Z*US%s_to_T, scalar_pair=.true.)
+        unscale=US%L_to_m**3*US%L_to_Z*US%s_to_T, scalar_pair=.true.)
 
 end subroutine MOM_mech_forcing_chksum
 
@@ -2627,7 +2627,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
   if (turns /= 0) then
     G => diag%G
     allocate(fluxes)
-    call allocate_forcing_type(fluxes_in, G, fluxes)
+    call allocate_forcing_type(fluxes_in, G, fluxes, turns=turns)
     call rotate_forcing(fluxes_in, fluxes, turns)
   else
     G => G_in
@@ -2657,7 +2657,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_prcme > 0) call post_data(handles%id_prcme, res, diag)
       if (handles%id_total_prcme > 0) then
-        total_transport = global_area_integral(res, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_prcme, total_transport, diag)
       endif
       if (handles%id_prcme_ga > 0) then
@@ -2684,7 +2684,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_net_massout > 0) call post_data(handles%id_net_massout, res, diag)
       if (handles%id_total_net_massout > 0) then
-        total_transport = global_area_integral(res, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_net_massout, total_transport, diag)
       endif
     endif
@@ -2716,7 +2716,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_net_massin > 0) call post_data(handles%id_net_massin, res, diag)
       if (handles%id_total_net_massin > 0) then
-        total_transport = global_area_integral(res, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_net_massin, total_transport, diag)
       endif
     endif
@@ -2727,7 +2727,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_evap > 0) .and. associated(fluxes%evap)) &
       call post_data(handles%id_evap, fluxes%evap, diag)
     if ((handles%id_total_evap > 0) .and. associated(fluxes%evap)) then
-      total_transport = global_area_integral(fluxes%evap, G, scale=US%RZ_T_to_kg_m2s)
+      total_transport = global_area_integral(fluxes%evap, G, unscale=US%RZ_T_to_kg_m2s)
       call post_data(handles%id_total_evap, total_transport, diag)
     endif
     if ((handles%id_evap_ga > 0) .and. associated(fluxes%evap)) then
@@ -2741,7 +2741,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_precip > 0) call post_data(handles%id_precip, res, diag)
       if (handles%id_total_precip > 0) then
-        total_transport = global_area_integral(res, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(res, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_precip, total_transport, diag)
       endif
       if (handles%id_precip_ga > 0) then
@@ -2753,7 +2753,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (associated(fluxes%lprec)) then
       if (handles%id_lprec > 0) call post_data(handles%id_lprec, fluxes%lprec, diag)
       if (handles%id_total_lprec > 0) then
-        total_transport = global_area_integral(fluxes%lprec, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(fluxes%lprec, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_lprec, total_transport, diag)
       endif
       if (handles%id_lprec_ga > 0) then
@@ -2765,7 +2765,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (associated(fluxes%fprec)) then
       if (handles%id_fprec > 0) call post_data(handles%id_fprec, fluxes%fprec, diag)
       if (handles%id_total_fprec > 0) then
-        total_transport = global_area_integral(fluxes%fprec, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(fluxes%fprec, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_fprec, total_transport, diag)
       endif
       if (handles%id_fprec_ga > 0) then
@@ -2777,7 +2777,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (associated(fluxes%vprec)) then
       if (handles%id_vprec > 0) call post_data(handles%id_vprec, fluxes%vprec, diag)
       if (handles%id_total_vprec > 0) then
-        total_transport = global_area_integral(fluxes%vprec, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(fluxes%vprec, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_vprec, total_transport, diag)
       endif
       if (handles%id_vprec_ga > 0) then
@@ -2789,7 +2789,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (associated(fluxes%lrunoff)) then
     if (handles%id_lrunoff > 0) call post_data(handles%id_lrunoff, fluxes%lrunoff, diag)
       if (handles%id_total_lrunoff > 0) then
-        total_transport = global_area_integral(fluxes%lrunoff, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(fluxes%lrunoff, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_lrunoff, total_transport, diag)
       endif
     endif
@@ -2797,7 +2797,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (associated(fluxes%frunoff)) then
       if (handles%id_frunoff > 0) call post_data(handles%id_frunoff, fluxes%frunoff, diag)
       if (handles%id_total_frunoff > 0) then
-        total_transport = global_area_integral(fluxes%frunoff, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(fluxes%frunoff, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_frunoff, total_transport, diag)
       endif
     endif
@@ -2805,7 +2805,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if (associated(fluxes%seaice_melt)) then
       if (handles%id_seaice_melt > 0) call post_data(handles%id_seaice_melt, fluxes%seaice_melt, diag)
       if (handles%id_total_seaice_melt > 0) then
-        total_transport = global_area_integral(fluxes%seaice_melt, G, scale=US%RZ_T_to_kg_m2s)
+        total_transport = global_area_integral(fluxes%seaice_melt, G, unscale=US%RZ_T_to_kg_m2s)
         call post_data(handles%id_total_seaice_melt, total_transport, diag)
       endif
     endif
@@ -2815,63 +2815,63 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_heat_content_lrunoff > 0) .and. associated(fluxes%heat_content_lrunoff))  &
       call post_data(handles%id_heat_content_lrunoff, fluxes%heat_content_lrunoff, diag)
     if ((handles%id_total_heat_content_lrunoff > 0) .and. associated(fluxes%heat_content_lrunoff)) then
-      total_transport = global_area_integral(fluxes%heat_content_lrunoff, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_lrunoff, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_lrunoff, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_frunoff > 0) .and. associated(fluxes%heat_content_frunoff))  &
       call post_data(handles%id_heat_content_frunoff, fluxes%heat_content_frunoff, diag)
     if ((handles%id_total_heat_content_frunoff > 0) .and. associated(fluxes%heat_content_frunoff)) then
-      total_transport = global_area_integral(fluxes%heat_content_frunoff, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_frunoff, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_frunoff, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_lprec > 0) .and. associated(fluxes%heat_content_lprec))      &
       call post_data(handles%id_heat_content_lprec, fluxes%heat_content_lprec, diag)
     if ((handles%id_total_heat_content_lprec > 0) .and. associated(fluxes%heat_content_lprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_lprec, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_lprec, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_lprec, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_fprec > 0) .and. associated(fluxes%heat_content_fprec))      &
       call post_data(handles%id_heat_content_fprec, fluxes%heat_content_fprec, diag)
     if ((handles%id_total_heat_content_fprec > 0) .and. associated(fluxes%heat_content_fprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_fprec, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_fprec, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_fprec, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec))      &
       call post_data(handles%id_heat_content_vprec, fluxes%heat_content_vprec, diag)
     if ((handles%id_total_heat_content_vprec > 0) .and. associated(fluxes%heat_content_vprec)) then
-      total_transport = global_area_integral(fluxes%heat_content_vprec, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_vprec, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_vprec, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_cond > 0) .and. associated(fluxes%heat_content_cond))        &
       call post_data(handles%id_heat_content_cond, fluxes%heat_content_cond, diag)
     if ((handles%id_total_heat_content_cond > 0) .and. associated(fluxes%heat_content_cond)) then
-      total_transport = global_area_integral(fluxes%heat_content_cond, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_cond, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_cond, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_evap > 0) .and. associated(fluxes%heat_content_evap))        &
       call post_data(handles%id_heat_content_evap, fluxes%heat_content_evap, diag)
     if ((handles%id_total_heat_content_evap > 0) .and. associated(fluxes%heat_content_evap)) then
-      total_transport = global_area_integral(fluxes%heat_content_evap, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_evap, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_evap, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_massout > 0) .and. associated(fluxes%heat_content_massout))  &
       call post_data(handles%id_heat_content_massout, fluxes%heat_content_massout, diag)
     if ((handles%id_total_heat_content_massout > 0) .and. associated(fluxes%heat_content_massout)) then
-      total_transport = global_area_integral(fluxes%heat_content_massout, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_massout, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_massout, total_transport, diag)
     endif
 
     if ((handles%id_heat_content_massin > 0) .and. associated(fluxes%heat_content_massin))  &
       call post_data(handles%id_heat_content_massin, fluxes%heat_content_massin, diag)
     if ((handles%id_total_heat_content_massin > 0) .and. associated(fluxes%heat_content_massin)) then
-      total_transport = global_area_integral(fluxes%heat_content_massin, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_content_massin, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_content_massin, total_transport, diag)
     endif
 
@@ -2887,7 +2887,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_net_heat_coupler > 0) call post_data(handles%id_net_heat_coupler, res, diag)
       if (handles%id_total_net_heat_coupler > 0) then
-        total_transport = global_area_integral(res, G, scale=US%QRZ_T_to_W_m2)
+        total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
         call post_data(handles%id_total_net_heat_coupler, total_transport, diag)
       endif
       if (handles%id_net_heat_coupler_ga > 0) then
@@ -2930,7 +2930,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       if (handles%id_net_heat_surface > 0) call post_data(handles%id_net_heat_surface, res, diag)
 
       if (handles%id_total_net_heat_surface > 0) then
-        total_transport = global_area_integral(res, G, scale=US%QRZ_T_to_W_m2)
+        total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
         call post_data(handles%id_total_net_heat_surface, total_transport, diag)
       endif
       if (handles%id_net_heat_surface_ga > 0) then
@@ -2956,7 +2956,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       enddo ; enddo
       if (handles%id_heat_content_surfwater > 0) call post_data(handles%id_heat_content_surfwater, res, diag)
       if (handles%id_total_heat_content_surfwater > 0) then
-        total_transport = global_area_integral(res, G, scale=US%QRZ_T_to_W_m2)
+        total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
         call post_data(handles%id_total_heat_content_surfwater, total_transport, diag)
       endif
     endif
@@ -2995,7 +2995,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       do j=js,je ; do i=is,ie
         res(i,j) = (fluxes%lw(i,j) + fluxes%latent(i,j)) + fluxes%sens(i,j)
       enddo ; enddo
-      total_transport = global_area_integral(res, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(res, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_LwLatSens, total_transport, diag)
     endif
 
@@ -3020,7 +3020,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_sw_nir, fluxes%sw_nir_dir+fluxes%sw_nir_dif, diag)
     endif
     if ((handles%id_total_sw > 0) .and. associated(fluxes%sw)) then
-      total_transport = global_area_integral(fluxes%sw, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%sw, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_sw, total_transport, diag)
     endif
     if ((handles%id_sw_ga > 0) .and. associated(fluxes%sw)) then
@@ -3032,7 +3032,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_lw, fluxes%lw, diag)
     endif
     if ((handles%id_total_lw > 0) .and. associated(fluxes%lw)) then
-      total_transport = global_area_integral(fluxes%lw, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%lw, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_lw, total_transport, diag)
     endif
     if ((handles%id_lw_ga > 0) .and. associated(fluxes%lw)) then
@@ -3044,7 +3044,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_lat, fluxes%latent, diag)
     endif
     if ((handles%id_total_lat > 0) .and. associated(fluxes%latent)) then
-      total_transport = global_area_integral(fluxes%latent, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%latent, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_lat, total_transport, diag)
     endif
     if ((handles%id_lat_ga > 0) .and. associated(fluxes%latent)) then
@@ -3056,7 +3056,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_lat_evap, fluxes%latent_evap_diag, diag)
     endif
     if ((handles%id_total_lat_evap > 0) .and. associated(fluxes%latent_evap_diag)) then
-      total_transport = global_area_integral(fluxes%latent_evap_diag, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%latent_evap_diag, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_lat_evap, total_transport, diag)
     endif
 
@@ -3064,7 +3064,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_lat_fprec, fluxes%latent_fprec_diag, diag)
     endif
     if ((handles%id_total_lat_fprec > 0) .and. associated(fluxes%latent_fprec_diag)) then
-      total_transport = global_area_integral(fluxes%latent_fprec_diag, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%latent_fprec_diag, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_lat_fprec, total_transport, diag)
     endif
 
@@ -3072,7 +3072,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
       call post_data(handles%id_lat_frunoff, fluxes%latent_frunoff_diag, diag)
     endif
     if (handles%id_total_lat_frunoff > 0 .and. associated(fluxes%latent_frunoff_diag)) then
-      total_transport = global_area_integral(fluxes%latent_frunoff_diag, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%latent_frunoff_diag, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_lat_frunoff, total_transport, diag)
     endif
 
@@ -3085,12 +3085,12 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     endif
 
     if ((handles%id_total_seaice_melt_heat > 0) .and. associated(fluxes%seaice_melt_heat)) then
-      total_transport = global_area_integral(fluxes%seaice_melt_heat, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%seaice_melt_heat, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_seaice_melt_heat, total_transport, diag)
     endif
 
     if ((handles%id_total_sens > 0) .and. associated(fluxes%sens)) then
-      total_transport = global_area_integral(fluxes%sens, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%sens, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_sens, total_transport, diag)
     endif
     if ((handles%id_sens_ga > 0) .and. associated(fluxes%sens)) then
@@ -3103,7 +3103,7 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     endif
 
     if ((handles%id_total_heat_added > 0) .and. associated(fluxes%heat_added)) then
-      total_transport = global_area_integral(fluxes%heat_added, G, scale=US%QRZ_T_to_W_m2)
+      total_transport = global_area_integral(fluxes%heat_added, G, unscale=US%QRZ_T_to_W_m2)
       call post_data(handles%id_total_heat_added, total_transport, diag)
     endif
 
@@ -3113,21 +3113,21 @@ subroutine forcing_diagnostics(fluxes_in, sfc_state, G_in, US, time_end, diag, h
     if ((handles%id_saltflux > 0) .and. associated(fluxes%salt_flux)) &
       call post_data(handles%id_saltflux, fluxes%salt_flux, diag)
     if ((handles%id_total_saltflux > 0) .and. associated(fluxes%salt_flux)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux, G, scale=US%RZ_T_to_kg_m2s)
+      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux, G, unscale=US%RZ_T_to_kg_m2s)
       call post_data(handles%id_total_saltflux, total_transport, diag)
     endif
 
     if ((handles%id_saltFluxAdded > 0) .and. associated(fluxes%salt_flux_added)) &
       call post_data(handles%id_saltFluxAdded, fluxes%salt_flux_added, diag)
     if ((handles%id_total_saltFluxAdded > 0) .and. associated(fluxes%salt_flux_added)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_added, G, scale=US%RZ_T_to_kg_m2s)
+      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_added, G, unscale=US%RZ_T_to_kg_m2s)
       call post_data(handles%id_total_saltFluxAdded, total_transport, diag)
     endif
 
     if (handles%id_saltFluxIn > 0 .and. associated(fluxes%salt_flux_in)) &
       call post_data(handles%id_saltFluxIn, fluxes%salt_flux_in, diag)
     if ((handles%id_total_saltFluxIn > 0) .and. associated(fluxes%salt_flux_in)) then
-      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_in, G, scale=US%RZ_T_to_kg_m2s)
+      total_transport = ppt2mks*global_area_integral(fluxes%salt_flux_in, G, unscale=US%RZ_T_to_kg_m2s)
       call post_data(handles%id_total_saltFluxIn, total_transport, diag)
     endif
 
@@ -3308,13 +3308,16 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
 end subroutine allocate_forcing_by_group
 
 !> Allocate elements of a new forcing type based on their status in an existing type.
-subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes)
+subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes, turns)
   type(forcing),         intent(in)  :: fluxes_ref !< Reference fluxes
   type(ocean_grid_type), intent(in)  :: G          !< Grid metric of target fluxes
   type(forcing),         intent(out) :: fluxes     !< Target fluxes
+  integer,     optional, intent(in)  :: turns      !< If present, the number of counterclockwise
+                                                   !! quarter turns to use on the new grid.
 
   logical :: do_ustar, do_taumag, do_water, do_heat, do_salt, do_press, do_shelf
   logical :: do_iceberg, do_heat_added, do_buoy
+  logical :: even_turns  ! True if turns is absent or even
 
   call get_forcing_groups(fluxes_ref, do_water, do_heat, do_ustar, do_taumag, do_press, &
       do_shelf, do_iceberg, do_salt, do_heat_added, do_buoy)
@@ -3353,6 +3356,19 @@ subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes)
   ! This flag would normally be set by a control flag in allocate_forcing_type.
   ! Here we copy the flag from the reference forcing.
   fluxes%gustless_accum_bug = fluxes_ref%gustless_accum_bug
+
+  if (coupler_type_initialized(fluxes_ref%tr_fluxes)) then
+    ! The data fields in the coupler_2d_bc_type are never rotated.
+    even_turns = .true. ; if (present(turns)) even_turns = (modulo(turns, 2) == 0)
+    if (even_turns) then
+      call coupler_type_spawn(fluxes_ref%tr_fluxes, fluxes%tr_fluxes, &
+                (/G%isc,G%isc,G%iec,G%iec/), (/G%jsc,G%jsc,G%jec,G%jec/))
+    else
+      call coupler_type_spawn(fluxes_ref%tr_fluxes, fluxes%tr_fluxes, &
+                (/G%jsc,G%jsc,G%jec,G%jec/), (/G%isc,G%isc,G%iec,G%iec/))
+    endif
+  endif
+
 end subroutine allocate_forcing_by_ref
 
 

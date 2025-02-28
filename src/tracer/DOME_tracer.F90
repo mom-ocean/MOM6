@@ -372,7 +372,7 @@ subroutine DOME_tracer_surface_state(sfc_state, h, G, GV, CS)
       !   This call loads the surface values into the appropriate array in the
       ! coupler-type structure.
       call set_coupler_type_data(CS%tr(:,:,1,m), CS%ind_tr(m), sfc_state%tr_fields, &
-                   idim=(/isd, is, ie, ied/), jdim=(/jsd, js, je, jed/) )
+                   idim=(/isd, is, ie, ied/), jdim=(/jsd, js, je, jed/), turns=G%HI%turns)
     enddo
   endif
 

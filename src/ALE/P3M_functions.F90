@@ -10,9 +10,6 @@ implicit none ; private
 public P3M_interpolation
 public P3M_boundary_extrapolation
 
-real, parameter :: hNeglect_dflt = 1.E-30 !< Default value of a negligible cell thickness
-real, parameter :: hNeglect_edge_dflt = 1.E-10 !< Default value of a negligible edge thickness
-
 contains
 
 !> Set up a piecewise cubic interpolation from cell averages and estimated
@@ -32,7 +29,7 @@ subroutine P3M_interpolation( N, h, u, edge_values, ppoly_S, ppoly_coef, h_negle
   real, dimension(:,:), intent(inout) :: edge_values   !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: ppoly_S   !< Edge slope of polynomial [A H-1].
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
+  real,                 intent(in)    :: h_neglect !< A negligibly small width for the
                                           !! purpose of cell reconstructions [H]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
@@ -66,7 +63,7 @@ subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, an
   real, dimension(:,:), intent(inout) :: edge_values !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: ppoly_S  !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for
+  real,                 intent(in)    :: h_neglect !< A negligibly small width for
                                            !! the purpose of cell reconstructions [H]
   integer,    optional, intent(in)    :: answer_date  !< The vintage of the expressions to use
 
@@ -79,15 +76,9 @@ subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, an
   real    :: h_l, h_c, h_r        ! left, center and right cell widths [H]
   real    :: sigma_l, sigma_c, sigma_r  ! left, center and right van Leer slopes [A H-1]
   real    :: slope        ! retained PLM slope [A H-1]
-  real    :: eps
-  real    :: hNeglect     ! A negligibly small thickness [H]
-
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
-
-  eps = 1e-10
 
   ! 1. Bound edge values (boundary cells are assumed to be local extrema)
-  call bound_edge_values( N, h, u, edge_values, hNeglect, answer_date=answer_date )
+  call bound_edge_values( N, h, u, edge_values, h_neglect, answer_date=answer_date )
 
   ! 2. Systematically average discontinuous edge values
   call average_discontinuous_edge_values( N, edge_values )
@@ -127,9 +118,9 @@ subroutine P3M_limiter( N, h, u, edge_values, ppoly_S, ppoly_coef, h_neglect, an
     endif
 
     ! Compute limited slope
-    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + hNeglect )
-    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + hNeglect )
-    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + hNeglect )
+    sigma_l = 2.0 * ( u_c - u_l ) / ( h_c + h_neglect )
+    sigma_c = 2.0 * ( u_r - u_l ) / ( h_l + 2.0*h_c + h_r + h_neglect )
+    sigma_r = 2.0 * ( u_r - u_c ) / ( h_c + h_neglect )
 
     if ( (sigma_l * sigma_r) > 0.0 ) then
       slope = sign( min(abs(sigma_l),abs(sigma_c),abs(sigma_r)), sigma_c )
@@ -197,10 +188,10 @@ subroutine P3M_boundary_extrapolation( N, h, u, edge_values, ppoly_S, ppoly_coef
   real, dimension(:,:), intent(inout) :: edge_values !< Edge value of polynomial [A]
   real, dimension(:,:), intent(inout) :: ppoly_S !< Edge slope of polynomial [A H-1]
   real, dimension(:,:), intent(inout) :: ppoly_coef !< Coefficients of polynomial [A]
-  real,       optional, intent(in)    :: h_neglect !< A negligibly small width for the
+  real,                 intent(in)    :: h_neglect !< A negligibly small width for the
                                           !! purpose of cell reconstructions [H]
-  real,       optional, intent(in)    :: h_neglect_edge !< A negligibly small width
-                                          !! for the purpose of finding edge values [H]
+  real,       optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose
+                                          !! of finding edge values [H].  The default is h_neglect.
   ! Local variables
   integer :: i0, i1
   logical :: monotonic    ! boolean indicating whether the cubic is monotonic
@@ -210,10 +201,9 @@ subroutine P3M_boundary_extrapolation( N, h, u, edge_values, ppoly_S, ppoly_coef
   real    :: u0_l, u0_r ! Left and right edge values [A]
   real    :: u1_l, u1_r ! Left and right edge slopes [A H-1]
   real    :: slope   ! The cell center slope [A H-1]
-  real    :: hNeglect, hNeglect_edge ! Negligibly small thickness [H]
+  real    :: hNeglect_edge ! Negligibly small thickness [H]
 
-  hNeglect = hNeglect_dflt ; if (present(h_neglect)) hNeglect = h_neglect
-  hNeglect_edge = hNeglect_edge_dflt ; if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
+  hNeglect_edge = h_neglect ; if (present(h_neglect_edge)) hNeglect_edge = h_neglect_edge
 
   ! ----- Left boundary -----
   i0 = 1
@@ -229,7 +219,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, edge_values, ppoly_S, ppoly_coef
   u1_r = b / h1     ! derivative evaluated at xi = 0.0, expressed w.r.t. x
 
   ! Limit the right slope by the PLM limited slope
-  slope = 2.0 * ( u1 - u0 ) / ( h0 + hNeglect )
+  slope = 2.0 * ( u1 - u0 ) / ( h0 + h_neglect )
   if ( abs(u1_r) > abs(slope) ) then
     u1_r = slope
   endif
@@ -242,7 +232,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, edge_values, ppoly_S, ppoly_coef
   ! edge value and slope by computing the parabola as determined by
   ! the right edge value and slope and the boundary cell average
   u0_l = 3.0 * u0 + 0.5 * h0*u1_r - 2.0 * u0_r
-  u1_l = ( - 6.0 * u0 - 2.0 * h0*u1_r + 6.0 * u0_r) / ( h0 + hNeglect )
+  u1_l = ( - 6.0 * u0 - 2.0 * h0*u1_r + 6.0 * u0_r) / ( h0 + h_neglect )
 
   ! Check whether the edge values are monotonic. For example, if the left edge
   ! value is larger than the right edge value while the slope is positive, the
@@ -286,10 +276,10 @@ subroutine P3M_boundary_extrapolation( N, h, u, edge_values, ppoly_S, ppoly_coef
   b = ppoly_coef(i0,2)
   c = ppoly_coef(i0,3)
   d = ppoly_coef(i0,4)
-  u1_l = (b + 2*c + 3*d) / ( h0 + hNeglect ) ! derivative evaluated at xi = 1.0
+  u1_l = (b + 2*c + 3*d) / ( h0 + h_neglect ) ! derivative evaluated at xi = 1.0
 
   ! Limit the left slope by the PLM limited slope
-  slope = 2.0 * ( u1 - u0 ) / ( h1 + hNeglect )
+  slope = 2.0 * ( u1 - u0 ) / ( h1 + h_neglect )
   if ( abs(u1_l) > abs(slope) ) then
     u1_l = slope
   endif
@@ -302,7 +292,7 @@ subroutine P3M_boundary_extrapolation( N, h, u, edge_values, ppoly_S, ppoly_coef
   ! edge value and slope by computing the parabola as determined by
   ! the left edge value and slope and the boundary cell average
   u0_r = 3.0 * u1 - 0.5 * h1*u1_l - 2.0 * u0_l
-  u1_r = ( 6.0 * u1 - 2.0 * h1*u1_l - 6.0 * u0_l) / ( h1 + hNeglect )
+  u1_r = ( 6.0 * u1 - 2.0 * h1*u1_l - 6.0 * u0_l) / ( h1 + h_neglect )
 
   ! Check whether the edge values are monotonic. For example, if the right edge
   ! value is smaller than the left edge value while the slope is positive, the

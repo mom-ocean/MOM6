@@ -281,13 +281,13 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   enddo
 
   if (CS%debug) then
-    ! if (CS%id_N2 > 0) call hchksum(N2_3d, "MOM_CVMix_conv: N2",G%HI,haloshift=0)
+    ! if (CS%id_N2 > 0) call hchksum(N2_3d, "MOM_CVMix_conv: N2", G%HI, haloshift=0, unscale=US%s_to_T**2)
     ! if (CS%id_kd_conv > 0) &
-    !   call hchksum(Kd_conv, "MOM_CVMix_conv: Kd_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
+    !   call hchksum(Kd_conv, "MOM_CVMix_conv: Kd_conv", G%HI, haloshift=0, unscale=US%Z2_T_to_m2_s)
     ! if (CS%id_kv_conv > 0) &
-    !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, scale=US%Z2_T_to_m2_s)
-    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
-    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, scale=GV%HZ_T_to_m2_s)
+    !   call hchksum(Kv_conv, "MOM_CVMix_conv: Kv_conv", G%HI, haloshift=0, unscale=US%Z2_T_to_m2_s)
+    call hchksum(Kd, "MOM_CVMix_conv: Kd", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
+    call hchksum(Kv, "MOM_CVMix_conv: Kv", G%HI, haloshift=0, unscale=GV%HZ_T_to_m2_s)
   endif
 
   ! send diagnostics to post_data
