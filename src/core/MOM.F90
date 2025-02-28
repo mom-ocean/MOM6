@@ -4085,22 +4085,26 @@ end function MOM_state_is_synchronized
 
 !> This subroutine offers access to values or pointers to other types from within
 !! the MOM_control_struct, allowing the MOM_control_struct to be opaque.
-subroutine get_MOM_state_elements(CS, G, GV, US, C_p, C_p_scaled, use_temp)
+subroutine get_MOM_state_elements(CS, G, GV, US, Reg, h, C_p, C_p_scaled, use_temp)
   type(MOM_control_struct), intent(inout), target :: CS  !< MOM control structure
   type(ocean_grid_type),   optional, pointer     :: G    !< structure containing metrics and grid info
   type(verticalGrid_type), optional, pointer     :: GV   !< structure containing vertical grid info
   type(unit_scale_type),   optional, pointer     :: US   !< A dimensional unit scaling type
+  type(tracer_registry_type), optional, pointer  :: Reg  !< Pointer to the MOM tracer registry
   real,                    optional, intent(out) :: C_p  !< The heat capacity [J kg degC-1]
   real,                    optional, intent(out) :: C_p_scaled !< The heat capacity in scaled
                                                          !! units [Q C-1 ~> J kg-1 degC-1]
   logical,                 optional, intent(out) :: use_temp !< True if temperature is a state variable
+  real, dimension(:,:,:),  optional, pointer     :: h    !< layer thickness [H ~> m or kg m-2]
 
   if (present(G)) G => CS%G_in
   if (present(GV)) GV => CS%GV
   if (present(US)) US => CS%US
+  if (present(Reg)) Reg => CS%tracer_Reg
   if (present(C_p)) C_p = CS%US%Q_to_J_kg*US%degC_to_C * CS%tv%C_p
   if (present(C_p_scaled)) C_p_scaled = CS%tv%C_p
   if (present(use_temp)) use_temp = associated(CS%tv%T)
+  if (present(h)) h => CS%h
 end subroutine get_MOM_state_elements
 
 !> Find the global integrals of various quantities.
