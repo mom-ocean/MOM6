@@ -1235,18 +1235,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             Kh(i,j) = max(Kh(i,j), CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3)
         endif
       enddo ; enddo
-      !$omp end target
-
-      !$omp target update from(Kh)
 
       ! All viscosity contributions above are subject to resolution scaling
 
+      ! TODO: GPU
       if (rescale_Kh) then
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = VarMix%Res_fn_h(i,j) * Kh(i,j)
         enddo ; enddo
       endif
 
+      ! TODO: GPU
       if (legacy_bound) then
         ! Older method of bounding for stability
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -1255,9 +1254,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       ! Place a floor on the viscosity, if desired.
+      !$omp parallel loop collapse(2)
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Kh(i,j) = max(Kh(i,j), CS%Kh_bg_min)
       enddo ; enddo
+      !$omp end target
+
+      !$omp target update from(Kh)
 
       if (use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) then
         ! *Add* the MEKE contribution (which might be negative)
