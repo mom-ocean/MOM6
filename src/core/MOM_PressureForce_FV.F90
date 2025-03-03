@@ -61,6 +61,8 @@ type, public :: PressureForce_FV_CS ; private
                             !! exceeds the vertical grid spacing, reset intxpa at the interface below
                             !! a trusted interior cell.  (This often applies in ice shelf cavities.)
   logical :: MassWghtInterpVanOnly !< If true, don't do mass weighting of T/S interpolation unless vanished
+  logical :: reset_intxpa_flattest !< If true, use flattest interface rather than top for reset integral
+                                   !! in cases where no best nonvanished interface
   real    :: h_nonvanished  !< A minimal layer thickness that indicates that a layer is thick enough
                             !! to usefully reestimate the pressure integral across the interface
                             !! below it [H ~> m or kg m-2]
@@ -214,8 +216,12 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   logical, dimension(SZI_(G),SZJB_(G)) :: &
     seek_y_cor          ! If true, try to find a v-point interface that would provide a better estimate
                         ! of the curvature terms in the inty_pa.
-
-
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    delta_p_x           ! If using flattest interface for reset integral, store x interface
+                        ! differences [R L2 T-2 ~> Pa]
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    delta_p_y           ! If using flattest interface for reset integral, store y interface
+                        ! differences [R L2 T-2 ~> Pa]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
     MassWt_u    ! The fractional mass weighting at a u-point [nondim].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
@@ -581,6 +587,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     intx_za_nonlin(:,:) = 0.0 ; intx_za_cor_ri(:,:) = 0.0 ; dp_int_x(:,:) = 0.0
     do j=js,je ; do I=Isq,Ieq
       seek_x_cor(I,j) = (G%mask2dCu(I,j) > 0.)
+      delta_p_x(I,j)  = 0.0
     enddo ; enddo
 
     do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
@@ -619,15 +626,40 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     enddo
 
     if (do_more_k) then
-      ! There are still points where a correction is needed, so use the top interface.
-      do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
-        T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
-        S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
-        p_int_W(I,j) = p(i,j,1) ; p_int_E(I,j) = p(i+1,j,1)
-        intx_za_nonlin(I,j) = intx_za(I,j,1) - 0.5*(za(i,j,1) + za(i+1,j,1))
-        dp_int_x(I,j) = p(i+1,j,1)-p(i,j,1)
+      if (CS%reset_intxpa_flattest) then
+      ! There are still points where a correction is needed, so use flattest interface
+        do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+          ! choose top layer first
+          T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+          S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+          p_int_W(I,j) = p(i,j,1) ; p_int_E(I,j) = p(i+1,j,1)
+          intx_za_nonlin(I,j) = intx_za(I,j,1) - 0.5*(za(i,j,1) + za(i+1,j,1))
+          dp_int_x(I,j) = p(i+1,j,1)-p(i,j,1)
+          delta_p_x(I,j) = abs(p(i+1,j,1)-p(i,j,1))
+          do k=1,nz
+            if (abs(p(i+1,j,k+1)-p(i,j,k+1)) < delta_p_x(I,j)) then
+              ! bottom of layer is less sloped than top. Use this layer
+              delta_p_x(I,j) = abs(p(i+1,j,k+1)-p(i,j,k+1))
+              T_int_W(I,j) = T_b(i,j,k) ; T_int_E(I,j) = T_b(i+1,j,k)
+              S_int_W(I,j) = S_b(i,j,k) ; S_int_E(I,j) = S_b(i+1,j,k)
+              p_int_W(I,j) = p(i,j,K+1) ; p_int_E(I,j) = p(i+1,j,K+1)
+              intx_za_nonlin(I,j) = intx_za(I,j,K+1) - 0.5*(za(i,j,K+1) + za(i+1,j,K+1))
+              dp_int_x(I,j) = p(i+1,j,K+1)-p(i,j,K+1)
+            endif
+          enddo
         seek_x_cor(I,j) = .false.
-      endif ; enddo ; enddo
+        endif; enddo; enddo;
+      else
+        ! There are still points where a correction is needed, so use the top interface.
+        do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+          T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+          S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+          p_int_W(I,j) = p(i,j,1) ; p_int_E(I,j) = p(i+1,j,1)
+          intx_za_nonlin(I,j) = intx_za(I,j,1) - 0.5*(za(i,j,1) + za(i+1,j,1))
+          dp_int_x(I,j) = p(i+1,j,1)-p(i,j,1)
+          seek_x_cor(I,j) = .false.
+        endif ; enddo ; enddo
+      endif
     endif
 
     do j=js,je
@@ -658,6 +690,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     inty_za_nonlin(:,:) = 0.0 ; inty_za_cor_ri(:,:) = 0.0 ; dp_int_y(:,:) = 0.0
     do J=Jsq,Jeq ; do i=is,ie
       seek_y_cor(i,J) = (G%mask2dCv(i,J) > 0.)
+      delta_p_y(i,J) = 0.0
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
@@ -695,15 +728,40 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     enddo
 
     if (do_more_k) then
-      ! There are still points where a correction is needed, so use the top interface.
-      do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
-        T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
-        S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
-        p_int_S(i,J) = p(i,j,1) ; p_int_N(i,J) = p(i,j+1,1)
-        inty_za_nonlin(i,J) = inty_za(i,J,1) - 0.5*(za(i,j,1) + za(i,j+1,1))
-        dp_int_y(i,J) = p(i,j+1,1) - p(i,j,1)
-        seek_y_cor(i,J) = .false.
-      endif ; enddo ; enddo
+      if (CS%reset_intxpa_flattest) then
+        ! There are still points where a correction is needed, so use flattest interface.
+        do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+          ! choose top interface first
+          T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+          S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+          p_int_S(i,J) = p(i,j,1) ; p_int_N(i,J) = p(i,j+1,1)
+          inty_za_nonlin(i,J) = inty_za(i,J,1) - 0.5*(za(i,j,1) + za(i,j+1,1))
+          dp_int_y(i,J) = p(i,j+1,1) - p(i,j,1)
+          delta_p_y(i,J) = abs(p(i,j+1,1)-p(i,j,1))
+          do k=1,nz
+            if (abs(p(i,j+1,k+1)-p(i,j,k+1)) < delta_p_y(i,J)) then
+              ! bottom of layer is less sloped than top. Use this layer
+              delta_p_y(i,J) = abs(p(i,j+1,k+1)-p(i,j,k+1))
+              T_int_S(i,J) = T_b(i,j,k) ; T_int_N(i,J) = T_b(i,j+1,k)
+              S_int_S(i,J) = S_b(i,j,k) ; S_int_N(i,J) = S_b(i,j+1,k)
+              p_int_S(i,J) = p(i,j,K+1) ; p_int_N(i,J) = p(i,j+1,K+1)
+              inty_za_nonlin(i,J) = inty_za(i,J,K+1) - 0.5*(za(i,j,K+1) + za(i,j+1,K+1))
+              dp_int_y(i,J) = p(i,j+1,K+1) - p(i,j,K+1)
+            endif
+          enddo
+          seek_y_cor(i,J) = .false.
+        endif ; enddo ; enddo
+      else
+        ! There are still points where a correction is needed, so use the top interface.
+        do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+          T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+          S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+          p_int_S(i,J) = p(i,j,1) ; p_int_N(i,J) = p(i,j+1,1)
+          inty_za_nonlin(i,J) = inty_za(i,J,1) - 0.5*(za(i,j,1) + za(i,j+1,1))
+          dp_int_y(i,J) = p(i,j+1,1) - p(i,j,1)
+          seek_y_cor(i,J) = .false.
+        endif ; enddo ; enddo
+      endif
     endif
 
     do J=Jsq,Jeq
@@ -946,6 +1004,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   logical, dimension(SZI_(G),SZJB_(G)) :: &
     seek_y_cor          ! If true, try to find a v-point interface that would provide a better estimate
                         ! of the curvature terms in the inty_pa.
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    delta_z_x           ! If using flattest interface for reset integral, store x interface differences [Z ~> m]
+  real, dimension(SZI_(G),SZJB_(G)) :: &
+    delta_z_y           ! If using flattest interface for reset integral, store y interface differences [Z ~> m]
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), target :: &
     T_tmp, &    ! Temporary array of temperatures where layers that are lighter
@@ -1472,6 +1534,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     intx_pa_nonlin(:,:) = 0.0 ; dgeo_x(:,:) = 0.0 ; intx_pa_cor_ri(:,:) = 0.0
     do j=js,je ; do I=Isq,Ieq
       seek_x_cor(I,j) = (G%mask2dCu(I,j) > 0.)
+      delta_z_x(I,j)  = 0.0
     enddo ; enddo
 
     do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
@@ -1514,16 +1577,43 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo
 
     if (do_more_k) then
-      ! There are still points where a correction is needed, so use the top interface for lack of a better idea?
-      do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
-        T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
-        S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
-        p_int_W(I,j) = -GxRho0*(e(i,j,1) - Z_0p(i,j))
-        p_int_E(I,j) = -GxRho0*(e(i+1,j,1) - Z_0p(i,j))
-        intx_pa_nonlin(I,j) = intx_pa(I,j,1) - 0.5*(pa(i,j,1) + pa(i+1,j,1))
-        dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,1)-e(i,j,1))
-        seek_x_cor(I,j) = .false.
-      endif ; enddo ; enddo
+      if (CS%reset_intxpa_flattest) then
+      ! There are still points where a correction is needed, so use flattest interface
+        do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+          ! choose top layer first
+          T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+          S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+          p_int_W(I,j) = -GxRho0*(e(i,j,1) - Z_0p(i,j))
+          p_int_E(I,j) = -GxRho0*(e(i+1,j,1) - Z_0p(i,j))
+          intx_pa_nonlin(I,j) = intx_pa(I,j,1) - 0.5*(pa(i,j,1) + pa(i+1,j,1))
+          dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,1)-e(i,j,1))
+          delta_z_x(I,j) = abs(e(i+1,j,1)-e(i,j,1))
+          do k=1,nz
+            if (abs(e(i+1,j,k+1)-e(i,j,k+1)) < delta_z_x(I,j)) then
+              ! bottom of layer is less sloped than top. Use this layer
+              delta_z_x(I,j) = abs(e(i+1,j,k+1)-e(i,j,k+1))
+              T_int_W(I,j) = T_b(i,j,k) ; T_int_E(I,j) = T_b(i+1,j,k)
+              S_int_W(I,j) = S_b(i,j,k) ; S_int_E(I,j) = S_b(i+1,j,k)
+              p_int_W(I,j) = -GxRho0*(e(i,j,K+1) - Z_0p(i,j))
+              p_int_E(I,j) = -GxRho0*(e(i+1,j,K+1) - Z_0p(i,j))
+              intx_pa_nonlin(I,j) = intx_pa(I,j,K+1) - 0.5*(pa(i,j,K+1) + pa(i+1,j,K+1))
+              dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,K+1)-e(i,j,K+1))
+            endif
+          enddo
+          seek_x_cor(I,j) = .false.
+        endif ; enddo ; enddo
+      else
+        ! There are still points where a correction is needed, so use the top interface for lack of a better idea?
+        do j=js,je ; do I=Isq,Ieq ; if (seek_x_cor(I,j)) then
+          T_int_W(I,j) = T_top(i,j) ; T_int_E(I,j) = T_top(i+1,j)
+          S_int_W(I,j) = S_top(i,j) ; S_int_E(I,j) = S_top(i+1,j)
+          p_int_W(I,j) = -GxRho0*(e(i,j,1) - Z_0p(i,j))
+          p_int_E(I,j) = -GxRho0*(e(i+1,j,1) - Z_0p(i,j))
+          intx_pa_nonlin(I,j) = intx_pa(I,j,1) - 0.5*(pa(i,j,1) + pa(i+1,j,1))
+          dgeo_x(I,j) = GV%g_Earth * (e(i+1,j,1)-e(i,j,1))
+          seek_x_cor(I,j) = .false.
+        endif ; enddo ; enddo
+      endif
     endif
 
     do j=js,je
@@ -1554,6 +1644,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     inty_pa_nonlin(:,:) = 0.0 ; dgeo_y(:,:) = 0.0 ; inty_pa_cor_ri(:,:) = 0.0
     do J=Jsq,Jeq ; do i=is,ie
       seek_y_cor(i,J) = (G%mask2dCv(i,J) > 0.)
+      delta_z_y(i,J)  = 0.0
     enddo ; enddo
 
     do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
@@ -1595,16 +1686,43 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     enddo
 
     if (do_more_k) then
-      ! There are still points where a correction is needed, so use the top interface for lack of a better idea?
-      do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
-        T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
-        S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
-        p_int_S(i,J) = -GxRho0*(e(i,j,1) - Z_0p(i,j))
-        p_int_N(i,J) = -GxRho0*(e(i,j+1,1) - Z_0p(i,j))
-        inty_pa_nonlin(i,J) = inty_pa(i,J,1) - 0.5*(pa(i,j,1) + pa(i,j+1,1))
-        dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,1)-e(i,j,1))
-        seek_y_cor(i,J) = .false.
-      endif ; enddo ; enddo
+      if (CS%reset_intxpa_flattest) then
+        ! There are still points where a correction is needed, so use flattest interface.
+        do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+          ! choose top interface first
+          T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+          S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+          p_int_S(i,J) = -GxRho0*(e(i,j,1) - Z_0p(i,j))
+          p_int_N(i,J) = -GxRho0*(e(i,j+1,1) - Z_0p(i,j))
+          inty_pa_nonlin(i,J) = inty_pa(i,J,1) - 0.5*(pa(i,j,1) + pa(i,j+1,1))
+          dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,1)-e(i,j,1))
+          delta_z_y(i,J) = abs(e(i,j+1,1)-e(i,j,1))
+          do k=1,nz
+            if (abs(e(i,j+1,k+1)-e(i,j,k+1)) < delta_z_y(i,J)) then
+              ! bottom of layer is less sloped than top. Use this layer
+              delta_z_y(i,J) = abs(e(i,j+1,k+1)-e(i,j,k+1))
+              T_int_S(i,J) = T_b(i,j,k) ; T_int_N(i,J) = T_b(i,j+1,k)
+              S_int_S(i,J) = S_b(i,j,k) ; S_int_N(i,J) = S_b(i,j+1,k)
+              p_int_S(i,J) = -GxRho0*(e(i,j,k+1) - Z_0p(i,j))
+              p_int_N(i,J) = -GxRho0*(e(i,j+1,k+1) - Z_0p(i,j))
+              inty_pa_nonlin(i,J) = inty_pa(i,J,k+1) - 0.5*(pa(i,j,k+1) + pa(i,j+1,k+1))
+              dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,k+1)-e(i,j,k+1))
+            endif
+          enddo
+          seek_y_cor(i,J) = .false.
+        endif ; enddo ; enddo
+      else
+        ! There are still points where a correction is needed, so use the top interface for lack of a better idea?
+        do J=Jsq,Jeq ; do i=is,ie ; if (seek_y_cor(i,J)) then
+          T_int_S(i,J) = T_top(i,j) ; T_int_N(i,J) = T_top(i,j+1)
+          S_int_S(i,J) = S_top(i,j) ; S_int_N(i,J) = S_top(i,j+1)
+          p_int_S(i,J) = -GxRho0*(e(i,j,1) - Z_0p(i,j))
+          p_int_N(i,J) = -GxRho0*(e(i,j+1,1) - Z_0p(i,j))
+          inty_pa_nonlin(i,J) = inty_pa(i,J,1) - 0.5*(pa(i,j,1) + pa(i,j+1,1))
+          dgeo_y(i,J) = GV%g_Earth * (e(i,j+1,1)-e(i,j,1))
+          seek_y_cor(i,J) = .false.
+        endif ; enddo ; enddo
+      endif
     endif
 
     do J=Jsq,Jeq
@@ -1940,9 +2058,14 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   call get_param(param_file, mdl, "RESET_INTXPA_INTEGRAL", CS%reset_intxpa_integral, &
                  "If true, reset INTXPA to match pressures at first nonvanished cell. "//&
                  "Includes pressure correction.", default=.false., do_not_log=.not.use_EOS)
+  call get_param(param_file, mdl, "RESET_INTXPA_INTEGRAL_FLATTEST", CS%reset_intxpa_flattest, &
+                 "If true, use flattest interface as reference interface where there is no "//&
+                 "better choice for RESET_INTXPA_INTEGRAL. Otherwise, use surface interface.", &
+                 default=.false., do_not_log=.not.use_EOS)
   if (.not.use_EOS) then  ! These options do nothing without an equation of state.
     CS%correction_intxpa = .false.
     CS%reset_intxpa_integral = .false.
+    CS%reset_intxpa_flattest = .false.
   endif
   call get_param(param_file, mdl, "RESET_INTXPA_H_NONVANISHED", CS%h_nonvanished, &
                  "A minimal layer thickness that indicates that a layer is thick enough to usefully "//&
