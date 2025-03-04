@@ -2536,8 +2536,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     else
       do j=js,je ; do i=is,ie
         if (eta(i,j) < 0.0) then
+          write(mesg,'(" at ", ES12.4, ES12.4, i7, i7)') &
+              G%geoLonT(i,j), G%geoLatT(i,j), i + G%HI%idg_offset, j + G%HI%jdg_offset
           if (err_count < 2) &
-            call MOM_error(WARNING, "btstep: negative eta in a non-Boussinesq barotropic solver.", all_print=.true.)
+            call MOM_error(WARNING, "btstep: negative eta in a non-Boussinesq barotropic solver "//&
+                trim(mesg), all_print=.true.)
           err_count = err_count + 1
         endif
       enddo ; enddo
