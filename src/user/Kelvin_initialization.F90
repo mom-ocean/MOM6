@@ -128,9 +128,9 @@ function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
   call register_OBC(casename, param_file, OBC_Reg)
   register_Kelvin_OBC = .true.
 
-  if (CS%mode > 0) call MOM_error(WARNING, &
-      "register_Kelvin_OBC: The Kelvin_initialization code is not yet working properly unless KELVIN_WAVE_MODE = 0.")
   ! TODO: Revisit and correct the internal Kelvin wave test case.
+  ! Specifically, using wave_speed() and investigating adding eta_anom
+  ! noted in the comments below.
 
 end function register_Kelvin_OBC
 
@@ -212,7 +212,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: PI           ! The ratio of the circumference of a circle to its diameter [nondim]
   real :: depth_tot(SZI_(G),SZJ_(G))  ! The total depth of the ocean [Z ~> m]
   real    :: mag_SSH ! An overall magnitude of the external wave sea surface height at the coastline [Z ~> m]
-  real    :: mag_int ! An overall magnitude of the internal wave at the coastline [L2 T-2 ~> m2 s-2]
+  real    :: mag_int ! An overall magnitude of the internal wave at the coastline [L T-1 ~> m s-1]
   real    :: x1, y1  ! Various positions [L ~> m]
   real    :: x, y    ! Various positions [L ~> m]
   real    :: val1    ! The periodicity factor [nondim]
@@ -247,14 +247,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     omega = 2.0 * PI / CS%wave_period
     val1 = sin(omega * time_sec)
   else
-    ! This is supposed to be a linear internal Kelvin wave case, so I do not understand the purpose
-    ! of the squared velocity here. -RWH
-    mag_int = CS%inflow_amp**2
+    mag_int = CS%inflow_amp
     N0 = sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
     lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
-    ! The reason for the factor of 0.001 is unclear, but it is needed to recreate the previous answers. -RWH
-    omega = (4.0 * CS%H0 * N0)  / (CS%mode * (0.001*G%grid_unit_to_L)*G%len_lon)
+    omega = (4.0 * CS%H0 * N0)  / (CS%mode * (G%grid_unit_to_L*G%len_lon))
     ! If the modal wave speed were calculated via wave_speeds(), we should have
     !   lambda = CS%F_0 / CS%cg_mode
     !   omega = (4.0 * PI / (G%grid_unit_to_L*G%len_lon)) * CS%cg_mode
@@ -312,16 +309,13 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           ! in MOM_wave_speed() based on the horizontally uniform initial state.
           if (segment%nudged) then
             do k=1,nz
-              ! Note that mag_int is the square of the specified inflow amplitude, in [L2 T-2 ~> m2 s-2].
-              ! The following expression is dimensionally correct, but I do not understand why the
-              ! normal velocities should scale with the square of their amplitude. -RWH
-              segment%nudged_normal_vel(I,j,k) = mag_int * lambda / CS%F_0 * &
+              segment%nudged_normal_vel(I,j,k) = mag_int * &
                    exp(-lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = mag_int * lambda / CS%F_0 * &
+              segment%normal_vel(I,j,k) = mag_int * &
                    exp(-lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
               segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
@@ -373,12 +367,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
           segment%normal_vel_bt(i,J) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(i,J,k) = mag_int * lambda / CS%F_0 * &
+              segment%nudged_normal_vel(i,J,k) = mag_int * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(i,J,k) = mag_int * lambda / CS%F_0 * &
+              segment%normal_vel(i,J,k) = mag_int * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
               segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
