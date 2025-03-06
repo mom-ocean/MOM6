@@ -1628,9 +1628,7 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
   call zonal_flux_layer_fused(u_R, h_in, h_W, h_E, uh_R, duhdu_R, &
                         visc_rem, dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, gv=gv)
 
-  do j=jsh,jeh
-
-  do k=1,nz
+  do k=1,nz ; do j=jsh,jeh
     do I=ish-1,ieh ; if (do_I(I,j)) then
       FAmt_0(I,j) = FAmt_0(I,j) + duhdu_0(I,j,k)
       FAmt_L(I,j) = FAmt_L(I,j) + duhdu_L(I,j,k)
@@ -1638,8 +1636,9 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
       uhtot_L(I,j) = uhtot_L(I,j) + uh_L(I,j,k)
       uhtot_R(I,j) = uhtot_R(I,j) + uh_R(I,j,k)
     endif ; enddo
-  enddo
-  do I=ish-1,ieh ; if (do_I(I,j)) then
+  enddo ; enddo
+
+  do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
     FA_0 = FAmt_0(I,j) ; FA_avg = FAmt_0(I,j)
     if ((duL(I,j) - du0(I,j)) /= 0.0) &
       FA_avg = uhtot_L(I,j) / (duL(I,j) - du0(I,j))
@@ -1667,9 +1666,7 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
     BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
     BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
     BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
-  endif ; enddo
-
-  enddo
+  endif ; enddo ; enddo
 
 end subroutine set_zonal_BT_cont_fused
 
