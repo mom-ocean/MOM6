@@ -1233,10 +1233,10 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
                        !! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
-  real, dimension(SZIB_(G),SZK_(GV)) :: &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
     uh_aux, &  ! An auxiliary zonal volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
     duhdu      ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
-  real, dimension(SZIB_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
     uh_err, &  ! Difference between uhbt and the summed uh [H L2 T-1 ~> m3 s-1 or kg s-1].
     uh_err_best, & ! The smallest value of uh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
     u_new, &   ! The velocity with the correction added [L T-1 ~> m s-1].
@@ -1248,23 +1248,23 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, j, k, nz, itt, max_itts = 20
-  logical :: domore, do_I(SZIB_(G))
+  logical :: domore, do_I(SZIB_(G),SZJ_(G))
 
   nz = GV%ke
 
+  uh_aux(:, :, :) = 0.0 ; duhdu(:, :, :) = 0.0
+
+  if (present(uh_3d)) then ; do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+    uh_aux(i,j,k) = uh_3d(I,j,k)
+  enddo ; enddo ; enddo ; endif
+
   do j = jsh, jeh
 
-  uh_aux(:,:) = 0.0 ; duhdu(:,:) = 0.0
-
-  if (present(uh_3d)) then ; do k=1,nz ; do I=ish-1,ieh
-    uh_aux(i,k) = uh_3d(I,j,k)
-  enddo ; enddo ; endif
-
   do I=ish-1,ieh
-    du(I,j) = 0.0 ; do_I(I) = do_I_in(I,j)
-    du_max(I) = du_max_CFL(I,j) ; du_min(I) = du_min_CFL(I,j)
-    uh_err(I) = uh_tot_0(I,j) - uhbt(I,j) ; duhdu_tot(I) = duhdu_tot_0(I,j)
-    uh_err_best(I) = abs(uh_err(I))
+    du(I,j) = 0.0 ; do_I(I,j) = do_I_in(I,j)
+    du_max(I,j) = du_max_CFL(I,j) ; du_min(I,j) = du_min_CFL(I,j)
+    uh_err(I,j) = uh_tot_0(I,j) - uhbt(I,j) ; duhdu_tot(I,j) = duhdu_tot_0(I,j)
+    uh_err_best(I,j) = abs(uh_err(I,j))
   enddo
 
   do itt=1,max_itts
@@ -1277,57 +1277,57 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
     tol_vel = CS%tol_vel
 
     do I=ish-1,ieh
-      if (uh_err(I) > 0.0) then ; du_max(I) = du(I,j)
-      elseif (uh_err(I) < 0.0) then ; du_min(I) = du(I,j)
-      else ; do_I(I) = .false. ; endif
+      if (uh_err(I,j) > 0.0) then ; du_max(I,j) = du(I,j)
+      elseif (uh_err(I,j) < 0.0) then ; du_min(I,j) = du(I,j)
+      else ; do_I(I,j) = .false. ; endif
     enddo
     domore = .false.
-    do I=ish-1,ieh ; if (do_I(I)) then
-      if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I)) > tol_eta) .or. &
-          (CS%better_iter .and. ((abs(uh_err(I)) > tol_vel * duhdu_tot(I)) .or. &
-                                 (abs(uh_err(I)) > uh_err_best(I))) )) then
+    do I=ish-1,ieh ; if (do_I(I,j)) then
+      if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I,j)) > tol_eta) .or. &
+          (CS%better_iter .and. ((abs(uh_err(I,j)) > tol_vel * duhdu_tot(I,j)) .or. &
+                                 (abs(uh_err(I,j)) > uh_err_best(I,j))) )) then
       !   Use Newton's method, provided it stays bounded.  Otherwise bisect
       ! the value with the appropriate bound.
-        ddu = -uh_err(I) / duhdu_tot(I)
+        ddu = -uh_err(I,j) / duhdu_tot(I,j)
         du_prev = du(I,j)
         du(I,j) = du(I,j) + ddu
         if (abs(ddu) < 1.0e-15*abs(du(I,j))) then
-          do_I(I) = .false. ! ddu is small enough to quit.
+          do_I(I,j) = .false. ! ddu is small enough to quit.
         elseif (ddu > 0.0) then
-          if (du(I,j) >= du_max(I)) then
-            du(I,j) = 0.5*(du_prev + du_max(I))
-            if (du_max(I) - du_prev < 1.0e-15*abs(du(I,j))) do_I(I) = .false.
+          if (du(I,j) >= du_max(I,j)) then
+            du(I,j) = 0.5*(du_prev + du_max(I,j))
+            if (du_max(I,j) - du_prev < 1.0e-15*abs(du(I,j))) do_I(I,j) = .false.
           endif
         else ! ddu < 0.0
-          if (du(I,j) <= du_min(I)) then
-            du(I,j) = 0.5*(du_prev + du_min(I))
-            if (du_prev - du_min(I) < 1.0e-15*abs(du(I,j))) do_I(I) = .false.
+          if (du(I,j) <= du_min(I,j)) then
+            du(I,j) = 0.5*(du_prev + du_min(I,j))
+            if (du_prev - du_min(I,j) < 1.0e-15*abs(du(I,j))) do_I(I,j) = .false.
           endif
         endif
-        if (do_I(I)) domore = .true.
+        if (do_I(I,j)) domore = .true.
       else
-        do_I(I) = .false.
+        do_I(I,j) = .false.
       endif
     endif ; enddo
     if (.not.domore) exit
 
     if ((itt < max_itts) .or. present(uh_3d)) then ; do k=1,nz
-      do I=ish-1,ieh ; u_new(I) = u(I,j,k) + du(I,j) * visc_rem(I,j,k) ; enddo
-      call zonal_flux_layer(u_new, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), &
-                            uh_aux(:,k), duhdu(:,k), visc_rem(:,j,k), &
-                            dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k), OBC)
+      do I=ish-1,ieh ; u_new(I,j) = u(I,j,k) + du(I,j) * visc_rem(I,j,k) ; enddo
+      call zonal_flux_layer(u_new(:,j), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), &
+                            uh_aux(:, j, k), duhdu(:,j,k), visc_rem(:,j,k), &
+                            dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k), OBC)
     enddo ; endif
 
     if (itt < max_itts) then
       do I=ish-1,ieh
-        uh_err(I) = -uhbt(I,j) ; duhdu_tot(I) = 0.0
+        uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(i,j) = 0.0
       enddo
       do k=1,nz ; do I=ish-1,ieh
-        uh_err(I) = uh_err(I) + uh_aux(I,k)
-        duhdu_tot(I) = duhdu_tot(I) + duhdu(I,k)
+        uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
+        duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
       enddo ; enddo
       do I=ish-1,ieh
-        uh_err_best(I) = min(uh_err_best(I), abs(uh_err(I)))
+        uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
       enddo
     endif
   enddo ! itt-loop
@@ -1336,7 +1336,7 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
   ! This never seems to happen with 20 iterations as max_itt.
 
   if (present(uh_3d)) then ; do k=1,nz ; do I=ish-1,ieh
-    uh_3d(I,j,k) = uh_aux(I,k)
+    uh_3d(I,j,k) = uh_aux(I,j,k)
   enddo ; enddo ; endif
 
   enddo
