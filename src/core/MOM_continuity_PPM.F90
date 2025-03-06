@@ -1541,22 +1541,22 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G)) ::  &
     du0, & ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
-    zeros      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(SZIB_(G)) :: &
     duL, duR, &   ! The barotropic velocity increments that give the westerly
                   ! (duL) and easterly (duR) test velocities [L T-1 ~> m s-1].
+    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
     du_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
+    FAmt_L, FAmt_R, & ! The summed effective marginal face areas for the 3
+    FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
+    uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
+    uhtot_R       ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZIB_(G)) :: &
     u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
     u_0, &        ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
     duhdu_L, &    ! The effective layer marginal face areas with the westerly
     duhdu_R, &    ! (_L), easterly (_R), and zero-barotropic (_0) test
     duhdu_0, &    ! velocities [H L ~> m2 or kg m-1].
     uh_L, uh_R, & ! The layer transports with the westerly (_L), easterly (_R),
-    uh_0, &       ! and zero-barotropic (_0) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-    FAmt_L, FAmt_R, & ! The summed effective marginal face areas for the 3
-    FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
-    uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
-    uhtot_R       ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+    uh_0       ! and zero-barotropic (_0) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
   real :: FA_0    ! The effective face area with 0 barotropic transport [L H ~> m2 or kg m-1].
   real :: FA_avg  ! The average effective face area [L H ~> m2 or kg m-1], nominally given by
                   ! the realized transport divided by the barotropic velocity.
@@ -1582,20 +1582,18 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
                          du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                          ish, ieh, jsh, jeh, do_I, por_face_areaU)
 
-  do j=jsh,jeh
-
   ! Determine the westerly- and easterly- fluxes.  Choose a sufficiently
   ! negative velocity correction for the easterly-flux, and a sufficiently
   ! positive correction for the westerly-flux.
   domore = .false.
-  do I=ish-1,ieh
+  do j=jsh,jeh ; do I=ish-1,ieh
     if (do_I(I,j)) domore = .true.
-    du_CFL(I) = (CFL_min * Idt) * G%dxCu(I,j)
-    duR(I) = min(0.0,du0(I,j) - du_CFL(I))
-    duL(I) = max(0.0,du0(I,j) + du_CFL(I))
-    FAmt_L(I) = 0.0 ; FAmt_R(I) = 0.0 ; FAmt_0(I) = 0.0
-    uhtot_L(I) = 0.0 ; uhtot_R(I) = 0.0
-  enddo
+    du_CFL(I,j) = (CFL_min * Idt) * G%dxCu(I,j)
+    duR(I,j) = min(0.0,du0(I,j) - du_CFL(I,j))
+    duL(I,j) = max(0.0,du0(I,j) + du_CFL(I,j))
+    FAmt_L(I,j) = 0.0 ; FAmt_R(I,j) = 0.0 ; FAmt_0(I,j) = 0.0
+    uhtot_L(I,j) = 0.0 ; uhtot_R(I,j) = 0.0
+  enddo ; enddo
 
   if (.not.domore) then
     do k=1,nz ; do I=ish-1,ieh
@@ -1606,20 +1604,22 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
     return
   endif
 
+  do j=jsh,jeh
+
   do k=1,nz ; do I=ish-1,ieh ; if (do_I(I,j)) then
     visc_rem_lim = max(visc_rem(I,j,k), min_visc_rem*visc_rem_max(I,j))
     if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
-      if (u(I,j,k) + duR(I)*visc_rem_lim > -du_CFL(I)*visc_rem(I,j,k)) &
-        duR(I) = -(u(I,j,k) + du_CFL(I)*visc_rem(I,j,k)) / visc_rem_lim
-      if (u(I,j,k) + duL(I)*visc_rem_lim < du_CFL(I)*visc_rem(I,j,k)) &
-        duL(I) = -(u(I,j,k) - du_CFL(I)*visc_rem(I,j,k)) / visc_rem_lim
+      if (u(I,j,k) + duR(I,j)*visc_rem_lim > -du_CFL(I,j)*visc_rem(I,j,k)) &
+        duR(I,j) = -(u(I,j,k) + du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
+      if (u(I,j,k) + duL(I,j)*visc_rem_lim < du_CFL(I,j)*visc_rem(I,j,k)) &
+        duL(I,j) = -(u(I,j,k) - du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
     endif
   endif ; enddo ; enddo
 
   do k=1,nz
     do I=ish-1,ieh ; if (do_I(I,j)) then
-      u_L(I) = u(I,j,k) + duL(I) * visc_rem(I,j,k)
-      u_R(I) = u(I,j,k) + duR(I) * visc_rem(I,j,k)
+      u_L(I) = u(I,j,k) + duL(I,j) * visc_rem(I,j,k)
+      u_R(I) = u(I,j,k) + duR(I,j) * visc_rem(I,j,k)
       u_0(I) = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
     endif ; enddo
     call zonal_flux_layer(u_0, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_0, duhdu_0, &
@@ -1629,36 +1629,36 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
     call zonal_flux_layer(u_R, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_R, duhdu_R, &
                           visc_rem(:,j,k), dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k))
     do I=ish-1,ieh ; if (do_I(I,j)) then
-      FAmt_0(I) = FAmt_0(I) + duhdu_0(I)
-      FAmt_L(I) = FAmt_L(I) + duhdu_L(I)
-      FAmt_R(I) = FAmt_R(I) + duhdu_R(I)
-      uhtot_L(I) = uhtot_L(I) + uh_L(I)
-      uhtot_R(I) = uhtot_R(I) + uh_R(I)
+      FAmt_0(I,j) = FAmt_0(I,j) + duhdu_0(I)
+      FAmt_L(I,j) = FAmt_L(I,j) + duhdu_L(I)
+      FAmt_R(I,j) = FAmt_R(I,j) + duhdu_R(I)
+      uhtot_L(I,j) = uhtot_L(I,j) + uh_L(I)
+      uhtot_R(I,j) = uhtot_R(I,j) + uh_R(I)
     endif ; enddo
   enddo
   do I=ish-1,ieh ; if (do_I(I,j)) then
-    FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
-    if ((duL(I) - du0(I,j)) /= 0.0) &
-      FA_avg = uhtot_L(I) / (duL(I) - du0(I,j))
-    if (FA_avg > max(FA_0, FAmt_L(I))) then ; FA_avg = max(FA_0, FAmt_L(I))
-    elseif (FA_avg < min(FA_0, FAmt_L(I))) then ; FA_0 = FA_avg ; endif
+    FA_0 = FAmt_0(I,j) ; FA_avg = FAmt_0(I,j)
+    if ((duL(I,j) - du0(I,j)) /= 0.0) &
+      FA_avg = uhtot_L(I,j) / (duL(I,j) - du0(I,j))
+    if (FA_avg > max(FA_0, FAmt_L(I,j))) then ; FA_avg = max(FA_0, FAmt_L(I,j))
+    elseif (FA_avg < min(FA_0, FAmt_L(I,j))) then ; FA_0 = FA_avg ; endif
 
-    BT_cont%FA_u_W0(I,j) = FA_0 ; BT_cont%FA_u_WW(I,j) = FAmt_L(I)
-    if (abs(FA_0-FAmt_L(I)) <= 1e-12*FA_0) then ; BT_cont%uBT_WW(I,j) = 0.0 ; else
-      BT_cont%uBT_WW(I,j) = (1.5 * (duL(I) - du0(I,j))) * &
-                            ((FAmt_L(I) - FA_avg) / (FAmt_L(I) - FA_0))
+    BT_cont%FA_u_W0(I,j) = FA_0 ; BT_cont%FA_u_WW(I,j) = FAmt_L(I,j)
+    if (abs(FA_0-FAmt_L(I,j)) <= 1e-12*FA_0) then ; BT_cont%uBT_WW(I,j) = 0.0 ; else
+      BT_cont%uBT_WW(I,j) = (1.5 * (duL(I,j) - du0(I,j))) * &
+                            ((FAmt_L(I,j) - FA_avg) / (FAmt_L(I,j) - FA_0))
     endif
 
-    FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
-    if ((duR(I) - du0(I,j)) /= 0.0) &
-      FA_avg = uhtot_R(I) / (duR(I) - du0(I,j))
-    if (FA_avg > max(FA_0, FAmt_R(I))) then ; FA_avg = max(FA_0, FAmt_R(I))
-    elseif (FA_avg < min(FA_0, FAmt_R(I))) then ; FA_0 = FA_avg ; endif
+    FA_0 = FAmt_0(I,j) ; FA_avg = FAmt_0(I,j)
+    if ((duR(I,j) - du0(I,j)) /= 0.0) &
+      FA_avg = uhtot_R(I,j) / (duR(I,j) - du0(I,j))
+    if (FA_avg > max(FA_0, FAmt_R(I,j))) then ; FA_avg = max(FA_0, FAmt_R(I,j))
+    elseif (FA_avg < min(FA_0, FAmt_R(I,j))) then ; FA_0 = FA_avg ; endif
 
-    BT_cont%FA_u_E0(I,j) = FA_0 ; BT_cont%FA_u_EE(I,j) = FAmt_R(I)
-    if (abs(FAmt_R(I) - FA_0) <= 1e-12*FA_0) then ; BT_cont%uBT_EE(I,j) = 0.0 ; else
-      BT_cont%uBT_EE(I,j) = (1.5 * (duR(I) - du0(I,j))) * &
-                            ((FAmt_R(I) - FA_avg) / (FAmt_R(I) - FA_0))
+    BT_cont%FA_u_E0(I,j) = FA_0 ; BT_cont%FA_u_EE(I,j) = FAmt_R(I,j)
+    if (abs(FAmt_R(I,j) - FA_0) <= 1e-12*FA_0) then ; BT_cont%uBT_EE(I,j) = 0.0 ; else
+      BT_cont%uBT_EE(I,j) = (1.5 * (duR(I,j) - du0(I,j))) * &
+                            ((FAmt_R(I,j) - FA_avg) / (FAmt_R(I,j) - FA_0))
     endif
   else
     BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
