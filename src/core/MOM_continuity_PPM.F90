@@ -678,6 +678,18 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           if (du_min_CFL(I,j) * visc_rem(I,k) < du_lim) &
             du_min_CFL(I,j) = du_lim / visc_rem(I,k)
         enddo ; enddo ; enddo
+      else
+        do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+          if (CS%vol_CFL) then
+            dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+            dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
+          else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
+
+          if (du_max_CFL(I,j) * visc_rem(I,k) > dx_W*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
+            du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem(I,k)
+          if (du_min_CFL(I,j) * visc_rem(I,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
+            du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem(I,k)
+        enddo ; enddo ; enddo
       endif
     endif
 
@@ -693,20 +705,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
     if (present(uhbt) .or. set_BT_cont) then
       if (use_visc_rem) then
-        if (CS%aggress_adjust) then
-        else
-          do k=1,nz ; do I=ish-1,ieh
-            if (CS%vol_CFL) then
-              dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
-              dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
-            else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
-
-            if (du_max_CFL(I,j) * visc_rem(I,k) > dx_W*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
-              du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem(I,k)
-            if (du_min_CFL(I,j) * visc_rem(I,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
-              du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem(I,k)
-          enddo ; enddo
-        endif
       else
         if (CS%aggress_adjust) then
           do k=1,nz ; do I=ish-1,ieh
