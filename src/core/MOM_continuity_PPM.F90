@@ -634,6 +634,18 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
     endif ; enddo ; enddo ; enddo
   endif
+
+  if (present(uhbt) .or. set_BT_cont) then
+    if (use_visc_rem.and.CS%use_visc_rem_max) then
+      visc_rem_max(:, :) = 0.0
+      do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
+        visc_rem_max(I,j) = max(visc_rem_max(I,j), visc_rem_u(I,j,k))
+      enddo ; enddo ; enddo
+    else
+      visc_rem_max(:, :) = 1.0
+    endif
+  endif
+
   do j=jsh,jeh
     ! init visc_rem. This will be parted out later
     do k=1,nz
@@ -643,14 +655,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     enddo
 
     if (present(uhbt) .or. set_BT_cont) then
-      if (use_visc_rem .and. CS%use_visc_rem_max) then
-        visc_rem_max(:,j) = 0.0
-        do k=1,nz ; do I=ish-1,ieh
-          visc_rem_max(I,j) = max(visc_rem_max(I,j), visc_rem_u(I,j,k))
-        enddo ; enddo
-      else
-        visc_rem_max(:,j) = 1.0
-      endif
       !   Set limits on du that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
       do I=ish-1,ieh
