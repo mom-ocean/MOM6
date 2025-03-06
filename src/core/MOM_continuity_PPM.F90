@@ -757,6 +757,18 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           do j=jsh,jeh ; do I=ish-1,ieh ; du_cor(I,j) = du(I,j) ; enddo ; enddo
         endif
       endif
+      if (set_BT_cont) then
+        do j=jsh,jeh
+          do k=1,nz
+            if (use_visc_rem) then ; do I=ish-1,ieh
+              visc_rem(I,k) = visc_rem_u(I,j,k)
+            enddo ; endif
+          enddo
+          call set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0,&
+                                du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
+                                visc_rem_max, j, ish, ieh, do_I, por_face_areaU)
+        enddo
+      endif
     endif
 
   endif
@@ -764,17 +776,20 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   do j=jsh,jeh
     ! init visc_rem. This will be parted out later
     do k=1,nz
-      if (use_visc_rem) then ; do I=ish-1,ieh
-        visc_rem(I,k) = visc_rem_u(I,j,k)
-      enddo ; endif
+      if (use_visc_rem) then
+        do I=ish-1,ieh
+          visc_rem(I,k) = visc_rem_u(I,j,k)
+        enddo
+      else
+        do I=ish-1,ieh
+          visc_rem(I,k) = 1.0
+        enddo
+      endif
     enddo
 
     if (present(uhbt) .or. set_BT_cont) then
 
       if (set_BT_cont) then
-        call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0(:,j), duhdu_tot_0(:,j),&
-                               du_max_CFL(:,j), du_min_CFL(:,j), dt, G, GV, US, CS, visc_rem, &
-                               visc_rem_max(:,j), j, ish, ieh, do_I(:, j), por_face_areaU)
         if (any_simple_OBC) then
           do I=ish-1,ieh
             if (simple_OBC_pt(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
@@ -1490,6 +1505,173 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   enddo ; enddo ; endif
 
 end subroutine zonal_flux_adjust
+
+!> Sets a structure that describes the zonal barotropic volume or mass fluxes as a
+!! function of barotropic flow to agree closely with the sum of the layer's transports.
+subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, &
+                             du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
+                             visc_rem_max, j, ish, ieh, do_I, por_face_areaU)
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u    !< Zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to
+                                                                   !! calculate fluxes [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_W  !< West edge thickness in the
+                                                                   !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_E  !< East edge thickness in the
+                                                                   !! reconstruction [H ~> m or kg m-2].
+  type(BT_cont_type),                        intent(inout) :: BT_cont !< A structure with elements
+                       !! that describe the effective open face areas as a function of barotropic flow.
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: uh_tot_0    !< The summed transport
+                       !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: duhdu_tot_0 !< The partial derivative
+                       !! of du_err with du at 0 adjustment [H L ~> m2 or kg m-1].
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: du_max_CFL  !< Maximum acceptable
+                       !! value of du [L T-1 ~> m s-1].
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: du_min_CFL  !< Minimum acceptable
+                       !! value of du [L T-1 ~> m s-1].
+  real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
+  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
+  real, dimension(SZIB_(G),SZK_(GV)),        intent(in)    :: visc_rem !< Both the fraction of the
+                       !! momentum originally in a layer that remains after a time-step of viscosity, and
+                       !! the fraction of a time-step's worth of a barotropic acceleration that a layer
+                       !! experiences after viscosity is applied [nondim].
+                       !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim].
+  integer,                                   intent(in)    :: j        !< Spatial index.
+  integer,                                   intent(in)    :: ish      !< Start of index range.
+  integer,                                   intent(in)    :: ieh      !< End of index range.
+  logical, dimension(SZIB_(G),SZJ_(G)),      intent(in)    :: do_I     !< A logical flag indicating
+                       !! which I values to work on.
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), &
+                                    intent(in) :: por_face_areaU !< fractional open area of U-faces [nondim]
+  ! Local variables
+  real, dimension(SZIB_(G)) :: &
+    du0, &        ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
+    duL, duR, &   ! The barotropic velocity increments that give the westerly
+                  ! (duL) and easterly (duR) test velocities [L T-1 ~> m s-1].
+    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
+    du_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
+    u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
+    u_0, &        ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
+    duhdu_L, &    ! The effective layer marginal face areas with the westerly
+    duhdu_R, &    ! (_L), easterly (_R), and zero-barotropic (_0) test
+    duhdu_0, &    ! velocities [H L ~> m2 or kg m-1].
+    uh_L, uh_R, & ! The layer transports with the westerly (_L), easterly (_R),
+    uh_0, &       ! and zero-barotropic (_0) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+    FAmt_L, FAmt_R, & ! The summed effective marginal face areas for the 3
+    FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
+    uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
+    uhtot_R       ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: FA_0    ! The effective face area with 0 barotropic transport [L H ~> m2 or kg m-1].
+  real :: FA_avg  ! The average effective face area [L H ~> m2 or kg m-1], nominally given by
+                  ! the realized transport divided by the barotropic velocity.
+  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]. This
+                       ! limiting is necessary to keep the inverse of visc_rem
+                       ! from leading to large CFL numbers.
+  real :: min_visc_rem ! The smallest permitted value for visc_rem that is used
+                       ! in finding the barotropic velocity that changes the
+                       ! flow direction [nondim].  This is necessary to keep the inverse
+                       ! of visc_rem from leading to large CFL numbers.
+  real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
+                  ! flow is truly upwind [nondim]
+  real :: Idt     ! The inverse of the time step [T-1 ~> s-1].
+  logical :: domore
+  integer :: i, k, nz
+
+  nz = GV%ke ; Idt = 1.0 / dt
+  min_visc_rem = 0.1 ; CFL_min = 1e-6
+
+ ! Diagnose the zero-transport correction, du0.
+  do I=ish-1,ieh ; zeros(I) = 0.0 ; enddo
+  call zonal_flux_adjust(u, h_in, h_W, h_E, zeros, uh_tot_0(:,j), duhdu_tot_0(:,j), du0, &
+                         du_max_CFL(:,j), du_min_CFL(:,j), dt, G, GV, US, CS, visc_rem, &
+                         j, ish, ieh, do_I(:,j), por_face_areaU)
+
+  ! Determine the westerly- and easterly- fluxes.  Choose a sufficiently
+  ! negative velocity correction for the easterly-flux, and a sufficiently
+  ! positive correction for the westerly-flux.
+  domore = .false.
+  do I=ish-1,ieh
+    if (do_I(I,j)) domore = .true.
+    du_CFL(I) = (CFL_min * Idt) * G%dxCu(I,j)
+    duR(I) = min(0.0,du0(I) - du_CFL(I))
+    duL(I) = max(0.0,du0(I) + du_CFL(I))
+    FAmt_L(I) = 0.0 ; FAmt_R(I) = 0.0 ; FAmt_0(I) = 0.0
+    uhtot_L(I) = 0.0 ; uhtot_R(I) = 0.0
+  enddo
+
+  if (.not.domore) then
+    do k=1,nz ; do I=ish-1,ieh
+      BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
+      BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
+      BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
+    enddo ; enddo
+    return
+  endif
+
+  do k=1,nz ; do I=ish-1,ieh ; if (do_I(I,j)) then
+    visc_rem_lim = max(visc_rem(I,k), min_visc_rem*visc_rem_max(I,j))
+    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+      if (u(I,j,k) + duR(I)*visc_rem_lim > -du_CFL(I)*visc_rem(I,k)) &
+        duR(I) = -(u(I,j,k) + du_CFL(I)*visc_rem(I,k)) / visc_rem_lim
+      if (u(I,j,k) + duL(I)*visc_rem_lim < du_CFL(I)*visc_rem(I,k)) &
+        duL(I) = -(u(I,j,k) - du_CFL(I)*visc_rem(I,k)) / visc_rem_lim
+    endif
+  endif ; enddo ; enddo
+
+  do k=1,nz
+    do I=ish-1,ieh ; if (do_I(I,j)) then
+      u_L(I) = u(I,j,k) + duL(I) * visc_rem(I,k)
+      u_R(I) = u(I,j,k) + duR(I) * visc_rem(I,k)
+      u_0(I) = u(I,j,k) + du0(I) * visc_rem(I,k)
+    endif ; enddo
+    call zonal_flux_layer(u_0, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_0, duhdu_0, &
+                          visc_rem(:,k), dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k))
+    call zonal_flux_layer(u_L, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_L, duhdu_L, &
+                          visc_rem(:,k), dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k))
+    call zonal_flux_layer(u_R, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_R, duhdu_R, &
+                          visc_rem(:,k), dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k))
+    do I=ish-1,ieh ; if (do_I(I,j)) then
+      FAmt_0(I) = FAmt_0(I) + duhdu_0(I)
+      FAmt_L(I) = FAmt_L(I) + duhdu_L(I)
+      FAmt_R(I) = FAmt_R(I) + duhdu_R(I)
+      uhtot_L(I) = uhtot_L(I) + uh_L(I)
+      uhtot_R(I) = uhtot_R(I) + uh_R(I)
+    endif ; enddo
+  enddo
+  do I=ish-1,ieh ; if (do_I(I,j)) then
+    FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
+    if ((duL(I) - du0(I)) /= 0.0) &
+      FA_avg = uhtot_L(I) / (duL(I) - du0(I))
+    if (FA_avg > max(FA_0, FAmt_L(I))) then ; FA_avg = max(FA_0, FAmt_L(I))
+    elseif (FA_avg < min(FA_0, FAmt_L(I))) then ; FA_0 = FA_avg ; endif
+
+    BT_cont%FA_u_W0(I,j) = FA_0 ; BT_cont%FA_u_WW(I,j) = FAmt_L(I)
+    if (abs(FA_0-FAmt_L(I)) <= 1e-12*FA_0) then ; BT_cont%uBT_WW(I,j) = 0.0 ; else
+      BT_cont%uBT_WW(I,j) = (1.5 * (duL(I) - du0(I))) * &
+                            ((FAmt_L(I) - FA_avg) / (FAmt_L(I) - FA_0))
+    endif
+
+    FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
+    if ((duR(I) - du0(I)) /= 0.0) &
+      FA_avg = uhtot_R(I) / (duR(I) - du0(I))
+    if (FA_avg > max(FA_0, FAmt_R(I))) then ; FA_avg = max(FA_0, FAmt_R(I))
+    elseif (FA_avg < min(FA_0, FAmt_R(I))) then ; FA_0 = FA_avg ; endif
+
+    BT_cont%FA_u_E0(I,j) = FA_0 ; BT_cont%FA_u_EE(I,j) = FAmt_R(I)
+    if (abs(FAmt_R(I) - FA_0) <= 1e-12*FA_0) then ; BT_cont%uBT_EE(I,j) = 0.0 ; else
+      BT_cont%uBT_EE(I,j) = (1.5 * (duR(I) - du0(I))) * &
+                            ((FAmt_R(I) - FA_avg) / (FAmt_R(I) - FA_0))
+    endif
+  else
+    BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
+    BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
+    BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
+  endif ; enddo
+
+end subroutine set_zonal_BT_cont_fused
 
 !> Sets a structure that describes the zonal barotropic volume or mass fluxes as a
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
