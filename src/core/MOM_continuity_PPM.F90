@@ -717,6 +717,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         enddo ; enddo ; enddo
       endif
     endif
+    do j=jsh,jeh ; do I=ish-1,ieh
+      du_max_CFL(I,j) = max(du_max_CFL(I,j),0.0)
+      du_min_CFL(I,j) = min(du_min_CFL(I,j),0.0)
+    enddo ; enddo
 
   endif
 
@@ -729,25 +733,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     enddo
 
     if (present(uhbt) .or. set_BT_cont) then
-      do I=ish-1,ieh
-        du_max_CFL(I,j) = max(du_max_CFL(I,j),0.0)
-        du_min_CFL(I,j) = min(du_min_CFL(I,j),0.0)
-      enddo
-
-      any_simple_OBC = .false.
-      if (present(uhbt) .or. set_BT_cont) then
-        if (local_specified_BC .or. local_Flather_OBC) then ; do I=ish-1,ieh
-          l_seg = abs(OBC%segnum_u(I,j))
-
-          ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          simple_OBC_pt(I) = .false.
-          if (l_seg /= OBC_NONE) simple_OBC_pt(I) = OBC%segment(l_seg)%specified
-          do_I(I, j) = .not.simple_OBC_pt(I)
-          any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I)
-        enddo ; else ; do I=ish-1,ieh
-          do_I(I, j) = .true.
-        enddo ; endif
-      endif
 
       if (present(uhbt)) then
         ! Find du and uh.
