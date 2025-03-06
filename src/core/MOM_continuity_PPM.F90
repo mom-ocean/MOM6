@@ -724,7 +724,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     if (present(uhbt) .or. set_BT_cont) then
       ! untested!
       if (local_specified_BC .or. local_Flather_OBC) then ; do j=jsh,jeh ; do I=ish-1,ieh
-        l_seg = (OBC%segnum_u(I,j))
+        l_seg = abs(OBC%segnum_u(I,j))
 
         ! Avoid reconciling barotropic/baroclinic transports if transport is specified
         simple_OBC_pt(I) = .false.
