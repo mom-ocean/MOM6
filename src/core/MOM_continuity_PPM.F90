@@ -613,6 +613,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   I_dt = 1.0 / dt
   if (CS%aggress_adjust) CFL_dt = I_dt
 
+  ! a better solution is needed!
   if (.not.use_visc_rem) then
     visc_rem(:,:) = 1.0
     visc_rem_u_tmp(:, :, :) = 1.0
@@ -1879,7 +1880,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                                                   !! transports [L T-1 ~> m s-1].
 
   ! Local variables
-  real, dimension(SZI_(G),SZK_(GV)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dvhdv         ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G)) :: &
     dv, &         ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
@@ -1888,11 +1889,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     dvhdv_tot_0, & ! Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
     vh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim]
-  logical, dimension(SZI_(G)) :: do_I
+  logical, dimension(SZI_(G),SZJ_(G)) :: do_I
   real, dimension(SZI_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZK_(GV)) :: &
     visc_rem      ! A 2-D copy of visc_rem_v or an array of 1's [nondim]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: visc_rem_v_tmp ! A copy of visc_rem_v
   real :: I_vrm   ! 1.0 / visc_rem_max [nondim]
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
                   ! the time step [T-1 ~> s-1].
@@ -1933,21 +1935,23 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   I_dt = 1.0 / dt
   if (CS%aggress_adjust) CFL_dt = I_dt
 
-  if (.not.use_visc_rem) visc_rem(:,:) = 1.0
-  !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
-  !$OMP                                     dvhdv_tot_0,FAvi,visc_rem_max,I_vrm,dv_lim,dy_N,dy_S, &
-  !$OMP                                     simple_OBC_pt,any_simple_OBC,l_seg) &
-  !$OMP                        firstprivate(visc_rem)
+  ! a better solution is needed
+  if (.not.use_visc_rem) then
+    visc_rem(:,:) = 1.0
+    visc_rem_v_tmp(:, :, :) = 1.0
+  else
+    visc_rem_v_tmp(:, :, :) = visc_rem_v(:, :, :)
+  endif
+  do j=jsh-1,jeh ; do i=ish,ieh ; do_I(i,j) = .true. ; enddo ; enddo
   do J=jsh-1,jeh
-    do i=ish,ieh ; do_I(i) = .true. ; enddo
     ! This sets vh and dvhdv.
     do k=1,nz
       if (use_visc_rem) then ; do i=ish,ieh
         visc_rem(i,k) = visc_rem_v(i,J,k)
       enddo ; endif
-      call merid_flux_layer(v(:,J,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), &
-                            vh(:,J,k), dvhdv(:,k), visc_rem(:,k), &
-                            dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
+      call merid_flux_layer_fused(v, h_in, h_S, h_N, &
+                            vh, dvhdv, visc_rem_v_tmp, &
+                            dt, G, GV, US, J, k, ish, ieh, do_I, CS%vol_CFL, por_face_areaV, OBC)
       if (local_specified_BC) then
         do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
           l_seg = abs(OBC%segnum_v(i,J))
@@ -1979,7 +1983,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         vh_tot_0(i) = 0.0 ; dvhdv_tot_0(i) = 0.0
       enddo
       do k=1,nz ; do i=ish,ieh
-        dvhdv_tot_0(i) = dvhdv_tot_0(i) + dvhdv(i,k)
+        dvhdv_tot_0(i) = dvhdv_tot_0(i) + dvhdv(i,j,k)
         vh_tot_0(i) = vh_tot_0(i) + vh(i,J,k)
       enddo ; enddo
 
@@ -2046,10 +2050,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           simple_OBC_pt(i) = .false.
           if (l_seg /= 0) simple_OBC_pt(i) = OBC%segment(l_seg)%specified
-          do_I(i) = .not.simple_OBC_pt(i)
+          do_I(i,j) = .not.simple_OBC_pt(i)
           any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i)
         enddo ; else ; do i=ish,ieh
-          do_I(i) = .true.
+          do_I(i,j) = .true.
         enddo ; endif
       endif
 
@@ -2057,7 +2061,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         ! Find dv and vh.
         call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt(:,J), vh_tot_0, dvhdv_tot_0, dv, &
                                dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                               j, ish, ieh, do_I, por_face_areaV, vh, OBC=OBC)
+                               j, ish, ieh, do_I(:,j), por_face_areaV, vh, OBC=OBC)
 
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
@@ -2075,7 +2079,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       if (set_BT_cont) then
         call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0,&
                                dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                               visc_rem_max, J, ish, ieh, do_I, por_face_areaV)
+                               visc_rem_max, J, ish, ieh, do_I(:,j), por_face_areaV)
         if (any_simple_OBC) then
           do i=ish,ieh
             if (simple_OBC_pt(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
@@ -2210,6 +2214,93 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   call cpu_clock_end(id_clock_correct)
 
 end subroutine meridional_BT_mass_flux
+
+
+!> Evaluates the meridional mass or volume fluxes in a layer.
+subroutine merid_flux_layer_fused(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, GV, US, J, k, &
+                            ish, ieh, do_I, vol_CFL, por_face_areaV, OBC)
+  type(ocean_grid_type),        intent(in)    :: G        !< Ocean's grid structure.
+  type(verticalGrid_type),      intent(in)    :: GV       !< Ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),     intent(in)    :: v        !< Meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),     intent(in)    :: visc_rem !< Both the fraction of the
+         !! momentum originally in a layer that remains after a time-step
+         !! of viscosity, and the fraction of a time-step's worth of a barotropic
+         !! acceleration that a layer experiences after viscosity is applied [nondim].
+         !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in) :: h      !< Layer thickness used to calculate fluxes,
+                                                          !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in) :: h_S    !< South edge thickness in the reconstruction
+                                                          !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in) :: h_N    !< North edge thickness in the reconstruction
+                                                          !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vh       !< Meridional mass or volume transport
+                                                          !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: dvhdv    !< Partial derivative of vh with v
+                                                          !! [H L ~> m2 or kg m-1].
+  real,                         intent(in)    :: dt       !< Time increment [T ~> s].
+  type(unit_scale_type),        intent(in)    :: US       !< A dimensional unit scaling type
+  integer,                      intent(in)    :: j,k      !< Spatial index.
+  integer,                      intent(in)    :: ish      !< Start of index range.
+  integer,                      intent(in)    :: ieh      !< End of index range.
+  logical, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: do_I     !< Which i values to work on.
+  logical,                      intent(in)    :: vol_CFL  !< If true, rescale the
+         !! ratio of face areas to the cell areas when estimating the CFL number.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                             intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
+  type(ocean_OBC_type), optional, pointer :: OBC !< Open boundaries control structure.
+  ! Local variables
+  real :: CFL ! The CFL number based on the local velocity and grid spacing [nondim]
+  real :: curv_3 ! A measure of the thickness curvature over a grid length,
+                 ! with the same units as h, i.e. [H ~> m or kg m-2].
+  real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
+  integer :: i
+  logical :: local_open_BC
+
+  local_open_BC = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    local_open_BC = OBC%open_v_BCs_exist_globally
+  endif ; endif
+
+  do i=ish,ieh ; if (do_I(i,j)) then
+    if (v(i,j,k) > 0.0) then
+      if (vol_CFL) then ; CFL = (v(i,j,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
+      else ; CFL = v(i,j,k) * dt * G%IdyT(i,j) ; endif
+      curv_3 = (h_S(i,j,k) + h_N(i,j,k)) - 2.0*h(i,j,k)
+      vh(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * v(i,j,k) * ( h_N(i,j,k) + CFL * &
+          (0.5*(h_S(i,j,k) - h_N(i,j,k)) + curv_3*(CFL - 1.5)) )
+      h_marg = h_N(i,j,k) + CFL * ((h_S(i,j,k) - h_N(i,j,k)) + &
+                                  3.0*curv_3*(CFL - 1.0))
+    elseif (v(i,j,k) < 0.0) then
+      if (vol_CFL) then ; CFL = (-v(i,j,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
+      else ; CFL = -v(i,j,k) * dt * G%IdyT(i,j+1) ; endif
+      curv_3 = (h_S(i,j+1,k) + h_N(i,j+1,k)) - 2.0*h(i,j+1,k)
+      vh(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * v(i,j,k) * ( h_S(i,j+1,k) + CFL * &
+          (0.5*(h_N(i,j+1,k)-h_S(i,j+1,k)) + curv_3*(CFL - 1.5)) )
+      h_marg = h_S(i,j+1,k) + CFL * ((h_N(i,j+1,k)-h_S(i,j+1,k)) + &
+                                    3.0*curv_3*(CFL - 1.0))
+    else
+      vh(i,j,k) = 0.0
+      h_marg = 0.5 * (h_S(i,j+1,k) + h_N(i,j,k))
+    endif
+    dvhdv(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * h_marg * visc_rem(i,j,k)
+  endif ; enddo
+
+  if (local_open_BC) then
+    do i=ish,ieh ; if (do_I(i,j)) then
+      if (OBC%segnum_v(i,J) /= 0) then
+        if (OBC%segment(abs(OBC%segnum_v(i,J)))%open) then
+          if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
+            vh(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * v(i,j,k) * h(i,j,k)
+            dvhdv(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * h(i,j,k) * visc_rem(i,j,k)
+          else
+            vh(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * v(i,j,k) * h(i,j+1,k)
+            dvhdv(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * h(i,j+1,k) * visc_rem(i,j,k)
+          endif
+        endif
+      endif
+    endif ; enddo
+  endif
+end subroutine merid_flux_layer_fused
 
 
 !> Evaluates the meridional mass or volume fluxes in a layer.
