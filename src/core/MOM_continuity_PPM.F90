@@ -1946,6 +1946,15 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   call merid_flux_layer_fused(v, h_in, h_S, h_N, &
                         vh, dvhdv, visc_rem_v_tmp, &
                         dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
+
+  ! untested
+  if (local_specified_BC) then
+    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
+      l_seg = abs(OBC%segnum_v(i,J))
+      if (OBC%segment(l_seg)%specified) vh(i,J,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
+    endif ; enddo ; enddo ; enddo
+  endif
+  
   !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
   !$OMP                                     dvhdv_tot_0,FAvi,visc_rem_max,I_vrm,dv_lim,dy_N,dy_S, &
   !$OMP                                     simple_OBC_pt,any_simple_OBC,l_seg) &
@@ -1956,12 +1965,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       if (use_visc_rem) then ; do i=ish,ieh
         visc_rem(i,k) = visc_rem_v(i,J,k)
       enddo ; endif
-      if (local_specified_BC) then
-        do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
-          l_seg = abs(OBC%segnum_v(i,J))
-          if (OBC%segment(l_seg)%specified) vh(i,J,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
-        endif ; enddo
-      endif
     enddo ! k-loop
 
     if (present(vhbt) .or. set_BT_cont) then
