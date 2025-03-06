@@ -743,6 +743,21 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       call zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, du, &
                             du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u, &
                             ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
+
+      if (present(u_cor)) then
+        do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+          u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u(i,j,k)
+        enddo ; enddo ; enddo
+        if (any_simple_OBC) then 
+          do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
+            u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
+          endif ; enddo ; enddo ; enddo
+        endif
+      endif ! u-corrected
+
+      if (present(du_cor)) then
+        do j=jsh,jeh ; do I=ish-1,ieh ; du_cor(I,j) = du(I,j) ; enddo ; enddo
+      endif
     endif
 
   endif
@@ -756,21 +771,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     enddo
 
     if (present(uhbt) .or. set_BT_cont) then
-
-      if (present(uhbt)) then
-
-        if (present(u_cor)) then ; do k=1,nz
-          do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I,j) * visc_rem(I,k) ; enddo
-          if (any_simple_OBC) then ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
-            u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
-          endif ; enddo ; endif
-        enddo ; endif ! u-corrected
-
-        if (present(du_cor)) then
-          do I=ish-1,ieh ; du_cor(I,j) = du(I,j) ; enddo
-        endif
-
-      endif
 
       if (set_BT_cont) then
         call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0(:,j), duhdu_tot_0(:,j),&
