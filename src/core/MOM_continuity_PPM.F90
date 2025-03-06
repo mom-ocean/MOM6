@@ -1549,9 +1549,10 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
     FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
     uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
     uhtot_R       ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G)) :: &
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
     u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
-    u_0, &        ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
+    u_0           ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
+  real, dimension(SZIB_(G)) :: &
     duhdu_L, &    ! The effective layer marginal face areas with the westerly
     duhdu_R, &    ! (_L), easterly (_R), and zero-barotropic (_0) test
     duhdu_0, &    ! velocities [H L ~> m2 or kg m-1].
@@ -1615,19 +1616,20 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
     endif
   endif ; enddo ; enddo ; enddo
 
+  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
+    u_L(I,j,k) = u(I,j,k) + duL(I,j) * visc_rem(I,j,k)
+    u_R(I,j,k) = u(I,j,k) + duR(I,j) * visc_rem(I,j,k)
+    u_0(I,j,k) = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
+  endif ; enddo ; enddo ; enddo
+
   do j=jsh,jeh
 
   do k=1,nz
-    do I=ish-1,ieh ; if (do_I(I,j)) then
-      u_L(I) = u(I,j,k) + duL(I,j) * visc_rem(I,j,k)
-      u_R(I) = u(I,j,k) + duR(I,j) * visc_rem(I,j,k)
-      u_0(I) = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
-    endif ; enddo
-    call zonal_flux_layer(u_0, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_0, duhdu_0, &
+    call zonal_flux_layer(u_0(:,j,k), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_0, duhdu_0, &
                           visc_rem(:,j,k), dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k))
-    call zonal_flux_layer(u_L, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_L, duhdu_L, &
+    call zonal_flux_layer(u_L(:,j,k), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_L, duhdu_L, &
                           visc_rem(:,j,k), dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k))
-    call zonal_flux_layer(u_R, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_R, duhdu_R, &
+    call zonal_flux_layer(u_R(:,j,k), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh_R, duhdu_R, &
                           visc_rem(:,j,k), dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k))
     do I=ish-1,ieh ; if (do_I(I,j)) then
       FAmt_0(I,j) = FAmt_0(I,j) + duhdu_0(I)
