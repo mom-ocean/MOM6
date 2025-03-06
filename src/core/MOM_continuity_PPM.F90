@@ -1595,6 +1595,7 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
     uhtot_L(I,j) = 0.0 ; uhtot_R(I,j) = 0.0
   enddo ; enddo
 
+  ! short circuit if none should be updated
   if (.not.domore) then
     do k=1,nz ; do I=ish-1,ieh
       BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
@@ -1604,9 +1605,7 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
     return
   endif
 
-  do j=jsh,jeh
-
-  do k=1,nz ; do I=ish-1,ieh ; if (do_I(I,j)) then
+  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
     visc_rem_lim = max(visc_rem(I,j,k), min_visc_rem*visc_rem_max(I,j))
     if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
       if (u(I,j,k) + duR(I,j)*visc_rem_lim > -du_CFL(I,j)*visc_rem(I,j,k)) &
@@ -1614,7 +1613,9 @@ subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_t
       if (u(I,j,k) + duL(I,j)*visc_rem_lim < du_CFL(I,j)*visc_rem(I,j,k)) &
         duL(I,j) = -(u(I,j,k) - du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
     endif
-  endif ; enddo ; enddo
+  endif ; enddo ; enddo ; enddo
+
+  do j=jsh,jeh
 
   do k=1,nz
     do I=ish-1,ieh ; if (do_I(I,j)) then
