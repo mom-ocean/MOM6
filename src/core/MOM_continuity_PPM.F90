@@ -1239,10 +1239,10 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     uh_err, &  ! Difference between uhbt and the summed uh [H L2 T-1 ~> m3 s-1 or kg s-1].
     uh_err_best, & ! The smallest value of uh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
-    u_new, &   ! The velocity with the correction added [L T-1 ~> m s-1].
     duhdu_tot,&! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
     du_min, &  ! Lower limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
     du_max     ! Upper limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u_new ! The velocity with the correction added [L T-1 ~> m s-1].
   real :: du_prev ! The previous value of du [L T-1 ~> m s-1].
   real :: ddu     ! The change in du from the previous iteration [L T-1 ~> m s-1].
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
@@ -1258,14 +1258,12 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
     uh_aux(i,j,k) = uh_3d(I,j,k)
   enddo ; enddo ; enddo ; endif
 
-  do j = jsh, jeh
-
-  do I=ish-1,ieh
+  do j=jsh,jeh ; do I=ish-1,ieh
     du(I,j) = 0.0 ; do_I(I,j) = do_I_in(I,j)
     du_max(I,j) = du_max_CFL(I,j) ; du_min(I,j) = du_min_CFL(I,j)
     uh_err(I,j) = uh_tot_0(I,j) - uhbt(I,j) ; duhdu_tot(I,j) = duhdu_tot_0(I,j)
     uh_err_best(I,j) = abs(uh_err(I,j))
-  enddo
+  enddo ; enddo
 
   do itt=1,max_itts
     select case (itt)
@@ -1276,13 +1274,13 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
     end select
     tol_vel = CS%tol_vel
 
-    do I=ish-1,ieh
+    do j=jsh, jeh ; do I=ish-1,ieh
       if (uh_err(I,j) > 0.0) then ; du_max(I,j) = du(I,j)
       elseif (uh_err(I,j) < 0.0) then ; du_min(I,j) = du(I,j)
       else ; do_I(I,j) = .false. ; endif
-    enddo
+    enddo ; enddo
     domore = .false.
-    do I=ish-1,ieh ; if (do_I(I,j)) then
+    do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
       if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I,j)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(uh_err(I,j)) > tol_vel * duhdu_tot(I,j)) .or. &
                                  (abs(uh_err(I,j)) > uh_err_best(I,j))) )) then
@@ -1308,38 +1306,36 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
       else
         do_I(I,j) = .false.
       endif
-    endif ; enddo
+    endif ; enddo ; enddo
     if (.not.domore) exit
 
-    if ((itt < max_itts) .or. present(uh_3d)) then ; do k=1,nz
-      do I=ish-1,ieh ; u_new(I,j) = u(I,j,k) + du(I,j) * visc_rem(I,j,k) ; enddo
-      call zonal_flux_layer(u_new(:,j), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), &
-                            uh_aux(:, j, k), duhdu(:,j,k), visc_rem(:,j,k), &
-                            dt, G, US, j, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaU(:,j,k), OBC)
-    enddo ; endif
+    if ((itt < max_itts) .or. present(uh_3d)) then ; do k=1,nz ; do j = jsh,jeh
+      do I=ish-1,ieh ; u_new(I,j,k) = u(I,j,k) + du(I,j) * visc_rem(I,j,k) ; enddo ; enddo ; enddo
+      call zonal_flux_layer_fused(u_new, h_in, h_W, h_E, &
+                            uh_aux, duhdu, visc_rem, &
+                            dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, GV)
+    endif
 
     if (itt < max_itts) then
-      do I=ish-1,ieh
+      do j=jsh,jeh ; do I=ish-1,ieh
         uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(i,j) = 0.0
-      enddo
-      do k=1,nz ; do I=ish-1,ieh
+      enddo; enddo
+      do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
         uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
         duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
-      enddo ; enddo
-      do I=ish-1,ieh
+      enddo ; enddo ; enddo
+      do j=jsh,jeh ; do I=ish-1,ieh
         uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
-      enddo
+      enddo ; enddo
     endif
   enddo ! itt-loop
   ! If there are any faces which have not converged to within the tolerance,
   ! so-be-it, or else use a final upwind correction?
   ! This never seems to happen with 20 iterations as max_itt.
 
-  if (present(uh_3d)) then ; do k=1,nz ; do I=ish-1,ieh
+  if (present(uh_3d)) then ; do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
     uh_3d(I,j,k) = uh_aux(I,j,k)
-  enddo ; enddo ; endif
-
-  enddo
+  enddo ; enddo ; enddo ; endif
 
 end subroutine zonal_flux_adjust_fused
 
