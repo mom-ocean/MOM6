@@ -1882,13 +1882,14 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dvhdv         ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G)) :: &
-    dv, &         ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
     dv_min_CFL, & ! Lower limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dv_max_CFL, & ! Upper limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dvhdv_tot_0, & ! Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
     vh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim]
+  real, dimension(SZI_(G)) :: &
+    dv         ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
   logical, dimension(SZI_(G),SZJ_(G)) :: do_I
   real, dimension(SZI_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
@@ -1943,10 +1944,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     visc_rem_v_tmp(:, :, :) = visc_rem_v(:, :, :)
   endif
   do j=jsh-1,jeh ; do i=ish,ieh ; do_I(i,j) = .true. ; enddo ; enddo
+  ! This sets vh and dvhdv.
   call merid_flux_layer_fused(v, h_in, h_S, h_N, &
                         vh, dvhdv, visc_rem_v_tmp, &
                         dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
-
   ! untested
   if (local_specified_BC) then
     do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
@@ -1954,13 +1955,39 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       if (OBC%segment(l_seg)%specified) vh(i,J,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
     endif ; enddo ; enddo ; enddo
   endif
+  if (present(vhbt) .or. set_BT_cont) then
+    if (use_visc_rem .and. CS%use_visc_rem_max) then
+      visc_rem_max(:, :) = 0.0
+      do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+        visc_rem_max(i, j) = max(visc_rem_max(i, j), visc_rem_v(i,j,k))
+      enddo ; enddo ; enddo
+    else
+      visc_rem_max(:, :) = 1.0
+    endif
+    !   Set limits on dv that will keep the CFL number between -1 and 1.
+    ! This should be adequate to keep the root bracketed in all cases.
+    do j=jsh-1,jeh ; do i=ish,ieh
+      I_vrm = 0.0
+      if (visc_rem_max(i,j) > 0.0) I_vrm = 1.0 / visc_rem_max(i,j)
+      if (CS%vol_CFL) then
+        dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(i,J), 1000.0*G%dyT(i,j))
+        dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(i,J), 1000.0*G%dyT(i,j+1))
+      else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
+      dv_max_CFL(i,j) = 2.0 * (CFL_dt * dy_S) * I_vrm
+      dv_min_CFL(i,j) = -2.0 * (CFL_dt * dy_N) * I_vrm
+      vh_tot_0(i,j) = 0.0 ; dvhdv_tot_0(i,j) = 0.0
+    enddo ; enddo
+    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+      dvhdv_tot_0(i,j) = dvhdv_tot_0(i,j) + dvhdv(i,j,k)
+      vh_tot_0(i,j) = vh_tot_0(i,j) + vh(i,J,k)
+    enddo ; enddo ; enddo
+  endif
   
   !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
   !$OMP                                     dvhdv_tot_0,FAvi,visc_rem_max,I_vrm,dv_lim,dy_N,dy_S, &
   !$OMP                                     simple_OBC_pt,any_simple_OBC,l_seg) &
   !$OMP                        firstprivate(visc_rem)
   do J=jsh-1,jeh
-    ! This sets vh and dvhdv.
     do k=1,nz
       if (use_visc_rem) then ; do i=ish,ieh
         visc_rem(i,k) = visc_rem_v(i,J,k)
@@ -1968,32 +1995,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     enddo ! k-loop
 
     if (present(vhbt) .or. set_BT_cont) then
-      if (use_visc_rem .and. CS%use_visc_rem_max) then
-        visc_rem_max(:) = 0.0
-        do k=1,nz ; do i=ish,ieh
-          visc_rem_max(i) = max(visc_rem_max(i), visc_rem(i,k))
-        enddo ; enddo
-      else
-        visc_rem_max(:) = 1.0
-      endif
-      !   Set limits on dv that will keep the CFL number between -1 and 1.
-      ! This should be adequate to keep the root bracketed in all cases.
-      do i=ish,ieh
-        I_vrm = 0.0
-        if (visc_rem_max(i) > 0.0) I_vrm = 1.0 / visc_rem_max(i)
-        if (CS%vol_CFL) then
-          dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(i,J), 1000.0*G%dyT(i,j))
-          dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(i,J), 1000.0*G%dyT(i,j+1))
-        else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-        dv_max_CFL(i) = 2.0 * (CFL_dt * dy_S) * I_vrm
-        dv_min_CFL(i) = -2.0 * (CFL_dt * dy_N) * I_vrm
-        vh_tot_0(i) = 0.0 ; dvhdv_tot_0(i) = 0.0
-      enddo
-      do k=1,nz ; do i=ish,ieh
-        dvhdv_tot_0(i) = dvhdv_tot_0(i) + dvhdv(i,j,k)
-        vh_tot_0(i) = vh_tot_0(i) + vh(i,J,k)
-      enddo ; enddo
-
       if (use_visc_rem) then
         if (CS%aggress_adjust) then
           do k=1,nz ; do i=ish,ieh
@@ -2002,12 +2003,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
             else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
             dv_lim = 0.499*((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k)))
-            if (dv_max_CFL(i) * visc_rem(i,k) > dv_lim) &
-              dv_max_CFL(i) = dv_lim / visc_rem(i,k)
+            if (dv_max_CFL(i,j) * visc_rem(i,k) > dv_lim) &
+              dv_max_CFL(i,j) = dv_lim / visc_rem(i,k)
 
             dv_lim = 0.499*((-dy_N*CFL_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k)))
-            if (dv_min_CFL(i) * visc_rem(i,k) < dv_lim) &
-              dv_min_CFL(i) = dv_lim / visc_rem(i,k)
+            if (dv_min_CFL(i,j) * visc_rem(i,k) < dv_lim) &
+              dv_min_CFL(i,j) = dv_lim / visc_rem(i,k)
           enddo ; enddo
         else
           do k=1,nz ; do i=ish,ieh
@@ -2015,10 +2016,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
               dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
             else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-            if (dv_max_CFL(i) * visc_rem(i,k) > dy_S*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
-              dv_max_CFL(i) = (dy_S*CFL_dt - v(i,J,k)) / visc_rem(i,k)
-            if (dv_min_CFL(i) * visc_rem(i,k) < -dy_N*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
-              dv_min_CFL(i) = -(dy_N*CFL_dt + v(i,J,k)) / visc_rem(i,k)
+            if (dv_max_CFL(i,j) * visc_rem(i,k) > dy_S*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
+              dv_max_CFL(i,j) = (dy_S*CFL_dt - v(i,J,k)) / visc_rem(i,k)
+            if (dv_min_CFL(i,j) * visc_rem(i,k) < -dy_N*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
+              dv_min_CFL(i,j) = -(dy_N*CFL_dt + v(i,J,k)) / visc_rem(i,k)
           enddo ; enddo
         endif
       else
@@ -2028,9 +2029,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
               dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
             else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-            dv_max_CFL(i) = min(dv_max_CFL(i), 0.499 * &
+            dv_max_CFL(i,j) = min(dv_max_CFL(i,j), 0.499 * &
                         ((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k))) )
-            dv_min_CFL(i) = max(dv_min_CFL(i), 0.499 * &
+            dv_min_CFL(i,j) = max(dv_min_CFL(i,j), 0.499 * &
                         ((-dy_N*I_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k))) )
           enddo ; enddo
         else
@@ -2039,14 +2040,14 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
               dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
             else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-            dv_max_CFL(i) = min(dv_max_CFL(i), dy_S*CFL_dt - v(i,J,k))
-            dv_min_CFL(i) = max(dv_min_CFL(i), -(dy_N*CFL_dt + v(i,J,k)))
+            dv_max_CFL(i,j) = min(dv_max_CFL(i,j), dy_S*CFL_dt - v(i,J,k))
+            dv_min_CFL(i,j) = max(dv_min_CFL(i,j), -(dy_N*CFL_dt + v(i,J,k)))
           enddo ; enddo
         endif
       endif
       do i=ish,ieh
-        dv_max_CFL(i) = max(dv_max_CFL(i),0.0)
-        dv_min_CFL(i) = min(dv_min_CFL(i),0.0)
+        dv_max_CFL(i,j) = max(dv_max_CFL(i,j),0.0)
+        dv_min_CFL(i,j) = min(dv_min_CFL(i,j),0.0)
       enddo
 
       any_simple_OBC = .false.
@@ -2066,8 +2067,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
       if (present(vhbt)) then
         ! Find dv and vh.
-        call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt(:,J), vh_tot_0, dvhdv_tot_0, dv, &
-                               dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
+        call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt(:,J), vh_tot_0(:,j), dvhdv_tot_0(:,j), dv, &
+                               dv_max_CFL(:,j), dv_min_CFL(:,j), dt, G, GV, US, CS, visc_rem, &
                                j, ish, ieh, do_I(:,j), por_face_areaV, vh, OBC=OBC)
 
         if (present(v_cor)) then ; do k=1,nz
@@ -2084,9 +2085,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       endif
 
       if (set_BT_cont) then
-        call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0,&
-                               dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                               visc_rem_max, J, ish, ieh, do_I(:,j), por_face_areaV)
+        call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0(:,j), dvhdv_tot_0(:,j), &
+                               dv_max_CFL(:,j), dv_min_CFL(:,j), dt, G, GV, US, CS, visc_rem, &
+                               visc_rem_max(:,j), J, ish, ieh, do_I(:,j), por_face_areaV)
         if (any_simple_OBC) then
           do i=ish,ieh
             if (simple_OBC_pt(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
