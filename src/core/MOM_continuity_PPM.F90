@@ -644,6 +644,19 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     else
       visc_rem_max(:, :) = 1.0
     endif
+    !   Set limits on du that will keep the CFL number between -1 and 1.
+    ! This should be adequate to keep the root bracketed in all cases.
+    do j=jsh,jeh ; do I=ish-1,ieh
+      I_vrm = 0.0
+      if (visc_rem_max(I,j) > 0.0) I_vrm = 1.0 / visc_rem_max(I,j)
+      if (CS%vol_CFL) then
+        dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+        dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
+      else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
+      du_max_CFL(I,j) = 2.0* (CFL_dt * dx_W) * I_vrm
+      du_min_CFL(I,j) = -2.0 * (CFL_dt * dx_E) * I_vrm
+      uh_tot_0(I,j) = 0.0 ; duhdu_tot_0(I,j) = 0.0
+    enddo ; enddo
   endif
 
   do j=jsh,jeh
@@ -655,19 +668,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     enddo
 
     if (present(uhbt) .or. set_BT_cont) then
-      !   Set limits on du that will keep the CFL number between -1 and 1.
-      ! This should be adequate to keep the root bracketed in all cases.
-      do I=ish-1,ieh
-        I_vrm = 0.0
-        if (visc_rem_max(I,j) > 0.0) I_vrm = 1.0 / visc_rem_max(I,j)
-        if (CS%vol_CFL) then
-          dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
-          dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
-        else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
-        du_max_CFL(I,j) = 2.0* (CFL_dt * dx_W) * I_vrm
-        du_min_CFL(I,j) = -2.0 * (CFL_dt * dx_E) * I_vrm
-        uh_tot_0(I,j) = 0.0 ; duhdu_tot_0(I,j) = 0.0
-      enddo
       do k=1,nz ; do I=ish-1,ieh
         duhdu_tot_0(I,j) = duhdu_tot_0(I,j) + duhdu(I, j, k)
         uh_tot_0(I,j) = uh_tot_0(I,j) + uh(I,j,k)
