@@ -657,6 +657,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       du_min_CFL(I,j) = -2.0 * (CFL_dt * dx_E) * I_vrm
       uh_tot_0(I,j) = 0.0 ; duhdu_tot_0(I,j) = 0.0
     enddo ; enddo
+    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+      duhdu_tot_0(I,j) = duhdu_tot_0(I,j) + duhdu(I, j, k)
+      uh_tot_0(I,j) = uh_tot_0(I,j) + uh(I,j,k)
+    enddo ; enddo ; enddo
   endif
 
   do j=jsh,jeh
@@ -668,10 +672,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     enddo
 
     if (present(uhbt) .or. set_BT_cont) then
-      do k=1,nz ; do I=ish-1,ieh
-        duhdu_tot_0(I,j) = duhdu_tot_0(I,j) + duhdu(I, j, k)
-        uh_tot_0(I,j) = uh_tot_0(I,j) + uh(I,j,k)
-      enddo ; enddo
       if (use_visc_rem) then
         if (CS%aggress_adjust) then
           do k=1,nz ; do I=ish-1,ieh
