@@ -622,21 +622,24 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
   do_I(:, :) = .true.
   
+  ! Set uh and duhdu.
   call zonal_flux_layer_fused(u, h_in, h_W, h_E, &
                               uh, duhdu, visc_rem_u_tmp, &
                               dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, gv)
+  
+  ! untested!
+  if (local_specified_BC) then
+    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
+      l_seg = abs(OBC%segnum_u(I,j))
+      if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
+    endif ; enddo ; enddo ; enddo
+  endif
   do j=jsh,jeh
-    ! Set uh and duhdu.
+    ! init visc_rem. This will be parted out later
     do k=1,nz
       if (use_visc_rem) then ; do I=ish-1,ieh
         visc_rem(I,k) = visc_rem_u(I,j,k)
       enddo ; endif
-      if (local_specified_BC) then
-        do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
-          l_seg = abs(OBC%segnum_u(I,j))
-          if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
-        endif ; enddo
-      endif
     enddo
 
     if (present(uhbt) .or. set_BT_cont) then
