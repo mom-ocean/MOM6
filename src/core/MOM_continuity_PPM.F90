@@ -2076,16 +2076,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     endif
     
     if (set_BT_cont) then
-      do j=jsh-1,jeh
-      do k=1,nz
-        if (use_visc_rem) then ; do i=ish,ieh
-          visc_rem(i,k) = visc_rem_v(i,J,k)
-        enddo ; endif
-      enddo ! k-loop
       call set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
-                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             visc_rem_max, J, ish, ieh, do_I, por_face_areaV)
-      enddo
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
+                             visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
     endif
   endif
   
@@ -2835,7 +2828,7 @@ end subroutine meridional_flux_adjust
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
 subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             visc_rem_max, j, ish, ieh, do_I, por_face_areaV)
+                             visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
   type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)   :: v    !< Meridional velocity [L T-1 ~> m s-1].
@@ -2858,15 +2851,14 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
-  real, dimension(SZI_(G),SZK_(GV)),         intent(in)    :: visc_rem !< Both the fraction of the
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step
                        !! of viscosity, and the fraction of a time-step's worth of a barotropic
                        !! acceleration that a layer experiences after viscosity is applied [nondim].
                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim]
-  integer,                                   intent(in)    :: j        !< Spatial index.
-  integer,                                   intent(in)    :: ish      !< Start of index range.
-  integer,                                   intent(in)    :: ieh      !< End of index range.
+  integer,                                   intent(in)    :: ish, jsh      !< Start of index range.
+  integer,                                   intent(in)    :: ieh, jeh      !< End of index range.
   logical, dimension(SZI_(G),SZJ_(G)),       intent(in)    :: do_I     !< A logical flag indicating
                        !! which I values to work on.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -2903,15 +2895,17 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
                   ! flow is truly upwind [nondim]
   real :: Idt     ! The inverse of the time step [T-1 ~> s-1].
   logical :: domore
-  integer :: i, k, nz
+  integer :: i, j, k, nz
 
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
+  do j = jsh-1, jeh
+
  ! Diagnose the zero-transport correction, dv0.
   do i=ish,ieh ; zeros(i) = 0.0 ; enddo
   call meridional_flux_adjust(v, h_in, h_S, h_N, zeros, vh_tot_0(:,j), dvhdv_tot_0(:,j), dv0, &
-                         dv_max_CFL(:,j), dv_min_CFL(:,j), dt, G, GV, US, CS, visc_rem, &
+                         dv_max_CFL(:,j), dv_min_CFL(:,j), dt, G, GV, US, CS, visc_rem(:,j,:), &
                          j, ish, ieh, do_I(:,j), por_face_areaV)
 
   !   Determine the southerly- and northerly- fluxes.  Choose a sufficiently
@@ -2938,26 +2932,26 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   endif
 
   do k=1,nz ; do i=ish,ieh ; if (do_I(i,j)) then
-    visc_rem_lim = max(visc_rem(i,k), min_visc_rem*visc_rem_max(i,j))
+    visc_rem_lim = max(visc_rem(i,j,k), min_visc_rem*visc_rem_max(i,j))
     if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
-      if (v(i,J,k) + dvR(i)*visc_rem_lim > -dv_CFL(i)*visc_rem(i,k)) &
-        dvR(i) = -(v(i,J,k) + dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
-      if (v(i,J,k) + dvL(i)*visc_rem_lim < dv_CFL(i)*visc_rem(i,k)) &
-        dvL(i) = -(v(i,J,k) - dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
+      if (v(i,J,k) + dvR(i)*visc_rem_lim > -dv_CFL(i)*visc_rem(i,j,k)) &
+        dvR(i) = -(v(i,J,k) + dv_CFL(i)*visc_rem(i,j,k)) / visc_rem_lim
+      if (v(i,J,k) + dvL(i)*visc_rem_lim < dv_CFL(i)*visc_rem(i,j,k)) &
+        dvL(i) = -(v(i,J,k) - dv_CFL(i)*visc_rem(i,j,k)) / visc_rem_lim
     endif
   endif ; enddo ; enddo
   do k=1,nz
     do i=ish,ieh ; if (do_I(i,j)) then
-      v_L(i) = v(I,j,k) + dvL(i) * visc_rem(i,k)
-      v_R(i) = v(I,j,k) + dvR(i) * visc_rem(i,k)
-      v_0(i) = v(I,j,k) + dv0(i) * visc_rem(i,k)
+      v_L(i) = v(I,j,k) + dvL(i) * visc_rem(i,j,k)
+      v_R(i) = v(I,j,k) + dvR(i) * visc_rem(i,j,k)
+      v_0(i) = v(I,j,k) + dv0(i) * visc_rem(i,j,k)
     endif ; enddo
     call merid_flux_layer(v_0, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_0, dvhdv_0, &
-                          visc_rem(:,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
+                          visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
     call merid_flux_layer(v_L, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_L, dvhdv_L, &
-                          visc_rem(:,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
+                          visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
     call merid_flux_layer(v_R, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_R, dvhdv_R, &
-                          visc_rem(:,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
+                          visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
     do i=ish,ieh ; if (do_I(i,j)) then
       FAmt_0(i) = FAmt_0(i) + dvhdv_0(i)
       FAmt_L(i) = FAmt_L(i) + dvhdv_L(i)
@@ -2993,6 +2987,8 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
     BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
   endif ; enddo
+
+  enddo
 
 end subroutine set_merid_BT_cont_fused
 
