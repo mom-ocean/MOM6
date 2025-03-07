@@ -1883,13 +1883,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     dvhdv         ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZJ_(G)) :: &
+    dv, &         ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
     dv_min_CFL, & ! Lower limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dv_max_CFL, & ! Upper limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dvhdv_tot_0, & ! Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
     vh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim]
-  real, dimension(SZI_(G)) :: &
-    dv         ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
   logical, dimension(SZI_(G),SZJ_(G)) :: do_I
   real, dimension(SZI_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
@@ -2053,6 +2052,14 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         do_I(i,j) = .true.
       enddo ; enddo ; endif
     endif
+    if (present(vhbt)) then
+      ! Find dv and vh.
+      do j=jsh-1,jeh
+      call meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
+                             j, ish, ieh, do_I, por_face_areaV, vh, OBC=OBC)
+      enddo
+    endif
   endif
   
   !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
@@ -2069,20 +2076,16 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     if (present(vhbt) .or. set_BT_cont) then
 
       if (present(vhbt)) then
-        ! Find dv and vh.
-        call meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
-                               dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
-                               j, ish, ieh, do_I, por_face_areaV, vh, OBC=OBC)
 
         if (present(v_cor)) then ; do k=1,nz
-          do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
-            if (any_simple_OBC) then ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
-              v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
+          do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i,j) * visc_rem(i,k) ; enddo
+          if (any_simple_OBC) then ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
+            v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
           endif ; enddo ; endif
         enddo ; endif ! v-corrected
 
         if (present(dv_cor)) then
-          do i=ish,ieh ; dv_cor(i,J) = dv(i) ; enddo
+          do i=ish,ieh ; dv_cor(i,J) = dv(i,j) ; enddo
         endif
 
       endif
@@ -2546,7 +2549,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: dvhdv_tot_0 !< The partial derivative of dv_err with
                                                   !! dv at 0 adjustment [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G)), intent(out)   :: dv   !< The barotropic velocity adjustment [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: dv   !< The barotropic velocity adjustment [L T-1 ~> m s-1].
   real,                     intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),  intent(in)    :: CS   !< This module's control structure.
@@ -2588,7 +2591,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   enddo ; enddo ; endif
 
   do i=ish,ieh
-    dv(i) = 0.0 ; do_I(i) = do_I_in(i,j)
+    dv(i,j) = 0.0 ; do_I(i) = do_I_in(i,j)
     dv_max(i) = dv_max_CFL(i,j) ; dv_min(i) = dv_min_CFL(i,j)
     vh_err(i) = vh_tot_0(i,j) - vhbt(i,j) ; dvhdv_tot(i) = dvhdv_tot_0(i,j)
     vh_err_best(i) = abs(vh_err(i))
@@ -2604,8 +2607,8 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
     tol_vel = CS%tol_vel
 
     do i=ish,ieh
-      if (vh_err(i) > 0.0) then ; dv_max(i) = dv(i)
-      elseif (vh_err(i) < 0.0) then ; dv_min(i) = dv(i)
+      if (vh_err(i) > 0.0) then ; dv_max(i) = dv(i,j)
+      elseif (vh_err(i) < 0.0) then ; dv_min(i) = dv(i,j)
       else ; do_I(i) = .false. ; endif
     enddo
     domore = .false.
@@ -2616,19 +2619,19 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
         !   Use Newton's method, provided it stays bounded.  Otherwise bisect
         ! the value with the appropriate bound.
         ddv = -vh_err(i) / dvhdv_tot(i)
-        dv_prev = dv(i)
-        dv(i) = dv(i) + ddv
-        if (abs(ddv) < 1.0e-15*abs(dv(i))) then
+        dv_prev = dv(i,j)
+        dv(i,j) = dv(i,j) + ddv
+        if (abs(ddv) < 1.0e-15*abs(dv(i,j))) then
           do_I(i) = .false. ! ddv is small enough to quit.
         elseif (ddv > 0.0) then
-          if (dv(i) >= dv_max(i)) then
-            dv(i) = 0.5*(dv_prev + dv_max(i))
-            if (dv_max(i) - dv_prev < 1.0e-15*abs(dv(i))) do_I(i) = .false.
+          if (dv(i,j) >= dv_max(i)) then
+            dv(i,j) = 0.5*(dv_prev + dv_max(i))
+            if (dv_max(i) - dv_prev < 1.0e-15*abs(dv(i,j))) do_I(i) = .false.
           endif
         else ! dvv(i) < 0.0
-          if (dv(i) <= dv_min(i)) then
-            dv(i) = 0.5*(dv_prev + dv_min(i))
-            if (dv_prev - dv_min(i) < 1.0e-15*abs(dv(i))) do_I(i) = .false.
+          if (dv(i,j) <= dv_min(i)) then
+            dv(i,j) = 0.5*(dv_prev + dv_min(i))
+            if (dv_prev - dv_min(i) < 1.0e-15*abs(dv(i,j))) do_I(i) = .false.
           endif
         endif
         if (do_I(i)) domore = .true.
@@ -2639,7 +2642,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
     if (.not.domore) exit
 
     if ((itt < max_itts) .or. present(vh_3d)) then ; do k=1,nz
-      do i=ish,ieh ; v_new(i) = v(i,J,k) + dv(i) * visc_rem(i,j,k) ; enddo
+      do i=ish,ieh ; v_new(i) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k) ; enddo
       call merid_flux_layer(v_new, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), &
                             vh_aux(:,k), dvhdv(:,k), visc_rem(:,j,k), &
                             dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
