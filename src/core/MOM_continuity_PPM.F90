@@ -1890,7 +1890,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     vh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim]
   logical, dimension(SZI_(G),SZJ_(G)) :: do_I
-  real, dimension(SZI_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
+  real, dimension(SZI_(G),SZJB_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZK_(GV)) :: &
     visc_rem      ! A 2-D copy of visc_rem_v or an array of 1's [nondim]
@@ -2050,8 +2050,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i,j)
       enddo ; enddo ; else ; do j=jsh-1,jeh ; do i=ish,ieh
         do_I(i,j) = .true.
-      enddo ; enddo ; endif
-    endif
+      enddo ; enddo ; endif ! local_specified_BC .or. local_Flather_OBC
+    endif ! present(vhbt) .or. set_BT_cont (redundant?)
     if (present(vhbt)) then
       ! Find dv and vh.
       call meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
@@ -2072,52 +2072,33 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
       if (present(dv_cor)) then
         do j=jsh-1,jeh ; do i=ish,ieh ; dv_cor(i,J) = dv(i,j) ; enddo ; enddo
-      endif
+      endif ! dv-corrected
     endif
     
     if (set_BT_cont) then
       call set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
-    endif
-  endif
-  
-  !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
-  !$OMP                                     dvhdv_tot_0,FAvi,visc_rem_max,I_vrm,dv_lim,dy_N,dy_S, &
-  !$OMP                                     simple_OBC_pt,any_simple_OBC,l_seg) &
-  !$OMP                        firstprivate(visc_rem)
-  do J=jsh-1,jeh
-    do k=1,nz
-      if (use_visc_rem) then ; do i=ish,ieh
-        visc_rem(i,k) = visc_rem_v(i,J,k)
-      enddo ; endif
-    enddo ! k-loop
-
-    if (present(vhbt) .or. set_BT_cont) then
-
-      if (set_BT_cont) then
         
-        if (any_simple_OBC) then
-          do i=ish,ieh
-            if (simple_OBC_pt(i,j)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
-          enddo
-          ! NOTE: simple_OBC_pt(i,j) should prevent access to segment OBC_NONE
-          do k=1,nz ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
-            segment => OBC%segment(abs(OBC%segnum_v(i,J)))
-            if ((abs(segment%normal_vel(i,J,k)) > 0.0) .and. (segment%specified)) &
-              FAvi(i) = FAvi(i) + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
-          endif ; enddo ; enddo
-          do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
-            BT_cont%FA_v_S0(i,J) = FAvi(i) ; BT_cont%FA_v_N0(i,J) = FAvi(i)
-            BT_cont%FA_v_SS(i,J) = FAvi(i) ; BT_cont%FA_v_NN(i,J) = FAvi(i)
-            BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
-          endif ; enddo
-        endif
-      endif ! set_BT_cont
-
-    endif ! present(vhbt) or set_BT_cont
-
-  enddo ! j-loop
+      if (any_simple_OBC) then
+        ! untested
+        do j=jsh-1,jeh ; do i=ish,ieh
+          if (simple_OBC_pt(i,j)) FAvi(i,j) = GV%H_subroundoff*G%dx_Cv(i,J)
+        enddo ; enddo
+        ! NOTE: simple_OBC_pt(i,j) should prevent access to segment OBC_NONE
+        do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
+          segment => OBC%segment(abs(OBC%segnum_v(i,J)))
+          if ((abs(segment%normal_vel(i,J,k)) > 0.0) .and. (segment%specified)) &
+            FAvi(i,j) = FAvi(i,j) + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
+        endif ; enddo ; enddo ; enddo
+        do j=jsh-1,jeh ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
+          BT_cont%FA_v_S0(i,J) = FAvi(i,j) ; BT_cont%FA_v_N0(i,J) = FAvi(i,j)
+          BT_cont%FA_v_SS(i,J) = FAvi(i,j) ; BT_cont%FA_v_NN(i,J) = FAvi(i,j)
+          BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
+        endif ; enddo ; enddo
+      endif ! any_simple_OBC
+    endif ! set_BT_cont
+  endif ! present(vhbt) or set_BT_cont
 
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
