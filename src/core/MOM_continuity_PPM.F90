@@ -2930,9 +2930,7 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     return
   endif
 
-  do j = jsh-1, jeh
-
-  do k=1,nz ; do i=ish,ieh ; if (do_I(i,j)) then
+  do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
     visc_rem_lim = max(visc_rem(i,j,k), min_visc_rem*visc_rem_max(i,j))
     if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
       if (v(i,J,k) + dvR(i,j)*visc_rem_lim > -dv_CFL(i,j)*visc_rem(i,j,k)) &
@@ -2940,7 +2938,9 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
       if (v(i,J,k) + dvL(i,j)*visc_rem_lim < dv_CFL(i,j)*visc_rem(i,j,k)) &
         dvL(i,j) = -(v(i,J,k) - dv_CFL(i,j)*visc_rem(i,j,k)) / visc_rem_lim
     endif
-  endif ; enddo ; enddo
+  endif ; enddo ; enddo ; enddo
+
+  do j = jsh-1, jeh
   do k=1,nz
     do i=ish,ieh ; if (do_I(i,j)) then
       v_L(i) = v(I,j,k) + dvL(i,j) * visc_rem(i,j,k)
