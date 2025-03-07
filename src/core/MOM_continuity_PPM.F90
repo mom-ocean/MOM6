@@ -1981,6 +1981,58 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       dvhdv_tot_0(i,j) = dvhdv_tot_0(i,j) + dvhdv(i,j,k)
       vh_tot_0(i,j) = vh_tot_0(i,j) + vh(i,J,k)
     enddo ; enddo ; enddo
+    if (use_visc_rem) then
+      if (CS%aggress_adjust) then
+        ! untested
+        do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+          if (CS%vol_CFL) then
+            dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
+            dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
+          else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
+          dv_lim = 0.499*((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k)))
+          if (dv_max_CFL(i,j) * visc_rem(i,k) > dv_lim) &
+            dv_max_CFL(i,j) = dv_lim / visc_rem(i,k)
+
+          dv_lim = 0.499*((-dy_N*CFL_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k)))
+          if (dv_min_CFL(i,j) * visc_rem(i,k) < dv_lim) &
+            dv_min_CFL(i,j) = dv_lim / visc_rem(i,k)
+        enddo ; enddo ; enddo
+      else
+        do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+          if (CS%vol_CFL) then
+            dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
+            dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
+          else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
+          if (dv_max_CFL(i,j) * visc_rem(i,k) > dy_S*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
+            dv_max_CFL(i,j) = (dy_S*CFL_dt - v(i,J,k)) / visc_rem(i,k)
+          if (dv_min_CFL(i,j) * visc_rem(i,k) < -dy_N*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
+            dv_min_CFL(i,j) = -(dy_N*CFL_dt + v(i,J,k)) / visc_rem(i,k)
+        enddo ; enddo ; enddo
+      endif
+    else
+      if (CS%aggress_adjust) then
+        ! untested
+        do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+          if (CS%vol_CFL) then
+            dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
+            dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
+          else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
+          dv_max_CFL(i,j) = min(dv_max_CFL(i,j), 0.499 * &
+                      ((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k))) )
+          dv_min_CFL(i,j) = max(dv_min_CFL(i,j), 0.499 * &
+                      ((-dy_N*I_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k))) )
+        enddo ; enddo ; enddo
+      else
+        do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+          if (CS%vol_CFL) then
+            dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
+            dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
+          else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
+          dv_max_CFL(i,j) = min(dv_max_CFL(i,j), dy_S*CFL_dt - v(i,J,k))
+          dv_min_CFL(i,j) = max(dv_min_CFL(i,j), -(dy_N*CFL_dt + v(i,J,k)))
+        enddo ; enddo ; enddo
+      endif
+    endif
   endif
   
   !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
@@ -1995,56 +2047,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     enddo ! k-loop
 
     if (present(vhbt) .or. set_BT_cont) then
-      if (use_visc_rem) then
-        if (CS%aggress_adjust) then
-          do k=1,nz ; do i=ish,ieh
-            if (CS%vol_CFL) then
-              dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
-              dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
-            else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-            dv_lim = 0.499*((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k)))
-            if (dv_max_CFL(i,j) * visc_rem(i,k) > dv_lim) &
-              dv_max_CFL(i,j) = dv_lim / visc_rem(i,k)
-
-            dv_lim = 0.499*((-dy_N*CFL_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k)))
-            if (dv_min_CFL(i,j) * visc_rem(i,k) < dv_lim) &
-              dv_min_CFL(i,j) = dv_lim / visc_rem(i,k)
-          enddo ; enddo
-        else
-          do k=1,nz ; do i=ish,ieh
-            if (CS%vol_CFL) then
-              dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
-              dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
-            else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-            if (dv_max_CFL(i,j) * visc_rem(i,k) > dy_S*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
-              dv_max_CFL(i,j) = (dy_S*CFL_dt - v(i,J,k)) / visc_rem(i,k)
-            if (dv_min_CFL(i,j) * visc_rem(i,k) < -dy_N*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
-              dv_min_CFL(i,j) = -(dy_N*CFL_dt + v(i,J,k)) / visc_rem(i,k)
-          enddo ; enddo
-        endif
-      else
-        if (CS%aggress_adjust) then
-          do k=1,nz ; do i=ish,ieh
-            if (CS%vol_CFL) then
-              dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
-              dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
-            else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-            dv_max_CFL(i,j) = min(dv_max_CFL(i,j), 0.499 * &
-                        ((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k))) )
-            dv_min_CFL(i,j) = max(dv_min_CFL(i,j), 0.499 * &
-                        ((-dy_N*I_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k))) )
-          enddo ; enddo
-        else
-          do k=1,nz ; do i=ish,ieh
-            if (CS%vol_CFL) then
-              dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
-              dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
-            else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-            dv_max_CFL(i,j) = min(dv_max_CFL(i,j), dy_S*CFL_dt - v(i,J,k))
-            dv_min_CFL(i,j) = max(dv_min_CFL(i,j), -(dy_N*CFL_dt + v(i,J,k)))
-          enddo ; enddo
-        endif
-      endif
       do i=ish,ieh
         dv_max_CFL(i,j) = max(dv_max_CFL(i,j),0.0)
         dv_min_CFL(i,j) = min(dv_min_CFL(i,j),0.0)
