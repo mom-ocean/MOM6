@@ -2057,6 +2057,22 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       call meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
                              ish, ieh, jsh, jeh, do_I, por_face_areaV, vh, OBC=OBC)
+
+      if (present(v_cor)) then
+        do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+          v_cor(i,j,k) = v(i,j,k) + dv(i,j) * visc_rem_v(i,j,k)
+        enddo ; enddo ; enddo
+        if (any_simple_OBC) then
+            ! untested
+            do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
+              v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
+            endif ; enddo ; enddo ; enddo
+        endif
+      endif ! v-corrected
+
+      if (present(dv_cor)) then
+        do j=jsh-1,jeh ; do i=ish,ieh ; dv_cor(i,J) = dv(i,j) ; enddo ; enddo
+      endif
     endif
   endif
   
@@ -2072,21 +2088,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     enddo ! k-loop
 
     if (present(vhbt) .or. set_BT_cont) then
-
-      if (present(vhbt)) then
-
-        if (present(v_cor)) then ; do k=1,nz
-          do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i,j) * visc_rem(i,k) ; enddo
-          if (any_simple_OBC) then ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
-            v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
-          endif ; enddo ; endif
-        enddo ; endif ! v-corrected
-
-        if (present(dv_cor)) then
-          do i=ish,ieh ; dv_cor(i,J) = dv(i,j) ; enddo
-        endif
-
-      endif
 
       if (set_BT_cont) then
         call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0(:,j), dvhdv_tot_0(:,j), &
