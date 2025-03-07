@@ -2959,8 +2959,7 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i,j,k)
   endif ; enddo ; enddo ; enddo
 
-  do j = jsh-1, jeh
-  do i=ish,ieh ; if (do_I(i,j)) then
+  do j = jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
     FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
     if ((dvL(i,j) - dv0(i,j)) /= 0.0) &
       FA_avg = vhtot_L(i,j) / (dvL(i,j) - dv0(i,j))
@@ -2986,9 +2985,7 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
     BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
     BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
-  endif ; enddo
-
-  enddo
+  endif ; enddo ; enddo
 
 end subroutine set_merid_BT_cont_fused
 
