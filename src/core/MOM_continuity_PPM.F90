@@ -2921,12 +2921,12 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   endif ; enddo ; enddo
 
   if (.not.domore) then
-    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+    do j=jsh-1,jeh ; do i=ish,ieh
       BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
       BT_cont%vBT_SS(i,J) = 0.0
       BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
       BT_cont%vBT_NN(i,J) = 0.0
-    enddo ; enddo ; enddo
+    enddo ; enddo
     return
   endif
 
