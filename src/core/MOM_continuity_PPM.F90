@@ -2874,7 +2874,7 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
     vhtot_L, &    ! The summed transport with the southerly (vhtot_L) and
     vhtot_R       ! and northerly (vhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &    
     v_L, v_R, &   ! The southerly (v_L), northerly (v_R), and zero-barotropic
     v_0, &        ! transport (v_0) layer test velocities [L T-1 ~> m s-1].
     dvhdv_L, &    ! The effective layer marginal face areas with the southerly
@@ -2943,22 +2943,22 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   do j = jsh-1, jeh
   do k=1,nz
     do i=ish,ieh ; if (do_I(i,j)) then
-      v_L(i) = v(I,j,k) + dvL(i,j) * visc_rem(i,j,k)
-      v_R(i) = v(I,j,k) + dvR(i,j) * visc_rem(i,j,k)
-      v_0(i) = v(I,j,k) + dv0(i,j) * visc_rem(i,j,k)
+      v_L(i,j,k) = v(I,j,k) + dvL(i,j) * visc_rem(i,j,k)
+      v_R(i,j,k) = v(I,j,k) + dvR(i,j) * visc_rem(i,j,k)
+      v_0(i,j,k) = v(I,j,k) + dv0(i,j) * visc_rem(i,j,k)
     endif ; enddo
-    call merid_flux_layer(v_0, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_0, dvhdv_0, &
+    call merid_flux_layer(v_0(:,j,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_0(:,j,k), dvhdv_0(:,j,k), &
                           visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
-    call merid_flux_layer(v_L, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_L, dvhdv_L, &
+    call merid_flux_layer(v_L(:,j,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_L(:,j,k), dvhdv_L(:,j,k), &
                           visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
-    call merid_flux_layer(v_R, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_R, dvhdv_R, &
+    call merid_flux_layer(v_R(:,j,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_R(:,j,k), dvhdv_R(:,j,k), &
                           visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
     do i=ish,ieh ; if (do_I(i,j)) then
-      FAmt_0(i,j) = FAmt_0(i,j) + dvhdv_0(i)
-      FAmt_L(i,j) = FAmt_L(i,j) + dvhdv_L(i)
-      FAmt_R(i,j) = FAmt_R(i,j) + dvhdv_R(i)
-      vhtot_L(i,j) = vhtot_L(i,j) + vh_L(i)
-      vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i)
+      FAmt_0(i,j) = FAmt_0(i,j) + dvhdv_0(i,j,k)
+      FAmt_L(i,j) = FAmt_L(i,j) + dvhdv_L(i,j,k)
+      FAmt_R(i,j) = FAmt_R(i,j) + dvhdv_R(i,j,k)
+      vhtot_L(i,j) = vhtot_L(i,j) + vh_L(i,j,k)
+      vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i,j,k)
     endif ; enddo
   enddo
   do i=ish,ieh ; if (do_I(i,j)) then
