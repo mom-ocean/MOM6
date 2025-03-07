@@ -2074,6 +2074,19 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         do j=jsh-1,jeh ; do i=ish,ieh ; dv_cor(i,J) = dv(i,j) ; enddo ; enddo
       endif
     endif
+    
+    if (set_BT_cont) then
+      do j=jsh-1,jeh
+      do k=1,nz
+        if (use_visc_rem) then ; do i=ish,ieh
+          visc_rem(i,k) = visc_rem_v(i,J,k)
+        enddo ; endif
+      enddo ! k-loop
+      call set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
+                             visc_rem_max, J, ish, ieh, do_I, por_face_areaV)
+      enddo
+    endif
   endif
   
   !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
@@ -2090,9 +2103,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     if (present(vhbt) .or. set_BT_cont) then
 
       if (set_BT_cont) then
-        call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0(:,j), dvhdv_tot_0(:,j), &
-                               dv_max_CFL(:,j), dv_min_CFL(:,j), dt, G, GV, US, CS, visc_rem, &
-                               visc_rem_max(:,j), J, ish, ieh, do_I(:,j), por_face_areaV)
+        
         if (any_simple_OBC) then
           do i=ish,ieh
             if (simple_OBC_pt(i,j)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
@@ -2819,6 +2830,171 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   enddo ; enddo ; endif
 
 end subroutine meridional_flux_adjust
+
+!> Sets of a structure that describes the meridional barotropic volume or mass fluxes as a
+!! function of barotropic flow to agree closely with the sum of the layer's transports.
+subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
+                             visc_rem_max, j, ish, ieh, do_I, por_face_areaV)
+  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
+  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)   :: v    !< Meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to calculate fluxes,
+                                                                   !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_S  !< South edge thickness in the reconstruction,
+                                                                   !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_N  !< North edge thickness in the reconstruction,
+                                                                   !! [H ~> m or kg m-2].
+  type(BT_cont_type),                        intent(inout) :: BT_cont !< A structure with elements
+                       !! that describe the effective open face areas as a function of barotropic flow.
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: vh_tot_0    !< The summed transport
+                       !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: dvhdv_tot_0 !< The partial derivative
+                       !! of du_err with dv at 0 adjustment [H L ~> m2 or kg m-1].
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: dv_max_CFL !< Maximum acceptable value
+                                                                   !!  of dv [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: dv_min_CFL !< Minimum acceptable value
+                                                                   !!  of dv [L T-1 ~> m s-1].
+  real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
+  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
+  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
+  real, dimension(SZI_(G),SZK_(GV)),         intent(in)    :: visc_rem !< Both the fraction of the
+                       !! momentum originally in a layer that remains after a time-step
+                       !! of viscosity, and the fraction of a time-step's worth of a barotropic
+                       !! acceleration that a layer experiences after viscosity is applied [nondim].
+                       !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim]
+  integer,                                   intent(in)    :: j        !< Spatial index.
+  integer,                                   intent(in)    :: ish      !< Start of index range.
+  integer,                                   intent(in)    :: ieh      !< End of index range.
+  logical, dimension(SZI_(G),SZJ_(G)),       intent(in)    :: do_I     !< A logical flag indicating
+                       !! which I values to work on.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                                intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
+  ! Local variables
+  real, dimension(SZI_(G)) :: &
+    dv0, &        ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
+    dvL, dvR, &   ! The barotropic velocity increments that give the southerly
+                  ! (dvL) and northerly (dvR) test velocities [L T-1 ~> m s-1].
+    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
+    dv_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
+    v_L, v_R, &   ! The southerly (v_L), northerly (v_R), and zero-barotropic
+    v_0, &        ! transport (v_0) layer test velocities [L T-1 ~> m s-1].
+    dvhdv_L, &    ! The effective layer marginal face areas with the southerly
+    dvhdv_R, &    ! (_L), northerly (_R), and zero-barotropic (_0) test
+    dvhdv_0, &    ! velocities [H L ~> m2 or kg m-1].
+    vh_L, vh_R, & ! The layer transports with the southerly (_L), northerly (_R)
+    vh_0, &       ! and zero-barotropic (_0) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+    FAmt_L, FAmt_R, & ! The summed effective marginal face areas for the 3
+    FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
+    vhtot_L, &    ! The summed transport with the southerly (vhtot_L) and
+    vhtot_R       ! and northerly (vhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: FA_0    ! The effective face area with 0 barotropic transport [H L ~> m2 or kg m-1].
+  real :: FA_avg  ! The average effective face area [H L ~> m2 or kg m-1], nominally given by
+                  ! the realized transport divided by the barotropic velocity.
+  real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]  This
+                       ! limiting is necessary to keep the inverse of visc_rem
+                       ! from leading to large CFL numbers.
+  real :: min_visc_rem ! The smallest permitted value for visc_rem that is used
+                       ! in finding the barotropic velocity that changes the
+                       ! flow direction [nondim].  This is necessary to keep the inverse
+                       ! of visc_rem from leading to large CFL numbers.
+  real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
+                  ! flow is truly upwind [nondim]
+  real :: Idt     ! The inverse of the time step [T-1 ~> s-1].
+  logical :: domore
+  integer :: i, k, nz
+
+  nz = GV%ke ; Idt = 1.0 / dt
+  min_visc_rem = 0.1 ; CFL_min = 1e-6
+
+ ! Diagnose the zero-transport correction, dv0.
+  do i=ish,ieh ; zeros(i) = 0.0 ; enddo
+  call meridional_flux_adjust(v, h_in, h_S, h_N, zeros, vh_tot_0(:,j), dvhdv_tot_0(:,j), dv0, &
+                         dv_max_CFL(:,j), dv_min_CFL(:,j), dt, G, GV, US, CS, visc_rem, &
+                         j, ish, ieh, do_I(:,j), por_face_areaV)
+
+  !   Determine the southerly- and northerly- fluxes.  Choose a sufficiently
+  ! negative velocity correction for the northerly-flux, and a sufficiently
+  ! positive correction for the southerly-flux.
+  domore = .false.
+  do i=ish,ieh ; if (do_I(i,j)) then
+    domore = .true.
+    dv_CFL(i) = (CFL_min * Idt) * G%dyCv(i,J)
+    dvR(i) = min(0.0,dv0(i) - dv_CFL(i))
+    dvL(i) = max(0.0,dv0(i) + dv_CFL(i))
+    FAmt_L(i) = 0.0 ; FAmt_R(i) = 0.0 ; FAmt_0(i) = 0.0
+    vhtot_L(i) = 0.0 ; vhtot_R(i) = 0.0
+  endif ; enddo
+
+  if (.not.domore) then
+    do k=1,nz ; do i=ish,ieh
+      BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
+      BT_cont%vBT_SS(i,J) = 0.0
+      BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
+      BT_cont%vBT_NN(i,J) = 0.0
+    enddo ; enddo
+    return
+  endif
+
+  do k=1,nz ; do i=ish,ieh ; if (do_I(i,j)) then
+    visc_rem_lim = max(visc_rem(i,k), min_visc_rem*visc_rem_max(i,j))
+    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+      if (v(i,J,k) + dvR(i)*visc_rem_lim > -dv_CFL(i)*visc_rem(i,k)) &
+        dvR(i) = -(v(i,J,k) + dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
+      if (v(i,J,k) + dvL(i)*visc_rem_lim < dv_CFL(i)*visc_rem(i,k)) &
+        dvL(i) = -(v(i,J,k) - dv_CFL(i)*visc_rem(i,k)) / visc_rem_lim
+    endif
+  endif ; enddo ; enddo
+  do k=1,nz
+    do i=ish,ieh ; if (do_I(i,j)) then
+      v_L(i) = v(I,j,k) + dvL(i) * visc_rem(i,k)
+      v_R(i) = v(I,j,k) + dvR(i) * visc_rem(i,k)
+      v_0(i) = v(I,j,k) + dv0(i) * visc_rem(i,k)
+    endif ; enddo
+    call merid_flux_layer(v_0, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_0, dvhdv_0, &
+                          visc_rem(:,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
+    call merid_flux_layer(v_L, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_L, dvhdv_L, &
+                          visc_rem(:,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
+    call merid_flux_layer(v_R, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_R, dvhdv_R, &
+                          visc_rem(:,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
+    do i=ish,ieh ; if (do_I(i,j)) then
+      FAmt_0(i) = FAmt_0(i) + dvhdv_0(i)
+      FAmt_L(i) = FAmt_L(i) + dvhdv_L(i)
+      FAmt_R(i) = FAmt_R(i) + dvhdv_R(i)
+      vhtot_L(i) = vhtot_L(i) + vh_L(i)
+      vhtot_R(i) = vhtot_R(i) + vh_R(i)
+    endif ; enddo
+  enddo
+  do i=ish,ieh ; if (do_I(i,j)) then
+    FA_0 = FAmt_0(i) ; FA_avg = FAmt_0(i)
+    if ((dvL(i) - dv0(i)) /= 0.0) &
+      FA_avg = vhtot_L(i) / (dvL(i) - dv0(i))
+    if (FA_avg > max(FA_0, FAmt_L(i))) then ; FA_avg = max(FA_0, FAmt_L(i))
+    elseif (FA_avg < min(FA_0, FAmt_L(i))) then ; FA_0 = FA_avg ; endif
+    BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(i)
+    if (abs(FA_0-FAmt_L(i)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
+      BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i) - dv0(i))) * &
+                   ((FAmt_L(i) - FA_avg) / (FAmt_L(i) - FA_0))
+    endif
+
+    FA_0 = FAmt_0(i) ; FA_avg = FAmt_0(i)
+    if ((dvR(i) - dv0(i)) /= 0.0) &
+      FA_avg = vhtot_R(i) / (dvR(i) - dv0(i))
+    if (FA_avg > max(FA_0, FAmt_R(i))) then ; FA_avg = max(FA_0, FAmt_R(i))
+    elseif (FA_avg < min(FA_0, FAmt_R(i))) then ; FA_0 = FA_avg ; endif
+    BT_cont%FA_v_N0(i,J) = FA_0 ; BT_cont%FA_v_NN(i,J) = FAmt_R(i)
+    if (abs(FAmt_R(i) - FA_0) <= 1e-12*FA_0) then ; BT_cont%vBT_NN(i,J) = 0.0 ; else
+      BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i) - dv0(i))) * &
+                   ((FAmt_R(i) - FA_avg) / (FAmt_R(i) - FA_0))
+    endif
+  else
+    BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
+    BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
+    BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
+  endif ; enddo
+
+end subroutine set_merid_BT_cont_fused
 
 !> Sets of a structure that describes the meridional barotropic volume or mass fluxes as a
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
