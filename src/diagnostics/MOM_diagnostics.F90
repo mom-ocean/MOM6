@@ -81,6 +81,7 @@ type, public :: diagnostics_CS ; private
   integer :: id_col_ht         = -1, id_dh_dt          = -1
   integer :: id_KE             = -1, id_dKEdt          = -1
   integer :: id_PE_to_KE       = -1, id_KE_BT          = -1
+  integer :: id_KE_SAL         = -1, id_KE_TIDES       = -1
   integer :: id_KE_BT_PF       = -1, id_KE_BT_CF       = -1
   integer :: id_KE_BT_WD       = -1
   integer :: id_PE_to_KE_btbc  = -1, id_KE_Coradv_btbc = -1
@@ -1081,7 +1082,45 @@ subroutine calculate_energy_diagnostics(u, v, h, uh, vh, ADp, CDp, G, GV, US, CS
             * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
       enddo ; enddo
     enddo
-    if (CS%id_PE_to_KE > 0) call post_data(CS%id_PE_to_KE, KE_term, CS%diag)
+    call post_data(CS%id_PE_to_KE, KE_term, CS%diag)
+  endif
+
+  if (CS%id_KE_SAL > 0) then
+    ! Calculate the KE source from self-attraction and loading [H L2 T-3 ~> m3 s-3 or W m-2].
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%sal_u(I,j,k)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%sal_v(i,J,k)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_KE_SAL, KE_term, CS%diag)
+  endif
+
+  if (CS%id_KE_TIDES > 0) then
+    ! Calculate the KE source from astronomical tidal forcing [H L2 T-3 ~> m3 s-3 or W m-2].
+    do k=1,nz
+      do j=js,je ; do I=Isq,Ieq
+        KE_u(I,j) = uh(I,j,k) * G%dxCu(I,j) * ADp%tides_u(I,j,k)
+      enddo ; enddo
+      do J=Jsq,Jeq ; do i=is,ie
+        KE_v(i,J) = vh(i,J,k) * G%dyCv(i,J) * ADp%tides_v(i,J,k)
+      enddo ; enddo
+      if (.not.G%symmetric) &
+        call do_group_pass(CS%pass_KE_uv, G%domain)
+      do j=js,je ; do i=is,ie
+        KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
+            * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))
+      enddo ; enddo
+    enddo
+    call post_data(CS%id_KE_TIDES, KE_term, CS%diag)
   endif
 
   if (CS%id_KE_BT > 0) then
@@ -1740,6 +1779,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   logical :: better_speed_est ! If true, use a more robust estimate of the first
                               ! mode wave speed as the starting point for iterations.
   logical :: split            ! True if using the barotropic-baroclinic split algorithm
+  logical :: calc_tides       ! True if using tidal forcing
+  logical :: calc_sal         ! True if using self-attraction and loading
   logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for calculating the EBT structure
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -1797,6 +1838,8 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
 
   call get_param(param_file, mdl, "SPLIT", split, default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "TIDES", calc_tides, default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "CALCULATE_SAL", calc_sal, default=calc_tides, do_not_log=.true.)
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
@@ -1993,6 +2036,14 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   CS%id_PE_to_KE = register_diag_field('ocean_model', 'PE_to_KE', diag%axesTL, Time, &
       'Potential to Kinetic Energy Conversion of Layer', &
       'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+  if (calc_sal) &
+    CS%id_KE_SAL = register_diag_field('ocean_model', 'KE_SAL', diag%axesTL, Time, &
+        'Kinetic Energy Source from Self-Attraction and Loading', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
+  if (calc_tides) &
+    CS%id_KE_TIDES = register_diag_field('ocean_model', 'KE_tides', diag%axesTL, Time, &
+        'Kinetic Energy Source from Astronomical Tidal Forcing', &
+        'm3 s-3', conversion=GV%H_to_m*(US%L_T_to_m_s**2)*US%s_to_T)
   if (split) then
     CS%id_KE_BT = register_diag_field('ocean_model', 'KE_BT', diag%axesTL, Time, &
         'Barotropic contribution to Kinetic Energy', &
@@ -2485,11 +2536,22 @@ subroutine set_dependent_diagnostics(MIS, ADp, CDp, G, GV, CS)
     call safe_alloc_ptr(ADp%bt_lwd_v, isd, ied, JsdB, JedB)
   endif
 
+  if (CS%id_KE_SAL > 0) then
+    call safe_alloc_ptr(ADp%sal_u, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%sal_v, isd, ied, JsdB, JedB, nz)
+  endif
+
+  if (CS%id_KE_TIDES > 0) then
+    call safe_alloc_ptr(ADp%tides_u, IsdB, IedB, jsd, jed, nz)
+    call safe_alloc_ptr(ADp%tides_v, isd, ied, JsdB, JedB, nz)
+  endif
+
   CS%KE_term_on = ((CS%id_dKEdt > 0) .or. (CS%id_PE_to_KE > 0) .or. (CS%id_KE_BT > 0) .or. &
                    (CS%id_KE_Coradv > 0) .or. (CS%id_KE_adv > 0) .or. (CS%id_KE_visc > 0) .or. &
                    (CS%id_KE_visc_gl90 > 0) .or. (CS%id_KE_stress > 0) .or. (CS%id_KE_horvisc > 0) .or. &
                    (CS%id_KE_dia > 0) .or. (CS%id_PE_to_KE_btbc > 0) .or. (CS%id_KE_BT_PF > 0) .or. &
-                   (CS%id_KE_Coradv_btbc > 0) .or. (CS%id_KE_BT_CF > 0) .or. (CS%id_KE_BT_WD > 0))
+                   (CS%id_KE_Coradv_btbc > 0) .or. (CS%id_KE_BT_CF > 0) .or. (CS%id_KE_BT_WD > 0) .or. &
+                   (CS%id_KE_SAL > 0) .or. (CS%id_KE_TIDES > 0))
 
   if (CS%id_h_du_dt > 0) call safe_alloc_ptr(ADp%diag_hu,IsdB,IedB,jsd,jed,nz)
   if (CS%id_h_dv_dt > 0) call safe_alloc_ptr(ADp%diag_hv,isd,ied,JsdB,JedB,nz)
@@ -2535,6 +2597,13 @@ subroutine MOM_diagnostics_end(CS, ADp, CDp)
   if (associated(ADp%bt_cor_v)) deallocate(ADp%bt_cor_v)
   if (associated(ADp%bt_lwd_u)) deallocate(ADp%bt_lwd_u)
   if (associated(ADp%bt_lwd_v)) deallocate(ADp%bt_lwd_v)
+
+  ! NOTE: sal_[uv] and tide_[uv] may be allocated either here (KE budget diagnostics) or
+  ! PressureForce module (momentum acceleration diagnostics)
+  if (associated(ADp%sal_u))  deallocate(ADp%sal_u)
+  if (associated(ADp%sal_v))  deallocate(ADp%sal_v)
+  if (associated(ADp%tides_u)) deallocate(ADp%tides_u)
+  if (associated(ADp%tides_v)) deallocate(ADp%tides_v)
 
   if (associated(ADp%diag_hfrac_u)) deallocate(ADp%diag_hfrac_u)
   if (associated(ADp%diag_hfrac_v)) deallocate(ADp%diag_hfrac_v)

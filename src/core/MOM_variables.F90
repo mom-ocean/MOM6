@@ -183,7 +183,13 @@ type, public :: accel_diag_ptrs
     du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal mixing [L T-2 ~> m s-2]
     dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal mixing [L T-2 ~> m s-2]
     u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
-    v_accel_bt => NULL()   !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL(), &!< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
+
+    ! sal_[uv] and tide_[uv] are 3D fields because of their baroclinic component in Boussinesq mode.
+    sal_u => NULL(), &     !< Zonal acceleration due to self-attraction and loading [L T-2 ~> m s-2]
+    sal_v => NULL(), &     !< Meridional acceleration due to self-attraction and loading [L T-2 ~> m s-2]
+    tides_u => NULL(), &    !< Zonal acceleration due to astronomical tidal forcing [L T-2 ~> m s-2]
+    tides_v => NULL()       !< Meridional acceleration due to astronomical tidal forcing [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].

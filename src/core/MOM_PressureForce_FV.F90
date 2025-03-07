@@ -14,7 +14,7 @@ use MOM_self_attr_load, only : calc_SAL, SAL_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing, tidal_forcing_CS
 use MOM_tidal_forcing, only : calc_tidal_forcing_legacy
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
+use MOM_variables, only : thermo_var_ptrs, accel_diag_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_EOS, only : calculate_density, calculate_spec_vol, EOS_domain
 use MOM_density_integrals, only : int_density_dz, int_specific_vol_dp
@@ -98,6 +98,10 @@ type, public :: PressureForce_FV_CS ; private
   integer :: id_p_stanley = -1 !< Diagnostic identifier
   integer :: id_MassWt_u = -1 !< Diagnostic identifier
   integer :: id_MassWt_v = -1 !< Diagnostic identifier
+  integer :: id_sal_u = -1 !< Diagnostic identifier
+  integer :: id_sal_v = -1 !< Diagnostic identifier
+  integer :: id_tides_u = -1 !< Diagnostic identifier
+  integer :: id_tides_v = -1 !< Diagnostic identifier
   type(SAL_CS), pointer :: SAL_CSp => NULL() !< SAL control structure
   type(tidal_forcing_CS), pointer :: tides_CSp => NULL() !< Tides control structure
 end type PressureForce_FV_CS
@@ -113,7 +117,7 @@ contains
 !! To work, the following fields must be set outside of the usual (is:ie,js:je)
 !! range before this subroutine is called:
 !!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
-subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, p_atm, pbce, eta)
   type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
@@ -123,6 +127,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_FV_CS),                  intent(in)  :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
+  type(accel_diag_ptrs),                      pointer     :: ADp !< Acceleration diagnostic pointers
   real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                            !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
@@ -255,7 +260,7 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   real :: SpV5(5)       ! Specific volume anomalies at five quadrature points [R-1 ~> m3 kg-1]
   real :: wt_R          ! A weighting factor [nondim]
 
-!  real :: oneatm       ! 1 standard atmosphere of pressure in [R L2 T-2 ~> Pa]
+  !  real :: oneatm       ! 1 standard atmosphere of pressure in [R L2 T-2 ~> Pa]
   real, parameter :: C1_6 = 1.0/6.0  ! [nondim]
   real, parameter :: C1_90 = 1.0/90.0  ! A rational constant [nondim]
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, nkmb
@@ -888,9 +893,13 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
     endif
   endif
 
-  ! To be consistent with old runs, tidal forcing diagnostic also includes total SAL.
-  ! New diagnostics are given for each individual field.
+  if (CS%id_MassWt_u>0) call post_data(CS%id_MassWt_u, MassWt_u, CS%diag)
+  if (CS%id_MassWt_v>0) call post_data(CS%id_MassWt_v, MassWt_v, CS%diag)
+
+  ! Diagnostics for tidal forcing and SAL height anomaly
   if (CS%id_e_tide>0) then
+    ! To be consistent with old runs, tidal forcing diagnostic also includes total SAL.
+    ! New diagnostics are given for each individual field.
     if (CS%tides_answer_date>20230630) then ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e_sal_and_tide(i,j) = e_sal(i,j) + e_tidal_eq(i,j) + e_tidal_sal(i,j)
     enddo ; enddo ; endif
@@ -899,9 +908,32 @@ subroutine PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_
   if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
   if (CS%id_e_tidal_eq>0) call post_data(CS%id_e_tidal_eq, e_tidal_eq, CS%diag)
   if (CS%id_e_tidal_sal>0) call post_data(CS%id_e_tidal_sal, e_tidal_sal, CS%diag)
-  if (CS%id_MassWt_u>0) call post_data(CS%id_MassWt_u, MassWt_u, CS%diag)
-  if (CS%id_MassWt_v>0) call post_data(CS%id_MassWt_v, MassWt_v, CS%diag)
 
+  ! Diagnostics for tidal forcing and SAL horizontal gradients
+  if (CS%calculate_SAL .and. (associated(ADp%sal_u) .or. associated(ADp%sal_v))) then
+    if (CS%tides) then ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      e_sal(i,j) = e_sal(i,j) + e_tidal_sal(i,j)
+    enddo ; enddo ; endif
+    if (associated(ADp%sal_u)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      ADp%sal_u(I,j,k) = (e_sal(i+1,j) - e_sal(i,j)) * GV%g_Earth * G%IdxCu(I,j)
+    enddo ; enddo ; enddo ; endif
+    if (associated(ADp%sal_v)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      ADp%sal_v(i,J,k) = (e_sal(i,j+1) - e_sal(i,j)) * GV%g_Earth * G%IdyCv(i,J)
+    enddo ; enddo ; enddo ; endif
+    if (CS%id_sal_u>0) call post_data(CS%id_sal_u, ADp%sal_u, CS%diag)
+    if (CS%id_sal_v>0) call post_data(CS%id_sal_v, ADp%sal_v, CS%diag)
+  endif
+
+  if (CS%tides .and. (associated(ADp%tides_u) .or. associated(ADp%tides_v))) then
+    if (associated(ADp%tides_u)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      ADp%tides_u(I,j,k) = (e_tidal_eq(i+1,j) - e_tidal_eq(i,j)) * GV%g_Earth * G%IdxCu(I,j)
+    enddo ; enddo ; enddo ; endif
+    if (associated(ADp%tides_v)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      ADp%tides_v(i,J,k) = (e_tidal_eq(i,j+1) - e_tidal_eq(i,j)) * GV%g_Earth * G%IdyCv(i,J)
+    enddo ; enddo ; enddo ; endif
+    if (CS%id_tides_u>0) call post_data(CS%id_tides_u, ADp%tides_u, CS%diag)
+    if (CS%id_tides_v>0) call post_data(CS%id_tides_v, ADp%tides_v, CS%diag)
+  endif
 end subroutine PressureForce_FV_nonBouss
 
 !> \brief Boussinesq analytically-integrated finite volume form of pressure gradient
@@ -912,7 +944,7 @@ end subroutine PressureForce_FV_nonBouss
 !! To work, the following fields must be set outside of the usual (is:ie,js:je)
 !! range before this subroutine is called:
 !!   h(isB:ie+1,jsB:je+1), T(isB:ie+1,jsB:je+1), and S(isB:ie+1,jsB:je+1).
-subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, p_atm, pbce, eta)
   type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
   type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
@@ -922,6 +954,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out) :: PFv !< Meridional acceleration [L T-2 ~> m s-2]
   type(PressureForce_FV_CS),                  intent(in)  :: CS  !< Finite volume PGF control structure
   type(ALE_CS),                               pointer     :: ALE_CSp !< ALE control structure
+  type(accel_diag_ptrs),                      pointer     :: ADp !< Acceleration diagnostic pointers
   real, dimension(:,:),                       pointer     :: p_atm !< The pressure at the ice-ocean
                                                          !! or atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), optional, intent(out) :: pbce !< The baroclinic pressure
@@ -1910,9 +1943,17 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
     endif
   endif
 
-  ! To be consistent with old runs, tidal forcing diagnostic also includes total SAL.
-  ! New diagnostics are given for each individual field.
+  if (CS%id_MassWt_u>0) call post_data(CS%id_MassWt_u, MassWt_u, CS%diag)
+  if (CS%id_MassWt_v>0) call post_data(CS%id_MassWt_v, MassWt_v, CS%diag)
+
+  if (CS%id_rho_pgf>0) call post_data(CS%id_rho_pgf, rho_pgf, CS%diag)
+  if (CS%id_rho_stanley_pgf>0) call post_data(CS%id_rho_stanley_pgf, rho_stanley_pgf, CS%diag)
+  if (CS%id_p_stanley>0) call post_data(CS%id_p_stanley, p_stanley, CS%diag)
+
+  ! Diagnostics for tidal forcing and SAL height anomaly
   if (CS%id_e_tide>0) then
+    ! To be consistent with old runs, tidal forcing diagnostic also includes total SAL.
+    ! New diagnostics are given for each individual field.
     if (CS%tides_answer_date>20230630) then ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e_sal_and_tide(i,j) = e_sal(i,j) + e_tidal_eq(i,j) + e_tidal_sal(i,j)
     enddo ; enddo ; endif
@@ -1921,17 +1962,62 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm
   if (CS%id_e_sal>0) call post_data(CS%id_e_sal, e_sal, CS%diag)
   if (CS%id_e_tidal_eq>0) call post_data(CS%id_e_tidal_eq, e_tidal_eq, CS%diag)
   if (CS%id_e_tidal_sal>0) call post_data(CS%id_e_tidal_sal, e_tidal_sal, CS%diag)
-  if (CS%id_MassWt_u>0) call post_data(CS%id_MassWt_u, MassWt_u, CS%diag)
-  if (CS%id_MassWt_v>0) call post_data(CS%id_MassWt_v, MassWt_v, CS%diag)
 
-  if (CS%id_rho_pgf>0) call post_data(CS%id_rho_pgf, rho_pgf, CS%diag)
-  if (CS%id_rho_stanley_pgf>0) call post_data(CS%id_rho_stanley_pgf, rho_stanley_pgf, CS%diag)
-  if (CS%id_p_stanley>0) call post_data(CS%id_p_stanley, p_stanley, CS%diag)
+  ! Diagnostics for tidal forcing and SAL horizontal gradients
+  if (CS%calculate_SAL .and. ((associated(ADp%sal_u) .or. associated(ADp%sal_v)))) then
+    if (CS%tides) then ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      e_sal(i,j) = e_sal(i,j) + e_tidal_sal(i,j)
+    enddo ; enddo ; endif
+    if (CS%bq_sal_tides) then
+      ! sal_u = ( e(i+1) - e(i) ) * g / dx
+      if (associated(ADp%sal_u)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        ADp%sal_u(I,j,k) = (e_sal(i+1,j) - e_sal(i,j)) * GV%g_Earth * G%IdxCu(I,j)
+      enddo ; enddo ; enddo ; endif
+      if (associated(ADp%sal_v)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        ADp%sal_v(i,J,k) = (e_sal(i,j+1) - e_sal(i,j)) * GV%g_Earth * G%IdyCv(i,J)
+      enddo ; enddo ; enddo ; endif
+    else
+      ! sal_u = ( e(i+1) - e(i) ) * g / dx * (rho(k) / rho0)
+      if (associated(ADp%sal_u)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        ADp%sal_u(I,j,k) = (e_sal(i+1,j) - e_sal(i,j)) * G%IdxCu(I,j) * I_Rho0 * &
+          (2.0 * intx_dpa(I,j,k) * GV%Z_to_H / ((h(i,j,k) + h(i+1,j,k)) + h_neglect) + GxRho_ref)
+      enddo ; enddo ; enddo ; endif
+      if (associated(ADp%sal_v)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        ADp%sal_v(i,J,k) = (e_sal(i,j+1) - e_sal(i,j)) * G%IdyCv(i,J) * I_Rho0 * &
+          (2.0 * inty_dpa(i,J,k) * GV%Z_to_H / ((h(i,j,k) + h(i,j+1,k)) + h_neglect) + GxRho_ref)
+      enddo ; enddo ; enddo ; endif
+    endif
+    if (CS%id_sal_u>0) call post_data(CS%id_sal_u, ADp%sal_u, CS%diag)
+    if (CS%id_sal_v>0) call post_data(CS%id_sal_v, ADp%sal_v, CS%diag)
+  endif
 
+  if (CS%tides .and. ((associated(ADp%tides_u) .or. associated(ADp%tides_v)))) then
+    if (CS%bq_sal_tides) then
+      ! tides_u = ( e(i+1) - e(i) ) * g / dx
+      if (associated(ADp%tides_u)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        ADp%tides_u(I,j,k) = (e_tidal_eq(i+1,j) - e_tidal_eq(i,j)) * GV%g_Earth * G%IdxCu(I,j)
+      enddo ; enddo ; enddo ; endif
+      if (associated(ADp%tides_v)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        ADp%tides_v(i,J,k) = (e_tidal_eq(i,j+1) - e_tidal_eq(i,j)) * GV%g_Earth * G%IdyCv(i,J)
+      enddo ; enddo ; enddo ; endif
+    else
+      ! tides_u = ( e(i+1) - e(i) ) * g / dx * (rho(k) / rho0)
+      if (associated(ADp%tides_u)) then ; do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+        ADp%tides_u(I,j,k) = (e_tidal_eq(i+1,j) - e_tidal_eq(i,j)) * G%IdxCu(I,j) * I_Rho0 * &
+          (2.0 * intx_dpa(I,j,k) * GV%Z_to_H / ((h(i,j,k) + h(i+1,j,k)) + h_neglect) + GxRho_ref)
+      enddo ; enddo ; enddo ; endif
+      if (associated(ADp%tides_v)) then ; do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+        ADp%tides_v(i,J,k) = (e_tidal_eq(i,j+1) - e_tidal_eq(i,j)) * G%IdyCv(i,J) * I_Rho0 * &
+          (2.0 * inty_dpa(i,J,k) * GV%Z_to_H / ((h(i,j,k) + h(i,j+1,k)) + h_neglect) + GxRho_ref)
+      enddo ; enddo ; enddo ; endif
+    endif
+    if (CS%id_tides_u>0) call post_data(CS%id_tides_u, ADp%tides_u, CS%diag)
+    if (CS%id_tides_v>0) call post_data(CS%id_tides_v, ADp%tides_v, CS%diag)
+  endif
 end subroutine PressureForce_FV_Bouss
 
 !> Initializes the finite volume pressure gradient control structure
-subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp, tides_CSp)
+subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL_CSp, tides_CSp)
   type(time_type), target,    intent(in)    :: Time !< Current model time
   type(ocean_grid_type),      intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),    intent(in)    :: GV !< Vertical grid structure
@@ -1939,6 +2025,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
   type(param_file_type),      intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target,    intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_FV_CS),  intent(inout) :: CS !< Finite volume PGF control structure
+  type(accel_diag_ptrs),      pointer       :: ADp !< Acceleration diagnostic pointers
   type(SAL_CS),           intent(in), target, optional :: SAL_CSp !< SAL control structure
   type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
 
@@ -1956,6 +2043,10 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
   logical :: use_ALE       ! If true, use the Vertical Lagrangian Remap algorithm
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+
+  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
+  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%initialized = .true.
   CS%diag => diag ; CS%Time => Time
@@ -2109,8 +2200,16 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
         Time, 'p in PGF with Stanley correction', 'Pa', conversion=US%RL2_T2_to_Pa)
   endif
   if (CS%calculate_SAL) then
-    CS%id_e_sal = register_diag_field('ocean_model', 'e_sal', diag%axesT1, &
-        Time, 'Self-attraction and loading height anomaly', 'meter', conversion=US%Z_to_m)
+    CS%id_e_sal = register_diag_field('ocean_model', 'e_sal', diag%axesT1, Time, &
+        'Self-attraction and loading height anomaly', 'meter', conversion=US%Z_to_m)
+    CS%id_sal_u = register_diag_field('ocean_model', 'SAL_u', diag%axesCuL, Time, &
+        'Zonal Acceleration due to self-attraction and loading', 'm s-2', conversion=US%L_T2_to_m_s2)
+    CS%id_sal_v = register_diag_field('ocean_model', 'SAL_v', diag%axesCvL, Time, &
+        'Meridional Acceleration due to self-attraction and loading', 'm s-2', conversion=US%L_T2_to_m_s2)
+    if (CS%id_sal_u > 0) &
+      call safe_alloc_ptr(ADp%sal_u, IsdB, IedB, jsd, jed, nz)
+    if (CS%id_sal_v > 0) &
+      call safe_alloc_ptr(ADp%sal_v, isd, ied, JsdB, JedB, nz)
   endif
   if (CS%tides) then
     CS%id_e_tide = register_diag_field('ocean_model', 'e_tidal', diag%axesT1, Time, &
@@ -2119,6 +2218,14 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp,
         'Equilibrium tides height anomaly', 'meter', conversion=US%Z_to_m)
     CS%id_e_tidal_sal = register_diag_field('ocean_model', 'e_tide_sal', diag%axesT1, Time, &
         'Read-in tidal self-attraction and loading height anomaly', 'meter', conversion=US%Z_to_m)
+    CS%id_tides_u = register_diag_field('ocean_model', 'tides_u', diag%axesCuL, Time, &
+        'Zonal Acceleration due to tidal forcing', 'm s-2', conversion=US%L_T2_to_m_s2)
+    CS%id_tides_v = register_diag_field('ocean_model', 'tides_v', diag%axesCvL, Time, &
+        'Meridional Acceleration due to tidal forcing', 'm s-2', conversion=US%L_T2_to_m_s2)
+    if (CS%id_tides_u > 0) &
+      call safe_alloc_ptr(ADp%tides_u, IsdB, IedB, jsd, jed, nz)
+    if (CS%id_tides_v > 0) &
+      call safe_alloc_ptr(ADp%tides_v, isd, ied, JsdB, JedB, nz)
   endif
 
   CS%id_MassWt_u = register_diag_field('ocean_model', 'MassWt_u', diag%axesCuL, Time, &

@@ -490,7 +490,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (CS%begw == 0.0) call enable_averages(dt, Time_local, CS%diag)
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
-                     CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
+                     CS%ALE_CSp, CS%ADp, p_surf, CS%pbce, CS%eta_PF)
   if (dyn_p_surf) then
     pres_to_eta = 1.0 / (GV%g_Earth * GV%H_to_RZ)
     !$OMP parallel do default(shared)
@@ -817,7 +817,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     ! pbce = dM/deta
     call cpu_clock_begin(id_clock_pres)
     call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
-                       CS%ALE_CSp, p_surf, CS%pbce, CS%eta_PF)
+                       CS%ALE_CSp, CS%ADp, p_surf, CS%pbce, CS%eta_PF)
     ! Stokes shear force contribution to pressure gradient
     Use_Stokes_PGF = present(Waves)
     if (Use_Stokes_PGF) then
@@ -1521,7 +1521,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   else
     HA_CSp => NULL()
   endif
-  call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
+  call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &
                           CS%SAL_CSp, CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, ntrunc, CS%vertvisc_CSp)
