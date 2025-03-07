@@ -1880,9 +1880,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                                                   !! transports [L T-1 ~> m s-1].
 
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     dvhdv         ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G),SZJ_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     dv, &         ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
     dv_min_CFL, & ! Lower limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
     dv_max_CFL, & ! Upper limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
@@ -2247,7 +2247,7 @@ subroutine merid_flux_layer_fused(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, GV
                                                           !! [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vh       !< Meridional mass or volume transport
                                                           !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: dvhdv    !< Partial derivative of vh with v
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),  intent(inout) :: dvhdv    !< Partial derivative of vh with v
                                                           !! [H L ~> m2 or kg m-1].
   real,                         intent(in)    :: dt       !< Time increment [T ~> s].
   type(unit_scale_type),        intent(in)    :: US       !< A dimensional unit scaling type
@@ -2541,13 +2541,13 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
                              !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: vhbt !< The summed volume flux through meridional faces
                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: dv_max_CFL !< Maximum acceptable value of dv [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: dv_min_CFL !< Minimum acceptable value of dv [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: vh_tot_0   !< The summed transport with 0 adjustment
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: dv_max_CFL !< Maximum acceptable value of dv [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: dv_min_CFL !< Minimum acceptable value of dv [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: vh_tot_0   !< The summed transport with 0 adjustment
                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJ_(G)), intent(in)    :: dvhdv_tot_0 !< The partial derivative of dv_err with
+  real, dimension(SZI_(G),SZJB_(G)), intent(in)    :: dvhdv_tot_0 !< The partial derivative of dv_err with
                                                   !! dv at 0 adjustment [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G),SZJ_(G)), intent(out)   :: dv   !< The barotropic velocity adjustment [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(out)   :: dv   !< The barotropic velocity adjustment [L T-1 ~> m s-1].
   real,                     intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),  intent(in)    :: CS   !< This module's control structure.
@@ -2562,13 +2562,13 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
                              !! faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type), optional, pointer :: OBC !< Open boundaries control structure.
   ! Local variables
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
     vh_aux, &  ! An auxiliary meridional volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
-    dvhdv      ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
+    dvhdv, &   ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
+    v_new      ! The velocity with the correction added [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: &
     vh_err, &  ! Difference between vhbt and the summed vh [H L2 T-1 ~> m3 s-1 or kg s-1].
     vh_err_best, & ! The smallest value of vh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
-    v_new, &   ! The velocity with the correction added [L T-1 ~> m s-1].
     dvhdv_tot,&! Summed partial derivative of vh with u [H L ~> m2 or kg m-1].
     dv_min, &  ! Lower limit on dv correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
     dv_max     ! Upper limit on dv correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
@@ -2594,8 +2594,6 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
     vh_err_best(i,j) = abs(vh_err(i,j))
   enddo ; enddo
 
-  do j=jsh-1,jeh
-
   do itt=1,max_itts
     select case (itt)
       case (:1) ; tol_eta = 1e-6 * CS%tol_eta
@@ -2605,13 +2603,13 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
     end select
     tol_vel = CS%tol_vel
 
-    do i=ish,ieh
+    do j=jsh-1,jeh ; do i=ish,ieh
       if (vh_err(i,j) > 0.0) then ; dv_max(i,j) = dv(i,j)
       elseif (vh_err(i,j) < 0.0) then ; dv_min(i,j) = dv(i,j)
       else ; do_I(i,j) = .false. ; endif
-    enddo
+    enddo ; enddo
     domore = .false.
-    do i=ish,ieh ; if (do_I(i,j)) then
+    do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
       if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i,j)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(vh_err(i,j)) > tol_vel * dvhdv_tot(i,j)) .or. &
                                  (abs(vh_err(i,j)) > vh_err_best(i,j))) )) then
@@ -2637,38 +2635,37 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
       else
         do_I(i,j) = .false.
       endif
-    endif ; enddo
+    endif ; enddo ; enddo
     if (.not.domore) exit
 
-    if ((itt < max_itts) .or. present(vh_3d)) then ; do k=1,nz
-      do i=ish,ieh ; v_new(i,j) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k) ; enddo
-      call merid_flux_layer(v_new(:,j), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), &
-                            vh_aux(:,j,k), dvhdv(:,j,k), visc_rem(:,j,k), &
-                            dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k), OBC)
-    enddo ; endif
+    if ((itt < max_itts) .or. present(vh_3d)) then ; do k=1,nz ; do j=jsh-1,jeh
+      do i=ish,ieh ; v_new(i,j,k) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k) ; enddo ; enddo ; enddo
+      call merid_flux_layer_fused(v_new, h_in, h_S, h_N, &
+                            vh_aux, dvhdv, visc_rem, &
+                            dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
+    endif
 
     if (itt < max_itts) then
-      do i=ish,ieh
+      do j=jsh-1,jeh ; do i=ish,ieh
         vh_err(i,j) = -vhbt(i,j) ; dvhdv_tot(i,j) = 0.0
-      enddo
-      do k=1,nz ; do i=ish,ieh
+      enddo ; enddo
+      do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
         vh_err(i,j) = vh_err(i,j) + vh_aux(i,j,k)
         dvhdv_tot(i,j) = dvhdv_tot(i,j) + dvhdv(i,j,k)
-      enddo ; enddo
-      do i=ish,ieh
+      enddo ; enddo ; enddo
+      do j=jsh-1,jeh ; do i=ish,ieh
         vh_err_best(i,j) = min(vh_err_best(i,j), abs(vh_err(i,j)))
-      enddo
+      enddo ; enddo
     endif
   enddo ! itt-loop
+  
   ! If there are any faces which have not converged to within the tolerance,
   ! so-be-it, or else use a final upwind correction?
   ! This never seems to happen with 20 iterations as max_itt.
 
-  if (present(vh_3d)) then ; do k=1,nz ; do i=ish,ieh
+  if (present(vh_3d)) then ; do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
     vh_3d(i,J,k) = vh_aux(i,j,k)
-  enddo ; enddo ; endif
-
-  enddo
+  enddo ; enddo ; enddo ; endif
 
 end subroutine meridional_flux_adjust_fused
 
