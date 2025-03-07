@@ -2054,11 +2054,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     endif
     if (present(vhbt)) then
       ! Find dv and vh.
-      do j=jsh-1,jeh
       call meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
-                             j, ish, ieh, do_I, por_face_areaV, vh, OBC=OBC)
-      enddo
+                             ish, ieh, jsh, jeh, do_I, por_face_areaV, vh, OBC=OBC)
     endif
   endif
   
@@ -2524,7 +2522,7 @@ end subroutine meridional_flux_thickness
 !> Returns the barotropic velocity adjustment that gives the desired barotropic (layer-summed) transport.
 subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, &
                              dv, dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             j, ish, ieh, do_I_in, por_face_areaV, vh_3d, OBC)
+                             ish, ieh, jsh, jeh, do_I_in, por_face_areaV, vh_3d, OBC)
   type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -2553,9 +2551,8 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   real,                     intent(in)    :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),    intent(in)    :: US   !< A dimensional unit scaling type
   type(continuity_PPM_CS),  intent(in)    :: CS   !< This module's control structure.
-  integer,                  intent(in)    :: j    !< Spatial index.
-  integer,                  intent(in)    :: ish  !< Start of index range.
-  integer,                  intent(in)    :: ieh  !< End of index range.
+  integer,                  intent(in)    :: ish, jsh  !< Start of index range.
+  integer,                  intent(in)    :: ieh, jeh  !< End of index range.
   logical, dimension(SZI_(G),SZJ_(G)), &
                             intent(in)    :: do_I_in  !< A flag indicating which I values to work on.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
@@ -2579,10 +2576,12 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   real :: ddv     ! The change in dv from the previous iteration [L T-1 ~> m s-1].
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
-  integer :: i, k, nz, itt, max_itts = 20
+  integer :: i, j, k, nz, itt, max_itts = 20
   logical :: domore, do_I(SZI_(G))
 
   nz = GV%ke
+
+  do j=jsh-1,jeh
 
   vh_aux(:,:) = 0.0 ; dvhdv(:,:) = 0.0
 
@@ -2668,6 +2667,8 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   if (present(vh_3d)) then ; do k=1,nz ; do i=ish,ieh
     vh_3d(i,J,k) = vh_aux(i,k)
   enddo ; enddo ; endif
+
+  enddo
 
 end subroutine meridional_flux_adjust_fused
 
