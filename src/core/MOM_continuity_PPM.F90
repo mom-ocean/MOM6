@@ -2565,7 +2565,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     vh_aux, &  ! An auxiliary meridional volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
     dvhdv      ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G)) :: &
+  real, dimension(SZI_(G),SZJ_(G)) :: &
     vh_err, &  ! Difference between vhbt and the summed vh [H L2 T-1 ~> m3 s-1 or kg s-1].
     vh_err_best, & ! The smallest value of vh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
     v_new, &   ! The velocity with the correction added [L T-1 ~> m s-1].
@@ -2577,7 +2577,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, j, k, nz, itt, max_itts = 20
-  logical :: domore, do_I(SZI_(G))
+  logical :: domore, do_I(SZI_(G),SZJ_(G))
 
   nz = GV%ke
 
@@ -2586,15 +2586,15 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   if (present(vh_3d)) then ; do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
     vh_aux(i,j,k) = vh_3d(i,J,k)
   enddo ; enddo ; enddo ; endif
-  
-  do j=jsh-1,jeh
 
-  do i=ish,ieh
-    dv(i,j) = 0.0 ; do_I(i) = do_I_in(i,j)
-    dv_max(i) = dv_max_CFL(i,j) ; dv_min(i) = dv_min_CFL(i,j)
-    vh_err(i) = vh_tot_0(i,j) - vhbt(i,j) ; dvhdv_tot(i) = dvhdv_tot_0(i,j)
-    vh_err_best(i) = abs(vh_err(i))
-  enddo
+  do j=jsh-1,jeh ; do i=ish,ieh
+    dv(i,j) = 0.0 ; do_I(i,j) = do_I_in(i,j)
+    dv_max(i,j) = dv_max_CFL(i,j) ; dv_min(i,j) = dv_min_CFL(i,j)
+    vh_err(i,j) = vh_tot_0(i,j) - vhbt(i,j) ; dvhdv_tot(i,j) = dvhdv_tot_0(i,j)
+    vh_err_best(i,j) = abs(vh_err(i,j))
+  enddo ; enddo
+
+  do j=jsh-1,jeh
 
   do itt=1,max_itts
     select case (itt)
@@ -2606,57 +2606,57 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
     tol_vel = CS%tol_vel
 
     do i=ish,ieh
-      if (vh_err(i) > 0.0) then ; dv_max(i) = dv(i,j)
-      elseif (vh_err(i) < 0.0) then ; dv_min(i) = dv(i,j)
-      else ; do_I(i) = .false. ; endif
+      if (vh_err(i,j) > 0.0) then ; dv_max(i,j) = dv(i,j)
+      elseif (vh_err(i,j) < 0.0) then ; dv_min(i,j) = dv(i,j)
+      else ; do_I(i,j) = .false. ; endif
     enddo
     domore = .false.
-    do i=ish,ieh ; if (do_I(i)) then
-      if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i)) > tol_eta) .or. &
-          (CS%better_iter .and. ((abs(vh_err(i)) > tol_vel * dvhdv_tot(i)) .or. &
-                                 (abs(vh_err(i)) > vh_err_best(i))) )) then
+    do i=ish,ieh ; if (do_I(i,j)) then
+      if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i,j)) > tol_eta) .or. &
+          (CS%better_iter .and. ((abs(vh_err(i,j)) > tol_vel * dvhdv_tot(i,j)) .or. &
+                                 (abs(vh_err(i,j)) > vh_err_best(i,j))) )) then
         !   Use Newton's method, provided it stays bounded.  Otherwise bisect
         ! the value with the appropriate bound.
-        ddv = -vh_err(i) / dvhdv_tot(i)
+        ddv = -vh_err(i,j) / dvhdv_tot(i,j)
         dv_prev = dv(i,j)
         dv(i,j) = dv(i,j) + ddv
         if (abs(ddv) < 1.0e-15*abs(dv(i,j))) then
-          do_I(i) = .false. ! ddv is small enough to quit.
+          do_I(i,j) = .false. ! ddv is small enough to quit.
         elseif (ddv > 0.0) then
-          if (dv(i,j) >= dv_max(i)) then
-            dv(i,j) = 0.5*(dv_prev + dv_max(i))
-            if (dv_max(i) - dv_prev < 1.0e-15*abs(dv(i,j))) do_I(i) = .false.
+          if (dv(i,j) >= dv_max(i,j)) then
+            dv(i,j) = 0.5*(dv_prev + dv_max(i,j))
+            if (dv_max(i,j) - dv_prev < 1.0e-15*abs(dv(i,j))) do_I(i,j) = .false.
           endif
         else ! dvv(i) < 0.0
-          if (dv(i,j) <= dv_min(i)) then
-            dv(i,j) = 0.5*(dv_prev + dv_min(i))
-            if (dv_prev - dv_min(i) < 1.0e-15*abs(dv(i,j))) do_I(i) = .false.
+          if (dv(i,j) <= dv_min(i,j)) then
+            dv(i,j) = 0.5*(dv_prev + dv_min(i,j))
+            if (dv_prev - dv_min(i,j) < 1.0e-15*abs(dv(i,j))) do_I(i,j) = .false.
           endif
         endif
-        if (do_I(i)) domore = .true.
+        if (do_I(i,j)) domore = .true.
       else
-        do_I(i) = .false.
+        do_I(i,j) = .false.
       endif
     endif ; enddo
     if (.not.domore) exit
 
     if ((itt < max_itts) .or. present(vh_3d)) then ; do k=1,nz
-      do i=ish,ieh ; v_new(i) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k) ; enddo
-      call merid_flux_layer(v_new, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), &
+      do i=ish,ieh ; v_new(i,j) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k) ; enddo
+      call merid_flux_layer(v_new(:,j), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), &
                             vh_aux(:,j,k), dvhdv(:,j,k), visc_rem(:,j,k), &
-                            dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
+                            dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k), OBC)
     enddo ; endif
 
     if (itt < max_itts) then
       do i=ish,ieh
-        vh_err(i) = -vhbt(i,j) ; dvhdv_tot(i) = 0.0
+        vh_err(i,j) = -vhbt(i,j) ; dvhdv_tot(i,j) = 0.0
       enddo
       do k=1,nz ; do i=ish,ieh
-        vh_err(i) = vh_err(i) + vh_aux(i,j,k)
-        dvhdv_tot(i) = dvhdv_tot(i) + dvhdv(i,j,k)
+        vh_err(i,j) = vh_err(i,j) + vh_aux(i,j,k)
+        dvhdv_tot(i,j) = dvhdv_tot(i,j) + dvhdv(i,j,k)
       enddo ; enddo
       do i=ish,ieh
-        vh_err_best(i) = min(vh_err_best(i), abs(vh_err(i)))
+        vh_err_best(i,j) = min(vh_err_best(i,j), abs(vh_err(i,j)))
       enddo
     endif
   enddo ! itt-loop
