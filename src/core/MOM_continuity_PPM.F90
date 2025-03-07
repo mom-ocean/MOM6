@@ -2919,17 +2919,18 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     FAmt_L(i,j) = 0.0 ; FAmt_R(i,j) = 0.0 ; FAmt_0(i,j) = 0.0
     vhtot_L(i,j) = 0.0 ; vhtot_R(i,j) = 0.0
   endif ; enddo ; enddo
-  do j = jsh-1, jeh
 
   if (.not.domore) then
-    do k=1,nz ; do i=ish,ieh
+    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
       BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
       BT_cont%vBT_SS(i,J) = 0.0
       BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
       BT_cont%vBT_NN(i,J) = 0.0
-    enddo ; enddo
+    enddo ; enddo ; enddo
     return
   endif
+
+  do j = jsh-1, jeh
 
   do k=1,nz ; do i=ish,ieh ; if (do_I(i,j)) then
     visc_rem_lim = max(visc_rem(i,j,k), min_visc_rem*visc_rem_max(i,j))
