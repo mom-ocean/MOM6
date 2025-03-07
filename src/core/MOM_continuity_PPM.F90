@@ -2940,27 +2940,26 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     endif
   endif ; enddo ; enddo ; enddo
 
+  do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
+    v_L(i,j,k) = v(I,j,k) + dvL(i,j) * visc_rem(i,j,k)
+    v_R(i,j,k) = v(I,j,k) + dvR(i,j) * visc_rem(i,j,k)
+    v_0(i,j,k) = v(I,j,k) + dv0(i,j) * visc_rem(i,j,k)
+  endif ; enddo ; enddo ; enddo
+  call merid_flux_layer_fused(v_0, h_in, h_S, h_N, vh_0, dvhdv_0, &
+                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
+  call merid_flux_layer_fused(v_L, h_in, h_S, h_N, vh_L, dvhdv_L, &
+                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
+  call merid_flux_layer_fused(v_R, h_in, h_S, h_N, vh_R, dvhdv_R, &
+                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
+  do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
+    FAmt_0(i,j) = FAmt_0(i,j) + dvhdv_0(i,j,k)
+    FAmt_L(i,j) = FAmt_L(i,j) + dvhdv_L(i,j,k)
+    FAmt_R(i,j) = FAmt_R(i,j) + dvhdv_R(i,j,k)
+    vhtot_L(i,j) = vhtot_L(i,j) + vh_L(i,j,k)
+    vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i,j,k)
+  endif ; enddo ; enddo ; enddo
+
   do j = jsh-1, jeh
-  do k=1,nz
-    do i=ish,ieh ; if (do_I(i,j)) then
-      v_L(i,j,k) = v(I,j,k) + dvL(i,j) * visc_rem(i,j,k)
-      v_R(i,j,k) = v(I,j,k) + dvR(i,j) * visc_rem(i,j,k)
-      v_0(i,j,k) = v(I,j,k) + dv0(i,j) * visc_rem(i,j,k)
-    endif ; enddo
-    call merid_flux_layer(v_0(:,j,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_0(:,j,k), dvhdv_0(:,j,k), &
-                          visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
-    call merid_flux_layer(v_L(:,j,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_L(:,j,k), dvhdv_L(:,j,k), &
-                          visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
-    call merid_flux_layer(v_R(:,j,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_R(:,j,k), dvhdv_R(:,j,k), &
-                          visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
-    do i=ish,ieh ; if (do_I(i,j)) then
-      FAmt_0(i,j) = FAmt_0(i,j) + dvhdv_0(i,j,k)
-      FAmt_L(i,j) = FAmt_L(i,j) + dvhdv_L(i,j,k)
-      FAmt_R(i,j) = FAmt_R(i,j) + dvhdv_R(i,j,k)
-      vhtot_L(i,j) = vhtot_L(i,j) + vh_L(i,j,k)
-      vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i,j,k)
-    endif ; enddo
-  enddo
   do i=ish,ieh ; if (do_I(i,j)) then
     FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
     if ((dvL(i,j) - dv0(i,j)) /= 0.0) &
