@@ -1907,7 +1907,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   integer :: l_seg ! The OBC segment number
   logical :: use_visc_rem, set_BT_cont
   logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
-  logical :: simple_OBC_pt(SZI_(G))  ! Indicates points in a row with specified transport OBCs
+  logical :: simple_OBC_pt(SZI_(G),SZJ_(G))  ! Indicates points in a row with specified transport OBCs
   type(OBC_segment_type), pointer :: segment => NULL()
 
   call cpu_clock_begin(id_clock_correct)
@@ -2037,6 +2037,22 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       dv_max_CFL(i,j) = max(dv_max_CFL(i,j),0.0)
       dv_min_CFL(i,j) = min(dv_min_CFL(i,j),0.0)
     enddo ; enddo
+
+    ! untested
+    any_simple_OBC = .false.
+    if (present(vhbt) .or. set_BT_cont) then
+      if (local_specified_BC .or. local_Flather_OBC) then ; do j=jsh-1,jeh ; do i=ish,ieh
+        l_seg = abs(OBC%segnum_v(i,J))
+
+        ! Avoid reconciling barotropic/baroclinic transports if transport is specified
+        simple_OBC_pt(i,j) = .false.
+        if (l_seg /= 0) simple_OBC_pt(i,j) = OBC%segment(l_seg)%specified
+        do_I(i,j) = .not.simple_OBC_pt(i,j)
+        any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i,j)
+      enddo ; enddo ; else ; do j=jsh-1,jeh ; do i=ish,ieh
+        do_I(i,j) = .true.
+      enddo ; enddo ; endif
+    endif
   endif
   
   !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
@@ -2052,21 +2068,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
     if (present(vhbt) .or. set_BT_cont) then
 
-      any_simple_OBC = .false.
-      if (present(vhbt) .or. set_BT_cont) then
-        if (local_specified_BC .or. local_Flather_OBC) then ; do i=ish,ieh
-          l_seg = abs(OBC%segnum_v(i,J))
-
-          ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          simple_OBC_pt(i) = .false.
-          if (l_seg /= 0) simple_OBC_pt(i) = OBC%segment(l_seg)%specified
-          do_I(i,j) = .not.simple_OBC_pt(i)
-          any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i)
-        enddo ; else ; do i=ish,ieh
-          do_I(i,j) = .true.
-        enddo ; endif
-      endif
-
       if (present(vhbt)) then
         ! Find dv and vh.
         call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt(:,J), vh_tot_0(:,j), dvhdv_tot_0(:,j), dv, &
@@ -2075,8 +2076,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
-          if (any_simple_OBC) then ; do i=ish,ieh ; if (simple_OBC_pt(i)) then
-            v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
+            if (any_simple_OBC) then ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
+              v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
           endif ; enddo ; endif
         enddo ; endif ! v-corrected
 
@@ -2092,15 +2093,15 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                visc_rem_max(:,j), J, ish, ieh, do_I(:,j), por_face_areaV)
         if (any_simple_OBC) then
           do i=ish,ieh
-            if (simple_OBC_pt(i)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
+            if (simple_OBC_pt(i,j)) FAvi(i) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo
-          ! NOTE: simple_OBC_pt(i) should prevent access to segment OBC_NONE
-          do k=1,nz ; do i=ish,ieh ; if (simple_OBC_pt(i)) then
+          ! NOTE: simple_OBC_pt(i,j) should prevent access to segment OBC_NONE
+          do k=1,nz ; do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
             segment => OBC%segment(abs(OBC%segnum_v(i,J)))
             if ((abs(segment%normal_vel(i,J,k)) > 0.0) .and. (segment%specified)) &
               FAvi(i) = FAvi(i) + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
           endif ; enddo ; enddo
-          do i=ish,ieh ; if (simple_OBC_pt(i)) then
+          do i=ish,ieh ; if (simple_OBC_pt(i,j)) then
             BT_cont%FA_v_S0(i,J) = FAvi(i) ; BT_cont%FA_v_N0(i,J) = FAvi(i)
             BT_cont%FA_v_SS(i,J) = FAvi(i) ; BT_cont%FA_v_NN(i,J) = FAvi(i)
             BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
