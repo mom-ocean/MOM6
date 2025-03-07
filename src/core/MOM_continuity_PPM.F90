@@ -2562,7 +2562,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
                              !! faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type), optional, pointer :: OBC !< Open boundaries control structure.
   ! Local variables
-  real, dimension(SZI_(G),SZK_(GV)) :: &
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     vh_aux, &  ! An auxiliary meridional volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
     dvhdv      ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G)) :: &
@@ -2581,13 +2581,13 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
 
   nz = GV%ke
 
+  vh_aux(:,:,:) = 0.0 ; dvhdv(:,:,:) = 0.0
+  
+  if (present(vh_3d)) then ; do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+    vh_aux(i,j,k) = vh_3d(i,J,k)
+  enddo ; enddo ; enddo ; endif
+  
   do j=jsh-1,jeh
-
-  vh_aux(:,:) = 0.0 ; dvhdv(:,:) = 0.0
-
-  if (present(vh_3d)) then ; do k=1,nz ; do i=ish,ieh
-    vh_aux(i,k) = vh_3d(i,J,k)
-  enddo ; enddo ; endif
 
   do i=ish,ieh
     dv(i,j) = 0.0 ; do_I(i) = do_I_in(i,j)
@@ -2643,7 +2643,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
     if ((itt < max_itts) .or. present(vh_3d)) then ; do k=1,nz
       do i=ish,ieh ; v_new(i) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k) ; enddo
       call merid_flux_layer(v_new, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), &
-                            vh_aux(:,k), dvhdv(:,k), visc_rem(:,j,k), &
+                            vh_aux(:,j,k), dvhdv(:,j,k), visc_rem(:,j,k), &
                             dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
     enddo ; endif
 
@@ -2652,8 +2652,8 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
         vh_err(i) = -vhbt(i,j) ; dvhdv_tot(i) = 0.0
       enddo
       do k=1,nz ; do i=ish,ieh
-        vh_err(i) = vh_err(i) + vh_aux(i,k)
-        dvhdv_tot(i) = dvhdv_tot(i) + dvhdv(i,k)
+        vh_err(i) = vh_err(i) + vh_aux(i,j,k)
+        dvhdv_tot(i) = dvhdv_tot(i) + dvhdv(i,j,k)
       enddo ; enddo
       do i=ish,ieh
         vh_err_best(i) = min(vh_err_best(i), abs(vh_err(i)))
@@ -2665,7 +2665,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   ! This never seems to happen with 20 iterations as max_itt.
 
   if (present(vh_3d)) then ; do k=1,nz ; do i=ish,ieh
-    vh_3d(i,J,k) = vh_aux(i,k)
+    vh_3d(i,J,k) = vh_aux(i,j,k)
   enddo ; enddo ; endif
 
   enddo
