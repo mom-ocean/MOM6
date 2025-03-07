@@ -2864,11 +2864,12 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                 intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
   ! Local variables
-  real, dimension(SZI_(G)) :: &
+  real, dimension(SZI_(G),SZJB_(G)) :: &
     dv0, &        ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
+    zeros         ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G)) :: &
     dvL, dvR, &   ! The barotropic velocity increments that give the southerly
                   ! (dvL) and northerly (dvR) test velocities [L T-1 ~> m s-1].
-    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
     dv_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
     v_L, v_R, &   ! The southerly (v_L), northerly (v_R), and zero-barotropic
     v_0, &        ! transport (v_0) layer test velocities [L T-1 ~> m s-1].
@@ -2900,13 +2901,12 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
-  do j = jsh-1, jeh
-
  ! Diagnose the zero-transport correction, dv0.
-  do i=ish,ieh ; zeros(i) = 0.0 ; enddo
-  call meridional_flux_adjust(v, h_in, h_S, h_N, zeros, vh_tot_0(:,j), dvhdv_tot_0(:,j), dv0, &
-                         dv_max_CFL(:,j), dv_min_CFL(:,j), dt, G, GV, US, CS, visc_rem(:,j,:), &
-                         j, ish, ieh, do_I(:,j), por_face_areaV)
+  do j=jsh-1,jeh ; do i=ish,ieh ; zeros(i,j) = 0.0 ; enddo ; enddo
+  call meridional_flux_adjust_fused(v, h_in, h_S, h_N, zeros, vh_tot_0, dvhdv_tot_0, dv0, &
+                         dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
+                         ish, ieh, jsh, jeh, do_I, por_face_areaV)
+  do j = jsh-1, jeh
 
   !   Determine the southerly- and northerly- fluxes.  Choose a sufficiently
   ! negative velocity correction for the northerly-flux, and a sufficiently
@@ -2915,8 +2915,8 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   do i=ish,ieh ; if (do_I(i,j)) then
     domore = .true.
     dv_CFL(i) = (CFL_min * Idt) * G%dyCv(i,J)
-    dvR(i) = min(0.0,dv0(i) - dv_CFL(i))
-    dvL(i) = max(0.0,dv0(i) + dv_CFL(i))
+    dvR(i) = min(0.0,dv0(i,j) - dv_CFL(i))
+    dvL(i) = max(0.0,dv0(i,j) + dv_CFL(i))
     FAmt_L(i) = 0.0 ; FAmt_R(i) = 0.0 ; FAmt_0(i) = 0.0
     vhtot_L(i) = 0.0 ; vhtot_R(i) = 0.0
   endif ; enddo
@@ -2944,7 +2944,7 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
     do i=ish,ieh ; if (do_I(i,j)) then
       v_L(i) = v(I,j,k) + dvL(i) * visc_rem(i,j,k)
       v_R(i) = v(I,j,k) + dvR(i) * visc_rem(i,j,k)
-      v_0(i) = v(I,j,k) + dv0(i) * visc_rem(i,j,k)
+      v_0(i) = v(I,j,k) + dv0(i,j) * visc_rem(i,j,k)
     endif ; enddo
     call merid_flux_layer(v_0, h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh_0, dvhdv_0, &
                           visc_rem(:,j,k), dt, G, US, J, ish, ieh, do_I(:,j), CS%vol_CFL, por_face_areaV(:,:,k))
@@ -2962,24 +2962,24 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   enddo
   do i=ish,ieh ; if (do_I(i,j)) then
     FA_0 = FAmt_0(i) ; FA_avg = FAmt_0(i)
-    if ((dvL(i) - dv0(i)) /= 0.0) &
-      FA_avg = vhtot_L(i) / (dvL(i) - dv0(i))
+    if ((dvL(i) - dv0(i,j)) /= 0.0) &
+      FA_avg = vhtot_L(i) / (dvL(i) - dv0(i,j))
     if (FA_avg > max(FA_0, FAmt_L(i))) then ; FA_avg = max(FA_0, FAmt_L(i))
     elseif (FA_avg < min(FA_0, FAmt_L(i))) then ; FA_0 = FA_avg ; endif
     BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(i)
     if (abs(FA_0-FAmt_L(i)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
-      BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i) - dv0(i))) * &
+      BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i) - dv0(i,j))) * &
                    ((FAmt_L(i) - FA_avg) / (FAmt_L(i) - FA_0))
     endif
 
     FA_0 = FAmt_0(i) ; FA_avg = FAmt_0(i)
-    if ((dvR(i) - dv0(i)) /= 0.0) &
-      FA_avg = vhtot_R(i) / (dvR(i) - dv0(i))
+    if ((dvR(i) - dv0(i,j)) /= 0.0) &
+      FA_avg = vhtot_R(i) / (dvR(i) - dv0(i,j))
     if (FA_avg > max(FA_0, FAmt_R(i))) then ; FA_avg = max(FA_0, FAmt_R(i))
     elseif (FA_avg < min(FA_0, FAmt_R(i))) then ; FA_0 = FA_avg ; endif
     BT_cont%FA_v_N0(i,J) = FA_0 ; BT_cont%FA_v_NN(i,J) = FAmt_R(i)
     if (abs(FAmt_R(i) - FA_0) <= 1e-12*FA_0) then ; BT_cont%vBT_NN(i,J) = 0.0 ; else
-      BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i) - dv0(i))) * &
+      BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i) - dv0(i,j))) * &
                    ((FAmt_R(i) - FA_avg) / (FAmt_R(i) - FA_0))
     endif
   else
