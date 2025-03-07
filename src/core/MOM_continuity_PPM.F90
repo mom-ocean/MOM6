@@ -2033,6 +2033,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         enddo ; enddo ; enddo
       endif
     endif
+    do j=jsh-1,jeh ; do i=ish,ieh
+      dv_max_CFL(i,j) = max(dv_max_CFL(i,j),0.0)
+      dv_min_CFL(i,j) = min(dv_min_CFL(i,j),0.0)
+    enddo ; enddo
   endif
   
   !$OMP parallel do default(shared) private(do_I,dvhdv,dv,dv_max_CFL,dv_min_CFL,vh_tot_0, &
@@ -2047,10 +2051,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     enddo ! k-loop
 
     if (present(vhbt) .or. set_BT_cont) then
-      do i=ish,ieh
-        dv_max_CFL(i,j) = max(dv_max_CFL(i,j),0.0)
-        dv_min_CFL(i,j) = min(dv_min_CFL(i,j),0.0)
-      enddo
 
       any_simple_OBC = .false.
       if (present(vhbt) .or. set_BT_cont) then
