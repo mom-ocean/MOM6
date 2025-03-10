@@ -302,6 +302,8 @@ type, public :: MOM_control_struct ; private
                                      !! after any calls to thickness_diffuse.
   logical :: thickness_diffuse       !< If true, diffuse interface height w/ a diffusivity KHTH.
   logical :: thickness_diffuse_first !< If true, diffuse thickness before dynamics.
+  logical :: interface_filter_dt_bug !< If true, uses the wrong time interval in
+                                     !! calls to interface_filter and thickness_diffuse.
   logical :: mixedlayer_restrat      !< If true, use submesoscale mixed layer restratifying scheme.
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
   logical :: use_stochastic_EOS      !< If true, use the stochastic EOS parameterizations.
@@ -550,7 +552,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   real :: dtdia           ! time step for diabatic processes [T ~> s]
   real :: dt_tr_adv       ! time step for tracer advection [T ~> s]
   real :: dt_therm        ! a limited and quantized version of CS%dt_therm [T ~> s]
-  real :: dt_therm_here   ! a further limited value of dt_therm [T ~> s]
+  real :: dt_tradv_here   ! a further limited value of dt_tr_adv [T ~> s]
 
   real :: wt_end, wt_beg  ! Fractional weights of the future pressure at the end
                           ! and beginning of the current time step [nondim]
@@ -914,9 +916,15 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         enddo ; enddo ; enddo
       endif
 
-      dt_therm_here = dt_therm
-      if (do_thermo .and. do_dyn .and. .not.thermo_does_span_coupling) &
-        dt_therm_here = dt*min(ntstep, n_max-n+1)
+      if (CS%interface_filter_dt_bug) then
+        dt_tradv_here = dt_therm
+        if (do_thermo .and. do_dyn .and. .not.thermo_does_span_coupling) &
+          dt_tradv_here = dt*min(ntstep, n_max-n+1)
+      else
+        dt_tradv_here = dt_tr_adv
+        if (do_thermo .and. do_dyn .and. .not.tradv_does_span_coupling) &
+          dt_tradv_here = dt*min(ntstep, n_max-n+1)
+      endif
 
       ! Indicate whether the bottom boundary layer properties need to be
       ! recalculated, and if so for how long an interval they are valid.
@@ -943,7 +951,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       if (associated(CS%HA_CSp)) call HA_accum_FtF(Time_Local, CS%HA_CSp)
 
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
-                             dt_therm_here, bbl_time_int, CS, &
+                             dt_tradv_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
 
       !===========================================================================
@@ -1149,7 +1157,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 end subroutine step_MOM
 
 !> Time step the ocean dynamics, including the momentum and continuity equations
-subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
+subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
                              bbl_time_int, CS, Time_local, Waves)
   type(mech_forcing), intent(in)    :: forces     !< A structure with the driving mechanical forces
   real, dimension(:,:), pointer     :: p_surf_begin !< A pointer (perhaps NULL) to the surface
@@ -1159,7 +1167,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
                                                   !! pressure at the end of this dynamic step,
                                                   !! intent in [R L2 T-2 ~> Pa].
   real,               intent(in)    :: dt         !< time interval covered by this call [T ~> s].
-  real,               intent(in)    :: dt_thermo  !< time interval covered by any updates that may
+  real,               intent(in)    :: dt_tr_adv  !< time interval covered by any updates that may
                                                   !! span multiple dynamics steps [T ~> s].
   real,               intent(in)    :: bbl_time_int !< time interval over which updates to the
                                                   !! bottom boundary layer properties will apply [T ~> s],
@@ -1211,12 +1219,12 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
   if ((CS%t_dyn_rel_adv == 0.0) .and. CS%thickness_diffuse_first .and. &
       (CS%thickness_diffuse .or. CS%interface_filter)) then
 
-    call enable_averages(dt_thermo, Time_local+real_to_time(US%T_to_s*(dt_thermo-dt)), CS%diag)
+    call enable_averages(dt_tr_adv, Time_local+real_to_time(US%T_to_s*(dt_tr_adv-dt)), CS%diag)
     if (CS%thickness_diffuse) then
       call cpu_clock_begin(id_clock_thick_diff)
       if (CS%VarMix%use_variable_mixing) &
         call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
-      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
+      call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt_tr_adv, G, GV, US, &
                              CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp)
       call cpu_clock_end(id_clock_thick_diff)
       call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
@@ -1227,7 +1235,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
       if (allocated(CS%tv%SpV_avg)) call pass_var(CS%tv%SpV_avg, G%Domain, clock=id_clock_pass)
       CS%tv%valid_SpV_halo = min(G%Domain%nihalo, G%Domain%njhalo)
       call cpu_clock_begin(id_clock_int_filter)
-      call interface_filter(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
+      call interface_filter(h, CS%uhtr, CS%vhtr, CS%tv, dt_tr_adv, G, GV, US, &
                             CS%CDp, CS%interface_filter_CSp)
       call cpu_clock_end(id_clock_int_filter)
       call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
@@ -1379,8 +1387,13 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_thermo, &
       if (allocated(CS%tv%SpV_avg)) call pass_var(CS%tv%SpV_avg, G%Domain, clock=id_clock_pass)
       CS%tv%valid_SpV_halo = min(G%Domain%nihalo, G%Domain%njhalo)
       call cpu_clock_begin(id_clock_int_filter)
-      call interface_filter(h, CS%uhtr, CS%vhtr, CS%tv, dt_thermo, G, GV, US, &
-                            CS%CDp, CS%interface_filter_CSp)
+      if (CS%interface_filter_dt_bug) then
+        call interface_filter(h, CS%uhtr, CS%vhtr, CS%tv, dt_tr_adv, G, GV, US, &
+                              CS%CDp, CS%interface_filter_CSp)
+      else
+        call interface_filter(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
+                              CS%CDp, CS%interface_filter_CSp)
+      endif
       call cpu_clock_end(id_clock_int_filter)
       call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
       if (showCallTree) call callTree_waypoint("finished interface_filter (step_MOM)")
@@ -1842,9 +1855,15 @@ subroutine ALE_regridding_and_remapping(CS, G, GV, US, u, v, h, tv, dtdia, Time_
   if (showCallTree) call callTree_waypoint("finished ALE_regrid (ALE_regridding_and_remapping)")
   call cpu_clock_end(id_clock_ALE)
 
+  ! Update derived thermodynamic quantities.
+  if (allocated(CS%tv%SpV_avg)) then
+    call calc_derived_thermo(CS%tv, CS%h, G, GV, US, halo=1, debug=CS%debug)
+  endif
+
   ! Whenever thickness changes let the diag manager know, target grids
-  ! for vertical remapping may need to be regenerated. This needs to
-  ! happen after the H update and before the next post_data.
+  ! for vertical remapping may need to be regenerated.  In non-Boussinesq mode,
+  ! calc_derived_thermo needs to be called before diag_update_remap_grids.
+  ! This needs to happen after the H update and before the next post_data.
   call diag_update_remap_grids(CS%diag)
 
   call postALE_tracer_diagnostics(CS%tracer_Reg, G, GV, CS%diag, dtdia)
@@ -2428,16 +2447,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                  "BULKMIXEDLAYER can not be used with USE_REGRIDDING. "//&
                  "The default is influenced by ENABLE_THERMODYNAMICS.", &
                  default=use_temperature .and. .not.CS%use_ALE_algorithm)
-  call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
-                 "If true, isopycnal surfaces are diffused with a Laplacian "//&
-                 "coefficient of KHTH.", default=.false.)
-  call get_param(param_file, "MOM", "APPLY_INTERFACE_FILTER", CS%interface_filter, &
-                 "If true, model interface heights are subjected to a grid-scale "//&
-                 "dependent spatial smoothing, often with biharmonic filter.", default=.false.)
-  call get_param(param_file, "MOM", "THICKNESSDIFFUSE_FIRST", CS%thickness_diffuse_first, &
-                 "If true, do thickness diffusion or interface height smoothing before dynamics.  "//&
-                 "This is only used if THICKNESSDIFFUSE or APPLY_INTERFACE_FILTER is true.", &
-                 default=.false., do_not_log=.not.(CS%thickness_diffuse.or.CS%interface_filter))
   call get_param(param_file, "MOM", "USE_POROUS_BARRIER", CS%use_porbar, &
                  "If true, use porous barrier to constrain the widths "//&
                  "and face areas at the edges of the grid cells. ", &
@@ -2492,6 +2501,26 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                  default=CS%thermo_spans_coupling)
   if ( CS%diabatic_first .and. (CS%dt_tr_adv /= CS%dt_therm) ) then
     call MOM_error(FATAL,"MOM: If using DIABATIC_FIRST, DT_TRACER_ADVECT must equal DT_THERM.")
+  endif
+  call get_param(param_file, "MOM", "THICKNESSDIFFUSE", CS%thickness_diffuse, &
+                 "If true, isopycnal surfaces are diffused with a Laplacian "//&
+                 "coefficient of KHTH.", default=.false.)
+  call get_param(param_file, "MOM", "APPLY_INTERFACE_FILTER", CS%interface_filter, &
+                 "If true, model interface heights are subjected to a grid-scale "//&
+                 "dependent spatial smoothing, often with biharmonic filter.", default=.false.)
+  call get_param(param_file, "MOM", "THICKNESSDIFFUSE_FIRST", CS%thickness_diffuse_first, &
+                 "If true, do thickness diffusion or interface height smoothing before dynamics.  "//&
+                 "This is only used if THICKNESSDIFFUSE or APPLY_INTERFACE_FILTER is true.", &
+                 default=.false., do_not_log=.not.(CS%thickness_diffuse.or.CS%interface_filter))
+  CS%interface_filter_dt_bug = .false.
+  if ((.not.CS%thickness_diffuse_first .and. CS%interface_filter) .or. &
+      (CS%thickness_diffuse_first .and. (CS%thickness_diffuse .or. CS%interface_filter) &
+          .and. (CS%dt_tr_adv /= CS%dt_therm))) then
+    call get_param(param_file, "MOM", "INTERFACE_FILTER_DT_BUG", CS%interface_filter_dt_bug, &
+                   "If true, uses the wrong time interval in calls to interface_filter "//&
+                   "and thickness_diffuse.  Has no effect when THICKNESSDIFFUSE_FIRST is "//&
+                   "true and DT_TRACER_ADVECT = DT_THERMO or when THICKNESSDIFFUSE_FIRST "//&
+                   "is false and APPLY_INTERFACE_FILTER is false. ", default=.false.)
   endif
 
   if (bulkmixedlayer) then
