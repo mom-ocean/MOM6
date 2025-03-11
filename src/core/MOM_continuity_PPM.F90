@@ -3263,9 +3263,8 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
   endif
 
   if (monotonic) then
-    do k=1,nz
-    call PPM_limit_CW84(h_in(:,:,k), h_W(:,:,k), h_E(:,:,k), G, isl, iel, jsl, jel)
-    enddo
+    ! untested
+    call PPM_limit_CW84(h_in, h_W, h_E, G, GV, isl, iel, jsl, jel, nz)
   else
     call PPM_limit_pos(h_in, h_W, h_E, h_min, G, GV, isl, iel, jsl, jel, nz)
   endif
@@ -3402,9 +3401,8 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
   endif
 
   if (monotonic) then
-    do k=1,nz
-    call PPM_limit_CW84(h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), G, isl, iel, jsl, jel)
-    enddo
+    ! untested
+    call PPM_limit_CW84(h_in, h_S, h_N, G, GV, isl, iel, jsl, jel, nz)
   else
     call PPM_limit_pos(h_in, h_S, h_N, h_min, G, GV, isl, iel, jsl, jel, nz)
   endif
@@ -3460,17 +3458,19 @@ end subroutine PPM_limit_pos
 
 !> This subroutine limits the left/right edge values of the PPM reconstruction
 !! according to the monotonic prescription of Colella and Woodward, 1984.
-subroutine PPM_limit_CW84(h_in, h_L, h_R, G, iis, iie, jis, jie)
+subroutine PPM_limit_CW84(h_in, h_L, h_R, G, GV, iis, iie, jis, jie, nz)
   type(ocean_grid_type),             intent(in)  :: G     !< Ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)),  intent(in)  :: h_in  !< Layer thickness [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: h_L !< Left thickness in the reconstruction,
+  type(verticalGrid_type),           intent(in)  :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_in  !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_L !< Left thickness in the reconstruction,
                                                           !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: h_R !< Right thickness in the reconstruction,
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_R !< Right thickness in the reconstruction,
                                                           !! [H ~> m or kg m-2].
   integer,                           intent(in)  :: iis   !< Start of i index range.
   integer,                           intent(in)  :: iie   !< End of i index range.
   integer,                           intent(in)  :: jis   !< Start of j index range.
   integer,                           intent(in)  :: jie   !< End of j index range.
+  integer,                           intent(in)  :: nz    !< End of k index range.
 
   ! Local variables
   real    :: h_i      ! A copy of the cell-average layer thickness                [H ~> m or kg m-2]
@@ -3478,25 +3478,24 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, iis, iie, jis, jie)
   real    :: RLdiff2  ! The squared difference between the input edge values   [H2 ~> m2 or kg2 m-4]
   real    :: RLmean   ! The average of the input edge thicknesses                 [H ~> m or kg m-2]
   real    :: FunFac   ! A curious product of the thickness slope and curvature [H2 ~> m2 or kg2 m-4]
-  integer :: i, j
+  integer :: i, j, k
 
-  do j=jis,jie ; do i=iis,iie
+  do k=1,nz ; do j=jis,jie ; do i=iis,iie
     ! This limiter monotonizes the parabola following
     ! Colella and Woodward, 1984, Eq. 1.10
-    h_i = h_in(i,j)
-    if ( ( h_R(i,j) - h_i ) * ( h_i - h_L(i,j) ) <= 0. ) then
-      h_L(i,j) = h_i ; h_R(i,j) = h_i
+    h_i = h_in(i,j,k)
+    if ( ( h_R(i,j,k) - h_i ) * ( h_i - h_L(i,j,k) ) <= 0. ) then
+      h_L(i,j,k) = h_i ; h_R(i,j,k) = h_i
     else
-      RLdiff = h_R(i,j) - h_L(i,j)            ! Difference of edge values
-      RLmean = 0.5 * ( h_R(i,j) + h_L(i,j) )  ! Mean of edge values
+      RLdiff = h_R(i,j,k) - h_L(i,j,k)            ! Difference of edge values
+      RLmean = 0.5 * ( h_R(i,j,k) + h_L(i,j,k) )  ! Mean of edge values
       FunFac = 6. * RLdiff * ( h_i - RLmean ) ! Some funny factor
       RLdiff2 = RLdiff * RLdiff               ! Square of difference
-      if ( FunFac >  RLdiff2 ) h_L(i,j) = 3. * h_i - 2. * h_R(i,j)
-      if ( FunFac < -RLdiff2 ) h_R(i,j) = 3. * h_i - 2. * h_L(i,j)
+      if ( FunFac >  RLdiff2 ) h_L(i,j,k) = 3. * h_i - 2. * h_R(i,j,k)
+      if ( FunFac < -RLdiff2 ) h_R(i,j,k) = 3. * h_i - 2. * h_L(i,j,k)
     endif
-  enddo ; enddo
+  enddo ; enddo ; enddo
 
-  return
 end subroutine PPM_limit_CW84
 
 !> Return the maximum ratio of a/b or maxrat.
