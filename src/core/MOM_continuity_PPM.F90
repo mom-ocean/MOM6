@@ -3262,13 +3262,13 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
     enddo
   endif
 
-  do k=1,nz
   if (monotonic) then
+    do k=1,nz
     call PPM_limit_CW84(h_in(:,:,k), h_W(:,:,k), h_E(:,:,k), G, isl, iel, jsl, jel)
+    enddo
   else
-    call PPM_limit_pos(h_in(:,:,k), h_W(:,:,k), h_E(:,:,k), h_min, G, isl, iel, jsl, jel)
+    call PPM_limit_pos(h_in, h_W, h_E, h_min, G, GV, isl, iel, jsl, jel, nz)
   endif
-  enddo
 
   return
 end subroutine PPM_reconstruction_x
@@ -3401,13 +3401,13 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
     enddo
   endif
 
-  do k=1,nz
   if (monotonic) then
+    do k=1,nz
     call PPM_limit_CW84(h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), G, isl, iel, jsl, jel)
+    enddo
   else
-    call PPM_limit_pos(h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), h_min, G, isl, iel, jsl, jel)
+    call PPM_limit_pos(h_in, h_S, h_N, h_min, G, GV, isl, iel, jsl, jel, nz)
   endif
-  enddo
 
   return
 end subroutine PPM_reconstruction_y
@@ -3416,43 +3416,45 @@ end subroutine PPM_reconstruction_y
 !! to give a reconstruction that is positive-definite.  Here this is
 !! reinterpreted as giving a constant thickness if the mean thickness is less
 !! than h_min, with a minimum of h_min otherwise.
-subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, iis, iie, jis, jie)
+subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, GV, iis, iie, jis, jie, nz)
   type(ocean_grid_type),             intent(in)  :: G    !< Ocean's grid structure.
-  real, dimension(SZI_(G),SZJ_(G)),  intent(in)  :: h_in !< Layer thickness [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: h_L !< Left thickness in the reconstruction [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G)),  intent(inout) :: h_R !< Right thickness in the reconstruction [H ~> m or kg m-2].
+  type(verticalGrid_type),           intent(in)  :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_in !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_L !< Left thickness in the reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(inout) :: h_R !< Right thickness in the reconstruction [H ~> m or kg m-2].
   real,                              intent(in)  :: h_min !< The minimum thickness
                     !! that can be obtained by a concave parabolic fit [H ~> m or kg m-2]
   integer,                           intent(in)  :: iis      !< Start of i index range.
   integer,                           intent(in)  :: iie      !< End of i index range.
   integer,                           intent(in)  :: jis      !< Start of j index range.
   integer,                           intent(in)  :: jie      !< End of j index range.
+  integer,                           intent(in)  :: nz       !< End of k index range.
 
 ! Local variables
   real    :: curv  ! The grid-normalized curvature of the three thicknesses  [H ~> m or kg m-2]
   real    :: dh    ! The difference between the edge thicknesses             [H ~> m or kg m-2]
   real    :: scale ! A scaling factor to reduce the curvature of the fit               [nondim]
-  integer :: i,j
+  integer :: i,j,k
 
-  do j=jis,jie ; do i=iis,iie
+  do k=1,nz ; do j=jis,jie ; do i=iis,iie
     ! This limiter prevents undershooting minima within the domain with
     ! values less than h_min.
-    curv = 3.0*((h_L(i,j) + h_R(i,j)) - 2.0*h_in(i,j))
+    curv = 3.0*((h_L(i,j,k) + h_R(i,j,k)) - 2.0*h_in(i,j,k))
     if (curv > 0.0) then ! Only minima are limited.
-      dh = h_R(i,j) - h_L(i,j)
+      dh = h_R(i,j,k) - h_L(i,j,k)
       if (abs(dh) < curv) then ! The parabola's minimum is within the cell.
-        if (h_in(i,j) <= h_min) then
-          h_L(i,j) = h_in(i,j) ; h_R(i,j) = h_in(i,j)
-        elseif (12.0*curv*(h_in(i,j) - h_min) < (curv**2 + 3.0*dh**2)) then
+        if (h_in(i,j,k) <= h_min) then
+          h_L(i,j,k) = h_in(i,j,k) ; h_R(i,j,k) = h_in(i,j,k)
+        elseif (12.0*curv*(h_in(i,j,k) - h_min) < (curv**2 + 3.0*dh**2)) then
           ! The minimum value is h_in - (curv^2 + 3*dh^2)/(12*curv), and must
           ! be limited in this case.  0 < scale < 1.
-          scale = 12.0*curv*(h_in(i,j) - h_min) / (curv**2 + 3.0*dh**2)
-          h_L(i,j) = h_in(i,j) + scale*(h_L(i,j) - h_in(i,j))
-          h_R(i,j) = h_in(i,j) + scale*(h_R(i,j) - h_in(i,j))
+          scale = 12.0*curv*(h_in(i,j,k) - h_min) / (curv**2 + 3.0*dh**2)
+          h_L(i,j,k) = h_in(i,j,k) + scale*(h_L(i,j,k) - h_in(i,j,k))
+          h_R(i,j,k) = h_in(i,j,k) + scale*(h_R(i,j,k) - h_in(i,j,k))
         endif
       endif
     endif
-  enddo ; enddo
+  enddo ; enddo ; enddo
 
 end subroutine PPM_limit_pos
 
