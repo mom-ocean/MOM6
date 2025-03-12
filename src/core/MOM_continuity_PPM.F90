@@ -2163,12 +2163,12 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   type(cont_loop_bounds_type),      optional, intent(in)  :: LB_in !< Loop bounds structure.
 
   ! Local variables
-  real :: vh(SZI_(G))      ! Volume flux through meridional faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real ::  dvhdv(SZI_(G))  ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
-  logical, dimension(SZI_(G)) :: do_I
-  real :: ones(SZI_(G))    ! An array of 1's [nondim]
+  real :: vh(SZI_(G),SZJB_(G),SZK_(GV))      ! Volume flux through meridional faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real ::  dvhdv(SZI_(G),SZJB_(G),SZK_(GV))  ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
+  logical, dimension(SZI_(G),SZJ_(G)) :: do_I
+  real :: ones(SZI_(G),SZJB_(G),SZK_(GV))    ! An array of 1's [nondim]
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, l_seg
-  logical :: local_specified_BC, OBC_in_row
+  logical :: local_specified_BC, OBC_in_row(SZJB_(G))
 
   call cpu_clock_begin(id_clock_correct)
 
@@ -2183,31 +2183,34 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
     ish = G%isc ; ieh = G%iec ; jsh = G%jsc ; jeh = G%jec ; nz = GV%ke
   endif
 
-  ones(:) = 1.0 ; do_I(:) = .true.
+  ones(:,:,:) = 1.0 ; do_I(:,:) = .true.
 
   vhbt(:,:) = 0.0
-  !$OMP parallel do default(shared) private(vh,dvhdv,OBC_in_row)
-  do J=jsh-1,jeh
-    ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
-    OBC_in_row = .false.
-    if (local_specified_BC) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
-      if (OBC%segment(abs(OBC%segnum_v(i,J)))%specified) OBC_in_row = .true.
-    endif ; enddo ; endif
-    do k=1,nz
-      ! This sets vh and dvhdv.
-      call merid_flux_layer(v(:,J,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh, dvhdv, ones, &
-                            dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
-      if (OBC_in_row) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
-        l_seg = abs(OBC%segnum_v(i,J))
-        if (OBC%segment(l_seg)%specified) vh(i) = OBC%segment(l_seg)%normal_trans(i,J,k)
-      endif ; enddo ; endif
 
-      ! Accumulate the barotropic transport.
-      do i=ish,ieh
-        vhbt(i,J) = vhbt(i,J) + vh(i)
-      enddo
-    enddo ! k-loop
-  enddo ! j-loop
+  ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
+  OBC_in_row(:) = .false.
+  if (local_specified_BC) then
+    do j=jsh-1,jeh ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
+      if (OBC%segment(abs(OBC%segnum_v(i,J)))%specified) OBC_in_row(j) = .true.
+    endif ; enddo ; enddo
+  endif
+  
+  ! This sets vh and dvhdv.
+  call merid_flux_layer_fused(v, h_in, h_S, h_N, vh, dvhdv, ones, &
+    dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
+  
+  do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+    if (OBC_in_row(j) .and. OBC%segnum_v(i,J) /= 0) then
+      l_seg = abs(OBC%segnum_v(i,J))
+      if (OBC%segment(l_seg)%specified) vh(i,j,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
+    endif
+  enddo ; enddo ; enddo
+
+
+  ! Accumulate the barotropic transport.
+  do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
+    vhbt(i,J) = vhbt(i,J) + vh(i,J,k)
+  enddo ; enddo ; enddo
 
   call cpu_clock_end(id_clock_correct)
 
