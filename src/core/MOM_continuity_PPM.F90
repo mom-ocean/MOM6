@@ -1841,34 +1841,37 @@ end subroutine meridional_BT_mass_flux
 !> Evaluates the meridional mass or volume fluxes in a layer.
 subroutine merid_flux_layer_fused(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, GV, US, &
                             ish, ieh, jsh, jeh, nz, do_I, vol_CFL, por_face_areaV, OBC)
-  type(ocean_grid_type),        intent(in)    :: G        !< Ocean's grid structure.
-  type(verticalGrid_type),      intent(in)    :: GV       !< Ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),     intent(in)    :: v        !< Meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),     intent(in)    :: visc_rem !< Both the fraction of the
+  type(ocean_grid_type),                      intent(in)    :: G        !< Ocean's grid structure.
+  type(verticalGrid_type),                    intent(in)    :: GV       !< Ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v        !< Meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: visc_rem !< Both the fraction of the
          !! momentum originally in a layer that remains after a time-step
          !! of viscosity, and the fraction of a time-step's worth of a barotropic
          !! acceleration that a layer experiences after viscosity is applied [nondim].
          !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in) :: h      !< Layer thickness used to calculate fluxes,
-                                                          !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in) :: h_S    !< South edge thickness in the reconstruction
-                                                          !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in) :: h_N    !< North edge thickness in the reconstruction
-                                                          !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vh       !< Meridional mass or volume transport
-                                                          !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),  intent(inout) :: dvhdv    !< Partial derivative of vh with v
-                                                          !! [H L ~> m2 or kg m-1].
-  real,                         intent(in)    :: dt       !< Time increment [T ~> s].
-  type(unit_scale_type),        intent(in)    :: US       !< A dimensional unit scaling type
-  integer,                      intent(in)    :: ish,jsh      !< Start of index range.
-  integer,                      intent(in)    :: ieh,jeh,nz      !< End of index range.
-  logical, dimension(SZI_(G),SZJB_(G)),  intent(in)    :: do_I     !< Which i values to work on.
-  logical,                      intent(in)    :: vol_CFL  !< If true, rescale the
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h       !< Layer thickness used to calculate fluxes,
+                                                                       !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_S     !< South edge thickness in the reconstruction
+                                                                       !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_N     !< North edge thickness in the reconstruction
+                                                                       !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vh      !< Meridional mass or volume transport
+                                                                       !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: dvhdv   !< Partial derivative of vh with v
+                                                                       !! [H L ~> m2 or kg m-1].
+  real,                                       intent(in)    :: dt      !< Time increment [T ~> s].
+  type(unit_scale_type),                      intent(in)    :: US      !< A dimensional unit scaling type
+  integer,                                    intent(in)    :: ish     !< Start of i index range.
+  integer,                                    intent(in)    :: ieh     !< End of i index range.
+  integer,                                    intent(in)    :: jsh     !< End of j index range.
+  integer,                                    intent(in)    :: jeh     !< End of j index range.
+  integer,                                    intent(in)    :: nz      !< End of k index range.
+  logical, dimension(SZI_(G),SZJB_(G)),       intent(in)    :: do_I    !< Which i values to work on.
+  logical,                                    intent(in)    :: vol_CFL !< If true, rescale the
          !! ratio of face areas to the cell areas when estimating the CFL number.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                             intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
-  type(ocean_OBC_type), optional, pointer :: OBC !< Open boundaries control structure.
+                                              intent(in)    :: por_face_areaV !< fractional open area of V-faces [nondim]
+  type(ocean_OBC_type),                   optional, pointer :: OBC !< Open boundaries control structure.
   ! Local variables
   real :: CFL ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length,
