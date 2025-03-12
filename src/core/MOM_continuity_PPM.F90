@@ -1896,7 +1896,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     dvhdv_tot_0, & ! Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
     vh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim]
-  logical, dimension(SZI_(G),SZJ_(G)) :: do_I
+  logical, dimension(SZI_(G),SZJB_(G)) :: do_I
   real, dimension(SZI_(G),SZJB_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZK_(GV)) :: &
@@ -2172,7 +2172,7 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   ! Local variables
   real :: vh(SZI_(G),SZJB_(G),SZK_(GV))      ! Volume flux through meridional faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
   real ::  dvhdv(SZI_(G),SZJB_(G),SZK_(GV))  ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
-  logical, dimension(SZI_(G),SZJ_(G)) :: do_I
+  logical, dimension(SZI_(G),SZJB_(G)) :: do_I
   real :: ones(SZI_(G),SZJB_(G),SZK_(GV))    ! An array of 1's [nondim]
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, l_seg
   logical :: local_specified_BC, OBC_in_row(SZJB_(G))
@@ -2249,7 +2249,7 @@ subroutine merid_flux_layer_fused(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, GV
   type(unit_scale_type),        intent(in)    :: US       !< A dimensional unit scaling type
   integer,                      intent(in)    :: ish,jsh      !< Start of index range.
   integer,                      intent(in)    :: ieh,jeh,nz      !< End of index range.
-  logical, dimension(SZI_(G),SZJ_(G)),  intent(in)    :: do_I     !< Which i values to work on.
+  logical, dimension(SZI_(G),SZJB_(G)),  intent(in)    :: do_I     !< Which i values to work on.
   logical,                      intent(in)    :: vol_CFL  !< If true, rescale the
          !! ratio of face areas to the cell areas when estimating the CFL number.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -2549,7 +2549,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   type(continuity_PPM_CS),  intent(in)    :: CS   !< This module's control structure.
   integer,                  intent(in)    :: ish, jsh  !< Start of index range.
   integer,                  intent(in)    :: ieh, jeh  !< End of index range.
-  logical, dimension(SZI_(G),SZJ_(G)), &
+  logical, dimension(SZI_(G),SZJB_(G)), &
                             intent(in)    :: do_I_in  !< A flag indicating which I values to work on.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                      intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
@@ -2573,7 +2573,7 @@ subroutine meridional_flux_adjust_fused(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, j, k, nz, itt, max_itts = 20
-  logical :: domore, do_I(SZI_(G),SZJ_(G))
+  logical :: domore, do_I(SZI_(G),SZJB_(G))
 
   nz = GV%ke
 
@@ -2850,7 +2850,7 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
   real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim]
   integer,                                   intent(in)    :: ish, jsh      !< Start of index range.
   integer,                                   intent(in)    :: ieh, jeh      !< End of index range.
-  logical, dimension(SZI_(G),SZJ_(G)),       intent(in)    :: do_I     !< A logical flag indicating
+  logical, dimension(SZI_(G),SZJB_(G)),       intent(in)    :: do_I     !< A logical flag indicating
                        !! which I values to work on.
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
                                 intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
