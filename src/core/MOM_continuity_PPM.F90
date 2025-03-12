@@ -866,12 +866,13 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   type(cont_loop_bounds_type),      optional, intent(in)  :: LB_in !< Loop bounds structure.
 
   ! Local variables
-  real :: uh(SZIB_(G))      ! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real :: duhdu(SZIB_(G))   ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
-  logical, dimension(SZIB_(G)) :: do_I
-  real :: ones(SZIB_(G))    ! An array of 1's [nondim]
+  real :: uh(SZIB_(G),SZJ_(G),SZK_(GV))      ! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real :: duhdu(SZIB_(G),SZJ_(G),SZK_(GV))   ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
+  logical, dimension(SZIB_(G),SZJ_(G)) :: do_I
+  real :: ones(SZIB_(G),SZJ_(G),SZK_(GV))    ! An array of 1's [nondim]
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, l_seg
-  logical :: local_specified_BC, OBC_in_row
+  logical :: local_specified_BC
+  logical, dimension(SZJ_(G)) :: OBC_in_row
 
   call cpu_clock_begin(id_clock_correct)
 
@@ -886,31 +887,33 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
     ish = G%isc ; ieh = G%iec ; jsh = G%jsc ; jeh = G%jec ; nz = GV%ke
   endif
 
-  ones(:) = 1.0 ; do_I(:) = .true.
+  ones(:,:,:) = 1.0 ; do_I(:,:) = .true. ; OBC_in_row(:) = .false.
 
   uhbt(:,:) = 0.0
-  !$OMP parallel do default(shared) private(uh,duhdu,OBC_in_row)
-  do j=jsh,jeh
-    ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
-    OBC_in_row = .false.
-    if (local_specified_BC) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
-      if (OBC%segment(abs(OBC%segnum_u(I,j)))%specified) OBC_in_row = .true.
-    endif ; enddo ; endif
-    do k=1,nz
-      ! This sets uh and duhdu.
-      call zonal_flux_layer(u(:,j,k), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh, duhdu, ones, &
-                            dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k), OBC)
-      if (OBC_in_row) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
-        l_seg = abs(OBC%segnum_u(I,j))
-        if (OBC%segment(l_seg)%specified) uh(I) = OBC%segment(l_seg)%normal_trans(I,j,k)
-      endif ; enddo ; endif
 
-      ! Accumulate the barotropic transport.
-      do I=ish-1,ieh
-        uhbt(I,j) = uhbt(I,j) + uh(I)
-      enddo
-    enddo ! k-loop
-  enddo ! j-loop
+  ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
+  if (local_specified_BC) then
+    do j=jsh,jeh ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
+      if (OBC%segment(abs(OBC%segnum_u(I,j)))%specified) OBC_in_row(j) = .true.
+    endif ; enddo ; enddo
+  endif
+
+  ! This sets uh and duhdu.
+  call zonal_flux_layer_fused(u, h_in, h_W, h_E, uh, duhdu, ones, &
+                        dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, GV)
+  
+  do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
+    if (OBC_in_row(j) .and. OBC%segnum_u(I,j) /= 0) then
+      l_seg = abs(OBC%segnum_u(I,j))
+      if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
+    endif
+  enddo ; enddo ; enddo
+
+  ! Accumulate the barotropic transport.
+  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+        uhbt(I,j) = uhbt(I,j) + uh(I,j,k)
+  enddo ; enddo ; enddo ! j-loop
+
   call cpu_clock_end(id_clock_correct)
 
 end subroutine zonal_BT_mass_flux
