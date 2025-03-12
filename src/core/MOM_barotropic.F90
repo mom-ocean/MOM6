@@ -653,8 +653,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! End of wide-sized variables.
 
   real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
-    ubt_sum_prev, ubt_wtd_prev, & ! Previous velocities stored for OBCs [L T-1 ~> m s-1]
-    uhbt_prev, uhbt_sum_prev, & ! Previous transports stored for OBCs [L2 H T-1 ~> m3 s-1]
+    uhbt_prev, &    ! Previous transport stored for OBCs [L2 H T-1 ~> m3 s-1]
     ubt_int_prev, & ! Previous value of time-integrated velocity stored for OBCs [L ~> m]
     uhbt_int_prev   ! Previous value of time-integrated transport stored for OBCs [L2 H ~> m3]
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
@@ -1883,15 +1882,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ioff = 0; joff = 1
     endif
 
-    ! Store various velocities and transports so that they can be reset along open boundaries
+    ! Store the velocities and transports so that they can be reset along open boundaries
     if (CS%BT_OBC%apply_u_OBCs) &
-      call store_u_for_OBCs(ubt, uhbt, ubt_sum, ubt_wtd, uhbt_sum, &
-                            ubt_prev, uhbt_prev, ubt_sum_prev, ubt_wtd_prev, uhbt_sum_prev, &
-                            isv-1, iev, jsv-joff, jev+joff, CS)
+      call store_u_for_OBCs(ubt, uhbt, ubt_prev, uhbt_prev, isv-1, iev, jsv-joff, jev+joff, CS)
     if (CS%BT_OBC%apply_v_OBCs) &
-      call store_v_for_OBCs(vbt, vhbt, vbt_sum, vbt_wtd, vhbt_sum, &
-                            vbt_prev, vhbt_prev, vbt_sum_prev, vbt_wtd_prev, vhbt_sum_prev, &
-                            isv-ioff, iev+ioff, jsv-1, jev, CS)
+      call store_v_for_OBCs(vbt, vhbt, vbt_prev, vhbt_prev, isv-ioff, iev+ioff, jsv-1, jev, CS)
 
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
@@ -1958,6 +1953,35 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                       unscale=US%L_to_m**2*GV%H_to_m)
     endif
 
+    if (apply_OBCs) then
+      !$OMP single
+      call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
+             ubt_trans, vbt_trans, eta, SpV_col_avg, ubt_prev, vbt_prev, CS%BT_OBC, &
+             G, MS, GV, US, CS, iev-ie, dtbt, bebt, use_BT_cont, integral_BT_cont, &
+             n*dtbt, Datu, Datv, BTCL_u, BTCL_v, uhbt0, vhbt0, &
+             ubt_int_prev, vbt_int_prev, uhbt_int_prev, vhbt_int_prev)
+      !$OMP end single
+
+      if (integral_BT_cont) then
+        if (CS%BT_OBC%apply_u_OBCs) then
+          !$OMP do
+          do j=js,je ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+            ! Update the summed and integrated quantities from the saved previous values.
+            uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
+            ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
+          endif ; enddo ; enddo
+        endif
+        if (CS%BT_OBC%apply_v_OBCs) then
+          !$OMP do
+          do J=js-1,je ; do i=is,ie ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+            ! Update the summed and integrated quantities from the saved previous values.
+            vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
+            vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
+          endif ; enddo ; enddo
+        endif
+      endif
+    endif ! end apply_OBCs
+
     ! Calculate some diagnostics of time-averaged barotropic accelerations.
     if (find_PF) then
       !$OMP do
@@ -1999,48 +2023,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       vbt_wtd(i,J) = vbt_wtd(i,J) + wt_vel(n) * vbt(i,J)
     enddo ; enddo
     !$OMP end do nowait
-
-    if (apply_OBCs) then
-
-      !$OMP single
-      call apply_velocity_OBCs(OBC, ubt, vbt, uhbt, vhbt, &
-             ubt_trans, vbt_trans, eta, SpV_col_avg, ubt_prev, vbt_prev, CS%BT_OBC, &
-             G, MS, GV, US, CS, iev-ie, dtbt, bebt, use_BT_cont, integral_BT_cont, &
-             n*dtbt, Datu, Datv, BTCL_u, BTCL_v, uhbt0, vhbt0, &
-             ubt_int_prev, vbt_int_prev, uhbt_int_prev, vhbt_int_prev)
-      !$OMP end single
-
-      if (CS%BT_OBC%apply_u_OBCs) then
-        !$OMP do
-        do j=js,je ; do I=is-1,ie
-          if (OBC%segnum_u(I,j) /= OBC_NONE) then
-            ! Update the summed and integrated quantities from the saved previous values.
-            ubt_sum(I,j) = ubt_sum_prev(I,j) + wt_trans(n) * ubt_trans(I,j)
-            uhbt_sum(I,j) = uhbt_sum_prev(I,j) + wt_trans(n) * uhbt(I,j)
-            ubt_wtd(I,j) = ubt_wtd_prev(I,j) + wt_vel(n) * ubt(I,j)
-            if (integral_BT_cont) then
-              uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
-              ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
-            endif
-          endif
-        enddo ; enddo
-      endif
-      if (CS%BT_OBC%apply_v_OBCs) then
-        !$OMP do
-        do J=js-1,je ; do i=is,ie
-          if (OBC%segnum_v(i,J) /= OBC_NONE) then
-            ! Update the summed and integrated quantities from the saved previous values.
-            vbt_sum(i,J) = vbt_sum_prev(i,J) + wt_trans(n) * vbt_trans(i,J)
-            vhbt_sum(i,J) = vhbt_sum_prev(i,J) + wt_trans(n) * vhbt(i,J)
-            vbt_wtd(i,J) = vbt_wtd_prev(i,J) + wt_vel(n) * vbt(i,J)
-            if (integral_BT_cont) then
-              vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
-              vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
-            endif
-          endif
-        enddo ; enddo
-      endif
-    endif
 
     if (CS%debug_bt) then
       call uvchksum("BT [uv]hbt just after OBC", uhbt, vhbt, CS%debug_BT_HI, haloshift=iev-ie, &
@@ -2738,30 +2720,16 @@ subroutine btloop_eta_predictor(n, dtbt, ubt, vbt, eta, ubt_int, vbt_int, uhbt, 
 end subroutine btloop_eta_predictor
 
 !> Store the existing zonal velocities and trasports for use with open boundary conditions.
-subroutine store_u_for_OBCs(ubt, uhbt, ubt_sum, ubt_wtd, uhbt_sum, &
-                            ubt_prev, uhbt_prev, ubt_sum_prev, ubt_wtd_prev, uhbt_sum_prev, &
-                            Is_u, Ie_u, js_u, je_u, CS)
+subroutine store_u_for_OBCs(ubt, uhbt, ubt_prev, uhbt_prev, Is_u, Ie_u, js_u, je_u, CS)
   type(barotropic_CS),     intent(inout) :: CS   !< Barotropic control structure
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     ubt           !< The zonal barotropic velocity [L T-1 ~> m s-1].
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     uhbt          !< The zonal barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
-    ubt_sum       !< The sum of ubt over the time steps [L T-1 ~> m s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
-    ubt_wtd       !< A weighted sum used to find the filtered final ubt [L T-1 ~> m s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
-    uhbt_sum      !< The sum of uhbt over the time steps [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
     ubt_prev      !< The starting value of ubt in a barotropic step [L T-1 ~> m s-1].
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
     uhbt_prev     !< The starting value of uhbt, stored for OBCs [L2 H T-1 ~> m3 s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    ubt_sum_prev  !< The starting value of ubt_sum, stored for OBCs [L T-1 ~> m s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    ubt_wtd_prev  !< The starting value of ubt_wtd, stored for OBCs [L T-1 ~> m s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    uhbt_sum_prev !< the starting value of uhbt_sum, stored for OBCs [L2 H T-1 ~> m3 s-1]
   integer, intent(in)  :: Is_u !< The starting i-index of the range of u-point values to store
   integer, intent(in)  :: Ie_u !< The ending i-index of the range of u-point values to store
   integer, intent(in)  :: js_u !< The starting j-index of the range of u-point values to store
@@ -2775,37 +2743,22 @@ subroutine store_u_for_OBCs(ubt, uhbt, ubt_sum, ubt_wtd, uhbt_sum, &
   enddo ; enddo
   !$OMP do
   do j=js_u,je_u ; do I=Is_u,Ie_u
-    ubt_sum_prev(I,j) = ubt_sum(I,j) ; ubt_wtd_prev(I,j) = ubt_wtd(I,j)
-    uhbt_prev(I,j) = uhbt(I,j) ; uhbt_sum_prev(I,j) = uhbt_sum(I,j)
+    uhbt_prev(I,j) = uhbt(I,j)
   enddo ; enddo
 
 end subroutine store_u_for_OBCs
 
 !> Store the existing meridional velocities and trasports for use with open boundary conditions.
-subroutine store_v_for_OBCs(vbt, vhbt, vbt_sum, vbt_wtd, vhbt_sum, &
-                            vbt_prev, vhbt_prev, vbt_sum_prev, vbt_wtd_prev, vhbt_sum_prev, &
-                            is_v, ie_v, Js_v, Je_v, CS)
+subroutine store_v_for_OBCs(vbt, vhbt, vbt_prev, vhbt_prev, is_v, ie_v, Js_v, Je_v, CS)
   type(barotropic_CS),     intent(inout) :: CS   !< Barotropic control structure
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     vbt           !< The zonal barotropic velocity [L T-1 ~> m s-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     vhbt          !< The meridional barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vbt_sum       !< The sum of vbt over the time steps [L T-1 ~> m s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vhbt_sum      !< The sum of vhbt over the time steps [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vbt_wtd       !< A weighted sum used to find the filtered final vbt [L T-1 ~> m s-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
     vbt_prev      !< The starting value of vbt in a barotropic step [L T-1 ~> m s-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
     vhbt_prev     !< The starting value of vhbt, stored for OBCs [L2 H T-1 ~> m3 s-1]
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vbt_sum_prev  !< The starting value of vbt_sum, stored for OBCs [L T-1 ~> m s-1]
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vbt_wtd_prev  !< The starting value of vbt_wtd, stored for OBCs [L T-1 ~> m s-1]
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vhbt_sum_prev !< the starting value of vhbt_sum, stored for OBCs [L2 H T-1 ~> m3 s-1]
   integer, intent(in)  :: is_v !< The starting i-index of the range of v-point values to store
   integer, intent(in)  :: ie_v !< The ending i-index of the range of v-point values to store
   integer, intent(in)  :: Js_v !< The starting j-index of the range of v-point values to store
@@ -2819,8 +2772,7 @@ subroutine store_v_for_OBCs(vbt, vhbt, vbt_sum, vbt_wtd, vhbt_sum, &
   enddo ; enddo
   !$OMP do
   do J=Js_v,Je_v ; do i=is_v,ie_v
-    vbt_sum_prev(i,J) = vbt_sum(i,J) ; vbt_wtd_prev(i,J) = vbt_wtd(i,J)
-    vhbt_prev(i,J) = vhbt(i,J) ; vhbt_sum_prev(i,J) = vhbt_sum(i,J)
+    vhbt_prev(i,J) = vhbt(i,J)
   enddo ; enddo
 
 end subroutine store_v_for_OBCs
@@ -2979,14 +2931,6 @@ subroutine btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_in
     !$OMP end do nowait
   endif
 
-  if (CS%BT_OBC%apply_v_OBCs) then  ! zero out PF across boundary
-    !$OMP do schedule(static)
-    do J=Js_v,Je_v ; do i=is_v,ie_v ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
-      PFv(i,J) = 0.0
-    endif ; enddo ; enddo
-    !$OMP end do nowait
-  endif
-
   !$OMP do schedule(static)
   do J=Js_v,Je_v ; do i=is_v,ie_v
     vel_prev = vbt(i,J)
@@ -3035,6 +2979,7 @@ subroutine btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_in
   if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
     !$OMP do schedule(static)
     do J=Js_v,Je_v ; do i=is_v,ie_v ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+      PFv(i,J) = 0.0
       vbt(i,J) = vbt_prev(i,J) ; vhbt(i,J) = vhbt_prev(i,J)
     endif ; enddo ; enddo
   endif
@@ -3182,14 +3127,6 @@ subroutine btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_in
     !$OMP end do nowait
   endif
 
-  if (CS%BT_OBC%apply_u_OBCs) then  ! zero out pressure force across boundary
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=Is_u,Ie_u ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-      PFu(I,j) = 0.0
-    endif ; enddo ; enddo
-    !$OMP end do nowait
-  endif
-
   !$OMP do schedule(static)
   do j=js_u,je_u ; do I=Is_u,Ie_u
     vel_prev = ubt(I,j)
@@ -3238,6 +3175,7 @@ subroutine btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_in
   if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
     !$OMP do schedule(static)
     do j=js_u,je_u ; do I=Is_u,Ie_u ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+      PFu(I,j) = 0.0
       ubt(I,j) = ubt_prev(I,j) ; uhbt(I,j) = uhbt_prev(I,j)
     endif ; enddo ; enddo
   endif
