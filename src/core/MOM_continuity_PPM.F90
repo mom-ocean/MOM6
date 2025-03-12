@@ -921,31 +921,43 @@ end subroutine zonal_BT_mass_flux
 !> Evaluates the zonal mass or volume fluxes in a layer.
 subroutine zonal_flux_layer_fused(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, &
                             ish, ieh, jsh, jeh, nz, do_I, vol_CFL, por_face_areaU, OBC, GV)
-  type(ocean_grid_type),        intent(in)    :: G        !< Ocean's grid structure.
-  type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(GV)),    intent(in)    :: u        !< Zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(GV)),    intent(in)    :: visc_rem !< Both the fraction of the
+  type(ocean_grid_type),    intent(in)    :: G        !< Ocean's grid structure.
+  type(verticalGrid_type),  intent(in)    :: GV       !< Ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                            intent(in)    :: u        !< Zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                            intent(in)    :: visc_rem !< Both the fraction of the
                         !! momentum originally in a layer that remains after a time-step
                         !! of viscosity, and the fraction of a time-step's worth of a barotropic
                         !! acceleration that a layer experiences after viscosity is applied [nondim].
                         !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)),     intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2].
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)),     intent(in)    :: h_W      !< West edge thickness [H ~> m or kg m-2].
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)),     intent(in)    :: h_E      !< East edge thickness [H ~> m or kg m-2].
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(GV)),    intent(inout) :: uh       !< Zonal mass or volume
-                                                          !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(GV)),    intent(inout) :: duhdu    !< Partial derivative of uh
-                                                          !! with u [H L ~> m2 or kg m-1].
-  real,                         intent(in)    :: dt       !< Time increment [T ~> s]
-  type(unit_scale_type),        intent(in)    :: US       !< A dimensional unit scaling type
-  integer,                      intent(in)    :: jsh, jeh, nz        !< Spatial index.
-  integer,                      intent(in)    :: ish      !< Start of index range.
-  integer,                      intent(in)    :: ieh      !< End of index range.
-  logical, dimension(SZIB_(G), SZJ_(G)), intent(in)    :: do_I     !< Which i values to work on.
-  logical,                      intent(in)    :: vol_CFL  !< If true, rescale the
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(GV)),    intent(in)    :: por_face_areaU !< fractional open area of U-faces [nondim]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                            intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                            intent(in)    :: h_W      !< West edge thickness [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
+                            intent(in)    :: h_E      !< East edge thickness [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                            intent(inout) :: uh       !< Zonal mass or volume
+                                                      !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                            intent(inout) :: duhdu    !< Partial derivative of uh
+                                                      !! with u [H L ~> m2 or kg m-1].
+  real,                     intent(in)    :: dt       !< Time increment [T ~> s]
+  type(unit_scale_type),    intent(in)    :: US       !< A dimensional unit scaling type.
+  integer,                  intent(in)    :: ish      !< Start of i index range.
+  integer,                  intent(in)    :: ieh      !< End of i index range.
+  integer,                  intent(in)    :: jsh      !< Start of j index range.
+  integer,                  intent(in)    :: jeh      !< End of j index range.
+  integer,                  intent(in)    :: nz       !< Edn of k index range.
+  logical, dimension(SZIB_(G),SZJ_(G)), &
+                            intent(in)    :: do_I     !< Which i values to work on.
+  logical,                  intent(in)    :: vol_CFL  !< If true, rescale the
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                            intent(in)    :: por_face_areaU !< fractional open area of U-faces 
+                                                            !! [nondim].
           !! ratio of face areas to the cell areas when estimating the CFL number.
-  type(ocean_OBC_type), optional, pointer     :: OBC !< Open boundaries control structure.
+  type(ocean_OBC_type), optional, pointer :: OBC !< Open boundaries control structure.
   ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length [H ~> m or kg m-2]
@@ -1201,60 +1213,60 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
                              du, du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              ish, ieh, jsh, jeh, do_I_in, por_face_areaU, uh_3d, OBC)
 
-  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)   :: u    !< Zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to
-                                                                   !! calculate fluxes [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_W  !< West edge thickness in the
-                                                                   !! reconstruction [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_E  !< East edge thickness in the
-                                                                   !! reconstruction [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: visc_rem !< Both the fraction of the
+  type(ocean_grid_type),                      intent(in)    :: G    !< Ocean's grid structure.
+  type(verticalGrid_type),                    intent(in)    :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u     !< Zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_in !< Layer thickness used to
+                                                                    !! calculate fluxes [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_W  !< West edge thickness in the
+                                                                    !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_E  !< East edge thickness in the
+                                                                    !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step of viscosity, and
                        !! the fraction of a time-step's worth of a barotropic acceleration that a layer
                        !! experiences after viscosity is applied [nondim].
                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G),SZJ_(G)),                 intent(in)    :: uhbt !< The summed volume flux
+  real, dimension(SZIB_(G),SZJ_(G)),          intent(in)    :: uhbt !< The summed volume flux
                        !! through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
-
-  real, dimension(SZIB_(G),SZJ_(G)),                 intent(in)    :: du_max_CFL  !< Maximum acceptable
+  real, dimension(SZIB_(G),SZJ_(G)),          intent(in)    :: du_max_CFL  !< Maximum acceptable
                        !! value of du [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G),SZJ_(G)),                 intent(in)    :: du_min_CFL  !< Minimum acceptable
+  real, dimension(SZIB_(G),SZJ_(G)),          intent(in)    :: du_min_CFL  !< Minimum acceptable
                        !! value of du [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G),SZJ_(G)),                 intent(in)    :: uh_tot_0    !< The summed transport
+  real, dimension(SZIB_(G),SZJ_(G)),          intent(in)    :: uh_tot_0    !< The summed transport
                        !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G),SZJ_(G)),                 intent(in)    :: duhdu_tot_0 !< The partial derivative
+  real, dimension(SZIB_(G),SZJ_(G)),          intent(in)    :: duhdu_tot_0 !< The partial derivative
                        !! of du_err with du at 0 adjustment [H L ~> m2 or kg m-1].
-  real, dimension(SZIB_(G),SZJ_(G)),                 intent(inout)   :: du !<
+  real, dimension(SZIB_(G),SZJ_(G)),          intent(inout) :: du !<
                        !! The barotropic velocity adjustment [L T-1 ~> m s-1].
-  real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
-  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
-  integer,                                   intent(in)    :: ish, jsh  !< Start of index range.
-  integer,                                   intent(in)    :: ieh, jeh  !< End of index range.
-  logical, dimension(SZIB_(G),SZJ_(G)),              intent(in)    :: do_I_in     !<
-                       !! A logical flag indicating which I values to work on.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), &
-                                      intent(in) :: por_face_areaU !< fractional open area of U-faces [nondim]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), optional, intent(inout) :: uh_3d !<
-                       !! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
-  type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
+  real,                                       intent(in)    :: dt        !< Time increment [T ~> s].
+  type(unit_scale_type),                      intent(in)    :: US        !< A dimensional unit scaling type.
+  type(continuity_PPM_CS),                    intent(in)    :: CS        !< This module's control structure.
+  integer,                                    intent(in)    :: ish, jsh  !< Start of index range.
+  integer,                                    intent(in)    :: ieh, jeh  !< End of index range.
+  logical, dimension(SZIB_(G),SZJ_(G)),       intent(in)    :: do_I_in   !< A logical flag
+                       !! indicating which I values to work on.
+  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), intent(in)   :: por_face_areaU !< fractional open area 
+                                                                              !! of U-faces [nondim].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                                    optional, intent(inout) :: uh_3d !< Volume flux through zonal
+                       !! faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
+  type(ocean_OBC_type),             optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
-    uh_aux, &  ! An auxiliary zonal volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
-    duhdu      ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
+    uh_aux, &      ! An auxiliary zonal volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
+    duhdu          ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    uh_err, &  ! Difference between uhbt and the summed uh [H L2 T-1 ~> m3 s-1 or kg s-1].
+    uh_err, &      ! Difference between uhbt and the summed uh [H L2 T-1 ~> m3 s-1 or kg s-1].
     uh_err_best, & ! The smallest value of uh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
-    duhdu_tot,&! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
-    du_min, &  ! Lower limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
-    du_max     ! Upper limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
+    duhdu_tot,&    ! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
+    du_min, &      ! Lower limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
+    du_max         ! Upper limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: u_new ! The velocity with the correction added [L T-1 ~> m s-1].
-  real :: du_prev ! The previous value of du [L T-1 ~> m s-1].
-  real :: ddu     ! The change in du from the previous iteration [L T-1 ~> m s-1].
-  real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
-  real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
+  real :: du_prev  ! The previous value of du [L T-1 ~> m s-1].
+  real :: ddu      ! The change in du from the previous iteration [L T-1 ~> m s-1].
+  real :: tol_eta  ! The tolerance for the current iteration [H ~> m or kg m-2].
+  real :: tol_vel  ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, j, k, nz, itt, max_itts = 20
   logical :: domore, do_I(SZIB_(G),SZJ_(G))
 
