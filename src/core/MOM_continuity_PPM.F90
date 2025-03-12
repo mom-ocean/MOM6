@@ -2820,62 +2820,64 @@ end subroutine meridional_flux_adjust
 subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
-  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)   :: v    !< Meridional velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to calculate fluxes,
-                                                                   !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_S  !< South edge thickness in the reconstruction,
-                                                                   !! [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_N  !< North edge thickness in the reconstruction,
-                                                                   !! [H ~> m or kg m-2].
-  type(BT_cont_type),                        intent(inout) :: BT_cont !< A structure with elements
+  type(ocean_grid_type),                      intent(in)    :: G    !< Ocean's grid structure.
+  type(verticalGrid_type),                    intent(in)    :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: v    !< Meridional velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_in !< Layer thickness used to calculate fluxes,
+                                                                    !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_S  !< South edge thickness in the reconstruction,
+                                                                    !! [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)    :: h_N  !< North edge thickness in the reconstruction,
+                                                                    !! [H ~> m or kg m-2].
+  type(BT_cont_type),                         intent(inout) :: BT_cont !< A structure with elements
                        !! that describe the effective open face areas as a function of barotropic flow.
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: vh_tot_0    !< The summed transport
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: vh_tot_0 !< The summed transport
                        !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: dvhdv_tot_0 !< The partial derivative
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dvhdv_tot_0 !< The partial derivative
                        !! of du_err with dv at 0 adjustment [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: dv_max_CFL !< Maximum acceptable value
-                                                                   !!  of dv [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: dv_min_CFL !< Minimum acceptable value
-                                                                   !!  of dv [L T-1 ~> m s-1].
-  real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
-  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)),intent(in)    :: visc_rem !< Both the fraction of the
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dv_max_CFL !< Maximum acceptable value
+                                                                          !!  of dv [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dv_min_CFL !< Minimum acceptable value
+                                                                          !!  of dv [L T-1 ~> m s-1].
+  real,                                       intent(in)    :: dt   !< Time increment [T ~> s].
+  type(unit_scale_type),                      intent(in)    :: US   !< A dimensional unit scaling type
+  type(continuity_PPM_CS),                    intent(in)    :: CS   !< This module's control structure.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step
                        !! of viscosity, and the fraction of a time-step's worth of a barotropic
                        !! acceleration that a layer experiences after viscosity is applied [nondim].
                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJB_(G)),         intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim]
-  integer,                                   intent(in)    :: ish, jsh      !< Start of index range.
-  integer,                                   intent(in)    :: ieh, jeh      !< End of index range.
-  logical, dimension(SZI_(G),SZJB_(G)),       intent(in)    :: do_I     !< A logical flag indicating
-                       !! which I values to work on.
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
-                                intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim]
+  integer,                                    intent(in)    :: ish  !< Start of i index range.
+  integer,                                    intent(in)    :: ieh  !< End of i index range.
+  integer,                                    intent(in)    :: jsh  !< Start of j index range.
+  integer,                                    intent(in)    :: jeh  !< End of j index range.
+  logical, dimension(SZI_(G),SZJB_(G)),       intent(in)    :: do_I !< A logical flag indicating
+                                                                    !! which I values to work on.
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: por_face_areaV !< fractional open area of V-faces 
+                                                                              !! [nondim]
   ! Local variables
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    dv0, &        ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
-    dvL, dvR, &   ! The barotropic velocity increments that give the southerly
-                  ! (dvL) and northerly (dvR) test velocities [L T-1 ~> m s-1].
-    dv_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
-    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
-    FAmt_L, FAmt_R, & ! The summed effective marginal face areas for the 3
-    FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
-    vhtot_L, &    ! The summed transport with the southerly (vhtot_L) and
-    vhtot_R       ! and northerly (vhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+    dv0, &             ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
+    dvL, dvR, &        ! The barotropic velocity increments that give the southerly
+                       ! (dvL) and northerly (dvR) test velocities [L T-1 ~> m s-1].
+    dv_CFL, &          ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
+    zeros, &           ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
+    FAmt_L, FAmt_R, &  ! The summed effective marginal face areas for the 3
+    FAmt_0, &          ! test velocities [H L ~> m2 or kg m-1].
+    vhtot_L, &         ! The summed transport with the southerly (vhtot_L) and
+    vhtot_R            ! and northerly (vhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &    
-    v_L, v_R, &   ! The southerly (v_L), northerly (v_R), and zero-barotropic
-    v_0, &        ! transport (v_0) layer test velocities [L T-1 ~> m s-1].
-    dvhdv_L, &    ! The effective layer marginal face areas with the southerly
-    dvhdv_R, &    ! (_L), northerly (_R), and zero-barotropic (_0) test
-    dvhdv_0, &    ! velocities [H L ~> m2 or kg m-1].
-    vh_L, vh_R, & ! The layer transports with the southerly (_L), northerly (_R)
-    vh_0       ! and zero-barotropic (_0) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real :: FA_0    ! The effective face area with 0 barotropic transport [H L ~> m2 or kg m-1].
-  real :: FA_avg  ! The average effective face area [H L ~> m2 or kg m-1], nominally given by
-                  ! the realized transport divided by the barotropic velocity.
+    v_L, v_R, &        ! The southerly (v_L), northerly (v_R), and zero-barotropic
+    v_0, &             ! transport (v_0) layer test velocities [L T-1 ~> m s-1].
+    dvhdv_L, &         ! The effective layer marginal face areas with the southerly
+    dvhdv_R, &         ! (_L), northerly (_R), and zero-barotropic (_0) test
+    dvhdv_0, &         ! velocities [H L ~> m2 or kg m-1].
+    vh_L, vh_R, &      ! The layer transports with the southerly (_L), northerly (_R)
+    vh_0               ! and zero-barotropic (_0) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: FA_0         ! The effective face area with 0 barotropic transport [H L ~> m2 or kg m-1].
+  real :: FA_avg       ! The average effective face area [H L ~> m2 or kg m-1], nominally given by
+                       ! the realized transport divided by the barotropic velocity.
   real :: visc_rem_lim ! The larger of visc_rem and min_visc_rem [nondim]  This
                        ! limiting is necessary to keep the inverse of visc_rem
                        ! from leading to large CFL numbers.
@@ -2883,9 +2885,9 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
                        ! in finding the barotropic velocity that changes the
                        ! flow direction [nondim].  This is necessary to keep the inverse
                        ! of visc_rem from leading to large CFL numbers.
-  real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
-                  ! flow is truly upwind [nondim]
-  real :: Idt     ! The inverse of the time step [T-1 ~> s-1].
+  real :: CFL_min      ! A minimal increment in the CFL to try to ensure that the
+                       ! flow is truly upwind [nondim]
+  real :: Idt          ! The inverse of the time step [T-1 ~> s-1].
   logical :: domore
   integer :: i, j, k, nz
 
@@ -2898,7 +2900,7 @@ subroutine set_merid_BT_cont_fused(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_t
                          dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                          ish, ieh, jsh, jeh, do_I, por_face_areaV)
 
-  !   Determine the southerly- and northerly- fluxes.  Choose a sufficiently
+  ! Determine the southerly- and northerly- fluxes. Choose a sufficiently
   ! negative velocity correction for the northerly-flux, and a sufficiently
   ! positive correction for the southerly-flux.
   domore = .false.
