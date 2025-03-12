@@ -736,7 +736,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       enddo ; enddo ; endif
       if (present(uhbt)) then
         ! Find du and uh.
-        call zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, du, &
+        call zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, du, &
                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u, &
                               ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
 
@@ -1209,7 +1209,7 @@ end subroutine zonal_flux_thickness
 
 !> Returns the barotropic velocity adjustment that gives the
 !! desired barotropic (layer-summed) transport.
-subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
+subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
                              du, du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              ish, ieh, jsh, jeh, do_I_in, por_face_areaU, uh_3d, OBC)
 
@@ -1357,160 +1357,8 @@ subroutine zonal_flux_adjust_fused(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_
     uh_3d(I,j,k) = uh_aux(I,j,k)
   enddo ; enddo ; enddo ; endif
 
-end subroutine zonal_flux_adjust_fused
-
-!> Returns the barotropic velocity adjustment that gives the
-!! desired barotropic (layer-summed) transport.
-subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
-                             du, du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             j, ish, ieh, do_I_in, por_face_areaU, uh_3d, OBC)
-
-  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)   :: u    !< Zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to
-                                                                   !! calculate fluxes [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_W  !< West edge thickness in the
-                                                                   !! reconstruction [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_E  !< East edge thickness in the
-                                                                   !! reconstruction [H ~> m or kg m-2].
-  real, dimension(SZIB_(G),SZK_(GV)),        intent(in)    :: visc_rem !< Both the fraction of the
-                       !! momentum originally in a layer that remains after a time-step of viscosity, and
-                       !! the fraction of a time-step's worth of a barotropic acceleration that a layer
-                       !! experiences after viscosity is applied [nondim].
-                       !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G)),                 intent(in)    :: uhbt !< The summed volume flux
-                       !! through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
-
-  real, dimension(SZIB_(G)),                 intent(in)    :: du_max_CFL  !< Maximum acceptable
-                       !! value of du [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G)),                 intent(in)    :: du_min_CFL  !< Minimum acceptable
-                       !! value of du [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G)),                 intent(in)    :: uh_tot_0    !< The summed transport
-                       !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G)),                 intent(in)    :: duhdu_tot_0 !< The partial derivative
-                       !! of du_err with du at 0 adjustment [H L ~> m2 or kg m-1].
-  real, dimension(SZIB_(G)),                 intent(out)   :: du !<
-                       !! The barotropic velocity adjustment [L T-1 ~> m s-1].
-  real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
-  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
-  integer,                                   intent(in)    :: j    !< Spatial index.
-  integer,                                   intent(in)    :: ish  !< Start of index range.
-  integer,                                   intent(in)    :: ieh  !< End of index range.
-  logical, dimension(SZIB_(G)),              intent(in)    :: do_I_in     !<
-                       !! A logical flag indicating which I values to work on.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), &
-                                      intent(in) :: por_face_areaU !< fractional open area of U-faces [nondim]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), optional, intent(inout) :: uh_3d !<
-                       !! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
-  type(ocean_OBC_type),            optional, pointer       :: OBC !< Open boundaries control structure.
-  ! Local variables
-  real, dimension(SZIB_(G),SZK_(GV)) :: &
-    uh_aux, &  ! An auxiliary zonal volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
-    duhdu      ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
-  real, dimension(SZIB_(G)) :: &
-    uh_err, &  ! Difference between uhbt and the summed uh [H L2 T-1 ~> m3 s-1 or kg s-1].
-    uh_err_best, & ! The smallest value of uh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
-    u_new, &   ! The velocity with the correction added [L T-1 ~> m s-1].
-    duhdu_tot,&! Summed partial derivative of uh with u [H L ~> m2 or kg m-1].
-    du_min, &  ! Lower limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
-    du_max     ! Upper limit on du correction based on CFL limits and previous iterations [L T-1 ~> m s-1]
-  real :: du_prev ! The previous value of du [L T-1 ~> m s-1].
-  real :: ddu     ! The change in du from the previous iteration [L T-1 ~> m s-1].
-  real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
-  real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
-  integer :: i, k, nz, itt, max_itts = 20
-  logical :: domore, do_I(SZIB_(G))
-
-  nz = GV%ke
-
-  uh_aux(:,:) = 0.0 ; duhdu(:,:) = 0.0
-
-  if (present(uh_3d)) then ; do k=1,nz ; do I=ish-1,ieh
-    uh_aux(i,k) = uh_3d(I,j,k)
-  enddo ; enddo ; endif
-
-  do I=ish-1,ieh
-    du(I) = 0.0 ; do_I(I) = do_I_in(I)
-    du_max(I) = du_max_CFL(I) ; du_min(I) = du_min_CFL(I)
-    uh_err(I) = uh_tot_0(I) - uhbt(I) ; duhdu_tot(I) = duhdu_tot_0(I)
-    uh_err_best(I) = abs(uh_err(I))
-  enddo
-
-  do itt=1,max_itts
-    select case (itt)
-      case (:1) ; tol_eta = 1e-6 * CS%tol_eta
-      case (2)  ; tol_eta = 1e-4 * CS%tol_eta
-      case (3)  ; tol_eta = 1e-2 * CS%tol_eta
-      case default ; tol_eta = CS%tol_eta
-    end select
-    tol_vel = CS%tol_vel
-
-    do I=ish-1,ieh
-      if (uh_err(I) > 0.0) then ; du_max(I) = du(I)
-      elseif (uh_err(I) < 0.0) then ; du_min(I) = du(I)
-      else ; do_I(I) = .false. ; endif
-    enddo
-    domore = .false.
-    do I=ish-1,ieh ; if (do_I(I)) then
-      if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I)) > tol_eta) .or. &
-          (CS%better_iter .and. ((abs(uh_err(I)) > tol_vel * duhdu_tot(I)) .or. &
-                                 (abs(uh_err(I)) > uh_err_best(I))) )) then
-      !   Use Newton's method, provided it stays bounded.  Otherwise bisect
-      ! the value with the appropriate bound.
-        ddu = -uh_err(I) / duhdu_tot(I)
-        du_prev = du(I)
-        du(I) = du(I) + ddu
-        if (abs(ddu) < 1.0e-15*abs(du(I))) then
-          do_I(I) = .false. ! ddu is small enough to quit.
-        elseif (ddu > 0.0) then
-          if (du(I) >= du_max(I)) then
-            du(I) = 0.5*(du_prev + du_max(I))
-            if (du_max(I) - du_prev < 1.0e-15*abs(du(I))) do_I(I) = .false.
-          endif
-        else ! ddu < 0.0
-          if (du(I) <= du_min(I)) then
-            du(I) = 0.5*(du_prev + du_min(I))
-            if (du_prev - du_min(I) < 1.0e-15*abs(du(I))) do_I(I) = .false.
-          endif
-        endif
-        if (do_I(I)) domore = .true.
-      else
-        do_I(I) = .false.
-      endif
-    endif ; enddo
-    if (.not.domore) exit
-
-    if ((itt < max_itts) .or. present(uh_3d)) then ; do k=1,nz
-      do I=ish-1,ieh ; u_new(I) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
-      call zonal_flux_layer(u_new, h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), &
-                            uh_aux(:,k), duhdu(:,k), visc_rem(:,k), &
-                            dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k), OBC)
-    enddo ; endif
-
-    if (itt < max_itts) then
-      do I=ish-1,ieh
-        uh_err(I) = -uhbt(I) ; duhdu_tot(I) = 0.0
-      enddo
-      do k=1,nz ; do I=ish-1,ieh
-        uh_err(I) = uh_err(I) + uh_aux(I,k)
-        duhdu_tot(I) = duhdu_tot(I) + duhdu(I,k)
-      enddo ; enddo
-      do I=ish-1,ieh
-        uh_err_best(I) = min(uh_err_best(I), abs(uh_err(I)))
-      enddo
-    endif
-  enddo ! itt-loop
-  ! If there are any faces which have not converged to within the tolerance,
-  ! so-be-it, or else use a final upwind correction?
-  ! This never seems to happen with 20 iterations as max_itt.
-
-  if (present(uh_3d)) then ; do k=1,nz ; do I=ish-1,ieh
-    uh_3d(I,j,k) = uh_aux(I,k)
-  enddo ; enddo ; endif
-
 end subroutine zonal_flux_adjust
+
 
 !> Sets a structure that describes the zonal barotropic volume or mass fluxes as a
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
@@ -1598,7 +1446,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
 
  ! Diagnose the zero-transport correction, du0.
   do j=jsh,jeh ; do I=ish-1,ieh ; zeros(I, j) = 0.0 ; enddo ; enddo
-  call zonal_flux_adjust_fused(u, h_in, h_W, h_E, zeros, uh_tot_0, duhdu_tot_0, du0, &
+  call zonal_flux_adjust(u, h_in, h_W, h_E, zeros, uh_tot_0, duhdu_tot_0, du0, &
                          du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                          ish, ieh, jsh, jeh, do_I, por_face_areaU)
 
