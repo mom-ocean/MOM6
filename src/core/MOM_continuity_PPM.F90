@@ -622,8 +622,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   
   ! Set uh and duhdu.
   call zonal_flux_layer(u, h_in, h_W, h_E, &
-                              uh, duhdu, visc_rem_u_tmp, &
-                              dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, gv)
+                        uh, duhdu, visc_rem_u_tmp, &
+                        dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, gv)
   
   ! untested!
   if (local_specified_BC) then
@@ -1818,7 +1818,7 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   
   ! This sets vh and dvhdv.
   call merid_flux_layer(v, h_in, h_S, h_N, vh, dvhdv, ones, &
-    dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
+                        dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
   
   do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
     if (OBC_in_row(j) .and. OBC%segnum_v(i,J) /= 0) then
