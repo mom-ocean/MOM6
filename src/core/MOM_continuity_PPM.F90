@@ -1505,51 +1505,58 @@ end subroutine zonal_flux_adjust
 subroutine set_zonal_BT_cont_fused(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, &
                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaU)
-  type(ocean_grid_type),                     intent(in)    :: G    !< Ocean's grid structure.
-  type(verticalGrid_type),                   intent(in)    :: GV   !< Ocean's vertical grid structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u    !< Zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_in !< Layer thickness used to
-                                                                   !! calculate fluxes [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_W  !< West edge thickness in the
-                                                                   !! reconstruction [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h_E  !< East edge thickness in the
-                                                                   !! reconstruction [H ~> m or kg m-2].
-  type(BT_cont_type),                        intent(inout) :: BT_cont !< A structure with elements
+  type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: u    !< Zonal velocity [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h_in !< Layer thickness used to calculate fluxes [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h_W  !< West edge thickness in the reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: h_E  !< East edge thickness in the reconstruction [H ~> m or kg m-2].
+  type(BT_cont_type),      intent(inout) :: BT_cont !< A structure with elements
                        !! that describe the effective open face areas as a function of barotropic flow.
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: uh_tot_0    !< The summed transport
-                       !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: duhdu_tot_0 !< The partial derivative
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: uh_tot_0    !< The summed transport with 0 adjustment 
+                                                        !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: duhdu_tot_0 !< The partial derivative
                        !! of du_err with du at 0 adjustment [H L ~> m2 or kg m-1].
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: du_max_CFL  !< Maximum acceptable
-                       !! value of du [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: du_min_CFL  !< Minimum acceptable
-                       !! value of du [L T-1 ~> m s-1].
-  real,                                      intent(in)    :: dt   !< Time increment [T ~> s].
-  type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                   intent(in)    :: CS   !< This module's control structure.
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)),        intent(in)    :: visc_rem !< Both the fraction of the
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: du_max_CFL  !< Maximum acceptable value of du [L T-1 ~> m s-1].
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: du_min_CFL  !< Minimum acceptable value of du [L T-1 ~> m s-1].
+  real,                    intent(in)    :: dt   !< Time increment [T ~> s].
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
+  type(continuity_PPM_CS), intent(in)    :: CS   !< This module's control structure.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in)    :: visc_rem !< Both the fraction of the
                        !! momentum originally in a layer that remains after a time-step of viscosity, and
                        !! the fraction of a time-step's worth of a barotropic acceleration that a layer
                        !! experiences after viscosity is applied [nondim].
                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G),SZJ_(G)),         intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim].
-  integer,                                   intent(in)    :: ish, jsh      !< Start of index range.
-  integer,                                   intent(in)    :: ieh, jeh      !< End of index range.
-  logical, dimension(SZIB_(G),SZJ_(G)),      intent(in)    :: do_I     !< A logical flag indicating
-                       !! which I values to work on.
-  real, dimension(SZIB_(G), SZJ_(G), SZK_(G)), &
-                                    intent(in) :: por_face_areaU !< fractional open area of U-faces [nondim]
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: visc_rem_max !< Maximum allowable visc_rem [nondim].
+  integer,                 intent(in)    :: ish      !< Start of i index range.
+  integer,                 intent(in)    :: ieh      !< End of i index range.
+  integer,                 intent(in)    :: jsh      !< Start of j index range.
+  integer,                 intent(in)    :: jeh      !< End of j index range.
+  logical, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: do_I     !< A logical flag indicating which I values to work on.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)), &
+                           intent(in)    :: por_face_areaU !< fractional open area of U-faces [nondim]
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G)) ::  &
-    du0, & ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
-    duL, duR, &   ! The barotropic velocity increments that give the westerly
-                  ! (duL) and easterly (duR) test velocities [L T-1 ~> m s-1].
-    zeros, &      ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
-    du_CFL, &     ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
+  real, dimension(SZIB_(G),SZJ_(G)) :: &
+    du0, &            ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
+    duL, duR, &       ! The barotropic velocity increments that give the westerly
+                      ! (duL) and easterly (duR) test velocities [L T-1 ~> m s-1].
+    zeros, &          ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
+    du_CFL, &         ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
     FAmt_L, FAmt_R, & ! The summed effective marginal face areas for the 3
-    FAmt_0, &     ! test velocities [H L ~> m2 or kg m-1].
-    uhtot_L, &    ! The summed transport with the westerly (uhtot_L) and
-    uhtot_R       ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
+    FAmt_0, &         ! test velocities [H L ~> m2 or kg m-1].
+    uhtot_L, &        ! The summed transport with the westerly (uhtot_L) and
+    uhtot_R           ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
     u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
     u_0, &        ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
