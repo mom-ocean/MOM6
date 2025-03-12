@@ -621,7 +621,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   do_I(:, :) = .true.
   
   ! Set uh and duhdu.
-  call zonal_flux_layer_fused(u, h_in, h_W, h_E, &
+  call zonal_flux_layer(u, h_in, h_W, h_E, &
                               uh, duhdu, visc_rem_u_tmp, &
                               dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, gv)
   
@@ -899,7 +899,7 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   endif
 
   ! This sets uh and duhdu.
-  call zonal_flux_layer_fused(u, h_in, h_W, h_E, uh, duhdu, ones, &
+  call zonal_flux_layer(u, h_in, h_W, h_E, uh, duhdu, ones, &
                         dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, GV)
   
   do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
@@ -919,7 +919,7 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
 end subroutine zonal_BT_mass_flux
 
 !> Evaluates the zonal mass or volume fluxes in a layer.
-subroutine zonal_flux_layer_fused(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, &
+subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, &
                             ish, ieh, jsh, jeh, nz, do_I, vol_CFL, por_face_areaU, OBC, GV)
   type(ocean_grid_type),    intent(in)    :: G        !< Ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV       !< Ocean's vertical grid structure.
@@ -995,99 +995,20 @@ subroutine zonal_flux_layer_fused(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US
   endif ; enddo; enddo; enddo
 
   if (local_open_BC) then
-    do I=ish-1,ieh ; if (do_I(I, j)) then ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-      l_seg = OBC%segnum_u(I,j)
-      if (OBC%segment(l_seg)%open) then
-        if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+    do I=ish-1,ieh ; if (do_I(I, j)) then ; if (OBC%segnum_u(I,j) /= 0) then
+      if (OBC%segment(abs(OBC%segnum_u(I,j)))%open) then
+        if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
           uh(i, j, k) = (G%dy_Cu(I,j) * por_face_areaU(I, j, k)) * u(I, j, k) * h(i, j, k)
           duhdu(I, j, k) = (G%dy_Cu(I,j) * por_face_areaU(I, j, k)) * h(i, j, k) * visc_rem(I, j, k)
-        else
+        else !  OBC_DIRECTION_W
           uh(i, j, k) = (G%dy_Cu(I,j) * por_face_areaU(I, j, k)) * u(I, j, k) * h(i+1, j, k)
           duhdu(I, j, k) = (G%dy_Cu(I,j)* por_face_areaU(I, j, k)) * h(i+1, j, k) * visc_rem(I, j, k)
         endif
       endif
     endif ; endif ; enddo
   endif
-end subroutine zonal_flux_layer_fused
-
-
-!> Evaluates the zonal mass or volume fluxes in a layer.
-subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, j, &
-                            ish, ieh, do_I, vol_CFL, por_face_areaU, OBC)
-  type(ocean_grid_type),        intent(in)    :: G        !< Ocean's grid structure.
-  real, dimension(SZIB_(G)),    intent(in)    :: u        !< Zonal velocity [L T-1 ~> m s-1].
-  real, dimension(SZIB_(G)),    intent(in)    :: visc_rem !< Both the fraction of the
-                        !! momentum originally in a layer that remains after a time-step
-                        !! of viscosity, and the fraction of a time-step's worth of a barotropic
-                        !! acceleration that a layer experiences after viscosity is applied [nondim].
-                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G)),     intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2].
-  real, dimension(SZI_(G)),     intent(in)    :: h_W      !< West edge thickness [H ~> m or kg m-2].
-  real, dimension(SZI_(G)),     intent(in)    :: h_E      !< East edge thickness [H ~> m or kg m-2].
-  real, dimension(SZIB_(G)),    intent(inout) :: uh       !< Zonal mass or volume
-                                                          !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G)),    intent(inout) :: duhdu    !< Partial derivative of uh
-                                                          !! with u [H L ~> m2 or kg m-1].
-  real,                         intent(in)    :: dt       !< Time increment [T ~> s]
-  type(unit_scale_type),        intent(in)    :: US       !< A dimensional unit scaling type
-  integer,                      intent(in)    :: j        !< Spatial index.
-  integer,                      intent(in)    :: ish      !< Start of index range.
-  integer,                      intent(in)    :: ieh      !< End of index range.
-  logical, dimension(SZIB_(G)), intent(in)    :: do_I     !< Which i values to work on.
-  logical,                      intent(in)    :: vol_CFL  !< If true, rescale the
-  real, dimension(SZIB_(G)),    intent(in)    :: por_face_areaU !< fractional open area of U-faces [nondim]
-          !! ratio of face areas to the cell areas when estimating the CFL number.
-  type(ocean_OBC_type), optional, pointer     :: OBC !< Open boundaries control structure.
-  ! Local variables
-  real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
-  real :: curv_3 ! A measure of the thickness curvature over a grid length [H ~> m or kg m-2]
-  real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
-  integer :: i
-  integer :: l_seg
-  logical :: local_open_BC
-
-  local_open_BC = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then
-    local_open_BC = OBC%open_u_BCs_exist_globally
-  endif ; endif
-
-  do I=ish-1,ieh ; if (do_I(I)) then
-    ! Set new values of uh and duhdu.
-    if (u(I) > 0.0) then
-      if (vol_CFL) then ; CFL = (u(I) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
-      else ; CFL = u(I) * dt * G%IdxT(i,j) ; endif
-      curv_3 = (h_W(i) + h_E(i)) - 2.0*h(i)
-      uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * &
-          (h_E(i) + CFL * (0.5*(h_W(i) - h_E(i)) + curv_3*(CFL - 1.5)))
-      h_marg = h_E(i) + CFL * ((h_W(i) - h_E(i)) + 3.0*curv_3*(CFL - 1.0))
-    elseif (u(I) < 0.0) then
-      if (vol_CFL) then ; CFL = (-u(I) * dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
-      else ; CFL = -u(I) * dt * G%IdxT(i+1,j) ; endif
-      curv_3 = (h_W(i+1) + h_E(i+1)) - 2.0*h(i+1)
-      uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * &
-          (h_W(i+1) + CFL * (0.5*(h_E(i+1)-h_W(i+1)) + curv_3*(CFL - 1.5)))
-      h_marg = h_W(i+1) + CFL * ((h_E(i+1)-h_W(i+1)) + 3.0*curv_3*(CFL - 1.0))
-    else
-      uh(I) = 0.0
-      h_marg = 0.5 * (h_W(i+1) + h_E(i))
-    endif
-    duhdu(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * h_marg * visc_rem(I)
-  endif ; enddo
-
-  if (local_open_BC) then
-    do I=ish-1,ieh ; if (do_I(I)) then ; if (OBC%segnum_u(I,j) /= 0) then
-      if (OBC%segment(abs(OBC%segnum_u(I,j)))%open) then
-        if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
-          uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * h(i)
-          duhdu(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * h(i) * visc_rem(I)
-        else !  OBC_DIRECTION_W
-          uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * h(i+1)
-          duhdu(I) = (G%dy_Cu(I,j)* por_face_areaU(I)) * h(i+1) * visc_rem(I)
-        endif
-      endif
-    endif ; endif ; enddo
-  endif
 end subroutine zonal_flux_layer
+
 
 !> Sets the effective interface thickness associated with the fluxes at each zonal velocity point,
 !! optionally scaling back these thicknesses to account for viscosity and fractional open areas.
@@ -1331,7 +1252,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
 
     if ((itt < max_itts) .or. present(uh_3d)) then ; do k=1,nz ; do j = jsh,jeh
       do I=ish-1,ieh ; u_new(I,j,k) = u(I,j,k) + du(I,j) * visc_rem(I,j,k) ; enddo ; enddo ; enddo
-      call zonal_flux_layer_fused(u_new, h_in, h_W, h_E, &
+      call zonal_flux_layer(u_new, h_in, h_W, h_E, &
                             uh_aux, duhdu, visc_rem, &
                             dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, GV)
     endif
@@ -1489,11 +1410,11 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     u_0(I,j,k) = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
   endif ; enddo ; enddo ; enddo
 
-  call zonal_flux_layer_fused(u_0, h_in, h_W, h_E, uh_0, duhdu_0, &
+  call zonal_flux_layer(u_0, h_in, h_W, h_E, uh_0, duhdu_0, &
                         visc_rem, dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, gv=gv)
-  call zonal_flux_layer_fused(u_L, h_in, h_W, h_E, uh_L, duhdu_L, &
+  call zonal_flux_layer(u_L, h_in, h_W, h_E, uh_L, duhdu_L, &
                         visc_rem, dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, gv=gv)
-  call zonal_flux_layer_fused(u_R, h_in, h_W, h_E, uh_R, duhdu_R, &
+  call zonal_flux_layer(u_R, h_in, h_W, h_E, uh_R, duhdu_R, &
                         visc_rem, dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, gv=gv)
 
   do k=1,nz ; do j=jsh,jeh
