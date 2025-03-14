@@ -162,66 +162,66 @@ end type surface_forcing_CS
 !> Structure corresponding to forcing, but with the elements, units, and conventions
 !! that exactly conform to the use for MOM-based coupled models.
 type, public :: ice_ocean_boundary_type
-  real, pointer, dimension(:,:) :: lrunoff           =>NULL() !< liquid runoff [kg/m2/s]
-  real, pointer, dimension(:,:) :: frunoff           =>NULL() !< ice runoff [kg/m2/s]
-  real, pointer, dimension(:,:) :: lrunoff_glc       =>NULL() !< liquid glc runoff via rof [kg/m2/s]
-  real, pointer, dimension(:,:) :: frunoff_glc       =>NULL() !< frozen glc runoff via rof [kg/m2/s]
+  real, pointer, dimension(:,:) :: lrunoff           =>NULL() !< liquid runoff [km m-2 s-1]
+  real, pointer, dimension(:,:) :: frunoff           =>NULL() !< ice runoff [km m-2 s-1]
+  real, pointer, dimension(:,:) :: lrunoff_glc       =>NULL() !< liquid glc runoff via rof [km m-2 s-1]
+  real, pointer, dimension(:,:) :: frunoff_glc       =>NULL() !< frozen glc runoff via rof [km m-2 s-1]
   real, pointer, dimension(:,:) :: u_flux            =>NULL() !< i-direction wind stress [Pa]
   real, pointer, dimension(:,:) :: v_flux            =>NULL() !< j-direction wind stress [Pa]
-  real, pointer, dimension(:,:) :: t_flux            =>NULL() !< sensible heat flux [W/m2]
-  real, pointer, dimension(:,:) :: q_flux            =>NULL() !< specific humidity flux [kg/m2/s]
-  real, pointer, dimension(:,:) :: salt_flux         =>NULL() !< salt flux [kg/m2/s]
-  real, pointer, dimension(:,:) :: seaice_melt_heat  =>NULL() !< sea ice and snow melt heat flux [W/m2]
-  real, pointer, dimension(:,:) :: seaice_melt       =>NULL() !< water flux due to sea ice and snow melting [kg/m2/s]
-  real, pointer, dimension(:,:) :: lw_flux           =>NULL() !< long wave radiation [W/m2]
-  real, pointer, dimension(:,:) :: sw_flux_vis_dir   =>NULL() !< direct visible sw radiation [W/m2]
-  real, pointer, dimension(:,:) :: sw_flux_vis_dif   =>NULL() !< diffuse visible sw radiation [W/m2]
-  real, pointer, dimension(:,:) :: sw_flux_nir_dir   =>NULL() !< direct Near InfraRed sw radiation [W/m2]
-  real, pointer, dimension(:,:) :: sw_flux_nir_dif   =>NULL() !< diffuse Near InfraRed sw radiation [W/m2]
-  real, pointer, dimension(:,:) :: lprec             =>NULL() !< mass flux of liquid precip [kg/m2/s]
-  real, pointer, dimension(:,:) :: fprec             =>NULL() !< mass flux of frozen precip [kg/m2/s]
-  real, pointer, dimension(:,:) :: ustar_berg        =>NULL() !< frictional velocity beneath icebergs [m/s]
-  real, pointer, dimension(:,:) :: area_berg         =>NULL() !< area covered by icebergs[m2/m2]
-  real, pointer, dimension(:,:) :: mass_berg         =>NULL() !< mass of icebergs(kg/m2)
-  real, pointer, dimension(:,:) :: hrofl             =>NULL() !< heat content from liquid runoff [W/m2]
-  real, pointer, dimension(:,:) :: hrofi             =>NULL() !< heat content from frozen runoff [W/m2]
-  real, pointer, dimension(:,:) :: hrofl_glc         =>NULL() !< heat content from liquid glc runoff [W/m2]
-  real, pointer, dimension(:,:) :: hrofi_glc         =>NULL() !< heat content from frozen glc runoff [W/m2]
-  real, pointer, dimension(:,:) :: hrain             =>NULL() !< heat content from liquid precipitation [W/m2]
-  real, pointer, dimension(:,:) :: hsnow             =>NULL() !< heat content from frozen precipitation [W/m2]
-  real, pointer, dimension(:,:) :: hevap             =>NULL() !< heat content from evaporation [W/m2]
-  real, pointer, dimension(:,:) :: hcond             =>NULL() !< heat content from condensation [W/m2]
+  real, pointer, dimension(:,:) :: t_flux            =>NULL() !< sensible heat flux [W m-2]
+  real, pointer, dimension(:,:) :: q_flux            =>NULL() !< specific humidity flux [km m-2 s-1]
+  real, pointer, dimension(:,:) :: salt_flux         =>NULL() !< salt flux [km m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_melt_heat  =>NULL() !< sea ice and snow melt heat flux [W m-2]
+  real, pointer, dimension(:,:) :: seaice_melt       =>NULL() !< water flux due to sea ice and snow melting [km m-2 s-1]
+  real, pointer, dimension(:,:) :: lw_flux           =>NULL() !< long wave radiation [W m-2]
+  real, pointer, dimension(:,:) :: sw_flux_vis_dir   =>NULL() !< direct visible sw radiation [W m-2]
+  real, pointer, dimension(:,:) :: sw_flux_vis_dif   =>NULL() !< diffuse visible sw radiation [W m-2]
+  real, pointer, dimension(:,:) :: sw_flux_nir_dir   =>NULL() !< direct Near InfraRed sw radiation [W m-2]
+  real, pointer, dimension(:,:) :: sw_flux_nir_dif   =>NULL() !< diffuse Near InfraRed sw radiation [W m-2]
+  real, pointer, dimension(:,:) :: lprec             =>NULL() !< mass flux of liquid precip [km m-2 s-1]
+  real, pointer, dimension(:,:) :: fprec             =>NULL() !< mass flux of frozen precip [km m-2 s-1]
+  real, pointer, dimension(:,:) :: ustar_berg        =>NULL() !< frictional velocity beneath icebergs [m s-1]
+  real, pointer, dimension(:,:) :: area_berg         =>NULL() !< area covered by icebergs[m2 m-2]
+  real, pointer, dimension(:,:) :: mass_berg         =>NULL() !< mass of icebergs(kg m-2)
+  real, pointer, dimension(:,:) :: hrofl             =>NULL() !< heat content from liquid runoff [W m-2]
+  real, pointer, dimension(:,:) :: hrofi             =>NULL() !< heat content from frozen runoff [W m-2]
+  real, pointer, dimension(:,:) :: hrofl_glc         =>NULL() !< heat content from liquid glc runoff [W m-2]
+  real, pointer, dimension(:,:) :: hrofi_glc         =>NULL() !< heat content from frozen glc runoff [W m-2]
+  real, pointer, dimension(:,:) :: hrain             =>NULL() !< heat content from liquid precipitation [W m-2]
+  real, pointer, dimension(:,:) :: hsnow             =>NULL() !< heat content from frozen precipitation [W m-2]
+  real, pointer, dimension(:,:) :: hevap             =>NULL() !< heat content from evaporation [W m-2]
+  real, pointer, dimension(:,:) :: hcond             =>NULL() !< heat content from condensation [W m-2]
   real, pointer, dimension(:,:) :: p                 =>NULL() !< pressure of overlying ice and atmosphere
                                                               !< on ocean surface [Pa]
-  real, pointer, dimension(:,:) :: ice_fraction      =>NULL() !< fractional ice area [nondim]
-  real, pointer, dimension(:,:) :: u10_sqr           =>NULL() !< wind speed squared at 10m [m2/s2]
-  real, pointer, dimension(:,:) :: nhx_dep           =>NULL() !< Nitrogen deposition [kg/m^2/s]
-  real, pointer, dimension(:,:) :: noy_dep           =>NULL() !< Nitrogen deposition [kg/m^2/s]
+  real, pointer, dimension(:,:) :: ice_fraction      =>NULL() !< fractional ice area [1]
+  real, pointer, dimension(:,:) :: u10_sqr           =>NULL() !< wind speed squared at 10m [m2 s-2]
+  real, pointer, dimension(:,:) :: nhx_dep           =>NULL() !< Nitrogen deposition [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: noy_dep           =>NULL() !< Nitrogen deposition [kg m-2 s-1]
   real, pointer, dimension(:,:) :: atm_co2_prog      =>NULL() !< Prognostic atmospheric co2 concentration [ppm]
   real, pointer, dimension(:,:) :: atm_co2_diag      =>NULL() !< Diagnostic atmospheric co2 concentration [ppm]
-  real, pointer, dimension(:,:) :: atm_fine_dust_flux   =>NULL() !< Fine dust flux from atmosphere [kg/m^2/s]
-  real, pointer, dimension(:,:) :: atm_coarse_dust_flux =>NULL() !< Coarse dust flux from atmosphere [kg/m^2/s]
-  real, pointer, dimension(:,:) :: seaice_dust_flux     =>NULL() !< Dust flux from seaice [kg/m^2/s]
-  real, pointer, dimension(:,:) :: atm_bc_flux          =>NULL() !< Black carbon flux from atmosphere [kg/m^2/s]
-  real, pointer, dimension(:,:) :: seaice_bc_flux       =>NULL() !< Black carbon flux from seaice [kg/m^2/s]
-  real, pointer, dimension(:,:) :: afracr               =>NULL() !< Fractional atmosphere coverage wrt ocean [nondim]
+  real, pointer, dimension(:,:) :: atm_fine_dust_flux   =>NULL() !< Fine dust flux from atmosphere [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_coarse_dust_flux =>NULL() !< Coarse dust flux from atmosphere [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_dust_flux     =>NULL() !< Dust flux from seaice [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_bc_flux          =>NULL() !< Black carbon flux from atmosphere [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_bc_flux       =>NULL() !< Black carbon flux from seaice [kg m-2 s-1]
+  real, pointer, dimension(:,:) :: afracr               =>NULL() !< Fractional atmosphere coverage wrt ocean [1]
   real, pointer, dimension(:,:) :: swnet_afracr         =>NULL() !< Net shortwave radiation times atmosphere fraction
-                                                                 !! positive => into the ocean [W/m^2]
+                                                                 !! positive => into the ocean [W m-2]
   real, pointer, dimension(:,:,:) :: swpen_ifrac_n      =>NULL() !< Net shortwave radiation penetrating into ice and
                                                                  !! ocean times ice fraction for thickness
-                                                                 !! positive => into the ocean [W/m^2]
-  real, pointer, dimension(:,:,:) :: ifrac_n            =>NULL() !< Ice fraction per category [nondim]
-  real, pointer, dimension(:,:) :: mi                =>NULL() !< mass of ice [kg/m2]
+                                                                 !! positive => into the ocean [W m-2]
+  real, pointer, dimension(:,:,:) :: ifrac_n            =>NULL() !< Ice fraction per category [1]
+  real, pointer, dimension(:,:) :: mi                =>NULL() !< mass of ice [km m-2]
   real, pointer, dimension(:,:) :: ice_rigidity      =>NULL() !< rigidity of the sea ice, sea-ice and
                                                               !! ice-shelves, expressed as a coefficient
                                                               !! for divergence damping, as determined
-                                                              !! outside of the ocean model in [m3/s]
-  real, pointer, dimension(:,:)   :: lamult          => NULL() !< Langmuir enhancement factor [nondim]
+                                                              !! outside of the ocean model in [m3 s-1]
+  real, pointer, dimension(:,:)   :: lamult          => NULL() !< Langmuir enhancement factor [1]
   real, pointer, dimension(:)     :: stk_wavenumbers => NULL() !< The central wave number of Stokes bands [rad/m]
-  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !< Stokes Drift spectrum, zonal [m/s]
+  real, pointer, dimension(:,:,:) :: ustkb           => NULL() !< Stokes Drift spectrum, zonal [m s-1]
                                                                !! Horizontal  - u points
                                                                !! 3rd dimension - wavenumber
-  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !< Stokes Drift spectrum, meridional [m/s]
+  real, pointer, dimension(:,:,:) :: vstkb           => NULL() !< Stokes Drift spectrum, meridional [m s-1]
                                                                !! Horizontal  - v points
                                                                !! 3rd dimension - wavenumber
   integer :: num_stk_bands            !< Number of Stokes drift bands passed through the coupler
@@ -273,10 +273,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     data_restore,  & !< The surface value toward which to restore [S ~> ppt] or [C ~> degC]
     PmE_adj,       & !< The adjustment to PminusE that will cause the salinity
                      !! to be restored toward its target value [kg/(m^2 * s)]
-    net_FW,        & !< The area integrated net freshwater flux into the ocean [kg/s]
-    net_FW2,       & !< The area integrated net freshwater flux into the ocean [kg/s]
+    net_FW,        & !< The area integrated net freshwater flux into the ocean [kg s-1]
+    net_FW2,       & !< The area integrated net freshwater flux into the ocean [kg s-1]
     work_sum,      & !< A 2-d array that is used as the work space for a global
-                     !! sum, used with units of m2 or [kg/s]
+                     !! sum, used with units of m2 or [kg s-1]
     open_ocn_mask    !< a binary field indicating where ice is present based on frazil criteria
 
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, i0, j0
@@ -526,11 +526,11 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
     if (associated(IOB%t_flux)) &
       fluxes%sens(i,j) = US%W_m2_to_QRZ_T * IOB%t_flux(i-i0,j-j0) * G%mask2dT(i,j)
 
-    ! sea ice and snow melt heat flux [Q R Z T-1 ~> W/m2]
+    ! sea ice and snow melt heat flux [Q R Z T-1 ~> W m-2]
     if (associated(IOB%seaice_melt_heat)) &
       fluxes%seaice_melt_heat(i,j) = US%W_m2_to_QRZ_T * G%mask2dT(i,j) * IOB%seaice_melt_heat(i-i0,j-j0)
 
-    ! water flux due to sea ice and snow melt [kg/m2/s]
+    ! water flux due to sea ice and snow melt [km m-2 s-1]
     if (associated(IOB%seaice_melt)) &
       fluxes%seaice_melt(i,j) = kg_m2_s_conversion * G%mask2dT(i,j) * IOB%seaice_melt(i-i0,j-j0)
 
@@ -604,10 +604,10 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
         fluxes%heat_content_frunoff_glc(i,j) = US%W_m2_to_QRZ_T * IOB%hrofi_glc(i-i0,j-j0) * G%mask2dT(i,j)
     endif
 
-    ! sea ice fraction [nondim]
+    ! sea ice fraction [1]
     if (associated(IOB%ice_fraction) .and. associated(fluxes%ice_fraction)) &
       fluxes%ice_fraction(i,j) = G%mask2dT(i,j) * IOB%ice_fraction(i-i0,j-j0)
-    ! 10-m wind speed squared [m2/s2]
+    ! 10-m wind speed squared [m2 s-2]
     if (associated(IOB%u10_sqr) .and. associated(fluxes%u10_sqr)) &
       fluxes%u10_sqr(i,j) = US%m_to_L**2 * US%T_to_s**2 * G%mask2dT(i,j) * IOB%u10_sqr(i-i0,j-j0)
 

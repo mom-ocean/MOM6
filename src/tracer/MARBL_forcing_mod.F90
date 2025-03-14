@@ -195,14 +195,18 @@ contains
                                                                            !! [kg m-2 s-1]
     real, dimension(:,:),   pointer, intent(in)    :: seaice_bc_flux       !< sea ice black carbon flux from IOB
                                                                            !! [kg m-2 s-1]
-    real, dimension(:,:),   pointer, intent(in)    :: afracr               !< open ocean fraction
+    real, dimension(:,:),   pointer, intent(in)    :: afracr               !< open ocean fraction [1]
     real, dimension(:,:),   pointer, intent(in)    :: nhx_dep              !< NHx flux from atmosphere [kg m-2 s-1]
     real, dimension(:,:),   pointer, intent(in)    :: noy_dep              !< NOy flux from atmosphere [kg m-2 s-1]
     real, dimension(:,:),   pointer, intent(in)    :: atm_co2_prog         !< Prognostic atmospheric CO2 concentration
+                                                                           !! [ppm]
     real, dimension(:,:),   pointer, intent(in)    :: atm_co2_diag         !< Diagnostic atmospheric CO2 concentration
+                                                                           !! [ppm]
     real, dimension(:,:),   pointer, intent(in)    :: swnet_afracr         !< shortwave flux * open ocean fraction
-    real, dimension(:,:,:), pointer, intent(in)    :: ifrac_n              !< per-category ice fraction
+                                                                           !! [W m-2]
+    real, dimension(:,:,:), pointer, intent(in)    :: ifrac_n              !< per-category ice fraction [1]
     real, dimension(:,:,:), pointer, intent(in)    :: swpen_ifrac_n        !< per-category shortwave flux * ice fraction
+                                                                           !! [W m-2]
     type(time_type),                 intent(in)    :: Time                 !< The time of the fluxes, used for
                                                                            !! interpolating the salinity to the
                                                                            !! right time, when it is being

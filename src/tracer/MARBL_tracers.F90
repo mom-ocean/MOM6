@@ -62,7 +62,7 @@ public MARBL_tracers_stock, MARBL_tracers_get, MARBL_tracers_end
 !! Allocate exactly one of field_[23]d
 type :: temp_MARBL_diag
   integer :: id !< index into MOM diagnostic structure
-  real, allocatable :: field_2d(:,:) !< memory for 2D field
+  real, allocatable :: field_2d(:,:)   !< memory for 2D field
   real, allocatable :: field_3d(:,:,:) !< memory for 3D field
 end type temp_MARBL_diag
 
@@ -92,7 +92,7 @@ type :: saved_state_for_MARBL_type
   character(len=200) :: short_name !< name of variable being saved
   character(len=200) :: file_varname !< name of variable in restart file
   character(len=200) :: units !< variable units
-  real, pointer :: field_2d(:,:) => NULL() !< memory for 2D field
+  real, pointer :: field_2d(:,:) => NULL()   !< memory for 2D field
   real, pointer :: field_3d(:,:,:) => NULL() !< memory for 3D field
 end type saved_state_for_MARBL_type
 
@@ -101,7 +101,8 @@ type(MARBL_interface_class) :: MARBL_instances
 
 !> Pointer to tracer concentration and to tracer_type in tracer registry
 type, private :: MARBL_tracer_data
-  real, pointer              :: tr(:,:,:) => NULL() !< The array of tracers used in this subroutine, in g m-3?
+  real, pointer              :: tr(:,:,:) => NULL() !< Array of tracers used in this subroutine [CU ~> conc]
+                                                    !! (ALK tracers use meq m-3 instead of mmol m-3)
   type(tracer_type), pointer :: tr_ptr    => NULL() !< pointer to tracer inside Tr_reg
 end type MARBL_tracer_data
 
@@ -118,7 +119,7 @@ type, public :: MARBL_tracers_CS ; private
   logical :: use_ice_category_fields    !< Forcing will include multiple ice categories for ice_frac and shortwave
   logical :: request_Chl_from_MARBL     !< MARBL can provide Chl to use in set_pen_shortwave()
   integer :: ice_ncat                   !< Number of ice categories when use_ice_category_fields = True
-  real    :: IC_min                     !< Minimum value for tracer initial conditions
+  real    :: IC_min                     !< Minimum value for tracer initial conditions [CU ~> conc]
   character(len=200) :: IC_file !< The file in which the age-tracer initial values cam be found.
   logical :: ongrid                     !< True if IC_file is already interpolated to MOM grid
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
@@ -139,6 +140,7 @@ type, public :: MARBL_tracers_CS ; private
   character(len=200) :: feventflux_file  !< name of [netCDF] file containing iron vent flux
   type(forcing_timeseries_dataset) :: d14c_dataset(3) !< File and time axis information for d14c forcing
   real, dimension(3) :: d14c_bands       !< forcing is organized into bands: [30 N, 90 N]; [30 S, 30 N]; [90 S, 30 S]
+                                         !! This variable contains D14C for each band [CU ~> conc]
   integer :: d14c_id                     !< id for diagnostic field with d14c forcing
   logical :: read_riv_fluxes             !< If true, use river fluxes supplied from an input file.
                                          !! This is temporary, we will always read river fluxes
@@ -202,9 +204,11 @@ type, public :: MARBL_tracers_CS ; private
                                            !! (dims: i, j, tracer) [conc Z T-1 ~> conc m s-1]
   real, pointer :: SFO(:,:,:) => NULL()    !< surface flux output returned from MARBL for use in GCM
                                            !! e.g. CO2 flux to pass to atmosphere (dims: i, j, num_sfo)
+                                           !! Units vary based on index of num_sfo dimension
   real, pointer :: ITO(:,:,:,:) => NULL()  !< interior tendency output returned from MARBL for use in GCM
                                            !! e.g. total chlorophyll to use in shortwave penetration
                                            !! (dims: i, j, k, num_ito)
+                                           !! Units vary based on index of num_ito dimension
 
   integer :: u10_sqr_ind   !< index of MARBL forcing field array to copy 10-m wind (squared) into
   integer :: sss_ind       !< index of MARBL forcing field array to copy sea surface salinity into
@@ -267,11 +271,12 @@ type, public :: MARBL_tracers_CS ; private
 
   !> Memory for storing river fluxes, tracer restoring fields, and abiotic forcing
   real, allocatable :: d14c(:,:)         !< d14c forcing for abiotic DIC and carbon isotope tracer modules
+                                         !! [mmol m-3 s-1]
   real, allocatable :: RIV_FLUXES(:,:,:) !< river flux forcing for applyTracerBoundaryFluxesInOut
                                          !! (needs to be time-integrated when passed to function!)
                                          !! (dims: i, j, tracer) [conc m s-1]
   character(len=15), allocatable :: tracer_restoring_varname(:) !< name of variable being restored
-  real, allocatable :: I_tau(:,:,:)  !< inverse restoring timescale for marbl tracers (dims: i, j, k) [1/s]
+  real, allocatable :: I_tau(:,:,:)  !< inverse restoring timescale for marbl tracers (dims: i, j, k) [s-1]
   real, allocatable, dimension(:,:,:,:) :: restoring_in  !< Restoring fields read from file
                                                          !! (dims: i, j, restoring_nz, restoring_cnt) [tracer units]
 
@@ -282,19 +287,21 @@ type, public :: MARBL_tracers_CS ; private
   integer :: total_Chl_ind !< index to total chlorophyll interior tendency output
 
   ! TODO: create generic 3D forcing input type to read z coordinate + values
-  real    :: fesedflux_scale_factor !< scale factor for iron sediment flux
+  real    :: fesedflux_scale_factor !< scale factor for iron sediment flux [mmol umol-1 d s-1]
   integer :: fesedflux_nz  !< number of levels in iron sediment flux file
   real, allocatable, dimension(:,:,:) :: fesedflux_in  !< Field to read iron sediment flux into [conc m s-1]
   real, allocatable, dimension(:,:,:) :: feventflux_in  !< Field to read iron vent flux into [conc m s-1]
   real, allocatable, dimension(:) :: &
     fesedflux_z_edges  !< The depths of the cell interfaces in the input data [Z ~> m]
-  ! TODO: this thickness does not need to be 3D, but that's a problem for future Mike
+  ! TODO: this thickness does not need to be 3D, but it is easier to make thickness 0
+  !       below the surface on a per-column basis (could save memory by storing 1D
+  !       thickness from file and then computing a second 1D thickness array in (i,j) loop)
   real, allocatable, dimension(:,:,:) :: &
     fesedflux_dz  !< The thickness of the cell layers in the input data [H ~> m]
 end type MARBL_tracers_CS
 
 ! Module parameters
-real, parameter :: atm_per_Pa = 1./101325.  !< convert from Pa -> atm
+real, parameter :: atm_per_Pa = 1./101325.  !< convert from Pa -> atm [atm Pa-1]
 
 contains
 
@@ -573,7 +580,8 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
   character(len=128) :: desc_name ! The variable's descriptor.
   character(len=48)  :: units ! The variable's units.
   character(len=96)  :: file_name ! file name for d14c (looped over three bands)
-  real, pointer :: tr_ptr(:,:,:) => NULL()
+  real, pointer :: tr_ptr(:,:,:) => NULL() ! Pointer to 3D tracer array [CU ~> conc]
+                                           ! (ALK tracers use meq m-3 instead of mmol m-3)
   integer :: forcing_file_start_year
   integer :: forcing_file_end_year
   integer :: forcing_file_data_ref_year
@@ -640,7 +648,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
     ! ** Scale factor for FESEDFLUX
     call get_param(param_file, mdl, "MARBL_FESEDFLUX_SCALE_FACTOR", CS%fesedflux_scale_factor, &
         "Conversion factor between FESEDFLUX file units and MARBL units", &
-        units="umol m-1 d-1 -> mmol m-2 s-1", default=0.001/86400.)
+        units="umol m-2 d-1 -> mmol m-2 s-1", default=0.001/86400.)
 
     ! ** River fluxes
     call get_param(param_file, mdl, "READ_RIV_FLUXES", CS%read_riv_fluxes, &
@@ -868,7 +876,7 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
                                   ! years m3 s-1 or years kg s-1.
   character(len=48) :: tracer_name
   logical :: fesedflux_has_edges, fesedflux_use_missing
-  real    :: fesedflux_missing
+  real    :: fesedflux_missing  ! required argument for read_Z_edges() [CU ~> conc]
   integer :: i, j, k, kbot, m, diag_size
 
   if (.not.associated(CS)) return
@@ -1288,9 +1296,9 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
                                               !! call to register_MARBL_tracers.
   type(thermo_var_ptrs),   intent(in) :: tv   !< A structure pointing to various thermodynamic variables
   type(KPP_CS),  optional, pointer    :: KPP_CSp  !< KPP control structure
-  real,          optional, intent(in) :: nonLocalTrans(:,:,:) !< Non-local transport [nondim]
+  real,          optional, intent(in) :: nonLocalTrans(:,:,:) !< Non-local transport [1]
   real,          optional, intent(in) :: evap_CFL_limit !< Limit on the fraction of the water that can
-                                              !! be fluxed out of the top layer in a timestep [nondim]
+                                              !! be fluxed out of the top layer in a timestep [1]
   real,          optional, intent(in) :: minimum_forcing_depth !< The smallest depth over which
                                               !! fluxes can be applied [m]
 
@@ -1300,15 +1308,12 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
                                                      ! [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1].
   real, dimension(SZI_(G),SZJ_(G)) :: flux_from_salt_flux ! Surface tracer flux from salt flux
                                                           ! [conc Z T-1 ~> conc m s-1].
-  real, dimension(SZI_(G),SZJ_(G)) :: ref_mask ! Mask for 2D MARBL diags using ref_depth
-  real, dimension(SZI_(G),SZJ_(G)) :: riv_flux_loc ! Local copy of CS%RIV_FLUXES*dt
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified
-  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: bot_flux_to_tend
-  real :: cum_bftt_dz     ! sum of bot_flux_to_tend * dz from the bottom layer to current layer
-  real :: sfc_val  ! The surface value for the tracers.
-  real :: Isecs_per_year  ! The number of seconds in a year.
-  real :: year            ! The time in years.
-  integer :: secs, days   ! Integer components of the time type.
+  real, dimension(SZI_(G),SZJ_(G)) :: ref_mask ! Mask for 2D MARBL diags using ref_depth [1]
+  real, dimension(SZI_(G),SZJ_(G)) :: riv_flux_loc ! Local copy of CS%RIV_FLUXES*dt [mmol m-2 ~> conc H]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: h_work ! Used so that h can be modified [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: bot_flux_to_tend  ! Conversion factor for bottom tlux -> tend
+                                                                ! [Z-1 ~> m-1]
+  real :: cum_bftt_dz     ! sum of bot_flux_to_tend * dz from the bottom layer to current layer [1]
   real, dimension(0:GV%ke) :: zi  ! z-coordinate interface depth [Z ~> m]
   real, dimension(GV%ke) :: zc  ! z-coordinate layer center depth [Z ~> m]
   real, dimension(GV%ke) :: dz  ! z-coordinate cell thickness [H ~> m]
@@ -1835,12 +1840,12 @@ subroutine MARBL_tracers_set_forcing(day_start, G, CS)
   type(ocean_grid_type),   intent(in)    :: G         !< The ocean's grid structure.
   type(MARBL_tracers_CS),  pointer       :: CS        !< The control structure returned by a
 
-  ! Fraction of river nutrients in refractory pools
-  real, parameter :: DONriv_refract = 0.1
-  real, parameter :: DOCriv_refract = 0.2
-  real, parameter :: DOPriv_refract = 0.025
+  real, parameter :: DONriv_refract = 0.1    ! Fraction of DON river nutrients in refractory pools [1]
+  real, parameter :: DOCriv_refract = 0.2    ! Fraction of DOC river nutrients in refractory pools [1]
+  real, parameter :: DOPriv_refract = 0.025  ! Fraction of DOP river nutrients in refractory pools [1]
 
   real, dimension(SZI_(G),SZJ_(G)) :: riv_flux_in  !< The field read in from forcing file with time dimension
+                                                   !! [mmol m-2 s-1]
   type(time_type) :: Time_forcing  !< For reading river flux fields, we use a modified version of Time
   integer :: i, j, k, is, ie, js, je, m
 
