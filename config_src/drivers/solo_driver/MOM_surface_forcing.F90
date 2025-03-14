@@ -1562,13 +1562,20 @@ subroutine MARBL_forcing_from_data_override(fluxes, day, G, US, CS)
   ! Local variables
   real, pointer, dimension(:,:) :: atm_co2_prog         =>NULL() !< Prognostic atmospheric CO2 concentration [ppm]
   real, pointer, dimension(:,:) :: atm_co2_diag         =>NULL() !< Diagnostic atmospheric CO2 concentration [ppm]
-  real, pointer, dimension(:,:) :: atm_fine_dust_flux   =>NULL() !< Fine dust flux from atmosphere [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: atm_coarse_dust_flux =>NULL() !< Coarse dust flux from atmosphere [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: seaice_dust_flux     =>NULL() !< Dust flux from seaice [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: atm_bc_flux          =>NULL() !< Black carbon flux from atmosphere [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: seaice_bc_flux       =>NULL() !< Black carbon flux from seaice [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: nhx_dep              =>NULL() !< Nitrogen deposition [R Z T-1 ~> kg m-2 s-1]
-  real, pointer, dimension(:,:) :: noy_dep              =>NULL() !< Nitrogen deposition [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_fine_dust_flux   =>NULL() !< Fine dust flux from atmosphere
+                                                                 !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_coarse_dust_flux =>NULL() !< Coarse dust flux from atmosphere
+                                                                 !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_dust_flux     =>NULL() !< Dust flux from seaice
+                                                                 !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: atm_bc_flux          =>NULL() !< Black carbon flux from atmosphere
+                                                                 !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: seaice_bc_flux       =>NULL() !< Black carbon flux from seaice
+                                                                 !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: nhx_dep              =>NULL() !< Nitrogen deposition
+                                                                 !! [R Z T-1 ~> kg m-2 s-1]
+  real, pointer, dimension(:,:) :: noy_dep              =>NULL() !< Nitrogen deposition
+                                                                 !! [R Z T-1 ~> kg m-2 s-1]
   integer :: isc, iec, jsc, jec
 
   ! Necessary null pointers for arguments to convert_driver_fields_to_forcings()

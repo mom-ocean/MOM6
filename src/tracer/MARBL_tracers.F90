@@ -582,9 +582,9 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
   logical :: register_MARBL_tracers
   ! read_Z_edges() has several mandatory arguments that we do not use given our expectation
   ! of how the file being read in was created
-  logical :: Z_edges_has_edges   !< required argument for read_Z_edges()
-  logical :: Z_edges_use_missing !< required argument for read_Z_edges()
-  real :: Z_edges_missing        !< required argument for read_Z_edges() [CU ~> conc]
+  logical :: Z_edges_has_edges
+  logical :: Z_edges_use_missing
+  real :: Z_edges_missing        ! required argument for read_Z_edges() [CU ~> conc]
   integer :: isd, ied, jsd, jed, nz, m, k, kbot
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
