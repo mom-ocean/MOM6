@@ -233,8 +233,8 @@ type, public :: forcing
     iron_flux => NULL()                !< Flux of dust into the ocean [conc Z T-1 ~> conc m s-1]
 
   real, pointer, dimension(:,:,:) :: &
-    fracr_cat   => NULL(),           & !< per-category ice fraction
-    qsw_cat     => NULL()              !< per-category shortwave
+    fracr_cat   => NULL(),           & !< per-category ice fraction [nondim]
+    qsw_cat     => NULL()              !< per-category shortwave [Q R Z T-1 ~> W m-2]
 
   real, pointer, dimension(:,:) :: &
     lamult => NULL()            !< Langmuir enhancement factor [nondim]

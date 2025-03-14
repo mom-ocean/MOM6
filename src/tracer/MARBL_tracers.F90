@@ -580,9 +580,11 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
   integer :: forcing_file_model_ref_year
   integer :: forcing_file_forcing_year
   logical :: register_MARBL_tracers
-  logical :: restoring_has_edges, restoring_use_missing
-  logical :: restoring_timescale_has_edges, restoring_timescale_use_missing
-  real :: restoring_missing, restoring_timescale_missing
+  ! read_Z_edges() has several mandatory arguments that we do not use given our expectation
+  ! of how the file being read in was created
+  logical :: Z_edges_has_edges   !< required argument for read_Z_edges()
+  logical :: Z_edges_use_missing !< required argument for read_Z_edges()
+  real :: Z_edges_missing        !< required argument for read_Z_edges() [CU ~> conc]
   integer :: isd, ied, jsd, jed, nz, m, k, kbot
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
@@ -737,7 +739,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
 
       ! Set up array for thicknesses in restoring file
       call read_Z_edges(CS%restoring_file, "PO4", CS%restoring_z_edges, CS%restoring_nz, &
-          restoring_has_edges, restoring_use_missing, restoring_missing, scale=US%m_to_Z, &
+          Z_edges_has_edges, Z_edges_use_missing, Z_edges_missing, scale=US%m_to_Z, &
           missing_scale=1.0)
       allocate(CS%restoring_dz(CS%restoring_nz))
       do k=CS%restoring_nz,1,-1
@@ -756,8 +758,7 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
               default="I_TAU")
           ! Set up array for thicknesses in restoring timescale file
           call read_Z_edges(CS%restoring_I_tau_file, CS%restoring_I_tau_var_name, CS%restoring_timescale_z_edges, &
-              CS%restoring_timescale_nz, restoring_timescale_has_edges, &
-              restoring_timescale_use_missing, restoring_timescale_missing, scale=US%m_to_Z, &
+              CS%restoring_timescale_nz, Z_edges_has_edges, Z_edges_use_missing, Z_edges_missing, scale=US%m_to_Z, &
               missing_scale=1.0)
           allocate(CS%restoring_timescale_dz(CS%restoring_timescale_nz))
           do k=CS%restoring_timescale_nz,1,-1
@@ -1044,7 +1045,7 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
           day, trim(longname), trim(units))
       write(name, "(A,I0)") "QSW_CAT_", m
       write(longname, "(A,I0)") "Shortwave penetrating through ice category ", m
-      units = "TODO: set units"
+      units = "W m-2"
       CS%qsw_cat_id(m) = register_diag_field("ocean_model", trim(name), &
           diag%axesT1, & ! T => tracer grid? 1 => no vertical grid
           day, trim(longname), trim(units))
@@ -1629,7 +1630,7 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
         ! second index is num_subcols, not depth
         if (CS%use_ice_category_fields) then
           MARBL_instances%interior_tendency_forcings(CS%surf_shortwave_ind)%field_1d(1,:) = &
-              fluxes%qsw_cat(i,j,:)
+              fluxes%qsw_cat(i,j,:) * US%QRZ_T_to_W_m2
         else
           MARBL_instances%interior_tendency_forcings(CS%surf_shortwave_ind)%field_1d(1,1) = &
               fluxes%sw(i,j) * US%QRZ_T_to_W_m2
