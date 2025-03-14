@@ -669,12 +669,12 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
 
           du_lim = 0.499*((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k)))
-          if (du_max_CFL(I,j) * visc_rem(I,k) > du_lim) &
-            du_max_CFL(I,j) = du_lim / visc_rem(I,k)
+          if (du_max_CFL(I,j) * visc_rem_u_tmp(I,j,k) > du_lim) &
+            du_max_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
 
           du_lim = 0.499*((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k)))
-          if (du_min_CFL(I,j) * visc_rem(I,k) < du_lim) &
-            du_min_CFL(I,j) = du_lim / visc_rem(I,k)
+          if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < du_lim) &
+            du_min_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
         enddo ; enddo ; enddo
       else
         do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
@@ -683,10 +683,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
           else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
 
-          if (du_max_CFL(I,j) * visc_rem(I,k) > dx_W*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
-            du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem(I,k)
-          if (du_min_CFL(I,j) * visc_rem(I,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
-            du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem(I,k)
+          if (du_max_CFL(I,j) * visc_rem_u_tmp(I,j,k) > dx_W*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
+            du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem_u_tmp(I,j,k)
+          if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
+            du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem_u_tmp(I,j,k)
         enddo ; enddo ; enddo
       endif
     else
