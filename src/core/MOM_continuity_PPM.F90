@@ -623,7 +623,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   ! Set uh and duhdu.
   call zonal_flux_layer(u, h_in, h_W, h_E, &
                         uh, duhdu, visc_rem_u_tmp, &
-                        dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, gv)
+                        dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC)
   
   ! untested!
   if (local_specified_BC) then
@@ -900,7 +900,7 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
 
   ! This sets uh and duhdu.
   call zonal_flux_layer(u, h_in, h_W, h_E, uh, duhdu, ones, &
-                        dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, GV)
+                        dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC)
   
   do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
     if (OBC_in_row(j) .and. OBC%segnum_u(I,j) /= 0) then
@@ -919,8 +919,8 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
 end subroutine zonal_BT_mass_flux
 
 !> Evaluates the zonal mass or volume fluxes in a layer.
-subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, &
-                            ish, ieh, jsh, jeh, nz, do_I, vol_CFL, por_face_areaU, OBC, GV)
+subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, GV, US, &
+                            ish, ieh, jsh, jeh, nz, do_I, vol_CFL, por_face_areaU, OBC)
   type(ocean_grid_type),    intent(in)    :: G        !< Ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV       !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -1254,7 +1254,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
       do I=ish-1,ieh ; u_new(I,j,k) = u(I,j,k) + du(I,j) * visc_rem(I,j,k) ; enddo ; enddo ; enddo
       call zonal_flux_layer(u_new, h_in, h_W, h_E, &
                             uh_aux, duhdu, visc_rem, &
-                            dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC, GV)
+                            dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC)
     endif
 
     if (itt < max_itts) then
@@ -1411,11 +1411,11 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   endif ; enddo ; enddo ; enddo
 
   call zonal_flux_layer(u_0, h_in, h_W, h_E, uh_0, duhdu_0, &
-                        visc_rem, dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, gv=gv)
+                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU)
   call zonal_flux_layer(u_L, h_in, h_W, h_E, uh_L, duhdu_L, &
-                        visc_rem, dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, gv=gv)
+                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU)
   call zonal_flux_layer(u_R, h_in, h_W, h_E, uh_R, duhdu_R, &
-                        visc_rem, dt, G, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, gv=gv)
+                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU)
 
   do k=1,nz ; do j=jsh,jeh
     do I=ish-1,ieh ; if (do_I(I,j)) then
