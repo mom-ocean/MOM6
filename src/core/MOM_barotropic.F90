@@ -653,14 +653,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! End of wide-sized variables.
 
   real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
-    uhbt_prev, &    ! Previous transport stored for OBCs [L2 H T-1 ~> m3 s-1]
     ubt_int_prev, & ! Previous value of time-integrated velocity stored for OBCs [L ~> m]
-    uhbt_int_prev   ! Previous value of time-integrated transport stored for OBCs [L2 H ~> m3]
+    uhbt_int_prev   ! Previous value of time-integrated transport stored for integral_BT_cont [L2 H ~> m3]
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
-    vbt_sum_prev, vbt_wtd_prev, & ! Previous velocities stored for OBCs [L T-1 ~> m s-1]
-    vhbt_prev, vhbt_sum_prev, & ! Previous transports stored for OBCs [L2 H T-1 ~> m3 s-1]
     vbt_int_prev, & ! Previous value of time-integrated velocity stored for OBCs [L ~> m]
-    vhbt_int_prev   ! Previous value of time-integrated transport stored for OBCs [L2 H ~> m3]
+    vhbt_int_prev   ! Previous value of time-integrated transport stored for integral_BT_cont [L2 H ~> m3]
   real :: visc_rem    ! A work variable that may equal visc_rem_[uv] [nondim]
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: dtbt        ! The barotropic time step [T ~> s].
@@ -1877,53 +1874,78 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
-      if (CS%BT_OBC%apply_v_OBCs) &  ! Store velocities and transports to be reset along open boundaries.
-        call store_v_for_OBCs(vbt, vhbt, vbt_prev, vhbt_prev, isv-1, iev+1, jsv-1, jev, CS)
-      call btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_int, vbt_trans, &
-                           Cor_v, PFv, isv-1, iev+1, jsv-1, jev, &
-                           amer, bmer, cmer, dmer, &
-                           bt_rem_v, BT_force_v, vhbt0, Datv, &
-                           BTCL_v, vbt_prev, vhbt_prev, vhbt_int_prev, Cor_ref_v, Rayleigh_v, &
+      call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
+                           isv-1, iev+1, jsv-1, jev, amer, bmer, cmer, dmer, &
+                           bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
                            eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
-                           wt_accel(n), trans_wt1, trans_wt2, &
-                           G, GV, US, CS, OBC, integral_BT_cont, use_BT_cont)
+                           wt_accel(n), G, US, CS, OBC)
 
       ! Now update the zonal velocity.
-      if (CS%BT_OBC%apply_u_OBCs) &  ! Store velocities and transports to be reset along open boundaries.
-        call store_u_for_OBCs(ubt, uhbt, ubt_prev, uhbt_prev, isv-1, iev, jsv, jev, CS)
-      call btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_int, ubt_trans, &
-                           Cor_u, PFu, isv-1, iev, jsv, jev, &
-                           azon, bzon, czon, dzon, &
-                           bt_rem_u, BT_force_u, uhbt0, Datu, &
-                           BTCL_u, ubt_prev, uhbt_prev, uhbt_int_prev, Cor_ref_u, Rayleigh_u, &
+      call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
+                           isv-1, iev, jsv, jev, azon, bzon, czon, dzon, &
+                           bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
-                           wt_accel(n), trans_wt1, trans_wt2, &
-                           G, GV, US, CS, OBC, integral_BT_cont, use_BT_cont)
+                           wt_accel(n), G, US, CS, OBC)
 
     else
       ! On even steps, update u first.
-      if (CS%BT_OBC%apply_u_OBCs) &  ! Store velocities and transports to be reset along open boundaries.
-        call store_u_for_OBCs(ubt, uhbt, ubt_prev, uhbt_prev, isv-1, iev, jsv-1, jev+1, CS)
-      call btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_int, ubt_trans, &
-                           Cor_u, PFu, isv-1, iev, jsv-1, jev+1, &
-                           azon, bzon, czon, dzon, &
-                           bt_rem_u, BT_force_u, uhbt0, Datu, &
-                           BTCL_u, ubt_prev, uhbt_prev, uhbt_int_prev, Cor_ref_u, Rayleigh_u, &
+      call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
+                           isv-1, iev, jsv-1, jev+1, azon, bzon, czon, dzon, &
+                           bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
-                           wt_accel(n), trans_wt1, trans_wt2, &
-                           G, GV, US, CS, OBC, integral_BT_cont, use_BT_cont)
+                           wt_accel(n), G, US, CS, OBC)
       ! Now update the meridional velocity.
-      if (CS%BT_OBC%apply_v_OBCs) &  ! Store velocities and transports to be reset along open boundaries.
-        call store_v_for_OBCs(vbt, vhbt, vbt_prev, vhbt_prev, isv, iev, jsv-1, jev, CS)
-      call btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_int, vbt_trans, &
-                           Cor_v, PFv, isv, iev, jsv-1, jev, &
-                           amer, bmer, cmer, dmer, &
-                           bt_rem_v, BT_force_v, vhbt0, Datv, &
-                           BTCL_v, vbt_prev, vhbt_prev, vhbt_int_prev, Cor_ref_v, Rayleigh_v, &
+      call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
+                           isv, iev, jsv-1, jev, amer, bmer, cmer, dmer, &
+                           bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
                            eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
-                           wt_accel(n), trans_wt1, trans_wt2, &
-                           G, GV, US, CS, OBC, integral_BT_cont, use_BT_cont, &
+                           wt_accel(n), G, US, CS, OBC, &
                            Cor_bracket_bug=CS%use_old_coriolis_bracket_bug)
+    endif
+
+    ! Determine the transports based on the updated velocities when no OBCs are applied
+    if (integral_BT_cont) then
+      !$OMP do schedule(static)
+      do j=jsv,jev ; do I=isv-1,iev
+        ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*ubt_prev(I,j)
+        ubt_int(I,j) = ubt_int(I,j) + dtbt * ubt_trans(I,j)
+        uhbt_int(I,j) = find_uhbt(ubt_int(I,j), BTCL_u(I,j)) + n*dtbt*uhbt0(I,j)
+        ! Estimate the mass flux within a single timestep to take the filtered average.
+        uhbt(I,j) = (uhbt_int(I,j) - uhbt_int_prev(I,j)) * Idtbt
+      enddo ; enddo
+      !$OMP end do nowait
+      !$OMP do schedule(static)
+      do J=jsv-1,jev ; do i=isv,iev
+        vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vbt_prev(i,J)
+        vbt_int(i,J) = vbt_int(i,J) + dtbt * vbt_trans(i,J)
+        vhbt_int(i,J) = find_vhbt(vbt_int(i,J), BTCL_v(i,J)) + n*dtbt*vhbt0(i,J)
+        ! Estimate the mass flux within a single timestep to take the filtered average.
+        vhbt(i,J) = (vhbt_int(i,J) - vhbt_int_prev(i,J)) * Idtbt
+      enddo ; enddo
+    elseif (use_BT_cont) then
+      !$OMP do schedule(static)
+      do j=jsv,jev ; do I=isv-1,iev
+        ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*ubt_prev(I,j)
+        uhbt(I,j) = find_uhbt(ubt_trans(I,j), BTCL_u(I,j)) + uhbt0(I,j)
+      enddo ; enddo
+      !$OMP end do nowait
+      !$OMP do schedule(static)
+      do J=jsv-1,jev ; do i=isv,iev
+        vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vbt_prev(i,J)
+        vhbt(i,J) = find_vhbt(vbt_trans(i,J), BTCL_v(i,J)) + vhbt0(i,J)
+      enddo ; enddo
+    else
+      !$OMP do schedule(static)
+      do j=jsv,jev ; do I=isv-1,iev
+        ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*ubt_prev(I,j)
+        uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
+      enddo ; enddo
+      !$OMP end do nowait
+      !$OMP do schedule(static)
+      do J=jsv-1,jev ; do i=isv,iev
+        vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vbt_prev(i,J)
+        vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
+      enddo ; enddo
     endif
 
     ! This might need to be moved outside of the OMP do loop directives.
@@ -2720,16 +2742,12 @@ subroutine btloop_eta_predictor(n, dtbt, ubt, vbt, eta, ubt_int, vbt_int, uhbt, 
 end subroutine btloop_eta_predictor
 
 !> Store the existing zonal velocities and trasports for use with open boundary conditions.
-subroutine store_u_for_OBCs(ubt, uhbt, ubt_prev, uhbt_prev, Is_u, Ie_u, js_u, je_u, CS)
+subroutine store_u_for_OBCs(ubt, ubt_prev, Is_u, Ie_u, js_u, je_u, CS)
   type(barotropic_CS),     intent(inout) :: CS   !< Barotropic control structure
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     ubt           !< The zonal barotropic velocity [L T-1 ~> m s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
-    uhbt          !< The zonal barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
     ubt_prev      !< The starting value of ubt in a barotropic step [L T-1 ~> m s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    uhbt_prev     !< The starting value of uhbt, stored for OBCs [L2 H T-1 ~> m3 s-1]
   integer, intent(in)  :: Is_u !< The starting i-index of the range of u-point values to store
   integer, intent(in)  :: Ie_u !< The ending i-index of the range of u-point values to store
   integer, intent(in)  :: js_u !< The starting j-index of the range of u-point values to store
@@ -2741,24 +2759,16 @@ subroutine store_u_for_OBCs(ubt, uhbt, ubt_prev, uhbt_prev, Is_u, Ie_u, js_u, je
   do j=js_u,je_u ; do I=Is_u-1,Ie_u+1
     ubt_prev(I,j) = ubt(I,j)
   enddo ; enddo
-  !$OMP do
-  do j=js_u,je_u ; do I=Is_u,Ie_u
-    uhbt_prev(I,j) = uhbt(I,j)
-  enddo ; enddo
 
 end subroutine store_u_for_OBCs
 
 !> Store the existing meridional velocities and trasports for use with open boundary conditions.
-subroutine store_v_for_OBCs(vbt, vhbt, vbt_prev, vhbt_prev, is_v, ie_v, Js_v, Je_v, CS)
+subroutine store_v_for_OBCs(vbt, vbt_prev, is_v, ie_v, Js_v, Je_v, CS)
   type(barotropic_CS),     intent(inout) :: CS   !< Barotropic control structure
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     vbt           !< The zonal barotropic velocity [L T-1 ~> m s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vhbt          !< The meridional barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
     vbt_prev      !< The starting value of vbt in a barotropic step [L T-1 ~> m s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vhbt_prev     !< The starting value of vhbt, stored for OBCs [L2 H T-1 ~> m3 s-1]
   integer, intent(in)  :: is_v !< The starting i-index of the range of v-point values to store
   integer, intent(in)  :: ie_v !< The ending i-index of the range of v-point values to store
   integer, intent(in)  :: Js_v !< The starting j-index of the range of v-point values to store
@@ -2770,37 +2780,48 @@ subroutine store_v_for_OBCs(vbt, vhbt, vbt_prev, vhbt_prev, is_v, ie_v, Js_v, Je
   do J=Js_v-1,Je_v+1 ; do i=is_v,ie_v
     vbt_prev(i,J) = vbt(i,J)
   enddo ; enddo
-  !$OMP do
-  do J=Js_v,Je_v ; do i=is_v,ie_v
-    vhbt_prev(i,J) = vhbt(i,J)
-  enddo ; enddo
 
 end subroutine store_v_for_OBCs
 
 !> Update meridional velocity.
-subroutine btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_int, vbt_trans, &
+subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
                            Cor_v, PFv, is_v, ie_v, Js_v, Je_v, amer, bmer, cmer, dmer, &
-                           bt_rem_v, BT_force_v, vhbt0, Datv, &
-                           BTCL_v, vbt_prev, vhbt_prev, vhbt_int_prev, Cor_ref_v, Rayleigh_v, &
+                           bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
                            eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
-                           wt_accel_n, trans_wt1, trans_wt2, &
-                           G, GV, US, CS, OBC, integral_BT_cont, use_BT_cont, Cor_bracket_bug)
+                           wt_accel_n, G, US, CS, OBC, Cor_bracket_bug)
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
   type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
-  type(verticalGrid_type), intent(in)  :: GV      !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in)  :: US      !< A dimensional unit scaling type
-  type(ocean_OBC_type),    pointer     :: OBC     !< The open boundary condition structure.
-
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     ubt           !< The zonal barotropic velocity [L T-1 ~> m s-1].
-  type(local_BT_cont_v_type), dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    BTCL_v        !< A repackaged version of the v-point information in BT_cont.
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vbt_prev      !< The previous velocity, stored for OBCs  [L T-1 ~> m s-1]
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vhbt_prev     !< The previous transport, stored for OBCs [L2 H T-1 ~> m3 s-1]
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vhbt_int_prev !< Previous value of time-integrated transport stored for OBCs [L2 H ~> m3]
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    vbt           !< The meridional barotropic velocity [L T-1 ~> m s-1].
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    v_accel_bt    !< The difference between the meridional acceleration from the
+                  !! barotropic calculation and BT_force_v [L T-2 ~> m s-2].
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    Cor_v         !< The meridional Coriolis acceleration [L T-2 ~> m s-2]
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    PFv           !< The meridional pressure force acceleration [L T-2 ~> m s-2].
+  logical, optional, intent(in) :: Cor_bracket_bug !< If present and true, use an order of operations that is
+                  !! not bitwise rotationally symmetric in the meridional Coriolis term
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    amer          !< The term relating a zonal velocity anomoaly to its contribution to the
+                  !! Coriolis acceleration at the meridional velocity point to its northeast [T-1 ~> s-1]
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    bmer          !< The term relating a zonal velocity anomoaly to its contribution to the
+                  !! Coriolis acceleration at the meridional velocity point to its northwest [T-1 ~> s-1]
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    cmer          !< The term relating a zonal velocity anomoaly to its contribution to the
+                  !! Coriolis acceleration at the meridional velocity point to its southeast [T-1 ~> s-1]
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    dmer          !< The term relating a zonal velocity anomoaly to its contribution to the
+                  !! Coriolis acceleration at the meridional velocity point to its southwest [T-1 ~> s-1]
+  integer, intent(in)  :: is_v !< The starting i-index of the range of v-point values to calculate
+  integer, intent(in)  :: ie_v !< The ending i-index of the range of v-point values to calculate
+  integer, intent(in)  :: Js_v !< The starting j-index of the range of v-point values to calculate
+  integer, intent(in)  :: Je_v !< The ending j-index of the range of v-point values to calculate
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    vbt_prev      !< The previous velocity, stored for time-filtered transports and OBCs [L T-1 ~> m s-1]
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     bt_rem_v      !< The fraction of the barotropic meridional velocity that
                   !! remains after a time step, the rest being lost to bottom
@@ -2808,13 +2829,6 @@ subroutine btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_in
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     BT_force_v    !< The vertical average of all of the v-accelerations that are
                   !! not explicitly included in the barotropic equation [L T-2 ~> m s-2].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    vhbt0         !< The difference between the sum of the layer meridional
-                  !! thickness fluxes and the barotropic thickness flux using
-                  !! the same velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
-    Datv          !< Basin depth at v-velocity grid points times the x-grid
-                  !! spacing [H L ~> m2 or kg m-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     Cor_ref_v     !< The meridional barotropic Coriolis acceleration due
                   !! to the reference velocities [L T-2 ~> m s-2].
@@ -2840,62 +2854,20 @@ subroutine btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_in
                   !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
     p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2].
-  integer, intent(in)  :: n    !< The current step in loop of timesteps.
+!  integer, intent(in)  :: n    !< The current step in loop of timesteps.
   real,    intent(in) :: dgeo_de !< The constant of proportionality between geopotential and
                   !! sea surface height [nondim].  It is of order 1, but for stability this
                   !! may be made larger than the physical  problem would suggest.
   real,    intent(in) :: wt_accel_n  !< The raw or relative weights of each of the barotropic timesteps
                   !! in determining the average accelerations [nondim]
-  real,    intent(in) :: trans_wt1 !< The weight of the updated velocity used to compute ubt_trans [nondim]
-  real,    intent(in) :: trans_wt2 !< The weight of the previous velocity used to compute ubt_trans [nondim]
   real,    intent(in) :: dtbt !< The barotropic time step [T ~> s].
-  logical, intent(in) :: use_BT_cont !< If true, use the information in the BT_cont_type to determine
-                  !! barotropic transports as a function of the barotropic velocities.
-  logical, intent(in) :: integral_BT_cont !< If true, update the barotropic continuity equation directly
-                      !! from the initial condition using the time-integrated barotropic velocity.
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    amer          !< The term relating a zonal velocity anomoaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    bmer          !< The term relating a zonal velocity anomoaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    cmer          !< The term relating a zonal velocity anomoaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    dmer          !< The term relating a zonal velocity anomoaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southwest [T-1 ~> s-1]
-  integer, intent(in)  :: is_v !< The starting i-index of the range of v-point values to calculate
-  integer, intent(in)  :: ie_v !< The ending i-index of the range of v-point values to calculate
-  integer, intent(in)  :: Js_v !< The starting j-index of the range of v-point values to calculate
-  integer, intent(in)  :: Je_v !< The ending j-index of the range of v-point values to calculate
-
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vbt           !< The meridional barotropic velocity [L T-1 ~> m s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    v_accel_bt    !< The difference between the meridional acceleration from the
-                  !! barotropic calculation and BT_force_v [L T-2 ~> m s-2].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vhbt          !< The meridional barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vbt_int       !< The running time integral of vbt over the time steps [L ~> m].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vhbt_int      !< The running time integral of vhbt over the time steps [H L2  ~> m3].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vbt_trans     !< The latest value of vbt used for a transport [L T-1 ~> m s-1].
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    Cor_v         !< The meridional Coriolis acceleration [L T-2 ~> m s-2]
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    PFv           !< The meridional pressure force acceleration [L T-2 ~> m s-2].
-  logical, optional, intent(in) :: Cor_bracket_bug !< If present and true, use an order of operations that is
-                  !! not bitwise rotationally symmetric in the meridional Coriolis term
+  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
+  type(ocean_OBC_type),    pointer       :: OBC   !< The open boundary condition structure.
 
   ! Local variables
-  real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: Idtbt       ! The inverse of the barotropic time step [T-1 ~> s-1]
   logical :: use_bracket_bug
   integer :: i, j, k
-  integer :: l_seg
 
   Idtbt = 1.0 / dtbt
   use_bracket_bug = .false. ; if (present(Cor_bracket_bug)) use_bracket_bug = Cor_bracket_bug
@@ -2933,11 +2905,10 @@ subroutine btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_in
 
   !$OMP do schedule(static)
   do J=Js_v,Je_v ; do i=is_v,ie_v
-    vel_prev = vbt(i,J)
+    vbt_prev(i,J) = vbt(i,J)
     vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
          dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
     if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
-    vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vel_prev
   enddo ; enddo
   !$OMP end do nowait
 
@@ -2954,62 +2925,52 @@ subroutine btloop_update_v(n, dtbt, ubt, vbt, v_accel_bt, vhbt, vbt_int, vhbt_in
     enddo ; enddo
   endif
 
-  if (integral_BT_cont) then
-    !$OMP do schedule(static)
-    do J=Js_v,Je_v ; do i=is_v,ie_v
-      vbt_int(i,J) = vbt_int(i,J) + dtbt * vbt_trans(i,J)
-      vhbt_int(i,J) = find_vhbt(vbt_int(i,J), BTCL_v(i,J)) + n*dtbt*vhbt0(i,J)
-      ! Estimate the mass flux within a single timestep to take the filtered average.
-      vhbt(i,J) = (vhbt_int(i,J) - vhbt_int_prev(i,J)) * Idtbt
-    enddo ; enddo
-  elseif (use_BT_cont) then
-    !$OMP do schedule(static)
-    do J=Js_v,Je_v ; do i=is_v,ie_v
-      vhbt(i,J) = find_vhbt(vbt_trans(i,J), BTCL_v(i,J)) + vhbt0(i,J)
-    enddo ; enddo
-    !$OMP end do nowait
-  else
-    !$OMP do schedule(static)
-    do J=Js_v,Je_v ; do i=is_v,ie_v
-      vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
-    enddo ; enddo
-    !$OMP end do nowait
-  endif
-
   if (CS%BT_OBC%apply_v_OBCs) then  ! copy back the value for v-points on the boundary.
     !$OMP do schedule(static)
     do J=Js_v,Je_v ; do i=is_v,ie_v ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
       PFv(i,J) = 0.0
-      vbt(i,J) = vbt_prev(i,J) ; vhbt(i,J) = vhbt_prev(i,J)
+      vbt(i,J) = vbt_prev(i,J)
     endif ; enddo ; enddo
   endif
 
 end subroutine btloop_update_v
 
 !> Update zonal velocity.
-subroutine btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_int, ubt_trans, &
+subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
                            Cor_u, PFu, Is_u, Ie_u, js_u, je_u, azon, bzon, czon, dzon, &
-                           bt_rem_u, BT_force_u, uhbt0, Datu, &
-                           BTCL_u, ubt_prev, uhbt_prev, uhbt_int_prev, Cor_ref_u, Rayleigh_u, &
+                           bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
-                           wt_accel_n, trans_wt1, trans_wt2, &
-                           G, GV, US, CS, OBC, integral_BT_cont, use_BT_cont)
+                           wt_accel_n, G, US, CS, OBC)
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
   type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
-  type(verticalGrid_type), intent(in)  :: GV      !< The ocean's vertical grid structure.
-  type(unit_scale_type),   intent(in)  :: US      !< A dimensional unit scaling type
-  type(ocean_OBC_type),    pointer    :: OBC      !< The open boundary condition structure.
-
+  real,    intent(in) :: dtbt     !< The barotropic time step [T ~> s].
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    ubt           !< The zonal barotropic velocity [L T-1 ~> m s-1].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     vbt           !< The meridional barotropic velocity [L T-1 ~> m s-1].
-  type(local_BT_cont_u_type), dimension(SZIBW_(CS),SZJW_(CS)) :: &
-    BTCL_u        !< A repackaged version of the u-point information in BT_cont.
-  real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
-    ubt_prev      !< The previous velocity, stored for OBCs  [L T-1 ~> m s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
-    uhbt_prev     !< The previous transport, stored for OBCs [L2 H T-1 ~> m3 s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) :: &
-    uhbt_int_prev !< Previous value of time-integrated transport stored for OBCs [L2 H ~> m3]
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    u_accel_bt    !! The difference between the zonal acceleration from the
+                  !< barotropic calculation and BT_force_v [L T-2 ~> m s-2].
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    Cor_u         !< The anomalous zonal Coriolis acceleration [L T-2 ~> m s-2]
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    PFu           !< The anomalous zonal pressure force acceleration [L T-2 ~> m s-2].
+  integer, intent(in)  :: Is_u !< The starting i-index of the range of u-point values to calculate
+  integer, intent(in)  :: Ie_u !< The ending i-index of the range of u-point values to calculate
+  integer, intent(in)  :: js_u !< The starting j-index of the range of u-point values to calculate
+  integer, intent(in)  :: je_u !< The ending j-index of the range of u-point values to calculate
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    azon          !< The term giving the contribution to the Coriolis accelaration at a zonal
+                  !! velocty point from the meridional velocity anomaly to its southwest [T-1 ~> s-1]
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    bzon          !< The term giving the contribution to the Coriolis accelaration at a zonal
+                  !! velocty point from the meridional velocity anomaly to its southeast [T-1 ~> s-1]
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    czon          !< The term giving the contribution to the Coriolis accelaration at a zonal
+                  !! velocty point from the meridional velocity anomaly to its northwest [T-1 ~> s-1]
+  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
+    dzon          !< The term giving the contribution to the Coriolis accelaration at a zonal
+                  !! velocty point from the meridional velocity anomaly to its northeast [T-1 ~> s-1]
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     bt_rem_u      !< The fraction of the barotropic meridional velocity that
                   !! remains after a time step, the rest being lost to bottom
@@ -3017,13 +2978,8 @@ subroutine btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_in
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     BT_force_u    !< The vertical average of all of the v-accelerations that are
                   !! not explicitly included in the barotropic equation [L T-2 ~> m s-2].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
-    uhbt0         !< The difference between the sum of the layer meridional
-                  !! thickness fluxes and the barotropic thickness flux using
-                  !! the same velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
-    Datu          !< Basin depth at v-velocity grid points times the x-grid
-                  !! spacing [H L ~> m2 or kg m-1].
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    ubt_prev      !< The previous velocity, stored for time-filtered transports and OBCs  [L T-1 ~> m s-1]
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     Cor_ref_u     !< The meridional barotropic Coriolis acceleration due
                   !! to the reference velocities [L T-2 ~> m s-2].
@@ -3049,62 +3005,18 @@ subroutine btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_in
                   !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
     p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2].
-  integer, intent(in)  :: n    !< The current step in loop of timesteps.
   real,    intent(in) :: dgeo_de   !< The constant of proportionality between geopotential and
                   !! sea surface height [nondim].  It is of order 1, but for stability this may be
                   !! made larger than the physical problem would suggest.
   real,    intent(in) :: wt_accel_n  !< The raw or relative weights of each of the barotropic timesteps
                                   !! in determining the average accelerations [nondim]
-  real,    intent(in) :: trans_wt1 !< The weight of the updated velocity used to compute ubt_trans [nondim]
-  real,    intent(in) :: trans_wt2 !< The weight of the previous velocity used to compute ubt_trans [nondim]
-  real,    intent(in) :: dtbt     !< The barotropic time step [T ~> s].
-  logical, intent(in) :: use_BT_cont !< If true, use the information in the BT_cont_type to determine
-                  !! barotropic transports as a function of the barotropic velocities.
-  logical, intent(in) :: integral_BT_cont !< If true, update the barotropic continuity equation directly
-                      !! from the initial condition using the time-integrated barotropic velocity.
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    azon          !< The term giving the contribution to the Coriolis accelaration at a zonal
-                  !! velocty point from the meridional velocity anomaly to its southwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    bzon          !< The term giving the contribution to the Coriolis accelaration at a zonal
-                  !! velocty point from the meridional velocity anomaly to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    czon          !< The term giving the contribution to the Coriolis accelaration at a zonal
-                  !! velocty point from the meridional velocity anomaly to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    dzon          !< The term giving the contribution to the Coriolis accelaration at a zonal
-                  !! velocty point from the meridional velocity anomaly to its northeast [T-1 ~> s-1]
-  integer, intent(in)  :: Is_u !< The starting i-index of the range of u-point values to calculate
-  integer, intent(in)  :: Ie_u !< The ending i-index of the range of u-point values to calculate
-  integer, intent(in)  :: js_u !< The starting j-index of the range of u-point values to calculate
-  integer, intent(in)  :: je_u !< The ending j-index of the range of u-point values to calculate
-
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    ubt           !< The zonal barotropic velocity [L T-1 ~> m s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    u_accel_bt    !! The difference between the meridional acceleration from the
-                  !< barotropic calculation and BT_force_v [L T-2 ~> m s-2].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    uhbt          !< The meridional barotropic thickness fluxes [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    ubt_int       !< The running time integral of vbt over the time steps [L ~> m].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    uhbt_int      !< The running time integral of vhbt over the time steps [H L2  ~> m3].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    ubt_trans     !< The latest value of vbt used for a transport [L T-1 ~> m s-1].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    Cor_u         !< The meridional Coriolis acceleration [L T-2 ~> m s-2]
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    PFu           !< The meridional pressure force acceleration [L T-2 ~> m s-2].
+  type(unit_scale_type),   intent(in)  :: US      !< A dimensional unit scaling type
+  type(ocean_OBC_type),    pointer     :: OBC     !< The open boundary condition structure.
 
   ! Local variables
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   real :: Idtbt       ! The inverse of the barotropic time step [T-1 ~> s-1]
-  integer :: err_count ! A counter to limit the volume of error messages written to stdout.
-  integer :: i, j, k
-  integer :: is, ie, js, je, nz, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  integer :: l_seg
+  integer :: i, j
 
   Idtbt = 1.0 / dtbt
 
@@ -3129,11 +3041,10 @@ subroutine btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_in
 
   !$OMP do schedule(static)
   do j=js_u,je_u ; do I=Is_u,Ie_u
-    vel_prev = ubt(I,j)
+    ubt_prev(I,j) = ubt(I,j)
     ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
          dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
     if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
-    ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*vel_prev
   enddo ; enddo
   !$OMP end do nowait
 
@@ -3152,31 +3063,11 @@ subroutine btloop_update_u(n, dtbt, ubt, vbt, u_accel_bt, uhbt, ubt_int, uhbt_in
     !$OMP end do nowait
   endif
 
-  if (integral_BT_cont) then
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=Is_u,Ie_u
-      ubt_int(I,j) = ubt_int(I,j) + dtbt * ubt_trans(I,j)
-      uhbt_int(I,j) = find_uhbt(ubt_int(I,j), BTCL_u(I,j)) + n*dtbt*uhbt0(I,j)
-      ! Estimate the mass flux within a single timestep to take the filtered average.
-      uhbt(I,j) = (uhbt_int(I,j) - uhbt_int_prev(I,j)) * Idtbt
-    enddo ; enddo
-  elseif (use_BT_cont) then
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=Is_u,Ie_u
-      uhbt(I,j) = find_uhbt(ubt_trans(I,j), BTCL_u(I,j)) + uhbt0(I,j)
-    enddo ; enddo
-  else
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=Is_u,Ie_u
-      uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
-    enddo ; enddo
-  endif
-
   if (CS%BT_OBC%apply_u_OBCs) then  ! copy back the value for u-points on the boundary.
     !$OMP do schedule(static)
     do j=js_u,je_u ; do I=Is_u,Ie_u ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
       PFu(I,j) = 0.0
-      ubt(I,j) = ubt_prev(I,j) ; uhbt(I,j) = uhbt_prev(I,j)
+      ubt(I,j) = ubt_prev(I,j)
     endif ; enddo ; enddo
   endif
 
