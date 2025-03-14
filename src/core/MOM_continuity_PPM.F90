@@ -1609,12 +1609,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
             dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
           else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
           dv_lim = 0.499*((dy_S*I_dt - v(i,J,k)) + MIN(0.0,v(i,J-1,k)))
-          if (dv_max_CFL(i,j) * visc_rem(i,k) > dv_lim) &
-            dv_max_CFL(i,j) = dv_lim / visc_rem(i,k)
+          if (dv_max_CFL(i,j) * visc_rem_v_tmp(I,j,k) > dv_lim) &
+            dv_max_CFL(i,j) = dv_lim / visc_rem_v_tmp(I,j,k)
 
           dv_lim = 0.499*((-dy_N*CFL_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k)))
-          if (dv_min_CFL(i,j) * visc_rem(i,k) < dv_lim) &
-            dv_min_CFL(i,j) = dv_lim / visc_rem(i,k)
+          if (dv_min_CFL(i,j) * visc_rem_v_tmp(I,j,k) < dv_lim) &
+            dv_min_CFL(i,j) = dv_lim / visc_rem_v_tmp(I,j,k)
         enddo ; enddo ; enddo
       else
         do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
@@ -1622,10 +1622,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
             dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
             dy_N = ratio_max(G%areaT(i,j+1), G%dx_Cv(I,j), 1000.0*G%dyT(i,j+1))
           else ; dy_S = G%dyT(i,j) ; dy_N = G%dyT(i,j+1) ; endif
-          if (dv_max_CFL(i,j) * visc_rem(i,k) > dy_S*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
-            dv_max_CFL(i,j) = (dy_S*CFL_dt - v(i,J,k)) / visc_rem(i,k)
-          if (dv_min_CFL(i,j) * visc_rem(i,k) < -dy_N*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
-            dv_min_CFL(i,j) = -(dy_N*CFL_dt + v(i,J,k)) / visc_rem(i,k)
+          if (dv_max_CFL(i,j) * visc_rem_v_tmp(I,j,k) > dy_S*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
+            dv_max_CFL(i,j) = (dy_S*CFL_dt - v(i,J,k)) / visc_rem_v_tmp(I,j,k)
+          if (dv_min_CFL(i,j) * visc_rem_v_tmp(I,j,k) < -dy_N*CFL_dt - v(i,J,k)*G%mask2dCv(i,J)) &
+            dv_min_CFL(i,j) = -(dy_N*CFL_dt + v(i,J,k)) / visc_rem_v_tmp(I,j,k)
         enddo ; enddo ; enddo
       endif
     else
