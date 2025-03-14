@@ -35,7 +35,7 @@ type, private :: marbl_forcing_diag_ids
 end type marbl_forcing_diag_ids
 
 !> Control structure for this module
-type, public :: marbl_forcing_CS
+type, public :: marbl_forcing_CS ; private
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                                              !! regulate the timing of diagnostic output.
 
