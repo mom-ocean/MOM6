@@ -565,8 +565,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     uh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim].
   logical, dimension(SZIB_(G), SZJ_(G)) :: do_I
-  real, dimension(SZIB_(G),SZK_(GV)) :: &
-    visc_rem      ! A 2-D copy of visc_rem_u or an array of 1's [nondim].
   real, dimension(SZIB_(G),SZJ_(G), SZK_(GV)) :: &
     visc_rem_u_tmp      ! A 2-D copy of visc_rem_u or an array of 1's [nondim].
   real, dimension(SZIB_(G)) :: FAuI  ! A list of sums of zonal face areas [H L ~> m2 or kg m-1].
@@ -612,7 +610,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
   ! a better solution is needed!
   if (.not.use_visc_rem) then
-    visc_rem(:,:) = 1.0
     visc_rem_u_tmp(:, :, :) = 1.0
   else
     visc_rem_u_tmp(:, :, :) = visc_rem_u(:, :, :)
@@ -737,12 +734,12 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       if (present(uhbt)) then
         ! Find du and uh.
         call zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, du, &
-                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u, &
+                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
                               ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
 
         if (present(u_cor)) then
           do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
-            u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u(i,j,k)
+            u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
           enddo ; enddo ; enddo
           if (any_simple_OBC) then 
             do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
@@ -757,7 +754,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       endif
       if (set_BT_cont) then
         call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0,&
-                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u, &
+                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
                                visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaU)
       endif
     endif
@@ -765,18 +762,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   endif
 
   do j=jsh,jeh
-    ! init visc_rem. This will be parted out later
-    do k=1,nz
-      if (use_visc_rem) then
-        do I=ish-1,ieh
-          visc_rem(I,k) = visc_rem_u(I,j,k)
-        enddo
-      else
-        do I=ish-1,ieh
-          visc_rem(I,k) = 1.0
-        enddo
-      endif
-    enddo
 
     if (present(uhbt) .or. set_BT_cont) then
 
@@ -1513,9 +1498,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   logical, dimension(SZI_(G),SZJB_(G)) :: do_I
   real, dimension(SZI_(G),SZJB_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G),SZK_(GV)) :: &
-    visc_rem      ! A 2-D copy of visc_rem_v or an array of 1's [nondim]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: visc_rem_v_tmp ! A copy of visc_rem_v
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: visc_rem_v_tmp ! A copy of visc_rem_v or an array of 1's [nondim]
   real :: I_vrm   ! 1.0 / visc_rem_max [nondim]
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
                   ! the time step [T-1 ~> s-1].
@@ -1558,7 +1541,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
   ! a better solution is needed
   if (.not.use_visc_rem) then
-    visc_rem(:,:) = 1.0
     visc_rem_v_tmp(:, :, :) = 1.0
   else
     visc_rem_v_tmp(:, :, :) = visc_rem_v(:, :, :)
@@ -1676,12 +1658,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     if (present(vhbt)) then
       ! Find dv and vh.
       call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
-                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v_tmp, &
                              ish, ieh, jsh, jeh, do_I, por_face_areaV, vh, OBC=OBC)
 
       if (present(v_cor)) then
         do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
-          v_cor(i,j,k) = v(i,j,k) + dv(i,j) * visc_rem_v(i,j,k)
+          v_cor(i,j,k) = v(i,j,k) + dv(i,j) * visc_rem_v_tmp(i,j,k)
         enddo ; enddo ; enddo
         if (any_simple_OBC) then
             ! untested
@@ -1698,7 +1680,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     
     if (set_BT_cont) then
       call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
-                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v_tmp, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
         
       if (any_simple_OBC) then
