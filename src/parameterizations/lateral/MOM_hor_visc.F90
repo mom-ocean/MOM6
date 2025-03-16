@@ -706,6 +706,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
 
   !$omp target enter data map(to: CS%Ah_bg_xx) if (CS%biharmonic)
+  !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
+  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
@@ -1246,11 +1248,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             Kh(i,j) = max(Kh(i,j), CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3)
         endif
       enddo ; enddo
+      !$omp end target
 
       ! All viscosity contributions above are subject to resolution scaling
 
       ! TODO: GPU
       if (rescale_Kh) then
+        !$omp target update from(Kh)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = VarMix%Res_fn_h(i,j) * Kh(i,j)
         enddo ; enddo
@@ -1259,12 +1263,14 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! TODO: GPU
       if (legacy_bound) then
         ! Older method of bounding for stability
+        !$omp target update from(Kh)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = min(Kh(i,j), CS%Kh_Max_xx(i,j))
         enddo ; enddo
       endif
 
       ! Place a floor on the viscosity, if desired.
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Kh(i,j) = max(Kh(i,j), CS%Kh_bg_min)
@@ -1273,7 +1279,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp end target
 
       ! TODO: GPU of MEKE and anisotropic Kh tweaks
-
       !$omp target update from(Kh) &
       !$omp   if ((use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) .or. CS%anisotropic)
 
@@ -1415,20 +1420,25 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp target update from(Ah)
 
       if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
+        !$omp target
         if (CS%Smagorinsky_Ah) then
           if (CS%bound_Coriolis) then
+            !$omp parallel loop collapse(2)
             do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
               AhSm = Shear_mag(i,j) * (CS%Biharm_const_xx(i,j) &
                   + CS%Biharm_const2_xx(i,j) * Shear_mag(i,j))
               Ah(i,j) = max(Ah(i,j), AhSm)
             enddo ; enddo
           else
+            !$omp parallel loop collapse(2)
             do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
               AhSm = CS%Biharm_const_xx(i,j) * Shear_mag(i,j)
               Ah(i,j) = max(Ah(i,j), AhSm)
             enddo ; enddo
           endif
         endif
+        !$omp end target
+        !$omp target update from(Ah)
 
         if (CS%Leith_Ah) then
           do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -2363,6 +2373,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
 
   !$omp target exit data map(delete: CS%Ah_bg_xx) if (CS%biharmonic)
+
+  !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
+  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
