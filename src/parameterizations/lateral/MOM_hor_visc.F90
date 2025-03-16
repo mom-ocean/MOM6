@@ -708,6 +708,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Ah_bg_xx) if (CS%biharmonic)
   !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
+  !$omp target enter data map(to: CS%Ah_max_xx) &
+  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
@@ -1417,8 +1419,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
       !$omp end target
 
-      !$omp target update from(Ah)
-
       if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
         !$omp target
         if (CS%Smagorinsky_Ah) then
@@ -1441,6 +1441,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update from(Ah)
 
         if (CS%Leith_Ah) then
+          !$omp target update from(Ah)
           do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Del2vort_h = 0.25 * ((Del2vort_q(I,J) + Del2vort_q(I-1,J-1)) + &
                                  (Del2vort_q(I-1,J) + Del2vort_q(I,J-1)))
@@ -1450,6 +1451,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
 
         if (CS%use_Leithy) then
+          ! TODO: !$omp target update from(...?)
+
           ! Get m_leithy
           if (CS%smooth_Ah) m_leithy(:,:) = 0.0 ! This is here to initialize domain edge halo values.
           do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -1503,12 +1506,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
         endif
 
+        !$omp target
         if (CS%bound_Ah .and. .not. CS%better_bound_Ah) then
+          !$omp parallel loop collapse(2)
           do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Ah(i,j) = min(Ah(i,j), CS%Ah_Max_xx(i,j))
           enddo ; enddo
         endif
+        !$omp end target
       endif ! Smagorinsky_Ah or Leith_Ah or Leith+E
+
+      !$omp target update from(Ah)
 
       if (use_MEKE_Au) then
         ! *Add* the MEKE contribution
@@ -2373,9 +2381,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
 
   !$omp target exit data map(delete: CS%Ah_bg_xx) if (CS%biharmonic)
-
   !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
+  !$omp target enter data map(to: CS%Ah_max_xx) &
+  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
