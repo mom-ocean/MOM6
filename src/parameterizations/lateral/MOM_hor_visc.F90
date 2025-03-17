@@ -678,6 +678,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target enter data map(alloc: h_u, h_v)
   !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
+  !$omp target enter data map(alloc: dDel2vdx, dDel2udy) if (CS%biharmonic)
   !$omp target enter data map(alloc: Shear_mag) if (use_Smag)
   !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
   !$omp target enter data map(alloc: str_xx)
@@ -1595,17 +1596,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp end target
     endif ! Get biharmonic coefficient at h points and biharmonic part of str_xx
 
-    !$omp target update from(dudx, dudy, dvdx, dvdy)
-    !$omp target update from(sh_xx, sh_xy)
-    !$omp target update from(h_u, h_v)
-    !$omp target update from(str_xx)
-    !$omp target update from(Shear_mag) if (use_Smag)
-    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
-    !$omp target update from(visc_bound_rem, hrat_min) &
-    !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-
     ! Backscatter using MEKE
     if (CS%EY24_EBT_BS) then
+      ! TODO: GPU
+      !$omp target update from(sh_xx)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if (visc_limit_h_flag(i,j,k) > 0) then
           Kh_BS(i,j) = 0.
@@ -1631,16 +1625,22 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = str_xx(i,j) + str_xx_BS(i,j)
       enddo ; enddo
+      !$omp target update to(str_xx)
     endif ! Backscatter
 
     if (CS%biharmonic) then
       ! Gradient of Laplacian, for use in bi-harmonic term
+      !$omp target
+      !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
         dDel2vdx(I,J) = CS%DY_dxBu(I,J)*((Del2v(i+1,J)*G%IdyCv(i+1,J)) - (Del2v(i,J)*G%IdyCv(i,J)))
         dDel2udy(I,J) = CS%DX_dyBu(I,J)*((Del2u(I,j+1)*G%IdxCu(I,j+1)) - (Del2u(I,j)*G%IdxCu(I,j)))
       enddo ; enddo
+      !$omp end target
+
       ! Adjust contributions to shearing strain on open boundaries.
       if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
+        !$omp target update from(dDel2vdx, dDel2udy)
         do n=1,OBC%number_of_segments
           J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= Jeq)) then
@@ -1661,8 +1661,19 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             enddo
           endif
         enddo
+        !$omp target update to(dDel2vdx, dDel2udy)
       endif ; endif
     endif
+
+    !$omp target update from(dudx, dudy, dvdx, dvdy)
+    !$omp target update from(sh_xx, sh_xy)
+    !$omp target update from(h_u, h_v)
+    !$omp target update from(str_xx)
+    !$omp target update from(Shear_mag) if (use_Smag)
+    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
+    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
+    !$omp target update from(visc_bound_rem, hrat_min) &
+    !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
       do J=js-1,Jeq ; do I=is-1,Ieq
@@ -2367,6 +2378,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: h_u, h_v)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
   !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
+  !$omp target exit data map(delete: dDel2vdx, dDel2udy) if (CS%biharmonic)
   !$omp target exit data map(delete: str_xx)
 
   !$omp target exit data map(delete: Kh) if (CS%Laplacian)
