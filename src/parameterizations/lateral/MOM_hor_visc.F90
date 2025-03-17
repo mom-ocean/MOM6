@@ -706,6 +706,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
 
   !$omp target enter data map(to: CS%Ah_bg_xx) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%reduction_xx) if (CS%biharmonic)
   !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
   !$omp target enter data map(to: CS%Ah_max_xx) &
@@ -714,7 +715,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
   !$omp target enter data map(to: hu_cont, hv_cont) if (use_cont_huv)
-  !$omp target enter data map(to: MEKE%Au) if (use_MEKE_Au)
 
   do k=1,nz
 
@@ -1087,8 +1087,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! endif
 
       if (CS%modified_Leith) then
-
-        ! TODO: Remove after moving Leith to GPU
+        ! TODO: GPU
         !$omp target update from(dudx, dvdy)
 
         ! Divergence
@@ -1199,11 +1198,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
     endif
     !$omp end target
-
-    !$omp target update from(dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
-    !$omp target update from(h_u, h_v)
-    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
-    !$omp target update from(Shear_mag) if (use_Smag)
 
     if (CS%Laplacian) then
       ! Determine the Laplacian viscosity at h points, using the
@@ -1365,6 +1359,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       if (CS%id_div_xx_h>0) then
+        !$omp target update from(dudx, dvdy)
         do j=js,je ; do i=is,ie
           div_xx_h(i,j,k) = dudx(i,j) + dvdy(i,j)
         enddo ; enddo
@@ -1391,10 +1386,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp end target
     endif ! Get Kh at h points and get Laplacian component of str_xx
 
-    !$omp target update from(str_xx)
-
     ! TODO: GPU
     if (CS%anisotropic) then
+      !$omp target update from(str_xx)
+      !$omp target update from(sh_xx, sh_xy)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         ! Shearing-strain averaged to h-points
         local_strain = 0.25 * ( (sh_xy(I,J) + sh_xy(I-1,J-1)) + (sh_xy(I-1,J) + sh_xy(I,J-1)) )
@@ -1581,6 +1576,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
+      !$omp target update to(sh_xx_smooth) if (CS%use_Leithy)
+
+      !$omp target
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         d_del2u = (G%IdyCu(I,j) * Del2u(I,j)) - (G%IdyCu(I-1,j) * Del2u(I-1,j))
         d_del2v = (G%IdxCv(i,J) * Del2v(i,J)) - (G%IdxCv(i,J-1) * Del2v(i,J-1))
@@ -1593,11 +1592,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
         bhstr_xx(i,j) = d_str * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
+      !$omp end target
     endif ! Get biharmonic coefficient at h points and biharmonic part of str_xx
 
-    !$omp target update from(hrat_min) &
-    !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-    !$omp target update from(visc_bound_rem) &
+    !$omp target update from(dudx, dudy, dvdx, dvdy)
+    !$omp target update from(sh_xx, sh_xy)
+    !$omp target update from(h_u, h_v)
+    !$omp target update from(str_xx)
+    !$omp target update from(Shear_mag) if (use_Smag)
+    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
+    !$omp target update from(visc_bound_rem, hrat_min) &
     !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
     ! Backscatter using MEKE
@@ -2389,6 +2393,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
 
   !$omp target exit data map(delete: CS%Ah_bg_xx) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%reduction_xx) if (CS%biharmonic)
   !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
   !$omp target enter data map(to: CS%Ah_max_xx) &
