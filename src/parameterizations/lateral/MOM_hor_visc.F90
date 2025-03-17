@@ -701,7 +701,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%dx2q, CS%dy2q) if (CS%biharmonic)
   !$omp target enter data map(to: CS%dx2h, CS%dy2h) if (CS%biharmonic)
 
-  !$omp target enter data map(to: CS%Kh_bg_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
@@ -1244,6 +1244,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             Kh(i,j) = max(Kh(i,j), CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3)
         endif
       enddo ; enddo
+
       !$omp end target
 
       ! All viscosity contributions above are subject to resolution scaling
@@ -1719,6 +1720,15 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     !$omp end target
 
+    ! Pass the velocity gradients and thickness to ZB2020
+    if (CS%use_ZB2020) then
+      !$omp target update to(sh_xx, sh_xy, vort_xy, hq)
+      call ZB2020_copy_gradient_and_thickness( &
+           sh_xx, sh_xy, vort_xy,              &
+           hq,                                 &
+           G, GV, CS%ZB2020, k)
+    endif
+
     !$omp target update from(dudx, dudy, dvdx, dvdy)
     !$omp target update from(sh_xx, sh_xy)
     !$omp target update from(h_u, h_v, hq)
@@ -1739,6 +1749,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! largest value from several parameterizations. Also get the
       ! Laplacian component of str_xy.
 
+      ! TODO: GPU
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
         if (CS%use_QG_Leith_visc) then
           do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1753,10 +1764,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
       endif
 
+      !$omp target
+
       ! Static (pre-computed) background viscosity
+      !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
         Kh(I,J) = CS%Kh_bg_xy(I,J)
       enddo ; enddo
+      !$omp target update from(Kh)
+
+      !$omp end target
 
       if (CS%Smagorinsky_Kh) then
         if (CS%add_LES_viscosity) then
@@ -2405,7 +2422,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%dx2q, CS%dy2q) if (CS%biharmonic)
   !$omp target exit data map(delete: CS%dx2h, CS%dy2h) if (CS%biharmonic)
 
-  !$omp target exit data map(delete: CS%Kh_bg_xx) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
