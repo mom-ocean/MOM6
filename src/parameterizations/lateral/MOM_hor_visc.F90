@@ -676,7 +676,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   endif
 
   !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
-  !$omp target enter data map(alloc: h_u, h_v)
+  !$omp target enter data map(alloc: h_u, h_v, hq)
   !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
   !$omp target enter data map(alloc: dDel2vdx, dDel2udy) if (CS%biharmonic)
   !$omp target enter data map(alloc: Shear_mag) if (use_Smag)
@@ -1665,17 +1665,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif ; endif
     endif
 
-    !$omp target update from(dudx, dudy, dvdx, dvdy)
-    !$omp target update from(sh_xx, sh_xy)
-    !$omp target update from(h_u, h_v)
-    !$omp target update from(str_xx)
-    !$omp target update from(Shear_mag) if (use_Smag)
-    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
-    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
-    !$omp target update from(visc_bound_rem, hrat_min) &
-    !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+    !$omp target
 
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
+      !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
         sh_xy_sq = sh_xy(I,J)**2
         sh_xx_sq = 0.25 * ( ((sh_xx(i,j)**2) + (sh_xx(i+1,j+1)**2)) &
@@ -1684,6 +1677,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
     endif
 
+    !$omp parallel loop collapse(2)
     do J=js-1,Jeq ; do I=is-1,Ieq
       h2uq = 4.0 * (h_u(I,j) * h_u(I,j+1))
       h2vq = 4.0 * (h_v(i,J) * h_v(i+1,J))
@@ -1692,11 +1686,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     enddo ; enddo
 
     if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
+      !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
         h_min = min(h_u(I,j), h_u(I,j+1), h_v(i,J), h_v(i+1,J))
         hrat_min(I,J) = min(1.0, h_min / (hq(I,J) + h_neglect))
       enddo ; enddo
-
     endif
 
     if (CS%no_slip) then
@@ -1722,6 +1716,18 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
       enddo ; enddo
     endif
+
+    !$omp end target
+
+    !$omp target update from(dudx, dudy, dvdx, dvdy)
+    !$omp target update from(sh_xx, sh_xy)
+    !$omp target update from(h_u, h_v, hq)
+    !$omp target update from(str_xx)
+    !$omp target update from(Shear_mag) if (use_Smag)
+    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
+    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
+    !$omp target update from(visc_bound_rem, hrat_min) &
+    !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
     ! Pass the velocity gradients and thickness to ZB2020
     if (CS%use_ZB2020) then
@@ -2375,7 +2381,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   enddo ! end of k loop
 
   !$omp target exit data map(delete: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
-  !$omp target exit data map(delete: h_u, h_v)
+  !$omp target exit data map(delete: h_u, h_v, hq)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
   !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
   !$omp target exit data map(delete: dDel2vdx, dDel2udy) if (CS%biharmonic)
