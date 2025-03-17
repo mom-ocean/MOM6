@@ -588,8 +588,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   Ice_ocean_boundary%ice_ncat = 0
   if (cesm_coupled) then
     ! Note that flds_i2o_per_cat is set by the env_run.xml variable CPL_I2O_PER_CAT
-    ! This xml variable is set by MOM_interface's buildnml script; it has the same
-    ! value as USE_MARBL in the case
+    ! In CESM, this xml variable is set by MOM_interface's buildnml script and by
+    ! default it is false unless ICE_NCAT>0 and USE_MARBL_TRACERS=True
     call NUOPC_CompAttributeGet(gcomp, name='flds_i2o_per_cat', value=cvalue, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
     read(cvalue,*) i2o_per_cat

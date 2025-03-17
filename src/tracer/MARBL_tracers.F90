@@ -41,7 +41,6 @@ use MOM_diag_mediator,   only : register_diag_field, post_data!, safe_alloc_ptr
 use MARBL_interface,              only : MARBL_interface_class
 use MARBL_interface_public_types, only : marbl_diagnostics_type, marbl_saved_state_type
 
-use coupler_types_mod,      only : coupler_type_set_data, ind_csurf
 use atmos_ocean_fluxes_mod, only : aof_set_coupler_flux
 
 implicit none ; private
