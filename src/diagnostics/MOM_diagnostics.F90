@@ -1663,11 +1663,11 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
   if (use_temperature) then
     if (tv%T_is_conT) then
       CS%id_Tpot = register_diag_field('ocean_model', 'temp', diag%axesTL, &
-          Time, 'Potential Temperature', 'degC', conversion=US%C_to_degC)
+          Time, 'Potential Temperature', 'degC', conversion=US%C_to_degC, cmor_field_name="thetao")
     endif
     if (tv%S_is_absS) then
       CS%id_Sprac = register_diag_field('ocean_model', 'salt', diag%axesTL, &
-          Time, 'Salinity', 'psu', conversion=US%S_to_ppt)
+          Time, 'Salinity', 'psu', conversion=US%S_to_ppt, cmor_field_name='so')
     endif
 
     CS%id_tob = register_diag_field('ocean_model','tob', diag%axesT1, Time, &
