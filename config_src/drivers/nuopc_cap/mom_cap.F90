@@ -158,6 +158,7 @@ type(is_restart_fh_type) :: restartfh_info     ! For flexible restarts in UFS
 #endif
 character(len=8)  :: restart_mode = 'alarms'
 character(len=16) :: inst_suffix = ''
+logical           :: pointer_date = .true. ! append date to rpointer
 real(8) :: timere
 
 contains
@@ -493,12 +494,20 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   if (ChkErr(rc,__LINE__,u_FILE_u)) return
   call ensemble_manager_init(inst_suffix)
 
-  write(timestamp,'(".",i4.4,"-",i2.2,"-",i2.2,"-",i5.5)'),year,month,day,hour*3600+minute*60+second
-  rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)//timestamp
-  inquire(file=trim(rpointer_filename), exist=found)
-  ! for backward compatibility
-  if (.not. found) then
-     rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+  ! Default to appending dates to the restart pointer unless otherwise specified in NUOPC settings
+  call NUOPC_CompAttributeGet(gcomp, name="restart_pointer_append_date", value=cvalue, &
+       isPresent=isPresent, isSet=isSet, rc=rc)
+  if (ChkErr(rc,__LINE__,u_FILE_u)) return
+  if (isPresent .and. isSet) pointer_date = (trim(cvalue) .eq. ".true.")
+
+  rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+  if (pointer_date) then
+    write(timestamp,'(".",i4.4,"-",i2.2,"-",i2.2,"-",i5.5)'),year,month,day,hour*3600+minute*60+second
+    inquire(file=trim(rpointer_filename//timestamp), exist=found)
+    ! for backward compatibility
+    if (found) then
+      rpointer_filename = trim(rpointer_filename//timestamp)
+    endif
   endif
 #endif
 
@@ -655,14 +664,13 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   else if (runtype == "continue") then ! hybrid or branch or continuos runs
 
     if (cesm_coupled) then
-      call ESMF_LogWrite('MOM_cap: restart requested, using rpointer.ocn', ESMF_LOGMSG_WARNING)
+      call ESMF_LogWrite('MOM_cap: restart requested, using '//trim(rpointer_filename), ESMF_LOGMSG_WARNING)
       call ESMF_GridCompGet(gcomp, vm=vm, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
       call ESMF_VMGet(vm, localPet=localPet, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
 
       if (localPet == 0) then
-        ! this hard coded for rpointer.ocn right now
         open(newunit=readunit, file=rpointer_filename, form='formatted', status='old', iostat=iostat)
         if (iostat /= 0) then
           call ESMF_LogSetError(ESMF_RC_FILE_OPEN, msg=subname//' ERROR opening '//rpointer_filename, &
@@ -1916,7 +1924,10 @@ subroutine ModelAdvance(gcomp, rc)
 
         write(timestamp,'(".",i4.4,"-",i2.2,"-",i2.2,"-",i5.5)'),year,month,day,hour*3600+minute*60+seconds
 
-        rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)//timestamp
+        rpointer_filename = 'rpointer.ocn'//trim(inst_suffix)
+        if (pointer_date) then
+          rpointer_filename = trim(rpointer_filename//timestamp)
+        endif
 
         write(restartname,'(A,".mom6.r",A)') &
              trim(casename), timestamp
