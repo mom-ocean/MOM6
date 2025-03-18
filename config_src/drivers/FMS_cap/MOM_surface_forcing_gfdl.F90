@@ -17,6 +17,7 @@ use MOM_diag_mediator,    only : diag_ctrl, safe_alloc_ptr, time_type
 use MOM_domains,          only : pass_vector, pass_var, fill_symmetric_edges
 use MOM_domains,          only : AGRID, BGRID_NE, CGRID_NE, To_All
 use MOM_domains,          only : To_North, To_East, Omit_Corners
+use MOM_EOS,              only : gsw_sr_from_sp
 use MOM_error_handler,    only : MOM_error, WARNING, FATAL, is_root_pe, MOM_mesg
 use MOM_file_parser,      only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,     only : forcing, mech_forcing
@@ -145,6 +146,7 @@ type, public :: surface_forcing_CS ; private
   character(len=200) :: inputdir              !< Directory where NetCDF input files are
   character(len=200) :: salt_restore_file     !< Filename for salt restoring data
   character(len=30)  :: salt_restore_var_name !< Name of surface salinity in salt_restore_file
+  logical            :: salt_restore_is_practical !< Specifies that salt restore salinity practical and not absolute.
   logical            :: mask_srestore         !< If true, apply a 2-dimensional mask to the surface
                                               !! salinity restoring fluxes. The masking file should be
                                               !! in inputdir/salt_restore_mask.nc and the field should
@@ -356,6 +358,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! Salinity restoring logic
   if (CS%restore_salt) then
     call time_interp_external(CS%srestore_handle, Time, data_restore, scale=US%ppt_to_S)
+    if (sfc_state%S_is_absS .and. CS%salt_restore_is_practical) then
+      !Adjust the salt restoring data to absolute
+      do j=js,je
+        do i=is,ie
+          data_restore(i,j) = gsw_sr_from_sp(data_restore(i,j))
+        enddo
+      enddo
+    endif
     ! open_ocn_mask indicates where to restore salinity (1 means restore, 0 does not)
     open_ocn_mask(:,:) = 1.0
     if (CS%mask_srestore_under_ice) then ! Do not restore under sea-ice
@@ -1484,7 +1494,9 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  "The name of the surface salinity variable to read from "//&
                  "SALT_RESTORE_FILE for restoring salinity.", &
                  default="salt")
-
+    call get_param(param_file, mdl, "SALT_RESTORE_PRACTICAL_SALINITY", CS%salt_restore_is_practical, &
+                 "Specifies if the restoring surface salinity variable is practical salinity.  If this "//&
+                 "flag is set to false it is assumed that the salinity is absolute salinity.", default=.true.)
     call get_param(param_file, mdl, "SRESTORE_AS_SFLUX", CS%salt_restore_as_sflux, &
                  "If true, the restoring of salinity is applied as a salt "//&
                  "flux instead of as a freshwater flux.", default=.false.)

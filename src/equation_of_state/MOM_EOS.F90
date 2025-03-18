@@ -17,7 +17,7 @@ use MOM_EOS_UNESCO, only : UNESCO_EOS
 use MOM_EOS_Roquet_rho, only : Roquet_rho_EOS
 use MOM_EOS_Roquet_SpV, only : Roquet_SpV_EOS
 use MOM_EOS_TEOS10, only : TEOS10_EOS
-use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct
+use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct, gsw_sr_from_sp
 use MOM_temperature_convert, only : poTemp_to_consTemp, consTemp_to_poTemp
 use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_TFreeze,    only : calculate_TFreeze_teos10, calculate_TFreeze_TEOS_poly
@@ -52,6 +52,7 @@ public convert_temp_salt_for_TEOS10
 public cons_temp_to_pot_temp
 public abs_saln_to_prac_saln
 public gsw_sp_from_sr
+public gsw_sr_from_sp
 public gsw_pt_from_ct
 public query_compressible
 public get_EOS_name
