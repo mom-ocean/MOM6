@@ -705,6 +705,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
   !$omp target enter data map(to: CS%Ah_bg_xx) if (CS%biharmonic)
   !$omp target enter data map(to: CS%reduction_xx) if (CS%biharmonic)
@@ -1771,21 +1772,23 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       do J=js-1,Jeq ; do I=is-1,Ieq
         Kh(I,J) = CS%Kh_bg_xy(I,J)
       enddo ; enddo
-      !$omp target update from(Kh)
-
-      !$omp end target
 
       if (CS%Smagorinsky_Kh) then
         if (CS%add_LES_viscosity) then
+          !$omp parallel loop collapse(2)
           do J=js-1,Jeq ; do I=is-1,Ieq
             Kh(I,J) = Kh(I,J) + CS%Laplac2_const_xy(I,J) * Shear_mag(I,J)
           enddo ; enddo
         else
+          !$omp parallel loop collapse(2)
           do J=js-1,Jeq ; do I=is-1,Ieq
             Kh(I,J) = max(Kh(I,J), CS%Laplac2_const_xy(I,J) * Shear_mag(I,J) )
           enddo ; enddo
         endif
       endif
+      !$omp end target
+
+      !$omp target update from(Kh)
 
       if (CS%Leith_Kh) then
         if (CS%add_LES_viscosity) then
@@ -2426,6 +2429,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
   !$omp target exit data map(delete: CS%Ah_bg_xx) if (CS%biharmonic)
   !$omp target exit data map(delete: CS%reduction_xx) if (CS%biharmonic)
