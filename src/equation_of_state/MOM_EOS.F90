@@ -115,6 +115,7 @@ type, public :: EOS_type ; private
   real :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3]
   real :: dRho_dT   !< The partial derivative of density with temperature [kg m-3 degC-1]
   real :: dRho_dS   !< The partial derivative of density with salinity [kg m-3 ppt-1]
+  real :: dRho_dp   !< The partial derivative of density with pressure [s2 m-2]
 ! The following parameters are use with the linear expression for the freezing
 ! point only.
   real :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
@@ -1211,7 +1212,7 @@ subroutine average_specific_vol(T, S, p_t, dp, SpV_avg, EOS, dom, scale)
     select case (EOS%form_of_EOS)
       case (EOS_LINEAR)
         call avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, is, npts, EOS%Rho_T0_S0, &
-                                 EOS%dRho_dT, EOS%dRho_dS)
+                                 EOS%dRho_dT, EOS%dRho_dS, EOS%dRho_dp)
       case (EOS_WRIGHT)
         call avg_spec_vol_buggy_wright(T, S, p_t, dp, SpV_avg, is, npts)
       case (EOS_WRIGHT_FULL)
@@ -1231,7 +1232,7 @@ subroutine average_specific_vol(T, S, p_t, dp, SpV_avg, EOS, dom, scale)
     select case (EOS%form_of_EOS)
       case (EOS_LINEAR)
         call avg_spec_vol_linear(Ta, Sa, pres, dpres, SpV_avg, is, npts, EOS%Rho_T0_S0, &
-                                 EOS%dRho_dT, EOS%dRho_dS)
+                                 EOS%dRho_dT, EOS%dRho_dS, EOS%dRho_dp)
       case (EOS_WRIGHT)
         call avg_spec_vol_buggy_wright(Ta, Sa, pres, dpres, SpV_avg, is, npts)
       case (EOS_WRIGHT_FULL)
@@ -1549,6 +1550,8 @@ subroutine EOS_init(param_file, EOS, US, use_conT_absS)
   real :: Rho_Tref_Sref ! Density at Tref degC and Sref ppt [kg m-3]
   real :: Tref          ! Reference temperature [degC]
   real :: Sref          ! Reference salinity [psu]
+  real :: pref          ! Reference pressure [Pa]
+  real :: rho0          ! Density at T=0, S=0 and p=0 [kg m-3]
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1589,32 +1592,43 @@ subroutine EOS_init(param_file, EOS, US, use_conT_absS)
                 trim(tmpstr)//'"', 5)
 
   if (EOS%form_of_EOS == EOS_LINEAR) then
-    ! RHO(T,S) = RHO_TREF_SREF + DRHO_DT*(T-TREF) + DRHO_DS*(S-SREF)
-    !          = RHO_TREF_SREF - DRHO_DT*TREF - DRHO_DS*SREF + DRHO_DT*T + DRHO_DS*S
-    !          = RHO_T0_S0 + DRHO_DT*T + DRHO_DS*S
-    EOS%Compressible = .false.
-    call get_param(param_file, mdl, "RHO_TREF_SREF", Rho_Tref_Sref, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the density at T=TREF, S=SREF.", units="kg m-3", default=1000.0)
-    call get_param(param_file, mdl, "TREF", Tref, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the reference temperature.", units="degC", default=0.0)
-    call get_param(param_file, mdl, "SREF", Sref, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the reference salinity.", units="psu", default=0.0)
+    ! RHO(T,S) = RHO_REF + DRHO_DT*(T-T_REF) + DRHO_DS*(S-S_REF) + DRHO_DP*(P-P_REF)
+    !          = RHO_REF - (DRHO_DT*T_REF + DRHO_DS*SREF + DRHO_DP*PREF) + (DRHO_DT*T + DRHO_DS*S + DRHO_DP*P)
+    !          = RHO_T0_S0 + (DRHO_DT*T + DRHO_DS*S + DRHO_DP*P)
+    call get_param(param_file, mdl, "RHO_REF_LINEAR_EOS", Rho_Tref_Sref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the density "//&
+                   "at T=T_REF_LINEAR_EOS, S=S_REF_LINEAR_EOS and p=P_REF_LINEAR_EOS", &
+                   units="kg m-3", default=1000.0, old_name="RHO_TREF_SREF")
+    call get_param(param_file, mdl, "T_REF_LINEAR_EOS", Tref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the reference "//&
+                   "temperature.", units="degC", default=0.0, old_name="TREF")
+    call get_param(param_file, mdl, "S_REF_LINEAR_EOS", Sref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the reference "//&
+                   "salinity.", units="psu", default=0.0, old_name="SREF")
+    call get_param(param_file, mdl, "P_REF_LINEAR_EOS", pref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the reference "//&
+                   "pressure.", units="Pa", default=0.0)
     call get_param(param_file, mdl, "DRHO_DT", EOS%dRho_dT, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the partial derivative of density with "//&
-                 "temperature.", units="kg m-3 K-1", default=-0.2)
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is "//&
+                   "the partial derivative of density with temperature.", &
+                   units="kg m-3 K-1", default=-0.2)
     call get_param(param_file, mdl, "DRHO_DS", EOS%dRho_dS, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the partial derivative of density with salinity.", &
-                 units="kg m-3 ppt-1", default=0.8)
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is "//&
+                   "the partial derivative of density with salinity.", &
+                   units="kg m-3 ppt-1", default=0.8)
+    call get_param(param_file, mdl, "DRHO_DP", EOS%dRho_dp, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is "//&
+                   "the partial derivative of density with pressure (the inverse of "//&
+                   "sound speed squared).", units="s2 m-2", default=0.0)
+    rho0 = Rho_Tref_Sref - ((EOS%dRho_dT * Tref + EOS%dRho_dS * Sref) + EOS%dRho_dp * pref)
     call get_param(param_file, mdl, "RHO_T0_S0", EOS%Rho_T0_S0, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the density at T=0, S=0.", units="kg m-3", &
-                 default=Rho_Tref_Sref - EOS%dRho_dT *  Tref - EOS%dRho_dS * Sref)
-    call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=EOS%Rho_T0_S0, dRho_dT=EOS%dRho_dT, dRho_dS=EOS%dRho_dS)
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the density "//&
+                   "at T=0, S=0 and p=0.  If RHO_TO_SO is specified, RHO_REF_LINEAR_EOS, "//&
+                   "T_REF_LINEAR_EOS, S_REF_LINEAR_EOS and P_REF_LINEAR_EOS are not used.", &
+                   units="kg m-3", default=rho0)
+    EOS%Compressible = (EOS%dRho_dp/=0.0)
+    call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=EOS%Rho_T0_S0, &
+                         dRho_dT=EOS%dRho_dT, dRho_dS=EOS%dRho_dS, dRho_dp=EOS%dRho_dp)
   endif
   if (EOS%form_of_EOS == EOS_WRIGHT) then
     call get_param(param_file, mdl, "USE_WRIGHT_2ND_DERIV_BUG", EOS%use_Wright_2nd_deriv_bug, &
@@ -1715,7 +1729,7 @@ end subroutine EOS_init
 
 !> Manually initialized an EOS type (intended for unit testing of routines which need a specific EOS)
 subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, &
-                           Rho_T0_S0, drho_dT, dRho_dS, TFr_S0_P0, dTFr_dS, dTFr_dp, &
+                           Rho_T0_S0, drho_dT, dRho_dS, dRho_dp, TFr_S0_P0, dTFr_dS, dTFr_dp, &
                            use_Wright_2nd_deriv_bug)
   type(EOS_type),    intent(inout) :: EOS !< Equation of state structure
   integer, optional, intent(in) :: form_of_EOS !< A coded integer indicating the equation of state to use.
@@ -1729,6 +1743,8 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
                                              !! in [kg m-3 degC-1]
   real   , optional, intent(in) :: dRho_dS   !< Partial derivative of density with salinity
                                              !! in [kg m-3 ppt-1]
+  real   , optional, intent(in) :: dRho_dp   !< Partial derivative of density with pressure
+                                             !! in [s2 m-2]
   real   , optional, intent(in) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
   real   , optional, intent(in) :: dTFr_dS   !< The derivative of freezing point with salinity
                                              !! in [degC ppt-1]
@@ -1761,7 +1777,7 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
     end select
     select type (t => EOS%type)
       type is (linear_EOS)
-        call t%set_params_linear(Rho_T0_S0, dRho_dT, dRho_dS)
+        call t%set_params_linear(Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp)
       type is (buggy_Wright_EOS)
         call t%set_params_buggy_Wright(use_Wright_2nd_deriv_bug)
     end select
@@ -1772,6 +1788,7 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
   if (present(Rho_T0_S0      ))  EOS%Rho_T0_S0       = Rho_T0_S0
   if (present(drho_dT        ))  EOS%drho_dT         = drho_dT
   if (present(dRho_dS        ))  EOS%dRho_dS         = dRho_dS
+  if (present(dRho_dp        ))  EOS%dRho_dp         = dRho_dp
   if (present(TFr_S0_P0      ))  EOS%TFr_S0_P0       = TFr_S0_P0
   if (present(dTFr_dS        ))  EOS%dTFr_dS         = dTFr_dS
   if (present(dTFr_dp        ))  EOS%dTFr_dp         = dTFr_dp
@@ -2107,7 +2124,7 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "ROQUET_SPV EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
-  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8)
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8, dRho_dp=0.0)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "LINEAR", &
                               rho_check=1023.0*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
   if (verbose .and. fail) call MOM_error(WARNING, "LINEAR EOS has failed some self-consistency tests.")

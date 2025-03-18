@@ -16,9 +16,10 @@ public avg_spec_vol_linear
 !> The EOS_base implementation of a linear equation of state
 type, extends (EOS_base) :: linear_EOS
 
-  real :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+  real :: Rho_T0_S0 !< The density at T=0, S=0 and p=0 [kg m-3].
   real :: dRho_dT   !< The derivative of density with temperature [kg m-3 degC-1].
   real :: dRho_dS   !< The derivative of density with salinity [kg m-3 ppt-1].
+  real :: dRho_dp   !< The derivative of density with pressure [s2 m-2].
 
 contains
   !> Implementation of the in-situ density as an elemental function [kg m-3]
@@ -62,7 +63,7 @@ real elemental function density_elem_linear(this, T, S, pressure)
   real, intent(in) :: S        !< Salinity [ppt]
   real, intent(in) :: pressure !< Pressure [Pa]
 
-  density_elem_linear = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S
+  density_elem_linear = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S + this%dRho_dp*pressure
 
 end function density_elem_linear
 
@@ -77,7 +78,8 @@ real elemental function density_anomaly_elem_linear(this, T, S, pressure, rho_re
   real, intent(in) :: pressure !< Pressure [Pa]
   real, intent(in) :: rho_ref  !< A reference density [kg m-3]
 
-  density_anomaly_elem_linear = (this%Rho_T0_S0 - rho_ref) + (this%dRho_dT*T + this%dRho_dS*S)
+  density_anomaly_elem_linear = &
+      (this%Rho_T0_S0 - rho_ref) + ((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure)
 
 end function density_anomaly_elem_linear
 
@@ -91,7 +93,8 @@ real elemental function spec_vol_elem_linear(this, T, S, pressure)
   real,              intent(in) :: S        !< Salinity [ppt].
   real,              intent(in) :: pressure !< Pressure [Pa].
 
-  spec_vol_elem_linear = 1.0 / ( this%Rho_T0_S0 + (this%dRho_dT*T + this%dRho_dS*S))
+  spec_vol_elem_linear = &
+      1.0 / ( this%Rho_T0_S0 + ((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure) )
 
 end function spec_vol_elem_linear
 
@@ -106,15 +109,16 @@ real elemental function spec_vol_anomaly_elem_linear(this, T, S, pressure, spv_r
   real,              intent(in) :: pressure !< Pressure [Pa].
   real,              intent(in) :: spv_ref  !< A reference specific volume [m3 kg-1].
 
-  spec_vol_anomaly_elem_linear = ((1.0 - this%Rho_T0_S0*spv_ref) - &
-                                   spv_ref*(this%dRho_dT*T + this%dRho_dS*S)) / &
-                                 ( this%Rho_T0_S0 + (this%dRho_dT*T + this%dRho_dS*S))
+  spec_vol_anomaly_elem_linear = &
+      ((1.0 - this%Rho_T0_S0*spv_ref) - &
+        spv_ref*((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure)) / &
+      ( this%Rho_T0_S0 + ((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure) )
 
 end function spec_vol_anomaly_elem_linear
 
 !> This subroutine calculates the partial derivatives of density
 !! with potential temperature and salinity.
-elemental subroutine calculate_density_derivs_elem_linear(this,T, S, pressure, dRho_dT, dRho_dS)
+elemental subroutine calculate_density_derivs_elem_linear(this, T, S, pressure, dRho_dT, dRho_dS)
   class(linear_EOS),    intent(in)   :: this     !< This EOS
   real,    intent(in)  :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in)  :: S        !< Salinity [ppt].
@@ -189,13 +193,13 @@ elemental subroutine calculate_compress_elem_linear(this, T, S, pressure, rho, d
                                               !! (also the inverse of the square of sound speed)
                                               !! [s2 m-2].
 
-  rho = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S
-  drho_dp = 0.0
+  rho = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S + this%dRho_dp*pressure
+  drho_dp = this%dRho_dp
 
 end subroutine calculate_compress_elem_linear
 
 !> Calculates the layer average specific volumes.
-subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
+subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp)
   real, dimension(:), intent(in)    :: T         !< Potential temperature [degC]
   real, dimension(:), intent(in)    :: S         !< Salinity [ppt]
   real, dimension(:), intent(in)    :: p_t       !< Pressure at the top of the layer [Pa]
@@ -209,11 +213,13 @@ subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, d
                                                  !! [kg m-3 degC-1]
   real,               intent(in)    :: dRho_dS   !< The derivative of density with salinity
                                                  !! [kg m-3 ppt-1]
+  real,               intent(in)    :: dRho_dp   !< The derivative of density with pressure
+                                                 !! [s2 m-2]
   ! Local variables
   integer :: j
 
   do j=start,start+npts-1
-    SpV_avg(j) = 1.0 / (Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))
+    SpV_avg(j) = 1.0 / (Rho_T0_S0 + ((dRho_dT*T(j) + dRho_dS*S(j)) + dRho_dp*dp(j)))
   enddo
 end subroutine avg_spec_vol_linear
 
@@ -239,17 +245,20 @@ subroutine EoS_fit_range_linear(this, T_min, T_max, S_min, S_max, p_min, p_max)
 end subroutine EoS_fit_range_linear
 
 !> Set coefficients for the linear equation of state
-subroutine set_params_linear(this, Rho_T0_S0, dRho_dT, dRho_dS)
+subroutine set_params_linear(this, Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp)
   class(linear_EOS), intent(inout) :: this !< This EOS
   real, optional,    intent(in)    :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3]
   real, optional,    intent(in)    :: dRho_dT   !< The derivative of density with temperature,
                                                 !! [kg m-3 degC-1]
   real, optional,    intent(in)    :: dRho_dS   !< The derivative of density with salinity,
                                                 !! in [kg m-3 ppt-1]
+  real, optional,    intent(in)    :: dRho_dp   !< The derivative of density with pressure,
+                                                !! in [s2 m-2]
 
   if (present(Rho_T0_S0)) this%Rho_T0_S0 = Rho_T0_S0
   if (present(dRho_dT)) this%dRho_dT = dRho_dT
   if (present(dRho_dS)) this%dRho_dS = dRho_dS
+  if (present(dRho_dp)) this%dRho_dp = dRho_dp
 
 end subroutine set_params_linear
 
@@ -624,7 +633,7 @@ end subroutine int_spec_vol_dp_linear
 
 !> Calculate the in-situ density for 1D arraya inputs and outputs.
 subroutine calculate_density_array_linear(this, T, S, pressure, rho, start, npts, rho_ref)
-  class(linear_EOS),  intent(in) :: this      !< This EOS
+  class(linear_EOS),  intent(in)  :: this     !< This EOS
   real, dimension(:), intent(in)  :: T        !< Potential temperature relative to the surface [degC]
   real, dimension(:), intent(in)  :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]
