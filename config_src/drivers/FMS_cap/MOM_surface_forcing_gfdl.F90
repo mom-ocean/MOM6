@@ -146,7 +146,7 @@ type, public :: surface_forcing_CS ; private
   character(len=200) :: inputdir              !< Directory where NetCDF input files are
   character(len=200) :: salt_restore_file     !< Filename for salt restoring data
   character(len=30)  :: salt_restore_var_name !< Name of surface salinity in salt_restore_file
-  logical            :: salt_restore_is_practical !< Specifies that salt restore salinity practical and not absolute.
+  logical            :: salt_restore_is_practical !< Specifies that the target salinity is practical and not absolute.
   logical            :: mask_srestore         !< If true, apply a 2-dimensional mask to the surface
                                               !! salinity restoring fluxes. The masking file should be
                                               !! in inputdir/salt_restore_mask.nc and the field should
@@ -1496,7 +1496,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
                  default="salt")
     call get_param(param_file, mdl, "SALT_RESTORE_PRACTICAL_SALINITY", CS%salt_restore_is_practical, &
                  "Specifies if the restoring surface salinity variable is practical salinity.  If this "//&
-                 "flag is set to false it is assumed that the salinity is absolute salinity.", default=.true.)
+                 "flag is set to false it is assumed that the salinity is absolute salinity.", default=.false.)
     call get_param(param_file, mdl, "SRESTORE_AS_SFLUX", CS%salt_restore_as_sflux, &
                  "If true, the restoring of salinity is applied as a salt "//&
                  "flux instead of as a freshwater flux.", default=.false.)
