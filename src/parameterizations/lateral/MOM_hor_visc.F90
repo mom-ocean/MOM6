@@ -709,7 +709,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   !$omp target enter data map(to: CS%Ah_bg_xx) if (CS%biharmonic)
   !$omp target enter data map(to: CS%reduction_xx) if (CS%biharmonic)
-  !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
+  !$omp target enter data map(alloc: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
   !$omp target enter data map(to: CS%Ah_max_xx) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
@@ -2433,7 +2433,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   !$omp target exit data map(delete: CS%Ah_bg_xx) if (CS%biharmonic)
   !$omp target exit data map(delete: CS%reduction_xx) if (CS%biharmonic)
-  !$omp target enter data map(alloc: CS%Biharm_const_xx(i,j)) &
+  !$omp target exit data map(delete: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
   !$omp target enter data map(to: CS%Ah_max_xx) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
