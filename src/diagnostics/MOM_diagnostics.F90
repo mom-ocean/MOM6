@@ -100,8 +100,11 @@ type, public :: diagnostics_CS ; private
   integer :: id_Tpot           = -1, id_Sprac          = -1
   integer :: id_tob            = -1, id_sob            = -1
   integer :: id_thetaoga       = -1, id_soga           = -1
+  integer :: id_bigthetaoga    = -1, id_abssoga        = -1
   integer :: id_sosga          = -1, id_tosga          = -1
+  integer :: id_abssosga       = -1, id_bigtosga       = -1
   integer :: id_temp_layer_ave = -1, id_salt_layer_ave = -1
+  integer :: id_bigtemp_layer_ave = -1, id_abssalt_layer_ave = -1
   integer :: id_pbo            = -1
   integer :: id_thkcello       = -1, id_rhoinsitu      = -1
   integer :: id_rhopot0        = -1, id_rhopot2        = -1
@@ -404,6 +407,36 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ; enddo
       if (CS%id_Tpot > 0) call post_data(CS%id_Tpot, work_3d, CS%diag)
       if (CS%id_tob > 0) call post_data(CS%id_tob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
+      ! volume mean potential temperature
+      if (CS%id_thetaoga>0) then
+        thetaoga = global_volume_mean(work_3d, h, G, GV, tmp_scale=US%C_to_degC)
+        call post_data(CS%id_thetaoga, thetaoga, CS%diag)
+      endif
+      ! volume mean conservative temperature
+      if (CS%id_bigthetaoga>0) then
+        thetaoga = global_volume_mean(tv%T, h, G, GV, tmp_scale=US%C_to_degC)
+        call post_data(CS%id_bigthetaoga, thetaoga, CS%diag)
+      endif
+      ! area mean potential SST
+      if (CS%id_tosga > 0) then
+        tosga = global_area_mean(work_3d(:,:,1), G, tmp_scale=US%C_to_degC)
+        call post_data(CS%id_tosga, tosga, CS%diag)
+      endif
+      ! area mean conservative SST
+      if (CS%id_bigtosga > 0) then
+        tosga = global_area_mean(tv%T(:,:,1), G, tmp_scale=US%C_to_degC)
+        call post_data(CS%id_bigtosga, tosga, CS%diag)
+      endif
+      ! layer mean potential temperature
+      if (CS%id_temp_layer_ave>0) then
+        temp_layer_ave = global_layer_mean(work_3d, h, G, GV, tmp_scale=US%C_to_degC)
+        call post_data(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
+      endif
+      ! layer mean conservative temperature
+      if (CS%id_bigtemp_layer_ave>0) then
+        temp_layer_ave = global_layer_mean(tv%T, h, G, GV, tmp_scale=US%C_to_degC)
+        call post_data(CS%id_bigtemp_layer_ave, temp_layer_ave, CS%diag)
+      endif
       if (CS%id_tosq > 0) then
          do k=1,nz ; do j=js,je ; do i=is,ie
            work_3d(i,j,k) = work_3d(i,j,k)*work_3d(i,j,k)
@@ -420,7 +453,23 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ; enddo ; enddo
       call post_data(CS%id_tosq, work_3d, CS%diag)
     endif
+    ! volume mean potential temperature
+    if (CS%id_thetaoga>0) then
+      thetaoga = global_volume_mean(tv%T, h, G, GV, tmp_scale=US%C_to_degC)
+      call post_data(CS%id_thetaoga, thetaoga, CS%diag)
+    endif
+    ! area mean SST
+    if (CS%id_tosga > 0) then
+      tosga = global_area_mean(tv%T(:,:,1), G, tmp_scale=US%C_to_degC)
+      call post_data(CS%id_tosga, tosga, CS%diag)
+    endif
+    ! layer mean potential temperature
+    if (CS%id_temp_layer_ave>0) then
+      temp_layer_ave = global_layer_mean(tv%T, h, G, GV, tmp_scale=US%C_to_degC)
+      call post_data(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
+    endif
   endif
+
 
   ! Calculate additional, potentially derived salinity diagnostics
   if (tv%S_is_absS) then
@@ -434,6 +483,36 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ; enddo
       if (CS%id_Sprac > 0) call post_data(CS%id_Sprac, work_3d, CS%diag)
       if (CS%id_sob > 0) call post_data(CS%id_sob, work_3d(:,:,nz), CS%diag, mask=G%mask2dT)
+      ! volume mean salinity
+      if (CS%id_soga>0) then
+        soga = global_volume_mean(work_3d, h, G, GV, tmp_scale=US%S_to_ppt)
+        call post_data(CS%id_soga, soga, CS%diag)
+      endif
+      ! volume mean absolute salinity
+      if (CS%id_abssoga>0) then
+        soga = global_volume_mean(tv%S, h, G, GV, tmp_scale=US%S_to_ppt)
+        call post_data(CS%id_abssoga, soga, CS%diag)
+      endif
+      ! area mean practical SSS
+      if (CS%id_sosga > 0) then
+        sosga = global_area_mean(work_3d(:,:,1), G, tmp_scale=US%S_to_ppt)
+        call post_data(CS%id_sosga, sosga, CS%diag)
+      endif
+      ! area mean absolute SSS
+      if (CS%id_abssosga > 0) then
+        sosga = global_area_mean(tv%S(:,:,1), G, tmp_scale=US%S_to_ppt)
+        call post_data(CS%id_abssosga, sosga, CS%diag)
+      endif
+      ! layer mean practical salinity
+      if (CS%id_salt_layer_ave>0) then
+        salt_layer_ave = global_layer_mean(work_3d, h, G, GV, tmp_scale=US%S_to_ppt)
+        call post_data(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
+      endif
+      ! layer mean absolute salinity
+      if (CS%id_abssalt_layer_ave>0) then
+        salt_layer_ave = global_layer_mean(tv%S, h, G, GV, tmp_scale=US%S_to_ppt)
+        call post_data(CS%id_abssalt_layer_ave, salt_layer_ave, CS%diag)
+      endif
       if (CS%id_sosq > 0) then
         do k=1,nz ; do j=js,je ; do i=is,ie
            work_3d(i,j,k) = work_3d(i,j,k)*work_3d(i,j,k)
@@ -450,42 +529,21 @@ subroutine calculate_diagnostic_fields(u, v, h, uh, vh, tv, ADp, CDp, p_surf, &
       enddo ; enddo ; enddo
       call post_data(CS%id_sosq, work_3d, CS%diag)
     endif
-  endif
-
-  ! volume mean potential temperature
-  if (CS%id_thetaoga>0) then
-    thetaoga = global_volume_mean(tv%T, h, G, GV, tmp_scale=US%C_to_degC)
-    call post_data(CS%id_thetaoga, thetaoga, CS%diag)
-  endif
-
-  ! area mean SST
-  if (CS%id_tosga > 0) then
-    tosga = global_area_mean(tv%T(:,:,1), G, tmp_scale=US%C_to_degC)
-    call post_data(CS%id_tosga, tosga, CS%diag)
-  endif
-
-  ! volume mean salinity
-  if (CS%id_soga>0) then
-    soga = global_volume_mean(tv%S, h, G, GV, tmp_scale=US%S_to_ppt)
-    call post_data(CS%id_soga, soga, CS%diag)
-  endif
-
-  ! area mean SSS
-  if (CS%id_sosga > 0) then
-    sosga = global_area_mean(tv%S(:,:,1), G, tmp_scale=US%S_to_ppt)
-    call post_data(CS%id_sosga, sosga, CS%diag)
-  endif
-
-  ! layer mean potential temperature
-  if (CS%id_temp_layer_ave>0) then
-    temp_layer_ave = global_layer_mean(tv%T, h, G, GV, tmp_scale=US%C_to_degC)
-    call post_data(CS%id_temp_layer_ave, temp_layer_ave, CS%diag)
-  endif
-
-  ! layer mean salinity
-  if (CS%id_salt_layer_ave>0) then
-    salt_layer_ave = global_layer_mean(tv%S, h, G, GV, tmp_scale=US%S_to_ppt)
-    call post_data(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
+    ! volume mean salinity
+    if (CS%id_soga>0) then
+      soga = global_volume_mean(tv%S, h, G, GV, tmp_scale=US%S_to_ppt)
+      call post_data(CS%id_soga, soga, CS%diag)
+    endif
+    ! area mean SSS
+    if (CS%id_sosga > 0) then
+      sosga = global_area_mean(tv%S(:,:,1), G, tmp_scale=US%S_to_ppt)
+      call post_data(CS%id_sosga, sosga, CS%diag)
+    endif
+    ! layer mean salinity
+    if (CS%id_salt_layer_ave>0) then
+      salt_layer_ave = global_layer_mean(tv%S, h, G, GV, tmp_scale=US%S_to_ppt)
+      call post_data(CS%id_salt_layer_ave, salt_layer_ave, CS%diag)
+    endif
   endif
 
   call calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
@@ -1688,26 +1746,44 @@ subroutine MOM_diagnostics_init(MIS, ADp, CDp, Time, G, GV, US, param_file, diag
 
     CS%id_temp_layer_ave = register_diag_field('ocean_model', 'temp_layer_ave', &
         diag%axesZL, Time, 'Layer Average Ocean Temperature', units='degC', conversion=US%C_to_degC)
+    CS%id_bigtemp_layer_ave = register_diag_field('ocean_model', 'contemp_layer_ave', &
+        diag%axesZL, Time, 'Layer Average Ocean Conservative Temperature', units='Celsius', conversion=US%C_to_degC)
     CS%id_salt_layer_ave = register_diag_field('ocean_model', 'salt_layer_ave', &
         diag%axesZL, Time, 'Layer Average Ocean Salinity', units='psu', conversion=US%S_to_ppt)
+    CS%id_abssalt_layer_ave = register_diag_field('ocean_model', 'abssalt_layer_ave', &
+        diag%axesZL, Time, 'Layer Average Ocean Absolute Salinity', units='g kg-1', conversion=US%S_to_ppt)
 
     CS%id_thetaoga = register_scalar_field('ocean_model', 'thetaoga', &
         Time, diag, 'Global Mean Ocean Potential Temperature', units='degC', conversion=US%C_to_degC, &
         standard_name='sea_water_potential_temperature')
+    CS%id_bigthetaoga = register_scalar_field('ocean_model', 'bigthetaoga', &
+        Time, diag, 'Global Mean Ocean Conservative Temperature', units='Celsius', conversion=US%C_to_degC, &
+        standard_name='sea_water_conservative_temperature')
     CS%id_soga = register_scalar_field('ocean_model', 'soga', &
         Time, diag, 'Global Mean Ocean Salinity', units='psu', conversion=US%S_to_ppt, &
         standard_name='sea_water_salinity')
+    CS%id_abssoga = register_scalar_field('ocean_model', 'abssoga', &
+        Time, diag, 'Global Mean Ocean Absolute Salinity', units='g kg-1', conversion=US%S_to_ppt, &
+        standard_name='sea_water_absolute_salinity')
 
+    ! The CMIP convention is potential temperature, but not indicated in the CMIP long name.
     CS%id_tosga = register_scalar_field('ocean_model', 'sst_global', Time, diag, &
         long_name='Global Area Average Sea Surface Temperature', &
         units='degC', conversion=US%C_to_degC, standard_name='sea_surface_temperature', &
         cmor_field_name='tosga', cmor_standard_name='sea_surface_temperature', &
         cmor_long_name='Sea Surface Temperature')
+    CS%id_bigtosga = register_scalar_field('ocean_model', 'sscont_global', Time, diag, &
+        long_name='Global Area Average Sea Surface Conservative Temperature', &
+        units='Celsius', conversion=US%C_to_degC, standard_name='sea_surface_temperature')
+    ! The CMIP convention is practical salinity, but not indicated in the CMIP long name.
     CS%id_sosga = register_scalar_field('ocean_model', 'sss_global', Time, diag, &
         long_name='Global Area Average Sea Surface Salinity', &
         units='psu', conversion=US%S_to_ppt, standard_name='sea_surface_salinity', &
         cmor_field_name='sosga', cmor_standard_name='sea_surface_salinity', &
         cmor_long_name='Sea Surface Salinity')
+    CS%id_abssosga = register_scalar_field('ocean_model', 'ssabss_global', Time, diag, &
+        long_name='Global Area Average Sea Surface Absolute Salinity', &
+        units='psu', conversion=US%S_to_ppt, standard_name='sea_surface_absolute_salinity')
   endif
 
   CS%id_u = register_diag_field('ocean_model', 'u', diag%axesCuL, Time, &
