@@ -566,10 +566,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ubt_prev, &   ! The starting value of ubt in a barotropic step [L T-1 ~> m s-1].
     ubt_first, &  ! The starting value of ubt in a series of barotropic steps [L T-1 ~> m s-1].
     ubt_trans, &  ! The latest value of ubt used for a transport [L T-1 ~> m s-1].
-    azon, bzon, & ! _zon and _mer are the values of the Coriolis force which
-    czon, dzon, & ! are applied to the neighboring values of vbtav and ubtav,
-    amer, bmer, & ! respectively to get the barotropic inertial rotation
-    cmer, dmer, & ! [T-1 ~> s-1].
     Cor_u, &      ! The zonal Coriolis acceleration [L T-2 ~> m s-2].
     Cor_ref_u, &  ! The zonal barotropic Coriolis acceleration due
                   ! to the reference velocities [L T-2 ~> m s-2].
@@ -602,6 +598,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     DCor_v, &     ! An averaged total thickness at v points [H ~> m or kg m-2].
     Datv          ! Basin depth at v-velocity grid points times the x-grid
                   ! spacing [H L ~> m2 or kg m-1].
+  real, dimension(4,SZIBW_(CS),SZJW_(CS)) :: &
+    f_4_u         !< The terms giving the contribution to the Coriolis acceleration at a zonal
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at v points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! v-velocities to the southwest, southeast, northwest and northeast.
+  real, dimension(4,SZIW_(CS),SZJBW_(CS)) :: &
+    f_4_v         !< The terms giving the contribution to the Coriolis acceleration at a meridional
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at u points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! u-velocities to the southwest, southeast, northwest and northeast.
   real, dimension(:,:,:), pointer :: ufilt, vfilt
                   ! Filtered velocities from the output of streaming filters [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G)) :: Drag_u
@@ -651,10 +661,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   real :: det_de      ! The partial derivative due to self-attraction and loading
                       ! of the reference geopotential with the sea surface height [nondim].
                       ! This is typically ~0.09 or less.
-  real :: dgeo_de     ! The constant of proportionality between geopotential and
-                      ! sea surface height [nondim].  It is of order 1, but for
-                      ! stability this may be made larger than the physical
-                      ! problem would suggest.
+  real :: dgeo_de     ! The constant of proportionality between geopotential and sea surface height
+                      ! [nondim].  It is of order 1, but for stability this may be made larger than
+                      ! the physical problem would suggest.
+  real :: dgeo_de_OBC ! The value of dgeo_de to be used with Flather open boundary conditions [nondim].
   real :: Instep      ! The inverse of the number of barotropic time steps to take [nondim].
   integer :: nstep    ! The number of barotropic time steps to take.
   real :: Htot_avg    ! The average total thickness of the tracer columns adjacent to a
@@ -1082,17 +1092,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
         do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
           if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            gtot_S(i,j+1) = gtot_S(i,j)
+            gtot_S(i,j+1) = gtot_S(i,j)  !### Should this be gtot_N(i,j) to use wt_v at the same point?
           else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            gtot_N(i,j) = gtot_N(i,j+1)
+            gtot_N(i,j) = gtot_N(i,j+1)  ! Perhaps this should be gtot_S(i,j+1)?
           endif
         enddo
       elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
         do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
           if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            gtot_W(i+1,j) = gtot_W(i,j)
+            gtot_W(i+1,j) = gtot_W(i,j)  ! Perhaps this should be gtot_E(i,j)?
           else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            gtot_E(i,j) = gtot_E(i+1,j)
+            gtot_E(i,j) = gtot_E(i+1,j)  ! Perhaps this should be gtot_W(i+1,j)?
           endif
         enddo
       endif
@@ -1136,13 +1146,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (nonblock_setup .and. apply_OBC_flather .and. .not.GV%Boussinesq) &
       call complete_group_pass(CS%pass_SpV_avg, CS%BT_domain)
 
-    if (CS%TIDAL_SAL_FLATHER) then
-      call set_up_BT_OBC(OBC, eta, SpV_col_avg, CS%BT_OBC, CS%BT_Domain, G, GV, US, CS, MS, ievf-ie, &
-                         use_BT_cont, integral_BT_cont, dt, Datu, Datv, BTCL_u, BTCL_v, dgeo_de)
-    else
-      call set_up_BT_OBC(OBC, eta, SpV_col_avg, CS%BT_OBC, CS%BT_Domain, G, GV, US, CS, MS, ievf-ie, &
-                         use_BT_cont, integral_BT_cont, dt, Datu, Datv, BTCL_u, BTCL_v)
-    endif
+    dgeo_de_OBC = 1.0 ; if (CS%tidal_SAL_Flather) dgeo_de_OBC = dgeo_de
+    call set_up_BT_OBC(OBC, eta, SpV_col_avg, CS%BT_OBC, CS%BT_Domain, G, GV, US, CS, MS, ievf-ie, &
+                       use_BT_cont, integral_BT_cont, dt, Datu, Datv, BTCL_u, BTCL_v, dgeo_de_OBC)
   endif
 
   ! Determine the difference between the sum of the layer fluxes and the
@@ -1407,8 +1413,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
 
   ! Determine the weighted Coriolis parameters for the neighboring velocities.
-  call btstep_find_Cor(q, DCor_u, DCor_v, amer, bmer, cmer, dmer, &
-                       azon, bzon, czon, dzon, isvf, ievf, jsvf, jevf, CS)
+  call btstep_find_Cor(q, DCor_u, DCor_v, f_4_u, f_4_v, isvf, ievf, jsvf, jevf, CS)
 
 ! Complete the previously initiated message passing.
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
@@ -1435,14 +1440,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$OMP parallel do default(shared)
   do j=js,je ; do I=is-1,ie
     Cor_ref_u(I,j) =  &
-        (((azon(I,j) * vbt_Cor(i+1,j)) + (czon(I,j) * vbt_Cor(i  ,j-1))) + &
-         ((bzon(I,j) * vbt_Cor(i  ,j)) + (dzon(I,j) * vbt_Cor(i+1,j-1))))
+        (((f_4_u(4,I,j) * vbt_Cor(i+1,j)) + (f_4_u(1,I,j) * vbt_Cor(i  ,j-1))) + &
+         ((f_4_u(3,I,j) * vbt_Cor(i  ,j)) + (f_4_u(2,I,j) * vbt_Cor(i+1,j-1))))
   enddo ; enddo
   !$OMP parallel do default(shared)
   do J=js-1,je ; do i=is,ie
     Cor_ref_v(i,J) = -1.0 * &
-        (((amer(I-1,j) * ubt_Cor(I-1,j)) + (cmer(I  ,j+1) * ubt_Cor(I  ,j+1))) + &
-         ((bmer(I  ,j) * ubt_Cor(I  ,j)) + (dmer(I-1,j+1) * ubt_Cor(I-1,j+1))))
+        (((f_4_v(1,i,J) * ubt_Cor(I-1,j)) + (f_4_v(4,i,J) * ubt_Cor(I  ,j+1))) + &
+         ((f_4_v(2,i,J) * ubt_Cor(I  ,j)) + (f_4_v(3,i,J) * ubt_Cor(I-1,j+1))))
   enddo ; enddo
 
   ! Now start new halo updates.
@@ -1755,7 +1760,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! March the barotropic solver through all of its time steps.
   call btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL_v, eta_IC, &
                 eta_PF_1, d_eta_PF, eta_src, dyn_coef_eta, uhbtav, vhbtav, u_accel_bt, v_accel_bt, &
-                azon, bzon, czon, dzon, amer, bmer, cmer, dmer, bt_rem_u, bt_rem_v, &
+                f_4_u, f_4_v, bt_rem_u, bt_rem_v, &
                 BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v, Rayleigh_u, Rayleigh_v, &
                 eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, SpV_col_avg, dgeo_de, &
                 eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, Corv_avg, PFv_avg, &
@@ -2095,7 +2100,7 @@ end subroutine btstep
 !> Update the barotropic solver through multiple time steps.
 subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL_v, eta_IC, &
                 eta_PF_1, d_eta_PF, eta_src, dyn_coef_eta, uhbtav, vhbtav, u_accel_bt, v_accel_bt, &
-                azon, bzon, czon, dzon, amer, bmer, cmer, dmer, bt_rem_u, bt_rem_v, &
+                f_4_u, f_4_v, bt_rem_u, bt_rem_v, &
                 BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v, Rayleigh_u, Rayleigh_v, &
                 eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, SpV_col_avg, dgeo_de, &
                 eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, Corv_avg, PFv_avg, &
@@ -2150,30 +2155,20 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
     v_accel_bt    !< The difference between the meridional acceleration from the
                   !! barotropic calculation and BT_force_v [L T-2 ~> m s-2].
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    azon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its southwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    bzon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    czon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    dzon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its northeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    amer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    bmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    cmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    dmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southwest [T-1 ~> s-1]
+  real, dimension(4,SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    f_4_u         !< The terms giving the contribution to the Coriolis acceleration at a zonal
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at v points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! v-velocities to the southwest, southeast, northwest and northeast.
+  real, dimension(4,SZIW_(CS),SZJBW_(CS)), intent(in) :: &
+    f_4_v         !< The terms giving the contribution to the Coriolis acceleration at a meridional
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at u points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! u-velocities to the southwest, southeast, northwest and northeast.
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     bt_rem_u      !< The fraction of the barotropic zonal velocity that remains after a time step,
                   !! the rest being lost to bottom drag [nondim].  bt_rem_v is between 0 and 1.
@@ -2200,23 +2195,23 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     eta_PF        !< The 2-D eta field (either SSH anomaly or column mass anomaly) that was used to
                   !! calculate the input pressure gradient accelerations [H ~> m or kg m-2]
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_E        !< The effective total reduced gravity used to relate fee surface height
+    gtot_E        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the east of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_W        !< The effective total reduced gravity used to relate fee surface height
+    gtot_W        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the west of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
                   !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_N        !< The effective total reduced gravity used to relate fee surface height
+    gtot_N        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the north of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_S        !< The effective total reduced gravity used to relate fee surface height
+    gtot_S        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the south of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2]
@@ -2461,14 +2456,14 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     if (MOD(n+G%first_direction,2)==1) then
       ! On odd-steps, update v first.
       call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
-                           isv-1, iev+1, jsv-1, jev, amer, bmer, cmer, dmer, &
+                           isv-1, iev+1, jsv-1, jev, f_4_v, &
                            bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
                            eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS, OBC)
 
       ! Now update the zonal velocity.
       call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
-                           isv-1, iev, jsv, jev, azon, bzon, czon, dzon, &
+                           isv-1, iev, jsv, jev, f_4_u, &
                            bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS, OBC)
@@ -2476,13 +2471,13 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     else
       ! On even steps, update u first.
       call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
-                           isv-1, iev, jsv-1, jev+1, azon, bzon, czon, dzon, &
+                           isv-1, iev, jsv-1, jev+1, f_4_u, &
                            bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS, OBC)
       ! Now update the meridional velocity.
       call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
-                           isv, iev, jsv-1, jev, amer, bmer, cmer, dmer, &
+                           isv, iev, jsv-1, jev, f_4_v, &
                            bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
                            eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS, OBC, &
@@ -2700,8 +2695,7 @@ end subroutine btstep_timeloop
 
 
 !> Find the Coriolis force terms _zon and _mer.
-subroutine btstep_find_Cor(q, DCor_u, DCor_v, amer, bmer, cmer, dmer, azon, bzon, czon, dzon, &
-                           isvf, ievf, jsvf, jevf, CS)
+subroutine btstep_find_Cor(q, DCor_u, DCor_v, f_4_u, f_4_v, isvf, ievf, jsvf, jevf, CS)
   type(barotropic_CS), intent(inout) :: CS      !< Barotropic control structure
   real, intent(in) :: q(SZIBW_(CS),SZJBW_(CS))  !< A pseudo potential vorticity [T-1 Z-1 ~> s-1 m-1]
                   !! or [T-1 H-1 ~> s-1 m-1 or m2 s-1 kg-1]
@@ -2709,30 +2703,20 @@ subroutine btstep_find_Cor(q, DCor_u, DCor_v, amer, bmer, cmer, dmer, azon, bzon
     DCor_u        !< An averaged depth or total thickness at u points [Z ~> m] or [H ~> m or kg m-2].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     DCor_v        !< An averaged depth or total thickness at v points [Z ~> m] or [H ~> m or kg m-2].
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    azon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its southwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    bzon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    czon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    dzon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its northeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    amer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    bmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    cmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(inout) :: &
-    dmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southwest [T-1 ~> s-1]
+  real, dimension(4,SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    f_4_u         !< The terms giving the contribution to the Coriolis acceleration at a zonal
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at v points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! v-velocities to the southwest, southeast, northwest and northeast.
+  real, dimension(4,SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    f_4_v         !< The terms giving the contribution to the Coriolis acceleration at a meridional
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at u points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! u-velocities to the southwest, southeast, northwest and northeast.
   integer, intent(in) :: isvf  !< The starting i-index of the largest valid range for tracer points
   integer, intent(in) :: ievf  !< The ending i-index of the largest valid range for tracer points
   integer, intent(in) :: jsvf  !< The starting j-index of the largest valid range for tracer points
@@ -2743,30 +2727,30 @@ subroutine btstep_find_Cor(q, DCor_u, DCor_v, amer, bmer, cmer, dmer, azon, bzon
   !$OMP parallel do default(shared)
   do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
     if (CS%Sadourny) then
-      amer(I-1,j) = DCor_u(I-1,j) * q(I-1,J)
-      bmer(I,j) = DCor_u(I,j) * q(I,J)
-      cmer(I,j+1) = DCor_u(I,j+1) * q(I,J)
-      dmer(I-1,j+1) = DCor_u(I-1,j+1) * q(I-1,J)
+      f_4_v(1,i,J) = DCor_u(I-1,j) * q(I-1,J)
+      f_4_v(2,i,J) = DCor_u(I,j) * q(I,J)
+      f_4_v(4,i,J) = DCor_u(I,j+1) * q(I,J)
+      f_4_v(3,i,J) = DCor_u(I-1,j+1) * q(I-1,J)
     else
-      amer(I-1,j) = DCor_u(I-1,j) * ((q(I,J) + q(I-1,J-1)) + q(I-1,J)) / 3.0
-      bmer(I,j) = DCor_u(I,j) * (q(I,J) + (q(I-1,J) + q(I,J-1))) / 3.0
-      cmer(I,j+1) = DCor_u(I,j+1) * (q(I,J) + (q(I-1,J) + q(I,J+1))) / 3.0
-      dmer(I-1,j+1) = DCor_u(I-1,j+1) * ((q(I,J) + q(I-1,J+1)) + q(I-1,J)) / 3.0
+      f_4_v(1,i,J) = DCor_u(I-1,j) * ((q(I,J) + q(I-1,J-1)) + q(I-1,J)) / 3.0
+      f_4_v(2,i,J) = DCor_u(I,j) * (q(I,J) + (q(I-1,J) + q(I,J-1))) / 3.0
+      f_4_v(4,i,J) = DCor_u(I,j+1) * (q(I,J) + (q(I-1,J) + q(I,J+1))) / 3.0
+      f_4_v(3,i,J) = DCor_u(I-1,j+1) * ((q(I,J) + q(I-1,J+1)) + q(I-1,J)) / 3.0
     endif
   enddo ; enddo
 
   !$OMP parallel do default(shared)
   do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
     if (CS%Sadourny) then
-      azon(I,j) = DCor_v(i+1,J) * q(I,J)
-      bzon(I,j) = DCor_v(i,J) * q(I,J)
-      czon(I,j) = DCor_v(i,J-1) * q(I,J-1)
-      dzon(I,j) = DCor_v(i+1,J-1) * q(I,J-1)
+      f_4_u(4,I,j) = DCor_v(i+1,J) * q(I,J)
+      f_4_u(3,I,j) = DCor_v(i,J) * q(I,J)
+      f_4_u(1,I,j) = DCor_v(i,J-1) * q(I,J-1)
+      f_4_u(2,I,j) = DCor_v(i+1,J-1) * q(I,J-1)
     else
-      azon(I,j) = DCor_v(i+1,J) * (q(I,J) + (q(I+1,J) + q(I,J-1))) / 3.0
-      bzon(I,j) = DCor_v(i,J) * (q(I,J) + (q(I-1,J) + q(I,J-1))) / 3.0
-      czon(I,j) = DCor_v(i,J-1) * ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) / 3.0
-      dzon(I,j) = DCor_v(i+1,J-1) * ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) / 3.0
+      f_4_u(4,I,j) = DCor_v(i+1,J) * (q(I,J) + (q(I+1,J) + q(I,J-1))) / 3.0
+      f_4_u(3,I,j) = DCor_v(i,J) * (q(I,J) + (q(I-1,J) + q(I,J-1))) / 3.0
+      f_4_u(1,I,j) = DCor_v(i,J-1) * ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) / 3.0
+      f_4_u(2,I,j) = DCor_v(i+1,J-1) * ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) / 3.0
     endif
   enddo ; enddo
 
@@ -2987,7 +2971,7 @@ end subroutine btloop_eta_predictor
 
 !> Update meridional velocity.
 subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
-                           Cor_v, PFv, is_v, ie_v, Js_v, Je_v, amer, bmer, cmer, dmer, &
+                           Cor_v, PFv, is_v, ie_v, Js_v, Je_v, f_4_v, &
                            bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
                            eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
                            wt_accel_n, G, US, CS, OBC, Cor_bracket_bug)
@@ -3006,18 +2990,13 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
     PFv           !< The meridional pressure force acceleration [L T-2 ~> m s-2].
   logical, optional, intent(in) :: Cor_bracket_bug !< If present and true, use an order of operations that is
                   !! not bitwise rotationally symmetric in the meridional Coriolis term
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    amer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    bmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    cmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    dmer          !< The term relating a zonal velocity anomaly to its contribution to the
-                  !! Coriolis acceleration at the meridional velocity point to its southwest [T-1 ~> s-1]
+  real, dimension(4,SZIW_(CS),SZJBW_(CS)), intent(in) :: &
+    f_4_v         !< The terms giving the contribution to the Coriolis acceleration at a meridional
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at u points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! u-velocities to the southwest, southeast, northwest and northeast.
   integer, intent(in)  :: is_v !< The starting i-index of the range of v-point values to calculate
   integer, intent(in)  :: ie_v !< The ending i-index of the range of v-point values to calculate
   integer, intent(in)  :: Js_v !< The starting j-index of the range of v-point values to calculate
@@ -3044,12 +3023,12 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
                   !! column mass anomaly) that was used to calculate the input
                   !! pressure gradient accelerations [H ~> m or kg m-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_N        !< The effective total reduced gravity used to relate fee surface height
+    gtot_N        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the north of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_S        !< The effective total reduced gravity used to relate fee surface height
+    gtot_S        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the south of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
@@ -3075,8 +3054,8 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
   if (use_bracket_bug) then
    !$OMP do schedule(static)
    do J=Js_v,Je_v ; do i=is_v,ie_v
-     Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + bmer(I,j) * ubt(I,j)) + &
-             (cmer(I,j+1) * ubt(I,j+1) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+     Cor_v(i,J) = -1.0*((f_4_v(1,i,J) * ubt(I-1,j) + f_4_v(2,i,J) * ubt(I,j)) + &
+             (f_4_v(4,i,J) * ubt(I,j+1) + f_4_v(3,i,J) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
      PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
                  ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                  dgeo_de * CS%IdyCv(i,J)
@@ -3085,8 +3064,8 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
   else
    !$OMP do schedule(static)
    do J=Js_v,Je_v ; do i=is_v,ie_v
-     Cor_v(i,J) = -1.0*((amer(I-1,j) * ubt(I-1,j) + cmer(I,j+1) * ubt(I,j+1)) + &
-             (bmer(I,j) * ubt(I,j) + dmer(I-1,j+1) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+     Cor_v(i,J) = -1.0*((f_4_v(1,i,J) * ubt(I-1,j) + f_4_v(4,i,J) * ubt(I,j+1)) + &
+             (f_4_v(2,i,J) * ubt(I,j) + f_4_v(3,i,J) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
      PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
                  ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                  dgeo_de * CS%IdyCv(i,J)
@@ -3136,7 +3115,7 @@ end subroutine btloop_update_v
 
 !> Update zonal velocity.
 subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
-                           Cor_u, PFu, Is_u, Ie_u, js_u, je_u, azon, bzon, czon, dzon, &
+                           Cor_u, PFu, Is_u, Ie_u, js_u, je_u, f_4_u, &
                            bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
                            wt_accel_n, G, US, CS, OBC)
@@ -3158,18 +3137,13 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
   integer, intent(in)  :: Ie_u !< The ending i-index of the range of u-point values to calculate
   integer, intent(in)  :: js_u !< The starting j-index of the range of u-point values to calculate
   integer, intent(in)  :: je_u !< The ending j-index of the range of u-point values to calculate
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    azon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its southwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    bzon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its southeast [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    czon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its northwest [T-1 ~> s-1]
-  real, dimension(SZIBW_(CS),SZJW_(CS)) , intent(in) :: &
-    dzon          !< The term giving the contribution to the Coriolis acceleration at a zonal
-                  !! velocity point from the meridional velocity anomaly to its northeast [T-1 ~> s-1]
+  real, dimension(4,SZIBW_(CS),SZJW_(CS)), intent(in) :: &
+    f_4_u         !< The terms giving the contribution to the Coriolis acceleration at a zonal
+                  !! velocity point from the neighboring meridional velocity anomalies [T-1 ~> s-1].
+                  !! These are the products of thicknesses at v points and approprately staggered
+                  !! averaged pseudo potential vorticities, but with sufficiently smooth topography
+                  !! they are approximately f / 4.  The 4 values on the innermost loop are for
+                  !! v-velocities to the southwest, southeast, northwest and northeast.
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     bt_rem_u      !< The fraction of the barotropic meridional velocity that
                   !! remains after a time step, the rest being lost to bottom
@@ -3192,12 +3166,12 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
                   !! column mass anomaly) that was used to calculate the input
                   !! pressure gradient accelerations [H ~> m or kg m-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_E        !< The effective total reduced gravity used to relate fee surface height
+    gtot_E        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the east of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_W        !< The effective total reduced gravity used to relate fee surface height
+    gtot_W        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the west of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
@@ -3218,8 +3192,8 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
 
   !$OMP do schedule(static)
   do j=js_u,je_u ; do I=Is_u,Ie_u
-    Cor_u(I,j) = (((azon(I,j) * vbt(i+1,J)) + (czon(I,j) * vbt(i,J-1))) + &
-                  ((bzon(I,j) * vbt(i,J)) + (dzon(I,j) * vbt(i+1,J-1)))) - &
+    Cor_u(I,j) = (((f_4_u(4,I,j) * vbt(i+1,J)) + (f_4_u(1,I,j) * vbt(i,J-1))) + &
+                  ((f_4_u(3,I,j) * vbt(i,J)) + (f_4_u(2,I,j) * vbt(i+1,J-1)))) - &
                  Cor_ref_u(I,j)
     PFu(I,j) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j)) - &
                 ((eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j))) * &
@@ -3331,22 +3305,22 @@ subroutine btstep_layer_accel(dt, u_accel_bt, v_accel_bt, pbce, gtot_E, gtot_W, 
                                                          !! due to free surface height anomalies
                                                          !! [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_E        !< The effective total reduced gravity used to relate fee surface height
+    gtot_E        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the east of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_W        !< The effective total reduced gravity used to relate fee surface height
+    gtot_W        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the west of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_N        !< The effective total reduced gravity used to relate fee surface height
+    gtot_N        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the north of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_S        !< The effective total reduced gravity used to relate fee surface height
+    gtot_S        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
                   !! in the barotropic momentum equations half a grid-point to the south of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
@@ -3865,11 +3839,10 @@ subroutine set_up_BT_OBC(OBC, eta, SpV_avg, BT_OBC, BT_Domain, G, GV, US, CS, MS
   type(local_BT_cont_v_type), dimension(SZIW_(MS),SZJBW_(MS)), intent(in) :: BTCL_v !< Structure of information used
                                                                  !! for a dynamic estimate of the face areas at
                                                                  !! v-points.
-  real,                        optional, intent(in)    :: dgeo_de  !< The constant of proportionality between
+  real,                                  intent(in)    :: dgeo_de  !< The constant of proportionality between
                                                                  !! geopotential and sea surface height [nondim].
   ! Local variables
   real :: I_dt      ! The inverse of the time interval of this call [T-1 ~> s-1].
-  real :: dgeo_de_in !< The constant of proportionality between geopotential and sea surface height [nondim].
   integer :: i, j, k, is, ie, js, je, n, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: isdw, iedw, jsdw, jedw
@@ -3886,9 +3859,6 @@ subroutine set_up_BT_OBC(OBC, eta, SpV_avg, BT_OBC, BT_Domain, G, GV, US, CS, MS
     call MOM_error(FATAL, "set_up_BT_OBC: Open boundary conditions are not "//&
                            "yet fully implemented with wide barotropic halos.")
   endif
-
-  dgeo_de_in = 1.0
-  if (PRESENT(dgeo_de)) dgeo_de_in = dgeo_de
 
   if (.not. BT_OBC%is_alloced) then
     allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw), source=0.0)
@@ -3949,7 +3919,7 @@ subroutine set_up_BT_OBC(OBC, eta, SpV_avg, BT_OBC, BT_Domain, G, GV, US, CS, MS
             BT_OBC%dZ_u(I,j) = GV%H_to_RZ * eta(i+1,j) * SpV_avg(i+1,j)
           endif
         endif
-        BT_OBC%Cg_u(I,j) = SQRT(dgeo_de_in *  GV%g_prime(1) * BT_OBC%dZ_u(i,j))
+        BT_OBC%Cg_u(I,j) = SQRT(dgeo_de *  GV%g_prime(1) * BT_OBC%dZ_u(i,j))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_u_BCs_exist_globally) then
@@ -4003,7 +3973,7 @@ subroutine set_up_BT_OBC(OBC, eta, SpV_avg, BT_OBC, BT_Domain, G, GV, US, CS, MS
             BT_OBC%dZ_v(i,J) = GV%H_to_RZ * eta(i,j+1) * SpV_avg(i,j+1)
           endif
         endif
-        BT_OBC%Cg_v(i,J) = SQRT(dgeo_de_in * GV%g_prime(1) * BT_OBC%dZ_v(i,J))
+        BT_OBC%Cg_v(i,J) = SQRT(dgeo_de * GV%g_prime(1) * BT_OBC%dZ_v(i,J))
       endif
     endif ; enddo ; enddo
     if (OBC%Flather_v_BCs_exist_globally) then
