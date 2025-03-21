@@ -2164,6 +2164,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
   character(len=480) :: module_list, var_list
+  character(len=16)  :: dimensions
   integer :: num_modnm, num_varnm
   logical :: active
 
@@ -2384,6 +2385,22 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     enddo ! i
   enddo
 
+  dimensions = ""
+  if (axes_in%is_h_point)   dimensions = trim(dimensions)//" xh, yh,"
+  if (axes_in%is_q_point)   dimensions = trim(dimensions)//" xq, yq,"
+  if (axes_in%is_u_point)   dimensions = trim(dimensions)//" xq, yh,"
+  if (axes_in%is_v_point)   dimensions = trim(dimensions)//" xh, yq,"
+  if (axes_in%is_layer)     dimensions = trim(dimensions)//" zl,"
+  if (axes_in%is_interface) dimensions = trim(dimensions)//" zi,"
+
+  if (len_trim(dimensions) > 0) then
+    dimensions = trim(adjustl(dimensions))
+    if (dimensions(len_trim(dimensions):len_trim(dimensions)) == ",") then
+        dimensions = dimensions(1:len_trim(dimensions) - 1)
+    endif
+    dimensions = trim(dimensions)
+  endif
+
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0)) then
     msg = ''
     if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
@@ -2395,7 +2412,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     if (num_varnm <= 1) var_list = ''
 
     call log_available_diag(dm_id>0, module_list, field_name, cm_string, msg, diag_CS, &
-                            long_name, units, standard_name, variants=var_list)
+                            long_name, units, standard_name, variants=var_list, dimensions=dimensions)
   endif
 
   register_diag_field = dm_id
@@ -2897,6 +2914,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   integer :: dm_id, fms_id
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=16)  :: dimensions
 
   MOM_missing_value = diag_cs%missing_value
   if (present(missing_value)) MOM_missing_value = missing_value
@@ -2956,15 +2974,18 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     endif
   endif
 
+  dimensions = "scalar"
+
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     if (present(cmor_field_name)) then
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name, &
-                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}", &
+                              dimensions=dimensions)
     else
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
-                              long_name, units, standard_name)
+                              long_name, units, standard_name, dimensions=dimensions)
     endif
   endif
 
@@ -3016,6 +3037,7 @@ function register_static_field(module_name, field_name, axes, &
   integer :: dm_id, fms_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
   character(len=9) :: axis_name
+  character(len=16) :: dimensions
 
   MOM_missing_value = axes%diag_cs%missing_value
   if (present(missing_value)) MOM_missing_value = missing_value
@@ -3108,15 +3130,32 @@ function register_static_field(module_name, field_name, axes, &
     endif
   endif
 
+  dimensions = ""
+  if (axes%is_h_point)   dimensions = trim(dimensions)//" xh, yh,"
+  if (axes%is_q_point)   dimensions = trim(dimensions)//" xq, yq,"
+  if (axes%is_u_point)   dimensions = trim(dimensions)//" xq, yh,"
+  if (axes%is_v_point)   dimensions = trim(dimensions)//" xh, yq,"
+  if (axes%is_layer)     dimensions = trim(dimensions)//" zl,"
+  if (axes%is_interface) dimensions = trim(dimensions)//" zi,"
+
+  if (len_trim(dimensions) > 0) then
+    dimensions = trim(adjustl(dimensions))
+    if (dimensions(len_trim(dimensions):len_trim(dimensions)) == ",") then
+        dimensions = dimensions(1:len_trim(dimensions) - 1)
+    endif
+    dimensions = trim(dimensions)
+  endif
+
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     if (present(cmor_field_name)) then
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name, &
-                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}", &
+                              dimensions=dimensions)
     else
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
-                              long_name, units, standard_name)
+                              long_name, units, standard_name, dimensions=dimensions)
     endif
   endif
 
@@ -3865,13 +3904,14 @@ end subroutine alloc_diag_with_id
 
 !> Log a diagnostic to the available diagnostics file.
 subroutine log_available_diag(used, module_name, field_name, cell_methods_string, comment, &
-                              diag_CS, long_name, units, standard_name, variants)
+                              diag_CS, long_name, units, standard_name, variants, dimensions)
   logical,          intent(in) :: used !< Whether this diagnostic was in the diag_table or not
   character(len=*), intent(in) :: module_name !< Name of the diagnostic module
   character(len=*), intent(in) :: field_name !< Name of this diagnostic field
   character(len=*), intent(in) :: cell_methods_string !< The spatial component of the CF cell_methods attribute
   character(len=*), intent(in) :: comment !< A comment to append after [Used|Unused]
   type(diag_ctrl),  intent(in) :: diag_CS  !< The diagnotics control structure
+  character(len=*), optional, intent(in) :: dimensions !< Descriptor of the horizontal and vertical dimensions
   character(len=*), optional, intent(in) :: long_name !< CF long name of diagnostic
   character(len=*), optional, intent(in) :: units !< Units for diagnostic
   character(len=*), optional, intent(in) :: standard_name !< CF standardized name of diagnostic
@@ -3891,6 +3931,11 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
   call describe_option("modules", module_name, diag_CS)
+  if (present(dimensions)) then
+    if (len(trim(dimensions)) > 0) then
+      call describe_option("dimensions", dimensions, diag_CS)
+    endif
+  endif
   if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
   if (present(units)) call describe_option("units", units, diag_CS)
   if (present(standard_name)) &
