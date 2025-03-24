@@ -34,7 +34,7 @@ public stochastics_init, update_stochastics, apply_skeb
 !> This control structure holds parameters for the MOM_stochastics module
 type, public:: stochastic_CS
   logical :: do_sppt         !< If true, stochastically perturb the diabatic
-  logical :: do_skeb         !< If true, stochastically perturb the diabatic
+  logical :: do_skeb         !< If true, stochastically perturb the horizontal velocity
   logical :: skeb_use_gm     !< If true, adds GM work to the amplitude of SKEBS
   logical :: skeb_use_frict  !< If true, adds viscous dissipation rate to the amplitude of SKEBS
   logical :: pert_epbl       !< If true, then randomly perturb the KE dissipation and genration terms
@@ -57,12 +57,12 @@ type, public:: stochastic_CS
                                         !! Index into this at h points.
   ! stochastic patterns
   real, allocatable :: sppt_wts(:,:)  !< Random pattern for ocean SPPT
-                                      !! tendencies with a number between 0 and 2 [nondim]
-  real, allocatable :: skeb_wts(:,:)  !< Random pattern for ocean SKEB [nondim]
-  real, allocatable :: epbl1_wts(:,:) !< Random pattern for K.E. generation [nondim]
-  real, allocatable :: epbl2_wts(:,:) !< Random pattern for K.E. dissipation [nondim]
+                                      !! tendencies with a number between 0 and 2
+  real, allocatable :: skeb_wts(:,:)  !< Random pattern for ocean SKEB
+  real, allocatable :: epbl1_wts(:,:) !< Random pattern for K.E. generation
+  real, allocatable :: epbl2_wts(:,:) !< Random pattern for K.E. dissipation
   type(time_type), pointer :: Time !< Pointer to model time (needed for sponges)
-  type(diag_ctrl), pointer :: diag=>NULL() !< structure used to regulate timing of diagnostic output
+  type(diag_ctrl), pointer :: diag=>NULL() !< A structure that is used to regulate the
 
   ! Taper array to smoothly zero out the SKEBS velocity increment near land
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_) :: taperCu !< Taper applied to u component of
@@ -92,8 +92,8 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
   integer :: num_procs         ! number of processors to pass to stochastic physics
   integer :: iret              ! return code from stochastic physics
   integer :: pe_zero           !  root pe
-  integer :: nx                ! number of x-points including halo
-  integer :: ny                ! number of x-points including halo
+  integer :: nxT, nxB          ! number of x-points including halo
+  integer :: nyT, nyB          ! number of y-points including halo
   integer :: i, j, k           ! loop indices
   real    :: tmp(grid%isdB:grid%iedB,grid%jsdB:grid%jedB) ! Used to construct tapers
   integer :: taper_width       ! Width (in cells) of the taper that brings the stochastic velocity
@@ -155,35 +155,38 @@ subroutine stochastics_init(dt, grid, GV, CS, param_file, diag, Time)
                  default=.false.)
 
   if (CS%do_sppt .OR. CS%pert_epbl .OR. CS%do_skeb) then
-     num_procs = num_PEs()
-     allocate(pelist(num_procs))
-     call Get_PElist(pelist,commID = mom_comm)
-     pe_zero = root_PE()
-     nx = grid%iedB - grid%isdB + 1
-     ny = grid%jedB - grid%jsdB + 1
-     call init_stochastic_physics_ocn(dt,grid%geoLonBu,grid%geoLatBu,nx,ny,GV%ke, &
-                                      CS%pert_epbl,CS%do_sppt,CS%do_skeb,pe_zero,mom_comm,iret)
-     if (iret/=0)  then
-         call MOM_error(FATAL, "call to init_stochastic_physics_ocn failed")
-         return
-     endif
+    num_procs = num_PEs()
+    allocate(pelist(num_procs))
+    call Get_PElist(pelist,commID = mom_comm)
+    pe_zero = root_PE()
+    nxT = grid%ied - grid%isd + 1
+    nyT = grid%jed - grid%jsd + 1
+    nxB = grid%iedB - grid%isdB + 1
+    nyB = grid%jedB - grid%jsdB + 1
+    call init_stochastic_physics_ocn(dt, grid%geoLonT, grid%geoLatT, nxT, nyT, GV%ke, &
+                                     grid%geoLonBu, grid%geoLatBu, nxB, nyB, &
+                                     CS%pert_epbl, CS%do_sppt, CS%do_skeb, pe_zero, mom_comm, iret)
+    if (iret/=0)  then
+      call MOM_error(FATAL, "call to init_stochastic_physics_ocn failed")
+      return
+    endif
 
-     if (CS%do_sppt) allocate(CS%sppt_wts(grid%isdB:grid%iedB,grid%jsdB:grid%jedB))
-     if (CS%do_skeb) allocate(CS%skeb_wts(grid%isdB:grid%iedB,grid%jsdB:grid%jedB))
-     if (CS%do_skeb) allocate(CS%skeb_diss(grid%isd:grid%ied,grid%jsd:grid%jed,GV%ke), source=0.)
-     if (CS%pert_epbl) then
-       allocate(CS%epbl1_wts(grid%isdB:grid%iedB,grid%jsdB:grid%jedB))
-       allocate(CS%epbl2_wts(grid%isdB:grid%iedB,grid%jsdB:grid%jedB))
-     endif
+    if (CS%do_sppt) allocate(CS%sppt_wts(grid%isd:grid%ied,grid%jsd:grid%jed))
+    if (CS%do_skeb) allocate(CS%skeb_wts(grid%isdB:grid%iedB,grid%jsdB:grid%jedB))
+    if (CS%do_skeb) allocate(CS%skeb_diss(grid%isd:grid%ied,grid%jsd:grid%jed,GV%ke), source=0.)
+    if (CS%pert_epbl) then
+      allocate(CS%epbl1_wts(grid%isd:grid%ied,grid%jsd:grid%jed))
+      allocate(CS%epbl2_wts(grid%isd:grid%ied,grid%jsd:grid%jed))
+    endif
   endif
 
-  CS%id_sppt_wts = register_diag_field('ocean_model', 'sppt_pattern', CS%diag%axesB1, Time, &
+  CS%id_sppt_wts = register_diag_field('ocean_model', 'sppt_pattern', CS%diag%axesT1, Time, &
        'random pattern for sppt', 'None')
   CS%id_skeb_wts = register_diag_field('ocean_model', 'skeb_pattern', CS%diag%axesB1, Time, &
        'random pattern for skeb', 'None')
-  CS%id_epbl1_wts = register_diag_field('ocean_model', 'epbl1_wts', CS%diag%axesB1, Time, &
+  CS%id_epbl1_wts = register_diag_field('ocean_model', 'epbl1_wts', CS%diag%axesT1, Time, &
       'random pattern for KE generation', 'None')
-  CS%id_epbl2_wts = register_diag_field('ocean_model', 'epbl2_wts', CS%diag%axesB1, Time, &
+  CS%id_epbl2_wts = register_diag_field('ocean_model', 'epbl2_wts', CS%diag%axesT1, Time, &
       'random pattern for KE dissipation', 'None')
   CS%id_skebu = register_diag_field('ocean_model', 'skebu', CS%diag%axesCuL, Time, &
        'zonal current perts', 'None')
@@ -276,22 +279,20 @@ subroutine apply_skeb(grid,GV,CS,uc,vc,thickness,tv,dt,Time_end)
   type(time_type),                            intent(in)    :: Time_end !< Time at the end of the interval
 ! locals
 
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_,NKMEM_) :: psi
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEM_,NKMEM_) :: ustar
-  real ALLOCABLE_, dimension(NIMEM_,NJMEMB_PTR_,NKMEM_) :: vstar
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: diss_tmp
-
-  real, dimension(3,3) :: local_weights
+  real, dimension(SZIB_(grid),SZJB_(grid),SZK_(GV)) :: psi         !< Streamfunction for stochastic velocity increments
+                                                                   !! [L2 T-1 ~> m2 s-1]
+  real, dimension(SZIB_(grid),SZJ_(grid) ,SZK_(GV)) :: ustar       !< Stochastic u velocity increment [L T-1 ~> m s-1]
+  real, dimension(SZI_(grid) ,SZJB_(grid),SZK_(GV)) :: vstar       !< Stochastic v velocity increment [L T-1 ~> m s-1]
+  real, dimension(SZI_(grid),SZJ_(grid))            :: diss_tmp    !< Temporary array used in smoothing skeb_diss
+                                                                   !! [L2 T-3 ~> m2 s-2]
+  real, dimension(3,3) :: local_weights                            !< 3x3 stencil weights used in smoothing skeb_diss
+                                                                   !! [L2 ~> m2]
 
   real    :: shr,ten,tot,kh
   integer :: i,j,k,iter
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
 
   call callTree_enter("apply_skeb(), MOM_stochastics.F90")
-  ALLOC_(diss_tmp(grid%isd:grid%ied,grid%jsd:grid%jed))
-  ALLOC_(psi(grid%isdB:grid%iedB,grid%jsdB:grid%jedB,GV%ke))
-  ALLOC_(ustar(grid%isdB:grid%iedB,grid%jsd:grid%jed,GV%ke))
-  ALLOC_(vstar(grid%isd:grid%ied,grid%jsdB:grid%jedB,GV%ke))
 
   if ((.not. CS%skeb_use_gm) .and. (.not. CS%skeb_use_frict)) then
     ! fill in halos with zeros
@@ -379,10 +380,6 @@ subroutine apply_skeb(grid,GV,CS,uc,vc,thickness,tv,dt,Time_end)
      call post_data(CS%id_psi, psi(:,:,:), CS%diag)
   endif
   call disable_averaging(CS%diag)
-  DEALLOC_(diss_tmp)
-  DEALLOC_(ustar)
-  DEALLOC_(vstar)
-  DEALLOC_(psi)
   CS%skeb_diss(:,:,:) = 0.0 ! Must zero before next time step.
 
   call callTree_leave("apply_skeb(), MOM_stochastics.F90")

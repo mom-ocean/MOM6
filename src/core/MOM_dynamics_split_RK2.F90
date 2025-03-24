@@ -333,7 +333,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   type(thickness_diffuse_CS),        intent(inout) :: thickness_diffuse_CSp !< Pointer to a structure containing
                                                                    !! interface height diffusivities
   type(porous_barrier_type),         intent(in)    :: pbv          !< porous barrier fractional cell metrics
-  type(stochastic_CS),               intent(inout) :: STOCH        !< Stochastic control structure
+  type(stochastic_CS),     optional, intent(inout) :: STOCH        !< Stochastic control structure
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
 

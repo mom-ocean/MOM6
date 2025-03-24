@@ -1174,6 +1174,10 @@ subroutine ALE_remap_velocities(CS, G, GV, h_old_u, h_old_v, h_new_u, h_new_v, u
         ke_c_tgt = ke_c_tgt + h2(k) * (u_tgt(k) - u_bt)**2
       enddo
       ! Next rescale baroclinic component on target grid to conserve ke
+      ! The values 1.5625 = 1.25**2 and 1.25 below mean that the KE-conserving
+      ! correction cannot amplify the baroclinic part of velocity by more
+      ! than 25%. This threshold is somewhat arbitrary. It was added to
+      ! prevent unstable behavior when the amplification factor is large.
       if (ke_c_src < 1.5625 * ke_c_tgt) then
         rescale_coef = sqrt(ke_c_src / ke_c_tgt)
       else
