@@ -456,7 +456,6 @@ subroutine zonal_edge_thickness(h_in, h_W, h_E, G, GV, US, CS, OBC, LB_in)
       h_W(i,j,k) = h_in(i,j,k) ; h_E(i,j,k) = h_in(i,j,k)
     enddo ; enddo ; enddo
   else
-    !$OMP parallel do default(shared)
     call PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, &
                               2.0*GV%Angstrom_H, CS%monotonic, CS%simple_2nd, OBC)
   endif
