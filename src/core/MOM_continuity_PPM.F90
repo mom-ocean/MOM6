@@ -1229,7 +1229,9 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   !$omp       du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh), &
   !$omp       uh_tot_0(ish-1:ieh, jsh:jeh), uhbt(ish-1:ieh, jsh:jeh), &
   !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), G, G%IareaT(ish-1:ieh+1, jsh:jeh), CS, &
-  !$omp       u(ish-1:ieh, :, :), visc_rem(ish-1:ieh, :, :)) &
+  !$omp       u(ish-1:ieh, :, :), visc_rem(ish-1:ieh, :, :), h_W(ish-1:ieh+1, :, :), &
+  !$omp       h_E(ish-1:ieh+1, :, :), h_in(ish-1:ieh+1, :, :), G%dy_Cu(ish-1:ieh, jsh:jeh), &
+  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), por_face_areaU(ish-1:ieh, :, :)) &
   !$omp   map(alloc: uh_aux(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh), &
   !$omp       do_I(ish-1:ieh, jsh:jeh), du_max(ish-1:ieh, jsh:jeh), du_min(ish-1:ieh, jsh:jeh), &
   !$omp       duhdu_tot(ish-1:ieh, jsh:jeh), uh_err(ish-1:ieh, jsh:jeh), &
@@ -1367,7 +1369,10 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh), du_max(ish-1:ieh, jsh:jeh), &
   !$omp       du_min(ish-1:ieh, jsh:jeh), duhdu_tot(ish-1:ieh, jsh:jeh), uh_err(ish-1:ieh, jsh:jeh), &
   !$omp       uh_err_best(ish-1:ieh, jsh:jeh), G, G%IareaT(ish-1:ieh+1, jsh:jeh), CS, &
-  !$omp       u(ish-1:ieh, :, :), visc_rem(ish-1:ieh, :, :), u_new(ish-1:ieh, :, :))
+  !$omp       u(ish-1:ieh, :, :), visc_rem(ish-1:ieh, :, :), u_new(ish-1:ieh, :, :), &
+  !$omp       h_W(ish-1:ieh+1, :, :), h_E(ish-1:ieh+1, :, :), h_in(ish-1:ieh+1, :, :), &
+  !$omp       G%dy_Cu(ish-1:ieh, jsh:jeh), G%IdxT(ish-1:ieh+1, jsh:jeh), &
+  !$omp       por_face_areaU(ish-1:ieh, :, :))
 
 end subroutine zonal_flux_adjust
 
