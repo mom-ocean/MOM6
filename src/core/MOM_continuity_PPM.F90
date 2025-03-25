@@ -794,7 +794,13 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     any_simple_OBC = .false.
     if (present(uhbt) .or. set_BT_cont) then
       ! untested!
-      if (local_specified_BC .or. local_Flather_OBC) then ; do j=jsh,jeh ; do I=ish-1,ieh
+      if (local_specified_BC .or. local_Flather_OBC) then 
+        !$omp target teams distribute parallel do collapse(2) &
+        !$omp   private(l_seg) &
+        !$omp   reduction(.or.: any_simple_OBC) &
+        !$omp   map(to: OBC, OBC%segnum_u(ish-1:ieh, jsh:jeh), OBC%segment(:)) &
+        !$omp   map(from: simple_OBC_pt(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh))
+        do j=jsh,jeh ; do I=ish-1,ieh
           l_seg = abs(OBC%segnum_u(I,j))
 
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
@@ -804,6 +810,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I,j)
         enddo ; enddo
       else
+        !$omp target teams distribute parallel do collapse(2) &
+        !$omp   map(from: do_I(ish-1:ieh, jsh:jeh))
         do j=jsh,jeh ; do I=ish-1,ieh
           do_I(I, j) = .true.
         enddo ; enddo
@@ -825,6 +833,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
           enddo ; enddo ; enddo
           if (any_simple_OBC) then 
+            !$omp target teams distribute parallel do collapse(3) &
+            !$omp   map(to: simple_OBC_pt(ish-1:ieh, jsh:jeh), OBC, &
+            !$omp       OBC%segment(:), OBC%segnum_u(ish-1:ieh, jsh:jeh)) &
+            !$omp   map(tofrom: u_cor(ish-1:ieh, :, :))
             do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (simple_OBC_pt(I,j)) then
               u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
             endif ; enddo ; enddo ; enddo
@@ -837,6 +849,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           !$omp   map(to: du(ish-1:ieh, jsh:jeh)) &
           !$omp   map(from: du_cor(ish-1:ieh, jsh:jeh))
           do j=jsh,jeh ; do I=ish-1,ieh ; du_cor(I,j) = du(I,j) ; enddo ; enddo
+          !$omp target update from(du_cor)
         endif
       endif
       if (set_BT_cont) then
@@ -846,6 +859,14 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       
         if (any_simple_OBC) then
           ! untested
+          !$omp target teams distribute parallel do collapse(2) &
+          !$omp   private(FAuI) &
+          !$omp   map(to: simple_OBC_pt(ish-1:ieh, jsh:jeh), GV, G, G%dy_Cu(ish-1:ieh, jsh:jeh), &
+          !$omp       OBC, OBC%segment(:), OBC%segnum_u(ish-1:ieh, jsh:jeh), BT_cont) &
+          !$omp   map(tofrom: BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), &
+          !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
+          !$omp       BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), &
+          !$omp       BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
           do j=jsh,jeh ; do I=ish-1,ieh
             ! NOTE: simple_OBC_pt(I, j) should prevent access to segment OBC_NONE
             if (simple_OBC_pt(I,j)) then
@@ -861,6 +882,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             endif
           enddo ; enddo
         endif ! any_simple_OBC
+        !$omp target update from(BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
+        !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
+        !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
       endif ! set_BT_cont
     endif ! present(uhbt) or set_BT_cont
 
@@ -871,6 +895,17 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_E_or_W) then
         I = OBC%segment(n)%HI%IsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+          !$omp target teams distribute parallel do &
+          !$omp   private(FA_u) &
+          !$omp   map(to: OBC, OBC%segment(n), h_in(i, :, :), G, &
+          !$omp       G%dy_Cu(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       por_face_areaU(i, :, :), BT_cont) &
+          !$omp   map(tofrom: BT_cont%FA_u_W0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%FA_u_E0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%FA_u_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%FA_u_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%uBT_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%uBT_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed))
           do j = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
             FA_u = 0.0
             do k=1,nz ; FA_u = FA_u + h_in(i,j,k)*(G%dy_Cu(I,j)*por_face_areaU(I,j,k)) ; enddo
@@ -879,6 +914,17 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           enddo
         else
+          !$omp target teams distribute parallel do &
+          !$omp   private(FA_u) &
+          !$omp   map(to: OBC, OBC%segment(n), h_in(i+1, :, :), G, &
+          !$omp       G%dy_Cu(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       por_face_areaU(i, :, :), BT_cont) &
+          !$omp   map(tofrom: BT_cont%FA_u_W0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%FA_u_E0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%FA_u_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%FA_u_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%uBT_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
+          !$omp       BT_cont%uBT_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed))
           do j = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
             FA_u = 0.0
             do k=1,nz ; FA_u = FA_u + h_in(i+1,j,k)*(G%dy_Cu(I,j)*por_face_areaU(I,j,k)) ; enddo
@@ -1695,9 +1741,6 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
   endif ; enddo ; enddo
 
-  !$omp target update from(BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
   !$omp target exit data &
   !$omp   map(from: BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
   !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
