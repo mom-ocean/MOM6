@@ -622,12 +622,18 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
   ! a better solution is needed!
   if (.not.use_visc_rem) then
-    visc_rem_u_tmp(:, :, :) = 1.0
+    do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
+      visc_rem_u_tmp(i,j,k) = 1.0
+    enddo ; enddo ; enddo
   else
-    visc_rem_u_tmp(:, :, :) = visc_rem_u(:, :, :)
+    do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
+      visc_rem_u_tmp(i,j,k) = visc_rem_u(i,j,k)
+    enddo ; enddo ; enddo
   end if
 
-  do_I(:, :) = .true.
+  do j=jsh,jeh ; do i=ish-1,ieh
+    do_I(i, j) = .true.
+  enddo ; enddo
   
   ! Set uh and duhdu.
   call zonal_flux_layer(u, h_in, h_W, h_E, &
