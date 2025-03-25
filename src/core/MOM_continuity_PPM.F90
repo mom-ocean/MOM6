@@ -1086,6 +1086,12 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, n
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
+  !$omp target enter data &
+  !$omp   map(to: u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
+  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), h(ish-1:ieh+1, :, :), h_W(ish-1:ieh+1, :, :), &
+  !$omp       h_E(ish-1:ieh+1, :, :), por_face_areaU(ish-1:ieh, :, :)) &
+  !$omp   map(alloc: h_u(ish-1:ieh, :, :))
+
   !$omp target teams distribute parallel do collapse(3) &
   !$omp   private(CFL, curv_3, h_avg, h_marg) &
   !$omp   map(to: u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
@@ -1182,6 +1188,12 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
       endif
     enddo
   endif
+
+  !$omp target exit data &
+  !$omp   map(from: h_u(ish-1:ieh, :, :)) &
+  !$omp   map(release: u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
+  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), h(ish-1:ieh+1, :, :), h_W(ish-1:ieh+1, :, :), &
+  !$omp       h_E(ish-1:ieh+1, :, :), por_face_areaU(ish-1:ieh, :, :))
 
 end subroutine zonal_flux_thickness
 
