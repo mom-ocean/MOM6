@@ -582,7 +582,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   logical, dimension(SZIB_(G), SZJ_(G)) :: do_I
   real, dimension(SZIB_(G),SZJ_(G), SZK_(GV)) :: &
     visc_rem_u_tmp      ! A 2-D copy of visc_rem_u or an array of 1's [nondim].
-  real, dimension(SZIB_(G)) :: FAuI  ! A list of sums of zonal face areas [H L ~> m2 or kg m-1].
+  real :: FAuI  ! A sum of zonal face areas [H L ~> m2 or kg m-1].
   real :: FA_u    ! A sum of zonal face areas [H L ~> m2 or kg m-1].
   real :: I_vrm   ! 1.0 / visc_rem_max [nondim]
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
@@ -793,23 +793,21 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       
         if (any_simple_OBC) then
           ! untested
-          do j=jsh,jeh
-            do I=ish-1,ieh
-              if (simple_OBC_pt(I,j)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
-            enddo
-            ! NOTE: simple_OBC_pt(I) should prevent access to segment OBC_NONE
-            do k=1,nz ; do I=ish-1,ieh ; if (simple_OBC_pt(I,j)) then
-              l_seg = abs(OBC%segnum_u(I,j))
-              if ((abs(OBC%segment(l_seg)%normal_vel(I,j,k)) > 0.0) .and. (OBC%segment(l_seg)%specified)) &
-                FAuI(I) = FAuI(I) + OBC%segment(l_seg)%normal_trans(I,j,k) / OBC%segment(l_seg)%normal_vel(I,j,k)
-            endif ; enddo ; enddo
-            do I=ish-1,ieh ; if (simple_OBC_pt(I,j)) then
-              BT_cont%FA_u_W0(I,j) = FAuI(I) ; BT_cont%FA_u_E0(I,j) = FAuI(I)
-              BT_cont%FA_u_WW(I,j) = FAuI(I) ; BT_cont%FA_u_EE(I,j) = FAuI(I)
+          do j=jsh,jeh ; do I=ish-1,ieh
+            ! NOTE: simple_OBC_pt(I, j) should prevent access to segment OBC_NONE
+            if (simple_OBC_pt(I,j)) then
+              FAuI = GV%H_subroundoff*G%dy_Cu(I,j)
+              do k=1,nz
+                l_seg = abs(OBC%segnum_u(I,j))
+                if ((abs(OBC%segment(l_seg)%normal_vel(I,j,k)) > 0.0) .and. (OBC%segment(l_seg)%specified)) &
+                  FAuI = FAuI + OBC%segment(l_seg)%normal_trans(I,j,k) / OBC%segment(l_seg)%normal_vel(I,j,k)
+              enddo
+              BT_cont%FA_u_W0(I,j) = FAuI ; BT_cont%FA_u_E0(I,j) = FAuI
+              BT_cont%FA_u_WW(I,j) = FAuI ; BT_cont%FA_u_EE(I,j) = FAuI
               BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
-            endif ; enddo
-          enddo
-        endif
+            endif
+          enddo ; enddo
+        endif ! any_simple_OBC
       endif ! set_BT_cont
     endif ! present(uhbt) or set_BT_cont
 
