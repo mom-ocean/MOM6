@@ -2407,6 +2407,10 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
     call MOM_error(FATAL,mesg)
   endif
 
+  !$omp target enter data &
+  !$omp   map(to: G, G%mask2dT(isl-2:iel+2, jsl:jel), h_in(isl-2:iel+2, :, :)) &
+  !$omp   map(alloc: h_W, h_E, slp) ! whole arrays as unclear range of loops in OBC regions
+
   if (simple_2nd) then
     ! untested
     !$omp target teams distribute parallel do collapse(3) &
@@ -2511,6 +2515,10 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
   else
     call PPM_limit_pos(h_in, h_W, h_E, h_min, G, GV, isl, iel, jsl, jel, nz)
   endif
+
+  !$omp target exit data &
+  !$omp   map(from: h_W, h_E) & ! whole arrays as unclear range of loops in OBC regions
+  !$omp   map(release: G, G%mask2dT(isl-2:iel+2, jsl:jel), h_in(isl-2:iel+2, :, :), slp)
 
   return
 end subroutine PPM_reconstruction_x
