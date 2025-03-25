@@ -988,10 +988,10 @@ subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, GV, US, 
 
   !$omp target teams distribute parallel do collapse(3) &
   !$omp   private(CFL, curv_3, h_marg) &
-  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), u(ish-1:ieh, :, :), u(ish-1:ieh, :, :), G, &
-  !$omp       G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), h_W(ish-1:ieh+1, :, :), h_E(ish-1:ieh+1, :, :), &
-  !$omp       h(ish-1:ieh+1, :, :), por_face_areaU(ish-1:ieh, :, :), visc_rem(ish-1:ieh, :, :)) &
+  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), &
+  !$omp       G%IareaT(ish-1:ieh+1, jsh:jeh), G%IdxT(ish-1:ieh+1, jsh:jeh), h_W(ish-1:ieh+1, :, :), &
+  !$omp       h_E(ish-1:ieh+1, :, :), h(ish-1:ieh+1, :, :), por_face_areaU(ish-1:ieh, :, :), &
+  !$omp       visc_rem(ish-1:ieh, :, :)) &
   !$omp   map(tofrom: uh(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :)) ! tofrom so non-updated elems so we don't accidentally zero old values
   do k = 1, nz; do j = jsh, jeh; do I=ish-1,ieh ; if (do_I(I, j)) then
     ! Set new values of uh and duhdu.
