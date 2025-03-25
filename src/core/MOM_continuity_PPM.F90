@@ -1461,6 +1461,25 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
+  !$omp target enter data &
+  !$omp   map(to: u(ish-1:ieh, :, :), h_W(ish-1:ieh+1, :, :), h_E(ish-1:ieh+1, :, :), &
+  !$omp       h_in(ish-1:ieh+1, :, :), uh_tot_0(ish-1:ieh, jsh:jeh), duhdu_tot_0(ish-1:ieh, jsh:jeh), &
+  !$omp       G, G%IareaT(ish-1:ieh+1, jsh:jeh), G%dy_Cu(ish-1:ieh, jsh:jeh), &
+  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), G%dxCu(ish-1:ieh, jsh:jeh), BT_cont, &
+  !$omp       du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh), CS, &
+  !$omp       visc_rem(ish-1:ieh, :, :), visc_rem_max(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh), &
+  !$omp       por_face_areaU(ish-1:ieh, :, :)) &
+  !$omp   map(alloc: zeros(ish-1:ieh, jsh:jeh), du0(ish-1:ieh, jsh:jeh), duL(ish-1:ieh, jsh:jeh), &
+  !$omp       duR(ish-1:ieh, jsh:jeh), du_CFL(ish-1:ieh, jsh:jeh), FAmt_L(ish-1:ieh, jsh:jeh), &
+  !$omp       FAmT_R(ish-1:ieh, jsh:jeh), FAmt_0(ish-1:ieh, jsh:jeh), uhtot_L(ish-1:ieh, jsh:jeh), &
+  !$omp       uhtot_R(ish-1:ieh, jsh:jeh), u_L(ish-1:ieh, :, :), u_R(ish-1:ieh, :, :), &
+  !$omp       u_0(ish-1:ieh, :, :), duhdu_L(ish-1:ieh, :, :), duhdu_R(ish-1:ieh, :, :), &
+  !$omp       duhdu_0(ish-1:ieh, :, :), uh_L(ish-1:ieh, :, :), uh_R(ish-1:ieh, :, :), &
+  !$omp       uh_0(ish-1:ieh, :, :), BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
+
   ! Diagnose the zero-transport correction, du0.
   !$omp target teams distribute parallel do collapse(2) &
   !$omp   map(from: zeros(ish-1:ieh, jsh:jeh))
@@ -1594,6 +1613,23 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   !$omp target update from(BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
   !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
   !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
+  !$omp target exit data &
+  !$omp   map(from: BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh)) &
+  !$omp   map(release: zeros(ish-1:ieh, jsh:jeh), u(ish-1:ieh, :, :), h_W(ish-1:ieh+1, :, :), &
+  !$omp       h_E(ish-1:ieh+1, :, :), h_in(ish-1:ieh+1, :, :), uh_tot_0(ish-1:ieh, jsh:jeh), &
+  !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), du0(ish-1:ieh, jsh:jeh), duL(ish-1:ieh, jsh:jeh), &
+  !$omp       duR(ish-1:ieh, jsh:jeh), du_CFL(ish-1:ieh, jsh:jeh), FAmt_L(ish-1:ieh, jsh:jeh), &
+  !$omp       FAmT_R(ish-1:ieh, jsh:jeh), FAmt_0(ish-1:ieh, jsh:jeh), uhtot_L(ish-1:ieh, jsh:jeh), &
+  !$omp       uhtot_R(ish-1:ieh, jsh:jeh), u_L(ish-1:ieh, :, :), u_R(ish-1:ieh, :, :), &
+  !$omp       u_0(ish-1:ieh, :, :), duhdu_L(ish-1:ieh, :, :), duhdu_R(ish-1:ieh, :, :), &
+  !$omp       duhdu_0(ish-1:ieh, :, :), uh_L(ish-1:ieh, :, :), uh_R(ish-1:ieh, :, :), &
+  !$omp       uh_0(ish-1:ieh, :, :), G, G%IareaT(ish-1:ieh+1, jsh:jeh), G%dy_Cu(ish-1:ieh, jsh:jeh), &
+  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), G%dxCu(ish-1:ieh, jsh:jeh), BT_cont, &
+  !$omp       du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh), CS, &
+  !$omp       visc_rem(ish-1:ieh, :, :), visc_rem_max(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh), &
+  !$omp       por_face_areaU(ish-1:ieh, :, :))
 
 end subroutine set_zonal_BT_cont
 
