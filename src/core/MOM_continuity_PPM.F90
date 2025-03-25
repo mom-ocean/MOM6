@@ -595,7 +595,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   integer :: l_seg ! The OBC segment number
   logical :: use_visc_rem, set_BT_cont
   logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
-  logical :: simple_OBC_pt(SZIB_(G))  ! Indicates points in a row with specified transport OBCs
+  logical :: simple_OBC_pt(SZIB_(G), SZJ_(G))  ! Indicates points in a row with specified transport OBCs
 
   call cpu_clock_begin(id_clock_correct)
 
@@ -750,16 +750,20 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     if (present(uhbt) .or. set_BT_cont) then
       ! untested!
       if (local_specified_BC .or. local_Flather_OBC) then ; do j=jsh,jeh ; do I=ish-1,ieh
-        l_seg = abs(OBC%segnum_u(I,j))
+          l_seg = abs(OBC%segnum_u(I,j))
 
-        ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-        simple_OBC_pt(I) = .false.
-        if (l_seg /= OBC_NONE) simple_OBC_pt(I) = OBC%segment(l_seg)%specified
-        do_I(I, j) = .not.simple_OBC_pt(I)
-        any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I)
-      enddo ; enddo ; else ; do j=jsh,jeh ; do I=ish-1,ieh
-        do_I(I, j) = .true.
-      enddo ; enddo ; endif
+          ! Avoid reconciling barotropic/baroclinic transports if transport is specified
+          simple_OBC_pt(I,j) = .false.
+          if (l_seg /= OBC_NONE) simple_OBC_pt(I,j) = OBC%segment(l_seg)%specified
+          do_I(I, j) = .not.simple_OBC_pt(I,j)
+          any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I,j)
+        enddo ; enddo
+      else
+        do j=jsh,jeh ; do I=ish-1,ieh
+          do_I(I, j) = .true.
+        enddo ; enddo
+      endif
+
       if (present(uhbt)) then
         ! Find du and uh.
         call zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, du, &
@@ -772,7 +776,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
           enddo ; enddo ; enddo
           if (any_simple_OBC) then 
-            do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
+            do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (simple_OBC_pt(I,j)) then
               u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
             endif ; enddo ; enddo ; enddo
           endif
@@ -786,37 +790,30 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0,&
                                du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
                                visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaU)
-      endif
-    endif
-
-  endif
-
-  do j=jsh,jeh
-
-    if (present(uhbt) .or. set_BT_cont) then
-
-      if (set_BT_cont) then
+      
         if (any_simple_OBC) then
-          do I=ish-1,ieh
-            if (simple_OBC_pt(I)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
+          ! untested
+          do j=jsh,jeh
+            do I=ish-1,ieh
+              if (simple_OBC_pt(I,j)) FAuI(I) = GV%H_subroundoff*G%dy_Cu(I,j)
+            enddo
+            ! NOTE: simple_OBC_pt(I) should prevent access to segment OBC_NONE
+            do k=1,nz ; do I=ish-1,ieh ; if (simple_OBC_pt(I,j)) then
+              l_seg = abs(OBC%segnum_u(I,j))
+              if ((abs(OBC%segment(l_seg)%normal_vel(I,j,k)) > 0.0) .and. (OBC%segment(l_seg)%specified)) &
+                FAuI(I) = FAuI(I) + OBC%segment(l_seg)%normal_trans(I,j,k) / OBC%segment(l_seg)%normal_vel(I,j,k)
+            endif ; enddo ; enddo
+            do I=ish-1,ieh ; if (simple_OBC_pt(I,j)) then
+              BT_cont%FA_u_W0(I,j) = FAuI(I) ; BT_cont%FA_u_E0(I,j) = FAuI(I)
+              BT_cont%FA_u_WW(I,j) = FAuI(I) ; BT_cont%FA_u_EE(I,j) = FAuI(I)
+              BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
+            endif ; enddo
           enddo
-          ! NOTE: simple_OBC_pt(I) should prevent access to segment OBC_NONE
-          do k=1,nz ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
-            l_seg = abs(OBC%segnum_u(I,j))
-            if ((abs(OBC%segment(l_seg)%normal_vel(I,j,k)) > 0.0) .and. (OBC%segment(l_seg)%specified)) &
-              FAuI(I) = FAuI(I) + OBC%segment(l_seg)%normal_trans(I,j,k) / OBC%segment(l_seg)%normal_vel(I,j,k)
-          endif ; enddo ; enddo
-          do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
-            BT_cont%FA_u_W0(I,j) = FAuI(I) ; BT_cont%FA_u_E0(I,j) = FAuI(I)
-            BT_cont%FA_u_WW(I,j) = FAuI(I) ; BT_cont%FA_u_EE(I,j) = FAuI(I)
-            BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
-          endif ; enddo
         endif
       endif ! set_BT_cont
-
     endif ! present(uhbt) or set_BT_cont
 
-  enddo ! j-loop
+  endif
 
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
