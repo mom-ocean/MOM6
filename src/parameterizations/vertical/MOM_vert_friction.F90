@@ -239,12 +239,15 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
   real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: vStk    !< merid Stokes Drift (h-pts) [L T-1 ~> m s-1]
   real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)+1) :: omega_tau2s !< angle stress to shear (h-pts) [rad]
   real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)+1) :: omega_tau2w !< angle stress to wind  (h-pts) [rad]
-  real :: pi, tmp_u, tmp_v, omega_tmp, Irho0, fexp      !< constants and dummy variables
-  real :: sigma,Gat1,Gsig,dGdsig                        !< Shape parameters
-  real :: du, dv, depth, Wind_x, Wind_y                 !< intermediate variables
-  real :: taux, tauy, tauxDG, tauyDG, tauxDGup, tauyDGup, ustar2, ustar2min, tauh !< intermediate variables
-  real :: tauNLup, tauNLdn, tauNL_CG, tauNL_DG, tauNL_X, tauNL_Y, tau_MAG !< intermediate variables
-  real :: omega_w2s, omega_s2x, omega_tau2x, omega_s2w ,  omega_e2x, omega_l2x  !< intermediate angles
+  real :: omega_tmp, omega_s2x, omega_tau2x                    !< temporary angle wrt the x axis [rad]
+  real :: Irho0        !< Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
+  real :: pi           !< ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: tmp_u, tmp_v !< temporary ocean mask weights on u and v points [nondim]
+  real :: fexp         !< temporary exponential function [nondim]
+  real :: sigma        !< temporary normalize boundary layer coordinate [nondim]
+  real :: Gat1, Gsig, dGdsig !< Shape parameters [nondim]
+  real :: du, dv       !< Intermediate velocity differences [L T-1 ~> m s-1]
+  real :: depth        !< Cumulative of thicknesses [H ~> m]
   integer :: b, kbld, kp1, k, nz !< band and vertical indices
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq !< horizontal indices
 

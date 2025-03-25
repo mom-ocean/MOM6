@@ -44,14 +44,14 @@ type, public :: optics_type
 
   !! Lookup tables for Ohlmann solar penetration scheme
   !! These would naturally exist as private module variables but that is prohibited in MOM6
-  real :: dlog10chl           !< Chl increment within lookup table
-  real :: chl_min             !< Lower bound of Chl in lookup table
-  real :: log10chl_min        !< Lower bound of Chl in lookup table
-  real :: log10chl_max        !< Upper bound of Chl in lookup table
-  real, allocatable, dimension(:) :: a1_lut,&       !< Coefficient for band 1
-       &                             a2_lut,&       !< Coefficient for band 2
-       &                             b1_lut,&       !< Exponential decay scale for band 1
-       &                             b2_lut         !< Exponential decay scale for band 2
+  real :: dlog10chl           !< Chl increment within lookup table  [log10 of Chl in mg m-3]
+  real :: chl_min             !< Lower bound of Chl in lookup table [mg m-3]
+  real :: log10chl_min        !< Lower bound of Chl in lookup table [log10 of Chl in mg m-3]
+  real :: log10chl_max        !< Upper bound of Chl in lookup table [log10 of Chl in mg m-3]
+  real, allocatable, dimension(:) :: a1_lut,&       !< Coefficient for band 1 [nondim]
+       &                             a2_lut,&       !< Coefficient for band 2 [nondim]
+       &                             b1_lut,&       !< Exponential decay scale for band 1 [Z-1 ~> m-1]
+       &                             b2_lut         !< Exponential decay scale for band 2 [Z-1 ~> m-1]
 
   integer :: answer_date  !< The vintage of the order of arithmetic and expressions in the optics
                           !! calculations.  Values below 20190101 recover the answers from the
@@ -272,7 +272,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
 ! This implementation follows that in CESM-POP using a lookup table in log10(chl) space.
 ! The table is initialized in subroutine init_ohlmann and the coefficients are recovered
 ! with routines lookup_ohlmann_swpen and lookup_ohlmann_opacity.
-! Note that this form treats the IR solar input implicitly: the sum of partioning
+! Note that this form treats the IR solar input implicitly: the sum of partitioning
 ! coefficients < 1.0. The remainder is non-penetrating and is deposited in first layer
 ! irrespective of thickness. The Ohlmann (2003) paper states that the scheme is not valid
 ! for vertcal grids with first layer thickness < 2.0 meters.
@@ -390,10 +390,9 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
           optics%sw_pen_band(1:2,i,j) = 0.  ! Make sure there is a valid value for land points
         else
           if (multiband_vis_input ) then ! If multiband_vis_input is true then so is multiband_nir_input
-             SW_vis_tot = sw_vis_dir(i,j) + sw_vis_dif(i,j) + &
-                  &       sw_nir_dir(i,j) + sw_nir_dif(i,j)
+            SW_vis_tot = (sw_vis_dir(i,j) + (sw_vis_dif(i,j) + (sw_nir_dir(i,j) + sw_nir_dif(i,j))))
           elseif (total_sw_input) then
-             SW_vis_tot = sw_total(i,j)
+            SW_vis_tot = sw_total(i,j)
           else
             call MOM_error(FATAL, "No shortwave input was provided.")
           endif
@@ -1062,7 +1061,7 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  "valid options include:\n"//&
                  " \t\t  MANIZZA_05 - Use Manizza et al., GRL, 2005. \n"//&
                  " \t\t  MOREL_88 - Use Morel, JGR, 1988. \n"//&
-                 " \t\t  OHLMANN_03 - Use Ohlmann, J Clim, 2003.", &
+                 " \t\t  OHLMANN_03 - Use Ohlmann, J Clim, 2003. (only use if dz(1)>2.0m)", &
                  default=MANIZZA_05_STRING)
     if (len_trim(tmpstr) > 0) then
       tmpstr = uppercase(tmpstr)
@@ -1212,12 +1211,10 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
       longname, 'm-1', conversion=US%m_to_Z)
   enddo
 
-  !! FOB
   if (CS%opacity_scheme == OHLMANN_03) then
      ! Set up the lookup table
      call init_ohlmann_table(optics)
   endif
-  !! FOB
 
 end subroutine opacity_init
 

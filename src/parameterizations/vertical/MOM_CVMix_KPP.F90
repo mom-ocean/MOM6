@@ -114,7 +114,7 @@ type, public :: KPP_CS ; private
   logical :: LT_K_Enhancement          !< Flags if enhancing mixing coefficients due to LT
   integer :: LT_K_Shape                !< Integer for constant or shape function enhancement
   integer :: LT_K_Method               !< Integer for mixing coefficients LT method
-  real    :: KPP_CVt2                  !< Parameter for Stokes MOST convection entrainment
+  real    :: KPP_CVt2                  !< Parameter for Stokes MOST convection entrainment [nondim]
   real    :: KPP_K_ENH_FAC             !< Factor to multiply by K if Method is CONSTANT [nondim]
   logical :: LT_Vt2_Enhancement        !< Flags if enhancing Vt2 due to LT
   integer :: LT_VT2_METHOD             !< Integer for Vt2 LT method
@@ -156,9 +156,9 @@ type, public :: KPP_CS ; private
 
   ! Diagnostics arrays
   real, pointer,     dimension(:,:)   :: OBLdepth  !< Depth (positive) of ocean boundary layer (OBL) [Z ~> m]
-  real, allocatable, dimension(:,:)   :: OBLdepth_original  !< Depth (positive) of OBL [Z ~> m] without smoothing
-  real, allocatable, dimension(:,:)   :: StokesParXI !< Stokes similarity parameter
-  real, allocatable, dimension(:,:)   :: Lam2        !< La^(-2) = Ustk0/u*
+  real, allocatable, dimension(:,:)   :: OBLdepth_original  !< Depth (positive) of OBL without smoothing [Z ~> m]
+  real, allocatable, dimension(:,:)   :: StokesParXI !< Stokes similarity parameter [nondim]
+  real, allocatable, dimension(:,:)   :: Lam2      !< La^(-2) = Ustk0/u* [nondim]
   real, allocatable, dimension(:,:)   :: kOBL      !< Level (+fraction) of OBL extent [nondim]
   real, allocatable, dimension(:,:)   :: OBLdepthprev !< previous Depth (positive) of OBL [Z ~> m]
   real, allocatable, dimension(:,:)   :: La_SL     !< Langmuir number used in KPP [nondim]
