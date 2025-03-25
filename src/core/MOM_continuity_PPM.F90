@@ -1456,7 +1456,9 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
- ! Diagnose the zero-transport correction, du0.
+  ! Diagnose the zero-transport correction, du0.
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   map(from: zeros(ish-1:ieh, jsh:jeh))
   do j=jsh,jeh ; do I=ish-1,ieh ; zeros(I, j) = 0.0 ; enddo ; enddo
   call zonal_flux_adjust(u, h_in, h_W, h_E, zeros, uh_tot_0, duhdu_tot_0, du0, &
                          du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
@@ -1466,6 +1468,12 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   ! negative velocity correction for the easterly-flux, and a sufficiently
   ! positive correction for the westerly-flux.
   domore = .false.
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   reduction(.or.:domore) &
+  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), G, G%dxCu(ish-1:ieh, jsh:jeh), du0(ish-1:ieh, jsh:jeh)) &
+  !$omp   map(from: du_CFL(ish-1:ieh, jsh:jeh), duR(ish-1:ieh, jsh:jeh), duL(ish-1:ieh, jsh:jeh), &
+  !$omp       FAmt_L(ish-1:ieh, jsh:jeh), FAmt_R(ish-1:ieh, jsh:jeh), FAmt_0(ish-1:ieh, jsh:jeh), &
+  !$omp       uhtot_L(ish-1:ieh, jsh:jeh), uhtot_R(ish-1:ieh, jsh:jeh))
   do j=jsh,jeh ; do I=ish-1,ieh
     if (do_I(I,j)) domore = .true.
     du_CFL(I,j) = (CFL_min * Idt) * G%dxCu(I,j)
@@ -1477,7 +1485,12 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
 
   ! short circuit if none should be updated
   if (.not.domore) then
-    do k=1,nz ; do I=ish-1,ieh
+    !$omp target teams distribute parallel do collapse(2) &
+    !$omp   map(alloc: BT_cont) &
+    !$omp   map(from: BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
+    !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
+    !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
+    do j=jsh,jeh ; do I=ish-1,ieh
       BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
       BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
       BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
@@ -1485,16 +1498,27 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     return
   endif
 
-  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
-    visc_rem_lim = max(visc_rem(I,j,k), min_visc_rem*visc_rem_max(I,j))
-    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
-      if (u(I,j,k) + duR(I,j)*visc_rem_lim > -du_CFL(I,j)*visc_rem(I,j,k)) &
-        duR(I,j) = -(u(I,j,k) + du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
-      if (u(I,j,k) + duL(I,j)*visc_rem_lim < du_CFL(I,j)*visc_rem(I,j,k)) &
-        duL(I,j) = -(u(I,j,k) - du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
-    endif
-  endif ; enddo ; enddo ; enddo
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   private(visc_rem_lim) &
+  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), visc_rem(ish-1:ieh, :, :), &
+  !$omp       visc_rem_max(ish-1:ieh, jsh:jeh), u(ish-1:ieh, :, :), du_CFL(ish-1:ieh, jsh:jeh)) &
+  !$omp   map(tofrom: duR(ish-1:ieh, jsh:jeh), duL(ish-1:ieh, jsh:jeh))
+  do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
+    do k=1,nz ! k-loop is serialised
+      visc_rem_lim = max(visc_rem(I,j,k), min_visc_rem*visc_rem_max(I,j))
+      if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+        if (u(I,j,k) + duR(I,j)*visc_rem_lim > -du_CFL(I,j)*visc_rem(I,j,k)) &
+          duR(I,j) = -(u(I,j,k) + du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
+        if (u(I,j,k) + duL(I,j)*visc_rem_lim < du_CFL(I,j)*visc_rem(I,j,k)) &
+          duL(I,j) = -(u(I,j,k) - du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
+      endif
+    enddo
+  endif ; enddo ; enddo
 
+  !$omp target teams distribute parallel do collapse(3) &
+  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), u(ish-1:ieh, :, :), duL(ish-1:ieh, jsh:jeh), &
+  !$Omp       duR(ish-1:ieh, jsh:jeh), du0(ish-1:ieh, jsh:jeh), visc_rem(ish-1:ieh, :, :)) &
+  !$Omp   map(from: u_L(ish-1:ieh, :, :), u_R(ish-1:ieh, :, :), u_0(ish-1:ieh, :, :))
   do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
     u_L(I,j,k) = u(I,j,k) + duL(I,j) * visc_rem(I,j,k)
     u_R(I,j,k) = u(I,j,k) + duR(I,j) * visc_rem(I,j,k)
@@ -1508,16 +1532,30 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   call zonal_flux_layer(u_R, h_in, h_W, h_E, uh_R, duhdu_R, &
                         visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU)
 
-  do k=1,nz ; do j=jsh,jeh
-    do I=ish-1,ieh ; if (do_I(I,j)) then
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), duhdu_0(ish-1:ieh, :, :), duhdu_L(ish-1:ieh, :, :), &
+  !$omp       duhdu_R(ish-1:ieh, :, :), uh_L(ish-1:ieh, :, :), uh_R(ish-1:ieh, :, :)) &
+  !$omp   map(tofrom: FAmt_0(ish-1:ieh, jsh:jeh), FAmt_L(ish-1:ieh, jsh:jeh), &
+  !$omp       FAmt_R(ish-1:ieh, jsh:jeh), uhtot_L(ish-1:ieh, jsh:jeh), uhtot_R(ish-1:ieh, jsh:jeh))
+  do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
+    do k=1,nz
       FAmt_0(I,j) = FAmt_0(I,j) + duhdu_0(I,j,k)
       FAmt_L(I,j) = FAmt_L(I,j) + duhdu_L(I,j,k)
       FAmt_R(I,j) = FAmt_R(I,j) + duhdu_R(I,j,k)
       uhtot_L(I,j) = uhtot_L(I,j) + uh_L(I,j,k)
       uhtot_R(I,j) = uhtot_R(I,j) + uh_R(I,j,k)
-    endif ; enddo
-  enddo ; enddo
+    enddo
+  endif ; enddo ; enddo
 
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   private(FA_0, FA_avg) &
+  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), FAmt_0(ish-1:ieh, jsh:jeh), FAmt_L(ish-1:ieh, jsh:jeh), &
+  !$omp       FAmt_R(ish-1:ieh, jsh:jeh), du0(ish-1:ieh, jsh:jeh), duL(ish-1:ieh, jsh:jeh), &
+  !$omp       duR(ish-1:ieh, jsh:jeh), uhtot_L(ish-1:ieh, jsh:jeh), uhtot_R(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont) &
+  !$omp   map(from: BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
   do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
     FA_0 = FAmt_0(I,j) ; FA_avg = FAmt_0(I,j)
     if ((duL(I,j) - du0(I,j)) /= 0.0) &
@@ -1547,6 +1585,10 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
     BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
   endif ; enddo ; enddo
+
+  !$omp target update from(BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
 
 end subroutine set_zonal_BT_cont
 
