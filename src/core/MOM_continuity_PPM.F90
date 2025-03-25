@@ -166,10 +166,12 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call zonal_edge_thickness(hin, h_W, h_E, G, GV, US, CS, OBC, LB)
     call zonal_mass_flux(u, hin, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
                          LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
+    ! update device uh from zonal_mass_flux
+    !$omp target update to(uh)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin)
 
-    ! needed for ported code in meridional_edge_thickness
-    !$omp target update to(h)
+    ! update host h from continuity_zonal_convergence
+    !$omp target update from(h)
 
     !  Now advect meridionally, using the updated thicknesses to determine the fluxes.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
@@ -372,12 +374,17 @@ subroutine continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin, hmin)
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   if (present(hin)) then
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: hin(ish:ieh, :, :), G, G%IareaT(ish:ieh, jsh:jeh), uh(ish-1:ieh, :, :)) &
+    !$omp   map(from: h(ish:ieh, :, :))
     do k=1,nz ; do j=jsh,jeh ; do i=ish, ieh
       h(i,j,k) = max( hin(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
     enddo ; enddo ; enddo
   else
     ! untested
-    !$OMP parallel do default(shared)
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: G, G%IareaT(ish:ieh, jsh:jeh), uh(ish-1:ieh, :, :)) &
+    !$omp   map(tofrom: h(ish:ieh, :, :))
     do k=1,nz ; do j=jsh,jeh ; do i=ish, ieh
       h(i,j,k) = max( h(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
     enddo ; enddo ; enddo
