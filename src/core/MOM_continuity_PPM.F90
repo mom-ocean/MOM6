@@ -363,20 +363,22 @@ subroutine continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin, hmin)
   real,              optional, intent(in)    :: hmin !< The minimum layer thickness [H ~> m or kg m-2]
 
   real :: h_min  ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
-  integer :: i, j, k
+  integer :: i, j, k, ish, ieh, jsh, jeh, nz
 
   call cpu_clock_begin(id_clock_update)
 
   h_min = 0.0 ; if (present(hmin)) h_min = hmin
 
+  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
+
   if (present(hin)) then
-    !$OMP parallel do default(shared)
-    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+    do k=1,nz ; do j=jsh,jeh ; do i=ish, ieh
       h(i,j,k) = max( hin(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
     enddo ; enddo ; enddo
   else
+    ! untested
     !$OMP parallel do default(shared)
-    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+    do k=1,nz ; do j=jsh,jeh ; do i=ish, ieh
       h(i,j,k) = max( h(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
     enddo ; enddo ; enddo
   endif
