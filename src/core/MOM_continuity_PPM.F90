@@ -160,6 +160,9 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
       "MOM_continuity_PPM: Either both visc_rem_u and visc_rem_v or neither"// &
       " one must be present in call to continuity_PPM.")
 
+  ! update device visc_rem_u for zonal_mass_flux
+  !$omp target update to(visc_rem_u)
+
   if (x_first) then
     !  First advect zonally, with loop bounds that accomodate the subsequent meridional advection.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.true.)
@@ -622,15 +625,22 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
   ! a better solution is needed!
   if (.not.use_visc_rem) then
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(from: visc_rem_u_tmp(ish-1:ieh, :, :))
     do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
       visc_rem_u_tmp(i,j,k) = 1.0
     enddo ; enddo ; enddo
   else
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: visc_rem_u(ish-1:ieh, :, :)) &
+    !$omp   map(from: visc_rem_u_tmp(ish-1:ieh, :, :))
     do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
       visc_rem_u_tmp(i,j,k) = visc_rem_u(i,j,k)
     enddo ; enddo ; enddo
   end if
 
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   map(from: do_I(ish-1:ieh, jsh:jeh))
   do j=jsh,jeh ; do i=ish-1,ieh
     do_I(i, j) = .true.
   enddo ; enddo
