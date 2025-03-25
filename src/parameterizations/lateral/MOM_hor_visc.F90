@@ -702,7 +702,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%dx2h, CS%dy2h) if (CS%biharmonic)
 
   !$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
-  !$omp target enter data map(to: CS%Kh_Max_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
+  !!!$omp target enter data map(to: CS%Kh_max_xy) &
+  !!!$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
   !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
@@ -1786,11 +1788,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo ; enddo
         endif
       endif
+
       !$omp end target
 
-      !$omp target update from(Kh)
-
+      ! TODO: GPU
       if (CS%Leith_Kh) then
+        !$omp target update from(Kh)
         if (CS%add_LES_viscosity) then
           do J=js-1,Jeq ; do I=is-1,Ieq
             Kh(I,J) = Kh(I,J) + CS%Laplac3_const_xy(I,J) * vert_vort_mag(I,J) * inv_PI3 ! Is this right? -AJA
@@ -1800,28 +1803,41 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             Kh(I,J) = max(Kh(I,J), CS%Laplac3_const_xy(I,J) * vert_vort_mag(I,J) * inv_PI3)
           enddo ; enddo
         endif
+        !$omp target update to(Kh)
       endif
 
       ! All viscosity contributions above are subject to resolution scaling
 
+      ! TODO: GPU
       if (rescale_Kh) then
+        !$omp target update from(Kh)
         do J=js-1,Jeq ; do I=is-1,Ieq
           Kh(I,J) = VarMix%Res_fn_q(I,J) * Kh(I,J)
         enddo ; enddo
+        !$omp target update to(Kh)
       endif
 
+      ! TODO: GPU
       if (legacy_bound) then
+        !$omp target update from(Kh)
         ! Older method of bounding for stability
         do J=js-1,Jeq ; do I=is-1,Ieq
           Kh(I,J) = min(Kh(I,J), CS%Kh_Max_xy(I,J))
         enddo ; enddo
+        !$omp target update to(Kh)
       endif
 
+      !$omp target
+      !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
-        Kh(I,J) = max(Kh(I,J), CS%Kh_bg_min) ! Place a floor on the viscosity, if desired.
+        ! Place a floor on the viscosity, if desired.
+        Kh(I,J) = max(Kh(I,J), CS%Kh_bg_min)
       enddo ; enddo
+      !$omp end target
 
+      ! TODO: GPU
       if (use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) then
+        !$omp target update from(Kh)
         if (use_kh_struct) then
           do J=js-1,Jeq ; do I=is-1,Ieq
             meke_res_fn = 1.
@@ -1843,13 +1859,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
                                         MEKE%Ku(i,j+1)) ) * meke_res_fn
           enddo ; enddo
         endif
+        !$omp target update to(Kh)
       endif
 
+      ! TODO: GPU
       if (CS%anisotropic) then
+        !$omp target update from(Kh)
         ! *Add* the shear component of anisotropic viscosity
         do J=js-1,Jeq ; do I=is-1,Ieq
             Kh(I,J) = Kh(I,J) + CS%Kh_aniso * CS%n1n2_q(I,J)**2
         enddo ; enddo
+        !$omp target update from(Kh)
       endif
 
       do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1907,6 +1927,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         str_xy(I,J) = 0.
       enddo ; enddo
     endif ! get harmonic coefficient Kh at q points and harmonic part of str_xy
+
+    !$omp target update from(Kh)
 
     if (CS%anisotropic) then
       do J=js-1,Jeq ; do I=is-1,Ieq
@@ -2427,6 +2449,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   !$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
+  !!!$omp target exit data map(delete: CS%Kh_max_xy) &
+  !!!$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
   !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
