@@ -2227,6 +2227,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
                                     CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
     endif
+    !$omp target update from(BT_cont%h_v)
   endif ; endif
 
   call cpu_clock_end(id_clock_correct)
@@ -2467,7 +2468,11 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
-  !$OMP parallel do default(shared) private(CFL,curv_3,h_marg,h_avg)
+  !$omp target teams distribute parallel do collapse(3) &
+  !$omp   private(CFL, curv_3, h_avg, h_marg) &
+  !$omp   map(to: v(ish:ieh, :, :), G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%IareaT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%IdyT(ish:ieh, jsh-1:jeh+1), h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), h(ish:ieh, :, :)) &
+  !$omp   map(from: h_v(ish:ieh, :, :))
   do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
     if (v(i,J,k) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
@@ -2500,12 +2505,16 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
     ! Scale back the thickness to account for the effects of viscosity and the fractional open
     ! thickness to give an appropriate non-normalized weight for each layer in determining the
     ! barotropic acceleration.
-    !$OMP parallel do default(shared)
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: visc_rem_v(ish:ieh, :, :), por_face_areaV(ish:ieh, :, :)) &
+    !$omp   map(tofrom: h_v(ish:ieh, :, :))
     do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
       h_v(i,J,k) = h_v(i,J,k) * (visc_rem_v(i,J,k) * por_face_areaV(i,J,k))
     enddo ; enddo ; enddo
   else
-    !$OMP parallel do default(shared)
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: por_face_areaV(ish:ieh, :, :)) &
+    !$omp   map(tofrom: h_v(ish:ieh, :, :))
     do k=1,nz ; do J=jsh-1,jeh ; do i=ish,ieh
       h_v(i,J,k) = h_v(i,J,k) * por_face_areaV(i,J,k)
     enddo ; enddo ; enddo
