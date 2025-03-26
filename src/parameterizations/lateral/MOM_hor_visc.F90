@@ -677,11 +677,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   !$omp target enter data map(alloc: dudx, dudy, dvdx, dvdy, sh_xx, sh_xy)
   !$omp target enter data map(alloc: h_u, h_v, hq)
+  !$omp target enter data map(alloc: str_xx, str_xy)
   !$omp target enter data map(alloc: Del2u, Del2v) if (CS%biharmonic)
   !$omp target enter data map(alloc: dDel2vdx, dDel2udy) if (CS%biharmonic)
   !$omp target enter data map(alloc: Shear_mag) if (use_Smag)
   !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
-  !$omp target enter data map(alloc: str_xx, str_xy)
   !$omp target enter data map(alloc: Ah) if (CS%biharmonic)
 
   !$omp target enter data map(alloc: hrat_min) &
@@ -713,10 +713,14 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
-  !$omp target enter data map(to: CS%Ah_bg_xx) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
   !$omp target enter data map(to: CS%reduction_xx) if (CS%biharmonic)
-  !$omp target enter data map(alloc: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
+  !$omp target enter data map(to: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
+  !$omp target enter data map(to: CS%Biharm_const_xy) &
+  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
+  !$omp target enter data map(to: CS%Biharm_const2_xy) &
+  !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
   !$omp target enter data map(to: CS%Ah_max_xx) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
@@ -1418,6 +1422,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         Ah(i,j) = CS%Ah_bg_xx(i,j)
       enddo ; enddo
       !$omp end target
+      !$omp target update from(Ah)
 
       if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
         !$omp target
@@ -1438,7 +1443,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
         endif
         !$omp end target
-        !$omp target update from(Ah)
 
         if (CS%Leith_Ah) then
           !$omp target update from(Ah)
@@ -1448,7 +1452,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             AhLth = CS%Biharm6_const_xx(i,j) * abs(Del2vort_h) * inv_PI6
             Ah(i,j) = max(Ah(i,j), AhLth)
           enddo ; enddo
+          !$omp target update to(Ah)
         endif
+        !$omp target update from(Ah)
 
         if (CS%use_Leithy) then
           ! TODO: !$omp target update from(...?)
@@ -1516,22 +1522,24 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp end target
       endif ! Smagorinsky_Ah or Leith_Ah or Leith+E
 
-      !$omp target update from(Ah)
-
       ! TODO: GPU
       if (use_MEKE_Au) then
         ! *Add* the MEKE contribution
+        !$omp target update from(Ah)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Ah(i,j) = Ah(i,j) + MEKE%Au(i,j)
         enddo ; enddo
+        !$omp target update to(Ah)
       endif
 
       ! TODO: GPU
       if (CS%Re_Ah > 0.0) then
+        !$omp target update from(Ah)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           KE = 0.125*(((u(I,j,k)+u(I-1,j,k))**2) + ((v(i,J,k)+v(i,J-1,k))**2))
           Ah(i,j) = sqrt(KE) * CS%Re_Ah_const_xx(i,j)
         enddo ; enddo
+        !$omp target update to(Ah)
       endif
 
       !$omp target
@@ -1552,6 +1560,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       ! TODO: GPU
       if (CS%EY24_EBT_BS) then
+        !$omp target update from(Ah)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           tmp = CS%KS_coef * hrat_min(i,j) * CS%Ah_Max_xx_KS(i,j)
           visc_limit_h(i,j,k) = tmp
@@ -1563,6 +1572,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       if ((CS%id_Ah_h>0) .or. CS%debug .or. CS%use_Leithy) then
+        !$omp target update from(Ah)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Ah_h(i,j,k) = Ah(i,j)
         enddo ; enddo
@@ -1571,13 +1581,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       if (CS%use_Leithy) then
         ! Compute Leith+E Kh after bounds have been applied to Ah
         ! and after it has been smoothed. Kh = -m_leithy * Ah
+        !$omp target update from(Ah, Kh)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = -m_leithy(i,j) * Ah(i,j)
           Kh_h(i,j,k) = Kh(i,j)
         enddo ; enddo
+        !$omp target update to(Kh)
       endif
 
       if (CS%id_grid_Re_Ah > 0) then
+        !$omp target update from(Ah)
         do j=js,je ; do i=is,ie
           KE = 0.125 * (((u(I,j,k) + u(I-1,j,k))**2) + ((v(i,J,k) + v(i,J-1,k))**2))
           grid_Ah = max(Ah(i,j), CS%min_grid_Ah)
@@ -1944,47 +1957,61 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp end target
     endif ! get harmonic coefficient Kh at q points and harmonic part of str_xy
 
-    !$omp target update from(Kh)
-    !$omp target update from(h_u, h_v, hq)
-    !$omp target update from(sh_xx, sh_xy)
-    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
-    !$omp target update from(Shear_mag) if (use_Smag)
-    !$omp target update from(visc_bound_rem, hrat_min) &
-    !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-    !$omp target update from(str_xx, str_xy)
-
     if (CS%anisotropic) then
+      !$omp target update from(sh_xx, str_xy)
       do J=js-1,Jeq ; do I=is-1,Ieq
         ! Horizontal-tension averaged to q-points
         local_strain = 0.25 * ( (sh_xx(i,j) + sh_xx(i+1,j+1)) + (sh_xx(i+1,j) + sh_xx(i,j+1)) )
         ! *Add* the tension contribution to the xy-component of stress
         str_xy(I,J) = str_xy(I,J) - CS%Kh_aniso * CS%n1n2_q(I,J) * CS%n1n1_m_n2n2_q(I,J) * local_strain
       enddo ; enddo
+      !$omp target update to(str_xy)
     endif
+
+    !$omp target update from(Kh)
+    !$omp target update from(h_u, h_v, hq)
+    !$omp target update from(sh_xx, sh_xy)
+    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
+    !!$omp target update from(Shear_mag) if (use_Smag)
+    !$omp target update from(visc_bound_rem, hrat_min) &
+    !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+    !$omp target update from(str_xx, str_xy)
 
     if (CS%biharmonic) then
       ! Determine the biharmonic viscosity at q points, using the
       ! largest value from several parameterizations. Also get the
       ! biharmonic component of str_xy.
+      !$omp target
+      !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
         Ah(I,J) = CS%Ah_bg_xy(I,J)
       enddo ; enddo
+      !$omp end target
+
+      ! TODO: Remove after next block is done
+      !$omp target update from(Ah)
 
       if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
+        !$omp target
         if (CS%Smagorinsky_Ah) then
           if (CS%bound_Coriolis) then
+            !$omp parallel loop collapse(2)
             do J=js-1,Jeq ; do I=is-1,Ieq
               AhSm = Shear_mag(I,J) * (CS%Biharm_const_xy(I,J) &
                   + CS%Biharm_const2_xy(I,J) * Shear_mag(I,J))
               Ah(I,J) = max(Ah(I,J), AhSm)
             enddo ; enddo
           else
+            !$omp parallel loop collapse(2)
             do J=js-1,Jeq ; do I=is-1,Ieq
               AhSm = CS%Biharm_const_xy(I,J) * Shear_mag(I,J)
               Ah(I,J) = max(Ah(I,J), AhSm)
             enddo ; enddo
           endif
         endif
+        !$omp end target
+
+        !$omp target update from(Ah)
 
         if (CS%Leith_Ah) then
           do J=js-1,Jeq ; do I=is-1,Ieq
@@ -2478,7 +2505,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
-  !$omp target exit data map(delete: CS%Ah_bg_xx) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
   !$omp target exit data map(delete: CS%reduction_xx) if (CS%biharmonic)
   !$omp target exit data map(delete: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
