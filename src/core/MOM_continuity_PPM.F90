@@ -2892,6 +2892,24 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
+  !$omp target enter data &
+  !$omp   map(to: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%dyCv(ish:ieh, jsh-1:jeh), &
+  !$omp       G%IdyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
+  !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), BT_cont, vh_tot_0(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), CS, visc_rem(ish:ieh, :, :), &
+  !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), &
+  !$omp       por_face_areaV(ish:ieh, :, :)) &
+  !$omp   map(alloc: BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), &
+  !$omp       dv0(ish:ieh, jsh-1:jeh), dvL(ish:ieh, jsh-1:jeh), dvR(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_CFL(ish:ieh, jsh-1:jeh), zeros(ish:ieh, jsh-1:jeh), FAmt_L(ish:ieh, jsh-1:jeh), &
+  !$omp       FAmt_R(ish:ieh, jsh-1:jeh), FAmt_0(ish:ieh, jsh-1:jeh), vhtot_L(ish:ieh, jsh-1:jeh), &
+  !$omp       vhtot_R(ish:ieh, jsh-1:jeh), v_L(ish:ieh, :, :), v_R(ish:ieh, :, :), &
+  !$omp       v_0(ish:ieh, :, :), dvhdv_L(ish:ieh, :, :), dvhdv_R(ish:ieh, :, :), &
+  !$omp       dvhdv_0(ish:ieh, :, :), vh_L(ish:ieh, :, :), vh_R(ish:ieh, :, :), vh_0(ish:ieh, :, :))
+
  ! Diagnose the zero-transport correction, dv0.
   !$omp target teams distribute parallel do collapse(2) &
   !$omp   map(from: zeros(ish:ieh, jsh-1:jeh))
@@ -3014,6 +3032,23 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
     BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
   endif ; enddo ; enddo
+
+  !$omp target exit data &
+  !$omp   map(from: BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), BT_cont%vBT_NN(ish:ieh, jsh-1:jeh)) &
+  !$omp   map(release: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%dyCv(ish:ieh, jsh-1:jeh), &
+  !$omp       G%IdyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
+  !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), BT_cont, vh_tot_0(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), CS, visc_rem(ish:ieh, :, :), &
+  !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), &
+  !$omp       por_face_areaV(ish:ieh, :, :), dv0(ish:ieh, jsh-1:jeh), dvL(ish:ieh, jsh-1:jeh), &
+  !$omp       dvR(ish:ieh, jsh-1:jeh), dv_CFL(ish:ieh, jsh-1:jeh), zeros(ish:ieh, jsh-1:jeh), &
+  !$omp       FAmt_L(ish:ieh, jsh-1:jeh), FAmt_R(ish:ieh, jsh-1:jeh), FAmt_0(ish:ieh, jsh-1:jeh), &
+  !$omp       vhtot_L(ish:ieh, jsh-1:jeh), vhtot_R(ish:ieh, jsh-1:jeh), v_L(ish:ieh, :, :), &
+  !$omp       v_R(ish:ieh, :, :), v_0(ish:ieh, :, :), dvhdv_L(ish:ieh, :, :), dvhdv_R(ish:ieh, :, :), &
+  !$omp       dvhdv_0(ish:ieh, :, :), vh_L(ish:ieh, :, :), vh_R(ish:ieh, :, :), vh_0(ish:ieh, :, :))
 
 end subroutine set_merid_BT_cont
 
