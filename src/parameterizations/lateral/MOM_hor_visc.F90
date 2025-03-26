@@ -681,13 +681,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: dDel2vdx, dDel2udy) if (CS%biharmonic)
   !$omp target enter data map(alloc: Shear_mag) if (use_Smag)
   !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
-  !$omp target enter data map(alloc: str_xx)
+  !$omp target enter data map(alloc: str_xx, str_xy)
   !$omp target enter data map(alloc: Ah) if (CS%biharmonic)
 
   !$omp target enter data map(alloc: hrat_min) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
   !$omp target enter data map(alloc: visc_bound_rem) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp target enter data map(alloc: Kh_q) &
+  !$omp   if (CS%Laplacian .and. (CS%id_Kh_q > 0 .or. CS%debug))
+  !$omp target enter data map(alloc: sh_xy_q) &
+  !$omp   if (CS%id_sh_xy_q > 0)
 
   ! TODO: NoSt, ShSt, ...?
 
@@ -1732,7 +1736,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
            G, GV, CS%ZB2020, k)
     endif
 
-    !$omp target update from(dudx, dudy, dvdx, dvdy)
     !$omp target update from(sh_xx, sh_xy)
     !$omp target update from(h_u, h_v, hq)
     !$omp target update from(str_xx)
@@ -1867,7 +1870,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         do J=js-1,Jeq ; do I=is-1,Ieq
             Kh(I,J) = Kh(I,J) + CS%Kh_aniso * CS%n1n2_q(I,J)**2
         enddo ; enddo
-        !$omp target update from(Kh)
+        !$omp target update to(Kh)
       endif
 
       !$omp target
@@ -1889,17 +1892,23 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
       !$omp end target
 
+      ! TODO: GPU
       if (CS%use_Leithy) then
+        !$omp target update from(Kh)
         ! Leith+E doesn't recompute Kh at q points, it just interpolates it from h to q points
         do J=js-1,Jeq ; do I=is-1,Ieq
           Kh(I,J) = 0.25 * ((Kh_h(i,j,k) + Kh_h(i+1,j+1,k)) + (Kh_h(i,j+1,k) + Kh_h(i+1,j,k)))
         enddo ; enddo
+        !$omp target update to(Kh)
       end if
 
       if (CS%id_Kh_q > 0 .or. CS%debug) then
+        !$omp target
+        !$omp parallel loop collapse(2)
         do J=js-1,Jeq ; do I=is-1,Ieq
           Kh_q(I,J,k) = Kh(I,J)
         enddo ; enddo
+        !$omp end target
       endif
 
       if (CS%id_vort_xy_q > 0) then
@@ -1909,29 +1918,41 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       if (CS%id_sh_xy_q > 0) then
+        !$omp target
+        !$omp parallel loop collapse(2)
         do J=js-1,Jeq ; do I=is-1,Ieq
           sh_xy_q(I,J,k) = sh_xy(I,J)
         enddo ; enddo
+        !$omp end target
       endif
 
       if (.not. CS%use_Leithy) then
+        !$omp target
+        !$omp parallel loop collapse(2)
         do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = -Kh(I,J) * sh_xy(I,J)
         enddo ; enddo
+        !$omp end target
       else
+        !$omp target update from(Kh)
         do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = -Kh(I,J) * sh_xy_smooth(I,J)
         enddo ; enddo
+        !$omp target update to(str_xy)
       endif
     else
+      !$omp target
+      !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
         str_xy(I,J) = 0.
       enddo ; enddo
+      !$omp end target
     endif ! get harmonic coefficient Kh at q points and harmonic part of str_xy
 
     !$omp target update from(Kh)
     !$omp target update from(visc_bound_rem, hrat_min) &
     !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+    !$omp target update from(str_xy)
 
     if (CS%anisotropic) then
       do J=js-1,Jeq ; do I=is-1,Ieq
@@ -2430,7 +2451,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
   !$omp target exit data map(delete: Del2u, Del2v) if (CS%biharmonic)
   !$omp target exit data map(delete: dDel2vdx, dDel2udy) if (CS%biharmonic)
-  !$omp target exit data map(delete: str_xx)
+  !$omp target exit data map(delete: str_xx, str_xy)
 
   !$omp target exit data map(delete: Kh) if (CS%Laplacian)
   !$omp target exit data map(delete: Ah) if (CS%biharmonic)
@@ -2515,6 +2536,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       call Bchksum(Ah_q, "Ah_q", G%HI, haloshift=0, symmetric=.true., unscale=US%L_to_m**4*US%s_to_T)
     endif
   endif
+
+  !$omp target exit data map(delete: Kh_q) &
+  !$omp   if (CS%Laplacian .and. (CS%id_Kh_q > 0 .or. CS%debug))
+  !$omp target exit data map(delete: sh_xy_q) &
+  !$omp   if (CS%id_sh_xy_q > 0)
 
   if (CS%id_FrictWorkIntz > 0) then
     do j=js,je
