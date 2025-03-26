@@ -522,7 +522,10 @@ subroutine meridional_edge_thickness(h_in, h_S, h_N, G, GV, US, CS, OBC, LB_in)
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   if (CS%upwind_1st) then
-    !$OMP parallel do default(shared)
+    ! untested
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: h_in(ish:ieh, :, :)) &
+    !$omp   map(from: h_S(ish:ieh, :, :), h_N(ish:ieh, :, :))
     do k=1,nz ; do j=jsh-1,jeh+1 ; do i=ish,ieh
       h_S(i,j,k) = h_in(i,j,k) ; h_N(i,j,k) = h_in(i,j,k)
     enddo ; enddo ; enddo
@@ -2938,6 +2941,10 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
 
   if (simple_2nd) then
     ! untested
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   private(h_jm1, h_jp1) &
+    !$omp   map(to: G, G%mask2dT(isl:iel, jsl-1:jel+1), h_in(isl:iel, :, :)) &
+    !$omp   map(from: h_S(isl:iel, :, :), h_N(isl:iel, :, :))
     do k=1,nz ; do j=jsl,jel ; do i=isl,iel
       h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1,k) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j,k)
       h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1,k) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j,k)
@@ -2945,6 +2952,10 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
       h_N(i,j,k) = 0.5*( h_jp1 + h_in(i,j,k) )
     enddo ; enddo ; enddo
   else
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   private(dMx, dMn) &
+    !$omp   map(to: G, G%mask2dT(isl:iel, jsl-2:jel+2), h_in(isl:iel, :, :)) &
+    !$omp   map(from: slp(isl:iel, :, :))
     do k=1,nz ; do j=jsl-1,jel+1 ; do i=isl,iel
       if ((G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1)) == 0.0) then
         slp(i,j,k) = 0.0
@@ -2966,6 +2977,9 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
         if (.not. segment%on_pe) cycle
         if (segment%is_N_or_S) then
           J=segment%HI%JsdB
+          !$omp target teams distribute parallel do collapse(2) &
+          !$omp   map(to: segment) &
+          !$omp   map(tofrom: slp(segment%HI%isd:segment%HI%ied, :, :))
           do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
             slp(i,j+1,k) = 0.0
             slp(i,j,k) = 0.0
@@ -2974,6 +2988,11 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
       enddo
     endif
 
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   private(h_jm1, h_jp1) &
+    !$omp   map(to: G, G%mask2dT(isl:iel, jsl-1:jel+1), h_in(isl:iel, :, :), &
+    !$omp       slp(isl:iel, :, :)) &
+    !$Omp   map(from: h_S(isl:iel, :, :), h_N(isl:iel, :, :))
     do k=1,nz ; do j=jsl,jel ; do i=isl,iel
       ! Neighboring values should take into account any boundaries.  The 3
       ! following sets of expressions are equivalent.
@@ -2992,6 +3011,9 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
       if (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_N) then
         J=segment%HI%JsdB
+        !$omp target teams distribute parallel do collapse(2) &
+        !$omp   map(to: segment, h_in(i, :, :)) &
+        !$omp   map(tofrom: h_S(i, :, :), h_N(i, :, :))
         do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
           h_S(i,j+1,k) = h_in(i,j,k)
           h_N(i,j+1,k) = h_in(i,j,k)
@@ -3000,6 +3022,9 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
         enddo ; enddo
       elseif (segment%direction == OBC_DIRECTION_S) then
         J=segment%HI%JsdB
+        !$omp target teams distribute parallel do collapse(2) &
+        !$omp   map(to: segment, h_in(i, :, :)) &
+        !$omp   map(tofrom: h_S(i, :, :), h_N(i, :, :))
         do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
           h_S(i,j,k) = h_in(i,j+1,k)
           h_N(i,j,k) = h_in(i,j+1,k)
