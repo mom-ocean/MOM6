@@ -183,7 +183,9 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC, LB)
     call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                               LB, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
+    !$omp target update to(vh)
     call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hmin=h_min)
+    !$omp target update from(h)
 
   else  ! .not. x_first
     !  First advect meridionally, with loop bounds that accomodate the subsequent zonal advection.
@@ -429,12 +431,18 @@ subroutine continuity_merdional_convergence(h, vh, dt, G, GV, LB, hin, hmin)
   h_min = 0.0 ; if (present(hmin)) h_min = hmin
 
   if (present(hin)) then
-    !$OMP parallel do default(shared)
+    ! untested
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: LB, hin(LB%ish:LB%ieh, :, :), G, G%IareaT(LB%ish:LB%ieh, LB%jsh:LB%jeh), &
+    !$omp       vh(LB%ish:LB%ieh, :, :)) &
+    !$omp   map(from: h(LB%ish:LB%ieh, :, :))
     do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = max( hin(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k)), h_min )
     enddo ; enddo ; enddo
   else
-    !$OMP parallel do default(shared)
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: LB, G, G%IareaT(LB%ish:LB%ieh, LB%jsh:LB%jeh), vh(LB%ish:LB%ieh, :, :)) &
+    !$omp   map(tofrom: h(LB%ish:LB%ieh, :, :))
     do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
       h(i,j,k) = max( h(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k)), h_min )
     enddo ; enddo ; enddo
