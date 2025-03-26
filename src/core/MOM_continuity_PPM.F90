@@ -162,6 +162,10 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
 
   ! update device visc_rem_u for zonal_mass_flux
   !$omp target update to(visc_rem_u, u)
+  !$omp target enter data &
+  !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
+  !$omp       G%mask2dT) &
+  !$omp   map(alloc: h_W, h_E, uh)
 
   if (x_first) then
     !  First advect zonally, with loop bounds that accomodate the subsequent meridional advection.
@@ -169,8 +173,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call zonal_edge_thickness(hin, h_W, h_E, G, GV, US, CS, OBC, LB)
     call zonal_mass_flux(u, hin, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
                          LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
-    ! update device uh from zonal_mass_flux
-    !$omp target update to(uh)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin)
 
     ! update host h from continuity_zonal_convergence
@@ -198,6 +200,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
                          LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hmin=h_min)
   endif
+
+  !$omp target update from(uh, u_cor, du_cor)
+
+  !$omp target exit data &
+  !$omp   map(from: uh) &
+  !$omp   map(release: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
+  !$omp       G%mask2dT, h_W, h_E)
 
 end subroutine continuity_PPM
 
@@ -672,7 +681,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   call zonal_flux_layer(u, h_in, h_W, h_E, &
                         uh, duhdu, visc_rem_u_tmp, &
                         dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC)
-  !$omp target update from(uh)
   
   ! untested!
   if (local_specified_BC) then
@@ -845,7 +853,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         call zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, du, &
                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
                               ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
-        !$omp target update from(uh)
 
         if (present(u_cor)) then
           !$omp target teams distribute parallel do collapse(3) &
@@ -864,7 +871,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
               u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
             endif ; enddo ; enddo ; enddo
           endif
-          !$omp target update from(u_cor)
         endif ! u-corrected
 
         if (present(du_cor)) then
@@ -872,7 +878,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           !$omp   map(to: du(ish-1:ieh, jsh:jeh)) &
           !$omp   map(from: du_cor(ish-1:ieh, jsh:jeh))
           do j=jsh,jeh ; do I=ish-1,ieh ; du_cor(I,j) = du(I,j) ; enddo ; enddo
-          !$omp target update from(du_cor)
         endif
       endif
       if (set_BT_cont) then
