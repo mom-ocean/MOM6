@@ -1743,11 +1743,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
     !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
 
-    ! Pass the velocity gradients and thickness to ZB2020
-    if (CS%use_ZB2020) then
-      call ZB2020_copy_gradient_and_thickness(sh_xx, sh_xy, vort_xy, hq, G, GV, CS%ZB2020, k)
-    endif
-
     if (CS%Laplacian) then
       ! Determine the Laplacian viscosity at q points, using the
       ! largest value from several parameterizations. Also get the
@@ -1950,9 +1945,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif ! get harmonic coefficient Kh at q points and harmonic part of str_xy
 
     !$omp target update from(Kh)
+    !$omp target update from(h_u, h_v, hq)
+    !$omp target update from(sh_xx, sh_xy)
+    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
+    !$omp target update from(Shear_mag) if (use_Smag)
     !$omp target update from(visc_bound_rem, hrat_min) &
     !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-    !$omp target update from(str_xy)
+    !$omp target update from(str_xx, str_xy)
 
     if (CS%anisotropic) then
       do J=js-1,Jeq ; do I=is-1,Ieq
