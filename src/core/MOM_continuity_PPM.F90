@@ -2491,6 +2491,19 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
 
   nz = GV%ke
 
+  !$omp target enter data &
+  !$omp   map(to: G, G%IareaT(ish:ieh, jsh-1:jeh+1), G%IdyT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%dx_Cv(ish:ieh, jsh-1:jeh), G%IdyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), &
+  !$omp       h_in(ish:ieh, :, :), h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), visc_rem(ish:ieh, :, :), &
+  !$omp       vhbt(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), vh_tot_0(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), CS, do_I_in(ish:ieh, jsh-1:jeh), &
+  !$omp       por_face_areaV(ish:ieh, :, :), vh_3d(ish:ieh, :, :)) &
+  !$omp   map(alloc: dv(ish:ieh, jsh-1:jeh), vh_aux(ish:ieh, :, :), dvhdv(ish:ieh, :, :), &
+  !$omp       v_new(ish:ieh, :, :), vh_err(ish:ieh, jsh-1:jeh), vh_err_best(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot(ish:ieh, jsh-1:jeh), dv_min(ish:ieh, jsh-1:jeh), dv_max(ish:ieh, jsh-1:jeh), &
+  !$omp       do_I(ish:ieh, jsh-1:jeh))
+
   !$omp target teams distribute parallel do collapse(3) &
   !$omp   map(from: vh_aux(ish:ieh, :, :), dvhdv(ish:ieh, :, :))
   do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
@@ -2615,6 +2628,19 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
       vh_3d(i,J,k) = vh_aux(i,j,k)
     enddo ; enddo ; enddo
   endif
+
+  !$omp target exit data &
+  !$omp   map(from: dv(ish:ieh, jsh-1:jeh), vh_3d(ish:ieh, :, :)) &
+  !$omp   map(release: G, G%IareaT(ish:ieh, jsh-1:jeh+1), G%IdyT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%dx_Cv(ish:ieh, jsh-1:jeh), G%IdyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), &
+  !$omp       h_in(ish:ieh, :, :), h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), visc_rem(ish:ieh, :, :), &
+  !$omp       vhbt(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), vh_tot_0(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), CS, do_I_in(ish:ieh, jsh-1:jeh), &
+  !$omp       por_face_areaV(ish:ieh, :, :), vh_aux(ish:ieh, :, :), dvhdv(ish:ieh, :, :), &
+  !$omp       v_new(ish:ieh, :, :), vh_err(ish:ieh, jsh-1:jeh), vh_err_best(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot(ish:ieh, jsh-1:jeh), dv_min(ish:ieh, jsh-1:jeh), dv_max(ish:ieh, jsh-1:jeh), &
+  !$omp       do_I(ish:ieh, jsh-1:jeh))
 
 end subroutine meridional_flux_adjust
 
