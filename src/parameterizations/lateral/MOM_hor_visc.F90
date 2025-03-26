@@ -723,6 +723,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
   !$omp target enter data map(to: CS%Ah_max_xx) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp target enter data map(to: CS%Ah_max_xy) &
+  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
@@ -1988,9 +1990,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
       !$omp end target
 
-      ! TODO: Remove after next block is done
-      !$omp target update from(Ah)
-
       if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
         !$omp target
         if (CS%Smagorinsky_Ah) then
@@ -2014,47 +2013,62 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update from(Ah)
 
         if (CS%Leith_Ah) then
+          !$omp target update from(Ah)
           do J=js-1,Jeq ; do I=is-1,Ieq
             AhLth = CS%Biharm6_const_xy(I,J) * abs(Del2vort_q(I,J)) * inv_PI6
             Ah(I,J) = max(Ah(I,J), AhLth)
           enddo ; enddo
+          !$omp target update to(Ah)
         endif
 
+        !$omp target
         if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
+          !$omp parallel loop collapse(2)
           do J=js-1,Jeq ; do I=is-1,Ieq
             Ah(I,J) = min(Ah(I,J), CS%Ah_Max_xy(I,J))
           enddo ; enddo
         endif
+        !$omp end target
       endif ! Smagorinsky_Ah or Leith_Ah
 
       if (use_MEKE_Au) then
+        !$omp target update from(Ah)
         ! *Add* the MEKE contribution
         do J=js-1,Jeq ; do I=is-1,Ieq
           Ah(I,J) = Ah(I,J) + 0.25 * ( &
               (MEKE%Au(i,j) + MEKE%Au(i+1,j+1)) + (MEKE%Au(i+1,j) + MEKE%Au(i,j+1)) )
         enddo ; enddo
+        !$omp target update to(Ah)
       endif
 
+      ! XXX: It is just overwrites the values!
       if (CS%Re_Ah > 0.0) then
         do J=js-1,Jeq ; do I=is-1,Ieq
           KE = 0.125 * (((u(I,j,k) + u(I,j+1,k))**2) + ((v(i,J,k) + v(i+1,J,k))**2))
           Ah(I,J) = sqrt(KE) * CS%Re_Ah_const_xy(I,J)
         enddo ; enddo
+        !$omp target update to(Ah)
       endif
 
+      !$omp target
       if (CS%better_bound_Ah) then
         if (CS%better_bound_Kh) then
+          !$omp parallel loop collapse(2)
           do J=js-1,Jeq ; do I=is-1,Ieq
             Ah(I,J) = min(Ah(I,J), visc_bound_rem(I,J) * hrat_min(I,J) * CS%Ah_Max_xy(I,J))
           enddo ; enddo
         else
+          !$omp parallel loop collapse(2)
           do J=js-1,Jeq ; do I=is-1,Ieq
             Ah(I,J) = min(Ah(I,J), hrat_min(I,J) * CS%Ah_Max_xy(I,J))
           enddo ; enddo
         endif
       endif
+      !$omp end target
 
       if (CS%EY24_EBT_BS) then
+        ! TODO: Fix indent!
+        !$omp target update from(Ah)
           do J=js-1,Jeq ; do I=is-1,Ieq
             tmp = CS%KS_coef *hrat_min(I,J) * CS%Ah_Max_xy_KS(I,J)
             visc_limit_q(I,J,k) = tmp
@@ -2070,13 +2084,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         do J=js-1,Jeq ; do I=is-1,Ieq
           Ah(I,J) = 0.25 * ((Ah_h(i,j,k) + Ah_h(i+1,j+1,k)) + (Ah_h(i,j+1,k) + Ah_h(i+1,j,k)))
         enddo ; enddo
+        !$omp target update to(Ah)
       end if
 
       if (CS%id_Ah_q>0 .or. CS%debug) then
+        !$omp target update from(Ah)
         do J=js-1,Jeq ; do I=is-1,Ieq
           Ah_q(I,J,k) = Ah(I,J)
         enddo ; enddo
       endif
+
+      !$omp target update from(Ah)
 
       ! Again, need to initialize str_xy as if its biharmonic
       do J=js-1,Jeq ; do I=is-1,Ieq
