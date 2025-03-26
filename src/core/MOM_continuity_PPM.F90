@@ -2522,30 +2522,54 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
 
   local_open_BC = .false.
   if (associated(OBC)) local_open_BC = OBC%open_v_BCs_exist_globally
+  ! untested - will need to be refactored to be performant on GPUs
   if (local_open_BC) then
     do n = 1, OBC%number_of_segments
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_N_or_S) then
         J = OBC%segment(n)%HI%JsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-          if (present(visc_rem_v)) then ; do k=1,nz
-            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+          if (present(visc_rem_v)) then
+            !$omp target teams distribute parallel do collapse(2) &
+            !$omp   map(to: OBC, OBC%segment(n), &
+            !$omp       h(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :), &
+            !$omp       visc_rem_v(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :), &
+            !$omp       por_face_areaV(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :)) &
+            !$omp   map(tofrom: h_v(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :))
+            do k=1,nz ; do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
               h_v(i,J,k) = h(i,j,k) * (visc_rem_v(i,J,k) * por_face_areaV(i,J,k))
-            enddo
-          enddo ; else ; do k=1,nz
-            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+            enddo ; enddo
+          else
+            !$omp target teams distribute parallel do collapse(2) &
+            !$omp   map(to: OBC, OBC%segment(n), &
+            !$omp       h(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :), &
+            !$omp       por_face_areaV(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :)) &
+            !$omp   map(tofrom: h_v(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :))
+            do k=1,nz ; do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
               h_v(i,J,k) = h(i,j,k) * por_face_areaV(i,J,k)
-            enddo
-          enddo ; endif
+            enddo ; enddo
+          endif
         else
-          if (present(visc_rem_v)) then ; do k=1,nz
-            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+          if (present(visc_rem_v)) then
+            !$omp target teams distribute parallel do collapse(2) &
+            !$omp   map(to: OBC, OBC%segment(n), &
+            !$omp       h(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :), &
+            !$omp       visc_rem_v(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :), &
+            !$omp       por_face_areaV(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :)) &
+            !$omp   map(tofrom: h_v(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :))
+            do k=1,nz ; do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
               h_v(i,J,k) = h(i,j+1,k) * (visc_rem_v(i,J,k) * por_face_areaV(i,J,k))
-            enddo
-          enddo ; else ; do k=1,nz
-            do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
+            enddo ; enddo
+          else
+            !$omp target teams distribute parallel do collapse(2) &
+            !$omp   map(to: OBC, OBC%segment(n), &
+            !$omp       h(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :), &
+            !$omp       visc_rem_v(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :), &
+            !$omp       por_face_areaV(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :)) &
+            !$omp   map(tofrom: h_v(OBC%segment(n)%HI%isd:OBC%segment(n)%HI%ied, :, :))
+            do k=1,nz ; do i = OBC%segment(n)%HI%isd, OBC%segment(n)%HI%ied
               h_v(i,J,k) = h(i,j+1,k) * por_face_areaV(i,J,k)
-            enddo
-          enddo ; endif
+            enddo ; enddo
+          endif
         endif
       endif
     enddo
