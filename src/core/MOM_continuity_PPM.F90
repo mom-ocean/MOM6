@@ -1913,11 +1913,24 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
   ! a better solution is needed
   if (.not.use_visc_rem) then
-    visc_rem_v_tmp(:, :, :) = 1.0
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(from: visc_rem_v_tmp(ish:ieh, :, :))
+    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+      visc_rem_v_tmp(i,j,k) = 1.0
+    enddo ; enddo ; enddo
   else
-    visc_rem_v_tmp(:, :, :) = visc_rem_v(:, :, :)
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: visc_rem_v(ish:ieh, :, :)) &
+    !$omp   map(from: visc_rem_v_tmp(ish:ieh, :, :))
+    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+      visc_rem_v_tmp(i,j,k) = visc_rem_v(i,j,k)
+    enddo ; enddo ; enddo
   endif
-  do j=jsh-1,jeh ; do i=ish,ieh ; do_I(i,j) = .true. ; enddo ; enddo
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   map(from: do_I(ish:ieh, jsh-1:jeh))
+  do j=jsh-1,jeh ; do i=ish,ieh
+    do_I(i,j) = .true.
+  enddo ; enddo
   ! This sets vh and dvhdv.
   call merid_flux_layer(v, h_in, h_S, h_N, &
                         vh, dvhdv, visc_rem_v_tmp, &
@@ -1932,15 +1945,30 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   endif
   if (present(vhbt) .or. set_BT_cont) then
     if (use_visc_rem .and. CS%use_visc_rem_max) then
-      visc_rem_max(:, :) = 0.0
-      do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
-        visc_rem_max(i, j) = max(visc_rem_max(i, j), visc_rem_v(i,j,k))
-      enddo ; enddo ; enddo
+      !$omp target teams distribute parallel do collapse(2) &
+      !$omp   map(to: visc_rem_v(ish:ieh, :, :)) &
+      !$omp   map(from: visc_rem_max(ish:ieh, jsh-1:jeh))
+      do j=jsh-1,jeh ; do i=ish,ieh
+        visc_rem_max(i, j) = 0.0
+        do k=1,nz
+          visc_rem_max(i, j) = max(visc_rem_max(i, j), visc_rem_v(i,j,k))
+        enddo
+      enddo ; enddo
     else
-      visc_rem_max(:, :) = 1.0
+      !$omp target teams distribute parallel do collapse(2) &
+      !$omp   map(from: visc_rem_max(ish:ieh, jsh-1:jeh))
+      do j=jsh-1,jeh ; do i=ish,ieh
+        visc_rem_max(i, j) = 1.0
+      enddo ; enddo
     endif
     !   Set limits on dv that will keep the CFL number between -1 and 1.
     ! This should be adequate to keep the root bracketed in all cases.
+    !$omp target teams distribute parallel do collapse(2) &
+    !$omp   private(I_vrm, dy_S, dy_N) &
+    !$omp   map(to: visc_rem_max(ish:ieh, jsh-1:jeh), CS, G, G%areaT(ish:ieh, jsh-1:jeh+1), &
+    !$omp       G%dx_Cv(ish:ieh, jsh-1:jeh), G%dyT(ish:ieh, jsh-1:jeh+1)) &
+    !$omp   map(from: dv_max_CFL(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh), &
+    !$omp       vh_tot_0(ish:ieh, jsh-1:jeh), dvhdv_tot_0(ish:ieh, jsh-1:jeh))
     do j=jsh-1,jeh ; do i=ish,ieh
       I_vrm = 0.0
       if (visc_rem_max(i,j) > 0.0) I_vrm = 1.0 / visc_rem_max(i,j)
@@ -1951,14 +1979,19 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       dv_max_CFL(i,j) = 2.0 * (CFL_dt * dy_S) * I_vrm
       dv_min_CFL(i,j) = -2.0 * (CFL_dt * dy_N) * I_vrm
       vh_tot_0(i,j) = 0.0 ; dvhdv_tot_0(i,j) = 0.0
+      do k=1,nz
+        dvhdv_tot_0(i,j) = dvhdv_tot_0(i,j) + dvhdv(i,j,k)
+        vh_tot_0(i,j) = vh_tot_0(i,j) + vh(i,J,k)
+      enddo
     enddo ; enddo
-    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
-      dvhdv_tot_0(i,j) = dvhdv_tot_0(i,j) + dvhdv(i,j,k)
-      vh_tot_0(i,j) = vh_tot_0(i,j) + vh(i,J,k)
-    enddo ; enddo ; enddo
     if (use_visc_rem) then
       if (CS%aggress_adjust) then
         ! untested
+        !$omp target teams distribute parallel do collapse(3) &
+        !$omp   private(dy_S, dy_N, dv_lim) &
+        !$omp   map(to: CS, G, G%areaT(ish:ieh, jsh-1:jeh+1), G%dx_Cv(ish:ieh, jsh-1:jeh), &
+        !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), visc_rem_v_tmp(ish:ieh, :, :)) &
+        !$omp   map(tofrom: dv_max_CFL(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh))
         do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
           if (CS%vol_CFL) then
             dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
@@ -1973,6 +2006,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
             dv_min_CFL(i,j) = dv_lim / visc_rem_v_tmp(I,j,k)
         enddo ; enddo ; enddo
       else
+        !$omp target teams distribute parallel do collapse(3) &
+        !$omp   private(dy_S, dy_N) &
+        !$omp   map(to: CS, G, G%areaT(ish:ieh, jsh-1:jeh+1), G%dx_Cv(ish:ieh, jsh-1:jeh), &
+        !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), G%mask2dCv(ish:ieh, jsh-1:jeh), &
+        !$omp       v(ish:ieh, :, :), visc_rem_v_tmp(ish:ieh, :, :)) &
+        !$omp   map(tofrom: dv_max_CFL(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh))
         do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
           if (CS%vol_CFL) then
             dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
@@ -1987,6 +2026,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     else
       if (CS%aggress_adjust) then
         ! untested
+        !$omp target teams distribute parallel do collapse(3) &
+        !$omp   private(dy_S, dy_N) &
+        !$omp   map(to: CS, G, G%areaT(ish:ieh, jsh-1:jeh+1), G%dx_Cv(ish:ieh, jsh-1:jeh), &
+        !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :)) &
+        !$omp   map(tofrom: dv_max_CFL(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh))
         do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
           if (CS%vol_CFL) then
             dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
@@ -1998,6 +2042,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                       ((-dy_N*I_dt - v(i,J,k)) + MAX(0.0,v(i,J+1,k))) )
         enddo ; enddo ; enddo
       else
+        !$omp target teams distribute parallel do collapse(3) &
+        !$omp   private(dy_S, dy_N) &
+        !$omp   map(to: CS, G, G%areaT(ish:ieh, jsh-1:jeh+1), G%dx_Cv(ish:ieh, jsh-1:jeh), &
+        !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :)) &
+        !$omp   map(tofrom: dv_max_CFL(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh))
         do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
           if (CS%vol_CFL) then
             dy_S = ratio_max(G%areaT(i,j), G%dx_Cv(I,j), 1000.0*G%dyT(i,j))
@@ -2008,6 +2057,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         enddo ; enddo ; enddo
       endif
     endif
+    !$omp target teams distribute parallel do collapse(2) &
+    !$omp   map(tofrom: dv_max_CFL(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh))
     do j=jsh-1,jeh ; do i=ish,ieh
       dv_max_CFL(i,j) = max(dv_max_CFL(i,j),0.0)
       dv_min_CFL(i,j) = min(dv_min_CFL(i,j),0.0)
@@ -2035,6 +2086,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                              ish, ieh, jsh, jeh, do_I, por_face_areaV, vh, OBC=OBC)
 
       if (present(v_cor)) then
+        !$omp target teams distribute parallel do collapse(3) &
+        !$omp   map(to: v(ish:ieh, :, :), dv(ish:ieh, jsh-1:jeh), visc_rem_v_tmp(ish:ieh, :, :)) &
+        !$omp   map(from: v_cor(ish:ieh, :, :))
         do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
           v_cor(i,j,k) = v(i,j,k) + dv(i,j) * visc_rem_v_tmp(i,j,k)
         enddo ; enddo ; enddo
@@ -2044,10 +2098,15 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
             endif ; enddo ; enddo ; enddo
         endif
+        !$omp target update from(v_cor)
       endif ! v-corrected
 
       if (present(dv_cor)) then
+        !$omp target teams distribute parallel do collapse(2) &
+        !$omp   map(to: dv(ish:ieh, jsh-1:jeh)) &
+        !$omp   map(from: dv_cor(ish:ieh, jsh-1:jeh))
         do j=jsh-1,jeh ; do i=ish,ieh ; dv_cor(i,J) = dv(i,j) ; enddo ; enddo
+        !$omp target update from(dv_cor)
       endif ! dv-corrected
     endif
     
