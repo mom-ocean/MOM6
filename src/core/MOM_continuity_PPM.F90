@@ -2468,6 +2468,12 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
+  !$omp target enter data &
+  !$omp   map(to: v(ish:ieh, :, :), G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%IareaT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%IdyT(ish:ieh, jsh-1:jeh+1), h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), h(ish:ieh, :, :), &
+  !$omp       visc_rem_v(ish:ieh, :, :), por_face_areaV(ish:ieh, :, :)) &
+  !$omp   map(alloc: h_v(ish:ieh, :, :))
+
   !$omp target teams distribute parallel do collapse(3) &
   !$omp   private(CFL, curv_3, h_avg, h_marg) &
   !$omp   map(to: v(ish:ieh, :, :), G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%IareaT(ish:ieh, jsh-1:jeh+1), &
@@ -2574,6 +2580,13 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
       endif
     enddo
   endif
+
+  !$omp target exit data &
+  !$omp   map(from: h_v(ish:ieh, :, :)) &
+  !$omp   map(release: v(ish:ieh, :, :), G, G%dx_Cv(ish:ieh, jsh-1:jeh), &
+  !$omp       G%IareaT(ish:ieh, jsh-1:jeh+1), G%IdyT(ish:ieh, jsh-1:jeh+1), h_S(ish:ieh, :, :), &
+  !$omp       h_N(ish:ieh, :, :), h(ish:ieh, :, :), visc_rem_v(ish:ieh, :, :), &
+  !$omp       por_face_areaV(ish:ieh, :, :))
 
 end subroutine meridional_flux_thickness
 
