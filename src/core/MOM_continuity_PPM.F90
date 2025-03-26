@@ -183,7 +183,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC, LB)
     call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                               LB, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
-    !$omp target update to(vh)
     call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hmin=h_min)
     !$omp target update from(h)
 
@@ -203,7 +202,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hmin=h_min)
   endif
 
-  !$omp target update from(uh, u_cor, du_cor)
+  !$omp target update from(uh, u_cor, du_cor, vh)
 
   !$omp target exit data &
   !$omp   map(from: uh) &
@@ -2492,12 +2491,28 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
 
   nz = GV%ke
 
-  vh_aux(:,:,:) = 0.0 ; dvhdv(:,:,:) = 0.0
+  !$omp target teams distribute parallel do collapse(3) &
+  !$omp   map(from: vh_aux(ish:ieh, :, :), dvhdv(ish:ieh, :, :))
+  do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+    vh_aux(i,j,k) = 0.0 ; dvhdv(i,j,k) = 0.0
+  enddo ; enddo ; enddo
   
-  if (present(vh_3d)) then ; do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
-    vh_aux(i,j,k) = vh_3d(i,J,k)
-  enddo ; enddo ; enddo ; endif
+  if (present(vh_3d)) then
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: vh_3d(ish:ieh, :, :)) &
+    !$omp   map(from: vh_aux(ish:ieh, :, :))
+    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+      vh_aux(i,j,k) = vh_3d(i,J,k)
+    enddo ; enddo ; enddo ; 
+  endif
 
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   map(to: do_I_in(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), vh_tot_0(ish:ieh, jsh-1:jeh), vhbt(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh)) &
+  !$omp   map(from: dv(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), dv_max(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_min(ish:ieh, jsh-1:jeh), vh_err(ish:ieh, jsh-1:jeh), dvhdv_tot(ish:ieh, jsh-1:jeh), &
+  !$omp       vh_err_best(ish:ieh, jsh-1:jeh))
   do j=jsh-1,jeh ; do i=ish,ieh
     dv(i,j) = 0.0 ; do_I(i,j) = do_I_in(i,j)
     dv_max(i,j) = dv_max_CFL(i,j) ; dv_min(i,j) = dv_min_CFL(i,j)
@@ -2514,12 +2529,23 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
     end select
     tol_vel = CS%tol_vel
 
+    !$omp target teams distribute parallel do collapse(2) &
+    !$omp   map(to: vh_err(ish:ieh, jsh-1:jeh), dv(ish:ieh, jsh-1:jeh)) &
+    !$omp   map(tofrom: do_I(ish:ieh, jsh-1:jeh), dv_max(ish:ieh, jsh-1:jeh), &
+    !$omp       dv_min(ish:ieh, jsh-1:jeh))
     do j=jsh-1,jeh ; do i=ish,ieh
       if (vh_err(i,j) > 0.0) then ; dv_max(i,j) = dv(i,j)
       elseif (vh_err(i,j) < 0.0) then ; dv_min(i,j) = dv(i,j)
       else ; do_I(i,j) = .false. ; endif
     enddo ; enddo
     domore = .false.
+    !$omp target teams distribute parallel do collapse(2) &
+    !$omp   private(ddv, dv_prev) &
+    !$omp   reduction(.or.:domore) &
+    !$omp   map(to: G, G%IareaT(ish:ieh, jsh-1:jeh+1), CS, vh_err(ish:ieh, jsh-1:jeh), &
+    !$omp       dvhdv_tot(ish:ieh, jsh-1:jeh), vh_err_best(ish:ieh, jsh-1:jeh), &
+    !$omp       dv_max(ish:ieh, jsh-1:jeh), dv_min(ish:ieh, jsh-1:jeh)) &
+    !$omp   map(tofrom: do_I(ish:ieh, jsh-1:jeh), dv(ish:ieh, jsh-1:jeh))
     do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
       if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i,j)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(vh_err(i,j)) > tol_vel * dvhdv_tot(i,j)) .or. &
@@ -2549,22 +2575,29 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
     endif ; enddo ; enddo
     if (.not.domore) exit
 
-    if ((itt < max_itts) .or. present(vh_3d)) then ; do k=1,nz ; do j=jsh-1,jeh
-      do i=ish,ieh ; v_new(i,j,k) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k) ; enddo ; enddo ; enddo
+    if ((itt < max_itts) .or. present(vh_3d)) then
+      !$omp target teams distribute parallel do collapse(3) &
+      !$omp   map(to: v(ish:ieh, :, :), dv(ish:ieh, jsh-1:jeh), visc_rem(ish:ieh, :, :)) &
+      !$omp   map(from: v_new(ish:ieh, :, :))
+      do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+        v_new(i,j,k) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k)
+      enddo ; enddo ; enddo
       call merid_flux_layer(v_new, h_in, h_S, h_N, &
                             vh_aux, dvhdv, visc_rem, &
                             dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
     endif
 
     if (itt < max_itts) then
+      !$omp target teams distribute parallel do collapse(2) &
+      !$omp   map(to: vhbt(ish:ieh, jsh-1:jeh), vh_aux(ish:ieh, :, :), dvhdv(ish:ieh, :, :)) &
+      !$omp   map(from: vh_err(ish:ieh, jsh-1:jeh), dvhdv_tot(ish:ieh, jsh-1:jeh)) &
+      !$omp   map(tofrom: vh_err_best(ish:ieh, jsh-1:jeh))
       do j=jsh-1,jeh ; do i=ish,ieh
         vh_err(i,j) = -vhbt(i,j) ; dvhdv_tot(i,j) = 0.0
-      enddo ; enddo
-      do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
-        vh_err(i,j) = vh_err(i,j) + vh_aux(i,j,k)
-        dvhdv_tot(i,j) = dvhdv_tot(i,j) + dvhdv(i,j,k)
-      enddo ; enddo ; enddo
-      do j=jsh-1,jeh ; do i=ish,ieh
+        do k=1,nz
+          vh_err(i,j) = vh_err(i,j) + vh_aux(i,j,k)
+          dvhdv_tot(i,j) = dvhdv_tot(i,j) + dvhdv(i,j,k)
+        enddo
         vh_err_best(i,j) = min(vh_err_best(i,j), abs(vh_err(i,j)))
       enddo ; enddo
     endif
@@ -2574,9 +2607,14 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   ! so-be-it, or else use a final upwind correction?
   ! This never seems to happen with 20 iterations as max_itt.
 
-  if (present(vh_3d)) then ; do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
-    vh_3d(i,J,k) = vh_aux(i,j,k)
-  enddo ; enddo ; enddo ; endif
+  if (present(vh_3d)) then
+    !$omp target teams distribute parallel do collapse(3) &
+    !$omp   map(to: vh_aux(ish:ieh, :, :)) &
+    !$omp   map(from: vh_3d(ish:ieh, :, :))
+    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
+      vh_3d(i,J,k) = vh_aux(i,j,k)
+    enddo ; enddo ; enddo
+  endif
 
 end subroutine meridional_flux_adjust
 
