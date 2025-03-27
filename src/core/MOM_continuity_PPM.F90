@@ -1911,6 +1911,21 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   I_dt = 1.0 / dt
   if (CS%aggress_adjust) CFL_dt = I_dt
 
+  !$omp target enter data &
+  !$omp   map(to: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%IdyT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), G%dyT(ish:ieh, jsh-1:jeh+1), G%dyCv(ish:ieh, jsh-1:jeh), &
+  !$omp       G%mask2dCv(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
+  !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), CS, por_face_areaV(ish:ieh, :, :), &
+  !$omp       vhbt(ish:ieh, jsh-1:jeh), visc_rem_v(ish:ieh, :, :), BT_cont) &
+  !$omp   map(alloc: vh(ish:ieh, :, :), v_cor(ish:ieh, :, :), BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), dv_cor(ish:ieh, jsh-1:jeh), dvhdv(ish:ieh, :, :), &
+  !$omp       dv(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), vh_tot_0(ish:ieh, jsh-1:jeh), &
+  !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), FAvi(ish:ieh, jsh-1:jeh), &
+  !$omp       visc_rem_v_tmp(ish:ieh, :, :), simple_OBC_pt(ish:ieh, jsh:jeh))
+
   ! a better solution is needed
   if (.not.use_visc_rem) then
     !$omp target teams distribute parallel do collapse(3) &
@@ -2233,6 +2248,21 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     endif
     !$omp target update from(BT_cont%h_v)
   endif ; endif
+
+  !$omp target exit data &
+  !$omp   map(from: vh(ish:ieh, :, :), v_cor(ish:ieh, :, :), BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), dv_cor(ish:ieh, jsh-1:jeh)) &
+  !$omp   map(release: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%IdyT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), G%dyT(ish:ieh, jsh-1:jeh+1), G%dyCv(ish:ieh, jsh-1:jeh), &
+  !$omp       G%mask2dCv(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
+  !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), CS, por_face_areaV(ish:ieh, :, :), &
+  !$omp       vhbt(ish:ieh, jsh-1:jeh), visc_rem_v(ish:ieh, :, :), dvhdv(ish:ieh, :, :), &
+  !$omp       dv(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), vh_tot_0(ish:ieh, jsh-1:jeh), &
+  !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), FAvi(ish:ieh, jsh-1:jeh), &
+  !$omp       visc_rem_v_tmp(ish:ieh, :, :), simple_OBC_pt(ish:ieh, jsh:jeh))
 
   call cpu_clock_end(id_clock_correct)
 
