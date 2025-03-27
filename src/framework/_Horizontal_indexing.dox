@@ -25,7 +25,7 @@ For example, when a loop is over h-points collocated variables
 - the do-loop statements will be for lower-case `i,j` variables
 - references to h-point variables will be `h(i,j)`, `D(i+1,j)`, etc.
 - references to u-point variables will be `u(I,j)` (meaning \f$u_{i+\frac{1}{2},j}\f$), `u(I-1,j)` (meaning \f$u_{i-\frac{1}{2},j}\f$), etc.
-- references to v-point variables will be `v(i,J)` (meaning \f$v_{i,j+\frac{1}{2}}\f$), `u(I-1,j)` (meaning \f$u_{i,j-\frac{1}{2}}\f$), etc.
+- references to v-point variables will be `v(i,J)` (meaning \f$v_{i,j+\frac{1}{2}}\f$), `v(i,J-1)` (meaning \f$v_{i,j-\frac{1}{2}}\f$), etc.
 - references to q-point variables will be `q(I,J)` (meaning \f$q_{i+\frac{1}{2},j+\frac{1}{2}}\f$), etc.
 
 In contrast, when a loop is over u-points collocated variables
