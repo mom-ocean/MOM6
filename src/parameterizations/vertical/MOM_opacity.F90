@@ -390,7 +390,7 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
           optics%sw_pen_band(1:2,i,j) = 0.  ! Make sure there is a valid value for land points
         else
           if (multiband_vis_input ) then ! If multiband_vis_input is true then so is multiband_nir_input
-            SW_vis_tot = (sw_vis_dir(i,j) + (sw_vis_dif(i,j) + (sw_nir_dir(i,j) + sw_nir_dif(i,j))))
+            SW_vis_tot = ((sw_vis_dir(i,j) + sw_vis_dif(i,j)) + sw_nir_dir(i,j)) + sw_nir_dif(i,j)
           elseif (total_sw_input) then
             SW_vis_tot = sw_total(i,j)
           else

@@ -1047,8 +1047,8 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
               RivermixConst = -0.5*(CS%rivermix_depth*dt) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
             endif
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
-                            (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j) + &
-                             fluxes%lrunoff_glc(i,j) + fluxes%frunoff_glc(i,j)) * tv%S(i,j,1))
+                            ((fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) + &
+                             (fluxes%lrunoff_glc(i,j) + fluxes%frunoff_glc(i,j))) * tv%S(i,j,1))
           endif
 
           ! Update state

@@ -770,10 +770,10 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
     ! When enthalpy terms are provided via coupler, they must be included in net_heat
     if (.not. do_enthalpy) then
       net_heat(i) = net_heat(i) + (scale * dt * I_Cp_Hconvert * &
-                    (fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j) + &
-                     fluxes%heat_content_lrunoff_glc(i,j) + fluxes%heat_content_frunoff_glc(i,j) + &
-                     fluxes%heat_content_lprec(i,j)   + fluxes%heat_content_fprec(i,j)   + &
-                     fluxes%heat_content_evap(i,j)    + fluxes%heat_content_cond(i,j)))
+                    ((((fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j)) + &
+                       (fluxes%heat_content_lrunoff_glc(i,j) + fluxes%heat_content_frunoff_glc(i,j))) + &
+                       (fluxes%heat_content_lprec(i,j)   + fluxes%heat_content_fprec(i,j)))   + &
+                       (fluxes%heat_content_evap(i,j)    + fluxes%heat_content_cond(i,j))))
     endif
 
     if (fluxes%num_msg < fluxes%max_msg) then
@@ -931,14 +931,10 @@ subroutine extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, dt, &
 
       if (associated(tv%TempxPmE)) then
         tv%TempxPmE(i,j) =  (I_Cp*dt*scale) * &
-        (fluxes%heat_content_lprec(i,j)  + &
-        fluxes%heat_content_fprec(i,j)   + &
-        fluxes%heat_content_lrunoff(i,j) + &
-        fluxes%heat_content_frunoff(i,j) + &
-        fluxes%heat_content_lrunoff_glc(i,j) + &
-        fluxes%heat_content_frunoff_glc(i,j) + &
-        fluxes%heat_content_evap(i,j)    + &
-        fluxes%heat_content_cond(i,j))
+         ((((fluxes%heat_content_lprec(i,j) + fluxes%heat_content_fprec(i,j)) + &
+            (fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j))) + &
+            (fluxes%heat_content_lrunoff_glc(i,j) + fluxes%heat_content_frunoff_glc(i,j))) + &
+            (fluxes%heat_content_evap(i,j) + fluxes%heat_content_cond(i,j)))
       endif
 
     endif ! calculate_diags and do_enthalpy

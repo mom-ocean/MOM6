@@ -528,15 +528,15 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
         RmixConst = -0.5*CS%rivermix_depth * GV%g_Earth
         do i=is,ie
           TKE_river(i) = max(0.0, RmixConst * dSpV0_dS(i) * &
-                        (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j) + &
-                         fluxes%lrunoff_glc(i,j) + fluxes%frunoff_glc(i,j)) * S(i,1))
+                        ((fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) + &
+                         (fluxes%lrunoff_glc(i,j) + fluxes%frunoff_glc(i,j))) * S(i,1))
         enddo
       else
         RmixConst = 0.5*CS%rivermix_depth * GV%g_Earth * Irho0**2
         do i=is,ie
           TKE_river(i) = max(0.0, RmixConst*dR0_dS(i)* &
-                        (fluxes%lrunoff(i,j) + fluxes%frunoff(i,j) + &
-                         fluxes%lrunoff_glc(i,j) + fluxes%frunoff_glc(i,j)) * S(i,1))
+                        ((fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) + &
+                         (fluxes%lrunoff_glc(i,j) + fluxes%frunoff_glc(i,j))) * S(i,1))
         enddo
       endif
     else
