@@ -652,8 +652,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   !$omp       u_cor(ish-1:ieh, :, :), BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), &
   !$omp       BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
   !$omp       BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), du_cor(ish-1:ieh, jsh:jeh), duhdu(ish-1:ieh, :, :), &
-  !$omp       du(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh), du_max_CFL(ish-1:ieh, jsh:jeh), &
+  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%h_u(ish-1:ieh, :, :), &
+  !$omp       du_cor(ish-1:ieh, jsh:jeh), duhdu(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh), &
+  !$omp       du_min_CFL(ish-1:ieh, jsh:jeh), du_max_CFL(ish-1:ieh, jsh:jeh), &
   !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), uh_tot_0(ish-1:ieh, jsh:jeh), &
   !$omp       visc_rem_max(ish-1:ieh, jsh:jeh))
 
@@ -990,7 +991,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   !$omp   map(from: uh(ish-1:ieh, :, :), u_cor(ish-1:ieh, :, :), BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), &
   !$omp       BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
   !$omp       BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), du_cor(ish-1:ieh, jsh:jeh)) &
+  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%h_u(ish-1:ieh, :, :), &
+  !$omp       du_cor(ish-1:ieh, jsh:jeh)) &
   !$omp   map(release: visc_rem_u_tmp(ish-1:ieh, :, :), do_I(ish-1:ieh, jsh:jeh), G, &
   !$omp       G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
   !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), G%areaT(ish-1:ieh+1, jsh:jeh), &
@@ -1914,14 +1916,16 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   !$omp target enter data &
   !$omp   map(to: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%IdyT(ish:ieh, jsh-1:jeh+1), &
   !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), G%dyT(ish:ieh, jsh-1:jeh+1), G%dyCv(ish:ieh, jsh-1:jeh), &
-  !$omp       G%mask2dCv(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
+  !$omp       G%mask2dCv(ish:ieh, jsh-1:jeh), G%areaT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%IareaT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
   !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), CS, por_face_areaV(ish:ieh, :, :), &
   !$omp       vhbt(ish:ieh, jsh-1:jeh), visc_rem_v(ish:ieh, :, :), BT_cont) &
   !$omp   map(alloc: vh(ish:ieh, :, :), v_cor(ish:ieh, :, :), BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), &
   !$omp       BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), &
   !$omp       BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), dv_cor(ish:ieh, jsh-1:jeh), dvhdv(ish:ieh, :, :), &
-  !$omp       dv(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
+  !$omp       BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), BT_cont%h_v(ish:ieh, :, :), &
+  !$omp       dv_cor(ish:ieh, jsh-1:jeh), dvhdv(ish:ieh, :, :), dv(ish:ieh, jsh-1:jeh), &
+  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
   !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), vh_tot_0(ish:ieh, jsh-1:jeh), &
   !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), FAvi(ish:ieh, jsh-1:jeh), &
   !$omp       visc_rem_v_tmp(ish:ieh, :, :), simple_OBC_pt(ish:ieh, jsh:jeh))
@@ -2253,10 +2257,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   !$omp   map(from: vh(ish:ieh, :, :), v_cor(ish:ieh, :, :), BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), &
   !$omp       BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), &
   !$omp       BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), dv_cor(ish:ieh, jsh-1:jeh)) &
+  !$omp       BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), BT_cont%h_v(ish:ieh, :, :), &
+  !$omp       dv_cor(ish:ieh, jsh-1:jeh)) &
   !$omp   map(release: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%IdyT(ish:ieh, jsh-1:jeh+1), &
   !$omp       G%dyT(ish:ieh, jsh-1:jeh+1), G%dyT(ish:ieh, jsh-1:jeh+1), G%dyCv(ish:ieh, jsh-1:jeh), &
-  !$omp       G%mask2dCv(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
+  !$omp       G%mask2dCv(ish:ieh, jsh-1:jeh), G%areaT(ish:ieh, jsh-1:jeh+1), &
+  !$omp       G%IareaT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
   !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), CS, por_face_areaV(ish:ieh, :, :), &
   !$omp       vhbt(ish:ieh, jsh-1:jeh), visc_rem_v(ish:ieh, :, :), dvhdv(ish:ieh, :, :), &
   !$omp       dv(ish:ieh, jsh-1:jeh), dv_min_CFL(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
