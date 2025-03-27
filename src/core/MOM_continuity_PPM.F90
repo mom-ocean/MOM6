@@ -162,10 +162,15 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
 
   ! update device visc_rem_u for zonal_mass_flux
   !$omp target update to(visc_rem_u, u, visc_rem_v, v)
+  ! problems with hin
   !$omp target enter data &
   !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
-  !$omp       G%mask2dT) &
-  !$omp   map(alloc: h_W, h_E, uh)
+  !$omp       G%mask2dT, G%dx_Cv, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h, CS, pbv, &
+  !$omp       pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, BT_cont) &
+  !$omp   map(alloc: h_W, h_E, h_S, h_N, uh, vh, u_cor, v_cor, du_cor, dv_cor, BT_cont%FA_u_E0, &
+  !$omp       BT_cont%FA_u_W0, BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
+  !$omp       BT_cont%FA_v_NN, BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, &
+  !$omp       BT_cont%vBT_SS, BT_cont%h_u, BT_cont%h_V)
 
   if (x_first) then
     !  First advect zonally, with loop bounds that accomodate the subsequent meridional advection.
@@ -176,7 +181,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin)
 
     ! update host h from continuity_zonal_convergence
-    !$omp target update from(h)
 
     !  Now advect meridionally, using the updated thicknesses to determine the fluxes.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
@@ -184,7 +188,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                               LB, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
     call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hmin=h_min)
-    !$omp target update from(h)
 
   else  ! .not. x_first
     !  First advect meridionally, with loop bounds that accomodate the subsequent zonal advection.
@@ -202,12 +205,21 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hmin=h_min)
   endif
 
-  !$omp target update from(uh, u_cor, du_cor, vh)
+  !$omp target update from(uh, u_cor, du_cor, vh, v_cor, dv_cor)
+  !$omp target update from(BT_cont%FA_u_W0, BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, &
+  !$omp       BT_cont%uBT_WW, BT_cont%uBT_EE, BT_cont%h_u)
+  !$omp target update from(BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%FA_v_N0, BT_cont%FA_v_NN, &
+  !$omp       BT_cont%vBT_SS, BT_cont%vBT_NN, BT_cont%h_v)
+  !$omp target update from(h)
 
   !$omp target exit data &
-  !$omp   map(from: uh) &
+  !$omp   map(from: uh, h, vh, u_cor, v_cor, du_cor, dv_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, &
+  !$omp       BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, BT_cont%FA_v_NN, &
+  !$omp       BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, BT_cont%vBT_SS, &
+  !$omp       BT_cont%h_u, BT_cont%h_V) &
   !$omp   map(release: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
-  !$omp       G%mask2dT, h_W, h_E)
+  !$omp       G%mask2dT, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h_W, h_E, h_S, h_N, CS, pbv, &
+  !$omp       pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v)
 
 end subroutine continuity_PPM
 
@@ -921,9 +933,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             endif
           enddo ; enddo
         endif ! any_simple_OBC
-        !$omp target update from(BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
-        !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
-        !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
       endif ! set_BT_cont
     endif ! present(uhbt) or set_BT_cont
 
@@ -984,7 +993,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
                                 CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
     endif
-    !$omp target update from(BT_cont%h_u)
   endif ; endif
 
   !$omp target exit data &
@@ -1954,7 +1962,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   call merid_flux_layer(v, h_in, h_S, h_N, &
                         vh, dvhdv, visc_rem_v_tmp, &
                         dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
-  !$omp target update from(vh)
   ! untested
   if (local_specified_BC) then
     !$omp target teams distribute parallel do collapse(3) &
@@ -2136,7 +2143,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
             v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
           endif ; enddo ; enddo ; enddo
         endif
-        !$omp target update from(v_cor)
       endif ! v-corrected
 
       if (present(dv_cor)) then
@@ -2144,7 +2150,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         !$omp   map(to: dv(ish:ieh, jsh-1:jeh)) &
         !$omp   map(from: dv_cor(ish:ieh, jsh-1:jeh))
         do j=jsh-1,jeh ; do i=ish,ieh ; dv_cor(i,J) = dv(i,j) ; enddo ; enddo
-        !$omp target update from(dv_cor)
       endif ! dv-corrected
     endif
     
@@ -2238,10 +2243,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     enddo
   endif
 
-  !$omp target update from(BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), BT_cont%vBT_NN(ish:ieh, jsh-1:jeh))
-
   if (set_BT_cont) then ; if (allocated(BT_cont%h_v)) then
     if (present(v_cor)) then
       call meridional_flux_thickness(v_cor, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
@@ -2250,7 +2251,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       call meridional_flux_thickness(v, h_in, h_S, h_N, BT_cont%h_v, dt, G, GV, US, LB, &
                                     CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaV, visc_rem_v)
     endif
-    !$omp target update from(BT_cont%h_v)
   endif ; endif
 
   !$omp target exit data &
