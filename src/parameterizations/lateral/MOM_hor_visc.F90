@@ -1035,16 +1035,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! straightforward.
 
     if (use_vort_xy) then
-      ! TODO: Remove this after moving Leith to GPU
       !$omp target update from(dvdx, dudy)
-
       if (CS%no_slip) then
-        !!$omp parallel loop collapse(2)
         do J=js_vort,je_vort ; do I=is_vort,ie_vort
           vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
         enddo ; enddo
       else
-        !!$omp parallel loop collapse(2)
         do J=js_vort,je_vort ; do I=is_vort,ie_vort
           vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
         enddo ; enddo
@@ -1103,7 +1099,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! endif
 
       if (CS%modified_Leith) then
-        ! TODO: GPU
         !$omp target update from(dudx, dvdy)
 
         ! Divergence
@@ -1220,7 +1215,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! largest value from several parameterizations. Also get
       ! the Laplacian component of str_xx.
 
-      ! TODO: GPU
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
         if (CS%use_QG_Leith_visc) then
           do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -1264,7 +1258,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       ! All viscosity contributions above are subject to resolution scaling
 
-      ! TODO: GPU
       if (rescale_Kh) then
         !$omp target update from(Kh)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -1272,7 +1265,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      ! TODO: GPU
       if (legacy_bound) then
         ! Older method of bounding for stability
         !$omp target update from(Kh)
@@ -1290,7 +1282,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       !$omp end target
 
-      ! TODO: GPU of MEKE and anisotropic Kh tweaks
       !$omp target update from(Kh) &
       !$omp   if ((use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) .or. CS%anisotropic)
 
@@ -1403,7 +1394,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp end target
     endif ! Get Kh at h points and get Laplacian component of str_xx
 
-    ! TODO: GPU
     if (CS%anisotropic) then
       !$omp target update from(str_xx)
       !$omp target update from(sh_xx, sh_xy)
@@ -1526,7 +1516,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp end target
       endif ! Smagorinsky_Ah or Leith_Ah or Leith+E
 
-      ! TODO: GPU
       if (use_MEKE_Au) then
         ! *Add* the MEKE contribution
         !$omp target update from(Ah)
@@ -1536,7 +1525,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Ah)
       endif
 
-      ! TODO: GPU
       if (CS%Re_Ah > 0.0) then
         !$omp target update from(Ah)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -1562,7 +1550,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
       !$omp end target
 
-      ! TODO: GPU
       if (CS%EY24_EBT_BS) then
         !$omp target update from(Ah)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
@@ -1623,7 +1610,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     ! Backscatter using MEKE
     if (CS%EY24_EBT_BS) then
-      ! TODO: GPU
       !$omp target update from(sh_xx)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         if (visc_limit_h_flag(i,j,k) > 0) then
@@ -1765,7 +1751,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! largest value from several parameterizations. Also get the
       ! Laplacian component of str_xy.
 
-      ! TODO: GPU
       if ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
         if (CS%use_QG_Leith_visc) then
           do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1804,7 +1789,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       !$omp end target
 
-      ! TODO: GPU
       if (CS%Leith_Kh) then
         !$omp target update from(Kh)
         if (CS%add_LES_viscosity) then
@@ -1821,7 +1805,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       ! All viscosity contributions above are subject to resolution scaling
 
-      ! TODO: GPU
       if (rescale_Kh) then
         !$omp target update from(Kh)
         do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1830,7 +1813,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      ! TODO: GPU
       if (legacy_bound) then
         !$omp target update from(Kh)
         ! Older method of bounding for stability
@@ -1848,7 +1830,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
       !$omp end target
 
-      ! TODO: GPU
       if (use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) then
         !$omp target update from(Kh)
         if (use_kh_struct) then
@@ -1875,7 +1856,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      ! TODO: GPU
       if (CS%anisotropic) then
         !$omp target update from(Kh)
         ! *Add* the shear component of anisotropic viscosity
@@ -1904,7 +1884,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
       !$omp end target
 
-      ! TODO: GPU
       if (CS%use_Leithy) then
         !$omp target update from(Kh)
         ! Leith+E doesn't recompute Kh at q points, it just interpolates it from h to q points
@@ -1972,12 +1951,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp target update to(str_xy)
     endif
 
-    !$omp target update from(Kh)
     !$omp target update from(h_u, h_v, hq)
     !$omp target update from(sh_xx, sh_xy)
-    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
-    !$omp target update from(visc_bound_rem, hrat_min) &
-    !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
     !$omp target update from(str_xx, str_xy)
 
     if (CS%biharmonic) then
@@ -2010,8 +1985,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
         endif
         !$omp end target
-
-        !$omp target update from(Ah)
 
         if (CS%Leith_Ah) then
           !$omp target update from(Ah)
@@ -2069,7 +2042,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       if (CS%EY24_EBT_BS) then
         ! TODO: Fix indent!
-        !$omp target update from(Ah)
+        !$omp target update from(Ah, hrat_min)
           do J=js-1,Jeq ; do I=is-1,Ieq
             tmp = CS%KS_coef *hrat_min(I,J) * CS%Ah_Max_xy_KS(I,J)
             visc_limit_q(I,J,k) = tmp
@@ -2099,7 +2072,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       ! Again, need to initialize str_xy as if its biharmonic
       !$omp target
-      ! NOTE: computing bhstr_xy ought to be conditional!  But depends on d_str
       !$omp parallel loop collapse(2)
       do J=js-1,Jeq ; do I=is-1,Ieq
         d_str = Ah(I,J) * (dDel2vdx(I,J) + dDel2udy(I,J))
@@ -2107,11 +2079,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         str_xy(I,J) = str_xy(I,J) + d_str
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
+        ! NOTE: computing this ought to be conditional!  But it uses d_str...
         bhstr_xy(I,J) = d_str * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
       enddo ; enddo
       !$omp end target
 
-      !$omp target update from(str_xy, bhstr_xy)
+      !$omp target update from(Ah, str_xy, bhstr_xy)
     endif ! Get Ah at q points and biharmonic part of str_xy
 
     ! Backscatter using MEKE
