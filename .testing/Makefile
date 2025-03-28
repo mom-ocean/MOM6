@@ -285,6 +285,12 @@ $(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
 $(BUILD)/target: | $(TARGET_CODEBASE)
 	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/symmetric $@
 
+$(BUILD)/opt_target/MOM6: $(BUILD)/opt_target FORCE | $(TARGET_CODEBASE)
+	$(MAKE) -C $(TARGET_CODEBASE)/.testing BUILD=build build/opt/MOM6
+
+$(BUILD)/opt_target: | $(TARGET_CODEBASE)
+	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/opt $@
+
 FORCE:
 
 
