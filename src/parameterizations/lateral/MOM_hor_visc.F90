@@ -443,6 +443,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   logical :: rescale_Kh, legacy_bound
   logical :: find_FrictWork
+  logical :: find_FrictWork_bh
   logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
   logical :: use_MEKE_Au
@@ -515,10 +516,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   if (.not.(CS%Laplacian .or. CS%biharmonic)) return
 
-  find_FrictWork = (CS%id_FrictWork > 0)
-  if (CS%id_FrictWorkIntz > 0) find_FrictWork = .true.
+  find_FrictWork = CS%id_FrictWork > 0 .or. CS%id_FrictWorkIntz > 0 &
+      .or. allocated(MEKE%mom_src)
+  find_FrictWork_bh = CS%id_FrictWork_bh > 0 .or. CS%id_FrictWorkIntz_bh > 0 &
+      .or. allocated(MEKE%mom_src_bh)
 
-  if (allocated(MEKE%mom_src)) find_FrictWork = .true.
   use_kh_struct = allocated(VarMix%BS_struct)
   backscat_subround = 0.0
   if (find_FrictWork .and. allocated(MEKE%mom_src) .and. (MEKE%backscatter_Ro_c > 0.0) .and. &
@@ -2234,11 +2236,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp target update to(diffv)
     endif
 
-    !$omp target update from(h_u, h_v, hq)
-    !$omp target update from(sh_xx, sh_xy)
-    !$omp target update from(str_xx, str_xy)
+    !$omp target update from(h_u, h_v) &
+    !$omp   if ((find_Frictwork .or. find_FrictWork_bh) .and. .not. CS%FrictWork_bug)
 
     if (find_FrictWork) then
+      !$omp target update from(str_xx, str_Xy)
+
       if (CS%FrictWork_bug) then
         ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
         ! This is the old formulation that includes energy diffusion
@@ -2299,7 +2302,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
     endif
 
-    if (CS%id_FrictWork_bh>0 .or. CS%id_FrictWorkIntz_bh > 0 .or. allocated(MEKE%mom_src_bh)) then
+    if (find_FrictWork_bh) then
       if (CS%FrictWork_bug) then
         ! Diagnose   bhstr_xx*d_x u - bhstr_yy*d_y v + bhstr_xy*(d_y u + d_x v)
         ! This is the old formulation that includes energy diffusion !cyc
@@ -2439,6 +2442,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
       endif
       if (MEKE%backscatter_Ro_c /= 0.) then
+        !$omp target update from(sh_xx, sh_xy)
         do j=js,je ; do i=is,ie
           FatH = 0.25*( (abs(G%CoriolisBu(I-1,J-1)) + abs(G%CoriolisBu(I,J))) + &
                         (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J-1))) )
