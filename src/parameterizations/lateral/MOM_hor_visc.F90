@@ -750,6 +750,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     !$omp target update to(u(:,:,k), v(:,:,k), h(:,:,k))
 
     !$omp target
+
     ! Calculate horizontal tension
     !$omp parallel loop collapse(2)
     do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
@@ -774,6 +775,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       dvdx(I,J) = CS%DY_dxBu(I,J)*((v(i+1,J,k)*G%IdyCv(i+1,J)) - (v(i,J,k)*G%IdyCv(i,J)))
       dudy(I,J) = CS%DX_dyBu(I,J)*((u(I,j+1,k)*G%IdxCu(I,j+1)) - (u(I,j,k)*G%IdxCu(I,j)))
     enddo ; enddo
+
     !$omp end target
 
     if (CS%use_Leithy) then
@@ -796,6 +798,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif ! use Leith+E
 
     if (CS%id_normstress > 0) then
+      !$omp target update from(sh_xx)
       do j=js,je ; do i=is,ie
         NoSt(i,j,k) = sh_xx(i,j)
       enddo ; enddo
@@ -1284,10 +1287,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       !$omp end target
 
-      !$omp target update from(Kh) &
-      !$omp   if ((use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) .or. CS%anisotropic)
-
       if (use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) then
+        !$omp target update from(Kh)
         ! *Add* the MEKE contribution (which might be negative)
         if (use_kh_struct) then
           if (CS%res_scale_MEKE) then
@@ -1310,13 +1311,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             enddo ; enddo
           endif
         endif
+        !$omp target update to(Kh)
       endif
 
       if (CS%anisotropic) then
+        !$omp target update from(Kh)
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           ! *Add* the tension component of anisotropic viscosity
           Kh(i,j) = Kh(i,j) + CS%Kh_aniso * (1. - CS%n1n2_h(i,j)**2)
         enddo ; enddo
+        !$omp target update to(Kh)
       endif
 
       !$omp target update to(Kh) &
