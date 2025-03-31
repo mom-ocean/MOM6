@@ -2001,30 +2001,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     ! Copy decomposed barotropic accelerations to ADp
     if (associated(ADp%bt_pgf_u)) then
+      ! Note that CS%IdxCu is 0 at OBC points, so ADp%bt_pgf_u is zeroed out there.
       do k=1,nz ; do j=js,je ; do I=is-1,ie
         ADp%bt_pgf_u(I,j,k) = PFu_avg(I,j) - &
           (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
            ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j)
       enddo ; enddo ; enddo
-      ! The pressure gradient at OBC points is not meaningful and needs to be zeroed out.
-      if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
-        if (OBC%segnum_u(I,j) /= OBC_NONE) then
-          do k=1,nz ; ADp%bt_pgf_u(I,j,k) = 0.0 ; enddo
-        endif
-      enddo ; enddo ; endif
     endif
     if (associated(ADp%bt_pgf_v)) then
+      ! Note that CS%IdyCv is 0 at OBC points, so ADp%bt_pgf_v is zeroed out there.
       do k=1,nz ; do J=js-1,je ; do i=is,ie
         ADp%bt_pgf_v(i,J,k) = PFv_avg(i,J) - &
           (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
            ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J)
       enddo ; enddo ; enddo
-      ! The pressure gradient at OBC points is not meaningful and needs to be zeroed out.
-      if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
-        if (OBC%segnum_v(i,J) /= OBC_NONE) then
-          do k=1,nz ; ADp%bt_pgf_v(i,J,k) = 0.0 ; enddo
-        endif
-      enddo ; enddo ; endif
     endif
 
     if (associated(ADp%bt_cor_u)) then ; do j=js,je ; do I=is-1,ie
@@ -2408,6 +2398,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   logical :: do_hifreq_output  ! If true, output occurs every barotropic step.
   logical :: do_ave   ! If true, diagnostics are enabled on this step.
   logical :: evolving_face_areas
+  logical :: v_first  ! If true, update the v-velocity first with the present loop iteration
   logical :: integral_BT_cont ! If true, update the barotropic continuity equation directly
                       ! from the initial condition using the time-integrated barotropic velocity.
   character(len=200) :: mesg
@@ -2554,19 +2545,21 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
                         wt_accel2(n), wt_end, isv, iev, jsv, jev, interp_eta_PF, CS%BT_project_velocity, &
                         find_etaav, Instep, integral_BT_cont, use_BT_cont, G, GV, US, CS)
 
-    if (MOD(n+G%first_direction,2)==1) then
+    v_first = (MOD(n+G%first_direction,2)==1)
+    call btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
+                        gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, v_first, G, US, CS)
+
+    if (v_first) then
       ! On odd-steps, update v first.
       call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
                            isv-1, iev+1, jsv-1, jev, f_4_v, &
                            bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
-                           eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS)
 
       ! Now update the zonal velocity.
       call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
                            isv-1, iev, jsv, jev, f_4_u, &
                            bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
-                           eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS)
 
     else
@@ -2574,13 +2567,11 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
       call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
                            isv-1, iev, jsv-1, jev+1, f_4_u, &
                            bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
-                           eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS)
       ! Now update the meridional velocity.
       call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
                            isv, iev, jsv-1, jev, f_4_v, &
                            bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
-                           eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
                            wt_accel(n), G, US, CS, &
                            Cor_bracket_bug=CS%use_old_coriolis_bracket_bug)
     endif
@@ -3105,12 +3096,100 @@ subroutine btloop_eta_predictor(n, dtbt, ubt, vbt, eta, ubt_int, vbt_int, uhbt, 
 
 end subroutine btloop_eta_predictor
 
+subroutine btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
+                          gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, v_first, G, US, CS)
+  type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
+  type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    PFu           !< The anomalous zonal pressure force acceleration [L T-2 ~> m s-2].
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    PFv           !< The meridional pressure force acceleration [L T-2 ~> m s-2].
+  integer, intent(in)  :: isv         !< The starting i-index of eta being set in ths loop
+  integer, intent(in)  :: iev         !< The ending i-index of eta_pred being set in ths loop
+  integer, intent(in)  :: jsv         !< The starting j-index of eta_pred being set in ths loop
+  integer, intent(in)  :: jev         !< The ending j-index of eta_pred being set in ths loop
+  real, dimension(:,:), pointer, intent(in) :: &
+    eta_PF_BT     !< A pointer to the eta array (either eta or eta_pred) that
+                  !! determines the barotropic pressure force [H ~> m or kg m-2]
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    eta_PF        !< A local copy of the 2-D eta field (either SSH anomaly or
+                  !! column mass anomaly) that was used to calculate the input
+                  !! pressure gradient accelerations [H ~> m or kg m-2].
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    gtot_N        !< The effective total reduced gravity used to relate free surface height
+                  !! deviations to pressure forces (including GFS and baroclinic contributions)
+                  !! in the barotropic momentum equations half a grid-point to the north of a
+                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    gtot_S        !< The effective total reduced gravity used to relate free surface height
+                  !! deviations to pressure forces (including GFS and baroclinic contributions)
+                  !! in the barotropic momentum equations half a grid-point to the south of a
+                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
+                  !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    gtot_E        !< The effective total reduced gravity used to relate free surface height
+                  !! deviations to pressure forces (including GFS and baroclinic contributions)
+                  !! in the barotropic momentum equations half a grid-point to the east of a
+                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    gtot_W        !< The effective total reduced gravity used to relate free surface height
+                  !! deviations to pressure forces (including GFS and baroclinic contributions)
+                  !! in the barotropic momentum equations half a grid-point to the west of a
+                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
+                  !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2].
+  real,    intent(in) :: dgeo_de !< The constant of proportionality between geopotential and
+                  !! sea surface height [nondim].  It is of order 1, but for stability this
+                  !! may be made larger than the physical  problem would suggest.
+  logical, intent(in) :: v_first !< If true, update the v-velocity first with the present loop iteration
+  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
+
+  ! Local variables
+  integer :: i, j, js_u, je_u, is_v, ie_v
+
+  ! Ensure that the extra points used for the temporally staggered Coriolis terms are updated.
+  if (v_first) then
+    is_v = isv-1 ; ie_v = iev+1 ; js_u = jsv ; je_u = jev
+  else
+    is_v = isv ; ie_v = iev ; js_u = jsv-1 ; je_u = jev+1
+  endif
+
+  !$OMP do schedule(static)
+  do j=js_u,je_u ; do I=isv-1,iev
+    PFu(I,j) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j)) - &
+                ((eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j))) * &
+                dgeo_de * CS%IdxCu(I,j)
+  enddo ; enddo
+  !$OMP end do nowait
+
+  !$OMP do schedule(static)
+  do J=jsv-1,jev ; do i=is_v,ie_v
+    PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
+                ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
+                dgeo_de * CS%IdyCv(i,J)
+   enddo ; enddo
+   !$OMP end do nowait
+
+  if (CS%dynamic_psurf) then
+    !$OMP do schedule(static)
+    do j=js_u,je_u ; do I=isv-1,iev
+      PFu(I,j) = PFu(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
+    enddo ; enddo
+    !$OMP end do nowait
+    !$OMP do schedule(static)
+    do J=jsv-1,jev ; do i=is_v,ie_v
+      PFv(i,J) = PFv(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
+    enddo ; enddo
+    !$OMP end do nowait
+  endif
+
+end subroutine btloop_find_PF
 
 !> Update meridional velocity.
 subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
                            Cor_v, PFv, is_v, ie_v, Js_v, Je_v, f_4_v, &
                            bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
-                           eta_PF_BT, eta_PF, gtot_S, gtot_N, p_surf_dyn, dgeo_de, &
                            wt_accel_n, G, US, CS, Cor_bracket_bug)
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
   type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
@@ -3123,7 +3202,7 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
                   !! barotropic calculation and BT_force_v [L T-2 ~> m s-2].
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
     Cor_v         !< The meridional Coriolis acceleration [L T-2 ~> m s-2]
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     PFv           !< The meridional pressure force acceleration [L T-2 ~> m s-2].
   real, dimension(4,SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     f_4_v         !< The terms giving the contribution to the Coriolis acceleration at a meridional
@@ -3152,29 +3231,6 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
     Rayleigh_v    !< A Rayleigh drag timescale operating at v-points for drag parameterizations
                   !! that introduced directly into the barotropic solver rather than coming
                   !! in via the visc_rem_v arrays from the layered equations [T-1 ~> s-1]
-  real, dimension(:,:), pointer, intent(in) :: &
-    eta_PF_BT     !< A pointer to the eta array (either eta or eta_pred) that
-                  !! determines the barotropic pressure force [H ~> m or kg m-2]
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    eta_PF        !< A local copy of the 2-D eta field (either SSH anomaly or
-                  !! column mass anomaly) that was used to calculate the input
-                  !! pressure gradient accelerations [H ~> m or kg m-2].
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_N        !< The effective total reduced gravity used to relate free surface height
-                  !! deviations to pressure forces (including GFS and baroclinic contributions)
-                  !! in the barotropic momentum equations half a grid-point to the north of a
-                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_S        !< The effective total reduced gravity used to relate free surface height
-                  !! deviations to pressure forces (including GFS and baroclinic contributions)
-                  !! in the barotropic momentum equations half a grid-point to the south of a
-                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
-                  !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2].
-  real,    intent(in) :: dgeo_de !< The constant of proportionality between geopotential and
-                  !! sea surface height [nondim].  It is of order 1, but for stability this
-                  !! may be made larger than the physical  problem would suggest.
   real,    intent(in) :: wt_accel_n  !< The raw or relative weights of each of the barotropic timesteps
                   !! in determining the average accelerations [nondim]
   real,    intent(in) :: dtbt !< The barotropic time step [T ~> s].
@@ -3184,7 +3240,7 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
 
   ! Local variables
   logical :: use_bracket_bug
-  integer :: i, j, k
+  integer :: i, j
 
   use_bracket_bug = .false. ; if (present(Cor_bracket_bug)) use_bracket_bug = Cor_bracket_bug
 
@@ -3194,9 +3250,6 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
    do J=Js_v,Je_v ; do i=is_v,ie_v
      Cor_v(i,J) = -1.0*(((f_4_v(1,i,J) * ubt(I-1,j)) + (f_4_v(2,i,J) * ubt(I,j))) + &
              ((f_4_v(4,i,J) * ubt(I,j+1)) + (f_4_v(3,i,J) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
-     PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
-                 ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
-                 dgeo_de * CS%IdyCv(i,J)
    enddo ; enddo
    !$OMP end do nowait
   else
@@ -3204,19 +3257,8 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
    do J=Js_v,Je_v ; do i=is_v,ie_v
      Cor_v(i,J) = -1.0*(((f_4_v(1,i,J) * ubt(I-1,j)) + (f_4_v(4,i,J) * ubt(I,j+1))) + &
              ((f_4_v(2,i,J) * ubt(I,j)) + (f_4_v(3,i,J) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
-     PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
-                 ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
-                 dgeo_de * CS%IdyCv(i,J)
    enddo ; enddo
    !$OMP end do nowait
-  endif
-
-  if (CS%dynamic_psurf) then
-    !$OMP do schedule(static)
-    do J=Js_v,Je_v ; do i=is_v,ie_v
-      PFv(i,J) = PFv(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
-    enddo ; enddo
-    !$OMP end do nowait
   endif
 
   !$OMP do schedule(static)
@@ -3248,7 +3290,6 @@ end subroutine btloop_update_v
 subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
                            Cor_u, PFu, Is_u, Ie_u, js_u, je_u, f_4_u, &
                            bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
-                           eta_PF_BT, eta_PF, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
                            wt_accel_n, G, US, CS)
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
   type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
@@ -3262,7 +3303,7 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
                   !< barotropic calculation and BT_force_v [L T-2 ~> m s-2].
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
     Cor_u         !< The anomalous zonal Coriolis acceleration [L T-2 ~> m s-2]
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     PFu           !< The anomalous zonal pressure force acceleration [L T-2 ~> m s-2].
   integer, intent(in)  :: Is_u !< The starting i-index of the range of u-point values to calculate
   integer, intent(in)  :: Ie_u !< The ending i-index of the range of u-point values to calculate
@@ -3291,29 +3332,6 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
     Rayleigh_u    !< A Rayleigh drag timescale operating at u-points for drag parameterizations
                   !! that introduced directly into the barotropic solver rather than coming
                   !! in via the visc_rem_u arrays from the layered equations [T-1 ~> s-1].
-  real, dimension(:,:), pointer, intent(in) :: &
-    eta_PF_BT     !< A pointer to the eta array (either eta or eta_pred) that
-                  !! determines the barotropic pressure force [H ~> m or kg m-2]
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    eta_PF        !< A local copy of the 2-D eta field (either SSH anomaly or
-                  !! column mass anomaly) that was used to calculate the input
-                  !! pressure gradient accelerations [H ~> m or kg m-2].
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_E        !< The effective total reduced gravity used to relate free surface height
-                  !! deviations to pressure forces (including GFS and baroclinic contributions)
-                  !! in the barotropic momentum equations half a grid-point to the east of a
-                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    gtot_W        !< The effective total reduced gravity used to relate free surface height
-                  !! deviations to pressure forces (including GFS and baroclinic contributions)
-                  !! in the barotropic momentum equations half a grid-point to the west of a
-                  !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
-                  !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2].
-  real,    intent(in) :: dgeo_de   !< The constant of proportionality between geopotential and
-                  !! sea surface height [nondim].  It is of order 1, but for stability this may be
-                  !! made larger than the physical problem would suggest.
   real,    intent(in) :: wt_accel_n  !< The raw or relative weights of each of the barotropic timesteps
                                   !! in determining the average accelerations [nondim]
   type(unit_scale_type),   intent(in)  :: US      !< A dimensional unit scaling type
@@ -3327,22 +3345,7 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
     Cor_u(I,j) = (((f_4_u(4,I,j) * vbt(i+1,J)) + (f_4_u(1,I,j) * vbt(i,J-1))) + &
                   ((f_4_u(3,I,j) * vbt(i,J)) + (f_4_u(2,I,j) * vbt(i+1,J-1)))) - &
                  Cor_ref_u(I,j)
-    PFu(I,j) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j)) - &
-                ((eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j))) * &
-                dgeo_de * CS%IdxCu(I,j)
-  enddo ; enddo
-  !$OMP end do nowait
 
-  if (CS%dynamic_psurf) then
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=Is_u,Ie_u
-      PFu(I,j) = PFu(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
-    enddo ; enddo
-    !$OMP end do nowait
-  endif
-
-  !$OMP do schedule(static)
-  do j=js_u,je_u ; do I=Is_u,Ie_u
     ubt_prev(I,j) = ubt(I,j)
     ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
          dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
