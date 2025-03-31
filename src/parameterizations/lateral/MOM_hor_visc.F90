@@ -1951,10 +1951,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp target update to(str_xy)
     endif
 
-    !$omp target update from(h_u, h_v, hq)
-    !$omp target update from(sh_xx, sh_xy)
-    !$omp target update from(str_xx, str_xy)
-
     if (CS%biharmonic) then
       ! Determine the biharmonic viscosity at q points, using the
       ! largest value from several parameterizations. Also get the
@@ -2187,7 +2183,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
       !$omp end target
     endif ! use_GME
-    !$omp target update from(str_xx, str_xy)
 
     !$omp target
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
@@ -2238,6 +2233,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo
       !$omp target update to(diffv)
     endif
+
+    !$omp target update from(h_u, h_v, hq)
+    !$omp target update from(sh_xx, sh_xy)
+    !$omp target update from(str_xx, str_xy)
 
     if (find_FrictWork) then
       if (CS%FrictWork_bug) then
