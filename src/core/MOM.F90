@@ -2883,7 +2883,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   !$omp target enter data map(to: G%IdxCu, G%IdxCv, G%IdyCu, G%IdyCv)
   !$omp target enter data map(to: G%mask2dBu, G%mask2dT)
   !$omp target enter data map(to: G%areaT, G%areaCu, G%areaCv)
-  !$omp target enter data map(to: G%IareaT, G%IareaBu)
+  !$omp target enter data map(to: G%IareaT, G%IareaCu, G%IareaCv, G%IareaBu)
   !$omp target enter data map(to: G%bathyT)
   !$omp target enter data map(to: G%CoriolisBu)
 

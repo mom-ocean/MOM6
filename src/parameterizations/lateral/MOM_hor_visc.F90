@@ -703,8 +703,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   !$omp target enter data map(to: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
   !$omp target enter data map(to: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
-  !$omp target enter data map(to: CS%dx2q, CS%dy2q) if (CS%biharmonic)
-  !$omp target enter data map(to: CS%dx2h, CS%dy2h) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%dx2q, CS%dy2q)
+  !$omp target enter data map(to: CS%dx2h, CS%dy2h)
 
   !$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
@@ -715,8 +715,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
   !$omp target enter data map(to: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
-  !$omp target enter data map(to: CS%reduction_xx, CS%reduction_xy) &
-  !$omp   if (CS%biharmonic)
+  !$omp target enter data map(to: CS%reduction_xx, CS%reduction_xy)
   !$omp target enter data map(to: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
   !$omp target enter data map(to: CS%Biharm_const_xy) &
@@ -731,6 +730,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
   !$omp target enter data map(to: hu_cont, hv_cont) if (use_cont_huv)
+  !$omp target enter data map(alloc: diffu, diffv)
 
   do k=1,nz
 
@@ -2123,6 +2123,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif ! Backscatter
 
     if (CS%use_GME) then
+      !$omp target update from(str_xx, str_xy)
+
       ! The wider halo here is to permit one pass of smoothing without a halo update.
       do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
         GME_coeff = GME_effic_h(i,j) * 0.25 * &
@@ -2162,33 +2164,43 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           str_xy(I,J) = (str_xy(I,J) + str_xy_GME(I,J)) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
         enddo ; enddo
       endif
-
+      !$omp target update to(str_xx, str_xy)
     else ! .not. use_GME
+      !$omp target
       ! This changes the units of str_xx from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
+      !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo ; enddo
 
       ! This changes the units of str_xy from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
       if (CS%no_slip) then
+        !$omp parallel loop collapse(2)
         do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = str_xy(I,J) * (hq(I,J) * CS%reduction_xy(I,J))
         enddo ; enddo
       else
+        !$omp parallel loop collapse(2)
         do J=js-1,Jeq ; do I=is-1,Ieq
           str_xy(I,J) = str_xy(I,J) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
         enddo ; enddo
       endif
+      !$omp end target
     endif ! use_GME
+    !$omp target update from(str_xx, str_xy)
 
+    !$omp target
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
+    !$omp parallel loop collapse(2)
     do j=js,je ; do I=Isq,Ieq
       diffu(I,j,k) = ((G%IdxCu(I,j)*((CS%dx2q(I,J-1)*str_xy(I,J-1)) - (CS%dx2q(I,J)*str_xy(I,J))) + &
                        G%IdyCu(I,j)*((CS%dy2h(i,j)*str_xx(i,j)) - (CS%dy2h(i+1,j)*str_xx(i+1,j)))) * &
                      G%IareaCu(I,j)) / (h_u(I,j) + h_neglect)
     enddo ; enddo
+    !$omp end target
 
     if (apply_OBC) then
+      !$omp target update from(diffu)
       ! This is not the right boundary condition. If all the masking of tendencies are done
       ! correctly later then eliminating this block should not change answers.
       do n=1,OBC%number_of_segments
@@ -2199,16 +2211,21 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo
         endif
       enddo
+      !$omp target update to(diffu)
     endif
 
+    !$omp target
     ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
+    !$omp parallel loop collapse(2)
     do J=Jsq,Jeq ; do i=is,ie
       diffv(i,J,k) = ((G%IdyCv(i,J)*((CS%dy2q(I-1,J)*str_xy(I-1,J)) - (CS%dy2q(I,J)*str_xy(I,J))) - &
                        G%IdxCv(i,J)*((CS%dx2h(i,j)*str_xx(i,j)) - (CS%dx2h(i,j+1)*str_xx(i,j+1)))) * &
                      G%IareaCv(i,J)) / (h_v(i,J) + h_neglect)
     enddo ; enddo
+    !$omp end target
 
     if (apply_OBC) then
+      !$omp target update from(diffv)
       ! This is not the right boundary condition. If all the masking of tendencies are done
       ! correctly later then eliminating this block should not change answers.
       do n=1,OBC%number_of_segments
@@ -2219,6 +2236,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo
         endif
       enddo
+      !$omp target update to(diffv)
     endif
 
     if (find_FrictWork) then
@@ -2494,8 +2512,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   !$omp target exit data map(delete: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
   !$omp target exit data map(delete: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
-  !$omp target exit data map(delete: CS%dx2q, CS%dy2q) if (CS%biharmonic)
-  !$omp target exit data map(delete: CS%dx2h, CS%dy2h) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%dx2q, CS%dy2q)
+  !$omp target exit data map(delete: CS%dx2h, CS%dy2h)
 
   !$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
@@ -2506,8 +2524,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
   !$omp target exit data map(delete: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
-  !$omp target exit data map(delete: CS%reduction_xx, CS%reduction_xy) &
-  !$omp   if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%reduction_xx, CS%reduction_xy)
   !$omp target exit data map(delete: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
   !$omp target enter data map(to: CS%Ah_max_xx) &
@@ -2516,6 +2533,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
+  !$omp target exit data map(from: diffu, diffv)
 
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
