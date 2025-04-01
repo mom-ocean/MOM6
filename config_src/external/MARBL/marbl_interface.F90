@@ -63,6 +63,7 @@ contains
       character(len=*),             intent(in)  :: str_in
       logical,                      intent(out) :: log_out
 
+      log_out = .false.
       call MOM_error(FATAL, error_msg)
   end subroutine get_setting
 
