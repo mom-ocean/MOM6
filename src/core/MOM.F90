@@ -1769,6 +1769,7 @@ subroutine ALE_regridding_and_remapping(CS, G, GV, US, u, v, h, tv, dtdia, Time_
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  use_ice_shelf = .false.
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("ALE_regridding_and_remapping(), MOM.F90")
   if (CS%debug) call query_debugging_checks(do_redundant=debug_redundant)
