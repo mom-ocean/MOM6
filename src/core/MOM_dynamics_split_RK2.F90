@@ -890,10 +890,13 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
+  ! TODO: Am I doing this twice for no reason?
+  !!$omp target update to(u_av, v_av, h_av, uh, vh, CS%BT_cont%h_u, CS%BT_cont%h_v)
   call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, &
                             MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, &
                             OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
                             ADp=CS%ADp, hu_cont=CS%BT_cont%h_u, hv_cont=CS%BT_cont%h_v, STOCH=STOCH)
+  !$omp target update from(CS%diffu, CS%diffv)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
@@ -1250,6 +1253,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
   !   map(alloc:) rather than map(to:)
   ALLOC_(CS%diffu(IsdB:IedB,jsd:jed,nz)) ; CS%diffu(:,:,:) = 0.0
   ALLOC_(CS%diffv(isd:ied,JsdB:JedB,nz)) ; CS%diffv(:,:,:) = 0.0
+  !$omp target enter data map(to: CS%diffu, CS%diffv)
   ALLOC_(CS%CAu(IsdB:IedB,jsd:jed,nz))   ; CS%CAu(:,:,:)   = 0.0
   ALLOC_(CS%CAv(isd:ied,JsdB:JedB,nz))   ; CS%CAv(:,:,:)   = 0.0
   !$omp target enter data map(to: CS%CAu, CS%CAv)
@@ -1577,6 +1581,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   endif
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &
                           CS%SAL_CSp, CS%tides_CSp)
+
   !$omp target enter data map(to: CS%hor_visc)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
@@ -1615,9 +1620,11 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
 
   if (.not. query_initialized(CS%diffu, "diffu", restart_CS) .or. &
       .not. query_initialized(CS%diffv, "diffv", restart_CS)) then
+    !!$omp target update to(u, v, h, uh, vh, CS%BT_cont%h_u, CS%BT_cont%h_v)
     call horizontal_viscosity(u, v, h, uh, vh, CS%diffu, CS%diffv, MEKE, VarMix, G, GV, US, CS%hor_visc, &
                               tv, dt, OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
                               hu_cont=CS%BT_cont%h_u, hv_cont=CS%BT_cont%h_v)
+    !$omp target update from(CS%diffu, CS%diffv)
     call set_initialized(CS%diffu, "diffu", restart_CS)
     call set_initialized(CS%diffv, "diffv", restart_CS)
   endif
@@ -1917,6 +1924,7 @@ subroutine end_dyn_split_RK2(CS)
   call CoriolisAdv_end(CS%CoriolisAdv)
 
   DEALLOC_(CS%diffu) ; DEALLOC_(CS%diffv)
+  !$omp target exit data map(delete: CS%diffu, CS%diffv)
   DEALLOC_(CS%CAu)   ; DEALLOC_(CS%CAv)
   !$omp target exit data map(delete: CS%CAu, CS%CAv)
   DEALLOC_(CS%CAu_pred) ; DEALLOC_(CS%CAv_pred)

@@ -698,41 +698,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
   ! TODO: NoSt, ShSt, ...?
 
-  ! TODO: These are static and should be computed (and stored?) on the GPU
-  !!!$omp target enter data map(to: CS)
-  !!!$omp target enter data map(to: CS%dx_dyT, CS%dy_dxT)
-  !!!$omp target enter data map(to: CS%dx_dyBu, CS%dy_dxBu)
-
-  !!!$omp target enter data map(to: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
-  !!!$omp target enter data map(to: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
-  !!!$omp target enter data map(to: CS%dx2q, CS%dy2q)
-  !!!$omp target enter data map(to: CS%dx2h, CS%dy2h)
-
-  !!!$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
-  !!!$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
-  !!!$omp target enter data map(to: CS%Kh_max_xy) &
-  !!!$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
-  !!!$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
-  !!!$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
-  !!!$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
-
-  !!!$omp target enter data map(to: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
-  !!!$omp target enter data map(to: CS%reduction_xx, CS%reduction_xy)
-  !!!$omp target enter data map(to: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
-  !!!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
-  !!!$omp target enter data map(to: CS%Biharm_const_xy) &
-  !!!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
-  !!!$omp target enter data map(to: CS%Biharm_const2_xy) &
-  !!!$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
-  !!!$omp target enter data map(to: CS%Ah_max_xx) &
-  !!!$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !!!$omp target enter data map(to: CS%Ah_max_xy) &
-  !!!$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
-
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
   !$omp target enter data map(to: hu_cont, hv_cont) if (use_cont_huv)
-  !$omp target enter data map(alloc: diffu, diffv)
 
   do k=1,nz
 
@@ -2546,7 +2514,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
   !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
-  !$omp target exit data map(from: diffu, diffv)
 
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
