@@ -699,35 +699,35 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   ! TODO: NoSt, ShSt, ...?
 
   ! TODO: These are static and should be computed (and stored?) on the GPU
-  !$omp target enter data map(to: CS)
-  !$omp target enter data map(to: CS%dx_dyT, CS%dy_dxT)
-  !$omp target enter data map(to: CS%dx_dyBu, CS%dy_dxBu)
+  !!!$omp target enter data map(to: CS)
+  !!!$omp target enter data map(to: CS%dx_dyT, CS%dy_dxT)
+  !!!$omp target enter data map(to: CS%dx_dyBu, CS%dy_dxBu)
 
-  !$omp target enter data map(to: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
-  !$omp target enter data map(to: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
-  !$omp target enter data map(to: CS%dx2q, CS%dy2q)
-  !$omp target enter data map(to: CS%dx2h, CS%dy2h)
+  !!!$omp target enter data map(to: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
+  !!!$omp target enter data map(to: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
+  !!!$omp target enter data map(to: CS%dx2q, CS%dy2q)
+  !!!$omp target enter data map(to: CS%dx2h, CS%dy2h)
 
-  !$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
-  !$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
-  !$omp target enter data map(to: CS%Kh_max_xy) &
-  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
-  !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
-  !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
-  !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
+  !!!$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
+  !!!$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
+  !!!$omp target enter data map(to: CS%Kh_max_xy) &
+  !!!$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !!!$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
+  !!!$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
+  !!!$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
-  !$omp target enter data map(to: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
-  !$omp target enter data map(to: CS%reduction_xx, CS%reduction_xy)
-  !$omp target enter data map(to: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
-  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
-  !$omp target enter data map(to: CS%Biharm_const_xy) &
-  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
-  !$omp target enter data map(to: CS%Biharm_const2_xy) &
-  !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
-  !$omp target enter data map(to: CS%Ah_max_xx) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target enter data map(to: CS%Ah_max_xy) &
-  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
+  !!!$omp target enter data map(to: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
+  !!!$omp target enter data map(to: CS%reduction_xx, CS%reduction_xy)
+  !!!$omp target enter data map(to: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
+  !!!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
+  !!!$omp target enter data map(to: CS%Biharm_const_xy) &
+  !!!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
+  !!!$omp target enter data map(to: CS%Biharm_const2_xy) &
+  !!!$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
+  !!!$omp target enter data map(to: CS%Ah_max_xx) &
+  !!!$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !!!$omp target enter data map(to: CS%Ah_max_xy) &
+  !!!$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
 
   ! TODO: Do this outside the function
   !$omp target enter data map(to: u, v, h)
@@ -2513,29 +2513,35 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
 
   ! TODO: Should static CS arrays be permanently on the GPU?
-  !$omp target exit data map(delete: CS)
-  !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
-  !$omp target exit data map(delete: CS%Dx_dyBu, CS%DY_dxBu)
+  !!$omp target exit data map(delete: CS)
+  !!$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
+  !!$omp target exit data map(delete: CS%Dx_dyBu, CS%DY_dxBu)
 
-  !$omp target exit data map(delete: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
-  !$omp target exit data map(delete: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
-  !$omp target exit data map(delete: CS%dx2q, CS%dy2q)
-  !$omp target exit data map(delete: CS%dx2h, CS%dy2h)
+  !!$omp target exit data map(delete: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
+  !!$omp target exit data map(delete: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
+  !!$omp target exit data map(delete: CS%dx2q, CS%dy2q)
+  !!$omp target exit data map(delete: CS%dx2h, CS%dy2h)
 
-  !$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
-  !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
-  !$omp target exit data map(delete: CS%Kh_max_xy) &
-  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
-  !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
-  !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
-  !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
+  !!$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
+  !!$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
+  !!$omp target exit data map(delete: CS%Kh_max_xy) &
+  !!$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !!$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
+  !!$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
+  !!$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
 
-  !$omp target exit data map(delete: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
-  !$omp target exit data map(delete: CS%reduction_xx, CS%reduction_xy)
-  !$omp target exit data map(delete: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
-  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
-  !$omp target enter data map(to: CS%Ah_max_xx) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !!$omp target exit data map(delete: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
+  !!$omp target exit data map(delete: CS%reduction_xx, CS%reduction_xy)
+  !!$omp target exit data map(delete: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
+  !!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
+  !!$omp target exit data map(delete: CS%Biharm_const_xy) &
+  !!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
+  !!$omp target exit data map(delete: CS%Biharm_const2_xy) &
+  !!$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
+  !!$omp target exit data map(delete: CS%Ah_max_xx) &
+  !!$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !!$omp target exit data map(delete: CS%Ah_max_xy) &
+  !!$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
@@ -3161,6 +3167,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       allocate(CS%Re_Ah_const_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
   endif
+
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     CS%dx2q(I,J) = G%dxBu(I,J)*G%dxBu(I,J) ; CS%dy2q(I,J) = G%dyBu(I,J)*G%dyBu(I,J)
   enddo ; enddo
@@ -3181,11 +3188,14 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
     enddo ; enddo
   endif
+  !$omp target enter data map(to: CS%dx2q, CS%dy2q, CS%dx_dyBu, CS%dy_dxBu)
 
   do j=js-2,Jeq+2 ; do i=is-2,Ieq+2
     CS%dx2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; CS%dy2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
     CS%DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
   enddo ; enddo
+  !$omp target enter data map(to: CS%dx2h, CS%dy2h, CS%dx_dyT, CS%dy_dxT)
+
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     CS%reduction_xx(i,j) = 1.0
     if ((G%dy_Cu(I,j) > 0.0) .and. (G%dy_Cu(I,j) < G%dyCu(I,j)) .and. &
@@ -3629,6 +3639,32 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       'Depth integrated work done by the biharmonic lateral friction', &
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
 
+
+  ! TODO: Position these after their respective loops (and run loops on device)
+  !$omp target enter data map(to: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
+
+  !$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Kh_max_xy) &
+  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
+  !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
+
+  !$omp target enter data map(to: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
+  !$omp target enter data map(to: CS%reduction_xx, CS%reduction_xy)
+  !$omp target enter data map(to: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
+  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
+  !$omp target enter data map(to: CS%Biharm_const_xy) &
+  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
+  !$omp target enter data map(to: CS%Biharm_const2_xy) &
+  !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
+  !$omp target enter data map(to: CS%Ah_max_xx) &
+  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp target enter data map(to: CS%Ah_max_xy) &
+  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
+
 end subroutine hor_visc_init
 
 !> hor_visc_vel_stencil returns the horizontal viscosity input velocity stencil size
@@ -3844,6 +3880,36 @@ end subroutine smooth_x9_uv
 !> Deallocates any variables allocated in hor_visc_init.
 subroutine hor_visc_end(CS)
   type(hor_visc_CS), intent(inout) :: CS !< Horizontal viscosity control structure
+
+  !$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
+  !$omp target exit data map(delete: CS%Dx_dyBu, CS%DY_dxBu)
+
+  !$omp target exit data map(delete: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%dx2q, CS%dy2q)
+  !$omp target exit data map(delete: CS%dx2h, CS%dy2h)
+
+  !$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Kh_max_xy) &
+  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
+  !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
+
+  !$omp target exit data map(delete: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
+  !$omp target exit data map(delete: CS%reduction_xx, CS%reduction_xy)
+  !$omp target exit data map(delete: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
+  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
+  !$omp target exit data map(delete: CS%Biharm_const_xy) &
+  !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
+  !$omp target exit data map(delete: CS%Biharm_const2_xy) &
+  !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
+  !$omp target exit data map(delete: CS%Ah_max_xx) &
+  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp target exit data map(delete: CS%Ah_max_xy) &
+  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
+
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
     DEALLOC_(CS%dx_dyT) ; DEALLOC_(CS%dy_dxT) ; DEALLOC_(CS%dx_dyBu) ; DEALLOC_(CS%dy_dxBu)

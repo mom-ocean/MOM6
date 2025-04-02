@@ -1577,7 +1577,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   endif
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &
                           CS%SAL_CSp, CS%tides_CSp)
-  !$omp target enter data map(to: CS%PressureForce_CSp)
+  !$omp target enter data map(to: CS%hor_visc)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp, CS%fpmix)
@@ -1910,6 +1910,8 @@ subroutine end_dyn_split_RK2(CS)
   deallocate(CS%vertvisc_CSp)
 
   call hor_visc_end(CS%hor_visc)
+  !$omp target exit data map(delete: CS%hor_visc)
+
   if (CS%calculate_SAL) call SAL_end(CS%SAL_CSp)
   if (CS%use_tides) call tidal_forcing_end(CS%tides_CSp)
   call CoriolisAdv_end(CS%CoriolisAdv)
