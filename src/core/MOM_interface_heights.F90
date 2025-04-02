@@ -3,7 +3,7 @@ module MOM_interface_heights
 
 ! This file is part of MOM6. See LICENSE.md for the license.
 
-use MOM_density_integrals, only : int_specific_vol_dp, avg_specific_vol
+use MOM_density_integrals, only : int_specific_vol_dp, avg_specific_vol, int_density_dz
 use MOM_debugging,     only : hchksum
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_EOS,           only : calculate_density, average_specific_vol, EOS_type, EOS_domain
@@ -20,7 +20,7 @@ implicit none ; private
 public find_eta, dz_to_thickness, thickness_to_dz, dz_to_thickness_simple
 public calc_derived_thermo
 public convert_MLD_to_ML_thickness
-public find_rho_bottom, find_col_avg_SpV
+public find_rho_bottom, find_col_avg_SpV, find_col_mass
 
 !> Calculates the heights of the free surface or all interfaces from layer thicknesses.
 interface find_eta
@@ -73,7 +73,7 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
                             ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]
   real :: dZ_ref    ! The difference in the reference height between G%bathyT and eta [Z ~> m].
                     ! dZ_ref is 0 unless the optional argument dZref is present.
-  integer i, j, k, isv, iev, jsv, jev, nz, halo
+  integer :: i, j, k, isv, iev, jsv, jev, nz, halo
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
 
@@ -191,7 +191,7 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
                             ! rescaling factor derived from eta_to_m [T2 Z L-2 ~> s2 m-1]
   real :: dZ_ref    ! The difference in the reference height between G%bathyT and eta [Z ~> m].
                     ! dZ_ref is 0 unless the optional argument dZref is present.
-  integer i, j, k, is, ie, js, je, nz, halo
+  integer :: i, j, k, is, ie, js, je, nz, halo
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
@@ -345,7 +345,7 @@ subroutine find_col_avg_SpV(h, SpV_avg, tv, G, GV, US, halo_size)
   real :: I_rho                 ! The inverse of the Boussiensq reference density [R-1 ~> m3 kg-1]
   real :: SpV_lay(SZK_(GV))     ! The inverse of the layer target potential densities [R-1 ~> m3 kg-1]
   character(len=128) :: mesg    ! A string for error messages
-  integer i, j, k, is, ie, js, je, nz, halo
+  integer :: i, j, k, is, ie, js, je, nz, halo
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
 
@@ -391,6 +391,71 @@ subroutine find_col_avg_SpV(h, SpV_avg, tv, G, GV, US, halo_size)
 
 end subroutine find_col_avg_SpV
 
+!> Calculate the integrated mass of the water column.
+subroutine find_col_mass(h, tv, G, GV, US, mass, p_bot, p_surf)
+  type(ocean_grid_type),                      intent(in)  :: G    !< The ocean's grid structure.
+  type(verticalGrid_type),                    intent(in)  :: GV   !< The ocean's vertical grid structure.
+  type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
+  type(thermo_var_ptrs),                      intent(in)  :: tv   !< A structure pointing to various
+                                                                  !! thermodynamic variables.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h    !< Layer thicknesses [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)),           intent(out) :: mass !< Integrated mass of the water column
+                                                                  !! [R Z ~> kg m-2]
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(out) :: p_bot  !< Bottom pressure = g * mass + psurf
+                                                                    !! [R L2 T-2 ~> Pa]
+  real, dimension(:,:),             optional, pointer     :: p_surf !< A pointer to surface pressure
+                                                                    !! [R L2 T-2 ~> Pa]
+
+  ! Local variables
+  real :: I_gEarth ! The inverse of GV%g_Earth [T2 Z L-2 ~> s2 m-1]
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    z_top, & ! Height of the top of a layer [Z ~> m].
+    z_bot, & ! Height of the bottom of a layer [Z ~> m].
+    dp       ! Change in hydrostatic pressure across a layer [R L2 T-2 ~> Pa].
+  integer :: i, j, k, is, ie, js, je, isq, ieq, jsq, jeq, nz
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
+  isq = G%iscB ; ieq = G%iecB ; jsq = G%jscB ; jeq = G%jecB
+  nz = GV%ke
+
+  do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
+  if (GV%Boussinesq) then
+    if (associated(tv%eqn_of_state)) then
+      I_gEarth = 1.0 / GV%g_Earth
+      do j=jsq,jeq+1 ; do i=isq,ieq+1 ; z_bot(i,j) = 0.0 ; enddo ; enddo
+      do k=1,nz
+        ! NOTE: int_density_z expects z_top and z_bot values from [ij]sq to [ij]eq+1
+        do j=jsq,jeq+1 ; do i=isq,ieq+1
+          z_top(i,j) = z_bot(i,j)
+          z_bot(i,j) = z_top(i,j) - GV%H_to_Z * h(i,j,k)
+        enddo ; enddo
+        call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
+                            G%HI, tv%eqn_of_state, US, dp)
+        do j=js,je ; do i=is,ie
+          mass(i,j) = mass(i,j) + dp(i,j) * I_gEarth
+        enddo ; enddo
+      enddo
+    else
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        mass(i,j) = mass(i,j) + (GV%H_to_Z * GV%Rlay(k)) * h(i,j,k)
+      enddo ; enddo ; enddo
+    endif
+  else
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      mass(i,j) = mass(i,j) + GV%H_to_RZ * h(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+
+  if (present(p_bot)) then
+    do j=js,je ; do i=is,ie
+      p_bot(i,j) = GV%g_Earth * mass(i,j)
+    enddo ; enddo
+    if (present(p_surf) .and. associated(p_surf)) then ; do j=js,je ; do i=is,ie
+      p_bot(i,j) = p_bot(i,j) + p_surf(i,j)
+    enddo ; enddo ; endif
+  endif
+
+end subroutine find_col_mass
 
 !> Determine the in situ density averaged over a specified distance from the bottom,
 !! calculating it as the inverse of the mass-weighted average specific volume.
