@@ -1,18 +1,22 @@
 module MOM_self_attr_load
 
-use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
-use MOM_domains, only : pass_var
-use MOM_error_handler, only : MOM_error, FATAL, WARNING
-use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
-use MOM_grid, only : ocean_grid_type
-use MOM_io, only : slasher, MOM_read_data
-use MOM_load_love_numbers, only : Love_Data
-use MOM_obsolete_params, only : obsolete_logical, obsolete_int
+use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE
+use MOM_domains,             only : pass_var
+use MOM_error_handler,       only : MOM_error, FATAL, WARNING
+use MOM_file_parser,         only : get_param, log_param, log_version, param_file_type
+use MOM_grid,                only : ocean_grid_type
+use MOM_interface_heights,   only : find_col_mass
+use MOM_io,                  only : MOM_infra_file, MOM_field, vardesc, slasher
+use MOM_io,                  only : create_MOM_file, MOM_read_data, MOM_write_field, var_desc
+use MOM_load_love_numbers,   only : Love_Data
+use MOM_restart,             only : is_new_run, MOM_restart_CS
 use MOM_spherical_harmonics, only : spherical_harmonics_init, spherical_harmonics_end
 use MOM_spherical_harmonics, only : spherical_harmonics_forward, spherical_harmonics_inverse
 use MOM_spherical_harmonics, only : sht_CS, order2index, calc_lmax
-use MOM_unit_scaling, only : unit_scale_type
-use MOM_verticalGrid, only : verticalGrid_type
+use MOM_string_functions,    only : lowercase
+use MOM_unit_scaling,        only : unit_scale_type
+use MOM_variables,           only : thermo_var_ptrs
+use MOM_verticalGrid,        only : verticalGrid_type
 
 implicit none ; private
 
@@ -39,8 +43,8 @@ type, public :: SAL_CS ; private
     !< Spherical harmonic transforms (SHT) control structure
   integer :: sal_sht_Nd
     !< Maximum degree for spherical harmonic transforms [nondim]
-  real, allocatable :: ebot_ref(:,:)
-    !< Reference bottom pressure scaled by Rho_0 and G_Earth[Z ~> m]
+  real, allocatable :: pbot_ref(:,:)
+    !< Reference bottom pressure [R L2 T-2 ~> Pa]
   real, allocatable :: Love_scaling(:)
     !< Dimensional coefficients for harmonic SAL, which are functions of Love numbers
     !! [nondim] or [Z T2 L-2 R-1 ~> m Pa-1], depending on the value of use_ppa.
@@ -79,7 +83,7 @@ subroutine calc_SAL(eta, eta_sal, G, CS, tmp_scale)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (CS%use_bpa) then ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-    bpa(i,j) = eta(i,j) - CS%ebot_ref(i,j)
+    bpa(i,j) = eta(i,j) - CS%pbot_ref(i,j)
   enddo ; enddo ; else ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     bpa(i,j) = eta(i,j)
   enddo ; enddo ; endif
@@ -176,20 +180,30 @@ subroutine calc_love_scaling(rhoW, rhoE, grav, CS)
 end subroutine calc_love_scaling
 
 !> This subroutine initializes the self-attraction and loading control structure.
-subroutine SAL_init(G, GV, US, param_file, CS)
-  type(ocean_grid_type),   intent(inout) :: G  !< The ocean's grid structure.
-  type(verticalGrid_type), intent(in)    :: GV !< Vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
-  type(param_file_type),   intent(in)    :: param_file !< A structure to parse for run-time parameters.
-  type(SAL_CS), intent(inout) :: CS   !< Self-attraction and loading control structure
-
+subroutine SAL_init(h, tv, G, GV, US, param_file, CS, restart_CS)
+  type(ocean_grid_type),          intent(in)    :: G  !< The ocean's grid structure.
+  type(verticalGrid_type),        intent(in)    :: GV !< Vertical grid structure
+  type(unit_scale_type),          intent(in)    :: US !< A dimensional unit scaling type
+  type(param_file_type),          intent(in)    :: param_file !< A structure to parse for run-time parameters.
+  type(SAL_CS),                   intent(inout) :: CS !< Self-attraction and loading control structure
+  type(thermo_var_ptrs),          intent(in)    :: tv !< A structure pointing to various thermodynamic variables.
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                                  intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
+  type(MOM_restart_CS), optional, intent(in)    :: restart_CS !< MOM restart control structure
   ! Local variables
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_self_attr_load" ! This module's name.
   integer :: lmax ! Total modes of the real spherical harmonics [nondim]
   real :: rhoE    ! The average density of Earth [R ~> kg m-3].
-  character(len=200) :: filename, ebot_ref_file, inputdir ! Strings for file/path
-  character(len=200) :: ebot_ref_varname                  ! Variable name in file
+  character(len=20)  :: bpa_config ! String for reference bottom pressure config option
+  real :: tmp(G%isd:G%ied, G%jsd:G%jed) ! Temporary field storing mass returned by find_col_mass
+                                        ! [R Z ~> kg m-2]
+  logical :: restart_sim ! If true, this is a restart run
+  character(len=200) :: filename, ref_pbot_file, inputdir ! Strings for file/path
+  character(len=200) :: ref_pbot_varname                  ! Variable name in file
+  type(MOM_infra_file) :: IO_handle   ! used to write ref_pbot file
+  type(vardesc) :: vars(1)            ! used to write ref_pbot file
+  type(MOM_field) :: fields(1)        ! used to write ref_pbot file
   logical :: calculate_sal, tides, use_tidal_sal_file
   integer :: tides_answer_date ! Recover old answers with tides
   real :: sal_scalar_value ! Scaling SAL factors [nondim]
@@ -204,40 +218,62 @@ subroutine SAL_init(G, GV, US, param_file, CS)
   call get_param(param_file, '', "CALCULATE_SAL", calculate_sal, default=tides, do_not_log=.True.)
   if (.not. calculate_sal) return
 
-  if (tides) then
-    call get_param(param_file, '', "USE_PREVIOUS_TIDES", CS%use_tidal_sal_prev, &
-                   default=.false., do_not_log=.True.)
-    call get_param(param_file, '', "TIDAL_SAL_FROM_FILE", use_tidal_sal_file, &
-                   default=.false., do_not_log=.True.)
-    call get_param(param_file, '', "TIDES_ANSWER_DATE", tides_answer_date, &
-                   default=20230630, do_not_log=.True.)
-  endif
-
   call get_param(param_file, mdl, "SAL_USE_BPA", CS%use_bpa, &
                  "If true, use bottom pressure anomaly to calculate self-attraction and "// &
                  "loading (SAL). Otherwise sea surface height anomaly is used, which is "// &
-                 "only correct for homogenous flow.", default=.False.)
+                 "only accurate for uniform density fluid.", default=.False.)
   if (CS%use_bpa) then
+    allocate(CS%pbot_ref(isd:ied, jsd:jed), source=0.0)
+    call get_param(param_file, mdl, "SAL_REF_PBOT_CONFIG", bpa_config, default="file", &
+                   do_not_log=.True.)
+    restart_sim = .False. ; if (present(restart_CS)) restart_sim = (.not. is_new_run(restart_CS))
+    if (restart_sim .and. (trim(lowercase(bpa_config))/='file')) then
+      call MOM_error(WARNING, "SAL_init: 'file' is not used by SAL_PBOT_REF_CONFIG for a restart "//&
+                     "run, SAL_PBOT_REF_CONFIG is reset to 'file'.")
+      bpa_config = 'file'
+    endif
+    call get_param(param_file, mdl, "SAL_REF_PBOT_CONFIG", bpa_config, &
+                  "A string that determines how the reference bottom pressure for SAL "//&
+                  "is specified:\n"//&
+                  "\t init - calculated by thickness, temperature and salinity from \n"//&
+                  "\t        initialization and assuming surface pressure is zero.\n"//&
+                  "\t        This option can only be used by new simulations.\n"//&
+                  "\t file - read from the file specified by REF_PBOT_FILE.", &
+                  default="file", do_not_read=.True.)
     call get_param(param_file, '', "INPUTDIR", inputdir, default=".", do_not_log=.True.)
-    inputdir = slasher(inputdir)
-    call get_param(param_file, mdl, "REF_BOT_PRES_FILE", ebot_ref_file, &
+    call get_param(param_file, mdl, "REF_PBOT_FILE", ref_pbot_file, &
                    "Reference bottom pressure file used by self-attraction and loading (SAL).", &
                    default="pbot.nc")
-    call get_param(param_file, mdl, "REF_BOT_PRES_VARNAME", ebot_ref_varname, &
-                   "The name of the variable in REF_BOT_PRES_FILE with reference bottom "//&
-                   "pressure.  The variable should have the unit of Pa.", &
-                   default="pbot")
-    filename = trim(inputdir)//trim(ebot_ref_file)
-    call log_param(param_file, mdl, "INPUTDIR/REF_BOT_PRES_FILE", filename)
-
-    allocate(CS%ebot_ref(isd:ied, jsd:jed), source=0.0)
-    call MOM_read_data(filename, trim(ebot_ref_varname), CS%ebot_ref, G%Domain,&
-                       scale=US%Pa_to_RL2_T2)
-    call pass_var(CS%ebot_ref, G%Domain)
+    call get_param(param_file, mdl, "REF_PBOT_VARNAME", ref_pbot_varname, &
+                   "The name of the variable in REF_PBOT_FILE with reference bottom "//&
+                   "pressure.  The variable should have the unit of Pa.", default="pbot")
+    filename = trim(slasher(inputdir))//trim(ref_pbot_file)
+    call log_param(param_file, mdl, "INPUTDIR/REF_PBOT_FILE", filename)
+    select case (trim(lowercase(bpa_config)))
+      case ("file")
+        call MOM_read_data(filename, trim(ref_pbot_varname), CS%pbot_ref, G%Domain,&
+                           scale=US%Pa_to_RL2_T2)
+      case ("init")
+        call find_col_mass(h, tv, G, GV, US, tmp, CS%pbot_ref)
+        ! Write reference bottom pressure file
+        vars(1) = var_desc(trim(ref_pbot_varname), units="Pa", &
+                           longname="Reference bottom pressure", &
+                           hor_grid='h', z_grid='1', t_grid='1')
+        call create_MOM_file(IO_handle, trim(filename), vars, 1, fields, G=G)
+        call MOM_write_field(IO_handle, fields(1), G%Domain, CS%pbot_ref, unscale=US%RL2_T2_to_Pa)
+        call IO_handle%close()
+      case default
+        call MOM_error(FATAL, "SAL_init: Unsupported SAL_PBOT_REF_CONFIG option "//trim(bpa_config))
+    end select
+    call pass_var(CS%pbot_ref, G%Domain)
   endif
+  call get_param(param_file, '', "TIDES_ANSWER_DATE", tides_answer_date, default=20230630, &
+                 do_not_log=.True.) ! used to check SAL_USE_BPA
   if (tides_answer_date<=20250131 .and. CS%use_bpa) &
     call MOM_error(FATAL, trim(mdl) // ", SAL_init: SAL_USE_BPA needs to be false to recover "//&
                    "tide answers before 20250131.")
+  call get_param(param_file, '', "TIDAL_SAL_FROM_FILE", use_tidal_sal_file, default=.false., &
+                 do_not_log=.True.) ! used to set default of SAL_SCALAR_APPROX
   call get_param(param_file, mdl, "SAL_SCALAR_APPROX", CS%use_sal_scalar, &
                  "If true, use the scalar approximation to calculate self-attraction and "//&
                  "loading.", default=tides .and. (.not. use_tidal_sal_file))
@@ -250,6 +286,8 @@ subroutine SAL_init(G, GV, US, param_file, CS)
                  "SAL_SCALAR_APPROX is true or USE_PREVIOUS_TIDES is true.", default=0.0, &
                  units="m m-1", do_not_log=.not.(CS%use_sal_scalar .or. CS%use_tidal_sal_prev), &
                  old_name='TIDE_SAL_SCALAR_VALUE')
+  call get_param(param_file, '', "USE_PREVIOUS_TIDES", CS%use_tidal_sal_prev, &
+                 default=.false., do_not_log=.True.)
   call get_param(param_file, mdl, "SAL_HARMONICS", CS%use_sal_sht, &
                  "If true, use the online spherical harmonics method to calculate "//&
                  "self-attraction and loading.", default=.false.)
@@ -300,7 +338,7 @@ subroutine SAL_end(CS)
   type(SAL_CS), intent(inout) :: CS !< The control structure returned by a previous call
                                     !! to SAL_init; it is deallocated here.
 
-  if (allocated(CS%ebot_ref)) deallocate(CS%ebot_ref)
+  if (allocated(CS%pbot_ref)) deallocate(CS%pbot_ref)
 
   if (CS%use_sal_sht) then
     if (allocated(CS%Love_scaling)) deallocate(CS%Love_scaling)
