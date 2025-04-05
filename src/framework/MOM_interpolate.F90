@@ -10,7 +10,7 @@ use MOM_interp_infra,    only : time_interp_external_init=>time_interp_extern_in
 use MOM_interp_infra,    only : horiz_interp_type, get_external_field_info
 use MOM_interp_infra,    only : run_horiz_interp, build_horiz_interp_weights
 use MOM_interp_infra,    only : external_field
-use MOM_time_manager, only : time_type, real_to_time, operator(+), operator(<), operator(>)
+use MOM_time_manager, only : time_type, set_date, operator(+), operator(<), operator(>)
 
 implicit none ; private
 
@@ -247,11 +247,11 @@ subroutine forcing_timeseries_set_time_type_vars(data_start_year, data_end_year,
   type(forcing_timeseries_dataset), intent(inout) :: forcing_dataset    !< information about forcing file
 
   if (forcing_dataset%l_time_varying) then
-    forcing_dataset%data_start = real_to_time(year_to_sec(data_start_year))
-    forcing_dataset%data_end = real_to_time(year_to_sec(data_end_year))
-    forcing_dataset%m2d_offset = real_to_time(year_to_sec(data_ref_year - model_ref_year))
+    forcing_dataset%data_start = set_date(data_start_year, 1, 1)
+    forcing_dataset%data_end = set_date(data_end_year, 1, 1)
+    forcing_dataset%m2d_offset = set_date(data_ref_year - model_ref_year, 1, 1)
   else
-    forcing_dataset%data_forcing = real_to_time(year_to_sec(data_forcing_year))
+    forcing_dataset%data_forcing = set_date(data_forcing_year, 1, 1)
   endif
 
 end subroutine forcing_timeseries_set_time_type_vars
@@ -276,15 +276,5 @@ function map_model_time_to_forcing_time(Time, forcing_dataset)
   endif
 
 end function map_model_time_to_forcing_time
-
-!> real_to_time converts from seconds since 0001-01-01 to time_type so we need to convert from years -> seconds
-function year_to_sec(year)
-
-  integer, intent(in) :: year
-  real :: year_to_sec
-
-  year_to_sec = 86400. * 365. * real(year-1)
-
-end function year_to_sec
 
 end module MOM_interpolate
