@@ -2367,9 +2367,6 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     eta_pred      ! A predictor value of eta [H ~> m or kg m-2] like eta
   real, dimension(SZIW_(CS),SZJW_(CS)) :: &
     p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2]
-  real, dimension(:,:), pointer :: &
-    eta_PF_BT     ! A pointer to the eta array (either eta or eta_pred) that
-                  ! determines the barotropic pressure force [H ~> m or kg m-2]
   real :: wt_end      ! The weighting of the final value of eta_PF [nondim]
   real :: Instep      ! The inverse of the number of barotropic time steps to take [nondim]
   real :: trans_wt1, trans_wt2 ! The weights used to compute ubt_trans and vbt_trans [nondim]
@@ -2484,8 +2481,6 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
   p_surf_dyn(:,:) = 0.0
 
-  if (CS%BT_project_velocity) then ; eta_PF_BT => eta ; else ; eta_PF_BT => eta_pred ; endif
-
   ! Set up the group pass used for halo updates within the barotropic time stepping loops.
   call create_group_pass(CS%pass_eta_ubt, eta, CS%BT_Domain)
   call create_group_pass(CS%pass_eta_ubt, ubt, vbt, CS%BT_Domain)
@@ -2556,9 +2551,16 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     endif
 
     v_first = (MOD(n+G%first_direction,2)==1)
-    call btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
-                        gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
-                        find_etaav, wt_accel2(n), eta_sum, v_first, G, US, CS)
+
+    if (CS%BT_project_velocity) then
+      call btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta, eta_PF, &
+                          gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
+                          find_etaav, wt_accel2(n), eta_sum, v_first, G, US, CS)
+    else
+      call btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_pred, eta_PF, &
+                          gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
+                          find_etaav, wt_accel2(n), eta_sum, v_first, G, US, CS)
+    endif
 
     if (v_first) then
       ! On odd-steps, update v first.
@@ -2804,7 +2806,12 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
       if (CS%id_eta_hifreq > 0) call post_data(CS%id_eta_hifreq, eta(isd:ied,jsd:jed), CS%diag)
       if (CS%id_uhbt_hifreq > 0) call post_data(CS%id_uhbt_hifreq, uhbt(IsdB:IedB,jsd:jed), CS%diag)
       if (CS%id_vhbt_hifreq > 0) call post_data(CS%id_vhbt_hifreq, vhbt(isd:ied,JsdB:JedB), CS%diag)
-      if (CS%id_eta_pred_hifreq > 0) call post_data(CS%id_eta_pred_hifreq, eta_PF_BT(isd:ied,jsd:jed), CS%diag)
+      if (CS%BT_project_velocity) then
+        ! This diagnostic is redundant in this case and should probably be omitted.
+        if (CS%id_eta_pred_hifreq > 0) call post_data(CS%id_eta_pred_hifreq, eta(isd:ied,jsd:jed), CS%diag)
+      else
+        if (CS%id_eta_pred_hifreq > 0) call post_data(CS%id_eta_pred_hifreq, eta_pred(isd:ied,jsd:jed), CS%diag)
+      endif
     endif
   enddo ! end of do n=1,ntimestep
 
@@ -5816,6 +5823,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
       'High Frequency Barotropic zonal velocity', 'm s-1', conversion=US%L_T_to_m_s)
   CS%id_vbt_hifreq = register_diag_field('ocean_model', 'vbt_hifreq', diag%axesCv1, Time, &
       'High Frequency Barotropic meridional velocity', 'm s-1', conversion=US%L_T_to_m_s)
+  ! if (.not.CS%BT_project_velocity) &  ! The following diagnostic is redundant with BT_project_velocity.
   CS%id_eta_pred_hifreq = register_diag_field('ocean_model', 'eta_pred_hifreq', diag%axesT1, Time, &
       'High Frequency Predictor Barotropic SSH', thickness_units, conversion=GV%H_to_MKS)
   CS%id_uhbt_hifreq = register_diag_field('ocean_model', 'uhbt_hifreq', diag%axesCu1, Time, &
