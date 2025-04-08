@@ -719,13 +719,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
     ! TODO: Can KE be removed from this function?
 
-    !$omp target
+    !!!$omp target
     ! Calculate the tendencies of zonal velocity due to the Coriolis
     ! force and momentum advection.  On a Cartesian grid, this is
     !     CAu =  q * vh - d(KE)/dx.
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
+        !$omp target
         !$omp parallel loop collapse(2)
         do j=js,je ; do I=Isq,Ieq
           if (q(I,J)*u(I,j,k) == 0.0) then
@@ -746,34 +747,42 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           endif
           CAu(I,j,k) = 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
         enddo ; enddo
+        !$omp end target
       else
         ! Energy conserving scheme, Sadourny 1975
+        !$omp target
         !$omp parallel loop collapse(2)
         do j=js,je ; do I=Isq,Ieq
           CAu(I,j,k) = 0.25 * &
             ((q(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
              (q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
         enddo ; enddo
+        !$omp end target
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
         CAu(I,j,k) = 0.125 * (G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
                      ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
       enddo ; enddo
+      !$omp end target
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
             (CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
         CAu(I,j,k) = (((a(I,j) * vh(i+1,J,k)) +  (c(I,j) * vh(i,J-1,k)))  + &
                       ((b(I,j) * vh(i,J,k)) +  (d(I,j) * vh(i+1,J-1,k)))) * G%IdxCu(I,j)
       enddo ; enddo
+      !$omp end target
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_v that should be returned by the
       !       continuity solver. AJA
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
         Heff1 = abs(vh(i,J,k) * G%IdxCv(i,J)) / (eps_vel+abs(v(i,J,k)))
@@ -799,31 +808,37 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           CAu(I,j,k) = (QVHeff / ( h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) ) * G%IdxCu(I,j)
         endif
       enddo ; enddo
+      !$omp end target
     endif
 
     ! Add in the additional terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
         CAu(I,j,k) = CAu(I,j,k) + &
               ((ep_u(i,j)*uh(I-1,j,k)) - (ep_u(i+1,j)*uh(I+1,j,k))) * G%IdxCu(I,j)
       enddo ; enddo
+      !$omp end target
     endif
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
         ! Computing the diagnostic Stokes contribution to CAu
+        !$omp target
         !$omp parallel loop collapse(2)
         do j=js,je ; do I=Isq,Ieq
           CAuS(I,j,k) = 0.25 * &
                 ((qS(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
                  (qS(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
         enddo ; enddo
+        !$omp end target
       endif
     endif
 
     if (CS%bound_Coriolis) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
         fv1 = abs_vort(I,J) * v(i+1,J,k)
@@ -837,19 +852,24 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         CAu(I,j,k) = min(CAu(I,j,k), max_fv)
         CAu(I,j,k) = max(CAu(I,j,k), min_fv)
       enddo ; enddo
+      !$omp end target
     endif
 
     ! Term - d(KE)/dx.
+    !$omp target
     !$omp parallel loop collapse(2)
     do j=js,je ; do I=Isq,Ieq
       CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
     enddo ; enddo
+    !$omp end target
 
     if (associated(AD%gradKEu)) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=js,je ; do I=Isq,Ieq
         AD%gradKEu(I,j,k) = -KEx(I,j)
       enddo ; enddo
+      !$omp end target
     endif
 
     ! Calculate the tendencies of meridional velocity due to the Coriolis
@@ -858,6 +878,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
+        !$omp target
         !$omp parallel loop collapse(2)
         do J=Jsq,Jeq ; do i=is,ie
           if (q(I-1,J)*v(i,J,k) == 0.0) then
@@ -878,25 +899,31 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           endif
           CAv(i,J,k) = -0.25 * G%IdyCv(i,J) * (temp1 + temp2)
         enddo ; enddo
+        !$omp end target
       else
         ! Energy conserving scheme, Sadourny 1975
+        !$omp target
         !$omp parallel loop collapse(2)
         do J=Jsq,Jeq ; do i=is,ie
           CAv(i,J,k) = - 0.25* &
               ((q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
                (q(I,J)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
         enddo ; enddo
+        !$omp end target
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
         CAv(i,J,k) = -0.125 * (G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
                      ((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
       enddo ; enddo
+      !$omp end target
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
             (CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
         CAv(i,J,k) = - (((a(I-1,j)   * uh(I-1,j,k)) + &
@@ -904,10 +931,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
                       + ((b(I,j)     * uh(I,j,k)) +   &
                          (d(I-1,j+1) * uh(I-1,j+1,k)))) * G%IdyCv(i,J)
       enddo ; enddo
+      !$omp end target
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_u that should be returned by the
       !       continuity solver. AJA
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
         Heff1 = abs(uh(I,j,k) * G%IdyCu(I,j)) / (eps_vel+abs(u(I,j,k)))
@@ -936,30 +965,36 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
                        (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
         endif
       enddo ; enddo
+      !$omp end target
     endif
     ! Add in the additonal terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
         CAv(i,J,k) = CAv(i,J,k) + &
               ((ep_v(i,j)*vh(i,J-1,k)) - (ep_v(i,j+1)*vh(i,J+1,k))) * G%IdyCv(i,J)
       enddo ; enddo
+      !$omp end target
     endif
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
         ! Computing the diagnostic Stokes contribution to CAv
+        !$omp target
         !$omp parallel loop collapse(2)
         do J=Jsq,Jeq ; do i=is,ie
           CAvS(I,j,k) = 0.25 * &
                 ((qS(I,J) * (uh(I,j+1,k) + uh(I,j,k))) + &
                  (qS(I,J-1) * (uh(I-1,j,k) + uh(I-1,j+1,k)))) * G%IdyCv(i,J)
         enddo; enddo
+        !$omp end target
       endif
     endif
 
     if (CS%bound_Coriolis) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
         fu1 = -abs_vort(I,J) * u(I,j+1,k)
@@ -973,42 +1008,52 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         CAv(I,j,k) = min(CAv(I,j,k), max_fu)
         CAv(I,j,k) = max(CAv(I,j,k), min_fu)
       enddo ; enddo
+      !$omp end target
     endif
 
     ! Term - d(KE)/dy.
+    !$omp target
     !$omp parallel loop collapse(2)
     do J=Jsq,Jeq ; do i=is,ie
       CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
     enddo ; enddo
+    !$omp end target
     if (associated(AD%gradKEv)) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq,Jeq ; do i=is,ie
         AD%gradKEv(i,J,k) = -KEy(i,J)
       enddo ; enddo
+      !$omp end target
     endif
 
     if (associated(AD%rv_x_u) .or. associated(AD%rv_x_v)) then
       ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
         if (associated(AD%rv_x_u)) then
+          !$omp target
           !$omp parallel loop collapse(2)
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = - 0.25* &
               ((q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
                (q2(I,j)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
           enddo ; enddo
+          !$omp end target
         endif
 
         if (associated(AD%rv_x_v)) then
+          !$omp target
           !$omp parallel loop collapse(2)
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = 0.25 * &
               ((q2(I,j) * (vh(i+1,J,k) + vh(i,J,k))) + &
                (q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
           enddo ; enddo
+          !$omp end target
         endif
       else
         if (associated(AD%rv_x_u)) then
+          !$omp target
           !$omp parallel loop collapse(2)
           do J=Jsq,Jeq ; do i=is,ie
             AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
@@ -1017,9 +1062,11 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
                ((((q2(I-1,J) + q2(I,J-1)) + q2(I,J)) * uh(I,j,k))+ &
                 (((q2(I,J) + q2(I-1,J+1)) + q2(I-1,J)) * uh(I-1,j+1,k))))
           enddo ; enddo
+          !$omp end target
         endif
 
         if (associated(AD%rv_x_v)) then
+          !$omp target
           !$omp parallel loop collapse(2)
           do j=js,je ; do I=Isq,Ieq
             AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
@@ -1028,11 +1075,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
                ((((q2(I-1,J) + q2(I,J-1)) + q2(I,J)) * vh(i,J,k)) + &
                 (((q2(I+1,J-1) + q2(I,J)) + q2(I,J-1)) * vh(i+1,J-1,k))))
           enddo ; enddo
+          !$omp end target
         endif
       endif
     endif
-    !$omp end target
-
   enddo ! k-loop.
 
   !$omp target exit data map(delete: Area_h, Area_q)
