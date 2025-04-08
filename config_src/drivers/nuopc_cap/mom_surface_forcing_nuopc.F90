@@ -615,11 +615,12 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
 
   ! Copy MARBL-specific IOB fields into fluxes; also set some MARBL-specific forcings to other values
   ! (constants, values from netCDF, etc)
-  call convert_driver_fields_to_forcings(IOB%atm_fine_dust_flux, IOB%atm_coarse_dust_flux, &
-                                         IOB%seaice_dust_flux, IOB%atm_bc_flux, IOB%seaice_bc_flux, &
-                                         IOB%nhx_dep, IOB%noy_dep, IOB%atm_co2_prog, IOB%atm_co2_diag, &
-                                         IOB%afracr, IOB%swnet_afracr, IOB%ifrac_n, IOB%swpen_ifrac_n, &
-                                         Time, G, US, i0, j0, fluxes, CS%marbl_forcing_CSp)
+  if (CS%use_marbl_tracers) &
+    call convert_driver_fields_to_forcings(IOB%atm_fine_dust_flux, IOB%atm_coarse_dust_flux, &
+                                           IOB%seaice_dust_flux, IOB%atm_bc_flux, IOB%seaice_bc_flux, &
+                                           IOB%nhx_dep, IOB%noy_dep, IOB%atm_co2_prog, IOB%atm_co2_diag, &
+                                           IOB%afracr, IOB%swnet_afracr, IOB%ifrac_n, IOB%swpen_ifrac_n, &
+                                           Time, G, US, i0, j0, fluxes, CS%marbl_forcing_CSp)
 
   ! wave to ocean coupling
   if ( associated(IOB%lamult)) then

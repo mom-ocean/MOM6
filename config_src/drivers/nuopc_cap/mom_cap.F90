@@ -443,6 +443,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   logical                                :: existflag
   logical                                :: use_waves  ! If true, the wave modules are active.
   character(len=40)                      :: wave_method ! Wave coupling method.
+  logical                                :: use_MARBL  ! If true, MARBL tracers are being used.
   integer                                :: userRc
   integer                                :: localPet
   integer                                :: localPeCount
@@ -720,6 +721,8 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
 
   call get_domain_extent(ocean_public%domain, isc, iec, jsc, jec)
 
+  call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method, use_MARBL=use_MARBL)
+
   allocate(Ice_ocean_boundary% u_flux (isc:iec,jsc:jec),          &
            Ice_ocean_boundary% v_flux (isc:iec,jsc:jec),          &
            Ice_ocean_boundary% t_flux (isc:iec,jsc:jec),          &
@@ -763,22 +766,20 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
              Ice_ocean_boundary% hrofi_glc (isc:iec,jsc:jec),       &
              source=0.0)
 
-    ! Needed for MARBL
-    ! These are allocated separately to make it easier to pull out
-    ! of the cesm_coupled block if other models want to add BGC
-    allocate(Ice_ocean_boundary% nhx_dep (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% noy_dep (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% atm_fine_dust_flux (isc:iec,jsc:jec),  &
-             Ice_ocean_boundary% atm_coarse_dust_flux (isc:iec,jsc:jec),&
-             Ice_ocean_boundary% seaice_dust_flux (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% atm_bc_flux (isc:iec,jsc:jec),         &
-             Ice_ocean_boundary% seaice_bc_flux (isc:iec,jsc:jec),      &
-             Ice_ocean_boundary% atm_co2_prog (isc:iec,jsc:jec),    &
-             Ice_ocean_boundary% atm_co2_diag (isc:iec,jsc:jec),    &
-             source=0.0)
+    if (use_MARBL) then
+      allocate(Ice_ocean_boundary% nhx_dep (isc:iec,jsc:jec),         &
+              Ice_ocean_boundary% noy_dep (isc:iec,jsc:jec),         &
+              Ice_ocean_boundary% atm_fine_dust_flux (isc:iec,jsc:jec),  &
+              Ice_ocean_boundary% atm_coarse_dust_flux (isc:iec,jsc:jec),&
+              Ice_ocean_boundary% seaice_dust_flux (isc:iec,jsc:jec),    &
+              Ice_ocean_boundary% atm_bc_flux (isc:iec,jsc:jec),         &
+              Ice_ocean_boundary% seaice_bc_flux (isc:iec,jsc:jec),      &
+              Ice_ocean_boundary% atm_co2_prog (isc:iec,jsc:jec),    &
+              Ice_ocean_boundary% atm_co2_diag (isc:iec,jsc:jec),    &
+              source=0.0)
+    endif
   endif
 
-  call query_ocean_state(ocean_state, use_waves=use_waves, wave_method=wave_method)
   if (use_waves) then
     if (wave_method == "EFACTOR") then
       allocate( Ice_ocean_boundary%lamult(isc:iec,jsc:jec), source=0.0)
@@ -850,7 +851,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
                       ungridded_lbound=1, ungridded_ubound=Ice_ocean_boundary%ice_ncat)
   endif
 
-  if (cesm_coupled) then
+  if (cesm_coupled .and. use_MARBL) then
     ! Fields needed for MARBL
     call fld_list_add(fldsToOcn_num, fldsToOcn, "Faxa_ndep"                  , "will provide", & !-> nitrogen deposition
                       ungridded_lbound=1, ungridded_ubound=2)
@@ -890,7 +891,7 @@ subroutine InitializeAdvertise(gcomp, importState, exportState, clock, rc)
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_dhdy"    , "will provide")
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Fioo_q"     , "will provide")
   call fld_list_add(fldsFrOcn_num, fldsFrOcn, "So_bldepth" , "will provide")
-  if (cesm_coupled) then
+  if (cesm_coupled .and. use_MARBL) then
     call fld_list_add(fldsFrOcn_num, fldsFrOcn, "Faoo_fco2_ocn", "will provide")
   endif
 

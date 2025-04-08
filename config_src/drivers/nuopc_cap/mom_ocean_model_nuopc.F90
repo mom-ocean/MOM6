@@ -148,6 +148,7 @@ type, public :: ocean_state_type ; private
   logical :: use_ice_shelf    !< If true, the ice shelf model is enabled.
   logical,public :: use_waves !< If true use wave coupling.
   character(len=40) :: wave_method !< Wave coupling method.
+  logical,public :: use_MARBL !< If true, use MARBL tracers.
 
   logical :: icebergs_alter_ocean !< If true, the icebergs can change ocean the
                               !! ocean dynamics and forcing fluxes.
@@ -256,7 +257,6 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
                       !! min(HFrz, OBLD), where OBLD is the boundary layer depth.
                       !! If HFrz <= 0 (default), melt potential will not be computed.
   logical :: use_melt_pot !< If true, allocate melt_potential array
-  logical :: use_MARBL  !< If true, allocate surface co2 array
 
 
 ! This include declares and sets the variable "version".
@@ -380,14 +380,14 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
 
   call get_param(param_file, mdl, "USE_WAVES", OS%Use_Waves, &
        "If true, enables surface wave modules.", default=.false.)
-  call get_param(param_file, mdl, "USE_MARBL_TRACERS", use_MARBL, &
+  call get_param(param_file, mdl, "USE_MARBL_TRACERS", OS%use_MARBL, &
                  default=.false., do_not_log=.true.)
 
   !   Consider using a run-time flag to determine whether to do the diagnostic
   ! vertical integrals, since the related 3-d sums are not negligible in cost.
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, &
                               do_integrals=.true., gas_fields_ocn=gas_fields_ocn, &
-                              use_meltpot=use_melt_pot, use_marbl_tracers=use_MARBL)
+                              use_meltpot=use_melt_pot, use_marbl_tracers=OS%use_MARBL)
 
   call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
                             OS%forcing_CSp, OS%restore_salinity, OS%restore_temp, OS%use_waves)
@@ -1057,7 +1057,7 @@ end subroutine ocean_model_flux_init
 
 !> This interface allows certain properties that are stored in the ocean_state_type to be
 !! obtained.
-subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale, wave_method)
+subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale, wave_method, use_MARBL)
   type(ocean_state_type),       intent(in)  :: OS      !< The structure with the complete ocean state
   logical,            optional, intent(out) :: use_waves !< Indicates whether surface waves are in use
   integer,            optional, intent(out) :: NumWaveBands !< If present, this gives the number of
@@ -1067,6 +1067,7 @@ subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale, 
   logical,            optional, intent(in)  :: unscale !< If present and true, undo any dimensional
                                                        !! rescaling and return dimensional values in MKS units
   character(len=40),  optional, intent(out) :: wave_method !< Wave coupling method.
+  logical,            optional, intent(out) :: use_MARBL !< Indicates whether MARBL is in use.
 
   logical :: undo_scaling
   undo_scaling = .false. ; if (present(unscale)) undo_scaling = unscale
@@ -1079,6 +1080,7 @@ subroutine query_ocean_state(OS, use_waves, NumWaveBands, Wavenumbers, unscale, 
     call query_wave_properties(OS%Waves, WaveNumbers=WaveNumbers)
   endif
   if (present(wave_method)) wave_method = OS%wave_method
+  if (present(use_MARBL)) use_MARBL = OS%use_MARBL
 
 end subroutine query_ocean_state
 
