@@ -244,12 +244,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   !$omp target enter data map(alloc: Area_h, Area_q)
 
-  !$omp target
-  !$omp parallel loop collapse(2)
-  do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+2
+  do concurrent (I=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
     Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
-  enddo ; enddo
-  !$omp end target
+  enddo
 
   if (associated(OBC)) then
     !$omp target update from(Area_h)
@@ -279,13 +276,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     !$omp target update to(Area_h)
   endif
 
-  !$omp target
-  !$omp parallel loop collapse(2)
-  do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+  do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
                   (Area_h(i+1,j) + Area_h(i,j+1))
-  enddo ; enddo
-  !$omp end target
+  enddo
 
   Stokes_VF = .false.
   if (present(Waves)) then ; if (associated(Waves)) then
@@ -328,73 +322,49 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! First calculate the contributions to the circulation around the q-point.
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
           dvSdx(I,J) = (-Waves%us_y(i+1,J,k)*G%dyCv(i+1,J)) - &
                        (-Waves%us_y(i,J,k)*G%dyCv(i,J))
           duSdy(I,J) = (-Waves%us_x(I,j+1,k)*G%dxCu(I,j+1)) - &
                        (-Waves%us_x(I,j,k)*G%dxCu(I,j))
-        enddo; enddo
-        !$omp end target
+        enddo
       endif
       if (.not. Waves%Passive_Stokes_VF) then
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
           dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J)) - &
                       ((v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
           dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1)) - &
                       ((u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
-        enddo; enddo
-        !$omp end target
+        enddo
       else
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
           dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
           dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
-        enddo; enddo
-        !$omp end target
+        enddo
       endif
     else
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+      do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
         dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
         dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
-      enddo; enddo
-      !$omp end target
+      enddo
     endif
 
-    !$omp target
-    !$omp parallel loop collapse(2)
-    do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
+    do concurrent (i=Isq-1:Ieq+2, J=Jsq-1:Jeq+1)
       hArea_v(i,J) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
-    enddo ; enddo
-    !$omp end target
+    enddo
 
-    !$omp target
-    !$omp parallel loop collapse(2)
-    do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
+    do concurrent (I=Isq-1:Ieq+1, j=Jsq-1:Jeq+2)
       hArea_u(I,j) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
-    enddo ; enddo
-    !$omp end target
+    enddo
 
     if (CS%Coriolis_En_Dis) then
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do I=is-1,ie
+      do concurrent (I=is-1:ie, J=Jsq:Jeq+1)
         uh_center(I,j) = 0.5 * ((G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
-      enddo ; enddo
-      !$omp end target
+      enddo
 
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=js-1,je ; do i=Isq,Ieq+1
+      do concurrent (i=Isq:Ieq+1, J=js-1:je)
         vh_center(i,J) = 0.5 * ((G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
-      enddo ; enddo
-      !$omp end target
+      enddo
     endif
 
     ! Adjust circulation components to relative vorticity and thickness projected onto
@@ -1224,41 +1194,32 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
-    !$omp target
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       KE(i,j) = ( ( (G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))) + &
                     (G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k))) ) + &
                   ( (G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))) + &
                     (G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k))) ) )*0.25*G%IareaT(i,j)
-    enddo ; enddo
-    !$omp end target
+    enddo
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme which does not take into account any geometric factors
-    !$omp target
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2 = up*up
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2 = um*um
       vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2 = vp*vp
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
-    enddo ; enddo
-    !$omp end target
+    enddo
   elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
-    !$omp target
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
       vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
       KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
-    enddo ; enddo
-    !$omp end target
+    enddo
   endif
   !
   ! This kernel needs to be split due to a dependency between KE and KE[xy].
@@ -1268,20 +1229,14 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   !
 
   ! Term - d(KE)/dx.
-  !$omp target
-  !$omp parallel loop collapse(2)
-  do j=js,je ; do I=Isq,Ieq
+  do concurrent (I=Isq:Ieq, j=js:je)
     KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(I,j)
-  enddo ; enddo
-  !$omp end target
+  enddo
 
   ! Term - d(KE)/dy.
-  !$omp target
-  !$omp parallel loop collapse(2)
-  do J=Jsq,Jeq ; do i=is,ie
+  do concurrent (i=is:ie, J=Jsq:Jeq)
     KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
-  enddo ; enddo
-  !$omp end target
+  enddo
 
   if (associated(OBC)) then
     !$omp target update from(KEx, KEy)
