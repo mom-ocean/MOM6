@@ -764,11 +764,13 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       Ihtot(i,j) = 1.0 / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
       pbce(i,j,1) = GV%g_prime(1) * GV%H_to_Z
     enddo ; enddo
-    !$omp parallel loop collapse(2)
-    do k=2,nz ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      pbce(i,j,k) = pbce(i,j,k-1) + (GV%g_prime(K) * GV%H_to_Z) &
-          * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
-    enddo ; enddo ; enddo
+    do k=2,nz
+      !$omp parallel loop collapse(2)
+      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        pbce(i,j,k) = pbce(i,j,k-1) + (GV%g_prime(K) * GV%H_to_Z) &
+            * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
+      enddo ; enddo
+    enddo
     !$omp end target
   endif
   !$omp end target data
