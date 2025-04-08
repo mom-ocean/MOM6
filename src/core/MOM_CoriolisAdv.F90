@@ -326,9 +326,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! vorticity is second order accurate everywhere with free slip b.c.s,
     ! but only first order accurate at boundaries with no slip b.c.s.
     ! First calculate the contributions to the circulation around the q-point.
-    !$omp target
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+        !$omp target
         !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           dvSdx(I,J) = (-Waves%us_y(i+1,J,k)*G%dyCv(i+1,J)) - &
@@ -336,8 +336,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           duSdy(I,J) = (-Waves%us_x(I,j+1,k)*G%dxCu(I,j+1)) - &
                        (-Waves%us_x(I,j,k)*G%dxCu(I,j))
         enddo; enddo
+        !$omp end target
       endif
       if (.not. Waves%Passive_Stokes_VF) then
+        !$omp target
         !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J)) - &
@@ -345,41 +347,55 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1)) - &
                       ((u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
         enddo; enddo
+        !$omp end target
       else
+        !$omp target
         !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
           dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
         enddo; enddo
+        !$omp end target
       endif
     else
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
         dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
       enddo; enddo
+      !$omp end target
     endif
 
+    !$omp target
     !$omp parallel loop collapse(2)
     do J=Jsq-1,Jeq+1 ; do i=Isq-1,Ieq+2
       hArea_v(i,J) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
     enddo ; enddo
+    !$omp end target
+
+    !$omp target
     !$omp parallel loop collapse(2)
     do j=Jsq-1,Jeq+2 ; do I=Isq-1,Ieq+1
       hArea_u(I,j) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
     enddo ; enddo
+    !$omp end target
 
     if (CS%Coriolis_En_Dis) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=is-1,ie
         uh_center(I,j) = 0.5 * ((G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
       enddo ; enddo
+      !$omp end target
+
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=js-1,je ; do i=Isq,Ieq+1
         vh_center(i,J) = 0.5 * ((G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
       enddo ; enddo
+      !$omp end target
     endif
-    !$omp end target
 
     ! Adjust circulation components to relative vorticity and thickness projected onto
     ! velocity points on open boundaries.
