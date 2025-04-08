@@ -533,75 +533,94 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       !$omp target update to(uh_center, vh_center)
     endif
 
-    !$omp target
     if (CS%no_slip) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         rel_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo; enddo
+      !$omp end target
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+          !$omp target
           !$omp parallel loop collapse(2)
           do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
             stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
           enddo; enddo
+          !$omp end target
         endif
       endif
     else
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         rel_vort(I,J) = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo; enddo
+      !$omp end target
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+          !$omp target
           !$omp parallel loop collapse(2)
           do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
             stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
           enddo; enddo
+          !$omp end target
         endif
       endif
     endif
 
+    !$omp target
     !$omp parallel loop collapse(2)
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       abs_vort(I,J) = G%CoriolisBu(I,J) + rel_vort(I,J)
     enddo ; enddo
+    !$omp end target
 
+    !$omp target
     !$omp parallel loop collapse(2)
     do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
       Ih_q(I,J) = Area_q(I,J) / (hArea_q + vol_neglect)
       q(I,J) = abs_vort(I,J) * Ih_q(I,J)
     enddo; enddo
+    !$omp end target
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
+        !$omp target
         !$omp parallel loop collapse(2)
         do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
           qS(I,J) = stk_vort(I,J) * Ih_q(I,J)
         enddo; enddo
+        !$omp end target
       endif
     endif
 
     if (CS%id_rv > 0) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         RV(I,J,k) = rel_vort(I,J)
       enddo ; enddo
+      !$omp end target
     endif
 
     if (CS%id_PV > 0) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         PV(I,J,k) = q(I,J)
       enddo ; enddo
+      !$omp end target
     endif
 
     if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
         q2(I,J) = rel_vort(I,J) * Ih_q(I,J)
       enddo ; enddo
+      !$omp end target
     endif
 
     !   a, b, c, and d are combinations of neighboring potential
@@ -609,18 +628,23 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! scheme.  All are defined at u grid points.
 
     if (CS%Coriolis_Scheme == ARAKAWA_HSU90) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=is-1,Ieq
         a(I,j) = (q(I,J) + (q(I+1,J) + q(I,J-1))) * C1_12
         d(I,j) = ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) * C1_12
       enddo ; enddo
+      !$omp end target
 
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=Isq,Ieq
         b(I,j) = (q(I,J) + (q(I-1,J) + q(I,J-1))) * C1_12
         c(I,j) = ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) * C1_12
       enddo ; enddo
+      !$omp end target
     elseif (CS%Coriolis_Scheme == ARAKAWA_LAMB81) then
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
         a(I-1,j) = (2.0*(q(I,J) + q(I-1,J-1)) + (q(I-1,J) + q(I,J-1))) * C1_24
@@ -630,6 +654,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ep_u(i,j) = ((q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
         ep_v(i,j) = (-(q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
       enddo ; enddo
+      !$omp end target
     elseif (CS%Coriolis_Scheme == AL_BLEND) then
       Fe_m2 = CS%F_eff_max_blend - 2.0
       rat_lin = 1.5 * Fe_m2 / max(CS%wt_lin_blend, 1.0e-16)
@@ -637,6 +662,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       ! This allows the code to always give Sadourny Energy
       if (CS%F_eff_max_blend <= 2.0) then ; Fe_m2 = -1. ; rat_lin = -1.0 ; endif
 
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
         min_Ihq = MIN(Ih_q(I-1,J-1), Ih_q(I,J-1), Ih_q(I-1,J), Ih_q(I,J))
@@ -676,6 +702,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         ep_u(i,j) = AL_wt  * ((q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
         ep_v(i,j) = AL_wt * (-(q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
       enddo ; enddo
+      !$omp end target
     endif
 
     ! .and. SADOURNEY75_ENERGY ??
@@ -683,6 +710,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     !  c1 = 1.0-1.5*RANGE ; c2 = 1.0-RANGE ; c3 = 2.0 ; slope = 0.5
       c1 = 1.0-1.5*0.5 ; c2 = 1.0-0.5 ; c3 = 2.0 ; slope = 0.5
 
+      !$omp target
       !$omp parallel loop collapse(2)
       do j=Jsq,Jeq+1 ; do I=is-1,ie
         uhc = uh_center(I,j)
@@ -705,7 +733,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           uh_max(I,j) = uhm ; uh_min(I,j) = uhc
         endif
       enddo ; enddo
+      !$omp end target
 
+      !$omp target
       !$omp parallel loop collapse(2)
       do J=js-1,je ; do i=Isq,Ieq+1
         vhc = vh_center(i,J)
@@ -728,8 +758,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           vh_max(i,J) = vhm ; vh_min(i,J) = vhc
         endif
       enddo ; enddo
+      !$omp end target
     endif
-    !$omp end target
 
     ! Calculate KE and the gradient of KE
     call gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
@@ -1189,12 +1219,12 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
-  !$omp target
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
   if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
+    !$omp target
     !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       KE(i,j) = ( ( (G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))) + &
@@ -1202,9 +1232,11 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
                   ( (G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))) + &
                     (G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k))) ) )*0.25*G%IareaT(i,j)
     enddo ; enddo
+    !$omp end target
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme which does not take into account any geometric factors
+    !$omp target
     !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2 = up*up
@@ -1213,9 +1245,11 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
       KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
     enddo ; enddo
+    !$omp end target
   elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
+    !$omp target
     !$omp parallel loop collapse(2)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
@@ -1224,23 +1258,25 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
       vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
       KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
     enddo ; enddo
+    !$omp end target
   endif
-  !$omp end target
   !
   ! This kernel needs to be split due to a dependency between KE and KE[xy].
   ! The compiler or the GPU does not appear to completing KE before starting
   ! the KE[xy] calculations.  Maybe there's a better way to do this than
   ! splitting the kernel, but I don't know how.
   !
-  !$omp target
 
   ! Term - d(KE)/dx.
+  !$omp target
   !$omp parallel loop collapse(2)
   do j=js,je ; do I=Isq,Ieq
     KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(I,j)
   enddo ; enddo
+  !$omp end target
 
   ! Term - d(KE)/dy.
+  !$omp target
   !$omp parallel loop collapse(2)
   do J=Jsq,Jeq ; do i=is,ie
     KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
