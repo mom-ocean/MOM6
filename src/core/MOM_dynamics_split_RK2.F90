@@ -891,7 +891,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
   ! TODO: Am I doing this twice for no reason?
-  !!$omp target update to(u_av, v_av, h_av, uh, vh, CS%BT_cont%h_u, CS%BT_cont%h_v)
+  !$omp target update to(u_av, v_av, h_av, uh, vh, CS%BT_cont%h_u, CS%BT_cont%h_v)
   call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, &
                             MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, &
                             OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &

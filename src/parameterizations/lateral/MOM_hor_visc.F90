@@ -703,48 +703,33 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(to: hu_cont, hv_cont) if (use_cont_huv)
 
   do k=1,nz
-
     ! The following are the forms of the horizontal tension and horizontal
     ! shearing strain advocated by Smagorinsky (1993) and discussed in
     ! Griffies and Hallberg (2000).
 
-    ! NOTE: There is a ~1% speedup when the tension and shearing loops below
-    !   are fused (presumably due to shared access of Id[xy]C[uv]).  However,
-    !   this breaks the center/vertex index case convention, and also evaluates
-    !   the dudx and dvdy terms beyond their valid bounds.
-    ! TODO: Explore methods for retaining both the syntax and speedup.
-
     ! XXX: **I don't understand why I need this**
     !$omp target update to(u(:,:,k), v(:,:,k), h(:,:,k))
 
-    !$omp target
-
     ! Calculate horizontal tension
-    !$omp parallel loop collapse(2)
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+    do concurrent (i=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
       dudx(i,j) = CS%DY_dxT(i,j)*((G%IdyCu(I,j) * u(I,j,k)) - &
                                   (G%IdyCu(I-1,j) * u(I-1,j,k)))
-    enddo ; enddo
+    enddo
 
-    !$omp parallel loop collapse(2)
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+    do concurrent (i=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
       dvdy(i,j) = CS%DX_dyT(i,j)*((G%IdxCv(i,J) * v(i,J,k)) - &
                                   (G%IdxCv(i,J-1) * v(i,J-1,k)))
-    enddo ; enddo
+    enddo
 
-    !$omp parallel loop collapse(2)
-    do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
+    do concurrent (i=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
       sh_xx(i,j) = dudx(i,j) - dvdy(i,j)
-    enddo ; enddo
+    enddo
 
     ! Components for the shearing strain
-    !$omp parallel loop collapse(2)
-    do J=js_vort,je_vort ; do I=is_vort,ie_vort
+    do concurrent (I=is_vort:ie_vort, J=js_vort:je_vort)
       dvdx(I,J) = CS%DY_dxBu(I,J)*((v(i+1,J,k)*G%IdyCv(i+1,J)) - (v(i,J,k)*G%IdyCv(i,J)))
       dudy(I,J) = CS%DX_dyBu(I,J)*((u(I,j+1,k)*G%IdxCu(I,j+1)) - (u(I,j,k)*G%IdxCu(I,j)))
-    enddo ; enddo
-
-    !$omp end target
+    enddo
 
     if (CS%use_Leithy) then
       ! Calculate horizontal tension from smoothed velocity
