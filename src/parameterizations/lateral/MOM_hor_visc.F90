@@ -762,36 +762,28 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! in OBCs, which are not ordinarily be necessary, and might not be necessary
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
-    !$omp target
     if (use_cont_huv) then
-      !$omp parallel loop collapse(2)
-      do j=js-2,je+2 ; do I=Isq-1,Ieq+1
+      do concurrent (I=Isq-1:Ieq+1, j=js-2:je+2)
         h_u(I,j) = hu_cont(I,j,k)
-      enddo ; enddo
-      !$omp parallel loop collapse(2)
-      do J=Jsq-1,Jeq+1 ; do i=is-2,ie+2
+      enddo
+      do concurrent (i=is-2:ie+2, J=Jsq-1:Jeq+1)
         h_v(i,J) = hv_cont(i,J,k)
-      enddo ; enddo
+      enddo
     elseif (CS%use_land_mask) then
-      !$omp parallel loop collapse(2)
-      do j=js-2,je+2 ; do I=is-2,Ieq+1
+      do concurrent (I=is-2:Ieq+1, j=js-2:je+2)
         h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
-      enddo ; enddo
-      !$omp parallel loop collapse(2)
-      do J=js-2,Jeq+1 ; do i=is-2,ie+2
+      enddo
+      do concurrent (i=is-2:ie+2, J=js-2:Jeq+1)
         h_v(i,J) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k))
-      enddo ; enddo
+      enddo
     else
-      !$omp parallel loop collapse(2)
-      do j=js-2,je+2 ; do I=is-2,Ieq+1
+      do concurrent (I=is-2:Ieq+1, j=js-2:je+2)
         h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
-      enddo ; enddo
-      !$omp parallel loop collapse(2)
-      do J=js-2,Jeq+1 ; do i=is-2,ie+2
+      enddo
+      do concurrent (i=is-2:ie+2, J=js-2:Jeq+1)
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
-      enddo ; enddo
+      enddo
     endif
-    !$omp end target
 
     ! Adjust contributions to shearing strain and interpolated values of
     ! thicknesses on open boundaries.
