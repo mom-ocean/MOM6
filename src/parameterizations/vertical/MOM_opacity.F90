@@ -40,7 +40,19 @@ type, public :: optics_type
   real :: PenSW_flux_absorb !< A heat flux that is small enough to be completely absorbed in the next
                         !! sufficiently thick layer [C H T-1 ~> degC m s-1 or degC kg m-2 s-1].
   real :: PenSW_absorb_Invlen !< The inverse of the thickness that is used to absorb the remaining
-                        !! shortwave heat flux when it drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2].
+  !! shortwave heat flux when it drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2].
+
+  !! Lookup tables for Ohlmann solar penetration scheme
+  !! These would naturally exist as private module variables but that is prohibited in MOM6
+  real :: dlog10chl           !< Chl increment within lookup table  [log10 of Chl in mg m-3]
+  real :: chl_min             !< Lower bound of Chl in lookup table [mg m-3]
+  real :: log10chl_min        !< Lower bound of Chl in lookup table [log10 of Chl in mg m-3]
+  real :: log10chl_max        !< Upper bound of Chl in lookup table [log10 of Chl in mg m-3]
+  real, allocatable, dimension(:) :: a1_lut,&       !< Coefficient for band 1 [nondim]
+       &                             a2_lut,&       !< Coefficient for band 2 [nondim]
+       &                             b1_lut,&       !< Exponential decay scale for band 1 [Z-1 ~> m-1]
+       &                             b2_lut         !< Exponential decay scale for band 2 [Z-1 ~> m-1]
+
   integer :: answer_date  !< The vintage of the order of arithmetic and expressions in the optics
                           !! calculations.  Values below 20190101 recover the answers from the
                           !! end of 2018, while higher values use updated and more robust
@@ -77,11 +89,13 @@ type, public :: opacity_CS ; private
 end type opacity_CS
 
 !>@{ Coded integers to specify the opacity scheme
-integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, SINGLE_EXP = 3, DOUBLE_EXP = 4
+integer, parameter :: NO_SCHEME = 0, MANIZZA_05 = 1, MOREL_88 = 2, SINGLE_EXP = 3, DOUBLE_EXP = 4,&
+     &                OHLMANN_03 = 5
 !>@}
 
 character*(10), parameter :: MANIZZA_05_STRING = "MANIZZA_05" !< String to specify the opacity scheme
 character*(10), parameter :: MOREL_88_STRING   = "MOREL_88"   !< String to specify the opacity scheme
+character*(10), parameter :: OHLMANN_03_STRING = "OHLMANN_03" !< String to specify the opacity scheme
 character*(10), parameter :: SINGLE_EXP_STRING = "SINGLE_EXP" !< String to specify the opacity scheme
 character*(10), parameter :: DOUBLE_EXP_STRING = "DOUBLE_EXP" !< String to specify the opacity scheme
 
@@ -254,6 +268,16 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
 ! use the "blue" band in the parameterizations to determine the e-folding
 ! depth of the incoming shortwave attenuation. The red portion is lumped
 ! into the net heating at the surface.
+! Adding Ohlmann scheme. Needs sw_total and chl as inputs. Produces 2 penetrating bands.
+! This implementation follows that in CESM-POP using a lookup table in log10(chl) space.
+! The table is initialized in subroutine init_ohlmann and the coefficients are recovered
+! with routines lookup_ohlmann_swpen and lookup_ohlmann_opacity.
+! Note that this form treats the IR solar input implicitly: the sum of partitioning
+! coefficients < 1.0. The remainder is non-penetrating and is deposited in first layer
+! irrespective of thickness. The Ohlmann (2003) paper states that the scheme is not valid
+! for vertcal grids with first layer thickness < 2.0 meters.
+!
+! Ohlmann, J.C. Ocean radiant heating in climate models. J. Climate, 16, 1337-1351, 2003.
 !
 ! Morel, A., Optical modeling of the upper ocean in relation to its biogenous
 !   matter content (case-i waters)., J. Geo. Res., {93}, 10,749--10,768, 1988.
@@ -353,13 +377,43 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
         do n=1,nbands
           optics%sw_pen_band(n,i,j) = Inv_nbands*sw_pen_tot
         enddo
-      enddo ; enddo
+     enddo; enddo
+    case (OHLMANN_03)
+      ! want exactly two penetrating bands. If not, throw an error.
+      if ( nbands /= 2 ) then
+        call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme requires nbands==2.")
+      endif
+      !$OMP parallel do default(shared) private(SW_vis_tot)
+      do j=js,je ; do i=is,ie
+        SW_vis_tot = 0.0  ! Ohlmann does not classify as vis/nir. Using vis to add up total
+        if (G%mask2dT(i,j) < 0.5) then
+          optics%sw_pen_band(1:2,i,j) = 0.  ! Make sure there is a valid value for land points
+        else
+          if (multiband_vis_input ) then ! If multiband_vis_input is true then so is multiband_nir_input
+            SW_vis_tot = ((sw_vis_dir(i,j) + sw_vis_dif(i,j)) + sw_nir_dir(i,j)) + sw_nir_dif(i,j)
+          elseif (total_sw_input) then
+            SW_vis_tot = sw_total(i,j)
+          else
+            call MOM_error(FATAL, "No shortwave input was provided.")
+          endif
+
+          ! Bands 1-2 (Ohlmann factors A with coefficients for Table 1a)
+          optics%sw_pen_band(1:2,i,j)  = lookup_ohlmann_swpen(chl_data(i,j),optics)*SW_vis_tot
+        endif
+      enddo; enddo
     case default
       call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
   end select
 
   !$OMP parallel do default(shared) firstprivate(chl_data)
   do k=1,nz
+    !! FOB
+    !!! I don't think this is what we want to do with Ohlmann.
+    !!! The surface CHL is used in developing the parameterization.
+    !!! Only the surface CHL is used above in setting optics%sw_pen_band for all schemes.
+    !!! Seems inconsistent to use depth dependent CHL in opacity calculation.
+    !!! Nevertheless, leaving as is for now.
+    !! FOB
     if (present(chl_3d)) then
       do j=js,je ; do i=is,ie ; chl_data(i,j) = chl_3d(i,j,k) ; enddo ; enddo
     endif
@@ -389,13 +443,21 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
           do n=2,optics%nbands
             optics%opacity_band(n,i,j,k) = optics%opacity_band(1,i,j,k)
           enddo
-        enddo ; enddo
-
+        enddo; enddo
+      case (OHLMANN_03)
+        !! not testing for 2 bands since we did it above
+        do j=js,je ; do i=is,ie
+          if (G%mask2dT(i,j) <= 0.5) then
+            optics%opacity_band(1:2,i,j,k) = CS%opacity_land_value
+          else
+            ! Bands 1-2 (Ohlmann factors B with coefficients for Table 1a
+            optics%opacity_band(1:2,i,j,k) = lookup_ohlmann_opacity(chl_data(i,j),optics) * US%Z_to_m
+          endif
+        enddo; enddo
       case default
         call MOM_error(FATAL, "opacity_from_chl: CS%opacity_scheme is not valid.")
     end select
   enddo
-
 
 end subroutine opacity_from_chl
 
@@ -998,7 +1060,8 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  "concentrations are translated into opacities. Currently "//&
                  "valid options include:\n"//&
                  " \t\t  MANIZZA_05 - Use Manizza et al., GRL, 2005. \n"//&
-                 " \t\t  MOREL_88 - Use Morel, JGR, 1988.", &
+                 " \t\t  MOREL_88 - Use Morel, JGR, 1988. \n"//&
+                 " \t\t  OHLMANN_03 - Use Ohlmann, J Clim, 2003. (only use if dz(1)>2.0m)", &
                  default=MANIZZA_05_STRING)
     if (len_trim(tmpstr) > 0) then
       tmpstr = uppercase(tmpstr)
@@ -1007,6 +1070,8 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
           CS%opacity_scheme = MANIZZA_05 ; scheme_string = MANIZZA_05_STRING
         case (MOREL_88_STRING)
           CS%opacity_scheme = MOREL_88 ; scheme_string = MOREL_88_STRING
+        case (OHLMANN_03_STRING)
+          CS%opacity_scheme = OHLMANN_03 ; scheme_string = OHLMANN_03_STRING
         case default
           call MOM_error(FATAL, "opacity_init: #DEFINE OPACITY_SCHEME "//&
                                   trim(tmpstr) // "in input file is invalid.")
@@ -1072,6 +1137,9 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   elseif (CS%Opacity_scheme == SINGLE_EXP ) then
     if (optics%nbands /= 1) call MOM_error(FATAL, &
         "set_opacity: \Cannot use a single_exp opacity scheme with nbands!=1.")
+  elseif (CS%Opacity_scheme == OHLMANN_03 ) then
+    if (optics%nbands /= 2) call MOM_error(FATAL, &
+         "set_opacity: \OHLMANN_03 scheme requires nbands==2")
   endif
 
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
@@ -1143,8 +1211,182 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
       longname, 'm-1', conversion=US%m_to_Z)
   enddo
 
+  if (CS%opacity_scheme == OHLMANN_03) then
+     ! Set up the lookup table
+     call init_ohlmann_table(optics)
+  endif
+
 end subroutine opacity_init
 
+!> Initialize the lookup table for Ohlmann solar penetration scheme.
+!! Step size in Chl is a constant in log-space to make lookups easy.
+!! Step size is fine enough that nearest neighbor lookup is sufficiently
+!! accurate.
+subroutine init_ohlmann_table(optics)
+
+  implicit none
+
+  type(optics_type), intent(inout) :: optics
+
+  ! Local variables
+
+  !! These are the data from Ohlmann (2003) Table 1a with additional
+  !! values provided by C. Ohlmann and implemented in CESM-POP by B. Briegleb
+  integer, parameter :: nval_tab1a = 31
+  real, parameter, dimension(nval_tab1a) :: &
+       chl_tab1a = (/                       &
+       .001, .005, .01,  .02,               &
+       .03,  .05,  .10,  .15,               &
+       .20,  .25,  .30,  .35,               &
+       .40,  .45,  .50,  .60,               &
+       .70,  .80,  .90, 1.00,               &
+       1.50, 2.00, 2.50, 3.00,              &
+       4.00, 5.00, 6.00, 7.00,              &
+       8.00, 9.00, 10.00  /)
+
+  real, parameter, dimension(nval_tab1a) :: &
+       a1_tab1a = (/                        &
+       0.4421, 0.4451, 0.4488, 0.4563,      &
+       0.4622, 0.4715, 0.4877, 0.4993,      &
+       0.5084, 0.5159, 0.5223, 0.5278,      &
+       0.5326, 0.5369, 0.5408, 0.5474,      &
+       0.5529, 0.5576, 0.5615, 0.5649,      &
+       0.5757, 0.5802, 0.5808, 0.5788,      &
+       0.56965, 0.55638, 0.54091, 0.52442,  &
+       0.50766, 0.49110, 0.47505  /)
+
+  real, parameter, dimension(nval_tab1a) :: &
+       a2_tab1a = (/                        &
+       0.2981, 0.2963, 0.2940, 0.2894,      &
+       0.2858, 0.2800, 0.2703, 0.2628,      &
+       0.2571, 0.2523, 0.2481, 0.2444,      &
+       0.2411, 0.2382, 0.2356, 0.2309,      &
+       0.2269, 0.2235, 0.2206, 0.2181,      &
+       0.2106, 0.2089, 0.2113, 0.2167,      &
+       0.23357, 0.25504, 0.27829, 0.30274,  &
+       0.32698, 0.35056, 0.37303 /)
+
+  real, parameter, dimension(nval_tab1a) :: &
+       b1_tab1a = (/                        &
+       0.0287, 0.0301, 0.0319, 0.0355,      &
+       0.0384, 0.0434, 0.0532, 0.0612,      &
+       0.0681, 0.0743, 0.0800, 0.0853,      &
+       0.0902, 0.0949, 0.0993, 0.1077,      &
+       0.1154, 0.1227, 0.1294, 0.1359,      &
+       0.1640, 0.1876, 0.2082, 0.2264,      &
+       0.25808, 0.28498, 0.30844, 0.32932,  &
+       0.34817, 0.36540, 0.38132 /)
+
+  real, parameter, dimension(nval_tab1a) :: &
+       b2_tab1a = (/                        &
+       0.3192, 0.3243, 0.3306, 0.3433,      &
+       0.3537, 0.3705, 0.4031, 0.4262,      &
+       0.4456, 0.4621, 0.4763, 0.4889,      &
+       0.4999, 0.5100, 0.5191, 0.5347,      &
+       0.5477, 0.5588, 0.5682, 0.5764,      &
+       0.6042, 0.6206, 0.6324, 0.6425,      &
+       0.66172, 0.68144, 0.70086, 0.72144,  &
+       0.74178, 0.76190, 0.78155 /)
+
+  !! Make the table big enough so step size is smaller
+  !! in log-space that any increment in Table 1a
+  integer, parameter :: nval_lut=401
+  real :: chl, log10chl_lut, w1, w2
+  integer :: n,m,mm1,err
+
+  allocate(optics%a1_lut(nval_lut),optics%b1_lut(nval_lut),&
+       &   optics%a2_lut(nval_lut),optics%b2_lut(nval_lut),&
+       &   stat=err)
+  if ( err /= 0 ) then
+     call MOM_error(FATAL,"init_ohlmann: Cannot allocate lookup table")
+  endif
+
+  optics%chl_min = chl_tab1a(1)
+  optics%log10chl_min = log10(chl_tab1a(1))
+  optics%log10chl_max = log10(chl_tab1a(nval_tab1a))
+  optics%dlog10chl = (optics%log10chl_max - optics%log10chl_min)/(nval_lut-1)
+
+  ! step through the lookup table
+  m = 2
+  do n=1,nval_lut
+     log10chl_lut = optics%log10chl_min + (n-1)*optics%dlog10chl
+     chl = 10.0**log10chl_lut
+     chl = max(chl_tab1a(1),min(chl,chl_tab1a(nval_tab1a)))
+
+     ! find interval in Table 1a (m-1,m]
+     do while (chl > chl_tab1a(m))
+        m = m + 1
+     enddo
+     mm1 = m-1
+
+     ! interpolation weights
+     w2 = (chl - chl_tab1a(mm1))/(chl_tab1a(m) - chl_tab1a(mm1))
+     w1 = 1. - w2
+
+     ! fill in the tables
+     optics%a1_lut(n) = w1*a1_tab1a(mm1) + w2*a1_tab1a(m)
+     optics%a2_lut(n) = w1*a2_tab1a(mm1) + w2*a2_tab1a(m)
+     optics%b1_lut(n) = w1*b1_tab1a(mm1) + w2*b1_tab1a(m)
+     optics%b2_lut(n) = w1*b2_tab1a(mm1) + w2*b2_tab1a(m)
+  enddo
+
+  return
+end subroutine init_ohlmann_table
+
+!> Get the partion of total solar into bands from Ohlmann lookup table
+function lookup_ohlmann_swpen(chl,optics) result(A)
+
+  implicit none
+
+  real, intent(in) :: chl
+  type(optics_type), intent(in) :: optics
+  real, dimension(2) :: A
+
+  ! Local variables
+
+  real :: log10chl
+  integer :: n
+
+  ! Make sure we are in the table
+  if (chl > optics%chl_min) then
+    log10chl = min(log10(chl),optics%log10chl_max)
+  else
+    log10chl = optics%log10chl_min
+  endif
+  ! Do a nearest neighbor lookup
+  n = nint( (log10chl - optics%log10chl_min)/optics%dlog10chl ) + 1
+
+  A(1) = optics%a1_lut(n)
+  A(2) = optics%a2_lut(n)
+
+end function lookup_ohlmann_swpen
+
+!> Get the opacity (decay scale) from Ohlmann lookup table
+function lookup_ohlmann_opacity(chl,optics) result(B)
+
+  implicit none
+  real, intent(in) :: chl
+  type(optics_type), intent(in) :: optics
+  real, dimension(2) :: B
+
+  ! Local variables
+  real :: log10chl
+  integer :: n
+
+  ! Make sure we are in the table
+  if (chl > optics%chl_min) then
+    log10chl = min(log10(chl),optics%log10chl_max)
+  else
+    log10chl = optics%log10chl_min
+  endif
+  ! Do a nearest neighbor lookup
+  n = nint( (log10chl - optics%log10chl_min)/optics%dlog10chl ) + 1
+
+  B(1) = optics%b1_lut(n)
+  B(2) = optics%b2_lut(n)
+
+  return
+end function lookup_ohlmann_opacity
 
 subroutine opacity_end(CS, optics)
   type(opacity_CS)  :: CS     !< Opacity control structure
@@ -1159,7 +1401,11 @@ subroutine opacity_end(CS, optics)
   if (allocated(optics%max_wavelength_band)) &
     deallocate(optics%max_wavelength_band)
   if (allocated(optics%min_wavelength_band)) &
-    deallocate(optics%min_wavelength_band)
+       deallocate(optics%min_wavelength_band)
+  if (allocated(optics%a1_lut)) deallocate(optics%a1_lut)
+  if (allocated(optics%a2_lut)) deallocate(optics%a2_lut)
+  if (allocated(optics%b1_lut)) deallocate(optics%b1_lut)
+  if (allocated(optics%b2_lut)) deallocate(optics%b2_lut)
 end subroutine opacity_end
 
 !> \namespace mom_opacity
@@ -1178,5 +1424,8 @@ end subroutine opacity_end
 !!  Bio-optical feedbacks among phytoplankton, upper ocean physics
 !!  and sea-ice in a global model, Geophys. Res. Let., 32, L05603,
 !!  doi:10.1029/2004GL020778.
+
+!! Ohlmann, J.C., 2003: Ocean radiant heating in climate models.
+!!   J. Climate, 16, 1337-1351, 2003.
 
 end module MOM_opacity

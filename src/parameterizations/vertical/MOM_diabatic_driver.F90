@@ -50,7 +50,7 @@ use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restar
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_CVMix_KPP,           only : KPP_CS, KPP_init, KPP_compute_BLD, KPP_calculate
-use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD
+use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD, register_KPP_restarts
 use MOM_CVMix_KPP,           only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
 use MOM_oda_incupd,          only : apply_oda_incupd, oda_incupd_CS
 use MOM_opacity,             only : opacity_init, opacity_end, opacity_CS
@@ -3037,14 +3037,6 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  if (associated(CS)) then
-    call MOM_error(WARNING, "diabatic_driver_init called with an "// &
-                            "associated control structure.")
-    return
-  else
-    allocate(CS)
-  endif
-
   CS%initialized = .true.
 
   CS%diag => diag
@@ -3588,15 +3580,24 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 end subroutine diabatic_driver_init
 
 !> Routine to register restarts, pass-through to children modules
-subroutine register_diabatic_restarts(G, GV, US, param_file, int_tide_CSp, restart_CSp)
+subroutine register_diabatic_restarts(G, GV, US, param_file, int_tide_CSp, restart_CSp, CS)
   type(ocean_grid_type), intent(in)    :: G           !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure
   type(unit_scale_type), intent(in)    :: US          !< A dimensional unit scaling type
   type(param_file_type), intent(in)    :: param_file  !< A structure to parse for run-time parameters
   type(int_tide_CS),     pointer       :: int_tide_CSp !< Internal tide control structure
   type(MOM_restart_CS),  pointer       :: restart_CSp  !< MOM restart control structure
+  type(diabatic_CS),     pointer       :: CS           !< module control structure
 
   logical :: use_int_tides
+
+  if (associated(CS)) then
+    call MOM_error(WARNING, "diabatic_driver_init called with an "// &
+                            "associated control structure.")
+    return
+  else
+    allocate(CS)
+  endif
 
   use_int_tides=.false.
 
@@ -3605,6 +3606,8 @@ subroutine register_diabatic_restarts(G, GV, US, param_file, int_tide_CSp, resta
   if (use_int_tides) then
     call register_int_tide_restarts(G, GV, US, param_file, int_tide_CSp, restart_CSp)
   endif
+
+  call register_KPP_restarts(G, param_file, restart_CSp, CS%KPP_CSp)
 
 end subroutine register_diabatic_restarts
 

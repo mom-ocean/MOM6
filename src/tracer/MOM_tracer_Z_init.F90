@@ -16,7 +16,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public tracer_Z_init, tracer_Z_init_array, determine_temperature
+public tracer_Z_init, read_Z_edges, tracer_Z_init_array, determine_temperature
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with

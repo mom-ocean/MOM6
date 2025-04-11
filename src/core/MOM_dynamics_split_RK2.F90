@@ -12,6 +12,7 @@ use MOM_checksum_packages, only : MOM_thermo_chksum, MOM_state_chksum, MOM_accel
 use MOM_cpu_clock,         only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,         only : CLOCK_COMPONENT, CLOCK_SUBCOMPONENT
 use MOM_cpu_clock,         only : CLOCK_MODULE_DRIVER, CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_diabatic_driver,   only : diabatic_CS, extract_diabatic_member
 use MOM_diag_mediator,     only : diag_mediator_init, enable_averages
 use MOM_diag_mediator,     only : disable_averaging, post_data, safe_alloc_ptr
 use MOM_diag_mediator,     only : post_product_u, post_product_sum_u
@@ -45,11 +46,13 @@ use MOM_continuity,            only : continuity, continuity_CS
 use MOM_continuity,            only : continuity_init, continuity_stencil
 use MOM_CoriolisAdv,           only : CorAdCalc, CoriolisAdv_CS
 use MOM_CoriolisAdv,           only : CoriolisAdv_init, CoriolisAdv_end
+use MOM_CVMix_KPP,             only : KPP_get_BLD, KPP_CS
 use MOM_debugging,             only : check_redundant
+use MOM_energetic_PBL,         only : energetic_PBL_get_MLD, energetic_PBL_CS
 use MOM_grid,                  only : ocean_grid_type
 use MOM_harmonic_analysis,     only : harmonic_analysis_CS
 use MOM_hor_index,             only : hor_index_type
-use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_CS
+use MOM_hor_visc,              only : horizontal_viscosity, hor_visc_CS, hor_visc_vel_stencil
 use MOM_hor_visc,              only : hor_visc_init, hor_visc_end
 use MOM_interface_heights,     only : thickness_to_dz, find_col_avg_SpV
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
@@ -60,6 +63,7 @@ use MOM_open_boundary,         only : open_boundary_test_extern_h, update_OBC_ra
 use MOM_PressureForce,         only : PressureForce, PressureForce_CS
 use MOM_PressureForce,         only : PressureForce_init
 use MOM_set_visc,              only : set_viscous_ML, set_visc_CS
+use MOM_stochastics,           only : stochastic_CS
 use MOM_thickness_diffuse,     only : thickness_diffuse_CS
 use MOM_self_attr_load,        only : SAL_CS
 use MOM_self_attr_load,        only : SAL_init, SAL_end
@@ -137,14 +141,16 @@ type, public :: MOM_dyn_split_RK2_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_,NKMEM_)      :: pbce   !< pbce times eta gives the baroclinic pressure
                                                                   !! anomaly in each layer due to free surface height
                                                                   !! anomalies [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
+  type(KPP_CS),           pointer :: KPP_CSp => NULL() !< KPP control structure needed to ge
+  type(energetic_PBL_CS), pointer :: energetic_PBL_CSp => NULL()  !< ePBL control structure
 
-  real, pointer, dimension(:,:) :: taux_bot => NULL() !< frictional x-bottom stress from the ocean
-                                                      !! to the seafloor [R L Z T-2 ~> Pa]
-  real, pointer, dimension(:,:) :: tauy_bot => NULL() !< frictional y-bottom stress from the ocean
-                                                      !! to the seafloor [R L Z T-2 ~> Pa]
-  type(BT_cont_type), pointer   :: BT_cont  => NULL() !<  A structure with elements that describe the
-                                                      !! effective summed open face areas as a function
-                                                      !! of barotropic flow.
+  real, pointer, dimension(:,:) :: taux_bot => NULL()  !< frictional x-bottom stress from the ocean
+                                                       !! to the seafloor [R L Z T-2 ~> Pa]
+  real, pointer, dimension(:,:) :: tauy_bot => NULL()  !< frictional y-bottom stress from the ocean
+                                                       !! to the seafloor [R L Z T-2 ~> Pa]
+  type(BT_cont_type), pointer   :: BT_cont  => NULL()  !<  A structure with elements that describe the
+                                                       !! effective summed open face areas as a function
+                                                       !! of barotropic flow.
 
   ! This is to allow the previous, velocity-based coupling with between the
   ! baroclinic and barotropic modes.
@@ -174,15 +180,15 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                      !! the extent to which the treatment of gravity waves
                      !! is forward-backward (0) or simulated backward
                      !! Euler (1) [nondim].  0 is often used.
-  logical :: debug   !< If true, write verbose checksums for debugging purposes.
+  real    :: Cemp_NL   !< Empirical coefficient of non-local momentum mixing [nondim]
+  logical :: debug     !< If true, write verbose checksums for debugging purposes.
   logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
-  logical :: fpmix = .false.                 !< If true, applies profiles of momentum flux magnitude and direction.
+  logical :: fpmix     !< If true, add non-local momentum flux increments and diffuse down the Eulerian gradient.
   logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
   logical :: visc_rem_dt_bug = .true. !< If true, recover a bug that uses dt_pred rather than dt for vertvisc_rem
                                       !! at the end of predictor.
 
   !>@{ Diagnostic IDs
-  integer :: id_uold   = -1, id_vold   = -1
   integer :: id_uh     = -1, id_vh     = -1
   integer :: id_umo    = -1, id_vmo    = -1
   integer :: id_umo_2d = -1, id_vmo_2d = -1
@@ -271,6 +277,7 @@ public step_MOM_dyn_split_RK2
 public register_restarts_dyn_split_RK2
 public initialize_dyn_split_RK2
 public remap_dyn_split_RK2_aux_vars
+public init_dyn_split_RK2_diabatic
 public end_dyn_split_RK2
 
 !>@{ CPU time clock IDs
@@ -286,7 +293,7 @@ contains
 !> RK2 splitting for time stepping MOM adiabatic dynamics
 subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, forces, &
                                   p_surf_begin, p_surf_end, uh, vh, uhtr, vhtr, eta_av, G, GV, US, CS, &
-                                  calc_dtbt, VarMix, MEKE, thickness_diffuse_CSp, pbv, Waves)
+                                  calc_dtbt, VarMix, MEKE, thickness_diffuse_CSp, pbv, STOCH, Waves)
   type(ocean_grid_type),             intent(inout) :: G            !< Ocean grid structure
   type(verticalGrid_type),           intent(in)    :: GV           !< Ocean vertical grid structure
   type(unit_scale_type),             intent(in)    :: US           !< A dimensional unit scaling type
@@ -326,6 +333,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   type(thickness_diffuse_CS),        intent(inout) :: thickness_diffuse_CSp !< Pointer to a structure containing
                                                                    !! interface height diffusivities
   type(porous_barrier_type),         intent(in)    :: pbv          !< porous barrier fractional cell metrics
+  type(stochastic_CS),     optional, intent(inout) :: STOCH        !< Stochastic control structure
   type(wave_parameters_CS), optional, pointer      :: Waves        !< A pointer to a structure containing
                                                                    !! fields related to the surface wave conditions
 
@@ -398,9 +406,10 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   logical :: Use_Stokes_PGF ! If true, add Stokes PGF to hydrostatic PGF
   !---For group halo pass
   logical :: showCallTree, sym
-
+  logical :: lFPpost        ! Used to only post diagnostics in vertFPmix when fpmix=true and
+                            ! in the  corrector step (not the predict)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: cont_stencil, obc_stencil
+  integer :: cont_stencil, obc_stencil, vel_stencil
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -470,19 +479,20 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (associated(CS%OBC)) then
     if (CS%OBC%oblique_BCs_exist_globally) obc_stencil = 3
   endif
+  vel_stencil = max(2, obc_stencil, hor_visc_vel_stencil(CS%hor_visc))
   call cpu_clock_begin(id_clock_pass)
   call create_group_pass(CS%pass_eta, eta, G%Domain, halo=1)
   call create_group_pass(CS%pass_visc_rem, CS%visc_rem_u, CS%visc_rem_v, G%Domain, &
                          To_All+SCALAR_PAIR, CGRID_NE, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_uvp, up, vp, G%Domain, halo=max(1,cont_stencil))
   call create_group_pass(CS%pass_hp_uv, hp, G%Domain, halo=2)
-  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
-  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_hp_uv, u_av, v_av, G%Domain, halo=vel_stencil)
+  call create_group_pass(CS%pass_hp_uv, uh(:,:,:), vh(:,:,:), G%Domain, halo=vel_stencil)
 
   call create_group_pass(CS%pass_uv, u_inst, v_inst, G%Domain, halo=max(2,cont_stencil))
   call create_group_pass(CS%pass_h, h, G%Domain, halo=max(2,cont_stencil))
-  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=max(2,obc_stencil))
-  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=max(2,obc_stencil))
+  call create_group_pass(CS%pass_av_uvh, u_av, v_av, G%Domain, halo=vel_stencil)
+  call create_group_pass(CS%pass_av_uvh, uh(:,:,:), vh(:,:,:), G%Domain, halo=vel_stencil)
   call cpu_clock_end(id_clock_pass)
   !--- end set up for group halo pass
 
@@ -719,16 +729,22 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
   call vertvisc_coef(up, vp, h, dz, forces, visc, tv, dt_pred, G, GV, US, CS%vertvisc_CSp, &
                      CS%OBC, VarMix)
-  call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%AD_pred, CS%CDp, G, &
-                GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
 
   if (CS%fpmix) then
     hbl(:,:) = 0.0
-    if (associated(visc%h_ML)) hbl(:,:) = visc%h_ML(:,:)
-    call vertFPmix(up, vp, uold, vold, hbl, h, forces, &
-                   dt_pred, G, GV, US, CS%vertvisc_CSp, CS%OBC)
-    call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%ADp, CS%CDp, G, &
-                GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
+    if (ASSOCIATED(CS%KPP_CSp)) call KPP_get_BLD(CS%KPP_CSp, hbl, G, US, m_to_BLD_units=GV%m_to_H)
+    if (ASSOCIATED(CS%energetic_PBL_CSp)) &
+      call energetic_PBL_get_MLD(CS%energetic_PBL_CSp, hbl, G, US, m_to_MLD_units=GV%m_to_H)
+
+    ! lFPpost must be false in the predictor step to avoid averaging into the diagnostics
+    lFPpost = .false.
+    call vertFPmix(up, vp, uold, vold, hbl, h, forces, dt_pred, lFPpost, CS%Cemp_NL,  &
+                   G, GV, US, CS%vertvisc_CSp, CS%OBC, waves=waves)
+    call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%AD_pred, CS%CDp, G, &
+                  GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, fpmix=CS%fpmix, waves=waves)
+  else
+    call vertvisc(up, vp, h, forces, visc, dt_pred, CS%OBC, CS%AD_pred, CS%CDp, G, &
+                  GV, US, CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
   endif
 
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
@@ -862,7 +878,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, &
                             MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, &
                             OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
-                            ADp=CS%ADp, hu_cont=CS%BT_cont%h_u, hv_cont=CS%BT_cont%h_v)
+                            ADp=CS%ADp, hu_cont=CS%BT_cont%h_u, hv_cont=CS%BT_cont%h_v, STOCH=STOCH)
   call cpu_clock_end(id_clock_horvisc)
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
@@ -977,12 +993,15 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   call thickness_to_dz(h, tv, dz, G, GV, US, halo_size=1)
   call vertvisc_coef(u_inst, v_inst, h, dz, forces, visc, tv, dt, G, GV, US, CS%vertvisc_CSp, CS%OBC, VarMix)
-  call vertvisc(u_inst, v_inst, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, US, &
-                CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot,waves=waves)
 
   if (CS%fpmix) then
-    call vertFPmix(u_inst, v_inst, uold, vold, hbl, h, forces, dt, &
-                   G, GV, US, CS%vertvisc_CSp, CS%OBC)
+    lFPpost = .true.
+    call vertFPmix(u_inst, v_inst, uold, vold, hbl, h, forces, dt, lFPpost, CS%Cemp_NL, &
+                   G, GV, US, CS%vertvisc_CSp, CS%OBC, Waves=Waves)
+    call vertvisc(u_inst, v_inst, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, US, &
+         CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, fpmix=CS%fpmix, waves=waves)
+
+  else
     call vertvisc(u_inst, v_inst, h, forces, visc, dt, CS%OBC, CS%ADp, CS%CDp, G, GV, US, &
                   CS%vertvisc_CSp, CS%taux_bot, CS%tauy_bot, waves=waves)
   endif
@@ -1068,11 +1087,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
   else
     CS%CAu_pred_stored = .false.
-  endif
-
-  if (CS%fpmix) then
-    if (CS%id_uold > 0) call post_data(CS%id_uold, uold, CS%diag)
-    if (CS%id_vold > 0) call post_data(CS%id_vold, vold, CS%diag)
   endif
 
   ! The time-averaged free surface height has already been set by the last call to btstep.
@@ -1308,6 +1322,17 @@ subroutine remap_dyn_split_RK2_aux_vars(G, GV, CS, h_old_u, h_old_v, h_new_u, h_
 
 end subroutine remap_dyn_split_RK2_aux_vars
 
+!> Initializes aspects of the dyn_split_RK2 that depend on diabatic processes.
+!! Needed when BLDs are used in the dynamics.
+subroutine init_dyn_split_RK2_diabatic(diabatic_CSp, CS)
+  type(diabatic_CS),                intent(in) :: diabatic_CSp !< diabatic structure
+  type(MOM_dyn_split_RK2_CS),       pointer    :: CS           !< module control structure
+
+  call extract_diabatic_member(diabatic_CSp, KPP_CSp=CS%KPP_CSp)
+  call extract_diabatic_member(diabatic_CSp, energetic_PBL_CSp=CS%energetic_PBL_CSp)
+
+end subroutine init_dyn_split_RK2_diabatic
+
 !> This subroutine initializes all of the variables that are used by this
 !! dynamic core, including diagnostics and the cpu clocks.
 subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, param_file, &
@@ -1423,8 +1448,13 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
                  "timestep for use in the predictor step of the next split RK2 timestep.", &
                  default=.true.)
   call get_param(param_file, mdl, "FPMIX", CS%fpmix, &
-                 "If true, apply profiles of momentum flux magnitude and "//&
-                 " direction", default=.false.)
+                 "If true, add non-local momentum flux increments and diffuse down the Eulerian gradient.", &
+                 default=.false.)
+  if (CS%fpmix) then
+    call get_param(param_file, "MOM", "CEMP_NL", CS%Cemp_NL, &
+                 "Empirical coefficient of non-local momentum mixing.", &
+                 units="nondim", default=3.6)
+  endif
   call get_param(param_file, mdl, "REMAP_AUXILIARY_VARS", CS%remap_aux, &
                  "If true, apply ALE remapping to all of the auxiliary 3-dimensional "//&
                  "variables that are needed to reproduce across restarts, similarly to "//&
@@ -1516,7 +1546,8 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
                           CS%SAL_CSp, CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
-  call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, ntrunc, CS%vertvisc_CSp)
+  call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
+                     ntrunc, CS%vertvisc_CSp, CS%fpmix)
   CS%set_visc_CSp => set_visc
   call updateCFLtruncationValue(Time, CS%vertvisc_CSp, US, activate=is_new_run(restart_CS) )
 
