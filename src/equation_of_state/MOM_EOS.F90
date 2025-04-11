@@ -34,7 +34,7 @@ public EOS_domain
 public EOS_init
 public EOS_manual_init
 public EOS_quadrature
-public EOS_use_linear
+! public EOS_use_linear
 public EOS_fit_range
 public EOS_unit_tests
 public analytic_int_density_dz
@@ -1342,7 +1342,7 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   ! Local variables
   real :: dRdT_scale ! A factor to convert drho_dT to the desired units [R degC m3 C-1 kg-1 ~> 1]
   real :: dRdS_scale ! A factor to convert drho_dS to the desired units [R ppt m3 S-1 kg-1 ~> 1]
-
+  real :: dRdp_scale ! A factor to convert drho_dp to the desired units [T-2 L2 s2 m-2 ~> 1]
 
   ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
   ! integration be used instead of analytic. This is a safety check.
@@ -1352,10 +1352,11 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
     case (EOS_LINEAR)
       dRdT_scale = EOS%kg_m3_to_R * EOS%C_to_degC
       dRdS_scale = EOS%kg_m3_to_R * EOS%S_to_ppt
+      dRdp_scale = EOS%kg_m3_to_R * EOS%RL2_T2_to_Pa
       call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%kg_m3_to_R*EOS%Rho_T0_S0, &
-                                dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, dza, &
-                                intp_dza, intx_dza, inty_dza, halo_size, &
-                                bathyP, P_surf, dP_tiny, MassWghtInterp)
+                          dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, dRdp_scale*EOS%dRho_dp, &
+                          dza, intp_dza, intx_dza, inty_dza, halo_size, &
+                          bathyP, P_surf, dP_tiny, MassWghtInterp)
     case (EOS_WRIGHT)
       call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
                                   inty_dza, halo_size, bathyP, P_surf, dP_tiny, MassWghtInterp, &
@@ -1430,6 +1431,7 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                      ! desired units [R m3 kg-1 ~> 1]
   real :: dRdT_scale ! A factor to convert drho_dT to the desired units [R degC m3 C-1 kg-1 ~> 1]
   real :: dRdS_scale ! A factor to convert drho_dS to the desired units [R ppt m3 S-1 kg-1 ~> 1]
+  real :: dRdp_scale ! A factor to convert drho_dp to the desired units [T-2 L2 s2 m-2 ~> 1]
   real :: pres_scale ! A multiplicative factor to convert pressure into Pa [Pa T2 R-1 L-2 ~> 1]
 
   ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
@@ -1441,14 +1443,15 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
       rho_scale = EOS%kg_m3_to_R
       dRdT_scale = EOS%kg_m3_to_R * EOS%C_to_degC
       dRdS_scale = EOS%kg_m3_to_R * EOS%S_to_ppt
-      if ((rho_scale /= 1.0) .or. (dRdT_scale /= 1.0) .or. (dRdS_scale /= 1.0)) then
-        call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                         rho_scale*EOS%Rho_T0_S0, dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, &
-                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp)
+      dRdp_scale = EOS%kg_m3_to_R * EOS%RL2_T2_to_Pa
+      if ((rho_scale /= 1.0) .or. (dRdT_scale /= 1.0) .or. (dRdS_scale /= 1.0) .or. (dRdp_scale /= 1.0)) then
+        call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, rho_scale*EOS%Rho_T0_S0, &
+                         dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, dRdp_scale*EOS%dRho_dp, &
+                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p=Z_0p)
       else
         call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                         EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, &
-                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp)
+                         EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, EOS%dRho_dp, &
+                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p=Z_0p)
       endif
     case (EOS_WRIGHT)
       rho_scale = EOS%kg_m3_to_R
@@ -1796,26 +1799,25 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
 
 end subroutine EOS_manual_init
 
-!> Set equation of state structure (EOS) to linear with given coefficients
-!!
-!! \note This routine is primarily for testing and allows a local copy of the
-!! EOS_type (EOS argument) to be set to use the linear equation of state
-!! independent from the rest of the model.
-subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
-  real,              intent(in) :: Rho_T0_S0 !< Density at T=0 degC and S=0 ppt [kg m-3]
-  real,              intent(in) :: dRho_dT   !< Partial derivative of density with temperature [kg m-3 degC-1]
-  real,              intent(in) :: dRho_dS   !< Partial derivative of density with salinity [kg m-3 ppt-1]
-  logical, optional, intent(in) :: use_quadrature !< If true, always use the generic (quadrature)
-                                             !! code for the integrals of density.
-  type(EOS_type),    intent(inout) :: EOS    !< Equation of state structure
+! !> Set equation of state structure (EOS) to linear with given coefficients
+! !!
+! !! \note This routine is primarily for testing and allows a local copy of the
+! !! EOS_type (EOS argument) to be set to use the linear equation of state
+! !! independent from the rest of the model.
+! subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
+!   real,              intent(in) :: Rho_T0_S0 !< Density at T=0 degC and S=0 ppt [kg m-3]
+!   real,              intent(in) :: dRho_dT   !< Partial derivative of density with temperature [kg m-3 degC-1]
+!   real,              intent(in) :: dRho_dS   !< Partial derivative of density with salinity [kg m-3 ppt-1]
+!   logical, optional, intent(in) :: use_quadrature !< If true, always use the generic (quadrature)
+!                                              !! code for the integrals of density.
+!   type(EOS_type),    intent(inout) :: EOS    !< Equation of state structure
 
-  call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=Rho_T0_S0, dRho_dT=dRho_dT, dRho_dS=dRho_dS)
-  EOS%Compressible = .false.
-  EOS%EOS_quadrature = .false.
-  if (present(use_quadrature)) EOS%EOS_quadrature = use_quadrature
+!   call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=Rho_T0_S0, dRho_dT=dRho_dT, dRho_dS=dRho_dS)
+!   EOS%Compressible = .false.
+!   EOS%EOS_quadrature = .false.
+!   if (present(use_quadrature)) EOS%EOS_quadrature = use_quadrature
 
-end subroutine EOS_use_linear
-
+! end subroutine EOS_use_linear
 
 !> Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
 subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
@@ -2124,9 +2126,9 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "ROQUET_SPV EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
-  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8, dRho_dp=0.0)
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8, dRho_dp=5.0e-7)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "LINEAR", &
-                              rho_check=1023.0*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
+                              rho_check=1028.0*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
   if (verbose .and. fail) call MOM_error(WARNING, "LINEAR EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
