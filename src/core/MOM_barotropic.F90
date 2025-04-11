@@ -95,8 +95,8 @@ type, private :: BT_OBC_type
   !>@{ Index ranges on the local PE for the open boundary conditions in various directions
   integer :: Is_u_W_obc, Ie_u_W_obc, js_u_W_obc, je_u_W_obc
   integer :: Is_u_E_obc, Ie_u_E_obc, js_u_E_obc, je_u_E_obc
-  integer :: is_v_S_obc, ie_v_S_obc, js_v_S_obc, Je_v_S_obc
-  integer :: is_v_N_obc, ie_v_N_obc, js_v_N_obc, Je_v_N_obc
+  integer :: is_v_S_obc, ie_v_S_obc, Js_v_S_obc, Je_v_S_obc
+  integer :: is_v_N_obc, ie_v_N_obc, Js_v_N_obc, Je_v_N_obc
   !>@}
   logical :: is_alloced = .false. !< True if BT_OBC is in use and has been allocated
 
@@ -1811,7 +1811,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo ; enddo
   endif
   if (apply_OBCs) then
-    !!! Not safe for wide halos...
+    ! This block of code may be unnecessary because e_anom is only used for accelerations that
+    ! are then recalculated at OBC points.
     if (CS%BT_OBC%u_OBCs_on_PE) then  ! copy back the value for u-points on the boundary.
       !GOMP parallel do default(shared)
       do j=js,je ; do I=is-1,ie
@@ -3635,8 +3636,6 @@ subroutine apply_u_velocity_OBCs(ubt, uhbt, ubt_trans, eta, SpV_avg, ubt_old, BT
 
   ! Local variables
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
-  real :: vel_trans   ! The combination of the previous and current velocity
-                      ! that does the mass transport [L T-1 ~> m s-1].
   real :: cfl         ! The CFL number at the point in question [nondim]
   real :: u_inlet     ! The zonal inflow velocity [L T-1 ~> m s-1]
   real :: uhbt_int_new ! The updated time-integrated zonal transport [H L2 ~> m3]
@@ -3644,87 +3643,115 @@ subroutine apply_u_velocity_OBCs(ubt, uhbt, ubt_trans, eta, SpV_avg, ubt_old, BT
   real :: ssh_1       ! The sea surface height in the interior cell adjacent to the an OBC face [Z ~> m]
   real :: ssh_2       ! The sea surface height in the next cell inward from the OBC face [Z ~> m]
   real :: Idtbt       ! The inverse of the barotropic time step [T-1 ~> s-1]
-  integer :: i, j, is, ie, js, je
-  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  integer :: i, j, Is_u, Ie_u, js, je
 
   if (.not.BT_OBC%u_OBCs_on_PE) return
 
   Idtbt = 1.0 / dtbt
 
-  do j=js,je ; do I=is-1,ie ; if (BT_OBC%u_OBC_type(I,j) /= 0) then
-    if (abs(BT_OBC%u_OBC_type(I,j)) == SPECIFIED_OBC) then  ! Eastern or western specified OBC
+  ! Work on Eastern OBC points
+  Is_u = max((G%isc-1)-halo, BT_OBC%Is_u_E_obc) ; Ie_u = min(G%iec+halo, BT_OBC%Ie_u_E_obc)
+  js = max(G%jsc-halo, BT_OBC%js_u_E_obc) ; je = min(G%jec+halo, BT_OBC%je_u_E_obc)
+  do j=js,je ; do I=Is_u,Ie_u ; if (BT_OBC%u_OBC_type(I,j) > 0) then
+    if (BT_OBC%u_OBC_type(I,j) == SPECIFIED_OBC) then  ! Eastern specified OBC
       uhbt(I,j) = BT_OBC%uhbt(I,j)
       ubt(I,j) = BT_OBC%ubt_outer(I,j)
-      vel_trans = ubt(I,j)
-    elseif (BT_OBC%u_OBC_type(I,j) > 0) then ! OBC_DIRECTION_E
-      if (BT_OBC%u_OBC_type(I,j) == FLATHER_OBC) then  ! Eastern Flather OBC
-        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
-        u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
-        if (GV%Boussinesq) then
-          ssh_in = GV%H_to_Z*(eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j)))      ! internal
-        else
-          ssh_1 = GV%H_to_RZ * eta(i,j) * SpV_avg(i,j) - (CS%bathyT(i,j) + G%Z_ref)
-          ssh_2 = GV%H_to_RZ * eta(i-1,j) * SpV_avg(i-1,j) - (CS%bathyT(i-1,j) + G%Z_ref)
-          ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
-        endif
-        if (BT_OBC%dZ_u(I,j) > 0.0) then
-          vel_prev = ubt(I,j)
-          ubt(I,j) = 0.5*((u_inlet + BT_OBC%ubt_outer(I,j)) + &
-              (BT_OBC%Cg_u(I,j)/BT_OBC%dZ_u(I,j)) * (ssh_in-BT_OBC%SSH_outer_u(I,j)))
-          vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        else  ! This point is now dry.
-          ubt(I,j) = 0.0
-          vel_trans = 0.0
-        endif
-      elseif (BT_OBC%u_OBC_type(I,j) == GRADIENT_OBC) then  ! Eastern gradient OBC
-        ubt(I,j) = ubt(I-1,j)
-        vel_trans = ubt(I,j)
-      endif
-    elseif (BT_OBC%u_OBC_type(I,j) < 0) then  ! OBC_DIRECTION_W
-      if (BT_OBC%u_OBC_type(I,j) == -FLATHER_OBC) then  ! Western Flather OBC
-        cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
-        u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
-        if (GV%Boussinesq) then
-          ssh_in = GV%H_to_Z*(eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j)))  ! internal
-        else
-          ssh_1 = GV%H_to_RZ * eta(i+1,j) * SpV_avg(i+1,j) - (CS%bathyT(i+1,j) + G%Z_ref)
-          ssh_2 = GV%H_to_RZ * eta(i+2,j) * SpV_avg(i+2,j) - (CS%bathyT(i+2,j) + G%Z_ref)
-          ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
-        endif
-
-        if (BT_OBC%dZ_u(I,j) > 0.0) then
-          vel_prev = ubt(I,j)
-          ubt(I,j) = 0.5*((u_inlet + BT_OBC%ubt_outer(I,j)) + &
-              (BT_OBC%Cg_u(I,j)/BT_OBC%dZ_u(I,j)) * (BT_OBC%SSH_outer_u(I,j)-ssh_in))
-          vel_trans = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
-        else  ! This point is now dry.
-          ubt(I,j) = 0.0
-          vel_trans = 0.0
-        endif
-      elseif (BT_OBC%u_OBC_type(I,j) == -GRADIENT_OBC) then  ! Western gradient OBC
-        ubt(I,j) = ubt(I+1,j)
-        vel_trans = ubt(I,j)
-      endif
-    endif
-
-    if (abs(BT_OBC%u_OBC_type(I,j)) > SPECIFIED_OBC) then  ! Eastern or western specified OBC
+      ubt_trans(I,j) = ubt(I,j)
       if (integral_BT_cont) then
-        uhbt_int_new = find_uhbt(ubt_int_prev(I,j) + dtbt*vel_trans, BTCL_u(I,j)) + &
-                       dt_elapsed*uhbt0(I,j)
-        uhbt(I,j) = (uhbt_int_new - uhbt_int_prev(I,j)) * Idtbt
-      elseif (use_BT_cont) then
-        uhbt(I,j) = find_uhbt(vel_trans, BTCL_u(I,j)) + uhbt0(I,j)
+        uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
+        ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
+      endif
+    elseif (BT_OBC%u_OBC_type(I,j) == FLATHER_OBC) then  ! Eastern Flather OBC
+      cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
+      u_inlet = cfl*ubt_old(I-1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
+      if (GV%Boussinesq) then
+        ssh_in = GV%H_to_Z*(eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i-1,j)))      ! internal
       else
-        uhbt(I,j) = Datu(I,j)*vel_trans + uhbt0(I,j)
+        ssh_1 = GV%H_to_RZ * eta(i,j) * SpV_avg(i,j) - (CS%bathyT(i,j) + G%Z_ref)
+        ssh_2 = GV%H_to_RZ * eta(i-1,j) * SpV_avg(i-1,j) - (CS%bathyT(i-1,j) + G%Z_ref)
+        ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
+      endif
+      if (BT_OBC%dZ_u(I,j) > 0.0) then
+        vel_prev = ubt(I,j)
+        ubt(I,j) = 0.5*((u_inlet + BT_OBC%ubt_outer(I,j)) + &
+            (BT_OBC%Cg_u(I,j)/BT_OBC%dZ_u(I,j)) * (ssh_in-BT_OBC%SSH_outer_u(I,j)))
+        ubt_trans(I,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+      else  ! This point is now dry.
+        ubt(I,j) = 0.0
+        ubt_trans(I,j) = 0.0
+      endif
+    elseif (BT_OBC%u_OBC_type(I,j) == GRADIENT_OBC) then  ! Eastern gradient OBC
+      ubt(I,j) = ubt(I-1,j)
+      ubt_trans(I,j) = ubt(I,j)
+    endif
+
+    ! Reset transports and related time-inetegrated velocities with non-specified OBCs
+    if (BT_OBC%u_OBC_type(I,j) > SPECIFIED_OBC) then  ! Eastern Flather or gradient OBC
+      if (integral_BT_cont) then
+        ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
+        uhbt_int_new = find_uhbt(ubt_int(I,j), BTCL_u(I,j)) + dt_elapsed*uhbt0(I,j)
+        uhbt(I,j) = (uhbt_int_new - uhbt_int_prev(I,j)) * Idtbt
+        uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
+        ! The line above is equivalent to:  uhbt_int(I,j) = uhbt_int_new
+      elseif (use_BT_cont) then
+        uhbt(I,j) = find_uhbt(ubt_trans(I,j), BTCL_u(I,j)) + uhbt0(I,j)
+      else
+        uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
       endif
     endif
 
-    ubt_trans(I,j) = vel_trans
+  endif ; enddo ; enddo
 
-   ! Update the summed and integrated quantities from the saved previous values.
-    if (integral_BT_cont) then
-      uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
-      ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
+  ! Work on Western OBC points
+  Is_u = max((G%isc-1)-halo, BT_OBC%Is_u_W_obc) ; Ie_u = min(G%iec+halo, BT_OBC%Ie_u_W_obc)
+  js = max(G%jsc-halo, BT_OBC%js_u_W_obc) ; je = min(G%jec+halo, BT_OBC%je_u_W_obc)
+  do j=js,je ; do I=Is_u,Ie_u ; if (BT_OBC%u_OBC_type(I,j) < 0) then
+    if (BT_OBC%u_OBC_type(I,j) == -SPECIFIED_OBC) then  ! Western specified OBC
+      uhbt(I,j) = BT_OBC%uhbt(I,j)
+      ubt(I,j) = BT_OBC%ubt_outer(I,j)
+      ubt_trans(I,j) = ubt(I,j)
+      if (integral_BT_cont) then
+        uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
+        ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
+      endif
+    elseif (BT_OBC%u_OBC_type(I,j) == -FLATHER_OBC) then  ! Western Flather OBC
+      cfl = dtbt * BT_OBC%Cg_u(I,j) * G%IdxCu(I,j) ! CFL
+      u_inlet = cfl*ubt_old(I+1,j) + (1.0-cfl)*ubt_old(I,j)  ! Valid for cfl<1
+      if (GV%Boussinesq) then
+        ssh_in = GV%H_to_Z*(eta(i+1,j) + (0.5-cfl)*(eta(i+1,j)-eta(i+2,j)))  ! internal
+      else
+        ssh_1 = GV%H_to_RZ * eta(i+1,j) * SpV_avg(i+1,j) - (CS%bathyT(i+1,j) + G%Z_ref)
+        ssh_2 = GV%H_to_RZ * eta(i+2,j) * SpV_avg(i+2,j) - (CS%bathyT(i+2,j) + G%Z_ref)
+        ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
+      endif
+
+      if (BT_OBC%dZ_u(I,j) > 0.0) then
+        vel_prev = ubt(I,j)
+        ubt(I,j) = 0.5*((u_inlet + BT_OBC%ubt_outer(I,j)) + &
+            (BT_OBC%Cg_u(I,j)/BT_OBC%dZ_u(I,j)) * (BT_OBC%SSH_outer_u(I,j)-ssh_in))
+        ubt_trans(I,j) = (1.0-bebt)*vel_prev + bebt*ubt(I,j)
+      else  ! This point is now dry.
+        ubt(I,j) = 0.0
+        ubt_trans(I,j) = 0.0
+      endif
+    elseif (BT_OBC%u_OBC_type(I,j) == -GRADIENT_OBC) then  ! Western gradient OBC
+      ubt(I,j) = ubt(I+1,j)
+      ubt_trans(I,j) = ubt(I,j)
+    endif
+
+    ! Reset transports and related time-inetegrated velocities with non-specified OBCs
+    if (BT_OBC%u_OBC_type(I,j) < -SPECIFIED_OBC) then  ! Western Flather or gradient OBC
+      if (integral_BT_cont) then
+        ubt_int(I,j) = ubt_int_prev(I,j) + dtbt * ubt_trans(I,j)
+        uhbt_int_new = find_uhbt(ubt_int(I,j), BTCL_u(I,j)) + dt_elapsed*uhbt0(I,j)
+        uhbt(I,j) = (uhbt_int_new - uhbt_int_prev(I,j)) * Idtbt
+        uhbt_int(I,j) = uhbt_int_prev(I,j) + dtbt * uhbt(I,j)
+        ! The line above is equivalent to:  uhbt_int(I,j) = uhbt_int_new
+      elseif (use_BT_cont) then
+        uhbt(I,j) = find_uhbt(ubt_trans(I,j), BTCL_u(I,j)) + uhbt0(I,j)
+      else
+        uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
+      endif
     endif
 
   endif ; enddo ; enddo
@@ -3789,8 +3816,6 @@ subroutine apply_v_velocity_OBCs(vbt, vhbt, vbt_trans, eta, SpV_avg, vbt_old, BT
 
   ! Local variables
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
-  real :: vel_trans   ! The combination of the previous and current velocity
-                      ! that does the mass transport [L T-1 ~> m s-1].
   real :: cfl         ! The CFL number at the point in question [nondim]
   real :: v_inlet     ! The meridional inflow velocity [L T-1 ~> m s-1]
   real :: vhbt_int_new ! The updated time-integrated meridional transport [H L2 ~> m3]
@@ -3798,88 +3823,122 @@ subroutine apply_v_velocity_OBCs(vbt, vhbt, vbt_trans, eta, SpV_avg, vbt_old, BT
   real :: ssh_1       ! The sea surface height in the interior cell adjacent to the an OBC face [Z ~> m]
   real :: ssh_2       ! The sea surface height in the next cell inward from the OBC face [Z ~> m]
   real :: Idtbt       ! The inverse of the barotropic time step [T-1 ~> s-1]
-  integer :: i, j, is, ie, js, je
-  is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
+  integer :: i, j, is, ie, Js_v, Je_v
 
   if (.not.BT_OBC%v_OBCs_on_PE) return
 
   Idtbt = 1.0 / dtbt
 
-  do J=js-1,je ; do i=is,ie ; if (BT_OBC%v_OBC_type(i,J) /= 0) then
-    if (abs(BT_OBC%v_OBC_type(i,J)) == SPECIFIED_OBC) then  ! Northern or southern specified OBC
+  ! This routine uses separate blocks of code and loops for Northern and southern open boundary
+  ! condition points, despite this leading to some code duplication, because the OBCs almost always
+  ! occur at the edge of the domain, and in parallel appliations, most PEs will only have one or
+  ! the other.
+
+
+  ! Work on Northern OBC points
+  is = max(G%isc-halo, BT_OBC%is_v_N_obc) ; ie = min(G%iec+halo, BT_OBC%ie_v_N_obc)
+  Js_v = max((G%jsc-1)-halo, BT_OBC%Js_v_N_obc) ; Je_v = min(G%jec+halo, BT_OBC%Je_v_N_obc)
+  do J=Js_v,Je_v ; do i=is,ie ; if (BT_OBC%v_OBC_type(i,J) > 0) then
+    if (BT_OBC%v_OBC_type(i,J) == SPECIFIED_OBC) then  ! Northern specified OBC
       vhbt(i,J) = BT_OBC%vhbt(i,J)
       vbt(i,J) = BT_OBC%vbt_outer(i,J)
-      vel_trans = vbt(i,J)
-    elseif (BT_OBC%v_OBC_type(i,J) > 0) then ! OBC_DIRECTION_N
-      if (BT_OBC%v_OBC_type(i,J) == FLATHER_OBC) then  ! Northern Flather OBC
-        cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J) ! CFL
-        v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
-        if (GV%Boussinesq) then
-          ssh_in = GV%H_to_Z*(eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1)))      ! internal
-        else
-          ssh_1 = GV%H_to_RZ * eta(i,j) * SpV_avg(i,j) - (CS%bathyT(i,j) + G%Z_ref)
-          ssh_2 = GV%H_to_RZ * eta(i,j-1) * SpV_avg(i,j-1) - (CS%bathyT(i,j-1) + G%Z_ref)
-          ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
-        endif
-
-        if (BT_OBC%dZ_v(i,J) > 0.0) then
-          vel_prev = vbt(i,J)
-          vbt(i,J) = 0.5*((v_inlet + BT_OBC%vbt_outer(i,J)) + &
-              (BT_OBC%Cg_v(i,J)/BT_OBC%dZ_v(i,J)) * (ssh_in-BT_OBC%SSH_outer_v(i,J)))
-          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        else  ! This point is now dry
-          vbt(i,J) = 0.0
-          vel_trans = 0.0
-        endif
-      elseif (BT_OBC%v_OBC_type(i,J) == GRADIENT_OBC) then  ! Northern gradient OBC
-        vbt(i,J) = vbt(i,J-1)
-        vel_trans = vbt(i,J)
-      endif
-    elseif (BT_OBC%v_OBC_type(i,J) < 0) then ! OBC_DIRECTION_S
-      if (BT_OBC%v_OBC_type(i,J) == -FLATHER_OBC) then  ! Southern Flather OBC
-        cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J) ! CFL
-        v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
-        if (GV%Boussinesq) then
-          ssh_in = GV%H_to_Z*(eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2)))  ! internal
-        else
-          ssh_1 = GV%H_to_RZ * eta(i,j+1) * SpV_avg(i,j+1) - (CS%bathyT(i,j+1) + G%Z_ref)
-          ssh_2 = GV%H_to_RZ * eta(i,j+2) * SpV_avg(i,j+2) - (CS%bathyT(i,j+2) + G%Z_ref)
-          ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
-        endif
-
-        if (BT_OBC%dZ_v(i,J) > 0.0) then
-          vel_prev = vbt(i,J)
-          vbt(i,J) = 0.5*((v_inlet + BT_OBC%vbt_outer(i,J)) + &
-              (BT_OBC%Cg_v(i,J)/BT_OBC%dZ_v(i,J)) * (BT_OBC%SSH_outer_v(i,J)-ssh_in))
-          vel_trans = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
-        else  ! This point is now dry
-          vbt(i,J) = 0.0
-          vel_trans = 0.0
-        endif
-      elseif (BT_OBC%v_OBC_type(i,J) == -GRADIENT_OBC) then  ! Southern gradient OBC
-        vbt(i,J) = vbt(i,J+1)
-        vel_trans = vbt(i,J)
-      endif
-    endif
-
-    if (abs(BT_OBC%v_OBC_type(i,J)) > SPECIFIED_OBC) then  ! Northern or southern specified OBC
+      vbt_trans(i,J) = vbt(i,J)
       if (integral_BT_cont) then
-        vhbt_int_new = find_vhbt(vbt_int_prev(i,J) + dtbt*vel_trans, BTCL_v(i,J)) + &
-                       dt_elapsed*vhbt0(i,J)
-        vhbt(i,J) = (vhbt_int_new - vhbt_int_prev(i,J)) * Idtbt
-      elseif (use_BT_cont) then
-        vhbt(i,J) = find_vhbt(vel_trans, BTCL_v(i,J)) + vhbt0(i,J)
+        vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt(i,J)
+        vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
+      endif
+    elseif (BT_OBC%v_OBC_type(i,J) == FLATHER_OBC) then  ! Northern Flather OBC
+      cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J) ! CFL
+      v_inlet = cfl*vbt_old(i,J-1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl<1
+      if (GV%Boussinesq) then
+        ssh_in = GV%H_to_Z*(eta(i,j) + (0.5-cfl)*(eta(i,j)-eta(i,j-1)))      ! internal
       else
-        vhbt(i,J) = vel_trans*Datv(i,J) + vhbt0(i,J)
+        ssh_1 = GV%H_to_RZ * eta(i,j) * SpV_avg(i,j) - (CS%bathyT(i,j) + G%Z_ref)
+        ssh_2 = GV%H_to_RZ * eta(i,j-1) * SpV_avg(i,j-1) - (CS%bathyT(i,j-1) + G%Z_ref)
+        ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
+      endif
+
+      if (BT_OBC%dZ_v(i,J) > 0.0) then
+        vel_prev = vbt(i,J)
+        vbt(i,J) = 0.5*((v_inlet + BT_OBC%vbt_outer(i,J)) + &
+            (BT_OBC%Cg_v(i,J)/BT_OBC%dZ_v(i,J)) * (ssh_in-BT_OBC%SSH_outer_v(i,J)))
+        vbt_trans(i,J) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+      else  ! This point is now dry
+        vbt(i,J) = 0.0
+        vbt_trans(i,J) = 0.0
+      endif
+    elseif (BT_OBC%v_OBC_type(i,J) == GRADIENT_OBC) then  ! Northern gradient OBC
+      vbt(i,J) = vbt(i,J-1)
+      vbt_trans(i,J) = vbt(i,J)
+    endif
+
+    ! Reset transports and related time-inetegrated velocities with non-specified OBCs
+    if (BT_OBC%v_OBC_type(i,J) > SPECIFIED_OBC) then  ! Northern Flather or gradient OBC
+      if (integral_BT_cont) then
+        vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
+        vhbt_int_new = find_vhbt(vbt_int(i,J), BTCL_v(i,J)) + dt_elapsed*vhbt0(i,J)
+        vhbt(i,J) = (vhbt_int_new - vhbt_int_prev(i,J)) * Idtbt
+        vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
+        ! The line above is equivalent to:  vhbt_int(i,J) = vhbt_int_new
+      elseif (use_BT_cont) then
+        vhbt(i,J) = find_vhbt(vbt_trans(i,J), BTCL_v(i,J)) + vhbt0(i,J)
+      else
+        vhbt(i,J) = vbt_trans(i,J)*Datv(i,J) + vhbt0(i,J)
       endif
     endif
 
-    vbt_trans(i,J) = vel_trans
+  endif ; enddo ; enddo
 
-    ! Update the summed and integrated quantities from the saved previous values.
-    if (integral_BT_cont) then
-      vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
-      vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
+  ! Work on Southern OBC points
+  is = max(G%isc-halo, BT_OBC%is_v_S_obc) ; ie = min(G%iec+halo, BT_OBC%ie_v_S_obc)
+  Js_v = max((G%jsc-1)-halo, BT_OBC%Js_v_S_obc) ; Je_v = min(G%jec+halo, BT_OBC%Je_v_S_obc)
+  do J=Js_v,Je_v ; do i=is,ie ; if (BT_OBC%v_OBC_type(i,J) < 0) then
+    if (BT_OBC%v_OBC_type(i,J) == -SPECIFIED_OBC) then  ! Southern specified OBC
+      vhbt(i,J) = BT_OBC%vhbt(i,J)
+      vbt(i,J) = BT_OBC%vbt_outer(i,J)
+      vbt_trans(i,J) = vbt(i,J)
+      if (integral_BT_cont) then
+        vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt(i,J)
+        vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
+      endif
+    elseif (BT_OBC%v_OBC_type(i,J) == -FLATHER_OBC) then  ! Southern Flather OBC
+      cfl = dtbt * BT_OBC%Cg_v(i,J) * G%IdyCv(i,J) ! CFL
+      v_inlet = cfl*vbt_old(i,J+1) + (1.0-cfl)*vbt_old(i,J)  ! Valid for cfl <1
+      if (GV%Boussinesq) then
+        ssh_in = GV%H_to_Z*(eta(i,j+1) + (0.5-cfl)*(eta(i,j+1)-eta(i,j+2)))  ! internal
+      else
+        ssh_1 = GV%H_to_RZ * eta(i,j+1) * SpV_avg(i,j+1) - (CS%bathyT(i,j+1) + G%Z_ref)
+        ssh_2 = GV%H_to_RZ * eta(i,j+2) * SpV_avg(i,j+2) - (CS%bathyT(i,j+2) + G%Z_ref)
+        ssh_in = ssh_1 + (0.5-cfl)*(ssh_1-ssh_2)      ! internal
+      endif
+
+      if (BT_OBC%dZ_v(i,J) > 0.0) then
+        vel_prev = vbt(i,J)
+        vbt(i,J) = 0.5*((v_inlet + BT_OBC%vbt_outer(i,J)) + &
+            (BT_OBC%Cg_v(i,J)/BT_OBC%dZ_v(i,J)) * (BT_OBC%SSH_outer_v(i,J)-ssh_in))
+        vbt_trans(i,J) = (1.0-bebt)*vel_prev + bebt*vbt(i,J)
+      else  ! This point is now dry
+        vbt(i,J) = 0.0
+        vbt_trans(i,J) = 0.0
+      endif
+    elseif (BT_OBC%v_OBC_type(i,J) == -GRADIENT_OBC) then  ! Southern gradient OBC
+      vbt(i,J) = vbt(i,J+1)
+      vbt_trans(i,J) = vbt(i,J)
+    endif
+
+    ! Reset transports and related time-inetegrated velocities with non-specified OBCs
+    if (BT_OBC%v_OBC_type(i,J) < -SPECIFIED_OBC) then  ! Southern Flather or gradient OBC
+      if (integral_BT_cont) then
+        vbt_int(i,J) = vbt_int_prev(i,J) + dtbt * vbt_trans(i,J)
+        vhbt_int_new = find_vhbt(vbt_int(i,J), BTCL_v(i,J)) + dt_elapsed*vhbt0(i,J)
+        vhbt(i,J) = (vhbt_int_new - vhbt_int_prev(i,J)) * Idtbt
+        vhbt_int(i,J) = vhbt_int_prev(i,J) + dtbt * vhbt(i,J)
+        ! The line above is equivalent to:  vhbt_int(i,J) = vhbt_int_new
+      elseif (use_BT_cont) then
+        vhbt(i,J) = find_vhbt(vbt_trans(i,J), BTCL_v(i,J)) + vhbt0(i,J)
+      else
+        vhbt(i,J) = vbt_trans(i,J)*Datv(i,J) + vhbt0(i,J)
+      endif
     endif
 
   endif ; enddo ; enddo
@@ -3952,9 +4011,9 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
   BT_OBC%Is_u_E_obc = iedw + 1 ; BT_OBC%Ie_u_E_obc = isdw - 2
   BT_OBC%js_u_E_obc = jedw + 1 ; BT_OBC%je_u_E_obc = jsdw - 1
   BT_OBC%is_v_S_obc = iedw + 1 ; BT_OBC%ie_v_S_obc = isdw - 1
-  BT_OBC%js_v_S_obc = jedw + 1 ; BT_OBC%Je_v_S_obc = jsdw - 2
+  BT_OBC%Js_v_S_obc = jedw + 1 ; BT_OBC%Je_v_S_obc = jsdw - 2
   BT_OBC%is_v_N_obc = iedw + 1 ; BT_OBC%ie_v_N_obc = isdw - 1
-  BT_OBC%js_v_N_obc = jedw + 1 ; BT_OBC%Je_v_N_obc = jsdw - 2
+  BT_OBC%Js_v_N_obc = jedw + 1 ; BT_OBC%Je_v_N_obc = jsdw - 2
 
   do j=jsdw,jedw ; do I=isdw-1,iedw
     BT_OBC%u_OBC_type(I,j) = nint(u_OBC(I,j))
@@ -3963,7 +4022,7 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
       BT_OBC%js_u_W_obc = min(j, BT_OBC%js_u_W_obc) ; BT_OBC%je_u_W_obc = max(j, BT_OBC%je_u_W_obc)
     endif
     if (BT_OBC%u_OBC_type(I,j) > 0) then ! This point has OBC_DIRECTION_E.
-      BT_OBC%Is_u_E_obc = min(I, BT_OBC%Is_u_E_obc) ; BT_OBC%Ie_u_E_obc = min(I, BT_OBC%Ie_u_E_obc)
+      BT_OBC%Is_u_E_obc = min(I, BT_OBC%Is_u_E_obc) ; BT_OBC%Ie_u_E_obc = max(I, BT_OBC%Ie_u_E_obc)
       BT_OBC%js_u_E_obc = min(j, BT_OBC%js_u_E_obc) ; BT_OBC%je_u_E_obc = max(j, BT_OBC%je_u_E_obc)
     endif
   enddo ; enddo
@@ -3971,17 +4030,17 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
   do J=jsdw-1,jedw ; do i=isdw,iedw
     BT_OBC%v_OBC_type(i,J) = nint(v_OBC(i,J))
     if (BT_OBC%v_OBC_type(i,J) < 0) then ! This point has OBC_DIRECTION_S.
-      BT_OBC%is_v_S_obc = min(I, BT_OBC%is_v_S_obc) ; BT_OBC%ie_v_S_obc = max(I, BT_OBC%ie_v_S_obc)
-      BT_OBC%js_v_S_obc = min(j, BT_OBC%js_v_S_obc) ; BT_OBC%Je_v_S_obc = max(j, BT_OBC%Je_v_S_obc)
+      BT_OBC%is_v_S_obc = min(i, BT_OBC%is_v_S_obc) ; BT_OBC%ie_v_S_obc = max(i, BT_OBC%ie_v_S_obc)
+      BT_OBC%Js_v_S_obc = min(J, BT_OBC%Js_v_S_obc) ; BT_OBC%Je_v_S_obc = max(J, BT_OBC%Je_v_S_obc)
     endif
     if (BT_OBC%v_OBC_type(i,J) > 0) then ! This point has OBC_DIRECTION_N.
-      BT_OBC%is_v_N_obc = min(I, BT_OBC%is_v_N_obc) ; BT_OBC%ie_v_N_obc = min(I, BT_OBC%ie_v_N_obc)
-      BT_OBC%js_v_N_obc = min(j, BT_OBC%js_v_N_obc) ; BT_OBC%Je_v_N_obc = max(j, BT_OBC%Je_v_N_obc)
+      BT_OBC%is_v_N_obc = min(i, BT_OBC%is_v_N_obc) ; BT_OBC%ie_v_N_obc = max(i, BT_OBC%ie_v_N_obc)
+      BT_OBC%Js_v_N_obc = min(J, BT_OBC%Js_v_N_obc) ; BT_OBC%Je_v_N_obc = max(J, BT_OBC%Je_v_N_obc)
     endif
   enddo ; enddo
 
   BT_OBC%u_OBCs_on_PE = ((BT_OBC%Is_u_E_obc <= iedw) .or. (BT_OBC%Is_u_W_obc <= iedw))
-  BT_OBC%v_OBCs_on_PE = ((BT_OBC%Is_v_N_obc <= iedw) .or. (BT_OBC%Is_v_S_obc <= iedw))
+  BT_OBC%v_OBCs_on_PE = ((BT_OBC%is_v_N_obc <= iedw) .or. (BT_OBC%is_v_S_obc <= iedw))
 
 end subroutine initialize_BT_OBC
 
