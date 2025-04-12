@@ -98,13 +98,9 @@ type, private :: BT_OBC_type
   integer :: is_v_S_obc, ie_v_S_obc, Js_v_S_obc, Je_v_S_obc
   integer :: is_v_N_obc, ie_v_N_obc, Js_v_N_obc, Je_v_N_obc
   !>@}
-  logical :: is_alloced = .false. !< True if BT_OBC is in use and has been allocated
 
-  type(group_pass_type) :: pass_uv   !< Structure for group halo pass
-  type(group_pass_type) :: pass_uhvh !< Structure for group halo pass
-  type(group_pass_type) :: pass_h    !< Structure for group halo pass
-  type(group_pass_type) :: pass_cg   !< Structure for group halo pass
-  type(group_pass_type) :: pass_eta_outer  !< Structure for group halo pass
+  type(group_pass_type) :: pass_uv   !< Structure for group halo pass of vectors
+  type(group_pass_type) :: scalar_pass  !< Structure for group halo pass of scalars
 end type BT_OBC_type
 
 integer, parameter :: SPECIFIED_OBC = 1 !< An integer used to encode a specified OBC point
@@ -212,6 +208,8 @@ type, public :: barotropic_CS ; private
                              !! equation.  Otherwise the transports are the sum of the transports
                              !! based on a series of instantaneous velocities and the BT_CONT_TYPE
                              !! for transports.  This is only valid if a BT_CONT_TYPE is used.
+  logical :: integral_OBCs   !< This is true if integral_bt_cont is true and there are open boundary
+                             !! conditions being applied somewhere in the global domain.
   logical :: Nonlinear_continuity !< If true, the barotropic continuity equation
                              !! uses the full ocean thickness for transport.
   integer :: Nonlin_cont_update_period !< The number of barotropic time steps
@@ -1082,28 +1080,21 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo ; enddo
   enddo
 
-  if (apply_OBCs) then
-    do n=1,OBC%number_of_segments
-      if (.not. OBC%segment(n)%on_pe) cycle
-      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-      if (OBC%segment(n)%is_N_or_S .and. (J >= Jsq-1) .and. (J <= Jeq+1)) then
-        do i = max(Isq-1,OBC%segment(n)%HI%isd), min(Ieq+2,OBC%segment(n)%HI%ied)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            gtot_S(i,j+1) = gtot_S(i,j)  !### Should this be gtot_N(i,j) to use wt_v at the same point?
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            gtot_N(i,j) = gtot_N(i,j+1)  ! Perhaps this should be gtot_S(i,j+1)?
-          endif
-        enddo
-      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Isq-1) .and. (I <= Ieq+1)) then
-        do j = max(Jsq-1,OBC%segment(n)%HI%jsd), min(Jeq+2,OBC%segment(n)%HI%jed)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            gtot_W(i+1,j) = gtot_W(i,j)  ! Perhaps this should be gtot_E(i,j)?
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            gtot_E(i,j) = gtot_E(i+1,j)  ! Perhaps this should be gtot_W(i+1,j)?
-          endif
-        enddo
-      endif
-    enddo
+  if (CS%BT_OBC%u_OBCs_on_PE) then
+    do j=js,je ; do I=is-1,ie
+      if (CS%BT_OBC%u_OBC_type(I,j) > 0) & ! Eastern boundary condition
+        gtot_W(i+1,j) = gtot_W(i,j)  ! Perhaps this should be gtot_E(i,j)?
+      if (CS%BT_OBC%u_OBC_type(I,j) < 0) & ! Western boundary condition
+        gtot_E(i,j) = gtot_E(i+1,j)  ! Perhaps this should be gtot_W(i+1,j)?
+    enddo ; enddo
+  endif
+  if (CS%BT_OBC%v_OBCs_on_PE) then
+    do J=js-1,je ; do i=is,ie
+      if (CS%BT_OBC%v_OBC_type(i,J) > 0) & ! Northern boundary condition
+        gtot_S(i,j+1) = gtot_S(i,j)  !### Should this be gtot_N(i,j) to use wt_v at the same point?
+      if (CS%BT_OBC%v_OBC_type(i,J) < 0) & ! Southern boundary condition
+        gtot_N(i,j) = gtot_N(i,j+1)  ! Perhaps this should be gtot_S(i,j+1)?
+    enddo ; enddo
   endif
 
   if (CS%calculate_SAL) then
@@ -1781,7 +1772,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     I_sum_wt_vel = 1.0 ; I_sum_wt_eta = 1.0 ; I_sum_wt_accel = 1.0 ; I_sum_wt_trans = 1.0
   endif
 
-
   ! March the barotropic solver through all of its time steps.
   call btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL_v, eta_IC, &
                 eta_PF_1, d_eta_PF, eta_src, dyn_coef_eta, uhbtav, vhbtav, u_accel_bt, v_accel_bt, &
@@ -1790,8 +1780,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                 eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, SpV_col_avg, dgeo_de, &
                 eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, LDu_avg, Corv_avg, PFv_avg, &
                 LDv_avg, use_BT_cont, interp_eta_PF, find_etaav, dt, dtbt, nstep, nfilter, &
-                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, ADp, OBC, CS%BT_OBC, CS, G, MS, GV, US)
-
+                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, ADp, CS%BT_OBC, CS, G, MS, GV, US)
 
   if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
@@ -2163,7 +2152,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
                 eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, SpV_col_avg, dgeo_de, &
                 eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, LDu_avg, Corv_avg, PFv_avg, &
                 LDv_avg, use_BT_cont, interp_eta_PF, find_etaav, dt, dtbt, nstep, nfilter, &
-                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, ADp, OBC, BT_OBC, CS, G, MS, GV, US)
+                wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, ADp, BT_OBC, CS, G, MS, GV, US)
 
   type(barotropic_CS),    intent(inout) :: CS    !< Barotropic control structure
   type(ocean_grid_type),  intent(inout) :: G     !< The ocean's grid structure (inout to allow for halo updates)
@@ -2328,10 +2317,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     wt_accel2     !< Potentially un-normalized relative weights of each of the
                   !! barotropic timesteps in determining the average accelerations [nondim]
   type(accel_diag_ptrs),    pointer       :: ADp     !< Acceleration diagnostic pointers
-  type(ocean_OBC_type),     pointer       :: OBC     !< An associated pointer to an OBC type
   type(BT_OBC_type),        intent(in)    :: BT_OBC  !< A structure with the private barotropic arrays
                                                      !! related to the open boundary conditions,
-                                                     !! set by set_up_BT_OBC
+                                                     !! with time evolving data stored via set_up_BT_OBC
   type(verticalGrid_type),  intent(in)    :: GV      !< The ocean's vertical grid structure
   type(unit_scale_type),    intent(in)    :: US      !< A dimensional unit scaling type
 
@@ -2480,9 +2468,8 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   if (integral_BT_cont) then
     call create_group_pass(CS%pass_eta_ubt, ubt_int, vbt_int, CS%BT_Domain)
     ! This is only needed with integral_BT_cont, OBCs and multiple barotropic steps between halo updates.
-    if (associated(OBC)) then ; if (open_boundary_query(OBC, apply_open_OBC=.true.)) &
+    if (CS%integral_OBCs) &
       call create_group_pass(CS%pass_eta_ubt, uhbt_int, vhbt_int, CS%BT_Domain)
-    endif
   endif
 
   ! The following loop contains all of the time steps.
@@ -2654,7 +2641,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     ! Apply open boundary condition considerations to revise the updated velocities and transports.
     if (CS%BT_OBC%u_OBCs_on_PE) then
       !$OMP single
-      call apply_u_velocity_OBCs(ubt, uhbt, ubt_trans, eta, SpV_col_avg, ubt_prev, CS%BT_OBC, &
+      call apply_u_velocity_OBCs(ubt, uhbt, ubt_trans, eta, SpV_col_avg, ubt_prev, BT_OBC, &
              G, MS, GV, US, CS, iev-ie, dtbt, CS%bebt, use_BT_cont, integral_BT_cont, n*dtbt, &
              Datu, BTCL_u, uhbt0, ubt_int, ubt_int_prev, uhbt_int, uhbt_int_prev)
       !$OMP end single
@@ -2662,7 +2649,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     if (CS%BT_OBC%v_OBCs_on_PE) then
       !$OMP single
-      call apply_v_velocity_OBCs(vbt, vhbt, vbt_trans, eta, SpV_col_avg, vbt_prev, CS%BT_OBC, &
+      call apply_v_velocity_OBCs(vbt, vhbt, vbt_trans, eta, SpV_col_avg, vbt_prev, BT_OBC, &
              G, MS, GV, US, CS, iev-ie, dtbt, CS%bebt, use_BT_cont, integral_BT_cont, n*dtbt, &
              Datv, BTCL_v, vhbt0, vbt_int, vbt_int_prev, vhbt_int, vhbt_int_prev)
       !$OMP end single
@@ -4042,6 +4029,33 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
   BT_OBC%u_OBCs_on_PE = ((BT_OBC%Is_u_E_obc <= iedw) .or. (BT_OBC%Is_u_W_obc <= iedw))
   BT_OBC%v_OBCs_on_PE = ((BT_OBC%is_v_N_obc <= iedw) .or. (BT_OBC%is_v_S_obc <= iedw))
 
+  ! Allocate time-varying arrays that will be used for open boundary conditions.
+
+  ! This pair is used with either Flather or specified OBCs.
+  allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw), source=0.0)
+  allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw), source=0.0)
+  call create_group_pass(BT_OBC%pass_uv, BT_OBC%ubt_outer, BT_OBC%vbt_outer, CS%BT_Domain)
+
+  ! This pair is only used with specified OBCs.
+  allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw), source=0.0)
+  allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw), source=0.0)
+  call create_group_pass(BT_OBC%pass_uv, BT_OBC%uhbt, BT_OBC%vhbt, CS%BT_Domain)
+
+  if (OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally) then
+    ! These 3 pairs are only used with Flather OBCs.
+    allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%dZ_u(isdw-1:iedw,jsdw:jedw), source=0.0)
+    allocate(BT_OBC%SSH_outer_u(isdw-1:iedw,jsdw:jedw), source=0.0)
+
+    allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%dZ_v(isdw:iedw,jsdw-1:jedw), source=0.0)
+    allocate(BT_OBC%SSH_outer_v(isdw:iedw,jsdw-1:jedw), source=0.0)
+
+    call create_group_pass(BT_OBC%scalar_pass, BT_OBC%SSH_outer_u, BT_OBC%SSH_outer_v, CS%BT_Domain, To_All+Scalar_Pair)
+    call create_group_pass(BT_OBC%scalar_pass, BT_OBC%dZ_u, BT_OBC%dZ_v, CS%BT_Domain, To_All+Scalar_Pair)
+    call create_group_pass(BT_OBC%scalar_pass, BT_OBC%Cg_u, BT_OBC%Cg_v, CS%BT_Domain, To_All+Scalar_Pair)
+  endif
+
 end subroutine initialize_BT_OBC
 
 !> This subroutine sets up the time-varying fields in the private structure used to apply the open
@@ -4095,32 +4109,6 @@ subroutine set_up_BT_OBC(OBC, eta, SpV_avg, BT_OBC, BT_Domain, G, GV, US, CS, MS
   isdw = MS%isdw ; iedw = MS%iedw ; jsdw = MS%jsdw ; jedw = MS%jedw
 
   I_dt = 1.0 / dt_baroclinic
-
-  if ((isdw < isd) .or. (jsdw < jsd)) then
-    call MOM_error(FATAL, "set_up_BT_OBC: Open boundary conditions are not "//&
-                           "yet fully implemented with wide barotropic halos.")
-  endif
-
-  if (.not. BT_OBC%is_alloced) then
-    allocate(BT_OBC%Cg_u(isdw-1:iedw,jsdw:jedw), source=0.0)
-    allocate(BT_OBC%dZ_u(isdw-1:iedw,jsdw:jedw), source=0.0)
-    allocate(BT_OBC%uhbt(isdw-1:iedw,jsdw:jedw), source=0.0)
-    allocate(BT_OBC%ubt_outer(isdw-1:iedw,jsdw:jedw), source=0.0)
-    allocate(BT_OBC%SSH_outer_u(isdw-1:iedw,jsdw:jedw), source=0.0)
-
-    allocate(BT_OBC%Cg_v(isdw:iedw,jsdw-1:jedw), source=0.0)
-    allocate(BT_OBC%dZ_v(isdw:iedw,jsdw-1:jedw), source=0.0)
-    allocate(BT_OBC%vhbt(isdw:iedw,jsdw-1:jedw), source=0.0)
-    allocate(BT_OBC%vbt_outer(isdw:iedw,jsdw-1:jedw), source=0.0)
-    allocate(BT_OBC%SSH_outer_v(isdw:iedw,jsdw-1:jedw), source=0.0)
-
-    BT_OBC%is_alloced = .true.
-    call create_group_pass(BT_OBC%pass_uv, BT_OBC%ubt_outer, BT_OBC%vbt_outer, BT_Domain)
-    call create_group_pass(BT_OBC%pass_uhvh, BT_OBC%uhbt, BT_OBC%vhbt, BT_Domain)
-    call create_group_pass(BT_OBC%pass_eta_outer, BT_OBC%SSH_outer_u, BT_OBC%SSH_outer_v, BT_Domain,To_All+Scalar_Pair)
-    call create_group_pass(BT_OBC%pass_h, BT_OBC%dZ_u, BT_OBC%dZ_v, BT_Domain,To_All+Scalar_Pair)
-    call create_group_pass(BT_OBC%pass_cg, BT_OBC%Cg_u, BT_OBC%Cg_v, BT_Domain,To_All+Scalar_Pair)
-  endif
 
   if (BT_OBC%u_OBCs_on_PE) then
     if (OBC%specified_u_BCs_exist_globally) then
@@ -4228,10 +4216,8 @@ subroutine set_up_BT_OBC(OBC, eta, SpV_avg, BT_OBC, BT_Domain, G, GV, US, CS, MS
   endif
 
   call do_group_pass(BT_OBC%pass_uv, BT_Domain)
-  call do_group_pass(BT_OBC%pass_uhvh, BT_Domain)
-  call do_group_pass(BT_OBC%pass_eta_outer, BT_Domain)
-  call do_group_pass(BT_OBC%pass_h, BT_Domain)
-  call do_group_pass(BT_OBC%pass_cg, BT_Domain)
+  if (OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally) &
+    call do_group_pass(BT_OBC%scalar_pass, BT_Domain)
 
 end subroutine set_up_BT_OBC
 
@@ -4244,21 +4230,18 @@ subroutine destroy_BT_OBC(BT_OBC)
   if (allocated(BT_OBC%u_OBC_type)) deallocate(BT_OBC%u_OBC_type)
   if (allocated(BT_OBC%v_OBC_type)) deallocate(BT_OBC%v_OBC_type)
 
-  if (BT_OBC%is_alloced) then
-    deallocate(BT_OBC%Cg_u)
-    deallocate(BT_OBC%dZ_u)
-    deallocate(BT_OBC%uhbt)
-    deallocate(BT_OBC%ubt_outer)
-    deallocate(BT_OBC%SSH_outer_u)
+  if (allocated(BT_OBC%Cg_u)) deallocate(BT_OBC%Cg_u)
+  if (allocated(BT_OBC%dZ_u)) deallocate(BT_OBC%dZ_u)
+  if (allocated(BT_OBC%uhbt)) deallocate(BT_OBC%uhbt)
+  if (allocated(BT_OBC%ubt_outer)) deallocate(BT_OBC%ubt_outer)
+  if (allocated(BT_OBC%SSH_outer_u)) deallocate(BT_OBC%SSH_outer_u)
 
-    deallocate(BT_OBC%Cg_v)
-    deallocate(BT_OBC%dZ_v)
-    deallocate(BT_OBC%vhbt)
-    deallocate(BT_OBC%vbt_outer)
-    deallocate(BT_OBC%SSH_outer_v)
+  if (allocated(BT_OBC%Cg_v)) deallocate(BT_OBC%Cg_v)
+  if (allocated(BT_OBC%dZ_v)) deallocate(BT_OBC%dZ_v)
+  if (allocated(BT_OBC%vhbt)) deallocate(BT_OBC%vhbt)
+  if (allocated(BT_OBC%vbt_outer)) deallocate(BT_OBC%vbt_outer)
+  if (allocated(BT_OBC%SSH_outer_v)) deallocate(BT_OBC%SSH_outer_v)
 
-    BT_OBC%is_alloced = .false.
-  endif
 end subroutine destroy_BT_OBC
 
 !> btcalc calculates the barotropic velocities from the full velocity and
@@ -4535,7 +4518,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         enddo
       endif
     else
-      call MOM_error(fatal, "btcalc encountered and OBC segment of indeterminate direction.")
+      call MOM_error(fatal, "btcalc encountered an OBC segment of indeterminate direction.")
     endif
   enddo ; endif
 
@@ -5722,26 +5705,6 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     CS%IareaT_OBCmask(i,j) = CS%IareaT(i,j)
   enddo ; enddo
 
-  if (associated(OBC)) then
-    call initialize_BT_OBC(OBC, CS%BT_OBC, G, CS)
-  endif
-
-  ! Update IareaT_OBCmask so that nothing changes outside of the OBC (problem for interior OBCs only)
-  if (associated(OBC) .and. (.not.CS%exterior_OBC_bug)) then
-    if (CS%BT_OBC%u_OBCs_on_PE) then
-      do j=jsd,jed ; do i=isd,ied
-        if (CS%BT_OBC%u_OBC_type(I-1,j) > 0) CS%IareaT_OBCmask(i,j) = 0.0 ! OBC_DIRECTION_E
-        if (CS%BT_OBC%u_OBC_type(I,j) < 0) CS%IareaT_OBCmask(i,j) = 0.0 ! OBC_DIRECTION_W
-      enddo ; enddo
-    endif
-    if (CS%BT_OBC%v_OBCs_on_PE) then
-      do j=jsd,jed ; do i=isd,ied
-        if (CS%BT_OBC%v_OBC_type(i,J-1) > 0) CS%IareaT_OBCmask(i,j) = 0.0  ! OBC_DIRECTION_N
-        if (CS%BT_OBC%v_OBC_type(i,J) < 0) CS%IareaT_OBCmask(i,j) = 0.0  ! OBC_DIRECTION_S
-      enddo ; enddo
-    endif
-  endif
-
   ! Note: G%IdxCu & G%IdyCv may be valid for a smaller extent than CS%IdxCu & CS%IdyCv, even without
   !   wide halos.
   do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
@@ -5750,8 +5713,28 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     CS%IdyCv(i,J) = G%IdyCv(i,J) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
   enddo ; enddo
-  ! Set masks to avoid changing velocities at OBC points.
+
   if (associated(OBC)) then
+    ! Set up information about the location and nature of the open boundary condition points.
+    call initialize_BT_OBC(OBC, CS%BT_OBC, G, CS)
+
+    ! Update IareaT_OBCmask so that nothing changes outside of the OBC (problem for interior OBCs only)
+    if (.not.CS%exterior_OBC_bug) then
+      if (CS%BT_OBC%u_OBCs_on_PE) then
+        do j=jsd,jed ; do i=isd,ied
+          if (CS%BT_OBC%u_OBC_type(I-1,j) > 0) CS%IareaT_OBCmask(i,j) = 0.0 ! OBC_DIRECTION_E
+          if (CS%BT_OBC%u_OBC_type(I,j) < 0) CS%IareaT_OBCmask(i,j) = 0.0 ! OBC_DIRECTION_W
+        enddo ; enddo
+      endif
+      if (CS%BT_OBC%v_OBCs_on_PE) then
+        do j=jsd,jed ; do i=isd,ied
+          if (CS%BT_OBC%v_OBC_type(i,J-1) > 0) CS%IareaT_OBCmask(i,j) = 0.0  ! OBC_DIRECTION_N
+          if (CS%BT_OBC%v_OBC_type(i,J) < 0) CS%IareaT_OBCmask(i,j) = 0.0  ! OBC_DIRECTION_S
+        enddo ; enddo
+      endif
+    endif
+
+    ! Set masks to avoid changing velocities at OBC points.
     if (CS%BT_OBC%u_OBCs_on_PE) then
       do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB ; if (CS%BT_OBC%u_OBC_type(I,j) /= 0) then
         CS%OBCmask_u(I,j) = 0.0 ; CS%IdxCu(I,j) = 0.0
@@ -5762,7 +5745,14 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
         CS%OBCmask_v(i,J) = 0.0 ; CS%IdyCv(i,J) = 0.0
       endif ; enddo ; enddo
     endif
+
+    CS%integral_OBCs = CS%integral_BT_cont .and. open_boundary_query(OBC, apply_open_OBC=.true.)
+  else ! There are no OBC points anywhere.
+    CS%BT_OBC%u_OBCs_on_PE = .false.
+    CS%BT_OBC%v_OBCs_on_PE = .false.
+    CS%integral_OBCs = .false.
   endif
+
   call create_group_pass(pass_static_data, CS%IareaT, CS%BT_domain, To_All)
   call create_group_pass(pass_static_data, CS%bathyT, CS%BT_domain, To_All)
   call create_group_pass(pass_static_data, CS%IareaT_OBCmask, CS%BT_domain, To_All)
