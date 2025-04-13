@@ -2508,17 +2508,8 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     if (CS%dynamic_psurf .or. (.not.CS%BT_project_velocity)) then
       ! Estimate the change in the free surface height.
       call btloop_eta_predictor(n, dtbt, ubt, vbt, eta, ubt_int, vbt_int, uhbt, vhbt, uhbt0, vhbt0, &
-                        uhbt_int, vhbt_int, BTCL_u, BTCL_v, Datu, Datv, &
-                        eta_IC, eta_src, eta_pred, isv, iev, jsv, jev, &
-                        integral_BT_cont, use_BT_cont, G, US, CS)
-    endif
-
-    ! Use the change in eta to determine an additional divergence damping due to the ice.
-    if (CS%dynamic_psurf) then
-      !$OMP do
-      do j=jsv-1,jev+1 ; do i=isv-1,iev+1
-        p_surf_dyn(i,j) = dyn_coef_eta(i,j) * (eta_pred(i,j) - eta(i,j))
-      enddo ; enddo
+                        uhbt_int, vhbt_int, BTCL_u, BTCL_v, Datu, Datv, eta_IC, eta_src, eta_pred, &
+                        isv, iev, jsv, jev, integral_BT_cont, use_BT_cont, G, US, CS)
     endif
 
     if (interp_eta_PF) then
@@ -2532,41 +2523,43 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     v_first = (MOD(n+G%first_direction,2)==1)
 
+    ! Determine the pressure force accelerations due to the updated eta anomalies.
     if (CS%BT_project_velocity) then
       call btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta, eta_PF, &
-                          gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
-                          find_etaav, wt_accel2(n), eta_sum, v_first, G, US, CS)
+                          gtot_N, gtot_S, gtot_E, gtot_W, dgeo_de, find_etaav, &
+                          wt_accel2(n), eta_sum, v_first, G, US, CS)
     else
       call btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_pred, eta_PF, &
-                          gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
-                          find_etaav, wt_accel2(n), eta_sum, v_first, G, US, CS)
+                          gtot_N, gtot_S, gtot_E, gtot_W, dgeo_de, find_etaav, &
+                          wt_accel2(n), eta_sum, v_first, G, US, CS)
+    endif
+
+    ! Use the change in eta to determine an additional divergence damping due to the ice strength.
+    if (CS%dynamic_psurf) then
+      call btloop_add_dyn_PF(PFu, PFv, eta_pred, eta, dyn_coef_eta, p_surf_dyn, &
+                             isv, iev, jsv, jev, v_first, G, US, CS)
     endif
 
     if (v_first) then
       ! On odd-steps, update v first.
-      call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
-                           isv-1, iev+1, jsv-1, jev, f_4_v, &
-                           bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
+      call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, isv-1, iev+1, jsv-1, jev, &
+                           f_4_v, bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
                            wt_accel(n), G, US, CS)
 
       ! Now update the zonal velocity.
-      call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
-                           isv-1, iev, jsv, jev, f_4_u, &
-                           bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
+      call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, isv-1, iev, jsv, jev, &
+                           f_4_u, bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            wt_accel(n), G, US, CS)
 
     else
       ! On even steps, update u first.
-      call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, &
-                           isv-1, iev, jsv-1, jev+1, f_4_u, &
-                           bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
+      call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, isv-1, iev, jsv-1, jev+1, &
+                           f_4_u, bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
                            wt_accel(n), G, US, CS)
       ! Now update the meridional velocity.
-      call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, &
-                           isv, iev, jsv-1, jev, f_4_v, &
-                           bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
-                           wt_accel(n), G, US, CS, &
-                           Cor_bracket_bug=CS%use_old_coriolis_bracket_bug)
+      call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, isv, iev, jsv-1, jev, &
+                           f_4_v, bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
+                           wt_accel(n), G, US, CS, Cor_bracket_bug=CS%use_old_coriolis_bracket_bug)
     endif
 
     ! Determine the transports based on the updated velocities when no OBCs are applied
@@ -3030,8 +3023,8 @@ subroutine btloop_eta_predictor(n, dtbt, ubt, vbt, eta, ubt_int, vbt_int, uhbt, 
 end subroutine btloop_eta_predictor
 
 subroutine btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
-                          gtot_N, gtot_S, gtot_E, gtot_W, p_surf_dyn, dgeo_de, &
-                          find_etaav, wt_accel2_n, eta_sum, v_first, G, US, CS)
+                          gtot_N, gtot_S, gtot_E, gtot_W, dgeo_de, find_etaav, &
+                          wt_accel2_n, eta_sum, v_first, G, US, CS)
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
   type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
@@ -3046,9 +3039,9 @@ subroutine btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
     eta_PF_BT     !< The eta array (either the SSH anomaly or column mass anomaly) that
                   !! determines the barotropic pressure force [H ~> m or kg m-2]
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    eta_PF        !< A local copy of the 2-D eta field (either SSH anomaly or
-                  !! column mass anomaly) that was used to calculate the input
-                  !! pressure gradient accelerations [H ~> m or kg m-2].
+    eta_PF        !< The input 2-D eta field (either SSH anomaly or column mass anomaly)
+                  !! that was used to calculate the input pressure gradient
+                  !! accelerations [H ~> m or kg m-2].
   real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
     gtot_N        !< The effective total reduced gravity used to relate free surface height
                   !! deviations to pressure forces (including GFS and baroclinic contributions)
@@ -3071,8 +3064,6 @@ subroutine btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
                   !! in the barotropic momentum equations half a grid-point to the west of a
                   !! thickness point [L2 H-1 T-2 ~> m s-2 or m4 kg-1 s-2].
                   !! (See Hallberg, J Comp Phys 1997 for a discussion of gtot_E and gtot_W.)
-  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
-    p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2].
   real,    intent(in) :: dgeo_de !< The constant of proportionality between geopotential and
                   !! sea surface height [nondim].  It is of order 1, but for stability this
                   !! may be made larger than the physical  problem would suggest.
@@ -3106,21 +3097,8 @@ subroutine btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
     PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
                 ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                 dgeo_de * CS%IdyCv(i,J)
-   enddo ; enddo
-   !$OMP end do nowait
-
-  if (CS%dynamic_psurf) then
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=isv-1,iev
-      PFu(I,j) = PFu(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
-    enddo ; enddo
-    !$OMP end do nowait
-    !$OMP do schedule(static)
-    do J=jsv-1,jev ; do i=is_v,ie_v
-      PFv(i,J) = PFv(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
-    enddo ; enddo
-    !$OMP end do nowait
-  endif
+  enddo ; enddo
+  !$OMP end do nowait
 
   if (find_etaav .and. (abs(wt_accel2_n) > 0.0)) then
     !$OMP do
@@ -3131,6 +3109,63 @@ subroutine btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
   endif
 
 end subroutine btloop_find_PF
+
+!> This routine adds a dynamic pressure force based on the temporal changes in the predicted value
+!! of eta, perhaps as an effective divergence damping to emulate the rigidity of an ice-sheet.
+subroutine btloop_add_dyn_PF(PFu, PFv, eta_pred, eta, dyn_coef_eta, p_surf_dyn, &
+                             isv, iev, jsv, jev, v_first, G, US, CS)
+  type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
+  type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
+  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
+    PFu           !< The anomalous zonal pressure force acceleration [L T-2 ~> m s-2].
+  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
+    PFv           !< The meridional pressure force acceleration [L T-2 ~> m s-2].
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    eta_pred      !< The updated eta field (either SSH anomaly or column mass anomaly) that is
+                  !! used to estimate the divergence that is to be damped [H ~> m or kg m-2].
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    eta           !< The previous eta field (either SSH anomaly or column mass anomaly) that is
+                  !! used to estimate the divergence that is to be damped [H ~> m or kg m-2].
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(in) :: &
+    dyn_coef_eta  !< The coefficient relating the changes in eta to the dynamic surface pressure
+                  !! under rigid ice [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1].
+  real, dimension(SZIW_(CS),SZJW_(CS)), intent(inout) :: &
+    p_surf_dyn    !< A dynamic surface pressure under rigid ice [L2 T-2 ~> m2 s-2].
+  integer, intent(in)  :: isv         !< The starting i-index of eta being set in ths loop
+  integer, intent(in)  :: iev         !< The ending i-index of eta_pred being set in ths loop
+  integer, intent(in)  :: jsv         !< The starting j-index of eta_pred being set in ths loop
+  integer, intent(in)  :: jev         !< The ending j-index of eta_pred being set in ths loop
+  logical, intent(in) :: v_first !< If true, update the v-velocity first with the present loop iteration
+  type(unit_scale_type),   intent(in)    :: US    !< A dimensional unit scaling type
+
+  ! Local variables
+  integer :: i, j, js_u, je_u, is_v, ie_v
+
+  ! Ensure that the extra points used for the temporally staggered Coriolis terms are updated.
+  if (v_first) then
+    is_v = isv-1 ; ie_v = iev+1 ; js_u = jsv ; je_u = jev
+  else
+    is_v = isv ; ie_v = iev ; js_u = jsv-1 ; je_u = jev+1
+  endif
+
+  ! Use the change in eta to estimate the flow divergence and dynamic pressure.
+  !$OMP do
+  do j=jsv-1,jev+1 ; do i=isv-1,iev+1
+    p_surf_dyn(i,j) = dyn_coef_eta(i,j) * (eta_pred(i,j) - eta(i,j))
+  enddo ; enddo
+
+  !$OMP do schedule(static)
+  do j=js_u,je_u ; do I=isv-1,iev
+    PFu(I,j) = PFu(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
+  enddo ; enddo
+  !$OMP end do nowait
+  !$OMP do schedule(static)
+  do J=jsv-1,jev ; do i=is_v,ie_v
+    PFv(i,J) = PFv(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
+  enddo ; enddo
+  !$OMP end do nowait
+
+end subroutine btloop_add_dyn_PF
 
 !> Update meridional velocity.
 subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
@@ -4298,9 +4333,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   real :: htot                 ! The sum of the layer thicknesses [H ~> m or kg m-2].
   real :: Ihtot                ! The inverse of htot [H-1 ~> m-1 or m2 kg-1].
 
-  logical :: use_default, test_dflt, apply_OBCs
+  logical :: use_default, test_dflt
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, i, j, k
-  integer :: iss, ies, n
+  integer :: is_v, ie_v, Js_v, Je_v
 
 !    This section interpolates thicknesses onto u & v grid points with the
 ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
@@ -4323,13 +4358,6 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         "btcalc: Inconsistent settings of optional arguments and hvel_scheme.")
   endif
 
-  apply_OBCs = .false.
-  if (present(OBC)) then ; if (associated(OBC)) then ; if (OBC%OBC_pe) then
-    ! Some open boundary condition points might be in this processor's symmetric
-    ! computational domain.
-    apply_OBCs = (OBC%number_of_segments > 0)
-  endif ; endif ; endif
-
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = GV%H_subroundoff
@@ -4338,7 +4366,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   ! points, using a harmonic mean estimate.
 
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_u,CS,h_neglect,h,use_default,G,GV) &
-  !$OMP                          private(hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith,Z_to_H)
+  !$OMP                          private(hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith,Z_to_H,htot,Ihtot)
   do j=js,je
     if (present(h_u)) then
       do I=is-1,ie ; hatutot(I) = h_u(I,j,1) ; enddo
@@ -4398,6 +4426,25 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       do k=1,nz ; do I=is-1,ie
         CS%frhatu(I,j,k) = CS%frhatu(I,j,k) * Ihatutot(I)
       enddo ; enddo
+    endif
+    if (CS%BT_OBC%u_OBCs_on_PE) then
+      if (((j >= CS%BT_OBC%js_u_E_obc) .and. (j <= CS%BT_OBC%je_u_E_obc)) .or. &
+          ((j >= CS%BT_OBC%js_u_W_obc) .and. (j <= CS%BT_OBC%je_u_W_obc))) then
+        do I=is-1,ie
+          if (CS%BT_OBC%u_OBC_type(I,j) > 0) then ! Eastern boundary condition
+            htot = h(i,j,1)
+            do k=2,nz ; htot = htot + h(i,j,k) ; enddo
+            Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
+            do k=1,nz ; CS%frhatu(I,j,k) = h(i,j,k) * Ihtot ; enddo
+          endif
+          if (CS%BT_OBC%u_OBC_type(I,j) < 0) then ! Western boundary condition
+            htot = h(i+1,j,1)
+            do k=2,nz ; htot = htot + h(i+1,j,k) ; enddo
+            Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
+            do k=1,nz ; CS%frhatu(I,j,k) = h(i+1,j,k) * Ihtot ; enddo
+          endif
+        enddo
+      endif
     endif
   enddo
 
@@ -4465,62 +4512,41 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     endif
   enddo
 
-  if (apply_OBCs) then ; do n=1,OBC%number_of_segments ! Test for segment type?
-    if (.not. OBC%segment(n)%on_pe) cycle
-    if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-      J = OBC%segment(n)%HI%JsdB
-      if ((J >= js-1) .and. (J <= je)) then
-        iss = max(is,OBC%segment(n)%HI%isd) ; ies = min(ie,OBC%segment(n)%HI%ied)
-        do i=iss,ies ; hatvtot(i) = h(i,j,1) ; enddo
-        do k=2,nz ; do i=iss,ies
-          hatvtot(i) = hatvtot(i) + h(i,j,k)
-        enddo ; enddo
-        do i=iss,ies
-          Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect)
-        enddo
-        do k=1,nz ; do i=iss,ies
+  if (CS%BT_OBC%v_OBCs_on_PE) then
+    ! Northern boundary conditions
+    is_v = max(is, CS%BT_OBC%is_v_N_obc) ; ie_v = min(ie, CS%BT_OBC%ie_v_N_obc)
+    Js_v = max(js-1, CS%BT_OBC%Js_v_N_obc) ; Je_v = min(je, CS%BT_OBC%Je_v_N_obc)
+    do J=Js_v,Je_v
+      do i=is_v,ie_v ; hatvtot(i) = h(i,j,1) ; enddo
+      do k=2,nz ; do i=is_v,ie_v
+        hatvtot(i) = hatvtot(i) + h(i,j,k)
+      enddo ; enddo
+      do i=is_v,ie_v
+        Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect)
+      enddo
+      do k=1,nz ; do i=is_v,ie_v
+       if (CS%BT_OBC%v_OBC_type(i,J) > 0) & ! Northern boundary condition
           CS%frhatv(i,J,k) = h(i,j,k) * Ihatvtot(i)
-        enddo ; enddo
-      endif
-    elseif (OBC%segment(n)%direction == OBC_DIRECTION_S) then
-      J = OBC%segment(n)%HI%JsdB
-      if ((J >= js-1) .and. (J <= je)) then
-        iss = max(is,OBC%segment(n)%HI%isd) ; ies = min(ie,OBC%segment(n)%HI%ied)
-        do i=iss,ies ; hatvtot(i) = h(i,j+1,1) ; enddo
-        do k=2,nz ; do i=iss,ies
-          hatvtot(i) = hatvtot(i) + h(i,j+1,k)
-        enddo ; enddo
-        do i=iss,ies
-          Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect)
-        enddo
-        do k=1,nz ; do i=iss,ies
+      enddo ; enddo
+    enddo
+
+    ! Southern boundary conditions
+    is_v = max(is, CS%BT_OBC%is_v_S_obc) ; ie_v = min(ie, CS%BT_OBC%ie_v_S_obc)
+    Js_v = max(js-1, CS%BT_OBC%Js_v_S_obc) ; Je_v = min(je, CS%BT_OBC%Je_v_S_obc)
+    do J=Js_v,Je_v
+      do i=is_v,ie_v ; hatvtot(i) = h(i,j+1,1) ; enddo
+      do k=2,nz ; do i=is_v,ie_v
+        hatvtot(i) = hatvtot(i) + h(i,j+1,k)
+      enddo ; enddo
+      do i=is_v,ie_v
+        Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect)
+      enddo
+      do k=1,nz ; do i=is_v,ie_v
+        if (CS%BT_OBC%v_OBC_type(i,J) < 0) & ! Southern boundary condition
           CS%frhatv(i,J,k) = h(i,j+1,k) * Ihatvtot(i)
-        enddo ; enddo
-      endif
-    elseif (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-      I = OBC%segment(n)%HI%IsdB
-      if ((I >= is-1) .and. (I <= ie)) then
-        do j = max(js,OBC%segment(n)%HI%jsd), min(je,OBC%segment(n)%HI%jed)
-          htot = h(i,j,1)
-          do k=2,nz ; htot = htot + h(i,j,k) ; enddo
-          Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
-          do k=1,nz ; CS%frhatu(I,j,k) = h(i,j,k) * Ihtot ; enddo
-        enddo
-      endif
-    elseif (OBC%segment(n)%direction == OBC_DIRECTION_W) then
-      I = OBC%segment(n)%HI%IsdB
-      if ((I >= is-1) .and. (I <= ie)) then
-        do j = max(js,OBC%segment(n)%HI%jsd), min(je,OBC%segment(n)%HI%jed)
-          htot = h(i+1,j,1)
-          do k=2,nz ; htot = htot + h(i+1,j,k) ; enddo
-          Ihtot = G%mask2dCu(I,j) / (htot + h_neglect)
-          do k=1,nz ; CS%frhatu(I,j,k) = h(i+1,j,k) * Ihtot ; enddo
-        enddo
-      endif
-    else
-      call MOM_error(fatal, "btcalc encountered an OBC segment of indeterminate direction.")
-    endif
-  enddo ; endif
+      enddo ; enddo
+    enddo
+  endif
 
   if (CS%debug) then
     call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, &
