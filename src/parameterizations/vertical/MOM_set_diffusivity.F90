@@ -13,6 +13,7 @@ use MOM_CVMix_shear,         only : calculate_CVMix_shear, CVMix_shear_init, CVM
 use MOM_CVMix_shear,         only : CVMix_shear_end
 use MOM_diag_mediator,       only : diag_ctrl, time_type
 use MOM_diag_mediator,       only : post_data, register_diag_field
+use MOM_diagnose_kdwork,     only : vbf_CS
 use MOM_debugging,           only : hchksum, uvchksum, Bchksum, hchksum_pair
 use MOM_EOS,                 only : calculate_density, calculate_density_derivs, EOS_domain
 use MOM_error_handler,       only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
@@ -238,7 +239,7 @@ integer :: id_clock_kappaShear, id_clock_CVMix_ddiff
 contains
 
 subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_int, &
-                           G, GV, US, CS, Kd_lay, Kd_extra_T, Kd_extra_S)
+                           G, GV, US, CS, VBF, Kd_lay, Kd_extra_T, Kd_extra_S)
   type(ocean_grid_type),     intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type),   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),     intent(in)    :: US   !< A dimensional unit scaling type
@@ -264,9 +265,11 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
                              intent(out)   :: Kd_int !< Diapycnal diffusivity at each interface
                                                    !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
   type(set_diffusivity_CS),  pointer       :: CS   !< Module control structure.
+  type(vbf_CS),           pointer          :: VBF  !< A diagnostic control structure for vertical buoyancy fluxes
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                    optional, intent(out)   :: Kd_lay !< Diapycnal diffusivity of each layer
                                                    !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1), &
                    optional, intent(out)   :: Kd_extra_T !< The extra diffusivity at interfaces of
                                                    !! temperature due to double diffusion relative
@@ -285,6 +288,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   integer :: k_bot(SZI_(G))   ! Bottom boundary layer thickness top layer index
 
   type(diffusivity_diags)  :: dd ! structure with arrays of available diags
+
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
     T_f, S_f      ! Temperature and salinity [C ~> degC] and [S ~> ppt] with properties in massless layers
@@ -380,7 +384,8 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
   if ((CS%double_diffusion) .and. (CS%id_KS_extra > 0)) &
     allocate(dd%KS_extra(isd:ied,jsd:jed,nz+1), source=0.0)
   if (CS%id_R_rho > 0) allocate(dd%drho_rat(isd:ied,jsd:jed,nz+1), source=0.0)
-  if (CS%id_Kd_BBL > 0) allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1), source=0.0)
+  if (CS%id_Kd_BBL > 0 .or. associated(VBF%Kd_BBL)) &
+    allocate(dd%Kd_BBL(isd:ied,jsd:jed,nz+1), source=0.0)
 
   if (CS%id_Kd_bkgnd > 0) allocate(dd%Kd_bkgnd(isd:ied,jsd:jed,nz+1), source=0.)
   if (CS%id_Kv_bkgnd > 0) allocate(dd%Kv_bkgnd(isd:ied,jsd:jed,nz+1), source=0.)
@@ -432,6 +437,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
     endif
     call cpu_clock_end(id_clock_kappaShear)
     if (showCallTree) call callTree_waypoint("done with calculate_kappa_shear (set_diffusivity)")
+    if (associated(VBF%Kd_KS)) then ; do K=1,nz+1 ; do i=is,ie ; do j=js,je
+      VBF%Kd_KS(i,j,K) = visc%Kd_shear(i,j,K)
+    enddo ; enddo ; enddo ; endif
   elseif (CS%use_CVMix_shear) then
     !NOTE{BGR}: this needs to be cleaned up.  It works in 1D case, but has not been tested outside.
     call calculate_CVMix_shear(u_h, v_h, h, tv, visc%Kd_shear, visc%Kv_shear, G, GV, US, CS%CVMix_shear_CSp)
@@ -486,6 +494,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
     if (CS%id_Kd_bkgnd > 0) then ; do K=1,nz+1 ; do i=is,ie
       dd%Kd_bkgnd(i,j,K) = Kd_int_2d(i,K)
     enddo ; enddo ; endif
+    if (associated(VBF%Kd_bkgnd)) then ; do K=1,nz+1 ; do i=is,ie
+      VBF%Kd_bkgnd(i,j,K) = Kd_int_2d(i,K)
+    enddo ; enddo ; endif
 
     ! Double-diffusion (old method)
     if (CS%double_diffusion) then
@@ -515,6 +526,13 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
       if (associated(dd%KS_extra)) then ; do K=1,nz+1 ; do i=is,ie
         dd%KS_extra(i,j,K) = KS_extra(i,K)
       enddo ; enddo ; endif
+
+      if (associated(VBF%Kd_ddiff_T)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_ddiff_T(i,j,K) = KT_extra(i,K)
+      enddo ; enddo ; endif
+      if (associated(VBF%Kd_ddiff_S)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_ddiff_S(i,j,K) = KS_extra(i,K)
+      enddo ; enddo ; endif ;
     endif
 
     ! Apply double diffusion via CVMix
@@ -527,6 +545,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
       else
         call compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_extra_T, Kd_extra_S, CS%CVMix_ddiff_csp)
       endif
+      if (associated(VBF%Kd_ddiff_T)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_ddiff_T(i,j,K) = KT_extra(i,K)
+      enddo ; enddo ; endif
+      if (associated(VBF%Kd_ddiff_S)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_ddiff_S(i,j,K) = KS_extra(i,K)
+      enddo ; enddo ; endif ;
       call cpu_clock_end(id_clock_CVMix_ddiff)
     endif
 
@@ -575,7 +599,7 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
     if (CS%use_tidal_mixing) &
       call calculate_tidal_mixing(dz, j, N2_bot, rho_bot, N2_lay, N2_int, TKE_to_Kd, &
                                   maxTKE, G, GV, US, CS%tidal_mixing, &
-                                  CS%Kd_max, visc%Kv_slow, Kd_lay_2d, Kd_int_2d)
+                                  CS%Kd_max, visc%Kv_slow, Kd_lay_2d, Kd_int_2d, VBF)
 
     ! Add diffusivity from internal tides ray tracing
     if (CS%use_int_tides) then
@@ -606,6 +630,21 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
       if (CS%id_Kd_slope > 0) then ; do K=1,nz+1 ; do i=is,ie
         dd%Kd_slope(i,j,K) = Kd_slope_2d(i,K)
       enddo ; enddo ; endif
+      if (associated (VBF%Kd_leak)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_leak(i,j,K) = Kd_leak_2d(i,K)
+      enddo ; enddo ; endif
+      if (associated (VBF%Kd_quad)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_quad(i,j,K) = Kd_quad_2d(i,K)
+      enddo ; enddo ; endif
+      if (associated (VBF%Kd_itidal)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_itidal(i,j,K) = Kd_itidal_2d(i,K)
+      enddo ; enddo ; endif
+      if (associated (VBF%Kd_Froude)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_Froude(i,j,K) = Kd_Froude_2d(i,K)
+      enddo ; enddo ; endif
+      if (associated (VBF%Kd_slope)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_slope(i,j,K) = Kd_slope_2d(i,K)
+      enddo ; enddo ; endif
 
       if (CS%id_prof_leak > 0) then ; do k=1,nz; do i=is,ie
         dd%prof_leak(i,j,k) = prof_leak_2d(i,k)
@@ -633,6 +672,9 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
         call add_drag_diffusivity(h, u, v,  tv, fluxes, visc, j, TKE_to_Kd, &
                                   maxTKE, kb, rho_bot, G, GV, US, CS, Kd_lay_2d, Kd_int_2d, dd%Kd_BBL)
       endif
+      if (associated(VBF%Kd_BBL)) then ; do K=1,nz+1 ; do i=is,ie
+        VBF%Kd_BBL(i,j,K) = dd%Kd_BBL(i,j,K)
+      enddo ; enddo ; endif
     endif
 
     if (CS%limit_dissipation) then
@@ -651,9 +693,12 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
     endif
 
     ! Optionally add a uniform diffusivity at the interfaces.
-    if (CS%Kd_add > 0.0) then ; do K=1,nz+1 ; do i=is,ie
-      Kd_int_2d(i,K) = Kd_int_2d(i,K) + CS%Kd_add
-    enddo ; enddo ; endif
+    if (CS%Kd_add > 0.0) then
+      do K=1,nz+1 ; do i=is,ie
+        Kd_int_2d(i,K) = Kd_int_2d(i,K) + CS%Kd_add
+      enddo; enddo
+      VBF%Kd_add = CS%Kd_add
+    endif
 
     ! Copy the 2-d slices into the 3-d array that is exported.
     do K=1,nz+1 ; do i=is,ie
