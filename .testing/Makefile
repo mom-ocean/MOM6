@@ -503,14 +503,10 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # Regression testing only checks for changes in existing diagnostics
 .PRECIOUS: $(WORK)/%/target/chksum_diag
 %.regression.diag: $(foreach b,symmetric target,$(WORK)/%/$(b)/chksum_diag)
-	@! diff $^ | grep "^[<>]" | grep "^>" > /dev/null \
-	  || ! (\
-	    mkdir -p $(WORK)/results/$*; \
-	    (diff $^ | tee $(WORK)/results/$*/chksum_diag.regression.diff | head -n 20) ; \
+	@tools/diff_diag.sh $^ || ! (\
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
-	@cmp $^ || ( \
-	  diff $^ | head -n 20; \
+	@tools/cmp_diag.sh $^ || ( \
 	  echo -e "$(WARN): New diagnostics in $<" \
 	)
 	@echo -e "$(PASS): Diagnostics $*.regression.diag agree."
