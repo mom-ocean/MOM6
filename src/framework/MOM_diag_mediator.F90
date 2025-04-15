@@ -31,6 +31,7 @@ use MOM_io,               only : get_filename_appendix
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
+use MOM_time_manager,     only : get_time
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs
 use MOM_verticalGrid,     only : verticalGrid_type
@@ -1285,6 +1286,10 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
   logical :: used, is_stat
   type(diag_type), pointer :: diag => null()
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1300,7 +1305,12 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
       locfield = locfield * diag%conversion_factor
 
     if (diag_cs%diag_as_chksum) then
-      call chksum0(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
+      ! Append timestep to mesg
+      call get_time(diag_cs%time_end, time_seconds, days=time_days)
+      write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+          trim(diag%debug_str), time_days, time_seconds
+
+      call chksum0(locfield, debug_mesg, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
       used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
@@ -1328,6 +1338,10 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer :: k, ks, ke
   type(diag_type), pointer :: diag => null()
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1353,7 +1367,12 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
     endif
 
     if (diag_cs%diag_as_chksum) then
-      call zchksum(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
+      ! Append timestep to mesg
+      call get_time(diag_cs%time_end, time_seconds, days=time_days)
+      write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+          trim(diag%debug_str), time_days, time_seconds
+
+      call zchksum(locfield, debug_mesg, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
       used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
@@ -1414,6 +1433,10 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:), allocatable, target :: locfield_dsamp ! A downsampled version of locfield [a]
   real, dimension(:,:), allocatable, target :: locmask_dsamp  ! A downsampled version of locmask [nondim]
   integer :: dl
+
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
 
   locfield => NULL()
   locmask => NULL()
@@ -1493,17 +1516,22 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (diag_cs%diag_as_chksum) then
+    ! Append timestep to mesg
+    call get_time(diag_cs%time_end, time_seconds, days=time_days)
+    write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+        trim(diag%debug_str), time_days, time_seconds
+
     if (diag%axes%is_h_point) then
-      call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call hchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     elseif (diag%axes%is_u_point) then
-      call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call uchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     elseif (diag%axes%is_v_point) then
-      call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call vchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     elseif (diag%axes%is_q_point) then
-      call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call Bchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     else
       call MOM_error(FATAL, "post_data_2d_low: unknown axis type.")
@@ -1735,6 +1763,10 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:,:), allocatable, target :: locmask_dsamp  ! A downsampled version of locmask [nondim]
   integer :: dl
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   locfield => NULL()
   locmask => NULL()
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
@@ -1831,17 +1863,22 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 
   if (diag%fms_diag_id>0) then
     if (diag_cs%diag_as_chksum) then
+      ! Append timestep to mesg
+      call get_time(diag_cs%time_end, time_seconds, days=time_days)
+      write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+          trim(diag%debug_str), time_days, time_seconds
+
       if (diag%axes%is_h_point) then
-        call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call hchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       elseif (diag%axes%is_u_point) then
-        call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call uchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       elseif (diag%axes%is_v_point) then
-        call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call vchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       elseif (diag%axes%is_q_point) then
-        call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call Bchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       else
         call MOM_error(FATAL, "post_data_3d_low: unknown axis type.")
@@ -1998,6 +2035,10 @@ subroutine post_xy_average(diag_cs, diag, field)
   logical :: staggered_in_x, staggered_in_y, used
   integer :: nz, remap_nz, coord
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   if (.not. diag_cs%ave_enabled) then
     return
   endif
@@ -2031,8 +2072,12 @@ subroutine post_xy_average(diag_cs, diag, field)
   endif
 
   if (diag_cs%diag_as_chksum) then
-    call zchksum(averaged_field, trim(diag%debug_str)//'_xyave', &
-                 logunit=diag_CS%chksum_iounit)
+    ! Append timestep to mesg
+    call get_time(diag_cs%time_end, time_seconds, days=time_days)
+    write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+        trim(diag%debug_str)//'_xyave', time_days, time_seconds
+
+    call zchksum(averaged_field, debug_mesg, logunit=diag_CS%chksum_iounit)
   else
     used = send_data_infra(diag%fms_xyave_diag_id, averaged_field, &
                            time=diag_cs%time_end, weight=diag_cs%time_int, mask=averaged_mask)
