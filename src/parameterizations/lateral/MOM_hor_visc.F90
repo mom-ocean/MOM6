@@ -1362,7 +1362,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo ; enddo
           !$omp target update to(Ah)
         endif
-        !!$omp target update from(Ah)
 
         if (CS%use_Leithy) then
           ! TODO: !$omp target update from(...?)
@@ -1937,9 +1936,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp target update from(Ah)
 
       ! Again, need to initialize str_xy as if its biharmonic
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         d_str = Ah(I,J) * (dDel2vdx(I,J) + dDel2udy(I,J))
 
         str_xy(I,J) = str_xy(I,J) + d_str
@@ -1947,8 +1944,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
         ! NOTE: computing this ought to be conditional!  But it uses d_str...
         bhstr_xy(I,J) = d_str * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-      enddo ; enddo
-      !$omp end target
+      enddo
 
       !$omp target update from(Ah, str_xy, bhstr_xy)
     endif ! Get Ah at q points and biharmonic part of str_xy
@@ -2032,37 +2028,29 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
       !$omp target update to(str_xx, str_xy)
     else ! .not. use_GME
-      !$omp target
       ! This changes the units of str_xx from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
         str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
-      enddo ; enddo
+      enddo
 
       ! This changes the units of str_xy from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
       if (CS%no_slip) then
-        !$omp parallel loop collapse(2)
-        do J=js-1,Jeq ; do I=is-1,Ieq
+        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
           str_xy(I,J) = str_xy(I,J) * (hq(I,J) * CS%reduction_xy(I,J))
-        enddo ; enddo
+        enddo
       else
-        !$omp parallel loop collapse(2)
-        do J=js-1,Jeq ; do I=is-1,Ieq
+        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
           str_xy(I,J) = str_xy(I,J) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
-        enddo ; enddo
+        enddo
       endif
-      !$omp end target
     endif ! use_GME
 
-    !$omp target
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
-    !$omp parallel loop collapse(2)
-    do j=js,je ; do I=Isq,Ieq
+    do concurrent (I=Isq:Ieq, j=js:je)
       diffu(I,j,k) = ((G%IdxCu(I,j)*((CS%dx2q(I,J-1)*str_xy(I,J-1)) - (CS%dx2q(I,J)*str_xy(I,J))) + &
                        G%IdyCu(I,j)*((CS%dy2h(i,j)*str_xx(i,j)) - (CS%dy2h(i+1,j)*str_xx(i+1,j)))) * &
                      G%IareaCu(I,j)) / (h_u(I,j) + h_neglect)
-    enddo ; enddo
-    !$omp end target
+    enddo
 
     if (apply_OBC) then
       !$omp target update from(diffu)
@@ -2375,37 +2363,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
   !$omp target exit data map(delete: visc_bound_rem) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-
-  ! TODO: Should static CS arrays be permanently on the GPU?
-  !!$omp target exit data map(delete: CS)
-  !!$omp target exit data map(delete: CS%DX_dyT, CS%DY_dxT)
-  !!$omp target exit data map(delete: CS%Dx_dyBu, CS%DY_dxBu)
-
-  !!$omp target exit data map(delete: CS%Idxdy2u, CS%Idxdy2v) if (CS%biharmonic)
-  !!$omp target exit data map(delete: CS%Idx2dyCu, CS%Idx2dyCv) if (CS%biharmonic)
-  !!$omp target exit data map(delete: CS%dx2q, CS%dy2q)
-  !!$omp target exit data map(delete: CS%dx2h, CS%dy2h)
-
-  !!$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
-  !!$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
-  !!$omp target exit data map(delete: CS%Kh_max_xy) &
-  !!$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
-  !!$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
-  !!$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
-  !!$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
-
-  !!$omp target exit data map(delete: CS%Ah_bg_xx, CS%Ah_bg_xy) if (CS%biharmonic)
-  !!$omp target exit data map(delete: CS%reduction_xx, CS%reduction_xy)
-  !!$omp target exit data map(delete: CS%Biharm_const_xx, CS%Biharm_const2_xx) &
-  !!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah .or. CS%use_Leithy)
-  !!$omp target exit data map(delete: CS%Biharm_const_xy) &
-  !!$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
-  !!$omp target exit data map(delete: CS%Biharm_const2_xy) &
-  !!$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
-  !!$omp target exit data map(delete: CS%Ah_max_xx) &
-  !!$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !!$omp target exit data map(delete: CS%Ah_max_xy) &
-  !!$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
 
   ! TODO: Do this outside of the function
   !$omp target exit data map(delete: u, v, h)
