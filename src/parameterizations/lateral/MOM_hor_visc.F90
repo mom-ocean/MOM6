@@ -1337,24 +1337,20 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo
 
       if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
-        !$omp target
         if (CS%Smagorinsky_Ah) then
           if (CS%bound_Coriolis) then
-            !$omp parallel loop collapse(2)
-            do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+            do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
               AhSm = Shear_mag(i,j) * (CS%Biharm_const_xx(i,j) &
                   + CS%Biharm_const2_xx(i,j) * Shear_mag(i,j))
               Ah(i,j) = max(Ah(i,j), AhSm)
-            enddo ; enddo
+            enddo
           else
-            !$omp parallel loop collapse(2)
-            do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+            do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
               AhSm = CS%Biharm_const_xx(i,j) * Shear_mag(i,j)
               Ah(i,j) = max(Ah(i,j), AhSm)
-            enddo ; enddo
+            enddo
           endif
         endif
-        !$omp end target
 
         if (CS%Leith_Ah) then
           !$omp target update from(Ah)
@@ -1366,7 +1362,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo ; enddo
           !$omp target update to(Ah)
         endif
-        !$omp target update from(Ah)
+        !!$omp target update from(Ah)
 
         if (CS%use_Leithy) then
           ! TODO: !$omp target update from(...?)
@@ -1424,14 +1420,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
         endif
 
-        !$omp target
         if (CS%bound_Ah .and. .not. CS%better_bound_Ah) then
-          !$omp parallel loop collapse(2)
-          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
             Ah(i,j) = min(Ah(i,j), CS%Ah_Max_xx(i,j))
-          enddo ; enddo
+          enddo
         endif
-        !$omp end target
       endif ! Smagorinsky_Ah or Leith_Ah or Leith+E
 
       if (use_MEKE_Au) then
@@ -1452,21 +1445,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Ah)
       endif
 
-      !$omp target
       if (CS%better_bound_Ah) then
         if (CS%better_bound_Kh) then
-          !$omp parallel loop collapse(2)
-          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
             Ah(i,j) = min(Ah(i,j), visc_bound_rem(i,j) * hrat_min(i,j) * CS%Ah_Max_xx(i,j))
-          enddo ; enddo
+          enddo
         else
-          !$omp parallel loop collapse(2)
-          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
+          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
             Ah(i,j) = min(Ah(i,j), hrat_min(i,j) * CS%Ah_Max_xx(i,j))
-          enddo ; enddo
+          enddo
         endif
       endif
-      !$omp end target
 
       if (CS%EY24_EBT_BS) then
         !$omp target update from(Ah)
@@ -1509,9 +1498,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       !$omp target update to(sh_xx_smooth) if (CS%use_Leithy)
 
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
         d_del2u = (G%IdyCu(I,j) * Del2u(I,j)) - (G%IdyCu(I-1,j) * Del2u(I-1,j))
         d_del2v = (G%IdxCv(i,J) * Del2v(i,J)) - (G%IdxCv(i,J-1) * Del2v(i,J-1))
         d_str = Ah(i,j) * ((CS%DY_dxT(i,j) * d_del2u) - (CS%DX_dyT(i,j) * d_del2v))
@@ -1522,8 +1509,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
         bhstr_xx(i,j) = d_str * (h(i,j,k) * CS%reduction_xx(i,j))
-      enddo ; enddo
-      !$omp end target
+      enddo
     endif ! Get biharmonic coefficient at h points and biharmonic part of str_xx
 
     ! Backscatter using MEKE
@@ -1559,13 +1545,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     if (CS%biharmonic) then
       ! Gradient of Laplacian, for use in bi-harmonic term
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         dDel2vdx(I,J) = CS%DY_dxBu(I,J)*((Del2v(i+1,J)*G%IdyCv(i+1,J)) - (Del2v(i,J)*G%IdyCv(i,J)))
         dDel2udy(I,J) = CS%DX_dyBu(I,J)*((Del2u(I,j+1)*G%IdxCu(I,j+1)) - (Del2u(I,j)*G%IdxCu(I,j)))
-      enddo ; enddo
-      !$omp end target
+      enddo
 
       ! Adjust contributions to shearing strain on open boundaries.
       if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
@@ -1594,34 +1577,30 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif ; endif
     endif
 
-    !$omp target
-
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         sh_xy_sq = sh_xy(I,J)**2
         sh_xx_sq = 0.25 * ( ((sh_xx(i,j)**2) + (sh_xx(i+1,j+1)**2)) &
                           + ((sh_xx(i,j+1)**2) + (sh_xx(i+1,j)**2)) )
         Shear_mag(I,J) = sqrt(sh_xy_sq + sh_xx_sq)
-      enddo ; enddo
+      enddo
     endif
 
-    !$omp parallel loop collapse(2)
-    do J=js-1,Jeq ; do I=is-1,Ieq
+    do concurrent (I=is-1:Ieq, J=js-1:Jeq)
       h2uq = 4.0 * (h_u(I,j) * h_u(I,j+1))
       h2vq = 4.0 * (h_v(i,J) * h_v(i+1,J))
       hq(I,J) = (2.0 * (h2uq * h2vq)) &
           / (h_neglect3 + (h2uq + h2vq) * ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
-    enddo ; enddo
+    enddo
 
     if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         h_min = min(h_u(I,j), h_u(I,j+1), h_v(i,J), h_v(i+1,J))
         hrat_min(I,J) = min(1.0, h_min / (hq(I,J) + h_neglect))
-      enddo ; enddo
+      enddo
     endif
 
+    ! TODO: GPU??  Are h_[uv] on CPU?  update to hrat_min?
     if (CS%no_slip) then
       do J=js-1,Jeq ; do I=is-1,Ieq
         if (CS%no_slip .and. (G%mask2dBu(I,J) < 0.5)) then
@@ -1645,8 +1624,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
       enddo ; enddo
     endif
-
-    !$omp end target
 
     ! Pass the velocity gradients and thickness to ZB2020
     if (CS%use_ZB2020) then

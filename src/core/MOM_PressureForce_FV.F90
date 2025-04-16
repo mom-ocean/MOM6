@@ -1153,12 +1153,9 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   !$omp target enter data map(alloc: e)
 
-  !$omp target
-  !$omp parallel loop collapse(2)
-  do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+  do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
     e(i,j,nz+1) = -G%bathyT(i,j)
-  enddo ; enddo
-  !$omp end target
+  enddo
 
   ! The following two if-blocks are used to recover old answers for self-attraction and loading
   ! (SAL) and tides only. The old algorithm moves interface heights before density calculations,
