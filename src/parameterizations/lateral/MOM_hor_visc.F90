@@ -1824,32 +1824,25 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! Determine the biharmonic viscosity at q points, using the
       ! largest value from several parameterizations. Also get the
       ! biharmonic component of str_xy.
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         Ah(I,J) = CS%Ah_bg_xy(I,J)
-      enddo ; enddo
-      !$omp end target
+      enddo
 
       if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
-        !$omp target
         if (CS%Smagorinsky_Ah) then
           if (CS%bound_Coriolis) then
-            !$omp parallel loop collapse(2)
-            do J=js-1,Jeq ; do I=is-1,Ieq
+            do concurrent (I=is-1:Ieq, J=js-1:Jeq)
               AhSm = Shear_mag(I,J) * (CS%Biharm_const_xy(I,J) &
                   + CS%Biharm_const2_xy(I,J) * Shear_mag(I,J))
               Ah(I,J) = max(Ah(I,J), AhSm)
-            enddo ; enddo
+            enddo
           else
-            !$omp parallel loop collapse(2)
-            do J=js-1,Jeq ; do I=is-1,Ieq
+            do concurrent (I=is-1:Ieq, J=js-1:Jeq)
               AhSm = CS%Biharm_const_xy(I,J) * Shear_mag(I,J)
               Ah(I,J) = max(Ah(I,J), AhSm)
-            enddo ; enddo
+            enddo
           endif
         endif
-        !$omp end target
 
         if (CS%Leith_Ah) then
           !$omp target update from(Ah)
@@ -1860,14 +1853,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           !$omp target update to(Ah)
         endif
 
-        !$omp target
         if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-          !$omp parallel loop collapse(2)
-          do J=js-1,Jeq ; do I=is-1,Ieq
+          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
             Ah(I,J) = min(Ah(I,J), CS%Ah_Max_xy(I,J))
-          enddo ; enddo
+          enddo
         endif
-        !$omp end target
       endif ! Smagorinsky_Ah or Leith_Ah
 
       if (use_MEKE_Au) then
@@ -1889,21 +1879,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Ah)
       endif
 
-      !$omp target
       if (CS%better_bound_Ah) then
         if (CS%better_bound_Kh) then
-          !$omp parallel loop collapse(2)
-          do J=js-1,Jeq ; do I=is-1,Ieq
+          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
             Ah(I,J) = min(Ah(I,J), visc_bound_rem(I,J) * hrat_min(I,J) * CS%Ah_Max_xy(I,J))
-          enddo ; enddo
+          enddo
         else
-          !$omp parallel loop collapse(2)
-          do J=js-1,Jeq ; do I=is-1,Ieq
+          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
             Ah(I,J) = min(Ah(I,J), hrat_min(I,J) * CS%Ah_Max_xy(I,J))
-          enddo ; enddo
+          enddo
         endif
       endif
-      !$omp end target
 
       if (CS%EY24_EBT_BS) then
         ! TODO: Fix indent!
@@ -2067,15 +2053,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp target update to(diffu)
     endif
 
-    !$omp target
     ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
-    !$omp parallel loop collapse(2)
-    do J=Jsq,Jeq ; do i=is,ie
+    do concurrent (i=is:ie, J=Jsq:Jeq)
       diffv(i,J,k) = ((G%IdyCv(i,J)*((CS%dy2q(I-1,J)*str_xy(I-1,J)) - (CS%dy2q(I,J)*str_xy(I,J))) - &
                        G%IdxCv(i,J)*((CS%dx2h(i,j)*str_xx(i,j)) - (CS%dx2h(i,j+1)*str_xx(i,j+1)))) * &
                      G%IareaCv(i,J)) / (h_v(i,J) + h_neglect)
-    enddo ; enddo
-    !$omp end target
+    enddo
 
     if (apply_OBC) then
       !$omp target update from(diffv)
@@ -2991,12 +2974,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     endif
   endif
 
-  !$omp target
-
-  !$omp parallel loop collapse(2)
-  do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+  do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
     CS%dx2q(I,J) = G%dxBu(I,J)*G%dxBu(I,J) ; CS%dy2q(I,J) = G%dyBu(I,J)*G%dyBu(I,J)
-  enddo ; enddo
+  enddo
 
   if (((CS%Leith_Kh) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) .and. &
       ((G%isc-G%isd < 3) .or. (G%isc-G%isd < 3))) call MOM_error(FATAL, &
@@ -3016,13 +2996,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   endif
   !$omp target enter data map(to: CS%dx2q, CS%dy2q, CS%dx_dyBu, CS%dy_dxBu)
 
-  !$omp parallel loop collapse(2)
-  do j=js-2,Jeq+2 ; do i=is-2,Ieq+2
+  do concurrent (i=is-2:Ieq+2, j=js-2:Jeq+2)
     CS%dx2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; CS%dy2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
     CS%DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
-  enddo ; enddo
-
-  !$omp end target
+  enddo
 
   ! TODO: Remove this after every instance has been moved to GPU
   !$omp target update from(CS%dx2q, CS%dy2q, CS%dx_dyBu, CS%dy_dxBu)
