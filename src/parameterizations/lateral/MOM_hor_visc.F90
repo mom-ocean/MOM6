@@ -1660,29 +1660,22 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
       endif
 
-      !$omp target
-
       ! Static (pre-computed) background viscosity
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         Kh(I,J) = CS%Kh_bg_xy(I,J)
-      enddo ; enddo
+      enddo
 
       if (CS%Smagorinsky_Kh) then
         if (CS%add_LES_viscosity) then
-          !$omp parallel loop collapse(2)
-          do J=js-1,Jeq ; do I=is-1,Ieq
+          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
             Kh(I,J) = Kh(I,J) + CS%Laplac2_const_xy(I,J) * Shear_mag(I,J)
-          enddo ; enddo
+          enddo
         else
-          !$omp parallel loop collapse(2)
-          do J=js-1,Jeq ; do I=is-1,Ieq
+          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
             Kh(I,J) = max(Kh(I,J), CS%Laplac2_const_xy(I,J) * Shear_mag(I,J) )
-          enddo ; enddo
+          enddo
         endif
       endif
-
-      !$omp end target
 
       if (CS%Leith_Kh) then
         !$omp target update from(Kh)
@@ -1717,13 +1710,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         ! Place a floor on the viscosity, if desired.
         Kh(I,J) = max(Kh(I,J), CS%Kh_bg_min)
-      enddo ; enddo
-      !$omp end target
+      enddo
 
       if (use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) then
         !$omp target update from(Kh)
