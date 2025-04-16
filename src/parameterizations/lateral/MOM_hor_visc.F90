@@ -1750,9 +1750,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         ! Newer method of bounding for stability
         if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
           visc_bound_rem(I,J) = 1.0
@@ -1766,8 +1764,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         elseif (CS%better_bound_Kh) then
           Kh(I,J) = min(Kh(I,J), hrat_min(I,J) * CS%Kh_Max_xy(I,J))
         endif
-      enddo ; enddo
-      !$omp end target
+      enddo
 
       if (CS%use_Leithy) then
         !$omp target update from(Kh)
@@ -1779,12 +1776,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       end if
 
       if (CS%id_Kh_q > 0 .or. CS%debug) then
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do J=js-1,Jeq ; do I=is-1,Ieq
+        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
           Kh_q(I,J,k) = Kh(I,J)
-        enddo ; enddo
-        !$omp end target
+        enddo
       endif
 
       if (CS%id_vort_xy_q > 0) then
@@ -1794,21 +1788,15 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       if (CS%id_sh_xy_q > 0) then
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do J=js-1,Jeq ; do I=is-1,Ieq
+        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
           sh_xy_q(I,J,k) = sh_xy(I,J)
-        enddo ; enddo
-        !$omp end target
+        enddo
       endif
 
       if (.not. CS%use_Leithy) then
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do J=js-1,Jeq ; do I=is-1,Ieq
+        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
           str_xy(I,J) = -Kh(I,J) * sh_xy(I,J)
-        enddo ; enddo
-        !$omp end target
+        enddo
       else
         !$omp target update from(Kh)
         do J=js-1,Jeq ; do I=is-1,Ieq
@@ -1817,12 +1805,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(str_xy)
       endif
     else
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do J=js-1,Jeq ; do I=is-1,Ieq
+      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         str_xy(I,J) = 0.
-      enddo ; enddo
-      !$omp end target
+      enddo
     endif ! get harmonic coefficient Kh at q points and harmonic part of str_xy
 
     if (CS%anisotropic) then
