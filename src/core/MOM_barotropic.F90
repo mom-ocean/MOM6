@@ -1966,16 +1966,32 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     endif
 
     ! Copy decomposed barotropic accelerations to ADp
-    if (associated(ADp%bt_pgf_u)) then ; do k=1,nz ; do j=js,je ; do I=is-1,ie
-      ADp%bt_pgf_u(I,j,k) = PFu_avg(I,j) - &
-        (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
-         ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j)
-    enddo ; enddo ; enddo ; endif
-    if (associated(ADp%bt_pgf_v)) then ; do k=1,nz ; do J=js-1,je ; do i=is,ie
-      ADp%bt_pgf_v(i,J,k) = PFv_avg(i,J) - &
-        (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
-         ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J)
-    enddo ; enddo ; enddo ; endif
+    if (associated(ADp%bt_pgf_u)) then
+      do k=1,nz ; do j=js,je ; do I=is-1,ie
+        ADp%bt_pgf_u(I,j,k) = PFu_avg(I,j) - &
+          (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
+           ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j)
+      enddo ; enddo ; enddo
+      ! The pressure gradient at OBC points is not meaningful and needs to be zeroed out.
+      if (CS%BT_OBC%apply_u_OBCs) then ; do j=js,je ; do I=is-1,ie
+        if (OBC%segnum_u(I,j) /= OBC_NONE) then
+          do k=1,nz ; ADp%bt_pgf_u(I,j,k) = 0.0 ; enddo
+        endif
+      enddo ; enddo ; endif
+    endif
+    if (associated(ADp%bt_pgf_v)) then
+      do k=1,nz ; do J=js-1,je ; do i=is,ie
+        ADp%bt_pgf_v(i,J,k) = PFv_avg(i,J) - &
+          (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
+           ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J)
+      enddo ; enddo ; enddo
+      ! The pressure gradient at OBC points is not meaningful and needs to be zeroed out.
+      if (CS%BT_OBC%apply_v_OBCs) then ; do J=js-1,je ; do i=is,ie
+        if (OBC%segnum_v(i,J) /= OBC_NONE) then
+          do k=1,nz ; ADp%bt_pgf_v(i,J,k) = 0.0 ; enddo
+        endif
+      enddo ; enddo ; endif
+    endif
 
     if (associated(ADp%bt_cor_u)) then ; do j=js,je ; do I=is-1,ie
       ADp%bt_cor_u(I,j) = Coru_avg(I,j)
