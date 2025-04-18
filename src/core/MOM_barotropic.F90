@@ -3116,8 +3116,8 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
   if (use_bracket_bug) then
    !$OMP do schedule(static)
    do J=Js_v,Je_v ; do i=is_v,ie_v
-     Cor_v(i,J) = -1.0*((f_4_v(1,i,J) * ubt(I-1,j) + f_4_v(2,i,J) * ubt(I,j)) + &
-             (f_4_v(4,i,J) * ubt(I,j+1) + f_4_v(3,i,J) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+     Cor_v(i,J) = -1.0*(((f_4_v(1,i,J) * ubt(I-1,j)) + (f_4_v(2,i,J) * ubt(I,j))) + &
+             ((f_4_v(4,i,J) * ubt(I,j+1)) + (f_4_v(3,i,J) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
      PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
                  ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                  dgeo_de * CS%IdyCv(i,J)
@@ -3126,8 +3126,8 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
   else
    !$OMP do schedule(static)
    do J=Js_v,Je_v ; do i=is_v,ie_v
-     Cor_v(i,J) = -1.0*((f_4_v(1,i,J) * ubt(I-1,j) + f_4_v(4,i,J) * ubt(I,j+1)) + &
-             (f_4_v(2,i,J) * ubt(I,j) + f_4_v(3,i,J) * ubt(I-1,j+1))) - Cor_ref_v(i,J)
+     Cor_v(i,J) = -1.0*(((f_4_v(1,i,J) * ubt(I-1,j)) + (f_4_v(4,i,J) * ubt(I,j+1))) + &
+             ((f_4_v(2,i,J) * ubt(I,j)) + (f_4_v(3,i,J) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
      PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
                  ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                  dgeo_de * CS%IdyCv(i,J)
