@@ -31,6 +31,8 @@ use MOM_wave_interface, only : wave_parameters_CS
 use MOM_set_visc,      only : set_v_at_u, set_u_at_v
 use MOM_lateral_mixing_coeffs, only : VarMix_CS
 
+use CVMix_kpp,         only : cvmix_kpp_composite_Gshape
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -170,9 +172,11 @@ type, public :: vertvisc_CS ; private
   integer :: id_au_vv = -1, id_av_vv = -1, id_au_gl90_vv = -1, id_av_gl90_vv = -1
   integer :: id_du_dt_str = -1, id_dv_dt_str = -1
   integer :: id_h_u = -1, id_h_v = -1, id_hML_u = -1 , id_hML_v = -1
-  integer :: id_FPw2x = -1    !W id_FPhbl_u = -1, id_FPhbl_v = -1
-  integer :: id_tauFP_u = -1, id_tauFP_v = -1  !W,    id_FPtau2x_u = -1, id_FPtau2x_v = -1
-  integer :: id_FPtau2s_u = -1, id_FPtau2s_v = -1, id_FPtau2w_u = -1, id_FPtau2w_v = -1
+  integer :: id_Omega_w2x = -1, id_FPtau2s  = -1 , id_FPtau2w = -1
+  integer :: id_uE_h  = -1, id_vE_h  = -1
+  integer :: id_uStk  = -1, id_vStk  = -1
+  integer :: id_uStk0 = -1, id_vStk0 = -1
+  integer :: id_uInc_h= -1, id_vInc_h= -1
   integer :: id_taux_bot = -1, id_tauy_bot = -1
   integer :: id_Kv_slow = -1, id_Kv_u = -1, id_Kv_v = -1
   integer :: id_Kv_gl90_u = -1, id_Kv_gl90_v = -1
@@ -191,391 +195,221 @@ end type vertvisc_CS
 
 contains
 
-!> Add nonlocal stress increments to u^n (uold) and v^n (vold) using ui and vi.
-subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, G, GV, US, CS, OBC)
+!> Add nonlocal stress increments to ui^n and vi^n.
+subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G, GV, US, CS, OBC, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: ui     !< Zonal velocity after vertvisc [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                           intent(inout) :: vi      !< Meridional velocity after vertvisc [L T-1 ~> m s-1]
+                           intent(inout) :: vi     !< Meridional velocity after vertvisc [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
                            intent(inout) :: uold   !< Old Zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(inout) :: vold   !< Old Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: hbl_h !<  boundary layer depth [H ~> m]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                           intent(in) :: h      !< Layer thicknesses [H ~> m or kg m-2]
-  type(mech_forcing),      intent(in) :: forces !< A structure with the driving mechanical forces
-  real,                    intent(in) :: dt     !< Time increment [T ~> s]
-  type(unit_scale_type),   intent(in) :: US     !< A dimensional unit scaling type
-  type(vertvisc_CS),       pointer    :: CS     !< Vertical viscosity control structure
-  type(ocean_OBC_type),    pointer    :: OBC    !< Open boundary condition structure
+                           intent(in) :: h       !< Layer thicknesses [H ~> m or kg m-2]
+  type(mech_forcing),      intent(in) :: forces  !< A structure with the driving mechanical forces
+  real,                    intent(in) :: dt      !< Time increment [T ~> s]
+  real,                    intent(in) :: Cemp_NL !< empirical coefficient of non-local momentum mixing [nondim]
+  logical,                 intent(in) :: lpost   !< Compute and make available FPMix diagnostics
+  type(unit_scale_type),   intent(in) :: US      !< A dimensional unit scaling type
+  type(vertvisc_CS),       pointer    :: CS      !< Vertical viscosity control structure
+  type(ocean_OBC_type),    pointer    :: OBC     !< Open boundary condition structure
+  type(wave_parameters_CS), &
+                   optional, pointer  :: Waves   !< Container for wave/Stokes information
 
   ! local variables
-  real, dimension(SZIB_(G),SZJ_(G))  :: hbl_u   !< boundary layer depth at u-pts [H ~> m]
-  real, dimension(SZI_(G),SZJB_(G))  :: hbl_v   !< boundary layer depth at v-pts [H ~> m]
-  integer, dimension(SZIB_(G),SZJ_(G)) :: kbl_u !< index of the BLD at u-pts     [nondim]
-  integer, dimension(SZI_(G),SZJB_(G)) :: kbl_v !< index of the BLD at v-pts     [nondim]
-  real, dimension(SZIB_(G),SZJ_(G))  :: ustar2_u !< ustar squared at u-pts   [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G))  :: ustar2_v !< ustar squared at v-pts   [L2 T-2 ~> m2 s-2]
-  real, dimension(SZIB_(G),SZJ_(G))  :: taux_u   !< zonal wind stress at u-pts  [R L Z T-2 ~> Pa]
-  real, dimension(SZI_(G),SZJB_(G))  :: tauy_v   !< meridional wind stress at v-pts  [R L Z T-2 ~> Pa]
-  !real, dimension(SZIB_(G),SZJ_(G))  :: omega_w2x_u !< angle between wind and x-axis at u-pts [rad]
-  !real, dimension(SZI_(G),SZJB_(G))  :: omega_w2x_v !< angle between wind and y-axis at v-pts [rad]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: tau_u !< kinematic zonal mtm flux at u-pts [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: tau_v !< kinematic mer. mtm flux at v-pts [L2 T-2 ~> m2 s-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: tauxDG_u !< downgradient zonal mtm flux at u-pts [L2 T-2 ~> m2 s-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: tauyDG_u !< downgradient meri mtm flux at u-pts [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: tauxDG_v !< downgradient zonal mtm flux at v-pts [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: tauyDG_v !< downgradient meri mtm flux at v-pts [L2 T-2 ~> m2 s-2]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: omega_tau2s_u !< angle between mtm flux and vert shear at u-pts [rad]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: omega_tau2s_v !< angle between mtm flux and vert shear at v-pts [rad]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: omega_tau2w_u !< angle between mtm flux and wind at u-pts [rad]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: omega_tau2w_v !< angle between mtm flux and wind at v-pts [rad]
-
-  real :: pi, Cemp_CG, tmp, cos_tmp, sin_tmp  !< constants and dummy variables [nondim]
-  real :: omega_tmp        !< A dummy angle [radians]
-  real :: du, dv           !< Velocity increments [L T-1 ~> m s-1]
-  real :: depth            !< Cumulative layer thicknesses [H ~> m or kg m-2]
-  real :: sigma            !< Fractional depth in the mixed layer [nondim]
-  real :: Wind_x, Wind_y   !< intermediate wind stress componenents [L2 T-2 ~> m2 s-2]
-  real :: taux, tauy, tauxDG, tauyDG, tauxDGup, tauyDGup, ustar2, tauh !< intermediate variables [L2 T-2 ~> m2 s-2]
-  real :: tauNLup, tauNLdn, tauNL_CG, tauNL_DG, tauNL_X, tauNL_Y, tau_MAG !< intermediate variables [L2 T-2 ~> m2 s-2]
-  real :: omega_w2s, omega_tau2s, omega_s2x, omega_tau2x, omega_tau2w, omega_s2w !< intermediate angles [radians]
-  integer :: kblmin, kbld, kp1, k, nz !< vertical indices
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq ! horizontal indices
+  real, dimension(SZIB_(G),SZJ_(G))  :: hbl_u   !< boundary layer depth (u-pts) [H ~> m]
+  real, dimension(SZI_(G),SZJB_(G))  :: hbl_v   !< boundary layer depth (v-pts) [H ~> m]
+  real, dimension(SZIB_(G),SZJ_(G))  :: taux_u  !< kinematic zonal wind stress (u-pts) [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G))  :: tauy_v  !< kinematic merid wind stress (v-pts) [L2 T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJ_(G))   :: uS0     !< surface zonal Stokes drift h-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G))   :: vS0     !< surface zonal Stokes drift h-pts [L T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uE_u    !< zonal Eulerian u-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: uE_h    !< zonal Eulerian h-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vE_v    !< merid Eulerian v-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: vE_h    !< merid Eulerian h-pts [L T-1 ~> m s-1]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uInc_u  !< zonal Eulerian u-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: uInc_h  !< zonal Eulerian h-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vInc_v  !< merid Eulerian v-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: vInc_h  !< merid Eulerian h-pts [L T-1 ~> m s-1]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: uStk    !< zonal Stokes Drift (h-pts) [L T-1 ~> m s-1]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)) :: vStk    !< merid Stokes Drift (h-pts) [L T-1 ~> m s-1]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)+1) :: omega_tau2s !< angle stress to shear (h-pts) [rad]
+  real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)+1) :: omega_tau2w !< angle stress to wind  (h-pts) [rad]
+  real :: omega_tmp, omega_s2x, omega_tau2x                    !< temporary angle wrt the x axis [rad]
+  real :: Irho0        !< Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
+  real :: pi           !< ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: tmp_u, tmp_v !< temporary ocean mask weights on u and v points [nondim]
+  real :: fexp         !< temporary exponential function [nondim]
+  real :: sigma        !< temporary normalize boundary layer coordinate [nondim]
+  real :: Gat1, Gsig, dGdsig !< Shape parameters [nondim]
+  real :: du, dv       !< Intermediate velocity differences [L T-1 ~> m s-1]
+  real :: depth        !< Cumulative of thicknesses [H ~> m]
+  integer :: b, kbld, kp1, k, nz !< band and vertical indices
+  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq !< horizontal indices
 
   is = G%isc ; ie = G%iec; js = G%jsc; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   pi = 4. * atan2(1.,1.)
-  Cemp_CG = 3.6
-  kblmin  = 1
-  taux_u(:,:)    = 0.
-  tauy_v(:,:)    = 0.
+  Irho0 = 1.0 / GV%Rho0
 
+  call pass_var(hbl_h , G%Domain, halo=1)
+
+  ! u-points
   do j = js,je
     do I = Isq,Ieq
-      taux_u(I,j)  = forces%taux(I,j) / GV%H_to_RZ    !W rho0=1035.
-    enddo
-  enddo
-
-  do J = Jsq,Jeq
-    do i = is,ie
-      tauy_v(i,J)  = forces%tauy(i,J) / GV%H_to_RZ
-    enddo
-  enddo
-
-  call pass_var( hbl_h      ,G%Domain, halo=1 )
-  call pass_vector(taux_u , tauy_v, G%Domain, To_All )
-  ustar2_u(:,:)  = 0.
-  ustar2_v(:,:)  = 0.
-  hbl_u(:,:)     = 0.
-  hbl_v(:,:)     = 0.
-  kbl_u(:,:)     = 0
-  kbl_v(:,:)     = 0
-  !omega_w2x_u(:,:) = 0.0
-  !omega_w2x_v(:,:) = 0.0
-  tauxDG_u(:,:,:) = 0.0
-  tauyDG_v(:,:,:) = 0.0
-  do j = js,je
-    do I = Isq,Ieq
-      if( (G%mask2dCu(I,j) > 0.5) ) then
-        tmp  = MAX (1.0 ,(G%mask2dT(i,j)             + G%mask2dT(i+1,j)    ) )
-        hbl_u(I,j)   = (G%mask2dT(i,j)*   hbl_h(i,j) + G%mask2dT(i+1,j) *   hbl_h(i+1,j)) /tmp
-        tmp  = MAX(1.0, (G%mask2dCv(i,j) + G%mask2dCv(i,j-1) + G%mask2dCv(i+1,j) + G%mask2dCv(i+1,j-1) ) )
-        tauy = ( G%mask2dCv(i  ,j  )*tauy_v(i  ,j  ) + G%mask2dCv(i  ,j-1)*tauy_v(i  ,j-1) &
-             +   G%mask2dCv(i+1,j  )*tauy_v(i+1,j  ) + G%mask2dCv(i+1,j-1)*tauy_v(i+1,j-1) ) / tmp
-        ustar2_u(I,j) = sqrt( taux_u(I,j)*taux_u(I,j)  + tauy*tauy )
-        !omega_w2x_u(I,j) = atan2( tauy , taux_u(I,j) )
-        tauxDG_u(I,j,1)  = taux_u(I,j)
-        depth = 0.0
-        do k = 1, nz
-          depth = depth + CS%h_u(I,j,k)
-          if( (depth >= hbl_u(I,j)) .and. (kbl_u(I,j) == 0 ) .and. (k > (kblmin-1)) ) then
-            kbl_u(I,j)  = k
-            hbl_u(I,j)  = depth
-          endif
-        enddo
-      endif
-    enddo
-  enddo
-  do J = Jsq,Jeq
-    do i = is,ie
-      if( (G%mask2dCv(i,J) > 0.5) ) then
-        tmp  = max( 1.0 ,(G%mask2dT(i,j) + G%mask2dT(i,j+1)))
-        hbl_v(i,J) = (G%mask2dT(i,j) * hbl_h(i,J) + G%mask2dT(i,j+1) * hbl_h(i,j+1)) /tmp
-        tmp  = max(1.0, (G%mask2dCu(i,j) + G%mask2dCu(i,j+1) + G%mask2dCu(i-1,j) + G%mask2dCu(i-1,j+1)))
-        taux = ( G%mask2dCu(i  ,j) * taux_u(i  ,j) + G%mask2dCu(i  ,j+1) * taux_u(i  ,j+1) &
-             +   G%mask2dCu(i-1,j) * taux_u(i-1,j) + G%mask2dCu(i-1,j+1) * taux_u(i-1,j+1)) / tmp
-        ustar2_v(i,J)  = sqrt(tauy_v(i,J)*tauy_v(i,J) + taux*taux)
-        !omega_w2x_v(i,J) = atan2( tauy_v(i,J), taux )
-        tauyDG_v(i,J,1)  = tauy_v(i,J)
-        depth = 0.0
-        do k = 1, nz
-          depth = depth + CS%h_v(i,J,k)
-          if( (depth >= hbl_v(i,J)) .and. (kbl_v(i,J) == 0) .and. (k > (kblmin-1))) then
-            kbl_v(i,J)  = k
-            hbl_v(i,J)  = depth
-          endif
-        enddo
-      endif
-    enddo
-  enddo
-
-  if (CS%debug) then
-    !### These checksum calls are missing necessary dimensional scaling factors.
-    call uvchksum("surface tau[xy]_[uv] ", taux_u, tauy_v, G%HI, haloshift=1, scalar_pair=.true.)
-    call uvchksum("ustar2", ustar2_u, ustar2_v, G%HI, haloshift=0, scalar_pair=.true.)
-    call uvchksum(" hbl", hbl_u ,   hbl_v , G%HI, haloshift=0, scalar_pair=.true.)
-  endif
-
-  !   Compute downgradient stresses
-  do k = 1, nz
-    kp1 = min( k+1 , nz)
-    do j =  js   ,je
-      do I = Isq  , Ieq
-        tauxDG_u(I,j,k+1) = CS%a_u(I,j,kp1) * (ui(I,j,k) - ui(I,j,kp1))
-      enddo
-    enddo
-    do J = Jsq  , Jeq
-      do i = is  , ie
-        tauyDG_v(i,J,k+1) = CS%a_v(i,J,kp1) * (vi(i,J,k) - vi(i,J,kp1))
-      enddo
-    enddo
-  enddo
-
-  call pass_vector(tauxDG_u, tauyDG_v , G%Domain, To_All)
-  call pass_vector(ui,vi, G%Domain, To_All)
-  tauxDG_v(:,:,:)   = 0.
-  tauyDG_u(:,:,:)   = 0.
-
-  ! Thickness weighted interpolations
-  do k = 1, nz
-    ! v to u points
-    do j = js , je
-      do I = Isq, Ieq
-        tauyDG_u(I,j,k)   = set_v_at_u(tauyDG_v, h, G, GV, I, j, k, G%mask2dCv, OBC)
-      enddo
-    enddo
-    ! u to v points
-    do J = Jsq, Jeq
-      do i = is, ie
-        tauxDG_v(i,J,k)   = set_u_at_v(tauxDG_u, h, G, GV, i, J, k, G%mask2dCu, OBC)
-      enddo
-    enddo
-  enddo
-  if (CS%debug) then
-    call uvchksum(" tauyDG_u tauxDG_v",tauyDG_u,tauxDG_v, G%HI, haloshift=0, scalar_pair=.true.)
-  endif
-
-  ! compute angles, tau2x_[u,v], tau2w_[u,v], tau2s_[u,v], s2w_[u,v] and stress mag tau_[u,v]
-  omega_tau2w_u(:,:,:) = 0.0
-  omega_tau2w_v(:,:,:) = 0.0
-  omega_tau2s_u(:,:,:) = 0.0
-  omega_tau2s_v(:,:,:) = 0.0
-  tau_u(:,:,:)     = 0.0
-  tau_v(:,:,:)     = 0.0
-
-  ! stress magnitude tau_[uv] & direction Omega_tau2(w,s,x)_[uv]
-  do j = js,je
-    do I = Isq,Ieq
-      if( (G%mask2dCu(I,j) > 0.5) ) then
-        ! SURFACE
-        tauyDG_u(I,j,1) = ustar2_u(I,j) !* cos(omega_w2x_u(I,j))
-        tau_u(I,j,1)    = ustar2_u(I,j)
-        Omega_tau2w_u(I,j,1) =  0.0
-        Omega_tau2s_u(I,j,1) =  0.0
-
-        do k=1,nz
-          kp1 = MIN(k+1 , nz)
-          tau_u(I,j,k+1) = sqrt( (tauxDG_u(I,j,k+1)*tauxDG_u(I,j,k+1)) + (tauyDG_u(I,j,k+1)*tauyDG_u(I,j,k+1)) )
-          Omega_tau2x  = atan2( tauyDG_u(I,j,k+1) , tauxDG_u(I,j,k+1) )
-          omega_tmp = Omega_tau2x !- omega_w2x_u(I,j)
-          if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
-          if ( (omega_tmp  < (0.-pi)) )  omega_tmp = omega_tmp + 2.*pi
-          Omega_tau2w_u(I,j,k+1)   =     omega_tmp
-          Omega_tau2s_u(I,j,k+1) = 0.0
-        enddo
-      endif
-    enddo
-  enddo
-  do J = Jsq, Jeq
-    do i = is, ie
-      if( (G%mask2dCv(i,J) > 0.5) ) then
-        ! SURFACE
-        tauxDG_v(i,J,1) = ustar2_v(i,J) !* sin(omega_w2x_v(i,J))
-        tau_v(i,J,1)    = ustar2_v(i,J)
-        Omega_tau2w_v(i,J,1)   = 0.0
-        Omega_tau2s_v(i,J,1)   = 0.0
-
-        do k=1,nz-1
-          kp1 = MIN(k+1 , nz)
-          tau_v(i,J,k+1) = sqrt ( (tauxDG_v(i,J,k+1)*tauxDG_v(i,J,k+1)) + (tauyDG_v(i,J,k+1)*tauyDG_v(i,J,k+1)) )
-          omega_tau2x  =  atan2( tauyDG_v(i,J,k+1) , tauxDG_v(i,J,k+1) )
-          omega_tmp  = omega_tau2x !- omega_w2x_v(i,J)
-          if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
-          if ( (omega_tmp  < (0.-pi)) )  omega_tmp = omega_tmp + 2.*pi
-          Omega_tau2w_v(i,J,k+1)   =     omega_tmp
-          Omega_tau2s_v(i,J,k+1) = 0.0
-        enddo
-      endif
-    enddo
-  enddo
-
-  ! Parameterized stress orientation from the wind at interfaces (tau2x)
-  ! and centers (tau2x) OVERWRITE to kbl-interface above hbl
-  do j = js,je
-    do I = Isq,Ieq
-      if( (G%mask2dCu(I,j) > 0.5) ) then
-        kbld  = min( (kbl_u(I,j)) , (nz-2) )
-        if ( tau_u(I,j,kbld+2) > tau_u(I,j,kbld+1) ) kbld = kbld + 1
-
-        !### This expression is dimensionally inconsistent.
-        tauh  =  tau_u(I,j,kbld+1) + GV%H_subroundoff
-        ! surface boundary conditions
+      taux_u(I,j)  = forces%taux(I,j) * Irho0
+      if ( (G%mask2dCu(I,j) > 0.5) ) then
+        ! h to u-pts
+        tmp_u  = MAX (1.0 ,(G%mask2dT(i,j) + G%mask2dT(i+1,j) ) )
+        hbl_u(I,j) = ((G%mask2dT(i,j) * hbl_h(i,j)) + (G%mask2dT(i+1,j) * hbl_h(i+1,j))) / tmp_u
         depth   = 0.
-        tauNLup = 0.0
-        do k=1, kbld
-          depth = depth + CS%h_u(I,j,k)
-          sigma  = min( 1.0 , depth / hbl_u(i,j) )
-
-          ! linear stress mag
-          tau_MAG   = (ustar2_u(I,j) * (1.-sigma) )  + (tauh * sigma )
-          !### The following expressions are dimensionally inconsistent.
-          cos_tmp   = tauxDG_u(I,j,k+1) / (tau_u(I,j,k+1) + GV%H_subroundoff)
-          sin_tmp   = tauyDG_u(I,j,k+1) / (tau_u(I,j,k+1) + GV%H_subroundoff)
-
-          ! rotate to wind coordinates
-          Wind_x    = ustar2_u(I,j) !* cos(omega_w2x_u(I,j))
-          Wind_y    = ustar2_u(I,j) !* sin(omega_w2x_u(I,j))
-          tauNL_DG  = (Wind_x * cos_tmp + Wind_y * sin_tmp)
-          tauNL_CG  = (Wind_y * cos_tmp - Wind_x * sin_tmp)
-          omega_w2s = atan2(tauNL_CG, tauNL_DG)
-          omega_s2w = 0.0-omega_w2s
-          tauNL_CG  = Cemp_CG * G_sig(sigma) * tauNL_CG
-          tau_MAG   = max(tau_MAG, tauNL_CG)
-          tauNL_DG  = sqrt(tau_MAG*tau_MAG - tauNL_CG*tauNL_CG) - tau_u(I,j,k+1)
-
-          ! back to x,y coordinates
-          tauNL_X  = (tauNL_DG * cos_tmp - tauNL_CG * sin_tmp)
-          tauNL_Y  = (tauNL_DG * sin_tmp + tauNL_CG * cos_tmp)
-          tauNLdn  = tauNL_X
-
-          ! nonlocal increment and update to uold
-          !### The following expression is dimensionally inconsistent and missing parentheses.
-          du = (tauNLup - tauNLdn) * (dt/CS%h_u(I,j,k) + GV%H_subroundoff)
-          ui(I,j,k)    = uold(I,j,k)  + du
-          uold(I,j,k)  = du
-          tauNLup      = tauNLdn
-
-          ! diagnostics
-          Omega_tau2s_u(I,j,k+1) = atan2(tauNL_CG  , (tau_u(I,j,k+1)+tauNL_DG))
-          tau_u(I,j,k+1)         = sqrt(((tauxDG_u(I,j,k+1) + tauNL_X)**2) + ((tauyDG_u(I,j,k+1) + tauNL_Y)**2))
-          omega_tau2x            = atan2((tauyDG_u(I,j,k+1) + tauNL_Y), (tauxDG_u(I,j,k+1) + tauNL_X))
-          omega_tau2w            = omega_tau2x !-  omega_w2x_u(I,j)
-          if (omega_tau2w >= pi ) omega_tau2w = omega_tau2w - 2.*pi
-          if (omega_tau2w <= (0.-pi) )  omega_tau2w = omega_tau2w + 2.*pi
-          Omega_tau2w_u(I,j,k+1) = omega_tau2w
+        Gat1  = 0.
+        do k=1, nz
+          ! cell center
+          depth = depth + 0.5*CS%h_u(I,j,k)
+          uE_u(I,j,k) = ui(I,j,k) - waves%Us_x(I,j,k)
+          if ( depth < hbl_u(I,j) )     then
+            sigma = depth / hbl_u(i,j)
+            ! cell bottom
+            depth = depth + 0.5*CS%h_u(I,j,k)
+            call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
+            ! nonlocal boundary-layer increment
+            uInc_u(I,j,k)  = dt * Cemp_NL * taux_u(I,j) * dGdsig / hbl_u(I,j)
+            ui(I,j,k) = ui(I,j,k) + uInc_u(I,j,k)
+          else
+            uInc_u(I,j,k) = 0.0
+          endif
         enddo
-        do k= kbld+1, nz
-          ui(I,j,k)  = uold(I,j,k)
-          uold(I,j,k)  = 0.0
+      else
+        do k=1, nz
+          uInc_u(I,j,k) = 0.0
         enddo
       endif
     enddo
   enddo
 
-  ! v-point dv increment
+  ! v-points
   do J = Jsq,Jeq
     do i = is,ie
-      if( (G%mask2dCv(i,J) > 0.5) ) then
-        kbld  = min((kbl_v(i,J)), (nz-2))
-        if (tau_v(i,J,kbld+2) > tau_v(i,J,kbld+1)) kbld = kbld + 1
-        tauh  = tau_v(i,J,kbld+1)
-
-        !surface boundary conditions
+      tauy_v(i,J)  = forces%tauy(i,J) * Irho0
+      if ( (G%mask2dCv(i,J) > 0.5) ) then
+        ! h to v-pts
+        tmp_v  = max( 1.0 ,(G%mask2dT(i,j) + G%mask2dT(i,j+1)))
+        hbl_v(i,J) = (G%mask2dT(i,j) * hbl_h(i,J) + G%mask2dT(i,j+1) * hbl_h(i,j+1)) / tmp_v
         depth = 0.
-        tauNLup = 0.0
-        do k=1, kbld
-          depth = depth + CS%h_v(i,J,k)
-          sigma  = min(1.0, depth/ hbl_v(I,J))
-
-          ! linear stress
-          tau_MAG   = (ustar2_v(i,J) * (1.-sigma))  + (tauh * sigma)
-          !### The following expressions are dimensionally inconsistent.
-          cos_tmp   = tauxDG_v(i,J,k+1) / (tau_v(i,J,k+1)  + GV%H_subroundoff)
-          sin_tmp   = tauyDG_v(i,J,k+1) / (tau_v(i,J,k+1)  + GV%H_subroundoff)
-
-          ! rotate into wind coordinate
-          Wind_x    = ustar2_v(i,J) !* cos(omega_w2x_v(i,J))
-          Wind_y    = ustar2_v(i,J) !* sin(omega_w2x_v(i,J))
-          tauNL_DG  = (Wind_x * cos_tmp + Wind_y * sin_tmp)
-          tauNL_CG  = (Wind_y * cos_tmp - Wind_x * sin_tmp)
-          omega_w2s = atan2(tauNL_CG , tauNL_DG)
-          omega_s2w = 0.0 - omega_w2s
-          tauNL_CG  = Cemp_CG * G_sig(sigma) * tauNL_CG
-          tau_MAG   = max( tau_MAG , tauNL_CG )
-          tauNL_DG  = 0.0 - tau_v(i,J,k+1) + sqrt(tau_MAG*tau_MAG - tauNL_CG*tauNL_CG)
-
-          ! back to x,y coordinate
-          tauNL_X  = (tauNL_DG * cos_tmp - tauNL_CG * sin_tmp)
-          tauNL_Y  = (tauNL_DG * sin_tmp + tauNL_CG * cos_tmp)
-          tauNLdn  = tauNL_Y
-          !### The following expression is dimensionally inconsistent, [L T-1] vs. [L2 H-1 T-1] on the right,
-          !    and it is inconsistent with the counterpart expression for du.
-          dv            = (tauNLup - tauNLdn) * (dt/(CS%h_v(i,J,k)) )
-          vi(i,J,k)    = vold(i,J,k) + dv
-          vold(i,J,k)  = dv
-          tauNLup       = tauNLdn
-
-          ! diagnostics
-          Omega_tau2s_v(i,J,k+1) = atan2(tauNL_CG, tau_v(i,J,k+1) + tauNL_DG)
-          tau_v(i,J,k+1)         = sqrt(((tauxDG_v(i,J,k+1) + tauNL_X)**2) + ((tauyDG_v(i,J,k+1) + tauNL_Y)**2))
-          !omega_tau2x            = atan2((tauyDG_v(i,J,k+1) + tauNL_Y) , (tauxDG_v(i,J,k+1) + tauNL_X))
-          !omega_tau2w            = omega_tau2x - omega_w2x_v(i,J)
-          if (omega_tau2w > pi)  omega_tau2w = omega_tau2w - 2.*pi
-          if (omega_tau2w .le. (0.-pi) )  omega_tau2w = omega_tau2w + 2.*pi
-          Omega_tau2w_v(i,J,k+1) = omega_tau2w
+        Gat1  = 0.
+        do k=1, nz
+          ! cell center
+          depth = depth + 0.5* CS%h_v(i,J,k)
+          vE_v(i,J,k) = vi(i,J,k) - waves%Us_y(i,J,k)
+          if ( depth < hbl_v(i,J) )    then
+            sigma = depth / hbl_v(i,J)
+            ! cell bottom
+            depth = depth + 0.5* CS%h_v(i,J,k)
+            call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
+            ! nonlocal boundary-layer increment
+            vInc_v(i,J,k) = dt * Cemp_NL * tauy_v(i,J) * dGdsig / hbl_v(i,J)
+            vi(i,J,k) = vi(i,J,k) + vInc_v(i,J,k)
+          else
+            vInc_v(i,J,k)  = 0.0
+          endif
         enddo
-
-        do k= kbld+1, nz
-          vi(i,J,k)    = vold(i,J,k)
-          vold(i,J,k)  = 0.0
+      else
+        do k=1, nz
+          vInc_v(i,J,k)  = 0.0
         enddo
       endif
     enddo
   enddo
 
-  if (CS%debug) then
-    call uvchksum("FP-tau_[uv]  ", tau_u, tau_v, G%HI, haloshift=0, scalar_pair=.true.)
-  endif
+  ! Compute and store diagnostics, only during the corrector step.
+  if (lpost)  then
+    call pass_vector(uE_u  ,  vE_v  , G%Domain, To_All)
+    call pass_vector(uInc_u, vInc_v , G%Domain, To_All)
+    uStk = 0.0
+    vStk = 0.0
+    uS0  = 0.0
+    vS0  = 0.0
 
-  if (CS%id_tauFP_u > 0)   call post_data(CS%id_tauFP_u, tau_u, CS%diag)
-  if (CS%id_tauFP_v > 0)   call post_data(CS%id_tauFP_v, tau_v, CS%diag)
-  if (CS%id_FPtau2s_u > 0) call post_data(CS%id_FPtau2s_u, omega_tau2s_u, CS%diag)
-  if (CS%id_FPtau2s_v > 0) call post_data(CS%id_FPtau2s_v, omega_tau2s_v, CS%diag)
-  if (CS%id_FPtau2w_u > 0) call post_data(CS%id_FPtau2w_u, omega_tau2w_u, CS%diag)
-  if (CS%id_FPtau2w_v > 0) call post_data(CS%id_FPtau2w_v, omega_tau2w_v, CS%diag)
-  !if (CS%id_FPw2x   > 0)   call post_data(CS%id_FPw2x, forces%omega_w2x , CS%diag)
+    do j = js,je
+      do i = is,ie
+        if (G%mask2dT(i,j) > 0.5)  then
+          ! u to h-pts
+          tmp_u  = max( 1.0 ,(G%mask2dCu(i,j) + G%mask2dCu(i-1,j)))
+          ! v to h-pts
+          tmp_v  = max( 1.0 ,(G%mask2dCv(i,j) + G%mask2dCv(i,j-1)))
+          do k = 1,nz
+            uE_h(i,j,k)   = (G%mask2dCu(i,j) *   uE_u(i,j,k) + G%mask2dCu(i-1,j) *   uE_u(i-1,j,k)) / tmp_u
+            uInc_h(i,j,k) = (G%mask2dCu(i,j) * uInc_u(i,j,k) + G%mask2dCu(i-1,j) * uInc_u(i-1,j,k)) / tmp_u
+            vE_h(i,j,k)   = (G%mask2dCv(i,j) *   vE_v(i,j,k) + G%mask2dCv(i,j-1) *   vE_v(i,j-1,k)) / tmp_v
+            vInc_h(i,j,k) = (G%mask2dCv(i,j) * vInc_v(i,j,k) + G%mask2dCv(i,j-1) * vInc_v(i,j-1,k)) / tmp_v
+          enddo
+          ! Wind, Stress and Shear align at surface
+          Omega_tau2w(i,j,1) = 0.0
+          Omega_tau2s(i,j,1) = 0.0
+          do k = 1,nz
+            kp1 = min( nz , k+1)
+            du = uE_h(i,j,k) - uE_h(i,j,kp1)
+            dv = vE_h(i,j,k) - vE_h(i,j,kp1)
+            omega_s2x = atan2( dv , du )
+
+            du = du + uInc_h(i,j,k) - uInc_h(i,j,kp1)
+            dv = dv + vInc_h(i,j,k) - vInc_h(i,j,kp1)
+            omega_tau2x = atan2( dv , du )
+
+            omega_tmp = omega_tau2x - forces%omega_w2x(i,j)
+            if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
+            if ( (omega_tmp  < (0.-pi)) )  omega_tmp = omega_tmp + 2.*pi
+            Omega_tau2w(i,j,kp1) = omega_tmp
+
+            omega_tmp = omega_tau2x - omega_s2x
+            if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
+            if ( (omega_tmp  < (0.-pi)) )  omega_tmp = omega_tmp + 2.*pi
+            Omega_tau2s(i,j,kp1) = omega_tmp
+
+          enddo
+        endif
+
+        ! Stokes drift
+        do b=1,waves%NumBands
+          uS0(i,j)  = uS0(i,j) + waves%UStk_Hb(i,j,b)    ! or forces%UStkb(i,j,b)
+          vS0(i,j)  = vS0(i,j) + waves%VStk_Hb(i,j,b)    ! or forces%VStkb(i,j,b)
+        enddo
+        depth = 0.0
+        do k = 1,nz
+          do b  = 1, waves%NumBands
+            ! cell center
+            fexp = exp(-2. * waves%WaveNum_Cen(b) * (depth+0.5*h(i,j,k)) )
+            uStk(i,j,k) = uStk(i,j,k) + waves%UStk_Hb(i,j,b) * fexp
+            vStk(i,j,k) = vStk(i,j,k) + waves%VStk_Hb(i,j,b) * fexp
+          enddo
+          ! cell bottom
+          depth = depth + h(i,j,k)
+        enddo
+      enddo
+    enddo
+
+    ! post FPmix diagnostics
+    if (CS%id_uE_h    > 0) call post_data(CS%id_uE_h     , uE_h   , CS%diag)
+    if (CS%id_vE_h    > 0) call post_data(CS%id_vE_h   , vE_h   , CS%diag)
+    if (CS%id_uInc_h  > 0) call post_data(CS%id_uInc_h , uInc_h , CS%diag)
+    if (CS%id_vInc_h  > 0) call post_data(CS%id_vInc_h , vInc_h , CS%diag)
+    if (CS%id_FPtau2s > 0) call post_data(CS%id_FPtau2s, Omega_tau2s, CS%diag)
+    if (CS%id_FPtau2w > 0) call post_data(CS%id_FPtau2w, Omega_tau2w, CS%diag)
+    if (CS%id_uStk0   > 0) call post_data(CS%id_uStk0  , uS0 , CS%diag)
+    if (CS%id_vStk0   > 0) call post_data(CS%id_vStk0  , vS0    , CS%diag)
+    if (CS%id_uStk    > 0) call post_data(CS%id_uStk   , uStk   , CS%diag)
+    if (CS%id_vStk    > 0) call post_data(CS%id_vStk   , vStk   , CS%diag)
+    if (CS%id_Omega_w2x > 0) call post_data(CS%id_Omega_w2x, forces%omega_w2x, CS%diag)
+
+  endif
 
 end subroutine vertFPmix
-
-!> Returns the empirical shape-function given sigma [nondim]
-real function G_sig(sigma)
-  real , intent(in) :: sigma    !< Normalized boundary layer depth [nondim]
-
-  ! local variables
-  real :: p1, c2, c3  !< Parameters used to fit and match empirical shape-functions [nondim]
-
-  ! parabola
-  p1 = 0.287
-  ! cubic function
-  c2 = 1.74392
-  c3 = 2.58538
-  G_sig  = min( p1 * (1.-sigma)*(1.-sigma) , sigma * (1. + sigma * (c2*sigma - c3) ) )
-end function G_sig
 
 !> Compute coupling coefficient associated with vertical viscosity parameterization as in Greatbatch and Lamb
 !! (1990), hereafter referred to as the GL90 vertical viscosity parameterization. This vertical viscosity scheme
@@ -703,7 +537,7 @@ end subroutine find_coupling_coef_gl90
 !! if DIRECT_STRESS is true, applied to the surface layer.
 
 subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
-                    taux_bot, tauy_bot, Waves)
+                    taux_bot, tauy_bot, fpmix, Waves)
   type(ocean_grid_type),   intent(in)    :: G      !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV     !< Ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -727,6 +561,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   real, dimension(SZI_(G),SZJB_(G)), &
                    optional, intent(out) :: tauy_bot !< Meridional bottom stress from ocean to
                                                      !! rock [R L Z T-2 ~> Pa]
+  logical,         optional, intent(in)  :: fpmix !< fpmix along Eulerian shear
   type(wave_parameters_CS), &
                    optional, pointer     :: Waves !< Container for wave/Stokes information
 
@@ -767,6 +602,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   logical :: do_i(SZIB_(G))
   logical :: DoStokesMixing
+  logical :: lfpmix
 
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec; js = G%jsc; je = G%jec
@@ -804,6 +640,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       call MOM_error(FATAL,"Stokes Mixing called without allocated"//&
                      "Waves Control Structure")
   endif
+  lfpmix = .false.
+  if ( present(fpmix) ) lfpmix = fpmix
 
   do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
 
@@ -816,9 +654,15 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   do j=G%jsc,G%jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0.0) ; enddo
 
+    ! WGL: Brandon Reichl says the following is obsolete. u(I,j,k) already
+    ! includes Stokes.
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do I=Isq,Ieq
       if (do_i(I)) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
+    enddo ; enddo ; endif
+
+    if ( lfpmix  ) then ;  do k=1,nz ; do I=Isq,Ieq
+      if (do_i(I)) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%du_dt_visc)) then ; do k=1,nz ; do I=Isq,Ieq
@@ -978,6 +822,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
       if (do_i(I)) u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
     enddo ; enddo ; endif
 
+    if ( lfpmix ) then ; do k=1,nz ; do I=Isq,Ieq
+      if (do_i(I)) u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
+    enddo ; enddo ; endif
+
   enddo ! end u-component j loop
 
   ! Now work on the meridional velocity component.
@@ -991,6 +839,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     ! When mixing down Eulerian current + Stokes drift add before calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
       if (do_i(i)) v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
+    enddo ; enddo ; endif
+
+    if ( lfpmix ) then ; do k=1,nz ; do i=is,ie
+      if (do_i(i)) v(i,j,k) = v(i,j,k) - Waves%Us_y(i,j,k)
     enddo ; enddo ; endif
 
     if (associated(ADp%dv_dt_visc)) then ; do k=1,nz ; do i=is,ie
@@ -1119,6 +971,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     ! When mixing down Eulerian current + Stokes drift subtract after calling solver
     if (DoStokesMixing) then ; do k=1,nz ; do i=is,ie
       if (do_i(i)) v(i,J,k) = v(i,J,k) - Waves%Us_y(i,J,k)
+    enddo ; enddo ; endif
+
+    if ( lfpmix )  then ; do k=1,nz ; do i=is,ie
+      if (do_i(i)) v(i,J,k) = v(i,J,k) + Waves%Us_y(i,J,k)
     enddo ; enddo ; endif
 
   enddo ! end of v-component J loop
@@ -2613,7 +2469,7 @@ end subroutine vertvisc_limit_vel
 
 !> Initialize the vertical friction module
 subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
-                         ntrunc, CS)
+                          ntrunc, CS, fpmix)
   type(ocean_internal_state), &
                    target, intent(in)    :: MIS    !< The "MOM Internal State", a set of pointers
                                                    !! to the fields and accelerations that make
@@ -2628,6 +2484,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   type(directories),       intent(in)    :: dirs   !< Relevant directory paths
   integer, target,         intent(inout) :: ntrunc !< Number of velocity truncations
   type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
+  logical, optional,       intent(in)    :: fpmix  !< Nonlocal momentum mixing
 
   ! Local variables
 
@@ -2635,6 +2492,7 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   real :: Kv_back_z  ! A background kinematic viscosity [Z2 T-1 ~> m2 s-1]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  logical :: lfpmix
   character(len=200) :: kappa_gl90_file, inputdir, kdgl90_varname
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -2658,6 +2516,9 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   CS%diag => diag ; CS%ntrunc => ntrunc ; ntrunc = 0
+
+  lfpmix = .false.
+  if (present(fpmix)) lfpmix = fpmix
 
 ! Default, read and log parameters
   call log_version(param_file, mdl, version, "", log_to_all=.true., debugging=.true.)
@@ -2961,20 +2822,29 @@ subroutine vertvisc_init(MIS, Time, G, GV, US, param_file, diag, ADp, dirs, &
       'Mixed Layer Thickness at Meridional Velocity Points for Viscosity', &
       thickness_units, conversion=US%Z_to_m)
 
-  CS%id_FPw2x   = register_diag_field('ocean_model', 'FPw2x', diag%axesT1, Time, &
-      'Wind direction from x-axis','radians')
-  CS%id_tauFP_u = register_diag_field('ocean_model', 'tauFP_u', diag%axesCui, Time, &
-      'Stress Mag Profile  (u-points)', 'm2 s-2')
-  CS%id_tauFP_v = register_diag_field('ocean_model', 'tauFP_v', diag%axesCvi, Time, &
-      'Stress Mag Profile  (v-points)', 'm2 s-2')
-  CS%id_FPtau2s_u = register_diag_field('ocean_model', 'FPtau2s_u', diag%axesCui, Time, &
-      'stress from shear direction (u-points)', 'radians ')
-  CS%id_FPtau2s_v = register_diag_field('ocean_model', 'FPtau2s_v', diag%axesCvi, Time, &
-      'stress from shear direction (v-points)', 'radians')
-  CS%id_FPtau2w_u = register_diag_field('ocean_model', 'FPtau2w_u', diag%axesCui, Time, &
-      'stress from wind  direction (u-points)', 'radians')
-  CS%id_FPtau2w_v = register_diag_field('ocean_model', 'FPtau2w_v', diag%axesCvi, Time, &
-      'stress from wind  direction (v-points)', 'radians')
+ if (lfpmix) then
+  CS%id_uE_h = register_diag_field('ocean_model', 'uE_h' , CS%diag%axesTL, &
+      Time, 'x-zonal Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_vE_h = register_diag_field('ocean_model', 'vE_h' , CS%diag%axesTL, &
+      Time, 'y-merid Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_uInc_h = register_diag_field('ocean_model','uInc_h',CS%diag%axesTL, &
+      Time, 'x-zonal Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_vInc_h = register_diag_field('ocean_model','vInc_h',CS%diag%axesTL, &
+      Time, 'x-zonal Eulerian' , 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_uStk = register_diag_field('ocean_model', 'uStk' , CS%diag%axesTL, &
+      Time, 'x-FP du increment' , 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_vStk = register_diag_field('ocean_model', 'vStk' , CS%diag%axesTL, &
+      Time, 'y-FP dv increment' , 'm s-1', conversion=US%L_T_to_m_s)
+
+  CS%id_FPtau2s = register_diag_field('ocean_model','Omega_tau2s',CS%diag%axesTi, &
+      Time, 'Stress direction from shear','radians')
+  CS%id_FPtau2w = register_diag_field('ocean_model','Omega_tau2w',CS%diag%axesTi, &
+      Time, 'Stress direction from wind','radians')
+  CS%id_uStk0 = register_diag_field('ocean_model', 'uStk0' , diag%axesT1, &
+      Time, 'Zonal Surface Stokes', 'm s-1', conversion=US%L_T_to_m_s)
+  CS%id_vStk0 = register_diag_field('ocean_model', 'vStk0' , diag%axesT1, &
+      Time, 'Merid Surface Stokes', 'm s-1', conversion=US%L_T_to_m_s)
+  endif
 
   CS%id_du_dt_visc = register_diag_field('ocean_model', 'du_dt_visc', diag%axesCuL, Time, &
       'Zonal Acceleration from Vertical Viscosity', 'm s-2', conversion=US%L_T2_to_m_s2)

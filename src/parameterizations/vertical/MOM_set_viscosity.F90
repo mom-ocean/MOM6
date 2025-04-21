@@ -16,6 +16,7 @@ use MOM_domains,       only : pass_var, CORNER
 use MOM_EOS,           only : calculate_density, calculate_density_derivs, calculate_specific_vol_derivs
 use MOM_error_handler, only : MOM_error, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
+use MOM_file_parser,   only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,  only : forcing, mech_forcing, find_ustar
 use MOM_grid,          only : ocean_grid_type
 use MOM_hor_index,     only : hor_index_type
@@ -2776,8 +2777,12 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
                  default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "USE_IDEAL_AGE_TRACER", use_ideal_age, &
                  default=.false., do_not_log=.true.)
+  call openParameterBlock(param_file, 'MLE', do_not_log=.true.)
+    call get_param(param_file, mdl, "USE_BODNER23", MLE_use_Bodner, &
+                 default=.false., do_not_log=.true.)
+  call closeParameterBlock(param_file)
 
-  if (MLE_use_PBL_MLD) then
+  if (MLE_use_PBL_MLD .or. MLE_use_Bodner) then
     call safe_alloc_ptr(visc%MLD, isd, ied, jsd, jed)
   endif
   if ((hfreeze >= 0.0) .or. MLE_use_PBL_MLD .or. do_brine_plume .or. use_fpmix .or. &
@@ -2797,8 +2802,6 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
   endif
 
   ! visc%sfc_buoy_flx is used to communicate the state of the (e)PBL or KPP to the rest of the model
-  call get_param(param_file, mdl, "MLE%USE_BODNER23", MLE_use_Bodner, &
-                 default=.false., do_not_log=.true.)
   if (MLE_use_PBL_MLD .or. MLE_use_Bodner) then
     call safe_alloc_ptr(visc%sfc_buoy_flx, isd, ied, jsd, jed)
     call register_restart_field(visc%sfc_buoy_flx, "SFC_BFLX", .false., restart_CS, &

@@ -130,7 +130,7 @@ function fms2esmf_time(time, calkind)
 
   integer                            :: rc
 
-  if(present(calkind)) then
+  if (present(calkind)) then
     l_calkind = calkind
   else
     l_calkind = fms2esmf_cal(fms_get_calendar_type())
@@ -154,7 +154,7 @@ function string_to_date(string, rc)
   ! Local variables
   integer                                 :: yr,mon,day,hr,min,sec
 
-  if(present(rc)) rc = ESMF_SUCCESS
+  if (present(rc)) rc = ESMF_SUCCESS
 
   read(string, '(I4.4,I2.2,I2.2,".",I2.2,I2.2,I2.2)') yr, mon, day, hr, min, sec
   string_to_date = set_date(yr, mon, day, hr, min, sec)

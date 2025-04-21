@@ -65,7 +65,7 @@ contains
 !! properties of the domain type.
 subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             NIHALO, NJHALO, NIGLOBAL, NJGLOBAL, NIPROC, NJPROC, &
-                            min_halo, domain_name, include_name, param_suffix, US)
+                            min_halo, domain_name, include_name, param_suffix, US, MOM_dom_unmasked)
   type(MOM_domain_type),           pointer       :: MOM_dom      !< A pointer to the MOM_domain_type
                                                                  !! being defined here.
   type(param_file_type),           intent(in)    :: param_file   !< A structure to parse for
@@ -99,10 +99,13 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   character(len=*),      optional, intent(in)    :: param_suffix !< A suffix to apply to
                                                                  !! layout-specific parameters.
   type(unit_scale_type), optional, pointer       :: US           !< A dimensional unit scaling type
+  type(MOM_domain_type), optional, pointer       :: MOM_dom_unmasked !< Unmasked MOM domain instance.
+                                                                 !! Set to null if masking is not enabled.
 
   ! Local variables
   integer, dimension(2) :: layout    ! The number of logical processors in the i- and j- directions
   integer, dimension(2) :: auto_layout ! The layout determined by the auto masking routine
+  integer, dimension(2) :: layout_unmasked ! A temporary layout for unmasked domain
   integer, dimension(2) :: io_layout ! The layout of logical processors for input and output
   !$ integer :: ocean_nthreads       ! Number of openMP threads
   !$ logical :: ocean_omp_hyper_thread ! If true use openMP hyper-threads
@@ -437,6 +440,14 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     call get_param(param_file, mdl, trim(io_layout_nm), io_layout, &
                    "The processor layout to be used, or 0,0 to automatically set the io_layout "//&
                    "to be the same as the layout.", defaults=(/1, 1/), layoutParam=.true.)
+  endif
+
+  ! Create an unmasked domain if requested. This is used for writing out unmasked ocean geometry.
+  if (present(MOM_dom_unmasked) .and. mask_table_exists) then
+    call MOM_define_layout(n_global, PEs_used, layout_unmasked)
+    call create_MOM_domain(MOM_dom_unmasked, n_global, n_halo, reentrant, tripolar_N, layout_unmasked, &
+                           domain_name=domain_name, symmetric=symmetric, thin_halos=thin_halos, &
+                           nonblocking=nonblocking)
   endif
 
   call create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, layout, &

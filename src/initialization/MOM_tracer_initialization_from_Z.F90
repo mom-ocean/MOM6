@@ -37,7 +37,8 @@ contains
 !> Initializes a tracer from a z-space data file, including any lateral regridding that is needed.
 subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_nam, &
                           src_var_unit_conversion, src_var_record, homogenize, &
-                          useALEremapping, remappingScheme, src_var_gridspec, h_in_Z_units )
+                          useALEremapping, remappingScheme, src_var_gridspec, h_in_Z_units, &
+                          ongrid)
   type(ocean_grid_type),      intent(inout) :: G   !< Ocean grid structure.
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
@@ -60,7 +61,10 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
                                                             !! thicknesses are in the units of height
                                                             !! ([Z ~> m]) instead of the usual units of
                                                             !! thicknesses ([H ~> m or kg m-2])
-
+  logical,          optional, intent(in)    :: ongrid       !< If true, then data are assumed to have been
+                                                            !! interpolated to the model horizontal grid. In this case,
+                                                            !! only extrapolation is performed by
+                                                            !! horiz_interp_and_extrap_tracer()
   ! Local variables
   real :: land_fill = 0.0  ! A value to use to replace missing values [CU ~> conc]
   real :: convert ! A conversion factor into the model's internal units [CU conc-1 ~> 1]
@@ -124,10 +128,10 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
                  "initial conditions.", default=.false.)
   call get_param(PF, mdl, "Z_INIT_ALE_REMAPPING", useALE, &
                  "If True, then remap straight to model coordinate from file.",&
-                 default=.true.)
+                 default=.false.)
   call get_param(PF, mdl, "Z_INIT_REMAPPING_SCHEME", remapScheme, &
                  "The remapping scheme to use if using Z_INIT_ALE_REMAPPING is True.", &
-                 default="PLM")
+                 default="PPM_IH4")
   call get_param(PF, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
@@ -166,7 +170,8 @@ subroutine MOM_initialize_tracer_from_Z(h, tr, G, GV, US, PF, src_file, src_var_
 
   call horiz_interp_and_extrap_tracer(src_file, src_var_nam, recnum, &
             G, tr_z, mask_z, z_in, z_edges_in, missing_value, &
-            scale=convert, homogenize=homog, m_to_Z=US%m_to_Z, answer_date=hor_regrid_answer_date)
+            scale=convert, homogenize=homog, m_to_Z=US%m_to_Z, &
+            answer_date=hor_regrid_answer_date, ongrid=ongrid)
 
   kd = size(z_edges_in,1)-1
   call pass_var(tr_z,G%Domain)
