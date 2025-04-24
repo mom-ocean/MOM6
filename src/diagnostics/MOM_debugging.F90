@@ -659,7 +659,7 @@ subroutine chksum_vec_C3d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uvchksum(mesg, u_comp, v_comp, G%HI, halos, scale=unscale)
+    call uvchksum(mesg, u_comp, v_comp, G%HI, halos, unscale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
@@ -691,7 +691,7 @@ subroutine chksum_vec_C2d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call uvchksum(mesg, u_comp, v_comp, G%HI, halos, scale=unscale)
+    call uvchksum(mesg, u_comp, v_comp, G%HI, halos, unscale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
@@ -723,8 +723,8 @@ subroutine chksum_vec_B3d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, scale=unscale)
-    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, scale=unscale)
+    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, unscale=unscale)
+    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, unscale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
@@ -758,8 +758,8 @@ subroutine chksum_vec_B2d(mesg, u_comp, v_comp, G, halos, scalars, symmetric, un
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, symmetric=symmetric, scale=unscale)
-    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, symmetric=symmetric, scale=unscale)
+    call Bchksum(u_comp, mesg//"(u)", G%HI, halos, symmetric=symmetric, unscale=unscale)
+    call Bchksum(v_comp, mesg//"(v)", G%HI, halos, symmetric=symmetric, unscale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
@@ -791,8 +791,8 @@ subroutine chksum_vec_A3d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call hchksum(u_comp, mesg//"(u)", G%HI, halos, scale=unscale)
-    call hchksum(v_comp, mesg//"(v)", G%HI, halos, scale=unscale)
+    call hchksum(u_comp, mesg//"(u)", G%HI, halos, unscale=unscale)
+    call hchksum(v_comp, mesg//"(v)", G%HI, halos, unscale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then
@@ -824,8 +824,8 @@ subroutine chksum_vec_A2d(mesg, u_comp, v_comp, G, halos, scalars, unscale)
   are_scalars = .false. ; if (present(scalars)) are_scalars = scalars
 
   if (debug_chksums) then
-    call hchksum(u_comp, mesg//"(u)", G%HI, halos, scale=unscale)
-    call hchksum(v_comp, mesg//"(v)", G%HI, halos, scale=unscale)
+    call hchksum(u_comp, mesg//"(u)", G%HI, halos, unscale=unscale)
+    call hchksum(v_comp, mesg//"(v)", G%HI, halos, unscale=unscale)
   endif
   if (debug_redundant) then
     if (are_scalars) then

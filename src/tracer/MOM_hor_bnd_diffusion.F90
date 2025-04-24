@@ -234,7 +234,7 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, visc, CS)
     tracer => Reg%tr(m)
 
     if (CS%debug) then
-      call hchksum(tracer%t, "before HBD "//tracer%name, G%HI, scale=tracer%conc_scale)
+      call hchksum(tracer%t, "before HBD "//tracer%name, G%HI, unscale=tracer%conc_scale)
     endif
 
     ! for diagnostics
@@ -290,7 +290,7 @@ subroutine hor_bnd_diffusion(G, GV, US, h, Coef_x, Coef_y, dt, Reg, visc, CS)
     endif
 
     if (CS%debug) then
-      call hchksum(tracer%t, "after HBD "//tracer%name, G%HI, scale=tracer%conc_scale)
+      call hchksum(tracer%t, "after HBD "//tracer%name, G%HI, unscale=tracer%conc_scale)
       ! tracer (native grid) integrated tracer amounts before and after HBD
       tracer_int_prev = global_mass_integral(h, G, GV, tracer_old, scale=tracer%conc_scale)
       tracer_int_end = global_mass_integral(h, G, GV, tracer%t, scale=tracer%conc_scale)

@@ -1502,7 +1502,7 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
     do m=1,CS%ntr
       call hchksum(CS%STF(:,:,m), &
           trim(MARBL_instances%tracer_metadata(m)%short_name)//" sfc_flux", G%HI, &
-          scale=US%Z_to_m*US%s_to_T)
+          unscale=US%Z_to_m*US%s_to_T)
     enddo
   endif
 
@@ -1545,7 +1545,7 @@ subroutine MARBL_tracers_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, GV,
       enddo ; enddo
       if (CS%debug) &
         call hchksum(riv_flux_loc(:,:), &
-            trim(MARBL_instances%tracer_metadata(m)%short_name)//' riv flux', G%HI, scale=GV%H_to_m)
+            trim(MARBL_instances%tracer_metadata(m)%short_name)//' riv flux', G%HI, unscale=GV%H_to_m)
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tracer_data(m)%tr(:,:,:) , dt, fluxes, h_work, &
           evap_CFL_limit, minimum_forcing_depth, in_flux_optional=riv_flux_loc)
       call tracer_vertdiff(h_work, ea, eb, dt, CS%tracer_data(m)%tr(:,:,:), G, GV, &
