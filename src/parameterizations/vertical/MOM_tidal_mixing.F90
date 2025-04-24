@@ -1305,7 +1305,7 @@ subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, m
       endif
 
       ! diagnostics
-      if (allocated(CS%dd%Kd_itidal).or.(associated(VBF%Kd_itidal))) then
+      if (allocated(CS%dd%Kd_itidal).or.(associated(VBF%Kd_itides))) then
         ! If at layers, CS%dd%Kd_itidal is just TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
@@ -1420,36 +1420,55 @@ subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, m
       endif
 
       ! diagnostics
-      if (allocated(CS%dd%Kd_itidal)) then
+      if (allocated(CS%dd%Kd_itidal).or.(associated(VBF%Kd_itides))) then
         ! If at layers, this is just CS%dd%Kd_itidal(i,j,K) = TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_itidal)) then
+          if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_itides)) then
+          !Not to be confused w/ Kd_itidal (this is to be consistent w/ output parameter names)
+          if (k>1)  VBF%Kd_itides(i,j,K)   = VBF%Kd_itides(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_itides(i,j,K+1) = VBF%Kd_itides(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
       if (allocated(CS%dd%Kd_Itidal_work)) &
         CS%dd%Kd_itidal_work(i,j,k) = GV%H_to_RZ * TKE_itide_lay
       if (allocated(CS%dd%Fl_itidal)) CS%dd%Fl_itidal(i,j,k) = TKE_itidal_rem(i)
 
-      if (allocated(CS%dd%Kd_Niku)) then
+      if (allocated(CS%dd%Kd_Niku).or.(associated(VBF%Kd_Niku))) then
         ! If at layers, this is just CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_Niku_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_Niku)) then
+          if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_Niku)) then
+          if (k>1) VBF%Kd_Niku(i,j,K)    = VBF%Kd_Niku(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_Niku(i,j,K+1) = VBF%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
    !  if (associated(CS%dd%Kd_Niku)) CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (allocated(CS%dd%Kd_Niku_work)) CS%dd%Kd_Niku_work(i,j,k) = GV%H_to_RZ * TKE_Niku_lay
 
-      if (allocated(CS%dd%Kd_lowmode)) then
+      if (allocated(CS%dd%Kd_lowmode).or.(associated(VBF%Kd_lowmode))) then
         ! If at layers, CS%dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_lowmode)) then
+          if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_lowmode)) then
+          if (k>1)  VBF%Kd_lowmode(i,j,K)   = VBF%Kd_lowmode(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_lowmode(i,j,K+1) = VBF%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
       if (allocated(CS%dd%Kd_lowmode_work)) &
         CS%dd%Kd_lowmode_work(i,j,k) = GV%H_to_RZ * TKE_lowmode_lay
