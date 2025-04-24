@@ -2349,6 +2349,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                                                                 ! (To be used for writing out ocean geometry)
   character(len=240) :: geom_file ! Name of the ocean geometry file
 
+  ! XXX: This may need to happen even soon, at the driver level
+  ! NOTE: This must precede copy of G to GPU!
+  !$omp target enter data map(to: CS)
+
   CS%Time => Time
 
   id_clock_init = cpu_clock_id('Ocean Initialization', grain=CLOCK_SUBCOMPONENT)
@@ -2958,6 +2962,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ALLOC_(CS%h(isd:ied,jsd:jed,nz))     ; CS%h(:,:,:) = GV%Angstrom_H
   ALLOC_(CS%uh(IsdB:IedB,jsd:jed,nz))  ; CS%uh(:,:,:) = 0.0
   ALLOC_(CS%vh(isd:ied,JsdB:JedB,nz))  ; CS%vh(:,:,:) = 0.0
+  !$omp target enter data map(to: CS%u, CS%v, CS%h, CS%uh, CS%vh)
   if (use_temperature) then
     ALLOC_(CS%T(isd:ied,jsd:jed,nz))   ; CS%T(:,:,:) = 0.0
     ALLOC_(CS%S(isd:ied,jsd:jed,nz))   ; CS%S(:,:,:) = 0.0
@@ -4560,6 +4565,7 @@ subroutine MOM_end(CS)
 
   DEALLOC_(CS%u) ; DEALLOC_(CS%v) ; DEALLOC_(CS%h)
   DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
+  !$omp target exit data map(delete: CS%u, CS%v, CS%h, CS%uh, CS%vh)
 
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
   if (associated(CS%OBC)) call open_boundary_end(CS%OBC)
