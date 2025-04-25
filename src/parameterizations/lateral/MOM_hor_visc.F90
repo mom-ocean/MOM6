@@ -2987,19 +2987,18 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       ((G%isc-G%isd < 3) .or. (G%isc-G%isd < 3))) call MOM_error(FATAL, &
           "The minimum halo size is 3 when a Leith viscosity is being used.")
   if (CS%use_Leithy) then
-    do J=js-3,Jeq+2 ; do I=is-3,Ieq+2
+    do concurrent (I=is-3:Ieq+2, J=js-3:Jeq+2)
       CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
-    enddo ; enddo
+    enddo
   elseif ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-    do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
+    do concurrent (I=Isq-2:Ieq+2, J=Jsq-2:Jeq+2)
       CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
-    enddo ; enddo
+    enddo
   else
-    do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
+    do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
       CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
-    enddo ; enddo
+    enddo
   endif
-  !$omp target enter data map(to: CS%dx2q, CS%dy2q, CS%dx_dyBu, CS%dy_dxBu)
 
   do concurrent (i=is-2:Ieq+2, j=js-2:Jeq+2)
     CS%dx2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; CS%dy2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
