@@ -1281,8 +1281,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo
       endif
 
-      !!$omp target update from(Kh)
-
       ! In Leith+E parameterization Kh is computed after Ah in the biharmonic loop.
       ! The harmonic component of str_xx is added in the biharmonic loop.
       if (CS%use_Leithy) then
@@ -1939,8 +1937,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      !$omp target update from(Ah)
-
       ! Again, need to initialize str_xy as if its biharmonic
       do concurrent (I=is-1:Ieq, J=js-1:Jeq)
         d_str = Ah(I,J) * (dDel2vdx(I,J) + dDel2udy(I,J))
@@ -1951,8 +1947,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         ! NOTE: computing this ought to be conditional!  But it uses d_str...
         bhstr_xy(I,J) = d_str * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
       enddo
-
-      !$omp target update from(Ah, str_xy, bhstr_xy)
     endif ! Get Ah at q points and biharmonic part of str_xy
 
     ! Backscatter using MEKE
@@ -2099,7 +2093,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     !$omp   if ((find_Frictwork .or. find_FrictWork_bh) .and. .not. CS%FrictWork_bug)
 
     if (find_FrictWork) then
-      !$omp target update from(str_xx, str_Xy)
+      !$omp target update from(str_xx, str_xy)
 
       if (CS%FrictWork_bug) then
         ! Diagnose   str_xx*d_x u - str_yy*d_y v + str_xy*(d_y u + d_x v)
