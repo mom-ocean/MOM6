@@ -982,6 +982,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   real, dimension(SZI_(G)) :: &
     Rho_cv_BL   ! The coordinate potential density in the deepest variable
                 ! density near-surface layer [R ~> kg m-3].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    dz_geo      ! The change in geopotential thickness through a layer [L2 T-2 ~> m2 s-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
     pa          ! The pressure anomaly (i.e. pressure + g*RHO_0*e) at the
                 ! the interface atop a layer [R L2 T-2 ~> Pa].
@@ -1071,7 +1073,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                              ! consistent with what is used in the density integral routines [R L2 T-2 ~> Pa]
   real :: p0(SZI_(G), SZJ_(G)) ! An array of zeros to use for pressure [R L2 T-2 ~> Pa].
   real :: dz_geo_sfc         ! The change in surface geopotential height between adjacent cells [L2 T-2 ~> m2 s-2]
-  real :: dz_geo, dz_geo_next ! Change in geopotential thickness across layer [L2 T-2 ~> m2 s-2]
   real :: GxRho0             ! The gravitational acceleration times mean ocean density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: GxRho_ref          ! The gravitational acceleration times reference density [R L2 Z-1 T-2 ~> Pa m-1]
   real :: rho0_int_density   ! Rho0 used in int_density_dz_* subroutines [R ~> kg m-3]
@@ -1358,30 +1359,19 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo
     !$omp target update to(dpa, intx_dpa, inty_dpa, intz_dpa)
   else
-    !$omp target
     do k=1,nz
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        dz_geo = GV%g_Earth * GV%H_to_Z * h(i,j,k)
-        dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo
-        intz_dpa(i,j,k) = 0.5 * (GV%Rlay(k) - rho_ref) * dz_geo * h(i,j,k)
-      enddo ; enddo
-
-      !$omp parallel loop collapse(2)
-      do j=js,je ; do I=Isq,Ieq
-        dz_geo = GV%g_Earth * GV%H_to_Z * h(i,j,k)
-        dz_geo_next = GV%g_Earth * GV%H_to_Z * h(i+1,j,k)
-        intx_dpa(I,j,k) = 0.5 * (GV%Rlay(k) - rho_ref) * (dz_geo + dz_geo_next)
-      enddo ; enddo
-
-      !$omp parallel loop collapse(2)
-      do J=Jsq,Jeq ; do i=is,ie
-        dz_geo = GV%g_Earth * GV%H_to_Z * h(i,j,k)
-        dz_geo_next = GV%g_Earth * GV%H_to_Z * h(i,j+1,k)
-        inty_dpa(i,J,k) = 0.5 * (GV%Rlay(k) - rho_ref) * (dz_geo + dz_geo_next)
-      enddo ; enddo
+      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+        dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
+        dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo(i,j)
+        intz_dpa(i,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * dz_geo(i,j)*h(i,j,k)
+      enddo
+      do concurrent (I=Isq:Ieq, j=js:je)
+        intx_dpa(I,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i+1,j))
+      enddo
+      do concurrent (i=is:ie, J=Jsq:Jeq)
+        inty_dpa(i,J,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i,j+1))
+      enddo
     enddo
-    !$omp end target
   endif
 
   !$omp target
@@ -1867,58 +1857,54 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp target enter data map(to: e_tidal_eq, e_tidal_sal, e_sal_and_tide) if (CS%tides)
   !$omp target enter data map(to: e_sal) if (CS%calculate_SAL)
 
-  !$omp target
-  !$omp parallel loop collapse(3)
-  do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+  !$omp target data map(to: h)
+
+  do concurrent (k=1:nz, j=js:je, I=Isq:Ieq)
     PFu(I,j,k) = (((pa(i,j,K)*h(i,j,k) + intz_dpa(i,j,k)) - &
                    (pa(i+1,j,K)*h(i+1,j,k) + intz_dpa(i+1,j,k))) + &
                   ((h(i+1,j,k) - h(i,j,k)) * intx_pa(I,j,K) - &
                    (e(i+1,j,K+1) - e(i,j,K+1)) * intx_dpa(I,j,k) * GV%Z_to_H)) * &
                  ((2.0*I_Rho0*G%IdxCu(I,j)) / &
                   ((h(i,j,k) + h(i+1,j,k)) + h_neglect))
-  enddo ; enddo ; enddo
+  enddo
 
   ! Compute pressure gradient in y direction
-  !$omp parallel loop collapse(3)
-  do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+  do concurrent (k=1:nz, J=Jsq:Jeq, i=is:ie)
     PFv(i,J,k) = (((pa(i,j,K)*h(i,j,k) + intz_dpa(i,j,k)) - &
                    (pa(i,j+1,K)*h(i,j+1,k) + intz_dpa(i,j+1,k))) + &
                   ((h(i,j+1,k) - h(i,j,k)) * inty_pa(i,J,K) - &
                    (e(i,j+1,K+1) - e(i,j,K+1)) * inty_dpa(i,J,k) * GV%Z_to_H)) * &
                  ((2.0*I_Rho0*G%IdyCv(i,J)) / &
                   ((h(i,j,k) + h(i,j+1,k)) + h_neglect))
-  enddo ; enddo ; enddo
+  enddo
+
+  !$omp end target data
 
   if (CS%tides_answer_date>20230630 .and. CS%bq_sal_tides) then
     ! Calculate SAL geopotential anomaly and add its gradient to pressure
     ! gradient force
     if (CS%calculate_SAL) then
-      !$omp parallel loop collapse(3)
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      do concurrent(I=Isq:Ieq, j=js:je, k=1:nz)
           PFu(I,j,k) = PFu(I,j,k) + (e_sal(i+1,j) - e_sal(i,j)) * GV%g_Earth * G%IdxCu(I,j)
-      enddo ;  enddo ; enddo
-      !$omp parallel loop collapse(3)
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      enddo
+      do concurrent (i=is:ie, J=Jsq:Jeq, k=1:nz)
           PFv(i,J,k) = PFv(i,J,k) + (e_sal(i,j+1) - e_sal(i,j)) * GV%g_Earth * G%IdyCv(i,J)
-      enddo ; enddo ; enddo
+      enddo
     endif
 
     ! Calculate tidal geopotential anomaly and add its gradient to pressure
     ! gradient force
     if (CS%tides) then
-      !$omp parallel loop collapse(3)
-      do k=1,nz ; do j=js,je ; do I=Isq,Ieq
+      do concurrent(I=Isq:Ieq, j=js:je, k=1:nz)
           PFu(I,j,k) = PFu(I,j,k) + ((e_tidal_eq(i+1,j) + e_tidal_sal(i+1,j)) &
               - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdxCu(I,j)
-      enddo ; enddo ; enddo
-      !$omp parallel loop collapse(3)
-      do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      enddo
+      do concurrent(i=is:ie, J=Jsq:Jeq, k=1:nz)
           PFv(i,J,k) = PFv(i,J,k) + ((e_tidal_eq(i,j+1) + e_tidal_sal(i,j+1)) &
               - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdyCv(i,J)
-      enddo ; enddo ; enddo
+      enddo
     endif
   endif
-  !$omp end target
 
   if (CS%GFS_scale < 1.0) then
     ! Adjust the Montgomery potential to make this a reduced gravity model.
