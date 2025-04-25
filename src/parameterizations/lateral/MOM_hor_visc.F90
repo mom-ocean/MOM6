@@ -707,9 +707,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! shearing strain advocated by Smagorinsky (1993) and discussed in
     ! Griffies and Hallberg (2000).
 
-    ! XXX: **I don't understand why I need this**
-    !$omp target update to(u(:,:,k), v(:,:,k), h(:,:,k))
-
     ! Calculate horizontal tension
     do concurrent (i=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
       dudx(i,j) = CS%DY_dxT(i,j)*((G%IdyCu(I,j) * u(I,j,k)) - &
@@ -917,12 +914,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     if (CS%no_slip) then
       do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
         sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
-        if (CS%id_shearstress > 0) ShSt(I,J,k) = sh_xy(I,J)
       enddo
     else
       do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
         sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) )
-        if (CS%id_shearstress > 0) ShSt(I,J,k) = sh_xy(I,J)
+      enddo
+    endif
+
+    if (CS%id_shearstress > 0) then
+      do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
+        ShSt(I,J,k) = sh_xy(I,J)
       enddo
     endif
 
@@ -1171,21 +1172,33 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         Kh(i,j) = CS%Kh_bg_xx(i,j)
       enddo
 
-      ! NOTE: The following do-block can be decomposed and vectorized after the
-      !   stack size has been reduced.
-      do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
-        if (CS%add_LES_viscosity) then
-          if (CS%Smagorinsky_Kh) &
+      if (CS%add_LES_viscosity) then
+        if (CS%Smagorinsky_Kh) then
+          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
             Kh(i,j) = Kh(i,j) + CS%Laplac2_const_xx(i,j) * Shear_mag(i,j)
-          if (CS%Leith_Kh) &
-            Kh(i,j) = Kh(i,j) + CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3
-        else
-          if (CS%Smagorinsky_Kh) &
-            Kh(i,j) = max(Kh(i,j), CS%Laplac2_const_xx(i,j) * Shear_mag(i,j))
-          if (CS%Leith_Kh) &
-            Kh(i,j) = max(Kh(i,j), CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3)
+          enddo
         endif
-      enddo
+
+        if (CS%Leith_Kh) then
+          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+            Kh(i,j) = Kh(i,j) &
+                + CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3
+          enddo
+        endif
+      else
+        if (CS%Smagorinsky_Kh) then
+          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+            Kh(i,j) = max(Kh(i,j), CS%Laplac2_const_xx(i,j) * Shear_mag(i,j))
+          enddo
+        endif
+
+        if (CS%Leith_Kh) then
+          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+            Kh(i,j) = max(Kh(i,j), &
+                CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3)
+          enddo
+        endif
+      endif
 
       ! All viscosity contributions above are subject to resolution scaling
 
@@ -1495,8 +1508,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      !$omp target update to(sh_xx_smooth) if (CS%use_Leithy)
-
       do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
         d_del2u = (G%IdyCu(I,j) * Del2u(I,j)) - (G%IdyCu(I-1,j) * Del2u(I-1,j))
         d_del2v = (G%IdxCv(i,J) * Del2v(i,J)) - (G%IdxCv(i,J-1) * Del2v(i,J-1))
@@ -1504,11 +1515,18 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
         str_xx(i,j) = str_xx(i,j) + d_str
 
-        if (CS%use_Leithy) str_xx(i,j) = str_xx(i,j) - Kh(i,j) * sh_xx_smooth(i,j)
-
         ! Keep a copy of the biharmonic contribution for backscatter parameterization
-        bhstr_xx(i,j) = d_str * (h(i,j,k) * CS%reduction_xx(i,j))
+        ! XXX: Need to get out of the loop somehow
+        if (find_FrictWork_bh) &
+          bhstr_xx(i,j) = d_str * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo
+
+      if (CS%use_Leithy) then
+        !$omp target update from(Kh)
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          str_xx(i,j) = str_xx(i,j) - Kh(i,j) * sh_xx_smooth(i,j)
+        enddo ; enddo
+      endif
     endif ! Get biharmonic coefficient at h points and biharmonic part of str_xx
 
     ! Backscatter using MEKE
