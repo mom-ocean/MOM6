@@ -685,7 +685,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: Shear_mag) if (use_Smag)
   !$omp target enter data map(alloc: Kh) if (CS%Laplacian)
   !$omp target enter data map(alloc: Ah) if (CS%biharmonic)
-  !$omp target enter data map(alloc: bhstr_xy) if (CS%biharmonic)
+  ! TODO: Only needed if FrictWork_bh is true, and currently only used on CPU,
+  !   but I do not yet see any benefit to breaking up the calculation.
+  !$omp target enter data map(alloc: bhstr_xx, bhstr_xy) if (CS%biharmonic)
 
   !$omp target enter data map(alloc: hrat_min) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
@@ -2160,6 +2162,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
 
     if (find_FrictWork_bh) then
+      !$omp target update from(bhstr_xx, bhstr_xy)
       if (CS%FrictWork_bug) then
         ! Diagnose   bhstr_xx*d_x u - bhstr_yy*d_y v + bhstr_xy*(d_y u + d_x v)
         ! This is the old formulation that includes energy diffusion !cyc
@@ -2358,7 +2361,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: Shear_mag) if (use_Smag)
   !$omp target exit data map(delete: Kh) if (CS%Laplacian)
   !$omp target exit data map(delete: Ah) if (CS%biharmonic)
-  !$omp target exit data map(delete: bhstr_xy) if (CS%biharmonic)
+  !$omp target exit data map(delete: bhstr_xx, bhstr_xy) if (CS%biharmonic)
 
   !$omp target exit data map(delete: hrat_min) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
