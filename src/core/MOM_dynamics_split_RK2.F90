@@ -888,25 +888,32 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     endif
   endif
 
+  ! TODO: Cleanup BT_cont%h_[uv] handling
+  !$omp target update to(u_av, v_av, h_av, uh, vh)
+  !$omp target enter data map(to: CS%BT_cont%h_u, CS%BT_cont%h_v)
+
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
-  ! TODO: Am I doing this twice for no reason?
-  !$omp target update to(u_av, v_av, h_av, uh, vh, CS%BT_cont%h_u, CS%BT_cont%h_v)
+
   call horizontal_viscosity(u_av, v_av, h_av, uh, vh, CS%diffu, CS%diffv, &
                             MEKE, Varmix, G, GV, US, CS%hor_visc, tv, dt, &
                             OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
                             ADp=CS%ADp, hu_cont=CS%BT_cont%h_u, hv_cont=CS%BT_cont%h_v, STOCH=STOCH)
-  !$omp target update from(CS%diffu, CS%diffv)
   call cpu_clock_end(id_clock_horvisc)
+
+  !$omp target update from(CS%diffu, CS%diffv)
+  !$omp target exit data map(delete: CS%BT_cont%h_u, CS%BT_cont%h_v)
+
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
 ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
   call cpu_clock_begin(id_clock_Cor)
-  !$omp target update to(u_av, v_av, h_av, uh, vh)
   call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu, CS%CAv, CS%OBC, CS%ADp, &
                  G, GV, US, CS%CoriolisAdv, pbv, Waves=Waves)
-  !$omp target update from(CS%CAu, CS%CAv)
   call cpu_clock_end(id_clock_Cor)
+
+  !$omp target update from(CS%CAu, CS%CAv)
+
   if (showCallTree) call callTree_wayPoint("done with CorAdCalc (step_MOM_dyn_split_RK2)")
 
 ! Calculate the momentum forcing terms for the barotropic equations.
@@ -1620,11 +1627,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
 
   if (.not. query_initialized(CS%diffu, "diffu", restart_CS) .or. &
       .not. query_initialized(CS%diffv, "diffv", restart_CS)) then
-    !!$omp target update to(u, v, h, uh, vh, CS%BT_cont%h_u, CS%BT_cont%h_v)
+    ! TODO: Cleanup BT_cont%h_[uv] handling
+    !$omp target update to(u, v, h, uh, vh)
+    !$omp target enter data map(to: CS%BT_cont%h_u, CS%BT_cont%h_v)
     call horizontal_viscosity(u, v, h, uh, vh, CS%diffu, CS%diffv, MEKE, VarMix, G, GV, US, CS%hor_visc, &
                               tv, dt, OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
                               hu_cont=CS%BT_cont%h_u, hv_cont=CS%BT_cont%h_v)
     !$omp target update from(CS%diffu, CS%diffv)
+    !$omp target exit data map(delete: CS%BT_cont%h_u, CS%BT_cont%h_v)
     call set_initialized(CS%diffu, "diffu", restart_CS)
     call set_initialized(CS%diffv, "diffv", restart_CS)
   endif

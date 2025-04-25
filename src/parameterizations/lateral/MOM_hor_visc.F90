@@ -698,12 +698,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: sh_xy_q) &
   !$omp   if (CS%id_sh_xy_q > 0)
 
-  ! TODO: NoSt, ShSt, ...?
-
-  ! TODO: Do this outside the function
-  !$omp target enter data map(to: u, v, h)
-  !$omp target enter data map(to: hu_cont, hv_cont) if (use_cont_huv)
-
   do k=1,nz
     ! The following are the forms of the horizontal tension and horizontal
     ! shearing strain advocated by Smagorinsky (1993) and discussed in
@@ -2361,10 +2355,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
   !$omp target exit data map(delete: visc_bound_rem) &
   !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-
-  ! TODO: Do this outside of the function
-  !$omp target exit data map(delete: u, v, h)
-  !$omp target exit data map(delete: hu_cont, hv_cont) if (use_cont_huv)
 
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
