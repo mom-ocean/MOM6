@@ -26,8 +26,9 @@ type, public :: verticalGrid_type
   ! Commonly used parameters
   integer :: ke     !< The number of layers/levels in the vertical
   real :: max_depth !< The maximum depth of the ocean [Z ~> m].
-  real :: mks_g_Earth !< The gravitational acceleration in unscaled MKS units [m s-2].
+!  real :: mks_g_Earth !< The gravitational acceleration in unscaled MKS units [m s-2].  This might not be used.
   real :: g_Earth   !< The gravitational acceleration [L2 Z-1 T-2 ~> m s-2].
+  real :: g_Earth_Z_T2 !< The gravitational acceleration in alternatively rescaled units [Z T-2 ~> m s-2]
   real :: Rho0      !< The density used in the Boussinesq approximation or nominal
                     !! density used to convert depths into mass units [R ~> kg m-3].
 
@@ -173,7 +174,8 @@ subroutine verticalGridInit( param_file, GV, US )
                  "units of thickness into m.", units="m H-1", default=1.0)
     GV%H_to_m = GV%H_to_m * H_rescale_factor
   endif
-  GV%mks_g_Earth = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth
+  ! This is not used:  GV%mks_g_Earth = US%L_T_to_m_s**2*US%m_to_Z * GV%g_Earth
+  GV%g_Earth_Z_T2 = US%L_to_Z**2 * GV%g_Earth  ! This would result from scale=US%m_to_Z*US%T_to_s**2.
 #ifdef STATIC_MEMORY_
   ! Here NK_ is a macro, while nk is a variable.
   call get_param(param_file, mdl, "NK", nk, &

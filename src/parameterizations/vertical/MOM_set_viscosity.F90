@@ -197,7 +197,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     S_vel, &    ! Arithmetic mean of the layer salinities adjacent to a
                 ! velocity point [S ~> ppt].
     SpV_vel, &  ! Arithmetic mean of the layer averaged specific volumes adjacent to a
-                ! velocity point [R-1 ~> kg m-3].
+                ! velocity point [R-1 ~> m3 kg-1].
     Rml_vel     ! Arithmetic mean of the layer coordinate densities adjacent
                 ! to a velocity point [R ~> kg m-3].
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Height change across layers [Z ~> m]
@@ -314,7 +314,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%dZ_subroundoff
 
-  Rho0x400_G = 400.0*(GV%H_to_RZ / (US%L_to_Z**2 * GV%g_Earth))
+  Rho0x400_G = 400.0*(GV%H_to_RZ / GV%g_Earth_Z_T2)
 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(BBL): "//&
          "Module must be initialized before it is used.")
@@ -417,6 +417,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
 
   if (.not.use_BBL_EOS) Rml_vel(:,:) = 0.0
 
+  ! Resetting Ray_[uv] is required by body force drag.
   if (allocated(visc%Ray_u)) visc%Ray_u(:,:,:) = 0.0
   if (allocated(visc%Ray_v)) visc%Ray_v(:,:,:) = 0.0
 
@@ -583,6 +584,21 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       endif
     endif ; endif
 
+    ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
+    if (CS%BBL_use_tidal_bg) then
+      do i=is,ie ; if (do_i(i)) then ; if (m==1) then
+        u2_bg(I) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                         G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
+      else
+        u2_bg(i) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
+                         G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
+      endif ; endif ; enddo
+    else
+      do i=is,ie ; if (do_i(i)) then
+        u2_bg(i) = CS%drag_bg_vel * CS%drag_bg_vel
+      endif ; enddo
+    endif
+
     if (use_BBL_EOS .or. CS%body_force_drag .or. .not.CS%linear_drag) then
       ! Calculate the mean velocity magnitude over the bottommost CS%Hbbl of
       ! the water column for determining the quadratic bottom drag.
@@ -592,18 +608,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         dztot_vel = 0.0 ; dzwtot = 0.0
         Thtot = 0.0 ; Shtot = 0.0 ; SpV_htot = 0.0
 
-        ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
-        if (CS%BBL_use_tidal_bg) then
-          if (m==1) then
-            u2_bg(I) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
-                             G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
-          else
-            u2_bg(i) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
-                              G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
-          endif
-        else
-          u2_bg(i) = CS%drag_bg_vel * CS%drag_bg_vel
-        endif
         do k=nz,1,-1
 
           if (htot_vel>=CS%Hbbl) exit ! terminate the k loop
@@ -802,19 +806,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       ! Value of 2*f at u- or v-points.
       if (m==1) then ; C2f = G%CoriolisBu(I,J-1) + G%CoriolisBu(I,J)
       else ; C2f = G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J) ; endif
-
-      ! Set the "back ground" friction velocity scale to either the tidal amplitude or place-holder constant
-      if (CS%BBL_use_tidal_bg) then
-        if (m==1) then
-          u2_bg(I) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
-                           G%mask2dT(i+1,j)*(CS%tideamp(i+1,j)*CS%tideamp(i+1,j)) )
-        else
-          u2_bg(i) = 0.5*( G%mask2dT(i,j)*(CS%tideamp(i,j)*CS%tideamp(i,j))+ &
-                            G%mask2dT(i,j+1)*(CS%tideamp(i,j+1)*CS%tideamp(i,j+1)) )
-        endif
-      else
-        u2_bg(i) = CS%drag_bg_vel * CS%drag_bg_vel
-      endif
 
       ! The thickness of a rotation limited BBL ignoring stratification is
       !   h_f ~ Cn u* / f        (limit of KW99 eq. 2.20 for N->0).
@@ -2046,7 +2037,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
 
-  Rho0x400_G = 400.0*(GV%H_to_RZ / (US%L_to_Z**2 * GV%g_Earth))
+  Rho0x400_G = 400.0*(GV%H_to_RZ / GV%g_Earth_Z_T2)
   cdrag_sqrt = sqrt(CS%cdrag)
   cdrag_sqrt_H = cdrag_sqrt * US%L_to_m * GV%m_to_H
   cdrag_sqrt_H_RL = cdrag_sqrt * US%L_to_Z * GV%RZ_to_H
@@ -2959,9 +2950,6 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     CS%RiNo_mix = kappa_shear_is_used(param_file)
   endif
 
-  call get_param(param_file, mdl, "PRANDTL_TURB", visc%Prandtl_turb, &
-                 "The turbulent Prandtl number applied to shear "//&
-                 "instability.", units="nondim", default=1.0)
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false.)
 
   call get_param(param_file, mdl, "DYNAMIC_VISCOUS_ML", CS%dynamic_viscous_ML, &
@@ -3142,7 +3130,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
     allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed), source=0.0)
     allocate(visc%kv_bbl_v(isd:ied,JsdB:JedB), source=0.0)
     allocate(visc%ustar_bbl(isd:ied,jsd:jed), source=0.0)
-    allocate(visc%TKE_bbl(isd:ied,jsd:jed), source=0.0)
+    allocate(visc%BBL_meanKE_loss(isd:ied,jsd:jed), source=0.0)
+    allocate(visc%BBL_meanKE_loss_sqrtCd(isd:ied,jsd:jed), source=0.0)
 
     CS%id_bbl_thick_u = register_diag_field('ocean_model', 'bbl_thick_u', &
        diag%axesCu1, Time, 'BBL thickness at u points', 'm', conversion=US%Z_to_m)
@@ -3217,7 +3206,8 @@ subroutine set_visc_end(visc, CS)
   if (associated(visc%Kv_shear)) deallocate(visc%Kv_shear)
   if (associated(visc%Kv_shear_Bu)) deallocate(visc%Kv_shear_Bu)
   if (allocated(visc%ustar_bbl)) deallocate(visc%ustar_bbl)
-  if (allocated(visc%TKE_bbl)) deallocate(visc%TKE_bbl)
+  if (allocated(visc%BBL_meanKE_loss)) deallocate(visc%BBL_meanKE_loss)
+  if (allocated(visc%BBL_meanKE_loss_sqrtCd)) deallocate(visc%BBL_meanKE_loss_sqrtCd)
   if (allocated(visc%taux_shelf)) deallocate(visc%taux_shelf)
   if (allocated(visc%tauy_shelf)) deallocate(visc%tauy_shelf)
   if (allocated(visc%tbl_thick_shelf_u)) deallocate(visc%tbl_thick_shelf_u)

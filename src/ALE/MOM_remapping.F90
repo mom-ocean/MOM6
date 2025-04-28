@@ -6,17 +6,35 @@ module MOM_remapping
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_string_functions, only : uppercase
+use numerical_testing_type, only : testing
 use regrid_edge_values, only : edge_values_explicit_h4, edge_values_implicit_h4
 use regrid_edge_values, only : edge_values_explicit_h4cw
 use regrid_edge_values, only : edge_values_implicit_h4, edge_values_implicit_h6
 use regrid_edge_values, only : edge_slopes_implicit_h3, edge_slopes_implicit_h5
-use remapping_attic,    only : remapping_attic_unit_tests
 use PCM_functions, only : PCM_reconstruction
 use PLM_functions, only : PLM_reconstruction, PLM_boundary_extrapolation
 use PPM_functions, only : PPM_reconstruction, PPM_boundary_extrapolation
 use PPM_functions, only : PPM_monotonicity
 use PQM_functions, only : PQM_reconstruction, PQM_boundary_extrapolation_v1
 use MOM_hybgen_remap, only : hybgen_plm_coefs, hybgen_ppm_coefs, hybgen_weno_coefs
+
+use Recon1d_type, only : Recon1d
+use Recon1d_PCM, only : PCM
+use Recon1d_PLM_CW, only : PLM_CW
+use Recon1d_PLM_hybgen, only : PLM_hybgen
+use Recon1d_PLM_CWK, only : PLM_CWK
+use Recon1d_MPLM_CWK, only : MPLM_CWK
+use Recon1d_EMPLM_CWK, only : EMPLM_CWK
+use Recon1d_MPLM_WA, only : MPLM_WA
+use Recon1d_EMPLM_WA, only : EMPLM_WA
+use Recon1d_MPLM_WA_poly, only : MPLM_WA_poly
+use Recon1d_EMPLM_WA_poly, only : EMPLM_WA_poly
+use Recon1d_PPM_CW, only : PPM_CW
+use Recon1d_PPM_hybgen, only : PPM_hybgen
+use Recon1d_PPM_CWK, only : PPM_CWK
+use Recon1d_EPPM_CWK, only : EPPM_CWK
+use Recon1d_PPM_H4_2019, only : PPM_H4_2019
+use Recon1d_PPM_H4_2018, only : PPM_H4_2018
 
 implicit none ; private
 
@@ -34,6 +52,12 @@ type, public :: remapping_CS ; private
   logical :: check_remapping = .false.
   !> If true, the intermediate values used in remapping are forced to be bounded.
   logical :: force_bounds_in_subcell = .false.
+  !> If true, impose bounds on the remapping from sub-cells to target grid
+  logical :: force_bounds_in_target = .true.
+  !> If true, impose bounds on the remapping from non-vanished sub-cells to target grid
+  logical :: better_force_bounds_in_target = .false.
+  !> If true, calculate and use an offset when summing sub-cells to the target grid
+  logical :: offset_tgt_summation = .false.
   !> The vintage of the expressions to use for remapping. Values below 20190101 result
   !! in the use of older, less accurate expressions.
   integer :: answer_date = 99991231
@@ -47,37 +71,12 @@ type, public :: remapping_CS ; private
   !> A negligibly small width for the purpose of edge value calculations in the same units
   !! as the h0 argument to remapping_core_h [H]
   real :: h_neglect_edge
-end type
 
-!> Class to assist in unit tests
-type :: testing
-  private
-  !> True if any fail has been encountered since instantiation of "testing"
-  logical :: state = .false.
-  !> Count of tests checked
-  integer :: num_tests_checked = 0
-  !> Count of tests failed
-  integer :: num_tests_failed = 0
-  !> If true, be verbose and write results to stdout. Default True.
-  logical :: verbose = .true.
-  !> Error channel
-  integer :: stderr = 0
-  !> Standard output channel
-  integer :: stdout = 6
-  !> If true, stop instantly
-  logical :: stop_instantly = .false.
-  !> Record instances that fail
-  integer :: ifailed(100) = 0.
-  !> Record label of first instance that failed
-  character(len=:), allocatable :: label_first_fail
+  !> If true, do some debugging as operations proceed
+  logical :: debug = .false.
 
-  contains
-    procedure :: test => test           !< Update the testing state
-    procedure :: set => set             !< Set attributes
-    procedure :: outcome => outcome     !< Return current outcome
-    procedure :: summarize => summarize !< Summarize testing state
-    procedure :: real_arr => real_arr   !< Compare array of reals
-    procedure :: int_arr => int_arr     !< Compare array of integers
+  !> The instance of the actual equation of state
+  class(Recon1d), pointer :: reconstruction => Null()
 end type
 
 ! The following routines are visible to the outside world
@@ -97,6 +96,7 @@ integer, parameter  :: REMAPPING_PPM_HYBGEN = 6 !< O(h^3) remapping scheme
 integer, parameter  :: REMAPPING_WENO_HYBGEN= 7 !< O(h^3) remapping scheme
 integer, parameter  :: REMAPPING_PQM_IH4IH3 = 8 !< O(h^4) remapping scheme
 integer, parameter  :: REMAPPING_PQM_IH6IH5 = 9 !< O(h^5) remapping scheme
+integer, parameter  :: REMAPPING_VIA_CLASS  =99 !< Scheme is controlled by Recon1d class
 
 integer, parameter  :: INTEGRATION_PCM = 0  !< Piecewise Constant Method
 integer, parameter  :: INTEGRATION_PLM = 1  !< Piecewise Linear Method
@@ -121,7 +121,8 @@ contains
 !> Set parameters within remapping object
 subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
                check_reconstruction, check_remapping, force_bounds_in_subcell, &
-               om4_remap_via_sub_cells, answers_2018, answer_date, &
+               force_bounds_in_target, better_force_bounds_in_target, offset_tgt_summation, &
+               om4_remap_via_sub_cells, answers_2018, answer_date, nk, &
                h_neglect, h_neglect_edge)
   type(remapping_CS),         intent(inout) :: CS !< Remapping control structure
   character(len=*), optional, intent(in)    :: remapping_scheme !< Remapping scheme to use
@@ -129,6 +130,9 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
   logical, optional,          intent(in)    :: check_reconstruction !< Indicate to check reconstructions
   logical, optional,          intent(in)    :: check_remapping !< Indicate to check results of remapping
   logical, optional,          intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
+  logical, optional,          intent(in)    :: force_bounds_in_target !< Force target values to be bounded
+  logical, optional,          intent(in)    :: better_force_bounds_in_target !< Force target values to be bounded
+  logical, optional,          intent(in)    :: offset_tgt_summation !< Use an offset when summing sub-cells
   logical, optional,          intent(in)    :: om4_remap_via_sub_cells !< If true, use OM4 remapping algorithm
   logical, optional,          intent(in)    :: answers_2018 !< If true use older, less accurate expressions.
   integer, optional,          intent(in)    :: answer_date  !< The vintage of the expressions to use
@@ -138,9 +142,18 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
   real,    optional,          intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose of edge
                                                          !! value calculations in the same units as as the h0
                                                          !! argument to remapping_core_h [H]
+  integer, optional,          intent(in)    :: nk !< Number of levels to initialize reconstruction class with
 
   if (present(remapping_scheme)) then
     call setReconstructionType( remapping_scheme, CS )
+    if (index(trim(remapping_scheme),'C_')>0) then
+      if (present(nk)) then
+        call CS%reconstruction%init(nk, h_neglect=h_neglect)
+      else
+        call MOM_error( FATAL, 'MOM_remapping, remapping_set_param: '//&
+           'Using the Recon1d class for remapping requires nk to be passed' )
+      endif
+    endif
   endif
   if (present(boundary_extrapolation)) then
     CS%boundary_extrapolation = boundary_extrapolation
@@ -153,6 +166,15 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
   endif
   if (present(force_bounds_in_subcell)) then
     CS%force_bounds_in_subcell = force_bounds_in_subcell
+  endif
+  if (present(force_bounds_in_target)) then
+    CS%force_bounds_in_target = force_bounds_in_target
+  endif
+  if (present(better_force_bounds_in_target)) then
+    CS%better_force_bounds_in_target = better_force_bounds_in_target
+  endif
+  if (present(offset_tgt_summation)) then
+    CS%offset_tgt_summation = offset_tgt_summation
   endif
   if (present(om4_remap_via_sub_cells)) then
     CS%om4_remap_via_sub_cells = om4_remap_via_sub_cells
@@ -177,7 +199,8 @@ subroutine remapping_set_param(CS, remapping_scheme, boundary_extrapolation,  &
 end subroutine remapping_set_param
 
 subroutine extract_member_remapping_CS(CS, remapping_scheme, degree, boundary_extrapolation, check_reconstruction, &
-                                       check_remapping, force_bounds_in_subcell)
+                                       check_remapping, force_bounds_in_subcell, force_bounds_in_target, &
+                                       better_force_bounds_in_target, offset_tgt_summation)
   type(remapping_CS), intent(in) :: CS !< Control structure for remapping module
   integer, optional, intent(out) :: remapping_scheme        !< Determines which reconstruction scheme to use
   integer, optional, intent(out) :: degree                  !< Degree of polynomial reconstruction
@@ -187,6 +210,9 @@ subroutine extract_member_remapping_CS(CS, remapping_scheme, degree, boundary_ex
                                                             !!  for conservation and bounds.
   logical, optional, intent(out) :: force_bounds_in_subcell !< If true, the intermediate values used in
                                                             !! remapping are forced to be bounded.
+  logical, optional, intent(out) :: force_bounds_in_target  !< Force target values to be bounded
+  logical, optional, intent(out) :: better_force_bounds_in_target  !< Force target values to be bounded
+  logical, optional, intent(out) :: offset_tgt_summation    !< Use an offset when summing sub-cells
 
   if (present(remapping_scheme)) remapping_scheme = CS%remapping_scheme
   if (present(degree)) degree = CS%degree
@@ -194,10 +220,14 @@ subroutine extract_member_remapping_CS(CS, remapping_scheme, degree, boundary_ex
   if (present(check_reconstruction)) check_reconstruction = CS%check_reconstruction
   if (present(check_remapping)) check_remapping = CS%check_remapping
   if (present(force_bounds_in_subcell)) force_bounds_in_subcell = CS%force_bounds_in_subcell
+  if (present(force_bounds_in_target)) force_bounds_in_target = CS%force_bounds_in_target
+  if (present(better_force_bounds_in_target)) better_force_bounds_in_target = CS%better_force_bounds_in_target
+  if (present(offset_tgt_summation)) offset_tgt_summation = CS%offset_tgt_summation
 
 end subroutine extract_member_remapping_CS
 
-!> Remaps column of values u0 on grid h0 to grid h1 assuming the top edge is aligned.
+!> Remaps column of values u0 on grid h0 to grid h1 assuming the top edge is aligned and using the OM4
+!! reconstruction methods
 !!
 !! \todo Remove h_neglect argument by moving into remapping_CS
 !! \todo Remove PCM_cell argument by adding new method in Recon1D class
@@ -212,7 +242,6 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, net_err, PCM_cell)
   real, optional,      intent(out) :: net_err !< Error in total column [A H]
   logical, dimension(n0), optional, intent(in) :: PCM_cell !< If present, use PCM remapping for
                                          !! cells in the source grid where this is true.
-
   ! Local variables
   real, dimension(n0+n1+1) :: h_sub ! Width of each each sub-cell [H]
   real, dimension(n0+n1+1) :: uh_sub ! Integral of u*h over each sub-cell [A H]
@@ -225,7 +254,6 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, net_err, PCM_cell)
   integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
   integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
   ! For error checking/debugging
-  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   real :: u02_err ! Integrated reconstruction error estimates [H A]
   real, dimension(n0,2)           :: ppoly_r_E     ! Edge value of polynomial [A]
   real, dimension(n0,2)           :: ppoly_r_S     ! Edge slope of polynomial [A H-1]
@@ -233,62 +261,76 @@ subroutine remapping_core_h(CS, n0, h0, u0, n1, h1, u1, net_err, PCM_cell)
   real :: uh_err       ! A bound on the error in the sum of u*h, as estimated by the remapping code [A H]
   integer :: iMethod   ! An integer indicating the integration method used
 
-  call build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, ppoly_r_E, ppoly_r_S, iMethod, &
-                                 CS%h_neglect, CS%h_neglect_edge, PCM_cell )
+  ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
+  ! Sets: h_sub, h0_eff, isrc_start, isrc_end, isrc_max, isub_src, itgt_start, itgt_end
+  call intersect_src_tgt_grids(n0, h0, n1, h1, h_sub, h0_eff, &
+                               isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src)
 
-  if (CS%om4_remap_via_sub_cells) then
+  if (CS%remapping_scheme == REMAPPING_VIA_CLASS) then
 
-    if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
-                                   CS%boundary_extrapolation, ppoly_r_coefs, ppoly_r_E)
+!   if (CS%debug) call CS%reconstruction%set_debug() ! Sets an internal flag
 
-    ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
-    call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
-                                isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
+    call CS%reconstruction%reconstruct(h0, u0)
+
+    ! Adjust h_sub so that the Hallberg conservation trick works properly
+!   call adjust_h_sub( n0, h0, n1, isrc_start, isrc_end, isrc_max, h_sub )
 
     ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
-    ! Uses: h_sub, h0_eff, isub_src
+    ! Uses: h_sub, isrc_start, isrc_end, isrc_max, isub_src
     ! Sets: u_sub, uh_sub
-    call remap_src_to_sub_grid_om4(n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h_sub, &
-                               h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
-                               iMethod, CS%force_bounds_in_subcell, u_sub, uh_sub, u02_err)
+    call CS%reconstruction%remap_to_sub_grid(h0, u0, n1, h_sub, &
+                                             isrc_start, isrc_end, isrc_max, isub_src, &
+                                             u_sub, uh_sub, u02_err)
 
     ! Loop over each target cell summing the integrals from sub-cells within the target cell.
     ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
     ! Sets: u1, uh_err
     call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                               force_bounds_in_target, u1, uh_err)
+                               CS%force_bounds_in_target, CS%offset_tgt_summation, &
+                               CS%better_force_bounds_in_target, u1, uh_err)
 
+    ! Include the error remapping from source to sub-cells in the estimate of total remapping error
+    uh_err = uh_err + u02_err
+
+  else ! Uses the OM4-era reconstruction functions
+
+    call build_reconstructions_1d(CS, n0, h0, u0, ppoly_r_coefs, ppoly_r_E, ppoly_r_S, iMethod, &
+                                  CS%h_neglect, CS%h_neglect_edge, PCM_cell, debug=CS%debug)
+
+    if (CS%check_reconstruction) call check_reconstructions_1d(n0, h0, u0, CS%degree, &
+                                   CS%boundary_extrapolation, ppoly_r_coefs, ppoly_r_E)
+
+    ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
+    ! Uses: h_sub, h0_eff, isub_src
+    ! Sets: u_sub, uh_sub
+    if (CS%om4_remap_via_sub_cells) then ! Uses the version from OM4 with a bug at the bottom
+
+      call remap_src_to_sub_grid_om4(n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h_sub, &
+                                     h0_eff, isrc_start, isrc_end, isrc_max, isub_src, &
+                                     iMethod, CS%force_bounds_in_subcell, u_sub, uh_sub, u02_err)
+
+    else ! i.e. if (CS%om4_remap_via_sub_cells == .false.)
+
+      call remap_src_to_sub_grid(n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h_sub, &
+                                 isrc_start, isrc_end, isrc_max, isub_src, &
+                                 iMethod, CS%force_bounds_in_subcell, u_sub, uh_sub, u02_err)
+
+    endif
+
+    ! Loop over each target cell summing the integrals from sub-cells within the target cell.
+    ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
+    ! Sets: u1, uh_err
+    call remap_sub_to_tgt_grid_om4(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                               CS%force_bounds_in_target, u1, uh_err)
     ! Include the error remapping from source to sub-cells in the estimate of total remapping error
     uh_err = uh_err + u02_err
 
     if (CS%check_remapping) call check_remapped_values(n0, h0, u0, ppoly_r_E, CS%degree, ppoly_r_coefs, &
                                                        n1, h1, u1, iMethod, uh_err, "remapping_core_h")
 
-  else ! i.e. if (CS%om4_remap_via_sub_cells == .false.)
-
-    ! Calculate sub-layer thicknesses and indices connecting sub-layers to source and target grids
-    call intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
-                                  isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
-
-    ! Loop over each sub-cell to calculate average/integral values within each sub-cell.
-    ! Uses: h_sub, h0_eff, isub_src
-    ! Sets: u_sub, uh_sub
-    call remap_src_to_sub_grid(n0, h0, u0, ppoly_r_E, ppoly_r_coefs, n1, h_sub, &
-                               isrc_start, isrc_end, isrc_max, isub_src, &
-                               iMethod, CS%force_bounds_in_subcell, u_sub, uh_sub, u02_err)
-
-    ! Loop over each target cell summing the integrals from sub-cells within the target cell.
-    ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
-    ! Sets: u1, uh_err
-    call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                               force_bounds_in_target, u1, uh_err)
-
-    ! Include the error remapping from source to sub-cells in the estimate of total remapping error
-    uh_err = uh_err + u02_err
-
   endif
 
-  if (present(net_err)) net_err = uh_err
+ if (present(net_err)) net_err = uh_err
 
 end subroutine remapping_core_h
 
@@ -315,7 +357,6 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1)
   integer, dimension(n1) :: itgt_start ! Index of first sub-cell within each target cell
   integer, dimension(n1) :: itgt_end ! Index of last sub-cell within each target cell
   ! For error checking/debugging
-  logical, parameter :: force_bounds_in_target = .true. ! To fix round-off issues
   real :: u02_err ! Integrated reconstruction error estimates [H A]
   real, dimension(n0,2)           :: ppoly_r_E     ! Edge value of polynomial [A]
   real, dimension(n0,2)           :: ppoly_r_S     ! Edge slope of polynomial [A H-1]
@@ -354,8 +395,8 @@ subroutine remapping_core_w( CS, n0, h0, u0, n1, dx, u1)
   ! Loop over each target cell summing the integrals from sub-cells within the target cell.
   ! Uses: itgt_start, itgt_end, h1, h_sub, uh_sub, u_sub
   ! Sets: u1, uh_err
-  call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             force_bounds_in_target, u1, uh_err)
+  call remap_sub_to_tgt_grid_om4(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
+                             CS%force_bounds_in_target, u1, uh_err)
 
   ! Include the error remapping from source to sub-cells in the estimate of total remapping error
   uh_err = uh_err + u02_err
@@ -368,7 +409,7 @@ end subroutine remapping_core_w
 !> Creates polynomial reconstructions of u0 on the source grid h0.
 subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
                                      ppoly_r_E, ppoly_r_S, iMethod, h_neglect, &
-                                     h_neglect_edge, PCM_cell )
+                                     h_neglect_edge, PCM_cell, debug )
   type(remapping_CS),    intent(in)  :: CS !< Remapping control structure
   integer,               intent(in)  :: n0 !< Number of cells on source grid
   real, dimension(n0),   intent(in)  :: h0 !< Cell widths on source grid [H]
@@ -386,12 +427,16 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
                                          !! The default is h_neglect.
   logical, optional,     intent(in)  :: PCM_cell(n0) !< If present, use PCM remapping for
                                          !! cells from the source grid where this is true.
+  logical, optional,     intent(in) :: debug !< If true, enable debugging
 
   ! Local variables
   real :: h_neg_edge  ! A negligibly small width for the purpose of edge value
                       ! calculations in the same units as h0 [H]
   integer :: local_remapping_scheme
   integer :: k, n
+  logical :: deb ! Do debugging
+
+  deb=.false.; if (present(debug)) deb=debug
 
   h_neg_edge = h_neglect ; if (present(h_neglect_edge)) h_neg_edge = h_neglect_edge
 
@@ -484,6 +529,9 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
                                             ppoly_r_coefs, h_neglect )
       endif
       iMethod = INTEGRATION_PQM
+    case ( REMAPPING_VIA_CLASS )
+      call MOM_error( FATAL, 'MOM_remapping, build_reconstructions_1d: '//&
+           'Should not reach this point if using Recon1d class for remapping' )
     case default
       call MOM_error( FATAL, 'MOM_remapping, build_reconstructions_1d: '//&
            'The selected remapping method is invalid' )
@@ -617,14 +665,8 @@ subroutine intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
   real :: dh ! The width of the sub-cell [H]
   real :: dh0_eff ! Running sum of source cell thickness [H]
   ! For error checking/debugging
-  integer :: i0_last_thick_cell
   logical :: src_has_volume !< True if h0 has not been consumed
   logical :: tgt_has_volume !< True if h1 has not been consumed
-
-  i0_last_thick_cell = 0
-  do i0 = 1, n0
-    if (h0(i0)>0.) i0_last_thick_cell = i0
-  enddo
 
   ! Initialize algorithm
   h0_supply = h0(1)
@@ -752,7 +794,49 @@ subroutine intersect_src_tgt_grids( n0, h0, n1, h1, h_sub, h0_eff, &
     endif
 
   enddo
+
 end subroutine intersect_src_tgt_grids
+
+!> Adjust h_sub to ensure accurate conservation
+!!
+!! Loop over each source cell substituting the thickest sub-cell (within the source cell) with the
+!! residual of the source cell thickness minus the sum of other sub-cells
+!! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (\@Hallberg-NOAA).
+!subroutine adjust_h_sub( n0, h0, n1, isrc_start, isrc_end, isrc_max, h_sub )
+!  integer, intent(in)    :: n0      !< Number of cells in source grid
+!  real,    intent(in)    :: h0(n0)  !< Source grid widths (size n0) [H]
+!  integer, intent(in)    :: n1      !< Number of cells in target grid
+!  integer, intent(in)    :: isrc_start(n0) !< Index of first sub-cell within each source cell
+!  integer, intent(in)    :: isrc_end(n0) !< Index of last sub-cell within each source cell
+!  integer, intent(in)    :: isrc_max(n0) !< Index of thickest sub-cell within each source cell
+!  real,    intent(inout) :: h_sub(n0+n1+1) !< Overlapping sub-cell thicknesses, h_sub [H]
+!  ! Local variables
+!  integer :: i_sub ! Index of sub-cell
+!  integer :: i0 ! Index into h0(1:n0), source column
+!  integer :: i_max ! Used to record which sub-cell is the largest contribution of a source cell
+!  real :: dh_max ! Used to record which sub-cell is the largest contribution of a source cell [H]
+!  real :: dh ! The width of the sub-cell [H]
+!  integer :: i0_last_thick_cell ! Last h0 cell with finite thickness
+!
+!  i0_last_thick_cell = 0
+!  do i0 = 1, n0
+!    if (h0(i0)>0.) i0_last_thick_cell = i0
+!  enddo
+!
+!  do i0 = 1, i0_last_thick_cell
+!    i_max = isrc_max(i0)
+!    dh_max = h_sub(i_max)
+!    if (dh_max > 0.) then
+!      ! dh will be the sum of sub-cell thicknesses within the source cell except for the thickest sub-cell.
+!      dh = 0.
+!      do i_sub = isrc_start(i0), isrc_end(i0)
+!        if (i_sub /= i_max) dh = dh + h_sub(i_sub)
+!      enddo
+!      h_sub(i_max) = h0(i0) - dh
+!    endif
+!  enddo
+!
+!end subroutine adjust_h_sub
 
 !> Remaps column of n0 values u0 on grid h0 to subgrid h_sub
 !!
@@ -854,9 +938,9 @@ subroutine remap_src_to_sub_grid_om4(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_s
   if (adjust_thickest_subcell) then
     ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
     ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
-    ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
+    ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (\@Hallberg-NOAA).
     ! Uses: i0_last_thick_cell, isrc_max, h_sub, isrc_start, isrc_end, uh_sub, u0, h0
-    ! Updates: uh_sub
+    ! Updates: uh_sub, u_sub
     do i0 = 1, i0_last_thick_cell
       i_max = isrc_max(i0)
       dh_max = h_sub(i_max)
@@ -903,7 +987,7 @@ subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, 
   real :: dh ! The width of the sub-cell [H]
   real :: duh ! The total amount of accumulated stuff (u*h) [A H]
   real :: dh0_eff ! Running sum of source cell thickness [H]
-  real :: u0_min(n0), u0_max(n0) !< Min/max of u0 for each source cell [A]
+  real :: u0_min(n0), u0_max(n0) ! Min/max of u0 for each source cell [A]
   ! For error checking/debugging
   logical, parameter :: adjust_thickest_subcell = .true. ! To fix round-off conservation issues
   integer :: i0_last_thick_cell
@@ -965,7 +1049,6 @@ subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, 
   i_sub = n0+n1+1
   ! Sub-cell thickness from loop above
   dh = h_sub(i_sub)
-
   ! Source cell
   i0 = isub_src(i_sub)
 
@@ -995,7 +1078,7 @@ subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, 
   if (adjust_thickest_subcell) then
     ! Loop over each source cell substituting the integral/average for the thickest sub-cell (within
     ! the source cell) with the residual of the source cell integral minus the other sub-cell integrals
-    ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (@Hallberg-NOAA).
+    ! aka a genius algorithm for accurate conservation when remapping from Robert Hallberg (\@Hallberg-NOAA).
     ! Uses: i0_last_thick_cell, isrc_max, h_sub, isrc_start, isrc_end, uh_sub, u0, h0
     ! Updates: uh_sub
     do i0 = 1, i0_last_thick_cell
@@ -1016,7 +1099,8 @@ subroutine remap_src_to_sub_grid(n0, h0, u0, ppoly0_E, ppoly0_coefs, n1, h_sub, 
 end subroutine remap_src_to_sub_grid
 
 !> Remaps column of n0+n1+1 values usub on sub-grid h_sub to targets on grid h1
-subroutine remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, &
+!! using the OM4-era algorithm
+subroutine remap_sub_to_tgt_grid_om4(n0, n1, h1, h_sub, u_sub, uh_sub, &
                                  itgt_start, itgt_end, force_bounds_in_target, u1, uh_err)
   integer, intent(in)  :: n0     !< Number of cells in source grid
   integer, intent(in)  :: n1     !< Number of cells in target grid
@@ -1063,6 +1147,87 @@ subroutine remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, &
         uh_err = uh_err + max(abs(duh),abs(uh_sub(i_sub)))*epsilon(duh)
       enddo
       u1(i1) = duh / dh
+      ! This is the contribution from the division to the error bound for the sum of u*h
+      uh_err = uh_err + abs(duh)*epsilon(duh)
+      if (force_bounds_in_target) then
+        u_orig = u1(i1)
+        u1(i1) = max(u1min, min(u1max, u1(i1)))
+        ! Adjusting to be bounded contributes to the error for the sum of u*h
+        uh_err = uh_err + dh*abs( u1(i1)-u_orig )
+      endif
+    else
+      u1(i1) = u_sub(itgt_start(i1))
+    endif
+  enddo
+
+end subroutine remap_sub_to_tgt_grid_om4
+
+!> Remaps column of n0+n1+1 values usub on sub-grid h_sub to targets on grid h1
+subroutine remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, &
+                                 itgt_start, itgt_end, force_bounds_in_target, &
+                                 better_force_bounds_in_target, offset_summation, u1, uh_err)
+  integer, intent(in)  :: n0     !< Number of cells in source grid
+  integer, intent(in)  :: n1     !< Number of cells in target grid
+  real,    intent(in)  :: h1(n1) !< Target grid widths (size n1) [H]
+  real,    intent(in)  :: h_sub(n0+n1+1) !< Overlapping sub-cell thicknesses, h_sub [H]
+  real,    intent(in)  :: u_sub(n0+n1+1) !< Sub-cell cell averages (size n1) [A]
+  real,    intent(in)  :: uh_sub(n0+n1+1) !< Sub-cell cell integrals (size n1) [A H]
+  integer, intent(in)  :: itgt_start(n1) !< Index of first sub-cell within each target cell
+  integer, intent(in)  :: itgt_end(n1) !< Index of last sub-cell within each target cell
+  logical, intent(in)  :: force_bounds_in_target !< Force sub-cell values to be bounded
+  logical, intent(in)  :: better_force_bounds_in_target !< Force sub-cell values to be bounded
+  logical, intent(in)  :: offset_summation !< Offset values in summation for accuracy
+  real,    intent(out) :: u1(n1) !< Target cell averages (size n1) [A]
+  real,    intent(out) :: uh_err !< Estimate of bound on error in sum of u*h [A H]
+  ! Local variables
+  integer :: i1 ! tgt loop index
+  integer :: i_sub ! index to sub-layer
+  real :: dh ! The width of the sub-cell [H]
+  real :: duh ! The total amount of accumulated stuff (u*h)  [A H]
+  real :: u1min, u1max ! Minimum and maximum values of reconstructions [A]
+  real :: u_orig ! The original value of the reconstruction in a cell prior to bounding [A]
+  real :: u_ref ! A value to offest the summation to gain accuracy [A]
+  real :: h_max ! Thickest cell encountered [H]
+
+  u1min = 0. ! Not necessary, but avoids an overzealous compiler ...
+  u1max = 0. ! ... warning about uninitialized variables
+  u_ref = 0. ! An offset of 0. should do no harm
+  h_max = 0.
+
+  ! Loop over each target cell summing the integrals from sub-cells within the target cell.
+  ! Uses: itgt_start, itgt_end, h_sub, uh_sub, u_sub
+  ! Sets: u1, uh_err
+  uh_err = 0.
+  do i1 = 1, n1
+    if (h1(i1) > 0.) then
+      duh = 0. ; dh = 0.
+      i_sub = itgt_start(i1)
+      if (force_bounds_in_target) then
+        u1min = u_sub(i_sub)
+        u1max = u_sub(i_sub)
+      endif
+      if (offset_summation) then
+        u_ref = 0. ! An offset of 0. should do no harm
+        h_max = 0.
+        do i_sub = itgt_start(i1), itgt_end(i1)
+          if (h_sub(i_sub) > h_max) then
+            u_ref = u_sub(i_sub)
+            h_max = h_sub(i_sub)
+          endif
+        enddo
+      endif
+      do i_sub = itgt_start(i1), itgt_end(i1)
+        if (force_bounds_in_target .or. better_force_bounds_in_target .and. h_sub(i_sub)>0.) then
+          u1min = min(u1min, u_sub(i_sub))
+          u1max = max(u1max, u_sub(i_sub))
+        endif
+        dh = dh + h_sub(i_sub)
+        ! Ideally u_ref would be already be substracted in uh_sub
+        duh = duh + ( uh_sub(i_sub) - h_sub(i_sub) * u_ref )
+        ! This accumulates the contribution to the error bound for the sum of u*h
+        uh_err = uh_err + max(abs(duh),abs(uh_sub(i_sub)))*epsilon(duh)
+      enddo
+      u1(i1) = duh / dh + u_ref
       ! This is the contribution from the division to the error bound for the sum of u*h
       uh_err = uh_err + abs(duh)*epsilon(duh)
       if (force_bounds_in_target) then
@@ -1488,7 +1653,8 @@ end subroutine dzFromH1H2
 !> Constructor for remapping control structure
 subroutine initialize_remapping( CS, remapping_scheme, boundary_extrapolation, &
                 check_reconstruction, check_remapping, force_bounds_in_subcell, &
-                om4_remap_via_sub_cells, answers_2018, answer_date, &
+                force_bounds_in_target, better_force_bounds_in_target, offset_tgt_summation, &
+                om4_remap_via_sub_cells, answers_2018, answer_date, nk, &
                 h_neglect, h_neglect_edge)
   ! Arguments
   type(remapping_CS), intent(inout) :: CS !< Remapping control structure
@@ -1497,6 +1663,9 @@ subroutine initialize_remapping( CS, remapping_scheme, boundary_extrapolation, &
   logical, optional,  intent(in)    :: check_reconstruction !< Indicate to check reconstructions
   logical, optional,  intent(in)    :: check_remapping !< Indicate to check results of remapping
   logical, optional,  intent(in)    :: force_bounds_in_subcell !< Force subcells values to be bounded
+  logical, optional,  intent(in)    :: force_bounds_in_target !< Force target values to be bounded
+  logical, optional,  intent(in)    :: better_force_bounds_in_target !< Force target values to be bounded
+  logical, optional,  intent(in)    :: offset_tgt_summation !< Use an offset when summing sub-cells
   logical, optional,  intent(in)    :: om4_remap_via_sub_cells !< If true, use OM4 remapping algorithm
   logical, optional,  intent(in)    :: answers_2018 !< If true use older, less accurate expressions.
   integer, optional,  intent(in)    :: answer_date  !< The vintage of the expressions to use
@@ -1504,13 +1673,24 @@ subroutine initialize_remapping( CS, remapping_scheme, boundary_extrapolation, &
                                                  !! reconstructions in the same units as h0 [H]
   real,    optional,  intent(in)    :: h_neglect_edge !< A negligibly small width for the purpose of edge
                                                       !! value calculations in the same units as h0 [H].
+  integer, optional,  intent(in)    :: nk !< Number of levels to initialize reconstruction class with
 
   ! Note that remapping_scheme is mandatory for initialize_remapping()
-  call remapping_set_param(CS, remapping_scheme=remapping_scheme, boundary_extrapolation=boundary_extrapolation,  &
-               check_reconstruction=check_reconstruction, check_remapping=check_remapping, &
+  call remapping_set_param(CS, &
+               remapping_scheme=remapping_scheme, &
+               boundary_extrapolation=boundary_extrapolation,  &
+               check_reconstruction=check_reconstruction, &
+               check_remapping=check_remapping, &
                force_bounds_in_subcell=force_bounds_in_subcell, &
-               om4_remap_via_sub_cells=om4_remap_via_sub_cells, answers_2018=answers_2018, answer_date=answer_date, &
-               h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+               om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
+               force_bounds_in_target=force_bounds_in_target, &
+               better_force_bounds_in_target=better_force_bounds_in_target, &
+               offset_tgt_summation=offset_tgt_summation, &
+               answers_2018=answers_2018, &
+               answer_date=answer_date, &
+               nk=nk, &
+               h_neglect=h_neglect, &
+               h_neglect_edge=h_neglect_edge)
 
 end subroutine initialize_remapping
 
@@ -1524,6 +1704,15 @@ subroutine setReconstructionType(string,CS)
   ! Local variables
   integer :: degree
   degree = -99
+  if (associated(CS%reconstruction)) then
+    ! We have a choice of being careless and allowing easy re-use (e.g. when testing)
+    CS%remapping_scheme = -911
+    call CS%reconstruction%destroy()
+    deallocate( CS%reconstruction )
+    ! or being careful and make sure we've properly clean up...
+    !  call MOM_error(FATAL, "setReconstructionType: "//&
+    !   "Recon1d type is already associated when initializing.")
+  endif
   select case ( uppercase(trim(string)) )
     case ("PCM")
       CS%remapping_scheme = REMAPPING_PCM
@@ -1555,6 +1744,54 @@ subroutine setReconstructionType(string,CS)
     case ("PQM_IH6IH5")
       CS%remapping_scheme = REMAPPING_PQM_IH6IH5
       degree = 4
+    case ("C_PCM")
+      allocate( PCM :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PLM_CW")
+      allocate( PLM_CW :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PLM_HYBGEN")
+      allocate( PLM_hybgen :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_MPLM_WA")
+      allocate( MPLM_WA :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_EMPLM_WA")
+      allocate( EMPLM_WA :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_MPLM_WA_POLY")
+      allocate( MPLM_WA_poly :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_EMPLM_WA_POLY")
+      allocate( EMPLM_WA_poly :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PLM_CWK")
+      allocate( PLM_CWK :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_MPLM_CWK")
+      allocate( MPLM_CWK :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_EMPLM_CWK")
+      allocate( EMPLM_CWK :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PPM_CW")
+      allocate( PPM_CW :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PPM_HYBGEN")
+      allocate( PPM_hybgen :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PPM_CWK")
+      allocate( PPM_CWK :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_EPPM_CWK")
+      allocate( EPPM_CWK :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PPM_H4_2019")
+      allocate( PPM_H4_2019 :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PPM_H4_2018")
+      allocate( PPM_H4_2018 :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
     case default
       call MOM_error(FATAL, "setReconstructionType: "//&
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
@@ -1572,17 +1809,276 @@ subroutine end_remapping(CS)
 
 end subroutine end_remapping
 
+!> Test if interpolate_column() produces the wrong answer
+subroutine test_interp(test, msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
+  type(testing),         intent(inout) :: test   !< Unit testing convenience functions
+  character(len=*),         intent(in) :: msg    !< Message to label test
+  integer,                  intent(in) :: nsrc   !< Number of source cells
+  real, dimension(nsrc),    intent(in) :: h_src  !< Thickness of source cells [H]
+  real, dimension(nsrc+1),  intent(in) :: u_src  !< Values at source cell interfaces [A]
+  integer,                  intent(in) :: ndest  !< Number of destination cells
+  real, dimension(ndest),   intent(in) :: h_dest !< Thickness of destination cells [H]
+  real, dimension(ndest+1), intent(in) :: u_true !< Correct value at destination cell interfaces [A]
+  ! Local variables
+  real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces [A]
+
+  ! Interpolate from src to dest
+  call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, .true.)
+  call test%real_arr(ndest, u_dest, u_true, msg)
+end subroutine test_interp
+
+!> Test if reintegrate_column() produces the wrong answer
+subroutine test_reintegrate(test, msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
+  type(testing),       intent(inout) :: test    !< Unit testing convenience functions
+  character(len=*),       intent(in) :: msg     !< Message to label test
+  integer,                intent(in) :: nsrc    !< Number of source cells
+  real, dimension(nsrc),  intent(in) :: h_src   !< Thickness of source cells [H]
+  real, dimension(nsrc),  intent(in) :: uh_src  !< Values of source cell stuff [A H]
+  integer,                intent(in) :: ndest   !< Number of destination cells
+  real, dimension(ndest), intent(in) :: h_dest  !< Thickness of destination cells [H]
+  real, dimension(ndest), intent(in) :: uh_true !< Correct value of destination cell stuff [A H]
+  ! Local variables
+  real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells [A H]
+
+  ! Interpolate from src to dest
+  call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
+  call test%real_arr(ndest, uh_dest, uh_true, msg)
+
+end subroutine test_reintegrate
+
+!> Test class-based remapping for internal consistency on random data
+subroutine test_recon_consistency(test, scheme, n0, niter, h_neglect)
+  type(testing),      intent(inout) :: test    !< Unit testing convenience functions
+  character(len=*),   intent(in)    :: scheme  !< Name of scheme to use
+  integer,            intent(in)    :: n0      !< Number of source cells
+  integer,            intent(in)    :: niter   !< Number of randomized columns to try
+  real,               intent(in)    :: h_neglect !< A negligibly small width used in cell reconstructions [H]
+  ! Local
+  type(remapping_CS) :: remapCS !< Remapping control structure
+  real :: h0(n0) ! Source grid [H but really nondim]
+  real :: u0(n0) ! Source values [A]
+  logical :: error ! Indicates a divergence
+  integer :: iter ! Loop counter
+  integer :: seed_size ! Number of integers used by seed
+  integer, allocatable :: seed(:) ! Random number seed
+  character(len=8) :: label ! Generated label
+
+  call initialize_remapping(remapCS, scheme, nk=n0, h_neglect=h_neglect, &
+                            force_bounds_in_subcell=.false. )
+
+  call random_seed(size=seed_size)
+  allocate( seed(seed_Size) )
+  seed(:) = 102030405 ! Repeatable sequences
+  call random_seed(put=seed)
+
+  error = .false.
+  do iter = 1, niter
+    call random_number( h0 ) ! In range 0-1
+    h0(:) = max(0., h0(:) - 0.05) ! Make 5% of values equal to zero
+    call random_number( u0 ) ! In range 0-1
+
+    call remapCS%reconstruction%reconstruct(h0, u0)
+    if ( remapCS%reconstruction%check_reconstruction(h0, u0) ) then
+      if ( .not. error ) then ! Only dump first error
+        print *,'iter=',iter
+        print *,'h0',h0
+        print *,'u0',u0
+      endif
+      error = .true.
+    endif
+
+  enddo
+
+  write(label(1:8),'(i8)') niter
+  call test%test( error, trim(adjustl(label))//' consistency tests of '//scheme )
+
+  call remapCS%reconstruction%destroy()
+
+end subroutine test_recon_consistency
+
+!> Test that remapping a uniform field remains uniform
+subroutine test_preserve_uniform(test, scheme, n0, niter, h_neglect)
+  type(testing),      intent(inout) :: test    !< Unit testing convenience functions
+  character(len=*),   intent(in)    :: scheme  !< Name of scheme to use
+  integer,            intent(in)    :: n0      !< Number of source cells
+  integer,            intent(in)    :: niter   !< Number of randomized columns to try
+  real,               intent(in)    :: h_neglect !< A negligibly small width used in cell reconstructions [H]
+  ! Local
+  type(remapping_CS) :: remapCS !< Remapping control structure
+  real :: h0(n0), h1(n0) ! Source and target grids [H but really nondim]
+  real :: u0(n0), u1(n0) ! Source and target values [A]
+  logical :: error ! Indicates a divergence
+  integer :: iter ! Loop counter
+  integer :: seed_size ! Number of integers used by seed
+  integer, allocatable :: seed(:) ! Random number seed
+  character(len=8) :: label ! Generated label
+
+  call initialize_remapping(remapCS, scheme, nk=n0, h_neglect=h_neglect, &
+                            force_bounds_in_subcell=.true., &
+                            force_bounds_in_target=.true., &
+                            better_force_bounds_in_target=.true., &
+                            offset_tgt_summation=.false., &
+                            om4_remap_via_sub_cells=.false.)
+
+  call random_seed(size=seed_size)
+  allocate( seed(seed_Size) )
+  seed(:) = 102030405 ! Repeatable sequences
+  call random_seed(put=seed)
+
+  error = .false.
+  do iter = 1, niter
+    call random_number( h0 ) ! In range 0-1
+    h0(:) = max(0., h0(:) - 0.05) ! Make 5% of values equal to zero
+    call random_number( h1 ) ! In range 0-1
+    h1(:) = max(0., h1(:) - 0.05) ! Make 5% of values equal to zero
+    call random_number( u0(1) ) ! In range 0-1
+    u0(:) = u0(1) ! Make u0 uniform
+
+    call remapping_core_h( remapCS, n0, h0, u0, n0, h1, u1 )
+    if ( maxval( abs( u1(:) - u0(1) ) ) > 0. ) then
+      if ( .not. error ) then ! Only dump first error
+        print *,'iter=',iter
+        print *,'u0(1)',u0(1)
+        print *,'u1',u1
+        print *,'u1-u0(1)',u1 - u0(1)
+      endif
+      error = .true.
+    endif
+
+  enddo
+
+  write(label(1:8),'(i8)') niter
+  call test%test( error, trim(adjustl(label))//' uniformity tests of '//scheme )
+
+end subroutine test_preserve_uniform
+
+!> Test that remapping to the same grid preserves answers
+!!
+!! Notes:
+!! 1) this test is currently imperfect since occasionally we see round-off
+!!    implying that     ( A * B ) / A != B
+!! 2) this test does not work for vanished layers
+subroutine test_unchanged_grid(test, scheme, n0, niter, h_neglect)
+  type(testing),      intent(inout) :: test    !< Unit testing convenience functions
+  character(len=*),   intent(in)    :: scheme  !< Name of scheme to use
+  integer,            intent(in)    :: n0      !< Number of source cells
+  integer,            intent(in)    :: niter   !< Number of randomized columns to try
+  real,               intent(in)    :: h_neglect !< A negligibly small width used in cell reconstructions [H]
+  ! Local
+  type(remapping_CS) :: remapCS !< Remapping control structure
+  real :: h0(n0), h1(n0) ! Source and target grids [H but really nondim]
+  real :: u0(n0), u1(n0) ! Source and target values [A]
+  logical :: error ! Indicates a divergence
+  integer :: iter ! Loop counter
+  character(len=8) :: label ! Generated label
+
+  call initialize_remapping(remapCS, scheme, nk=n0, h_neglect=h_neglect, &
+                            force_bounds_in_subcell=.true., &
+                            force_bounds_in_target=.false., &
+                            better_force_bounds_in_target=.true., &
+                            offset_tgt_summation=.true., &
+                            om4_remap_via_sub_cells=.false.)
+
+  error = .false.
+  do iter = 1, niter
+    call random_number( h0 ) ! In range 0-1
+    h0(:) = max(0., h0(:) - 0.00) ! Note we do NOT test with vanished layers
+    h1(:) = h0(:) ! Exact copy
+    call random_number( u0 ) ! In range 0-1
+
+    call remapping_core_h( remapCS, n0, h0, u0, n0, h1, u1 )
+    if ( maxval( abs( u1(:) - u0(:) ) ) > epsilon(h0(1)) * maxval( abs( u0 ) ) ) then
+      if ( .not. error ) then ! Only dump first error
+        print *,'iter=',iter
+        print *,'h0',h0
+        print *,'u0',u0
+        print *,'u1',u1
+        print *,'u1-u0',u1 - u0
+      endif
+      error = .true.
+    endif
+
+  enddo
+
+  write(label(1:8),'(i8)') niter
+  call test%test( error, trim(adjustl(label))//' unchanged grid tests of '//scheme )
+
+  call remapCS%reconstruction%destroy()
+
+end subroutine test_unchanged_grid
+
+!> Test class-based remapping bitwise reproduces original implementation
+subroutine compare_two_schemes(test, CS1, CS2, n0, n1, niter, msg)
+  type(testing),      intent(inout) :: test  !< Unit testing convenience functions
+  type(remapping_CS), intent(inout) :: CS1   !< Remapping control structure configured for
+                                             !! original implementation
+  type(remapping_CS), intent(inout) :: CS2   !< Remapping control structure configured for
+                                             !! class-based implementation
+  integer,            intent(in)    :: n0    !< Number of source cells
+  integer,            intent(in)    :: n1    !< Number of destination cells
+  integer,            intent(in)    :: niter !< Number of randomized columns to try
+  character(len=*),   intent(in)    :: msg   !< Message to label test
+  ! Local
+  real :: h0(n0), h1(n1) ! Source and target grids [H but really nondim]
+  real :: u0(n0), u1(n1), u2(n1)  ! Source and two target values [A]
+  logical :: error ! Indicates a divergence
+  integer :: iter ! Loop counter
+  integer :: seed_size ! Number of integers used by seed
+  integer, allocatable :: seed(:) ! Random number seed
+  character(len=8) :: label ! Generated label
+
+  call random_seed(size=seed_size)
+  allocate( seed(seed_Size) )
+  seed(:) = 102030405 ! Repeatable sequences
+  call random_seed(put=seed)
+
+  error = .false.
+  do iter = 1, niter
+    call random_number( h0 ) ! In range 0-1
+    h0(:) = max(0., h0(:) - 0.00) ! Make 5% of values equal to zero
+    h0(:) = h0(:) / sum( h0 ) ! Approximately normalize to total depth of 1
+    call random_number(h1) ! In range 0-1
+    h1(:) = max(0., h1(:) - 0.00) ! Make 5% of values equal to zero
+    h1(:) = h1(:) / sum( h1 ) ! Approximately normalize to total depth of 1
+    call random_number( u0 ) ! In range 0-1
+
+    call remapping_core_h( CS1, n0, h0, u0, n1, h1, u1 )
+    call remapping_core_h( CS2, n0, h0, u0, n1, h1, u2 )
+    error = sum( abs( u2(:) - u1(:) ) ) > 0.
+    if (error) then
+      print *,'iter=',iter
+      print *,'h1',h1
+      print *,'h0',h0
+      print *,'u0',u0
+      print *,'u1',u1
+      print *,'u2',u2
+      print *,'e',u2-u1
+    ! CS1%debug = .true.
+    ! call remapping_core_h( CS1, n0, h0, u0, n1, h1, u1 )
+    ! CS2%debug = .true.
+    ! call remapping_core_h( CS2, n0, h0, u0, n1, h1, u2 )
+      exit
+    endif
+  enddo
+
+  write(label(1:8),'(i8)') niter
+  call test%test( error, trim(adjustl(label))//' comparisons of '//msg )
+
+end subroutine compare_two_schemes
+
 !> Runs unit tests on remapping functions.
 !! Should only be called from a single/root thread
 !! Returns True if a test fails, otherwise False
-logical function remapping_unit_tests(verbose)
+logical function remapping_unit_tests(verbose, num_comp_samp)
   logical, intent(in) :: verbose !< If true, write results to stdout
+  integer, optional, intent(in) :: num_comp_samp !< If present, number of samples to
+                                 !! try comparing class-based cade against OM4 code
   ! Local variables
   integer :: n0, n1, n2
   real, allocatable :: h0(:), h1(:), h2(:) ! Thicknesses for test columns [H]
   real, allocatable :: u0(:), u1(:), u2(:) ! Values for test profiles [A]
   real, allocatable :: dx1(:) ! Change in interface position [H]
-  type(remapping_CS) :: CS !< Remapping control structure
+  type(remapping_CS) :: CS, CS2 !< Remapping control structures
   real, allocatable, dimension(:,:) :: ppoly0_E     ! Edge values of polynomials [A]
   real, allocatable, dimension(:,:) :: ppoly0_S     ! Edge slopes of polynomials [A H-1]
   real, allocatable, dimension(:,:) :: ppoly0_coefs ! Coefficients of polynomials [A]
@@ -1593,20 +2089,37 @@ logical function remapping_unit_tests(verbose)
   integer :: answer_date  ! The vintage of the expressions to test
   real :: err                         ! Errors in the remapped thicknesses [H] or values [A]
   real :: h_neglect, h_neglect_edge   ! Tiny thicknesses used in remapping [H]
+  integer :: seed_size ! Number of integers used by seed
+  integer, allocatable :: seed(:) ! Random number seed
   type(testing) :: test ! Unit testing convenience functions
-  integer :: i, om4
-  character(len=4) :: om4_tag
+  integer :: om4 ! Loop parameter, 0 or 1
+  integer :: ntests ! Number of iterations when brute force testing
+  character(len=4) :: om4_tag ! Generated label
+  type(PCM) :: PCM
+  type(PLM_CW) :: PLM_CW
+  type(PLM_hybgen) :: PLM_hybgen
+  type(MPLM_WA) :: MPLM_WA
+  type(EMPLM_WA) :: EMPLM_WA
+  type(MPLM_WA_poly) :: MPLM_WA_poly
+  type(EMPLM_WA_poly) :: EMPLM_WA_poly
+  type(PLM_CWK) :: PLM_CWK
+  type(MPLM_CWK) :: MPLM_CWK
+  type(EMPLM_CWK) :: EMPLM_CWK
+  type(PPM_H4_2019) :: PPM_H4_2019
+  type(PPM_H4_2018) :: PPM_H4_2018
+  type(PPM_CW) :: PPM_CW
+  type(PPM_hybgen) :: PPM_hybgen
+  type(PPM_CWK) :: PPM_CWK
+  type(EPPM_CWK) :: EPPM_CWK
 
   call test%set( verbose=verbose ) ! Sets the verbosity flag in test
+! call test%set( stop_instantly=.true. ) ! While debugging
 
   answer_date = 20190101 ! 20181231
   h_neglect = 1.0e-30
   h_neglect_edge = h_neglect ; if (answer_date < 20190101) h_neglect_edge = 1.0e-10
 
   if (verbose) write(test%stdout,*) '  ===== MOM_remapping: remapping_unit_tests ================='
-
-  ! This line carries out tests on some older remapping schemes.
-  call test%test( remapping_attic_unit_tests(verbose), 'attic remapping unit tests' )
 
   if (verbose) write(test%stdout,*) '  - - - - - 1st generation tests - - - - -'
 
@@ -1849,10 +2362,10 @@ logical function remapping_unit_tests(verbose)
   ! h_tgt =     |<-   2   ->|<-   2  ->|<-  2   ->|
   ! u_tgt =     |     2     |     4    |    6     |
   call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             .false., u1, u02_err)
+                             .false., .false., .false., u1, u02_err)
   call test%real_arr(3, u1, (/2.,4.,6./), 'u1')
   call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             .true., u1, u02_err)
+                             .true., .false., .false., u1, u02_err)
   call test%real_arr(3, u1, (/2.,4.,6./), 'u1.b')
   deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub, h0, u0, h1, u1)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
@@ -1955,10 +2468,10 @@ logical function remapping_unit_tests(verbose)
   ! h_tgt =     |<-   2   ->|<-         4         ->|
   ! u_tgt =     |     2     |          4 7/8        |
   call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             .false., u1, u02_err)
+                             .false., .false., .false., u1, u02_err)
   call test%real_arr(2, u1, (/2.,4.875/), 'u1')
   call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             .true., u1, u02_err)
+                             .true., .false., .false., u1, u02_err)
   call test%real_arr(2, u1, (/2.,4.875/), 'u1.b')
   deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub, h0, u0, h1, u1)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
@@ -2015,10 +2528,10 @@ logical function remapping_unit_tests(verbose)
   ! h_tgt =     |<- 1 ->|0|<- 1 ->|0|<-       2       ->|
   ! u_tgt =     |  1.5  |2|  2.5  |3|         4         |
   call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             .false., u1, u02_err)
+                             .false., .false., .false., u1, u02_err)
   call test%real_arr(5, u1, (/1.5,2.,2.5,3.,4./), 'u1')
   call remap_sub_to_tgt_grid(n0, n1, h1, h_sub, u_sub, uh_sub, itgt_start, itgt_end, &
-                             .true., u1, u02_err)
+                             .true., .false., .false., u1, u02_err)
   call test%real_arr(5, u1, (/1.5,2.,2.5,3.,4./), 'u1.b')
   deallocate( ppoly0_coefs, ppoly0_E, ppoly0_S, u_sub, uh_sub, h0, u0, h1, u1)
   deallocate( h_sub, h0_eff, isrc_start, isrc_end, isrc_max, itgt_start, itgt_end, isub_src )
@@ -2210,193 +2723,223 @@ logical function remapping_unit_tests(verbose)
                      3, (/0.,0.,0./), (/0.,0.,0./), &
                      3, (/0.,0.,0./), (/0.,0.,0./) )
 
+  if (verbose) write(test%stdout,*) '- - - - - - - - - - Recon1d PCM tests  - - - - - - - - -'
+  call test%test( PCM%unit_tests(verbose, test%stdout, test%stderr), 'PCM unit test')
+  call test%test( MPLM_WA%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_WA unit test')
+  call test%test( EMPLM_WA%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_WA unit test')
+  call test%test( MPLM_WA_poly%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_WA_poly unit test')
+  call test%test( EMPLM_WA_poly%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_WA_poly unit test')
+  call test%test( PLM_hybgen%unit_tests(verbose, test%stdout, test%stderr), 'PLM_hybgen unit test')
+  call test%test( PLM_CW%unit_tests(verbose, test%stdout, test%stderr), 'PLM_CW unit test')
+  call test%test( PLM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'PLM_CWK unit test')
+  call test%test( MPLM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_CWK unit test')
+  call test%test( EMPLM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_CWK unit test')
+  call test%test( PPM_H4_2019%unit_tests(verbose, test%stdout, test%stderr), 'PPM_H4_2019 unit test')
+  call test%test( PPM_H4_2018%unit_tests(verbose, test%stdout, test%stderr), 'PPM_H4_2018 unit test')
+  call test%test( PPM_hybgen%unit_tests(verbose, test%stdout, test%stderr), 'PPM_hybgen unit test')
+  call test%test( PPM_CW%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CW unit test')
+  call test%test( PPM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CWK unit test')
+  call test%test( EPPM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'EPPM_CWK unit test')
+
+  ! Randomized, brute force tests
+  ntests = 3000
+  if (present(num_comp_samp)) ntests = num_comp_samp
+
+  call random_seed(size=seed_size)
+  allocate( seed(seed_Size) )
+  seed(:) = 102030405
+  call random_seed(put=seed)
+
+  n0 = 9
+
+  ! Internal consistency
+  call test_recon_consistency(test, 'C_PCM', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PLM_CW', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PLM_HYBGEN', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_MPLM_WA', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_EMPLM_WA', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_MPLM_WA_poly', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_EMPLM_WA_poly', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PLM_CWK', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_MPLM_CWK', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_EMPLM_CWK', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PPM_H4_2018', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PPM_H4_2019', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PPM_HYBGEN', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PPM_CW', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PPM_CWK', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+
+  call test_preserve_uniform(test, 'PCM', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PCM', n0, ntests, h_neglect)
+! call test_preserve_uniform(test, 'PLM', n0, ntests, h_neglect) ! Fails
+! call test_preserve_uniform(test, 'PLM_HYBGEN', n0, ntests, h_neglect) ! Fails
+! call test_preserve_uniform(test, 'PPM_H4', n0, ntests, h_neglect) ! Fails
+! call test_preserve_uniform(test, 'PPM_IH4', n0, ntests, h_neglect) ! Fails
+! call test_preserve_uniform(test, 'PPM_HYBGEN', n0, ntests, h_neglect) ! Fails
+! call test_preserve_uniform(test, 'PPM_CW', n0, ntests, h_neglect) ! Fails
+! call test_preserve_uniform(test, 'WENO_HYBGEN', n0, ntests, h_neglect) ! Fails
+! call test_preserve_uniform(test, 'PQM_IH4IH3', n0, ntests, h_neglect) ! Fails
+  call test_preserve_uniform(test, 'C_PLM_CW', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PLM_HYBGEN', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_MPLM_WA', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_EMPLM_WA', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_MPLM_WA_poly', n0, ntests, h_neglect) ! Surprised this passes -AJA
+! call test_preserve_uniform(test, 'C_EMPLM_WA_poly', n0, ntests, h_neglect) ! This is known to fail
+  call test_preserve_uniform(test, 'C_PLM_CWK', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_MPLM_CWK', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_EMPLM_CWK', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PPM_H4_2019', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PPM_H4_2018', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PPM_HYBGEN', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PPM_CW', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PPM_CWK', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+
+  call test_unchanged_grid(test, 'C_PCM', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PLM_CW', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PLM_HYBGEN', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PLM_CWK', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_MPLM_CWK', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_EMPLM_CWK', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PPM_HYBGEN', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PPM_CW', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PPM_CWK', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+
+  ! Check that remapping to the exact same grid leaves values unchanged
+  allocate( h0(8), u0(8) )
+  h0 = (/0.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.0, 0.0/)
+  u0 = (/1.0, 1.5, 2.5, 3.5, 4.5, 5.5, 6.0, 6.0/)
+  allocate( u1(8) )
+  call initialize_remapping(CS, 'C_PLM_CW', nk=8)
+  call remapping_core_h( CS, 8, h0, u0, 8, [0.,1.,1.,1.,1.,1.,0.,0.], u1 )
+  call test%real_arr(8, u1, u0, 'remapping_core to unchanged grid with class')
+
+  call end_remapping(CS)
+  deallocate( h0, u0, u1 )
+
+  ! Brute force test that we have bitwise identical answers with the new classes
+  n0 = 7
+  n1 = 4
+
+  ! PPM_CW and PPM_HYBGEN are identical, but are different options in build_reconstructions_1d()
+  call initialize_remapping(CS, 'PPM_CW', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'PPM_HYBGEN', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_CW <-> PPM_HYBGEN')
+
+  ! PPM_CW <-> PPM_HYBGEN, as above but with OM4 subcells
+  call initialize_remapping(CS, 'PPM_CW', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.true., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'PPM_HYBGEN', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.true., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_CW <-> PPM_HYBGEN OM4')
+
+  ! PPM_CW <-> PPM_HYBGEN, as above but with extrapolation
+  call initialize_remapping(CS, 'PPM_CW', answer_date=99990101, boundary_extrapolation=.true., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'PPM_HYBGEN', answer_date=99990101, boundary_extrapolation=.true., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_CW <-> PPM_HYBGEN Extrap')
+
+  ! PPM_CW <-> PPM_HYBGEN, as above but with OM4 subcells and subcell bounds
+  call initialize_remapping(CS, 'PPM_CW', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.true., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'PPM_HYBGEN', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.true., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_CW <-> PPM_HYBGEN')
+
+  ! PCM <-> C_PCM
+  call initialize_remapping(CS, 'PCM', answer_date=99990101, om4_remap_via_sub_cells=.false., &
+                            force_bounds_in_subcell=.false.)
+  call initialize_remapping(CS2, 'C_PCM', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PCM <-> C_PCM')
+
+  ! PLM <-> C_MPLM_WA_POLY
+  call initialize_remapping(CS, 'PLM', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_MPLM_WA_POLY', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PLM <-> C_MPLM_WA_poly')
+
+  ! PLM (with subcell bounds) <-> C_MPLM_WA_POLY
+  call initialize_remapping(CS, 'PLM', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_MPLM_WA_POLY', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PLM bounded <-> C_MPLM_WA_poly')
+
+  ! PLM + extrapolation <-> C_EMPLM_WA_POLY
+  call initialize_remapping(CS, 'PLM', answer_date=99990101, boundary_extrapolation=.true., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_EMPLM_WA_POLY', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PLM <-> C_EMPLM_WA_poly')
+
+  ! PLM + extrapolation (with subcell bounds) <-> C_EMPLM_WA_POLY
+  call initialize_remapping(CS, 'PLM', answer_date=99990101, boundary_extrapolation=.true., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_EMPLM_WA_POLY', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PLM bounded <-> C_EMPLM_WA_poly')
+
+  ! PPM_H4 (2018 answers) <-> C_PPM_H4_2018
+  call initialize_remapping(CS, 'PPM_H4', answer_date=20180101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_PPM_H4_2018', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_H4 2018 <-> C_PPM_H4_2018')
+
+  ! PPM_H4 (2018 answers with subcell bounds) <-> C_PPM_H4_2018
+  call initialize_remapping(CS, 'PPM_H4', answer_date=20180101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_PPM_H4_2018', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_H4 2018 bounded <-> C_PPM_H4_2018')
+
+  ! PPM_H4 (latest answers) <-> C_PPM_H4_2019
+  call initialize_remapping(CS, 'PPM_H4', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.false., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_PPM_H4_2019', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_H4 <-> C_PPM_H4_2019')
+
+  ! PPM_H4 (latest answers with subcell bounds) <-> C_PPM_H4_2019
+  call initialize_remapping(CS, 'PPM_H4', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_PPM_H4_2019', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_H4 bounded <-> C_PPM_H4_2019')
+
+  ! PLM_HYBGEN (latest answers with subcell bounds) <-> C_PLM_hybgen
+  call initialize_remapping(CS, 'PLM_HYBGEN', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_PLM_hybgen', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PLM_HYBGEN bounded <-> C_PLM_hygen')
+
+  ! PPM_HYBGEN (latest answers with subcell bounds) <-> C_PPM_hybgen
+  call initialize_remapping(CS, 'PPM_HYBGEN', answer_date=99990101, boundary_extrapolation=.false., &
+                            om4_remap_via_sub_cells=.false., force_bounds_in_subcell=.true., &
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+  call initialize_remapping(CS2, 'C_PPM_HYBGEN', nk=n0, h_neglect=h_neglect)
+  call compare_two_schemes(test, CS, CS2, n0, n1, ntests, 'PPM_HYBGEN bounded <-> C_PPM_HYGEN')
+
+  call end_remapping(CS)
+  call end_remapping(CS2)
+
   remapping_unit_tests = test%summarize('remapping_unit_tests')
 
 end function remapping_unit_tests
-
-!> Test if interpolate_column() produces the wrong answer
-subroutine test_interp(test, msg, nsrc, h_src, u_src, ndest, h_dest, u_true)
-  type(testing),         intent(inout) :: test   !< Unit testing convenience functions
-  character(len=*),         intent(in) :: msg    !< Message to label test
-  integer,                  intent(in) :: nsrc   !< Number of source cells
-  real, dimension(nsrc),    intent(in) :: h_src  !< Thickness of source cells [H]
-  real, dimension(nsrc+1),  intent(in) :: u_src  !< Values at source cell interfaces [A]
-  integer,                  intent(in) :: ndest  !< Number of destination cells
-  real, dimension(ndest),   intent(in) :: h_dest !< Thickness of destination cells [H]
-  real, dimension(ndest+1), intent(in) :: u_true !< Correct value at destination cell interfaces [A]
-  ! Local variables
-  real, dimension(ndest+1) :: u_dest ! Interpolated value at destination cell interfaces [A]
-
-  ! Interpolate from src to dest
-  call interpolate_column(nsrc, h_src, u_src, ndest, h_dest, u_dest, .true.)
-  call test%real_arr(ndest, u_dest, u_true, msg)
-end subroutine test_interp
-
-!> Test if reintegrate_column() produces the wrong answer
-subroutine test_reintegrate(test, msg, nsrc, h_src, uh_src, ndest, h_dest, uh_true)
-  type(testing),       intent(inout) :: test    !< Unit testing convenience functions
-  character(len=*),       intent(in) :: msg     !< Message to label test
-  integer,                intent(in) :: nsrc    !< Number of source cells
-  real, dimension(nsrc),  intent(in) :: h_src   !< Thickness of source cells [H]
-  real, dimension(nsrc),  intent(in) :: uh_src  !< Values of source cell stuff [A H]
-  integer,                intent(in) :: ndest   !< Number of destination cells
-  real, dimension(ndest), intent(in) :: h_dest  !< Thickness of destination cells [H]
-  real, dimension(ndest), intent(in) :: uh_true !< Correct value of destination cell stuff [A H]
-  ! Local variables
-  real, dimension(ndest) :: uh_dest ! Reintegrated value on destination cells [A H]
-
-  ! Interpolate from src to dest
-  call reintegrate_column(nsrc, h_src, uh_src, ndest, h_dest, uh_dest)
-  call test%real_arr(ndest, uh_dest, uh_true, msg)
-
-end subroutine test_reintegrate
-
-! =========================================================================================
-! The following provide the function for the testing_type helper class
-
-!> Update the state with "test"
-subroutine test(this, state, label)
-  class(testing),   intent(inout) :: this  !< This testing class
-  logical,          intent(in)    :: state !< True to indicate a fail, false otherwise
-  character(len=*), intent(in)    :: label !< Message
-
-  this%num_tests_checked = this%num_tests_checked + 1
-  if (state) then
-    this%state = .true.
-    this%num_tests_failed = this%num_tests_failed + 1
-    this%ifailed( this%num_tests_failed ) = this%num_tests_checked
-    if (this%num_tests_failed == 1) this%label_first_fail = label
-  endif
-  if (this%stop_instantly .and. this%state) stop 1
-end subroutine test
-
-!> Set attributes
-subroutine set(this, verbose, stdout, stderr, stop_instantly)
-  class(testing), intent(inout) :: this  !< This testing class
-  logical, optional, intent(in) :: verbose !< True or false setting to assign to verbosity
-  integer, optional, intent(in) :: stdout !< The stdout channel to use
-  integer, optional, intent(in) :: stderr !< The stderr channel to use
-  logical, optional, intent(in) :: stop_instantly !< If true, stop immediately on error detection
-
-  if (present(verbose)) then
-    this%verbose = verbose
-  endif
-  if (present(stdout)) then
-    this%stdout = stdout
-  endif
-  if (present(stderr)) then
-    this%stderr = stderr
-  endif
-  if (present(stop_instantly)) then
-    this%stop_instantly = stop_instantly
-  endif
-end subroutine set
-
-!> Returns state
-logical function outcome(this)
-  class(testing), intent(inout) :: this !< This testing class
-  outcome = this%state
-end function outcome
-
-!> Summarize results
-logical function summarize(this, label)
-  class(testing),  intent(inout) :: this  !< This testing class
-  character(len=*),   intent(in) :: label !< Message
-  integer :: i
-
-  if (this%state) then
-    write(this%stdout,'(a," : ",a,", ",i4," failed of ",i4," tested")') &
-         'FAIL', trim(label), this%num_tests_failed, this%num_tests_checked
-    write(this%stdout,'(a,100i4)') 'Failed tests:',(this%ifailed(i),i=1,this%num_tests_failed)
-    write(this%stdout,'(a,a)') 'First failed test: ',trim(this%label_first_fail)
-    write(this%stderr,'(a,100i4)') 'Failed tests:',(this%ifailed(i),i=1,this%num_tests_failed)
-    write(this%stderr,'(a,a)') 'First failed test: ',trim(this%label_first_fail)
-    write(this%stderr,'(a," : ",a)') trim(label),'FAILED'
-  else
-    write(this%stdout,'(a," : ",a,", all ",i4," tests passed")') &
-         'Pass', trim(label), this%num_tests_checked
-  endif
-  summarize = this%state
-end function summarize
-
-!> Compare u_test to u_true, report, and return true if a difference larger than tol is measured
-!!
-!! If in verbose mode, display results to stdout
-!! If a difference is measured, display results to stdout and stderr
-subroutine real_arr(this, n, u_test, u_true, label, tol)
-  class(testing),  intent(inout) :: this   !< This testing class
-  integer,            intent(in) :: n      !< Number of cells in u
-  real, dimension(n), intent(in) :: u_test !< Values to test [A]
-  real, dimension(n), intent(in) :: u_true !< Values to test against (correct answer) [A]
-  character(len=*),   intent(in) :: label  !< Message
-  real,     optional, intent(in) :: tol    !< The tolerance for differences between u and u_true [A]
-  ! Local variables
-  integer :: k
-  logical :: this_test
-  real :: tolerance, err ! Tolerance for differences, and error [A]
-
-  tolerance = 0.0
-  if (present(tol)) tolerance = tol
-  this_test = .false.
-
-  ! Scan for any mismatch between u_test and u_true
-  do k = 1, n
-    if (abs(u_test(k) - u_true(k)) > tolerance) this_test = .true.
-  enddo
-
-  ! If either being verbose, or an error was measured then display results
-  if (this_test .or. this%verbose) then
-    write(this%stdout,'(a4,2a24,1x,a)') 'k','Calculated value','Correct value',label
-    if (this_test) write(this%stderr,'(a4,2a24,1x,a)') 'k','Calculated value','Correct value',label
-    do k = 1, n
-      err = u_test(k) - u_true(k)
-      if (abs(err) > tolerance) then
-        write(this%stdout,'(i4,1p2e24.16,a,1pe24.16,a)') k, u_test(k), u_true(k), &
-                         ' err=', err, ' <--- WRONG'
-        write(this%stderr,'(i4,1p2e24.16,a,1pe24.16,a)') k, u_test(k), u_true(k), &
-                         ' err=', err, ' <--- WRONG'
-      else
-        write(this%stdout,'(i4,1p2e24.16)') k, u_test(k), u_true(k)
-      endif
-    enddo
-  endif
-
-  call this%test( this_test, label ) ! Updates state and counters in this
-end subroutine real_arr
-
-!> Compare i_test to i_true and report and return true if a difference is found
-!!
-!! If in verbose mode, display results to stdout
-!! If a difference is measured, display results to stdout and stderr
-subroutine int_arr(this, n, i_test, i_true, label)
-  class(testing),     intent(inout) :: this   !< This testing class
-  integer,               intent(in) :: n      !< Number of cells in u
-  integer, dimension(n), intent(in) :: i_test !< Values to test [A]
-  integer, dimension(n), intent(in) :: i_true !< Values to test against (correct answer) [A]
-  character(len=*),      intent(in) :: label  !< Message
-  ! Local variables
-  integer :: k
-  logical :: this_test
-
-  this_test = .false.
-
-  ! Scan for any mismatch between u_test and u_true
-  do k = 1, n
-    if (i_test(k) .ne. i_true(k)) this_test = .true.
-  enddo
-
-  if (this%verbose) then
-     write(this%stdout,'(a12," : calculated =",30i3)') label, i_test
-     write(this%stdout,'(12x,"      correct =",30i3)') i_true
-     if (this_test) write(this%stdout,'(3x,a,8x,"error =",30i3)') 'FAIL --->', i_test(:) - i_true(:)
-   endif
-   if (this_test) then
-     write(this%stderr,'(a12," : calculated =",30i3)') label, i_test
-     write(this%stderr,'(12x,"      correct =",30i3)') i_true
-     write(this%stderr,'("   FAIL --->        error =",30i3)') i_test(:) - i_true(:)
-   endif
-
-  call this%test( this_test, label ) ! Updates state and counters in this
-end subroutine int_arr
 
 end module MOM_remapping

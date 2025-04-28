@@ -52,7 +52,7 @@ type, public :: int_tide_input_CS ; private
             !! stratification and perhaps density are time-varying [R Z4 H-1 T-2 ~> J m-2 or J m kg-1].
   real, allocatable, dimension(:,:,:) :: &
     TKE_itidal_input, & !< The internal tide TKE input at the bottom of the ocean [H Z2 T-3 ~> m3 s-3 or W m-2].
-    tideamp             !< The amplitude of the tidal velocities [Z T-1 ~> m s-1].
+    tideamp             !< The amplitude of the tidal velocities [L T-1 ~> m s-1].
 
   character(len=200) :: inputdir !< The directory for input files.
 
@@ -116,8 +116,10 @@ subroutine set_int_tide_input(u, v, h, tv, fluxes, itide, dt, G, GV, US, CS)
                         ! equation of state.
   logical :: avg_enabled  ! for testing internal tides (BDM)
   type(time_type) :: time_end        !< For use in testing internal tides (BDM)
-  real :: HZ2_T3_to_W_m2  ! unit conversion factor for TKE from internal to mks [H Z2 T-3 ~> m3 s-3 or W m-2]
-  real :: W_m2_to_HZ2_T3  ! unit conversion factor for TKE from mks to internal [m3 s-3 or W m-2 ~> H Z2 T-3]
+  real :: HZ2_T3_to_W_m2  ! unit conversion factor for TKE from internal units
+                          ! to mks [T3 kg H-1 Z-2 s-3 ~> kg m-3 or 1]
+  real :: W_m2_to_HZ2_T3  ! unit conversion factor for TKE from mks to internal
+                          ! units [H Z2 s3 T-3 kg-1 ~> m3 kg-1 or 1]
 
   integer :: i, j, is, ie, js, je, nz, isd, ied, jsd, jed
   integer :: i_global, j_global
@@ -249,7 +251,7 @@ subroutine find_N2_bottom(G, GV, US, tv, fluxes, h, T_f, S_f, h2, N2_bot, Rho_bo
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-  G_Rho0 = (US%L_to_Z**2*GV%g_Earth) / GV%H_to_RZ
+  G_Rho0 = GV%g_Earth_Z_T2 / GV%H_to_RZ
   EOSdom(:) = EOS_domain(G%HI)
 
   ! Find the (limited) density jump across each interface.
@@ -404,8 +406,10 @@ subroutine int_tide_input_init(Time, G, GV, US, param_file, diag, CS, itide)
   real :: kappa_h2_factor    ! factor for the product of wavenumber * rms sgs height [nondim].
   real :: kappa_itides       ! topographic wavenumber and non-dimensional scaling [L-1 ~> m-1]
   real :: min_zbot_itides    ! Minimum ocean depth for internal tide conversion [Z ~> m].
-  real :: HZ2_T3_to_W_m2     ! unit conversion factor for TKE from internal to mks [H Z2 T-3 ~> m3 s-3 or W m-2]
-  real :: W_m2_to_HZ2_T3     ! unit conversion factor for TKE from mks to internal [m3 s-3 or W m-2 ~> H Z2 T-3]
+  real :: HZ2_T3_to_W_m2     ! unit conversion factor for TKE from internal units
+                             ! to mks [T3 kg H-1 Z-2 s-3 ~> kg m-3 or 1]
+  real :: W_m2_to_HZ2_T3     ! unit conversion factor for TKE from mks to internal
+                             ! units [H Z2 s3 T-3 kg-1 ~> m3 kg-1 or 1]
   integer :: tlen_days       !< Time interval from start for adding wave source
                              !! for testing internal tides (BDM)
   integer :: i, j, is, ie, js, je, isd, ied, jsd, jed

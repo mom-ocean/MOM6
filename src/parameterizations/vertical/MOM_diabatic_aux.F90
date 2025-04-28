@@ -805,7 +805,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
   calculate_buoyancy = present(SkinBuoyFlux)
   if (calculate_buoyancy) SkinBuoyFlux(:,:) = 0.0
   if (present(cTKE)) cTKE(:,:,:) = 0.0
-  g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
+  g_Hconv2 = (GV%g_Earth_Z_T2 * GV%H_to_RZ) * GV%H_to_RZ
   EOSdom(:) = EOS_domain(G%HI)
 
   ! Only apply forcing if fluxes%sw is associated.
@@ -816,7 +816,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
 
   if (calculate_buoyancy) then
     SurfPressure(:) = 0.0
-    GoRho = US%L_to_Z**2*GV%g_Earth / GV%Rho0
+    GoRho = GV%g_Earth_Z_T2 / GV%Rho0
   endif
 
   if (CS%do_brine_plume .and. .not.present(MLD_h)) then
@@ -1040,11 +1040,11 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
             ! drho_ds = The derivative of density with salt at the ambient surface salinity.
             ! Sriver = 0 (i.e. rivers are assumed to be pure freshwater)
             if (GV%Boussinesq) then
-              RivermixConst = -0.5*(CS%rivermix_depth*dt) * ( US%L_to_Z**2*GV%g_Earth ) * GV%Rho0
+              RivermixConst = -0.5*(CS%rivermix_depth*dt) * GV%g_Earth_Z_T2 * GV%Rho0
             elseif (allocated(tv%SpV_avg)) then
-              RivermixConst = -0.5*(CS%rivermix_depth*dt) * ( US%L_to_Z**2*GV%g_Earth ) / tv%SpV_avg(i,j,1)
+              RivermixConst = -0.5*(CS%rivermix_depth*dt) * GV%g_Earth_Z_T2 / tv%SpV_avg(i,j,1)
             else
-              RivermixConst = -0.5*(CS%rivermix_depth*dt) * GV%Rho0 * ( US%L_to_Z**2*GV%g_Earth )
+              RivermixConst = -0.5*(CS%rivermix_depth*dt) * GV%Rho0 * GV%g_Earth_Z_T2
             endif
             cTKE(i,j,k) = cTKE(i,j,k) + max(0.0, RivermixConst*dSV_dS(i,j,1) * &
                             ((fluxes%lrunoff(i,j) + fluxes%frunoff(i,j)) + &
@@ -1294,7 +1294,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
       if (associated(tv%p_surf)) then ; do i=is,ie ; SurfPressure(i) = tv%p_surf(i,j) ; enddo ; endif
 
       if ((.not.GV%Boussinesq) .and. (.not.GV%semi_Boussinesq)) then
-        g_conv = GV%g_Earth * GV%H_to_RZ * US%L_to_Z**2
+        g_conv = GV%g_Earth_Z_T2 * GV%H_to_RZ
 
         ! Specific volume derivatives
         call calculate_specific_vol_derivs(T2d(:,1), tv%S(:,j,1), SurfPressure, dSpV_dT, dSpV_dS, &

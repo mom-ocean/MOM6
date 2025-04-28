@@ -78,8 +78,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: my_flux     ! The vlume flux through the face [L2 Z T-1 ~> m3 s-1]
   real :: total_area  ! The total face area of the OBCs [L Z ~> m2]
   real :: PI          ! The ratio of the circumference of a circle to its diameter [nondim]
-  real :: flux_scale  ! A scaling factor for the areas [m2 H-1 L-1 ~> nondim or m3 kg-1]
-  real, allocatable :: my_area(:,:) ! The total OBC inflow area [m2]
+  real, allocatable :: my_area(:,:) ! The total OBC inflow area [L Z ~> m2]
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -94,8 +93,6 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
   allocate(my_area(1:1,js:je))
 
-  flux_scale = GV%H_to_m*US%L_to_m
-
   time_sec = US%s_to_T*time_type_to_real(Time)
   cff_eta = CS%tide_ssh_amp * sin(2.0*PI*time_sec / CS%tide_period)
   my_area = 0.0
@@ -105,12 +102,11 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
     if (OBC%segnum_u(I,j) /= OBC_NONE) then
       do k=1,nz
-        ! This area has to be in MKS units to work with reproducing_sum.
-        my_area(1,j) = my_area(1,j) + h(I,j,k)*flux_scale*G%dyCu(I,j)
+        my_area(1,j) = my_area(1,j) + h(I,j,k)*(GV%H_to_m*US%m_to_Z)*G%dyCu(I,j)
       enddo
     endif
   enddo ; enddo
-  total_area = US%m_to_Z*US%m_to_L * reproducing_sum(my_area)
+  total_area = reproducing_sum(my_area, unscale=US%Z_to_m*US%L_to_m)
   my_flux = - CS%tide_flow * SIN(2.0*PI*time_sec / CS%tide_period)
 
   do n = 1, OBC%number_of_segments

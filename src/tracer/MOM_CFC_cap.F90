@@ -490,7 +490,7 @@ subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US
   real :: alpha_11       ! The solubility of CFC 11 [mol kg-1 atm-1].
   real :: alpha_12       ! The solubility of CFC 12 [mol kg-1 atm-1].
   real :: sc_11, sc_12   ! The Schmidt numbers of CFC 11 and CFC 12 [nondim].
-  real :: kw_coeff       ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+  real :: kw_coeff       ! A coefficient used to compute the piston velocity [Z T-1 T2 L-2] = [Z T L-2 ~> s m-1]
   real, parameter :: pa_to_atm = 9.8692316931427e-6 ! factor for converting from Pa to atm [atm Pa-1].
   real :: press_to_atm   ! converts from model pressure units to atm [atm T2 R-1 L-2 ~> atm Pa-1]
   integer :: i, j, is, ie, js, je, m
@@ -516,7 +516,7 @@ subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US
   !     Gas exchange/piston velocity parameter
   !---------------------------------------------------------------------
   ! From a = 0.251 cm/hr s^2/m^2 in Wannikhof 2014
-  !        = 6.97e-7 m/s s^2/m^2 [Z T-1 T2 L-2 = Z T L-2 ~> s / m]
+  !        = 6.97e-7 [m/s s^2/m^2] [Z T-1 T2 L-2] = [Z T L-2 ~> s / m]
   kw_coeff = (US%m_to_Z*US%s_to_T*US%L_to_m**2) * 6.97e-7
 
   ! set unit conversion factors
@@ -552,7 +552,7 @@ subroutine CFC_cap_set_forcing(sfc_state, fluxes, day_start, day_interval, G, US
     kw_wo_sc_no_term(i,j) = kw_coeff * ((1.0 - fluxes%ice_fraction(i,j))*fluxes%u10_sqr(i,j))
 
     ! air concentrations and cfcs BC's fluxes
-    ! CFC flux units: CU R Z T-1 = mol kg-1 R Z T-1 ~> mol m-2 s-1
+    ! CFC flux units: [mol kg-1 R Z T-1 ~> mol m-2 s-1]
     kw(i,j) = kw_wo_sc_no_term(i,j) * sqrt(660.0 / sc_11)
     cair(i,j) = press_to_atm * alpha_11 * cfc11_atm(i,j) * fluxes%p_surf_full(i,j)
     CS%CFC_data(1)%sfc_flux(i,j) = kw(i,j) * (cair(i,j) - CS%CFC_data(1)%conc(i,j,1)) * Rho0

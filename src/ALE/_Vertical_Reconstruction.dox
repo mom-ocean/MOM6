@@ -1,0 +1,92 @@
+/*! \page Vertical_Reconstruction Vertical Reconstruction
+
+\section section_vertical_reconstruction Vertical Reconstruction Methods
+
+Within the ALE or Lagrangian Remap Method (LRM), the structure of fields within cells (or layers in the case of MOM6) are reconstructed from the resolved cell means (i.e. the model variables).
+The most widely used reconstructions use a piecewise polynomial representation for the reconstruction within each cell.
+The simplest of these is the Piecewise Constant Method (PCM) which simply uses the cell mean value as a constant value throughout the cell.
+The reconstructed fields may be discontinuous across cell boundaries, which is inherently the case for PCM.
+PCM is a first order method and considered too diffusive for ALE, although it is the implicit representation in the traditional "layered" mode.
+A second order reconstruction if the Piecewise Linear Method (PLM) of Van Leer, 1977 \cite van_leer_1977.
+Higher order reconstructions are the Piecwise Parabloic Method (PPM) of Colella and Woodward, 1984 \cite colella1984, and the Piecwise Quartic Method (PQM) of White and Adcroft, 2008 \cite white2008.
+
+\section section_vertical_reconstruction_implementation Implementation
+
+The original implementations of vertical reconstructions are available in the `src/ALE` directory via modules such as plm_functions, ppm_functions, regrid_edge_values, etc.
+These versions were used in OM4 \cite Adcroft2019 but later found to have inaccuracies with regard to round-off errors that could lead to non-monotonic behaviors.
+A revision of the schemes was made available after comparing and porting from Hycom and are available via modules such as mom_hybgen_remap.
+A recent refactoring of reconstructions for remapping was implemented via classes derived from the recon1d_type (also in `src/ALE` directory).
+
+The following table summarizes the OM4-era and Hycom-ported methods and routines, all selected by the runtime parameter `REMAPPING_SCHEME`.
+The branch points (`select case`) in the code are in mom_remapping::build_reconstructions_1d().
+
+REMAPPING_SCHEME | Description | Functions invoked (from MOM_remapping::build_reconstructions_1d())
+:--------------: | :---------- | :-----------------------------------------------------------------
+PCM | Piecewise Constant Method | pcm_functions::pcm_reconstruction()
+PLM | Monotonized Piecewise Linear Method \cite white2008 | plm_functions::plm_reconstruction() (calls plm_functions::plm_slope_wa() and plm_functions::plm_monotonized_slope()) (opt. plm_functions::plm_boundary_extrapolation())
+PLM_HYBGEN | Piecewise Linear Method, ported from Hycom \cite colella1984 | mom_hybgen_remap::hybgen_plm_coefs() (opt. plm_functions::plm_boundary_extrapolation())
+PPM_H4 | Piecewise Parabolic Method with explicit 4th order edge values \cite white2008 | regrid_edge_values::edge_values_explicit_h4() ppm_functions::ppm_reconstruction() (opt. ppm_functions::ppm_boundary_extrapolation())
+PPM_IH4 | Piecewise Parabolic Method with implicit 4th order edge values \cite white2008 | regrid_edge_values::edge_values_implicit_h4() ppm_functions::ppm_reconstruction() (opt. ppm_functions::ppm_boundary_extrapolation())
+PPM_HYBGEN | Piecewise Parabolic Method with quasi-4th order edge values using PLM \cite colella1984 | mom_hybgen_remap::hybgen_ppm_coefs() (opt. ppm_functions::ppm_boundary_extrapolation())
+PPM_CW | (should be equivalent to PPM_HYBGEN) | regrid_edge_values::edge_values_explicit_h4cw() ppm_functions::ppm_monotonicity() ppm_functions::ppm_reconstruction() (calls ppm_functions::ppm_limiter_standard()) (opt. ppm_functions::ppm_boundary_extrapolation())
+WENO_HYBGEN | Piecewise Parabolic Method with WENO edge values, ported from Hycom | mom_hybgen_remap::hybgen_weno_coefs() ppm_functions::ppm_reconstruction() (calls ppm_functions::ppm_limiter_standard()) (opt. ppm_functions::ppm_boundary_extrapolation())
+PQM_IH4IH3 | Piecewise Quartic Method with implicit quasi-4th order edge values and 3rd order edge slopes \cite white2008 | regrid_edge_values::edge_values_implicit_h4() regrid_edge_values::edge_slopes_implicit_h3() pqm_functions::pqm_reconstruction() (calls pqm_functions::pqm_limiter()) (opt. pqm_functions::pqm_boundary_extrapolation_v1())
+PQM_IH6IH5 | Piecewise Quartic Method with implicit quasi-6th order edge values and 5rd order edge slopes \cite white2008 | regrid_edge_values::edge_values_implicit_h6() regrid_edge_values::edge_slopes_implicit_h5() pqm_functions::pqm_reconstruction() (calls pqm_functions::pqm_limiter()) (opt. pqm_functions::pqm_boundary_extrapolation_v1())
+
+The following table summarizes the newly refactored methods based on the class recon1d_type::recon1d.
+These are also controlled by the runtime parameter `REMAPPING_SCHEME` but the branch point is in the form of a type allocation during initialization in mom_remapping::setreconstructiontype().
+
+REMAPPING_SCHEME | Description | Module
+:--------------: | :---------- | :-----
+C_PCM | Piecewise Constant Method (equivalent to PCM) | recon1d_pcm
+C_PLM_CW | Piecewise Linear Method (faithful to Colella and Woodward \cite colella1984) | recon1d_plm_cw
+C_PLM_HYBGEN | PLM (equivalent to PLM_HYBGEN) | recon1d_plm_hybgen
+C_MPLM_WA | Monotonized Piecewise Linear Method (faithful to White and Adcroft \cite white2008) | recon1d_mplm_wa
+C_MPLM_WA_POLY | MPLM using polynomial representation (euivalent to PLM) | recon1d_mplm_wa_poly
+C_EMPLM_WA | Boundary extrapolation of MPLM_WA (faithful to White and Adcroft \cite white2008) | recon1d_emplm_wa
+C_EMPLM_WA_POLY | Boundary extrapolation of MPLM using polynomial repesentation (equivalent to PLM) | recon1d_emplm_wa_poly
+C_PLM_CWK | Piecewise Linear Method in index space (grid independent) | recon1d_plm_cwk
+C_MPLM_CWK | Monotonized Piecewise Linear Method in index space (grid independent) | recon1d_mplm_cwk
+C_EMPLM_CWK | Boundary extrapolatino of Monotonized Piecewise Linear Method in index space (grid independent) | recon1d_emplm_cwk
+C_PPM_CW | Piecewise Linear Method (faithful to Colella and Woodward \cite colella1984) | recon1d_ppm_cw
+C_PPM_HYBGEN | PPM (equivalent to PPM_HYBGEN) | recon1d_ppm_hybgen
+C_PPM_H4_2018 | (equivalent to PPM_H4 with answers circa 2018) | recon1d_ppm_h4_2018
+C_PPM_H4_2019 | (equivalent to PPM_H4 with answers post 2019) | recon1d_ppm_h4_2019
+C_PPM_CWK | Piecewise Parabolic Method in index space (grid independent) | recon1d_ppm_cwk
+C_EPPM_CWK | Piecewise Parabolic Method in index space (grid independent) | recon1d_eppm_cwk (extends recon1d_ppm_cwk)
+
+The motivation for some of the schemes in the last table was to recover certain numerical of computationsl properties, summarized in the next table.
+
+REMAPPING_SCHEME | Representation | Globally monotonic | Consistent | Grid dependent | Uniform test
+:--------------: | :------------- | :----------------- | :--------- | :------------- | :-----------
+PCM              | Single scalar  | Yes                | Yes        | No             | Pass
+PLM              | Polynomial     | Forced             |            | Yes            | Fail
+PLM_HYBGEN       | Polynomial     | No                 |            | Yes            | Fail
+PPM_H4           | Edge values    |                    |            | Yes            | Fail
+PPM_IH4          | Edge values    |                    |            | Yes            | Fail
+PPM_HYBGEN       | Edge values    |                    |            | Yes            | Fail
+PPM_CW           | Edge values    |                    |            | Yes            | Fail
+WENO_HYBGEN      | Edge values    |                    |            | Yes            | Fail
+PQM_IH4IH3       | Polynomial     |                    |            | Yes            | Fail
+PQM_IH6IH5       | Polynomial     |                    |            | Yes            | Fail
+C_PCM            | Single scalar  | Yes                | Yes        | No             | Pass
+C_PLM_CW         | Edge values    | No                 | Yes        | Yes            | Pass
+C_PLM_HYBGEN     | Edge values    | No                 | Yes        | Yes            | Pass
+C_MPLM_WA        | Edge values    | Yes                | No         | Yes            | Pass
+C_MPLM_WA_POLY   | Polynomial     | Yes                | *          | Yes            | Pass
+C_EMPLM_WA       | Edge values    | Yes                | No         | Yes            | Pass
+C_EMPLM_WA_POLY  | Polynomial     | No                 |            | Yes            | Pass
+C_PLM_CWK        | Edge values    | Yes                | Yes        | No             | Pass
+C_MPLM_CWK       | Edge values    | Yes                | Yes        | No             | Pass
+C_EMPLM_CWK      | Edge values    | Yes                | Yes        | No             | Pass
+C_PPM_CW         | Edge values    | Yes                | Yes        | Yes            | Pass
+C_PPM_HYBGEN     | Edge values    | * forced           | Yes        | Yes            | Pass
+C_PPM_H4_2018    | Edge values    | * forced           |            | Yes            | Pass
+C_PPM_H4_2019    | Edge values    | * forced           | Yes        | Yes            | Pass
+C_PPM_CWK        | Edge values    | Yes                | Yes        | No             | Pass
+C_EPPM_CWK       | Edge values    | Yes                | Yes        | No             | Pass
+
+The OM4-era schemes calculate values via the function mom_remapping::average_value_ppoly() which uses reconstructions stored as the corresponding polynomial coefficients for PLM and PQM, but uses edge values for PPM.
+The newer class-based schemes use edge values to store the reconstructions for all schemes (except where replicating the OM4-era schemes).
+
+*/

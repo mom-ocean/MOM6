@@ -221,7 +221,7 @@ subroutine doc_param_int(doc, varname, desc, units, val, default, &
 end subroutine doc_param_int
 
 !> This subroutine handles parameter documentation for arrays of integers.
-subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
+subroutine doc_param_int_array(doc, varname, desc, units, vals, default, defaults, &
                                layoutParam, debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
@@ -229,7 +229,8 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
   character(len=*),  intent(in) :: desc    !< A description of the parameter being documented
   character(len=*),  intent(in) :: units   !< The units of the parameter being documented
   integer,           intent(in) :: vals(:) !< The array of values to record
-  integer, optional, intent(in) :: default !< The default value of this parameter
+  integer, optional, intent(in) :: default !< The uniform default value of this parameter
+  integer, optional, intent(in) :: defaults(:) !< The element-wise default values of this parameter
   logical, optional, intent(in) :: layoutParam !< If present and true, this is a layout parameter.
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
   logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
@@ -256,6 +257,11 @@ subroutine doc_param_int_array(doc, varname, desc, units, vals, default, &
       equalsDefault = .true.
       do i=1,size(vals) ; if (vals(i) /= default) equalsDefault = .false. ; enddo
       mesg = trim(mesg)//" default = "//(trim(int_string(default)))
+    endif
+    if (present(defaults)) then
+      equalsDefault = .true.
+      do i=1,size(vals) ; if (vals(i) /= defaults(i)) equalsDefault = .false. ; enddo
+      mesg = trim(mesg)//" default = "//trim(int_array_string(defaults))
     endif
     if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
@@ -303,14 +309,16 @@ subroutine doc_param_real(doc, varname, desc, units, val, default, debuggingPara
 end subroutine doc_param_real
 
 !> This subroutine handles parameter documentation for arrays of reals.
-subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debuggingParam, like_default)
+subroutine doc_param_real_array(doc, varname, desc, units, vals, default, defaults, &
+                                debuggingParam, like_default)
   type(doc_type),    pointer    :: doc     !< A pointer to a structure that controls where the
                                            !! documentation occurs and its formatting
   character(len=*),  intent(in) :: varname !< The name of the parameter being documented
   character(len=*),  intent(in) :: desc    !< A description of the parameter being documented
   character(len=*),  intent(in) :: units   !< The units of the parameter being documented
   real,              intent(in) :: vals(:) !< The array of values to record
-  real,    optional, intent(in) :: default !< The default value of this parameter
+  real,    optional, intent(in) :: default !< A uniform default value of this parameter
+  real,    optional, intent(in) :: defaults(:) !< The element-wise default values of this parameter
   logical, optional, intent(in) :: debuggingParam !< If present and true, this is a debugging parameter.
   logical, optional, intent(in) :: like_default !< If present and true, log this parameter as though
                                            !! it has the default value, even if there is no default.
@@ -333,6 +341,11 @@ subroutine doc_param_real_array(doc, varname, desc, units, vals, default, debugg
       equalsDefault = .true.
       do i=1,size(vals) ; if (vals(i) /= default) equalsDefault = .false. ; enddo
       mesg = trim(mesg)//" default = "//trim(real_string(default))
+    endif
+    if (present(defaults)) then
+      equalsDefault = .true.
+      do i=1,size(vals) ; if (vals(i) /= defaults(i)) equalsDefault = .false. ; enddo
+      mesg = trim(mesg)//" default = "//trim(real_array_string(defaults))
     endif
     if (present(like_default)) then ; if (like_default) equalsDefault = .true. ; endif
 
@@ -472,7 +485,7 @@ subroutine doc_param_time(doc, varname, desc, val, default, units, debuggingPara
 
 end subroutine doc_param_time
 
-!> This subroutine writes out the message and description to the documetation files.
+!> This subroutine writes out the message and description to the documentation files.
 subroutine writeMessageAndDesc(doc, vmesg, desc, valueWasDefault, indent, &
                                layoutParam, debuggingParam)
   type(doc_type),    intent(in) :: doc     !< A pointer to a structure that controls where the
@@ -711,6 +724,55 @@ function real_array_string(vals, sep)
     endif
   enddo
 end function real_array_string
+
+
+!> Returns a character string of a comma-separated, compact formatted, integers
+!> e.g. "1, 2, 7*3, 500", that give the list of values.
+function int_array_string(vals, sep)
+  character(len=:), allocatable :: int_array_string !< The output string listing vals
+  integer,          intent(in)  :: vals(:) !< The array of values to record
+  character(len=*), &
+           optional, intent(in) :: sep     !< The separator between successive values,
+                                           !! by default it is ', '.
+
+  ! Local variables
+  integer :: j, m, n, ns
+  logical :: doWrite
+  character(len=10) :: separator
+  n = 1 ; doWrite = .true. ; int_array_string = ''
+  if (present(sep)) then
+    separator = sep ; ns = len(sep)
+  else
+    separator = ', ' ; ns = 2
+  endif
+  do j=1,size(vals)
+    doWrite = .true.
+    if (j < size(vals)) then
+      if (vals(j) == vals(j+1)) then
+        n = n+1
+        doWrite = .false.
+      endif
+    endif
+    if (doWrite) then
+      if (len(int_array_string) > 0) then ! Write separator if a number has already been written
+        int_array_string = int_array_string // separator(1:ns)
+      endif
+      if (n>1) then
+        if (size(vals) > 6) then  ! The n*val syntax is convenient in long lists of integers.
+          int_array_string = int_array_string // trim(int_string(n)) // "*" // trim(int_string(vals(j)))
+        else  ! For short lists of integers, do not use the n*val syntax as it is less convenient.
+          do m=1,n-1
+            int_array_string = int_array_string // trim(int_string(vals(j))) // separator(1:ns)
+          enddo
+          int_array_string = int_array_string // trim(int_string(vals(j)))
+        endif
+      else
+        int_array_string = int_array_string // trim(int_string(vals(j)))
+      endif
+      n=1
+    endif
+  enddo
+end function int_array_string
 
 !> This function tests whether a real value is encoded in a string.
 function testFormattedFloatIsReal(str, val)
@@ -1000,7 +1062,7 @@ function find_unused_unit_number()
     "doc_init failed to find an unused unit number.")
 end function find_unused_unit_number
 
-!> This subroutine closes the the files controlled by doc, and sets flags in
+!> This subroutine closes the files controlled by doc, and sets flags in
 !! doc to indicate that parameterization is no longer permitted.
 subroutine doc_end(doc)
   type(doc_type), pointer :: doc !< A pointer to a structure that controls where the

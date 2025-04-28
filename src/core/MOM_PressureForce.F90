@@ -16,7 +16,7 @@ use MOM_PressureForce_Mont, only : PressureForce_Mont_CS
 use MOM_self_attr_load, only : SAL_CS
 use MOM_tidal_forcing, only : tidal_forcing_CS
 use MOM_unit_scaling, only : unit_scale_type
-use MOM_variables, only : thermo_var_ptrs
+use MOM_variables, only : thermo_var_ptrs, accel_diag_ptrs
 use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ALE, only: ALE_CS
 implicit none ; private
@@ -38,7 +38,7 @@ end type PressureForce_CS
 contains
 
 !> A thin layer between the model and the Boussinesq and non-Boussinesq pressure force routines.
-subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, eta)
+subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, p_atm, pbce, eta)
   type(ocean_grid_type),   intent(in)  :: G    !< The ocean's grid structure
   type(verticalGrid_type), intent(in)  :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)  :: US   !< A dimensional unit scaling type
@@ -51,6 +51,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
                            intent(out) :: PFv  !< Meridional pressure force acceleration [L T-2 ~> m s-2]
   type(PressureForce_CS),  intent(inout) :: CS !< Pressure force control structure
   type(ALE_CS),            pointer     :: ALE_CSp !< ALE control structure
+  type(accel_diag_ptrs),   pointer     :: ADp !< Acceleration diagnostic pointers
   real, dimension(:,:),    pointer     :: p_atm !< The pressure at the ice-ocean or
                                                !! atmosphere-ocean interface [R L2 T-2 ~> Pa].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -63,10 +64,10 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
   if (CS%Analytic_FV_PGF) then
     if (GV%Boussinesq) then
       call PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV, &
-                                   ALE_CSp, p_atm, pbce, eta)
+                                   ALE_CSp, ADp, p_atm, pbce, eta)
     else
       call PressureForce_FV_nonBouss(h, tv, PFu, PFv, G, GV, US, CS%PressureForce_FV, &
-                                      ALE_CSp, p_atm, pbce, eta)
+                                      ALE_CSp, ADp, p_atm, pbce, eta)
     endif
   else
     if (GV%Boussinesq) then
@@ -81,7 +82,7 @@ subroutine PressureForce(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, p_atm, pbce, e
 end subroutine Pressureforce
 
 !> Initialize the pressure force control structure
-subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp, tides_CSp)
+subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL_CSp, tides_CSp)
   type(time_type), target, intent(in)    :: Time !< Current model time
   type(ocean_grid_type),   intent(in)    :: G    !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV   !< Vertical grid structure
@@ -89,6 +90,7 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp, ti
   type(param_file_type),   intent(in)    :: param_file !< Parameter file handles
   type(diag_ctrl), target, intent(inout) :: diag !< Diagnostics control structure
   type(PressureForce_CS),  intent(inout) :: CS   !< Pressure force control structure
+  type(accel_diag_ptrs),   pointer       :: ADp !< Acceleration diagnostic pointers
   type(SAL_CS),           intent(in), optional :: SAL_CSp !< SAL control structure
   type(tidal_forcing_CS), intent(in), optional :: tides_CSp !< Tide control structure
 #include "version_variable.h"
@@ -105,7 +107,7 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, SAL_CSp, ti
 
   if (CS%Analytic_FV_PGF) then
     call PressureForce_FV_init(Time, G, GV, US, param_file, diag, &
-             CS%PressureForce_FV, SAL_CSp, tides_CSp)
+             CS%PressureForce_FV, ADp, SAL_CSp, tides_CSp)
   else
     call PressureForce_Mont_init(Time, G, GV, US, param_file, diag, &
              CS%PressureForce_Mont, SAL_CSp, tides_CSp)

@@ -181,16 +181,40 @@ type, public :: accel_diag_ptrs
                            !! in du_dt_visc) [L T-2 ~> m s-2]
     dv_dt_str => NULL(), & !< Meridional acceleration due to the surface stress (included
                            !! in dv_dt_visc) [L T-2 ~> m s-2]
-    du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
-    dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal  mixing [L T-2 ~> m s-2]
+    du_dt_dia => NULL(), & !< Zonal acceleration due to diapycnal mixing [L T-2 ~> m s-2]
+    dv_dt_dia => NULL(), & !< Meridional acceleration due to diapycnal mixing [L T-2 ~> m s-2]
     u_accel_bt => NULL(), &!< Pointer to the zonal barotropic-solver acceleration [L T-2 ~> m s-2]
-    v_accel_bt => NULL()   !< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
+    v_accel_bt => NULL(), &!< Pointer to the meridional barotropic-solver acceleration [L T-2 ~> m s-2]
+
+    ! sal_[uv] and tide_[uv] are 3D fields because of their baroclinic component in Boussinesq mode.
+    sal_u => NULL(), &     !< Zonal acceleration due to self-attraction and loading [L T-2 ~> m s-2]
+    sal_v => NULL(), &     !< Meridional acceleration due to self-attraction and loading [L T-2 ~> m s-2]
+    tides_u => NULL(), &    !< Zonal acceleration due to astronomical tidal forcing [L T-2 ~> m s-2]
+    tides_v => NULL()       !< Meridional acceleration due to astronomical tidal forcing [L T-2 ~> m s-2]
   real, pointer, dimension(:,:,:) :: du_other => NULL()
                            !< Zonal velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].
   real, pointer, dimension(:,:,:) :: dv_other => NULL()
                            !< Meridional velocity changes due to any other processes that are
                            !! not due to any explicit accelerations [L T-1 ~> m s-1].
+
+  ! Sub-terms of [uv]_accel_bt
+  real, pointer :: bt_pgf_u(:,:,:) => NULL() !< Zonal acceleration due to anomalous pressure gradient from
+                                             !! barotropic solver, a 3D component of u_accel_bt that includes both
+                                             !! PFuBT and the offset term for central differencing timestepping
+                                             !! [L T-2 ~> m s-2]
+  real, pointer :: bt_pgf_v(:,:,:) => NULL() !< Meridional acceleration due to anomalous pressure gradient from
+                                             !! barotropic solver, a 3D component of v_accel_bt that includes both
+                                             !! PFvBT and the offset term for central differencing timestepping
+                                             !! [L T-2 ~> m s-2]
+  real, pointer :: bt_cor_u(:,:) => NULL()   !< Zonal acceleration due to anomalous Coriolis force from barotropic
+                                             !! solver, a 2D component of u_accel_bt [L T-2 ~> m s-2]
+  real, pointer :: bt_cor_v(:,:) => NULL()   !< Meridional acceleration due to anomalous Coriolis force from barotropic
+                                             !! solver, a 2D component of v_accel_bt [L T-2 ~> m s-2]
+  real, pointer :: bt_lwd_u(:,:) => NULL()   !< Zonal acceleration due to linear wave drag from barotropic solver,
+                                             !! a 2D component of u_accel_bt [L T-2 ~> m s-2]
+  real, pointer :: bt_lwd_v(:,:) => NULL()   !< Meridional acceleration due to linear wave drag from barotropic solver,
+                                             !! a 2D component of v_accel_bt [L T-2 ~> m s-2]
 
   ! These accelerations are sub-terms included in the accelerations above.
   real, pointer :: gradKEu(:,:,:) => NULL()  !< gradKEu = - d/dx(u2) [L T-2 ~> m s-2]
@@ -229,8 +253,6 @@ end type cont_diag_ptrs
 
 !> Vertical viscosities, drag coefficients, and related fields.
 type, public :: vertvisc_type
-  real :: Prandtl_turb       !< The Prandtl number for the turbulent diffusion
-                             !! that is captured in Kd_shear [nondim].
   real, allocatable, dimension(:,:) :: &
     bbl_thick_u, & !< The bottom boundary layer thickness at the u-points [Z ~> m].
     bbl_thick_v, & !< The bottom boundary layer thickness at the v-points [Z ~> m].
@@ -238,8 +260,11 @@ type, public :: vertvisc_type
     kv_bbl_v, &    !< The bottom boundary layer viscosity at the v-points [H Z T-1 ~> m2 s-1 or Pa s]
     ustar_BBL, &   !< The turbulence velocity in the bottom boundary layer at
                    !! h points [H T-1 ~> m s-1 or kg m-2 s-1].
-    TKE_BBL, &     !< A term related to the bottom boundary layer source of turbulent kinetic
-                   !! energy, currently in [H Z2 T-3 ~> m3 s-3 or W m-2].
+    BBL_meanKE_loss, & !< The viscous loss of mean kinetic energy in the bottom boundary layer
+                   !! [H L2 T-3 ~> m3 s-3 or W m-2].
+    BBL_meanKE_loss_sqrtCd, & !< The viscous loss of mean kinetic energy in the bottom boundary layer
+                   !! divided by the square root of the drag coefficient [H L2 T-3 ~> m3 s-3 or W m-2].
+                   !! This is being set only to retain old answers, and should be phased out.
     taux_shelf, &  !< The zonal stresses on the ocean under shelves [R Z L T-2 ~> Pa].
     tauy_shelf     !< The meridional stresses on the ocean under shelves [R Z L T-2 ~> Pa].
   real, allocatable, dimension(:,:) :: tbl_thick_shelf_u

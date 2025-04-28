@@ -1,0 +1,542 @@
+name: MacOS verification
+
+on: [push, pull_request]
+
+env:
+  CC: gcc
+  FC: gfortran
+
+jobs:
+  # Dependencies
+  build-fms:
+    runs-on: macOS-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/macos-setup/
+
+      - name: Build libFMS.a
+        run: make -C .testing build/deps/lib/libFMS.a -j
+
+      - name: Upload libFMS.a and dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: fms-artifact
+          path: |
+            .testing/build/deps/include/
+            .testing/build/deps/lib/libFMS.a
+          retention-days: 1
+
+  build-symmetric:
+    runs-on: macOS-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile symmetric index layout
+        run: |
+          make -C .testing build/symmetric/MOM6 -j -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/MOM6
+          retention-days: 1
+
+  build-asymmetric:
+    runs-on: macOS-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile asymmetric index layout
+        run: |
+          make -C .testing build/asymmetric/MOM6 -j -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-asymmetric-artifact
+          path: .testing/build/asymmetric/MOM6
+          retention-days: 1
+
+  build-repro:
+    runs-on: macOS-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile repro
+        run: make -C .testing build/repro/MOM6 -j -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-repro-artifact
+          path: .testing/build/repro/MOM6
+          retention-days: 1
+
+  build-openmp:
+    runs-on: macOS-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile MOM6 supporting OpenMP
+        run: make -C .testing build/openmp/MOM6 -j -o build/symmetric/Makefile
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-openmp-artifact
+          path: .testing/build/openmp/MOM6
+          retention-days: 1
+
+  build-target:
+    if: github.event_name == 'pull_request'
+    runs-on: macos-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile target MOM6
+        run: |
+          make -C .testing build/target/MOM6 -j \
+          -o build/deps/lib/libFMS.a \
+          MOM_TARGET_SLUG=$GITHUB_REPOSITORY \
+          MOM_TARGET_LOCAL_BRANCH=$GITHUB_BASE_REF \
+          DO_REGRESSION_TESTS=True
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-target-artifact
+          path: .testing/build/target/MOM6
+          retention-days: 1
+
+  #---
+
+  test-grid:
+    runs-on: macOS-latest
+    needs:
+      - build-symmetric
+      - build-asymmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download asymmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-asymmetric-artifact
+          path: .testing/build/asymmetric/
+
+      - name: Verify symmetric-asymmetric grid invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/asymmetric/MOM6
+          make -C .testing -k test.grid \
+          -o build/symmetric/MOM6 \
+          -o build/asymmetric/MOM6
+
+  test-layout:
+    runs-on: macOS-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify processor domain layout
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing -k test.layout \
+          -o build/symmetric/MOM6
+
+  test-rotate:
+    runs-on: macOS-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify rotational invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing -k test.rotate -o build/symmetric/MOM6
+
+  test-restart:
+    runs-on: macOS-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify restart invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing -k test.restart -o build/symmetric/MOM6
+
+  test-nan:
+    runs-on: macOS-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify aggressive initialization
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing -k test.nan -o build/symmetric/MOM6
+
+  test-dim-t:
+    runs-on: macos-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify time dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.t -o build/symmetric/MOM6
+
+  test-dim-l:
+    runs-on: macos-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify horizontal length dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.l -o build/symmetric/MOM6
+
+  test-dim-h:
+    runs-on: macos-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify vertical thickness dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.h -o build/symmetric/MOM6
+
+  test-dim-z:
+    runs-on: macos-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify vertical coordinate dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.z -o build/symmetric/MOM6
+
+  test-dim-q:
+    runs-on: macos-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify heat dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.z -o build/symmetric/MOM6
+
+  test-dim-r:
+    runs-on: macos-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify density dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.r -o build/symmetric/MOM6
+
+  test-openmp:
+    runs-on: macOS-latest
+    needs:
+      - build-symmetric
+      - build-openmp
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download OpenMP MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-openmp-artifact
+          path: .testing/build/openmp/
+
+      - name: Verify OpenMP invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/openmp/MOM6
+          make -C .testing -k test.openmp -k -o build/symmetric/MOM6 -o build/openmp/MOM6
+
+  test-repro:
+    runs-on: macOS-latest
+    needs:
+      - build-symmetric
+      - build-repro
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download DEBUG MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download REPRO MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-repro-artifact
+          path: .testing/build/repro/
+
+      - name: Verify optimized equivalence
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/repro/MOM6
+          make -C .testing -k test.repro -o build/symmetric/MOM6 -o build/repro/MOM6
+
+  test-regression:
+    if: github.event_name == 'pull_request'
+    runs-on: macOS-latest
+    needs:
+      - build-symmetric
+      - build-target
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/macos-setup
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download target MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-target-artifact
+          path: .testing/build/target/
+
+      - name: Check for regressions
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/target/MOM6
+          make -C .testing test.regression \
+          -o build/symmetric/MOM6 \
+          -o build/target/MOM6 \
+          DO_REGRESSION_TESTS=true
+
+  cleanup:
+    runs-on: macos-latest
+    permissions:
+      id-token: write
+    needs:
+      - test-grid
+      - test-layout
+      - test-rotate
+      - test-restart
+      - test-nan
+      - test-dim-t
+      - test-dim-l
+      - test-dim-h
+      - test-dim-z
+      - test-dim-q
+      - test-dim-r
+      - test-openmp
+      - test-repro
+
+    steps:
+      - uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            fms-artifact
+            mom6-*-artifact

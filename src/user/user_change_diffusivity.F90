@@ -230,14 +230,15 @@ subroutine user_change_diff_init(Time, G, GV, US, param_file, diag, CS)
                  "applied.  The four values specify the latitudes at "//&
                  "which the extra diffusivity starts to increase from 0, "//&
                  "hits its full value, starts to decrease again, and is "//&
-                 "back to 0.", units="degrees_N", default=-1.0e9)
+                 "back to 0.", units="degrees_N", defaults=(/-1.0e9,-1.0e9,-1.0e9,-1.0e9/))
     call get_param(param_file, mdl, "USER_KD_ADD_RHO_RANGE", CS%rho_range(:), &
                  "Four successive values that define a range of potential "//&
                  "densities over which the user-given extra diffusivity "//&
                  "is applied.  The four values specify the density at "//&
                  "which the extra diffusivity starts to increase from 0, "//&
                  "hits its full value, starts to decrease again, and is "//&
-                 "back to 0.", units="kg m-3", default=-1.0e9, scale=US%kg_m3_to_R)
+                 "back to 0.", units="kg m-3", defaults=(/-1.0e9,-1.0e9,-1.0e9,-1.0e9/),&
+                 scale=US%kg_m3_to_R)
     call get_param(param_file, mdl, "USER_KD_ADD_USE_ABS_LAT", CS%use_abs_lat, &
                  "If true, use the absolute value of latitude when "//&
                  "checking whether a point fits into range of latitudes.", &

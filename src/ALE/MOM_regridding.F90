@@ -2051,7 +2051,7 @@ subroutine setCoordinateResolution( dz, CS, scale )
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   real,      optional, intent(in)    :: scale !< A scaling factor converting dz to the internal represetation
                                            !! of coordRes, in various units that depend on the coordinate,
-                                           !! such as [Z m-1 ~> 1 for a z-coordinate or [R m3 kg-1 ~> 1] for
+                                           !! such as [Z m-1 ~> 1] for a z-coordinate or [R m3 kg-1 ~> 1] for
                                            !! a density coordinate.
 
   if (size(dz)/=CS%nk) call MOM_error( FATAL, &

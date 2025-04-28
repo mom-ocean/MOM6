@@ -1,0 +1,928 @@
+name: Linux verification
+
+on: [push, pull_request]
+
+jobs:
+  # Documentation
+  check-style-and-docstrings:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        submodules: recursive
+
+    - name: Check white space (non-blocking)
+      run: |
+        ./.testing/trailer.py -e TEOS10 -l 120 src config_src 2>&1 | tee style_errors
+      continue-on-error: true
+
+    - name: Install packages used when generating documentation
+      run: |
+        sudo apt-get update
+        sudo apt-get install python3-sphinx python3-lxml perl
+        sudo apt-get install texlive-binaries texlive-base bibtool tex-common texlive-bibtex-extra
+        sudo apt-get install graphviz
+
+    - name: Build doxygen HTML
+      run: |
+        cd docs
+        perl -e 'print "perl version $^V" . "\n"'
+        mkdir _build && make nortd DOXYGEN_RELEASE=Release_1_8_13 UPDATEHTMLEQS=Y
+        cat _build/doxygen_warn_nortd_log.txt
+
+    - name: Report doxygen or style errors
+      run: |
+        grep "warning:" docs/_build/doxygen_warn_nortd_log.txt | grep -v "as part of a" | tee doxy_errors
+        cat style_errors doxy_errors > all_errors
+        cat all_errors
+        test ! -s  all_errors
+
+  # Dependencies
+
+  build-fms:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - name: Build libFMS.a
+        run: make -C .testing build/deps/lib/libFMS.a -j
+
+      - name: Upload libFMS.a and dependencies
+        uses: actions/upload-artifact@v4
+        with:
+          name: fms-artifact
+          path: |
+            .testing/build/deps/include/
+            .testing/build/deps/lib/libFMS.a
+          retention-days: 1
+
+  # Executables
+
+  build-symmetric:
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile MOM6 with symmetric indexing
+        run: |
+          make -C .testing build/symmetric/MOM6 -j \
+          -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/MOM6
+          retention-days: 1
+
+  build-asymmetric:
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile MOM6 with asymmetric indexing
+        run: |
+          make -C .testing build/asymmetric/MOM6 -j \
+          -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-asymmetric-artifact
+          path: .testing/build/asymmetric/MOM6
+          retention-days: 1
+
+  build-repro:
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile repro
+        run: |
+          make -C .testing build/repro/MOM6 -j \
+          -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-repro-artifact
+          path: .testing/build/repro/MOM6
+          retention-days: 1
+
+  build-openmp:
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile MOM6 supporting OpenMP
+        run: make -C .testing build/openmp/MOM6 -j -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-openmp-artifact
+          path: .testing/build/openmp/MOM6
+          retention-days: 1
+
+  build-target:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile target MOM6
+        run: |
+          make -C .testing build/target/MOM6 -j \
+          -o build/deps/lib/libFMS.a \
+          MOM_TARGET_SLUG=$GITHUB_REPOSITORY \
+          MOM_TARGET_LOCAL_BRANCH=$GITHUB_BASE_REF \
+          DO_REGRESSION_TESTS=True
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-target-artifact
+          path: .testing/build/target/MOM6
+          retention-days: 1
+
+  build-opt:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile optimized model
+        run: |
+          make -C .testing build/opt/MOM6 -j \
+          -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-opt-artifact
+          path: .testing/build/opt/MOM6
+          retention-days: 1
+
+      - name: Compile unit tests
+        run: |
+          make -C .testing build.timing -j \
+          -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-unit-artifact
+          path: |
+            .testing/build/timing/time_MOM_EOS
+            .testing/build/timing/time_MOM_remapping
+          retention-days: 1
+
+  build-opt-target:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile target MOM6
+        run: |
+          make -C .testing build/opt_target/MOM6 -j \
+          -o build/deps/lib/libFMS.a \
+          MOM_TARGET_SLUG=$GITHUB_REPOSITORY \
+          MOM_TARGET_LOCAL_BRANCH=$GITHUB_BASE_REF \
+          DO_REGRESSION_TESTS=True
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-opt-target-artifact
+          path: .testing/build/opt_target/MOM6
+          retention-days: 1
+
+      - name: Compile target unit tests
+        run: |
+          make -C .testing build.timing_target -j \
+          -o build/deps/lib/libFMS.a
+          MOM_TARGET_SLUG=$GITHUB_REPOSITORY \
+          MOM_TARGET_LOCAL_BRANCH=$GITHUB_BASE_REF \
+          DO_REGRESSION_TESTS=true
+
+      # XXX: This attempts to create an empty artifact!
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-unit-target-artifact
+          path: |
+            .testing/build/target_codebase/.testing/build/timing/time_MOM_EOS
+            .testing/build/target_codebase/.testing/build/timing/time_MOM_remapping
+          retention-days: 1
+
+  build-coverage:
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile MOM6 with code coverage
+        run: make -C .testing build/cov/MOM6 -j -o build/deps/lib/libFMS.a
+
+      - name: Compile MOM6 unit tests
+        run: |
+          make -C .testing build/unit/test_MOM_file_parser -j \
+          -o build/deps/lib/libFMS.a
+          make -C .testing build.unit -j \
+          -o build/deps/lib/libFMS.a
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mom6-coverage-artifact
+          path: |
+            .testing/build/cov/MOM6
+            .testing/build/cov/*.gcno
+            .testing/build/unit/test_MOM_EOS
+            .testing/build/unit/test_MOM_file_parser
+            .testing/build/unit/test_MOM_mixedlayer_restrat
+            .testing/build/unit/test_MOM_remapping
+            .testing/build/unit/test_MOM_string_functions
+            .testing/build/unit/test_numerical_testing_type
+            .testing/build/unit/*.gcno
+          retention-days: 1
+
+  build-coupled-api:
+    runs-on: ubuntu-latest
+    needs: build-fms
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup/
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: fms-artifact
+          path: .testing/build/deps/
+
+      - name: Compile MOM6 for the GFDL coupled driver
+        run: |
+          make -C .testing check_mom6_api_coupled -j \
+          -o build/deps/lib/libFMS.a
+
+  #---
+
+  test-grid:
+    runs-on: ubuntu-latest
+    needs:
+      - build-symmetric
+      - build-asymmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download asymmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-asymmetric-artifact
+          path: .testing/build/asymmetric/
+
+      - name: Verify symmetric-asymmetric grid invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/asymmetric/MOM6
+          make -C .testing test.grid -o build/symmetric/MOM6 -o build/asymmetric/MOM6
+
+  test-layout:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify processor domain layout
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.layout -o build/symmetric/MOM6
+
+  test-rotate:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify rotational invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.rotate -o build/symmetric/MOM6
+
+  test-restart:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify restart invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.restart -o build/symmetric/MOM6
+
+  test-nan:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify aggressive initialization
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.nan -o build/symmetric/MOM6
+
+  test-dim-t:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify time dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.t -o build/symmetric/MOM6
+
+  test-dim-l:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify horizontal length dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.l -o build/symmetric/MOM6
+
+  test-dim-h:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify vertical thickness dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.h -o build/symmetric/MOM6
+
+  test-dim-z:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify vertical coordinate dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.z -o build/symmetric/MOM6
+
+  test-dim-q:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify heat dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.z -o build/symmetric/MOM6
+
+  test-dim-r:
+    runs-on: ubuntu-latest
+    needs: build-symmetric
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Verify density dimensional invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          make -C .testing test.dim.r -o build/symmetric/MOM6
+
+  test-openmp:
+    runs-on: ubuntu-latest
+    needs:
+      - build-symmetric
+      - build-openmp
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download OpenMP MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-openmp-artifact
+          path: .testing/build/openmp/
+
+      - name: Verify OpenMP invariance
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/openmp/MOM6
+          make -C .testing test.openmp -o build/symmetric/MOM6 -o build/openmp/MOM6
+
+  test-repro:
+    runs-on: ubuntu-latest
+    needs:
+      - build-symmetric
+      - build-repro
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download DEBUG MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download REPRO MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-repro-artifact
+          path: .testing/build/repro/
+
+      - name: Verify REPRO equivalence
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/repro/MOM6
+          make -C .testing test.repro \
+          -o build/symmetric/MOM6 \
+          -o build/repro/MOM6
+
+  test-regression:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs:
+      - build-symmetric
+      - build-target
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download symmetric MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-symmetric-artifact
+          path: .testing/build/symmetric/
+
+      - name: Download target MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-target-artifact
+          path: .testing/build/target/
+
+      - name: Check for regressions
+        run: |
+          chmod u+rx .testing/build/symmetric/MOM6
+          chmod u+rx .testing/build/target/MOM6
+          make -C .testing test.regression \
+          -o build/symmetric/MOM6 \
+          -o build/target/MOM6 \
+          DO_REGRESSION_TESTS=true
+
+  run-coverage:
+    runs-on: ubuntu-latest
+    needs: build-coverage
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download unit coverage tests
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-coverage-artifact
+          path: .testing/build/
+
+      - name: Generate MOM6 coverage
+        run: |
+          chmod u+rx .testing/build/cov/MOM6
+          make -C .testing -j run.cov \
+          -o build/cov/MOM6
+
+      - name: Generate unit test coverage
+        run: |
+          chmod u+rx .testing/build/unit/test_MOM_EOS
+          chmod u+rx .testing/build/unit/test_MOM_file_parser
+          chmod u+rx .testing/build/unit/test_MOM_mixedlayer_restrat
+          chmod u+rx .testing/build/unit/test_MOM_remapping
+          chmod u+rx .testing/build/unit/test_MOM_string_functions
+          chmod u+rx .testing/build/unit/test_numerical_testing_type
+          make -C .testing -j run.cov.unit \
+          -o build/unit/test_MOM_file_parser \
+          -o build/unit/test_MOM_EOS \
+          -o build/unit/test_MOM_mixedlayer_restrat \
+          -o build/unit/test_MOM_remapping \
+          -o build/unit/test_MOM_string_functions \
+          -o build/unit/test_numerical_testing_type
+
+      - name: Report coverage to CI
+        run: |
+          make -C .testing report.cov \
+          -o build/cov/MOM6
+          make -C .testing report.cov.unit \
+          -o build/unit/test_MOM_file_parser \
+          -o build/unit/test_MOM_EOS \
+          -o build/unit/test_MOM_mixedlayer_restrat \
+          -o build/unit/test_MOM_remapping \
+          -o build/unit/test_MOM_string_functions \
+          -o build/unit/test_numerical_testing_type
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+  # These are most likely nonsense on a GitHub node, but someday it could work.
+  run-timings:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    needs:
+      - build-opt
+      - build-opt-target
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download optimized MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-opt-artifact
+          path: .testing/build/opt/
+
+      - name: Download optimized target MOM6
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-opt-target-artifact
+          path: .testing/build/opt_target/
+
+        # TODO: Move f90nml and chmod setup to another step?
+      - name: Profile with FMS clocks
+        run: |
+          pip install f90nml
+          chmod u+rx .testing/build/opt/MOM6
+          chmod u+rx .testing/build/opt_target/MOM6
+          make -C .testing profile -j \
+          -o build/opt/MOM6 \
+          -o build/opt_target/MOM6 \
+          DO_REGRESSION_TESTS=true
+
+      - name: Profile with perf
+        run: |
+          sudo sysctl -w kernel.perf_event_paranoid=2
+          make -C .testing perf -j \
+          -o build/opt/MOM6 \
+          -o build/opt_target/MOM6 \
+          DO_REGRESSION_TESTS=true
+
+      # Collapse run.timing run.timing_target and show.timing into one rule
+      # TODO: Should this be a separate thing?
+
+      - name: Download unit tests
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-unit-artifact
+          path: .testing/build/timing
+
+      # XXX: This fails because the files do not yet build.
+      #- name: Download unit tests
+      #  uses: actions/download-artifact@v4
+      #  with:
+      #    name: mom6-unit-target-artifact
+      #    path: .testing/build/timing
+
+      - name: Run unit test timings
+        run: |
+          chmod u+rx .testing/build/timing/time_MOM_EOS
+          chmod u+rx .testing/build/timing/time_MOM_remapping
+          make -C .testing run.timing -j \
+          -o build/timing/time_MOM_EOS \
+          -o build/timing/time_MOM_remapping
+
+      - name: Run unit test target timings
+        run: |
+          make -C .testing run.timing_target -j \
+          -o build/target_codebase/.testing/build/timing/time_MOM_EOS \
+          -o build/target_codebase/.testing/build/timing/time_MOM_remapping \
+          DO_REGRESSION_TESTS=true
+
+      - name: Show timing results
+        run: |
+          make -C .testing show.timing \
+          DO_REGRESSION_TESTS=true
+
+      - name: Compare unit test timings
+        run: |
+          make -C .testing compare.timing \
+          DO_REGRESSION_TESTS=true
+
+  cleanup-common:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    needs:
+      - test-grid
+      - test-openmp
+      - test-repro
+      - run-coverage
+
+    steps:
+      - uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            fms-artifact
+            mom6-asymmetric-artifact
+            mom6-openmp-artifact
+            mom6-repro-artifact
+            mom6-coverage-artifact
+
+  # NOTE: There is no way to conditionally define the elements in `needs`.
+  #   For now, we must create separate rules for each case.
+
+  cleanup-push:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    needs:
+      - test-layout
+      - test-rotate
+      - test-restart
+      - test-nan
+      - test-dim-t
+      - test-dim-l
+      - test-dim-h
+      - test-dim-z
+      - test-dim-q
+      - test-dim-r
+      - test-grid
+      - test-openmp
+      - test-repro
+      - run-coverage
+
+    steps:
+      - uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            mom6-symmetric-artifact
+
+  cleanup-pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+    needs:
+      - test-layout
+      - test-rotate
+      - test-restart
+      - test-nan
+      - test-dim-t
+      - test-dim-l
+      - test-dim-h
+      - test-dim-z
+      - test-dim-q
+      - test-dim-r
+      - test-grid
+      - test-openmp
+      - test-repro
+      - run-coverage
+      - test-regression
+      - run-timings
+
+    steps:
+      - uses: geekyeggo/delete-artifact@v5
+        with:
+          name: |
+            mom6-symmetric-artifact
+            mom6-target-artifact
+            mom6-opt-artifact
+            mom6-opt-target-artifact
+            mom6-unit-artifact
+            mom6-unit-target-artifact

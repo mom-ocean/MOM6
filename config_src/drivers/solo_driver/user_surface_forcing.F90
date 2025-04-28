@@ -38,7 +38,7 @@ type, public :: user_surface_forcing_CS ; private
   real :: rho_restore        !< The density that is used to convert piston velocities into salt
                              !! or heat fluxes with salinity or temperature restoring [R ~> kg m-3]
   real :: gust_const         !< A constant unresolved background gustiness
-                             !! that contributes to ustar [R L Z T-2 ~> Pa].
+                             !! that contributes to ustar [R Z2 T-2 ~> Pa].
 
   type(diag_ctrl), pointer :: diag !< A structure that is used to regulate the
                              !! timing of diagnostic output.
@@ -91,10 +91,10 @@ subroutine USER_wind_forcing(sfc_state, forces, day, G, US, CS)
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
     forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gust_const + &
-            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
-                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
+            US%L_to_Z*sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                           0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
     if (associated(forces%ustar)) &
-      forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(forces%tau_mag(i,j) * (US%L_to_Z/CS%Rho0))
+      forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(forces%tau_mag(i,j) * (1.0/CS%Rho0))
   enddo ; enddo ; endif
 
 end subroutine USER_wind_forcing
@@ -275,7 +275,7 @@ subroutine USER_surface_forcing_init(Time, G, US, param_file, diag, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2)
+                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2*US%L_to_Z)
 
   call get_param(param_file, mdl, "RESTOREBUOY", CS%restorebuoy, &
                  "If true, the buoyancy fluxes drive the model back "//&

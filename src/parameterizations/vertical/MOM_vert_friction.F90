@@ -1836,7 +1836,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: h_shear ! The distance over which shears occur [Z ~> m].
   real :: dhc     ! The distance between the center of adjacent layers [Z ~> m].
   real :: visc_ml ! The mixed layer viscosity [H Z T-1 ~> m2 s-1 or Pa s].
-  real :: tau_scale  ! A scaling factor for the interpolated wind stress magnitude [H R-1 L-1 ~> m3 kg-1 or nondim]
   real :: I_Hmix  ! The inverse of the mixed layer thickness [Z-1 ~> m-1].
   real :: a_ml    ! The layer coupling coefficient across an interface in
                   ! the mixed layer [H T-1 ~> m s-1 or Pa s m-1].
@@ -1863,8 +1862,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   else ; is = G%isc ; ie = G%iec ; endif
   nz = GV%ke
   h_neglect = GV%dZ_subroundoff
-
-  tau_scale = US%L_to_Z * GV%RZ_to_H
 
   if (CS%answer_date < 20190101) then
     !   The maximum coupling coefficient was originally introduced to avoid
@@ -1964,11 +1961,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       dhc = hvel(i,nz)*0.5
       ! These expressions assume that Kv_tot(i,nz+1) = CS%Kv, consistent with
       ! the suppression of turbulent mixing by the presence of a solid boundary.
-      if (dhc < bbl_thick(i)) then
-        a_cpl(i,nz+1) = kv_bbl(i) / ((dhc+h_neglect) + I_amax*kv_bbl(i))
-      else
-        a_cpl(i,nz+1) = kv_bbl(i) / ((bbl_thick(i)+h_neglect) + I_amax*kv_bbl(i))
-      endif
+      a_cpl(i,nz+1) = kv_bbl(i) / ((min(dhc, bbl_thick(i)) + h_neglect) + I_amax*kv_bbl(i))
     endif ; enddo
     do K=nz,2,-1 ; do i=is,ie ; if (do_i(i)) then
       !    botfn determines when a point is within the influence of the bottom

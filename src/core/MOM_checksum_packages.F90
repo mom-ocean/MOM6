@@ -61,9 +61,9 @@ subroutine MOM_state_chksum_5arg(mesg, u, v, h, uh, vh, G, GV, US, haloshift, sy
   logical,       optional, intent(in) :: symmetric !< If true, do checksums on the fully symmetric
                                                    !! computational domain.
   logical,       optional, intent(in) :: omit_corners !< If true, avoid checking diagonal shifts
-  real,          optional, intent(in) :: vel_scale !< The scaling factor to convert velocities to [m s-1]
+  real,          optional, intent(in) :: vel_scale !< The scaling factor to convert velocities to [T m L-1 s-1 ~> 1]
 
-  real :: scale_vel ! The scaling factor to convert velocities to [m s-1]
+  real :: scale_vel ! The scaling factor to convert velocities to mks units [T m L-1 s-1 ~> 1]
   logical :: sym
   integer :: hs
 
@@ -275,13 +275,13 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
 
   ! Local variables
   real, dimension(G%isc:G%iec, G%jsc:G%jec) :: &
-    tmp_A, &  ! The area per cell [m2] (unscaled to permit reproducing sum).
-    tmp_V, &  ! The column-integrated volume [m3] or mass [kg] (unscaled to permit reproducing sum),
+    tmp_A, &  ! The area per cell [L2 ~> m2]
+    tmp_V, &  ! The column-integrated volume or mass [H L2 ~> m3 or kg],
               ! depending on whether the Boussinesq approximation is used
-    tmp_T, &  ! The column-integrated temperature [degC m3] or [degC kg] (unscaled to permit reproducing sum)
-    tmp_S     ! The column-integrated salinity [ppt m3] or [ppt kg] (unscaled to permit reproducing sum)
-  real :: Vol, dV    ! The total ocean volume or mass and its change [m3] or [kg] (unscaled to permit reproducing sum).
-  real :: Area       ! The total ocean surface area [m2] (unscaled to permit reproducing sum).
+    tmp_T, &  ! The column-integrated temperature [C H L2 ~> degC m3 or degC kg]
+    tmp_S     ! The column-integrated salinity [S H L2 ~> ppt m3 or ppt kg]
+  real :: Vol, dV    ! The total ocean volume or mass and its change [H L2 ~> m3 or kg]
+  real :: Area       ! The total ocean surface area [L2 ~> m2].
   real :: h_minimum  ! The minimum layer thicknesses [H ~> m or kg m-2]
   real :: T_scale    ! The scaling conversion factor for temperatures [degC C-1 ~> 1]
   real :: S_scale    ! The scaling conversion factor for salinities [ppt S-1 ~> 1]
@@ -293,7 +293,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
   !       assumption we will not turn this on with threads
   type(stats), save :: oldT, oldS
   logical, save :: firstCall = .true.
-  real, save :: oldVol ! The previous total ocean volume [m3] or mass [kg]
+  real, save :: oldVol ! The previous total ocean volume or mass [H L2 ~> m3 or kg]
 
   character(len=80) :: lMsg
   integer :: is, ie, js, je, nz, i, j, k
@@ -310,32 +310,31 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
 
   ! First collect local stats
   do j=js,je ; do i=is,ie
-    tmp_A(i,j) = tmp_A(i,j) + US%L_to_m**2*G%areaT(i,j)
+    tmp_A(i,j) = tmp_A(i,j) + G%areaT(i,j)
   enddo ; enddo
   T%minimum = 1.E34 ; T%maximum = -1.E34 ; T%average = 0.
   S%minimum = 1.E34 ; S%maximum = -1.E34 ; S%average = 0.
   h_minimum = 1.E34*GV%m_to_H
   do k=1,nz ; do j=js,je ; do i=is,ie
     if (G%mask2dT(i,j)>0.) then
-      dV = US%L_to_m**2*G%areaT(i,j)*GV%H_to_MKS*h(i,j,k)
+      dV = G%areaT(i,j)*h(i,j,k)
       tmp_V(i,j) = tmp_V(i,j) + dV
       if (do_TS .and. h(i,j,k)>0.) then
         T%minimum = min( T%minimum, T_scale*Temp(i,j,k) ) ; T%maximum = max( T%maximum, T_scale*Temp(i,j,k) )
-        T%average = T%average + dV*T_scale*Temp(i,j,k)
         S%minimum = min( S%minimum, S_scale*Salt(i,j,k) ) ; S%maximum = max( S%maximum, S_scale*Salt(i,j,k) )
-        S%average = S%average + dV*S_scale*Salt(i,j,k)
-        tmp_T(i,j) = tmp_T(i,j) + dV*T_scale*Temp(i,j,k)
-        tmp_S(i,j) = tmp_S(i,j) + dV*S_scale*Salt(i,j,k)
+        tmp_T(i,j) = tmp_T(i,j) + dV*Temp(i,j,k)
+        tmp_S(i,j) = tmp_S(i,j) + dV*Salt(i,j,k)
       endif
       if (h_minimum > h(i,j,k)) h_minimum = h(i,j,k)
     endif
   enddo ; enddo ; enddo
-  Area = reproducing_sum( tmp_A ) ; Vol = reproducing_sum( tmp_V )
+  Area = reproducing_sum( tmp_A, unscale=US%L_to_m**2 )
+  Vol = reproducing_sum( tmp_V, unscale=US%L_to_m**2*GV%H_to_mks )
   if (do_TS) then
     call min_across_PEs( T%minimum ) ; call max_across_PEs( T%maximum )
     call min_across_PEs( S%minimum ) ; call max_across_PEs( S%maximum )
-    T%average = reproducing_sum( tmp_T ) ; S%average = reproducing_sum( tmp_S )
-    T%average = T%average / Vol ; S%average = S%average / Vol
+    T%average = T_scale*reproducing_sum( tmp_T, unscale=US%C_to_degC*US%L_to_m**2*GV%H_to_mks) / Vol
+    S%average = S_scale*reproducing_sum( tmp_S, unscale=US%S_to_ppt*US%L_to_m**2*GV%H_to_mks) / Vol
   endif
   if (is_root_pe()) then
     if (.not.firstCall) then
@@ -344,7 +343,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
       delT%average = T%average - oldT%average
       delS%minimum = S%minimum - oldS%minimum ; delS%maximum = S%maximum - oldS%maximum
       delS%average = S%average - oldS%average
-      write(lMsg(1:80),'(2(a,es12.4))') 'Mean thickness =', Vol/Area,' frac. delta=',dV/Vol
+      write(lMsg(1:80),'(2(a,es12.4))') 'Mean thickness =', GV%H_to_mks*Vol/Area,' frac. delta=',dV/Vol
       call MOM_mesg(lMsg//trim(mesg))
       if (do_TS) then
         write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =',T%minimum,T%average,T%maximum
@@ -357,7 +356,7 @@ subroutine MOM_state_stats(mesg, u, v, h, Temp, Salt, G, GV, US, allowChange, pe
         call MOM_mesg(lMsg//trim(mesg))
       endif
     else
-      write(lMsg(1:80),'(a,es12.4)') 'Mean thickness =', Vol/Area
+      write(lMsg(1:80),'(a,es12.4)') 'Mean thickness =', GV%H_to_mks*Vol/Area
       call MOM_mesg(lMsg//trim(mesg))
       if (do_TS) then
         write(lMsg(1:80),'(a,3es12.4)') 'Temp min/mean/max =', T%minimum, T%average, T%maximum

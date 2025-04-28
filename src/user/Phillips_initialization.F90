@@ -50,11 +50,14 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
   real :: eta0(SZK_(GV)+1)  ! The 1-d nominal positions of the interfaces [Z ~> m]
   real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m]
   real :: eta1D(SZK_(GV)+1) ! Interface height relative to the sea surface, positive upward [Z ~> m]
-  real :: jet_width         ! The width of the zonal-mean jet [km]
+  real :: jet_width         ! The width of the zonal-mean jet in the same units as geolat, often [km]
   real :: jet_height        ! The interface height scale associated with the zonal-mean jet [Z ~> m]
-  real :: y_2             ! The y-position relative to the center of the domain [km]
+  real :: y_2             ! The y-position relative to the center of the domain in the same units as
+                          ! geolat, often [km]
   real :: half_strat      ! The fractional depth where the stratification is centered [nondim]
   real :: half_depth      ! The depth where the stratification is centered [Z ~> m]
+  real :: km_to_grid_unit ! The conversion factor from km to the units of latitude, often 1 [nondim],
+                          ! but this could be 1000 [m km-1]
   logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_thickness" ! This subroutine's name.
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
@@ -63,6 +66,17 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "Phillips_initialization: "//&
+          "Phillips_initialize_thickness is only set to work with Cartesian axis units.")
+  if (abs(G%grid_unit_to_L*US%L_to_m - 1000.0) < 1.0e-3) then ! The grid latitudes are in km.
+    km_to_grid_unit = 1.0
+  elseif (abs(G%grid_unit_to_L*US%L_to_m - 1.0) < 1.0e-6) then ! The grid latitudes are in m.
+    km_to_grid_unit = 1000.0
+  else
+    call MOM_error(FATAL, "Phillips_initialization: "//&
+          "Phillips_initialize_thickness is not recognizing the value of G%grid_unit_to_L.")
+  endif
+
   eta_im(:,:) = 0.0
 
   if (.not.just_read) call log_version(param_file, mdl, version)
@@ -70,12 +84,12 @@ subroutine Phillips_initialize_thickness(h, depth_tot, G, GV, US, param_file, ju
                  "The fractional depth where the stratification is centered.", &
                  units="nondim", default=0.5, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
-                 "The width of the zonal-mean jet.", units="km", &
+                 "The width of the zonal-mean jet.", units="km", scale=km_to_grid_unit, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the "//&
-                 "zonal-mean jet.", units="m", scale=US%m_to_Z, &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 "The interface height scale associated with the zonal-mean jet.", &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.not.just_read, do_not_log=just_read)
+
   ! If re-entrant in the Y direction, we use a sine function instead of a
   ! tanh. The ratio len_lat/jet_width should be an integer in this case.
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
@@ -139,34 +153,72 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read)
   logical,                 intent(in)  :: just_read  !< If true, this call will only read
                                                      !! parameters without changing u & v.
 
-  real :: jet_width       ! The width of the zonal-mean jet [km]
+  real :: jet_width_grid  ! The width of the zonal-mean jet in the same units as geolat, often [km]
+  real :: jet_width_L     ! The width of the zonal-mean jet [L ~> m]
+  real :: I_jet_width     ! The inverse of the width of the zonal-mean jet [L-1 ~> m-1]
   real :: jet_height      ! The interface height scale associated with the zonal-mean jet [Z ~> m]
-  real :: x_2             ! The x-position relative to the center of the domain [nondim]
-  real :: y_2             ! The y-position relative to the center of the domain [km] or [nondim]
+  real :: x_2             ! The x-position relative to the center of the domain normalized by the
+                          ! domain width [nondim]
+  real :: y_2_grid        ! The y-position relative to the center of the domain in the same units
+                          ! as geolat, often [km]
+  real :: y_2_L           ! The y-position relative to the center of the domain [L ~> m]
+  real :: y_2_norm        ! The y-position relative to the center of the domain normalized by the
+                          ! domain width [nondim]
   real :: velocity_amplitude ! The amplitude of velocity perturbations [L T-1 ~> m s-1]
   real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: km_to_grid_unit ! The conversion factor from km to the units of latitude, often 1 [nondim],
+                          ! but this could be 1000 [m km-1]
+  integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  integer :: answer_date  ! The vintage of the expressions in the Phillips_initialization code.
+                          ! Values below 20250101 recover the answers from the end of 2018, while
+                          ! higher values use mathematically equivalent expressions that are fully
+                          ! rescalable.
   integer :: i, j, k, is, ie, js, je, nz, m
   logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_velocity" ! This subroutine's name.
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "Phillips_initialization: "//&
+          "Phillips_initialize_velocity is only set to work with Cartesian axis units.")
+  if (abs(G%grid_unit_to_L*US%L_to_m - 1000.0) < 1.0e-3) then ! The grid latitudes are in km.
+    km_to_grid_unit = 1.0
+  elseif (abs(G%grid_unit_to_L*US%L_to_m - 1.0) < 1.0e-6) then ! The grid latitudes are in m.
+    km_to_grid_unit = 1000.0
+  else
+    call MOM_error(FATAL, "Phillips_initialization: "//&
+          "Phillips_initialize_velocity is not recognizing the value of G%grid_unit_to_L.")
+  endif
+
   if (.not.just_read) call log_version(param_file, mdl, version)
   call get_param(param_file, mdl, "VELOCITY_IC_PERTURB_AMP", velocity_amplitude, &
                  "The magnitude of the initial velocity perturbation.", &
                  units="m s-1", default=0.001, scale=US%m_s_to_L_T, do_not_log=just_read)
-  call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
-                 "The width of the zonal-mean jet.", units="km", &
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width_L, &
+                 "The width of the zonal-mean jet.", units="km", scale=1000.0*US%m_to_L, &
+                 fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "JET_WIDTH", jet_width_grid, &
+                 "The width of the zonal-mean jet.", units="km", scale=km_to_grid_unit, &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the "//&
-                 "zonal-mean jet.", units="m", scale=US%m_to_Z, &
-                 fail_if_missing=.not.just_read, do_not_log=just_read)
+                 "The interface height scale associated with the zonal-mean jet.", &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.not.just_read, do_not_log=just_read)
+  call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
+                 "This sets the default value for the various _ANSWER_DATE parameters.", &
+                 default=99991231)
+  call get_param(param_file, mdl, "PHILLIPS_ANSWER_DATE", answer_date, &
+                 "The vintage of the expressions in the Phillips_initialization code.  Values "//&
+                 "below 20250101 recover the answers from the end of 2018, while higher "//&
+                 "values use mathematically equivalent expressions that are fully rescalable.", &
+                 default=min(20241201,default_answer_date))  !### Change this to default=default_answer_date)
   ! If re-entrant in the Y direction, we use a sine function instead of a
-  ! tanh. The ratio len_lat/jet_width should be an integer in this case.
+  ! tanh. The ratio len_lat/jet_width_grid should be an integer in this case.
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
                  default=.false., do_not_log=.true.)
 
   if (just_read) return ! All run-time parameters have been read, so return.
+
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, 'Phillips_initialization.F90: '// &
+          "Phillips_initialize_velocity() is only set to work with Cartesian axis units.")
 
   u(:,:,:) = 0.0
   v(:,:,:) = 0.0
@@ -174,26 +226,43 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read)
   pi = 4.0*atan(1.0)
 
   ! Use thermal wind shear to give a geostrophically balanced flow.
-  do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
-    y_2 = G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat
-    if (reentrant_y) then
-      y_2 = 2.*pi*y_2
-      u(I,j,k) = u(I,j,k+1) + (1.e-3 * (jet_height / (US%m_to_L*jet_width)) * &
-                    cos(y_2/jet_width) )
-    else
-! This uses d/d y_2 atan(y_2 / jet_width)
-!    u(I,j,k) = u(I,j,k+1) + ( jet_height / &
-!           (1.0e3*US%m_to_L*jet_width * (1.0 + (y_2 / jet_width)**2))) * &
-!           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
-! This uses d/d y_2 tanh(y_2 / jet_width)
-      u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / (US%m_to_L*jet_width)) * &
-           (sech(y_2 / jet_width))**2 ) * &
-           (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
-    endif
-  enddo ; enddo ; enddo
+  if (answer_date < 20250101) then
+    do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
+      y_2_grid = G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat
+      if (reentrant_y) then
+        y_2_grid = 2.*pi*y_2_grid
+        u(I,j,k) = u(I,j,k+1) + (1.e-3 * (jet_height / (US%m_to_L*jet_width_grid)) * &
+                      cos(y_2_grid/jet_width_grid) )
+      else
+        ! This uses d/d y_2 atan(y_2 / jet_width)
+        ! u(I,j,k) = u(I,j,k+1) + ( jet_height / &
+        !     (1.0e3*US%m_to_L*jet_width_grid * (1.0 + (y_2_grid / jet_width_grid)**2))) * &
+        !     (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+        ! This uses d/d y_2 tanh(y_2 / jet_width)
+        u(I,j,k) = u(I,j,k+1) + (1e-3 * (jet_height / (US%m_to_L*jet_width_grid)) * &
+             (sech(y_2_grid / jet_width_grid))**2 ) * &
+             (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+      endif
+    enddo ; enddo ; enddo
+  else
+    I_jet_width = 1.0 / jet_width_L
+    do k=nz-1,1 ; do j=js,je ; do I=is-1,ie
+      y_2_L = (G%geoLatCu(I,j) - (G%south_lat + 0.5*G%len_lat)) * G%grid_unit_to_L
+      if (reentrant_y) then
+        u(I,j,k) = u(I,j,k+1) + ((jet_height * I_jet_width) * cos(2.*pi*(y_2_L*I_jet_width)) )
+      else
+        ! This uses d/d y_2 atan(y_2 / jet_width)
+        ! u(I,j,k) = u(I,j,k+1) + ( (jet_height*I_jet_width) / (1.0 + (y_2_L*I_jet_width)**2)) * &
+        !      (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+        ! This uses d/d y_2_L tanh(y_2_L*I_jet_width)
+        u(I,j,k) = u(I,j,k+1) + ((jet_height * I_jet_width) * (sech(y_2_L*I_jet_width))**2 ) * &
+             (2.0 * GV%g_prime(K+1) / (G%CoriolisBu(I,J) + G%CoriolisBu(I,J-1)))
+      endif
+    enddo ; enddo ; enddo
+  endif
 
   do k=1,nz ; do j=js,je ; do I=is-1,ie
-    y_2 = (G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat) / G%len_lat
+    y_2_norm = (G%geoLatCu(I,j) - G%south_lat - 0.5*G%len_lat) / G%len_lat
     x_2 = (G%geoLonCu(I,j) - G%west_lon - 0.5*G%len_lon) / G%len_lon
     if (G%geoLonCu(I,j) == G%west_lon) then
       ! This modification is required so that the perturbations are identical for
@@ -203,10 +272,10 @@ subroutine Phillips_initialize_velocity(u, v, G, GV, US, param_file, just_read)
              G%west_lon - 0.5*G%len_lon) / G%len_lon
     endif
     u(I,j,k) = u(I,j,k) + velocity_amplitude * ((real(k)-0.5)/real(nz)) * &
-           (0.5 - abs(2.0*x_2) + 0.1*abs(cos(10.0*pi*x_2)) - abs(sin(5.0*pi*y_2)))
+           (0.5 - abs(2.0*x_2) + 0.1*abs(cos(10.0*pi*x_2)) - abs(sin(5.0*pi*y_2_norm)))
     do m=1,10
       u(I,j,k) = u(I,j,k) + 0.2*velocity_amplitude * ((real(k)-0.5)/real(nz)) * &
-            cos(2.0*m*pi*x_2 + 2*m) * cos(6.0*pi*y_2)
+            cos(2.0*m*pi*x_2 + 2*m) * cos(6.0*pi*y_2_norm)
     enddo
   enddo ; enddo ; enddo
 
@@ -240,12 +309,15 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   real :: eta_im(SZJ_(G),SZK_(GV)+1) ! A temporary array for zonal-mean eta [Z ~> m].
   real :: Idamp_im(SZJ_(G))         ! The inverse zonal-mean damping rate [T-1 ~> s-1].
   real :: damp_rate    ! The inverse zonal-mean damping rate [T-1 ~> s-1].
-  real :: jet_width    ! The width of the zonal mean jet [km].
+  real :: jet_width    ! The width of the zonal mean jet in the same units as geolat, often [km]
   real :: jet_height   ! The interface height scale associated with the zonal-mean jet [Z ~> m].
-  real :: y_2          ! The y-position relative to the channel center [km].
+  real :: y_2          ! The y-position relative to the channel center in the same units as
+                       ! geolat, often [km]
   real :: half_strat   ! The fractional depth where the straficiation is centered [nondim].
   real :: half_depth   ! The depth where the stratification is centered [Z ~> m].
   real :: pi              ! The ratio of the circumference of a circle to its diameter [nondim]
+  real :: km_to_grid_unit ! The conversion factor from km to the units of latitude, often 1 [nondim],
+                          ! but this could be 1000 [m km-1]
   logical :: reentrant_y  ! If true, model is re-entrant in the y direction
   character(len=40)  :: mdl = "Phillips_initialize_sponges" ! This subroutine's name.
 
@@ -254,6 +326,17 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
+
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "Phillips_initialization: "//&
+          "Phillips_initialize_sponges is only set to work with Cartesian axis units.")
+  if (abs(G%grid_unit_to_L*US%L_to_m - 1000.0) < 1.0e-3) then ! The grid latitudes are in km.
+    km_to_grid_unit = 1.0
+  elseif (abs(G%grid_unit_to_L*US%L_to_m - 1.0) < 1.0e-6) then ! The grid latitudes are in m.
+    km_to_grid_unit = 1000.0
+  else
+    call MOM_error(FATAL, "Phillips_initialization: "//&
+          "Phillips_initialize_sponges is not recognizing the value of G%grid_unit_to_L.")
+  endif
 
   eta(:,:,:) = 0.0 ; temp(:,:,:) = 0.0 ; Idamp(:,:) = 0.0
   eta_im(:,:) = 0.0 ; Idamp_im(:) = 0.0
@@ -268,12 +351,11 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
                  units="s-1", default=1.0/(10.0*86400.0), scale=US%T_to_s)
 
   call get_param(param_file, mdl, "JET_WIDTH", jet_width, &
-                 "The width of the zonal-mean jet.", units="km", &
+                 "The width of the zonal-mean jet.", units="km", scale=km_to_grid_unit, &
                  fail_if_missing=.true.)
   call get_param(param_file, mdl, "JET_HEIGHT", jet_height, &
-                 "The interface height scale associated with the "//&
-                 "zonal-mean jet.", units="m", scale=US%m_to_Z, &
-                 fail_if_missing=.true.)
+                 "The interface height scale associated with the zonal-mean jet.", &
+                 units="m", scale=US%m_to_Z, fail_if_missing=.true.)
   ! If re-entrant in the Y direction, we use a sine function instead of a
   ! tanh. The ratio len_lat/jet_width should be an integer in this case.
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, &
@@ -294,7 +376,6 @@ subroutine Phillips_initialize_sponges(G, GV, US, tv, param_file, CSp, h)
   do K=2,nz ; do j=js,je
     y_2 = G%geoLatT(is,j) - G%south_lat - 0.5*G%len_lat
     eta_im(j,K) = eta0(k) + jet_height * tanh(y_2 / jet_width)
-!         jet_height * atan(y_2 / jet_width)
     if (reentrant_y) then
       y_2 = 2.*pi*y_2
       eta_im(j,K) = eta0(k) + jet_height * sin(y_2 / jet_width)
@@ -351,8 +432,7 @@ subroutine Phillips_initialize_topography(D, G, param_file, max_depth, US)
   Wtop = 0.5*G%len_lat     ! meridional width of drake and mount
   Ltop = 0.25*G%len_lon    ! zonal width of topographic features
   offset = 0.1*G%len_lat   ! meridional offset from center
-  dist = 0.333*G%len_lon   ! distance between drake and mount
-                           ! should be longer than Ltop/2
+  dist = 0.333*G%len_lon   ! distance between drake and mount, this should be longer than Ltop/2
 
   y1 = G%south_lat+0.5*G%len_lat+offset-0.5*Wtop ; y2 = y1+Wtop
   x1 = G%west_lon+0.1*G%len_lon ; x2 = x1+Ltop ; x3 = x1+dist ; x4 = x3+3.0/2.0*Ltop

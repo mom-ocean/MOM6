@@ -17,4 +17,5 @@ algorithm.
     api/generated/pages/Discrete_Coriolis
     api/generated/pages/Discrete_PG
     api/generated/pages/Energetic_Consistency
+    api/generated/pages/Vertical_Reconstruction
     api/generated/pages/Discrete_OBC

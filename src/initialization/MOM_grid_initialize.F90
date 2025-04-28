@@ -84,7 +84,7 @@ subroutine set_grid_metrics(G, param_file, US)
   ! These are defaults that may be changed in the next select block.
   G%x_axis_units = "degrees_east" ; G%y_axis_units = "degrees_north"
   G%x_ax_unit_short = "degrees_E" ; G%y_ax_unit_short = "degrees_N"
-
+  G%grid_unit_to_L = 0.0
   G%Rad_Earth_L = -1.0*US%m_to_L ; G%len_lat = 0.0 ; G%len_lon = 0.0
   select case (trim(config))
     case ("mosaic");    call set_grid_metrics_from_mosaic(G, param_file, US)
@@ -102,7 +102,6 @@ subroutine set_grid_metrics(G, param_file, US)
     call get_param(param_file, "MOM_grid_init", "RAD_EARTH", G%Rad_Earth_L, &
                    "The radius of the Earth.", units="m", default=6.378e6, scale=US%m_to_L)
   endif
-  G%Rad_Earth = US%L_to_m*G%Rad_Earth_L
 
   ! Calculate derived metrics (i.e. reciprocals and products)
   call callTree_enter("set_derived_metrics(), MOM_grid_initialize.F90")
@@ -176,7 +175,8 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpT ! Areas [L2 ~> m2]
   real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-2:2*G%jed+1) :: tmpU ! East face supergrid spacing [L ~> m]
   real, dimension(2*G%isd-2:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpV ! North face supergrid spacing [L ~> m]
-  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ ! Corner latitudes or longitudes [degN] or [degE]
+  real, dimension(2*G%isd-3:2*G%ied+1,2*G%jsd-3:2*G%jed+1) :: tmpZ ! Corner latitudes [degrees_N] or
+                                                                   ! longitudes [degrees_E]
   real, dimension(:,:), allocatable :: tmpGlbl ! A global array of axis labels [degrees_N] or [km] or [m]
   character(len=200) :: filename, grid_file, inputdir
   character(len=64)  :: mdl = "MOM_grid_init set_grid_metrics_from_mosaic"
@@ -250,6 +250,11 @@ subroutine set_grid_metrics_from_mosaic(G, param_file, US)
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied ; i2 = 2*i ; j2 = 2*J
     G%geoLatCv(i,J) = tmpZ(i2-1,j2)
   enddo ; enddo
+
+  ! This routine could be modified to support the use of a mosaic using Cartesian grid coordinates,
+  ! in which case the values of G%x_axis_units, G%y_axis_units and G%grid_unit_to_L would need to be
+  ! reset appropriately here, but this option has not yet been implemented, and the grid coordinates
+  ! are assumed to be degrees of longitude and latitude.
 
   ! Read DX,DY from the supergrid
   tmpU(:,:) = 0. ; tmpV(:,:) = 0.
@@ -440,9 +445,11 @@ subroutine set_grid_metrics_cartesian(G, param_file, US)
   enddo
 
   if (units_temp(1:1) == 'k') then ! Axes are measured in km.
+    G%grid_unit_to_L = 1000.0*US%m_to_L
     dx_everywhere = 1000.0*US%m_to_L * G%len_lon / (REAL(niglobal))
     dy_everywhere = 1000.0*US%m_to_L * G%len_lat / (REAL(njglobal))
   elseif (units_temp(1:1) == 'm') then ! Axes are measured in m.
+    G%grid_unit_to_L = US%m_to_L
     dx_everywhere = US%m_to_L*G%len_lon / (REAL(niglobal))
     dy_everywhere = US%m_to_L*G%len_lat / (REAL(njglobal))
   else ! Axes are measured in degrees of latitude and longitude.

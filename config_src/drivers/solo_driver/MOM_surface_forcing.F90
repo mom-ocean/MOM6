@@ -30,13 +30,12 @@ use MOM_forcing_type,        only : allocate_mech_forcing, deallocate_mech_forci
 use MOM_grid,                only : ocean_grid_type
 use MOM_get_input,           only : Get_MOM_Input, directories
 use MOM_io,                  only : file_exists, MOM_read_data, MOM_read_vector, slasher
-use MOM_io,                  only : read_netCDF_data
-use MOM_io,                  only : EAST_FACE, NORTH_FACE, num_timelevels
+use MOM_io,                  only : read_netCDF_data, EAST_FACE, NORTH_FACE, num_timelevels
 use MOM_restart,             only : register_restart_field, restart_init, MOM_restart_CS
 use MOM_restart,             only : restart_init_end, save_restart, restore_state
-use MOM_time_manager,        only : time_type, operator(+), operator(/), get_time, time_type_to_real
-use MOM_tracer_flow_control, only : call_tracer_set_forcing
-use MOM_tracer_flow_control, only : tracer_flow_control_CS
+use MOM_time_manager,        only : time_type, operator(+), operator(/), operator(*)
+use MOM_time_manager,        only : set_time, get_time, get_date, time_type_to_real
+use MOM_tracer_flow_control, only : call_tracer_set_forcing, tracer_flow_control_CS
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : surface
 use MESO_surface_forcing,    only : MESO_buoyancy_forcing
@@ -45,19 +44,18 @@ use user_surface_forcing,    only : USER_wind_forcing, USER_buoyancy_forcing
 use user_surface_forcing,    only : USER_surface_forcing_init, user_surface_forcing_CS
 use user_revise_forcing,     only : user_alter_forcing, user_revise_forcing_init
 use user_revise_forcing,     only : user_revise_forcing_CS
-use idealized_hurricane, only : idealized_hurricane_wind_init
-use idealized_hurricane, only : idealized_hurricane_wind_forcing, SCM_idealized_hurricane_wind_forcing
-use idealized_hurricane, only : idealized_hurricane_CS
+use idealized_hurricane,     only : idealized_hurricane_wind_forcing
+use idealized_hurricane,     only : idealized_hurricane_wind_init, idealized_hurricane_CS
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_surface_forcing_init
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_wind_forcing
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_buoyancy_forcing
 use SCM_CVmix_tests,         only : SCM_CVmix_tests_CS
-use BFB_surface_forcing,    only : BFB_buoyancy_forcing
-use BFB_surface_forcing,    only : BFB_surface_forcing_init, BFB_surface_forcing_CS
-use dumbbell_surface_forcing,    only : dumbbell_surface_forcing_init, dumbbell_surface_forcing_CS
-use dumbbell_surface_forcing, only    : dumbbell_buoyancy_forcing
-use MARBL_forcing_mod,    only : marbl_forcing_CS, MARBL_forcing_init
-use MARBL_forcing_mod,    only : convert_driver_fields_to_forcings
+use BFB_surface_forcing,     only : BFB_buoyancy_forcing
+use BFB_surface_forcing,     only : BFB_surface_forcing_init, BFB_surface_forcing_CS
+use dumbbell_surface_forcing, only : dumbbell_surface_forcing_init, dumbbell_surface_forcing_CS
+use dumbbell_surface_forcing, only : dumbbell_buoyancy_forcing
+use MARBL_forcing_mod,       only : marbl_forcing_CS, MARBL_forcing_init
+use MARBL_forcing_mod,       only : convert_driver_fields_to_forcings
 
 implicit none ; private
 
@@ -96,7 +94,7 @@ type, public :: surface_forcing_CS ; private
   real :: taux_mag              !< Peak magnitude of the zonal wind stress for several analytic
                                 !! profiles [R L Z T-2 ~> Pa]
 
-  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R L Z T-2 ~> Pa]
+  real    :: gust_const                 !< constant unresolved background gustiness for ustar [R Z2 T-2 ~> Pa]
   logical :: read_gust_2d               !< if true, use 2-dimensional gustiness supplied from a file
   real, pointer :: gust(:,:) => NULL()  !< spatially varying unresolved background gustiness [R L Z T-2 ~> Pa]
                                         !! gust is used when read_gust_2d is true.
@@ -104,8 +102,6 @@ type, public :: surface_forcing_CS ; private
   real, pointer :: T_Restore(:,:)    => NULL()  !< temperature to damp (restore) the SST to [C ~> degC]
   real, pointer :: S_Restore(:,:)    => NULL()  !< salinity to damp (restore) the SSS [S ~> ppt]
   real, pointer :: Dens_Restore(:,:) => NULL()  !< density to damp (restore) surface density [R ~> kg m-3]
-
-  integer :: buoy_last_lev_read = -1 !< The last time level read from buoyancy input files
 
   ! if WIND_CONFIG=='gyres' then use the following as  = A, B, C and n respectively for
   ! taux = A + B*sin(n*pi*y/L) + C*cos(n*pi*y/L)
@@ -184,6 +180,38 @@ type, public :: surface_forcing_CS ; private
   character(len=80)  :: frunoff_var   = '' !< frozen runoff variable name in the input file
   character(len=80)  :: SST_restore_var = '' !< target sea surface temperature variable name in the input file
   character(len=80)  :: SSS_restore_var = '' !< target sea surface salinity variable name in the input file
+
+  ! These variables relate model times to time levels in the various forcing files.
+  integer :: wind_days_per_rec = 0    !< If positive the number of days of wind stress per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: SW_days_per_rec = 0      !< If positive the number of days shortwave heat flux per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: LW_days_per_rec = 0      !< If positive the number of days longwave heat flux per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: latent_days_per_rec = 0  !< If positive the number of days latent heat flux per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: sens_days_per_rec = 0    !< If positive the number of days sensible heat flux per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: evap_days_per_rec = 0    !< If positive the number of days evaporation per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: precip_days_per_rec = 0  !< If positive the number of days precipitation per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: runoff_days_per_rec = 0  !< If positive the number of days runoff per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: SST_days_per_rec = 0     !< If positive the number of days target SST per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
+  integer :: SSS_days_per_rec = 0     !< If positive the number of days target SSS per forcing file time level,
+                                      !! or if negative the number of time levels per day.  If 31 change forcing
+                                      !! monthly, or if 0 the model will guess the right value based on the file size.
 
   ! These variables give the number of time levels in the various forcing files.
   integer :: wind_nlev = -1   !< The number of time levels in the file of wind stress
@@ -301,7 +329,8 @@ subroutine set_forcing(sfc_state, forces, fluxes, day_start, day_interval, G, US
     elseif (trim(CS%wind_config) == "ideal_hurr") then
       call idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
     elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
-      call SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day_center, G, US, CS%idealized_hurricane_CSp)
+      call MOM_error(FATAL, "MOM_surface_forcing (set_forcing): "//&
+                            'WIND_CONFIG = "SCM_ideal_hurr" is a depricated option.')
     elseif (trim(CS%wind_config) == "SCM_CVmix_tests") then
       call SCM_CVmix_tests_wind_forcing(sfc_state, forces, day_center, G, US, CS%SCM_CVmix_tests_CSp)
     elseif (trim(CS%wind_config) == "USER") then
@@ -398,14 +427,14 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
   type(surface_forcing_CS), pointer       :: CS   !< pointer to control structure returned by
                                                   !! a previous surface_forcing_init call
   ! Local variables
-  real :: mag_tau  ! Magnitude of the wind stress [R Z L T-2 ~> Pa]
+  real :: mag_tau  ! Magnitude of the wind stress [R Z2 T-2 ~> Pa]
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
   call callTree_enter("wind_forcing_const, MOM_surface_forcing.F90")
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
 
-  mag_tau = sqrt( tau_x0**2 + tau_y0**2)
+  mag_tau = US%L_to_Z * sqrt( tau_x0**2 + tau_y0**2)
 
   ! Set the steady surface wind stresses, in units of [R L Z T-2 ~> Pa].
   do j=js,je ; do I=is-1,Ieq
@@ -418,14 +447,14 @@ subroutine wind_forcing_const(sfc_state, forces, tau_x0, tau_y0, day, G, US, CS)
 
   if (CS%read_gust_2d) then
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = sqrt( US%L_to_Z * ( mag_tau + CS%gust(i,j) ) / CS%Rho0 )
+      forces%ustar(i,j) = sqrt( ( mag_tau + CS%gust(i,j) ) / CS%Rho0 )
     enddo ; enddo ; endif
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = mag_tau + CS%gust(i,j)
     enddo ; enddo ; endif
   else
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = sqrt( US%L_to_Z * ( mag_tau + CS%gust_const ) / CS%Rho0 )
+      forces%ustar(i,j) = sqrt( ( mag_tau + CS%gust_const ) / CS%Rho0 )
     enddo ; enddo ; endif
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = mag_tau + CS%gust_const
@@ -541,13 +570,13 @@ subroutine wind_forcing_gyres(sfc_state, forces, day, G, US, CS)
   ! set the friction velocity
   if (CS%answer_date < 20190101) then
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-      forces%tau_mag(i,j) = CS%gust_const + sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                                                      ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+      forces%tau_mag(i,j) = CS%gust_const + US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                                                  ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-      forces%ustar(i,j) = sqrt(US%L_to_Z * ((CS%gust_const/CS%Rho0) + &
-              sqrt(0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2) + &
-                        (forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)))/CS%Rho0) )
+      forces%ustar(i,j) = sqrt( (CS%gust_const/CS%Rho0) + &
+              US%L_to_Z * sqrt(0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2) + &
+                                    (forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)))/CS%Rho0 )
     enddo ; enddo ; endif
   else
     call stresses_to_ustar(forces, G, US, CS)
@@ -689,11 +718,8 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   real    :: temp_y(SZI_(G),SZJ_(G)) ! Pseudo-meridional wind stresses at h-points [R L Z T-2 ~> Pa]
   real    :: ustar_loc(SZI_(G),SZJ_(G)) ! The local value of ustar [Z T-1 ~> m s-1]
   real    :: tau_mag    ! The magnitude of the wind stress including any contributions from
-                        ! sub-gridscale variability or gustiness [R L Z T-2 ~> Pa]
-  integer :: time_lev_daily          ! The time levels to read for fields with
-  integer :: time_lev_monthly        ! daily and monthly cycles.
+                        ! sub-gridscale variability or gustiness [R Z2 T-2 ~> Pa]
   integer :: time_lev                ! The time level that is used for a field.
-  integer :: days, seconds
   integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   logical :: read_Ustar
 
@@ -701,31 +727,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
   is   = G%isc  ; ie   = G%iec  ; js   = G%jsc  ; je   = G%jec
   Isq  = G%IscB ; Ieq  = G%IecB ; Jsq  = G%JscB ; Jeq  = G%JecB
 
-  call get_time(day, seconds, days)
-  time_lev_daily = days - 365*floor(real(days) / 365.0)
-
-  if (time_lev_daily < 31) then ; time_lev_monthly = 0
-  elseif (time_lev_daily < 59)  then ; time_lev_monthly = 1
-  elseif (time_lev_daily < 90)  then ; time_lev_monthly = 2
-  elseif (time_lev_daily < 120) then ; time_lev_monthly = 3
-  elseif (time_lev_daily < 151) then ; time_lev_monthly = 4
-  elseif (time_lev_daily < 181) then ; time_lev_monthly = 5
-  elseif (time_lev_daily < 212) then ; time_lev_monthly = 6
-  elseif (time_lev_daily < 243) then ; time_lev_monthly = 7
-  elseif (time_lev_daily < 273) then ; time_lev_monthly = 8
-  elseif (time_lev_daily < 304) then ; time_lev_monthly = 9
-  elseif (time_lev_daily < 334) then ; time_lev_monthly = 10
-  else ; time_lev_monthly = 11
-  endif
-
-  time_lev_daily = time_lev_daily+1
-  time_lev_monthly = time_lev_monthly+1
-
-  select case (CS%wind_nlev)
-    case (12) ; time_lev = time_lev_monthly
-    case (365) ; time_lev = time_lev_daily
-    case default ; time_lev = 1
-  end select
+  time_lev = get_file_time_level(day, CS%wind_nlev, CS%wind_days_per_rec)
 
   if (time_lev /= CS%wind_last_lev) then
     filename = trim(CS%wind_file)
@@ -751,19 +753,19 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       if (.not.read_Ustar) then
         if (CS%read_gust_2d) then
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-            forces%tau_mag(i,j) = CS%gust(i,j) + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
+            forces%tau_mag(i,j) = CS%gust(i,j) + US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-            tau_mag = CS%gust(i,j) + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
-            forces%ustar(i,j) = sqrt(tau_mag * US%L_to_Z / CS%Rho0)
+            tau_mag = CS%gust(i,j) + US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
+            forces%ustar(i,j) = sqrt(tau_mag / CS%Rho0)
           enddo ; enddo ; endif
         else
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-            forces%tau_mag(i,j) = CS%gust_const + sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
+            forces%tau_mag(i,j) = CS%gust_const + US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-            forces%ustar(i,j) = sqrt(US%L_to_Z * (CS%gust_const/CS%Rho0 + &
-                    sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) / CS%Rho0) )
+            forces%ustar(i,j) = sqrt( CS%gust_const/CS%Rho0 + &
+                    US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) / CS%Rho0 )
           enddo ; enddo ; endif
         endif
       endif
@@ -805,25 +807,25 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
         if (CS%read_gust_2d) then
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
             forces%tau_mag(i,j) = CS%gust(i,j) + &
-                    sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                              ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+                    US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                          ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
             tau_mag = CS%gust(i,j) + &
-                    sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                              ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
-            forces%ustar(i,j) = sqrt( tau_mag * US%L_to_Z / CS%Rho0 )
+                   US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                         ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+            forces%ustar(i,j) = sqrt( tau_mag / CS%Rho0 )
           enddo ; enddo ; endif
         else
           if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
             forces%tau_mag(i,j) = CS%gust_const + &
-                  sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                            ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+                  US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
           enddo ; enddo ; endif
           if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-             forces%ustar(i,j) = sqrt(US%L_to_Z * ( (CS%gust_const/CS%Rho0) + &
-                  sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                            ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))/CS%Rho0))
+             forces%ustar(i,j) = sqrt( CS%gust_const/CS%Rho0 + &
+                  US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))/CS%Rho0 )
           enddo ; enddo ; endif
         endif
       endif
@@ -836,7 +838,7 @@ subroutine wind_forcing_from_file(sfc_state, forces, day, G, US, CS)
       call MOM_read_data(filename, CS%Ustar_var, ustar_loc(:,:), &
                          G%Domain, timelevel=time_lev, scale=US%m_to_Z*US%T_to_s)
       if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-        forces%tau_mag(i,j) = US%Z_to_L * CS%Rho0 * ustar_loc(i,j)**2
+        forces%tau_mag(i,j) = CS%Rho0 * ustar_loc(i,j)**2
       enddo ; enddo ; endif
       if (associated(forces%ustar)) then ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
         forces%ustar(i,j) = ustar_loc(i,j)
@@ -867,7 +869,7 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   real :: ustar_prev(SZI_(G),SZJ_(G)) ! The pre-override value of ustar [Z T-1 ~> m s-1]
   real :: ustar_loc(SZI_(G),SZJ_(G)) ! The value of ustar, perhaps altered by data override [Z T-1 ~> m s-1]
   real :: tau_mag       ! The magnitude of the wind stress including any contributions from
-                        ! sub-gridscale variability or gustiness [R L Z T-2 ~> Pa]
+                        ! sub-gridscale variability or gustiness [R Z2 T-2 ~> Pa]
   integer :: i, j
 
   call callTree_enter("wind_forcing_by_data_override, MOM_surface_forcing.F90")
@@ -891,24 +893,24 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   enddo ; enddo
 
   if (CS%read_gust_2d) then
-    call data_override(G%Domain, 'gust', CS%gust, day, scale=US%Pa_to_RLZ_T2)
+    call data_override(G%Domain, 'gust', CS%gust, day, scale=US%Pa_to_RLZ_T2*US%L_to_Z)
     if (associated(forces%tau_mag)) then ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      forces%tau_mag(i,j) = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
+      forces%tau_mag(i,j) = US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
     enddo ; enddo ; endif
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      tau_mag = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
-      ustar_loc(i,j) = sqrt( tau_mag * US%L_to_Z / CS%Rho0 )
+      tau_mag = US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust(i,j)
+      ustar_loc(i,j) = sqrt( tau_mag / CS%Rho0 )
     enddo ; enddo
   else
     if (associated(forces%tau_mag)) then
       do j=G%jsc,G%jec ; do i=G%isc,G%iec
-        forces%tau_mag(i,j) = sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust_const
-      ! ustar_loc(i,j) = sqrt( forces%tau_mag(i,j) * US%L_to_Z / CS%Rho0 )
+        forces%tau_mag(i,j) = US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2)) + CS%gust_const
+      ! ustar_loc(i,j) = sqrt( forces%tau_mag(i,j) / CS%Rho0 )
       enddo ; enddo
     endif
     do j=G%jsc,G%jec ; do i=G%isc,G%iec
-      ustar_loc(i,j) = sqrt(US%L_to_Z * (sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))/CS%Rho0 + &
-                            CS%gust_const/CS%Rho0))
+      ustar_loc(i,j) = sqrt(US%L_to_Z * sqrt((temp_x(i,j)**2) + (temp_y(i,j)**2))/CS%Rho0 + &
+                            CS%gust_const/CS%Rho0)
     enddo ; enddo
   endif
 
@@ -919,7 +921,7 @@ subroutine wind_forcing_by_data_override(sfc_state, forces, day, G, US, CS)
   ! Only reset values where data override of ustar has occurred
   if (associated(forces%tau_mag)) then
     do j=G%jsc,G%jec ; do i=G%isc,G%iec ; if (ustar_prev(i,j) /= ustar_loc(i,j)) then
-      forces%tau_mag(i,j) = US%Z_to_L * CS%Rho0 * ustar_loc(i,j)**2
+      forces%tau_mag(i,j) = CS%Rho0 * ustar_loc(i,j)**2
     endif ; enddo ; enddo
   endif
 
@@ -940,38 +942,37 @@ subroutine stresses_to_ustar(forces, G, US, CS)
   type(surface_forcing_CS), pointer       :: CS     !< pointer to control structure returned by
                                                     !! a previous surface_forcing_init call
   ! Local variables
-  real :: I_rho         ! The inverse of the reference density times a ratio of scaling
-                        ! factors [Z L-1 R-1 ~> m3 kg-1]
+  real :: I_rho         ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1]
   real :: tau_mag       ! The magnitude of the wind stress including any contributions from
-                        ! sub-gridscale variability or gustiness [R L Z T-2 ~> Pa]
+                        ! sub-gridscale variability or gustiness [R Z2 T-2 ~> Pa]
   integer :: i, j, is, ie, js, je
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
-  I_rho = US%L_to_Z / CS%Rho0
+  I_rho = 1.0 / CS%Rho0
 
   if (CS%read_gust_2d) then
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = CS%gust(i,j) + &
-              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+              US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                    ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       tau_mag = CS%gust(i,j) + &
-              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+              US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                    ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
       forces%ustar(i,j) = sqrt( tau_mag * I_rho )
     enddo ; enddo ; endif
   else
     if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
       forces%tau_mag(i,j) = CS%gust_const + &
-              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+              US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                    ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
     enddo ; enddo ; endif
     if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
       tau_mag = CS%gust_const + &
-              sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
-                        ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
+              US%L_to_Z * sqrt(0.5*(((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)) + &
+                                    ((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2))))
       forces%ustar(i,j) = sqrt( tau_mag * I_rho )
     enddo ; enddo ; endif
   endif
@@ -1004,11 +1005,9 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
 
   real :: rhoXcp ! reference density times heat capacity [Q R C-1 ~> J m-3 degC-1]
 
-  integer :: time_lev_daily     ! time levels to read for fields with daily cycle
-  integer :: time_lev_monthly   ! time levels to read for fields with monthly cycle
+  logical :: fluxes_changed     ! True if any of the fluxes might have been altered
   integer :: time_lev           ! time level that for a field
 
-  integer :: days, seconds
   integer :: i, j, is, ie, js, je
 
   call callTree_enter("buoyancy_forcing_from_files, MOM_surface_forcing.F90")
@@ -1018,35 +1017,11 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
   if (CS%use_temperature) rhoXcp = CS%rho_restore * fluxes%C_p
 
   ! Read the buoyancy forcing file
-  call get_time(day, seconds, days)
+  fluxes_changed = .false.
 
-  time_lev_daily = days - 365*floor(real(days) / 365.0)
-
-  if (time_lev_daily < 31) then ; time_lev_monthly = 0
-  elseif (time_lev_daily < 59)  then ; time_lev_monthly = 1
-  elseif (time_lev_daily < 90)  then ; time_lev_monthly = 2
-  elseif (time_lev_daily < 120) then ; time_lev_monthly = 3
-  elseif (time_lev_daily < 151) then ; time_lev_monthly = 4
-  elseif (time_lev_daily < 181) then ; time_lev_monthly = 5
-  elseif (time_lev_daily < 212) then ; time_lev_monthly = 6
-  elseif (time_lev_daily < 243) then ; time_lev_monthly = 7
-  elseif (time_lev_daily < 273) then ; time_lev_monthly = 8
-  elseif (time_lev_daily < 304) then ; time_lev_monthly = 9
-  elseif (time_lev_daily < 334) then ; time_lev_monthly = 10
-  else ; time_lev_monthly = 11
-  endif
-
-  time_lev_daily   = time_lev_daily  +1
-  time_lev_monthly = time_lev_monthly+1
-
-  if (time_lev_daily /= CS%buoy_last_lev_read) then
-
-    ! longwave
-    select case (CS%LW_nlev)
-      case (12)    ; time_lev = time_lev_monthly
-      case (365)   ; time_lev = time_lev_daily
-      case default ; time_lev = 1
-    end select
+  ! longwave
+  time_lev = get_file_time_level(day, CS%LW_nlev, CS%LW_days_per_rec)
+  if (time_lev /= CS%LW_last_lev) then
     call MOM_read_data(CS%longwave_file, CS%LW_var, fluxes%lw(:,:), &
                        G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     if (CS%archaic_OMIP_file) then
@@ -1054,14 +1029,13 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
                          timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
       do j=js,je ; do i=is,ie ; fluxes%LW(i,j) = fluxes%LW(i,j) - temp(i,j) ; enddo ; enddo
     endif
-    CS%LW_last_lev = time_lev
+    CS%LW_last_lev = time_lev ; fluxes_changed = .true.
+  endif
 
-    ! evaporation
-    select case (CS%evap_nlev)
-      case (12)    ; time_lev = time_lev_monthly
-      case (365)   ; time_lev = time_lev_daily
-      case default ; time_lev = 1
-    end select
+  ! evaporation
+  if ( (CS%evap_nlev /= CS%LW_nlev) .or. (CS%evap_days_per_rec /= CS%LW_days_per_rec) ) &
+    time_lev = get_file_time_level(day, CS%evap_nlev, CS%evap_days_per_rec)
+  if (time_lev /= CS%evap_last_lev) then
     if (CS%archaic_OMIP_file) then
       call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
                      G%Domain, timelevel=time_lev, scale=-US%kg_m2s_to_RZ_T)
@@ -1073,13 +1047,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_read_data(CS%evaporation_file, CS%evap_var, fluxes%evap(:,:), &
                      G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T)
     endif
-    CS%evap_last_lev = time_lev
+    CS%evap_last_lev = time_lev ; fluxes_changed = .true.
+  endif
 
-    select case (CS%latent_nlev)
-      case (12)    ; time_lev = time_lev_monthly
-      case (365)   ; time_lev = time_lev_daily
-      case default ; time_lev = 1
-    end select
+  if ( (CS%latent_nlev /= CS%evap_nlev) .or. (CS%latent_days_per_rec /= CS%evap_days_per_rec) ) &
+    time_lev = get_file_time_level(day, CS%latent_nlev, CS%latent_days_per_rec)
+  if (time_lev /= CS%latent_last_lev) then
     if (.not.CS%archaic_OMIP_file) then
       call MOM_read_data(CS%latentheat_file, CS%latent_var, fluxes%latent(:,:), &
                      G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
@@ -1087,13 +1060,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
         fluxes%latent_evap_diag(i,j) = fluxes%latent(i,j)
       enddo ; enddo
     endif
-    CS%latent_last_lev = time_lev
+    CS%latent_last_lev = time_lev ; fluxes_changed = .true.
+  endif
 
-    select case (CS%sens_nlev)
-      case (12)    ; time_lev = time_lev_monthly
-      case (365)   ; time_lev = time_lev_daily
-      case default ; time_lev = 1
-    end select
+  if ( (CS%sens_nlev /= CS%latent_nlev) .or. (CS%sens_days_per_rec /= CS%latent_days_per_rec) )  &
+    time_lev = get_file_time_level(day, CS%sens_nlev, CS%sens_days_per_rec)
+  if (time_lev /= CS%sens_last_lev) then
     if (CS%archaic_OMIP_file) then
       call MOM_read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
                      G%Domain, timelevel=time_lev, scale=-US%W_m2_to_QRZ_T)
@@ -1101,13 +1073,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_read_data(CS%sensibleheat_file, CS%sens_var, fluxes%sens(:,:), &
                      G%Domain, timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     endif
-    CS%sens_last_lev = time_lev
+    CS%sens_last_lev = time_lev ; fluxes_changed = .true.
+  endif
 
-    select case (CS%SW_nlev)
-      case (12)    ; time_lev = time_lev_monthly
-      case (365)   ; time_lev = time_lev_daily
-      case default ; time_lev = 1
-    end select
+  if ( (CS%SW_nlev /= CS%sens_nlev) .or. (CS%SW_days_per_rec /= CS%sens_days_per_rec) )  &
+    time_lev = get_file_time_level(day, CS%SW_nlev, CS%SW_days_per_rec)
+  if (time_lev /= CS%SW_last_lev) then
     call MOM_read_data(CS%shortwave_file, CS%SW_var, fluxes%sw(:,:), G%Domain, &
                        timelevel=time_lev, scale=US%W_m2_to_QRZ_T)
     if (CS%archaic_OMIP_file) then
@@ -1117,13 +1088,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
         fluxes%sw(i,j) = fluxes%sw(i,j) - temp(i,j)
       enddo ; enddo
     endif
-    CS%SW_last_lev = time_lev
+    CS%SW_last_lev = time_lev ; fluxes_changed = .true.
+  endif
 
-    select case (CS%precip_nlev)
-      case (12)    ; time_lev = time_lev_monthly
-      case (365)   ; time_lev = time_lev_daily
-      case default ; time_lev = 1
-    end select
+  if ( (CS%precip_nlev /= CS%SW_nlev) .or. (CS%precip_days_per_rec /= CS%SW_days_per_rec) )  &
+    time_lev = get_file_time_level(day, CS%precip_nlev, CS%precip_days_per_rec)
+  if (time_lev /= CS%precip_last_lev) then
     call MOM_read_data(CS%snow_file, CS%snow_var, &
              fluxes%fprec(:,:), G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T)
     call MOM_read_data(CS%rain_file, CS%rain_var, &
@@ -1133,13 +1103,12 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
         fluxes%lprec(i,j) = fluxes%lprec(i,j) - fluxes%fprec(i,j)
       enddo ; enddo
     endif
-    CS%precip_last_lev = time_lev
+    CS%precip_last_lev = time_lev ; fluxes_changed = .true.
+  endif
 
-    select case (CS%runoff_nlev)
-      case (12)    ; time_lev = time_lev_monthly
-      case (365)   ; time_lev = time_lev_daily
-      case default ; time_lev = 1
-    end select
+  if ( (CS%runoff_nlev /= CS%precip_nlev) .or. (CS%runoff_days_per_rec /= CS%precip_days_per_rec) )  &
+    time_lev = get_file_time_level(day, CS%runoff_nlev, CS%runoff_days_per_rec)
+  if (time_lev /= CS%runoff_last_lev) then
     if (CS%archaic_OMIP_file) then
       call MOM_read_data(CS%runoff_file, CS%lrunoff_var, temp(:,:), &
                      G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T*US%m_to_L**2)
@@ -1157,30 +1126,28 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       call MOM_read_data(CS%runoff_file, CS%frunoff_var, fluxes%frunoff(:,:), &
                      G%Domain, timelevel=time_lev, scale=US%kg_m2s_to_RZ_T)
     endif
-    CS%runoff_last_lev = time_lev
+    CS%runoff_last_lev = time_lev ; fluxes_changed = .true.
+  endif
 
-!     Read the SST and SSS fields for damping.
-    if (CS%restorebuoy) then !#CTRL# .or. associated(CS%ctrl_forcing_CSp)) then
-      select case (CS%SST_nlev)
-        case (12)    ; time_lev = time_lev_monthly
-        case (365)   ; time_lev = time_lev_daily
-        case default ; time_lev = 1
-      end select
+  !  Read the SST and SSS fields for damping.
+  if (CS%restorebuoy) then !#CTRL# .or. associated(CS%ctrl_forcing_CSp)) then
+    time_lev = get_file_time_level(day, CS%SST_nlev, CS%SST_days_per_rec)
+    if (time_lev /= CS%SST_last_lev) then
       call MOM_read_data(CS%SSTrestore_file, CS%SST_restore_var, &
                CS%T_Restore(:,:), G%Domain, timelevel=time_lev, scale=US%degC_to_C)
       CS%SST_last_lev = time_lev
+    endif
 
-      select case (CS%SSS_nlev)
-        case (12)    ; time_lev = time_lev_monthly
-        case (365)   ; time_lev = time_lev_daily
-        case default ; time_lev = 1
-      end select
+    if ( (CS%SSS_nlev /= CS%SST_nlev) .or. (CS%SSS_days_per_rec /= CS%SST_days_per_rec) )  &
+      time_lev = get_file_time_level(day, CS%SSS_nlev, CS%SSS_days_per_rec)
+    if (time_lev /= CS%SSS_last_lev) then
       call MOM_read_data(CS%salinityrestore_file, CS%SSS_restore_var, &
                CS%S_Restore(:,:), G%Domain, timelevel=time_lev, scale=US%ppt_to_S)
       CS%SSS_last_lev = time_lev
     endif
-    CS%buoy_last_lev_read = time_lev_daily
+  endif
 
+  if (fluxes_changed) then
     ! mask out land points and compute heat content of water fluxes
     ! assume liquid precipitation enters ocean at SST
     ! assume frozen precipitation enters ocean at 0degC
@@ -1202,8 +1169,7 @@ subroutine buoyancy_forcing_from_files(sfc_state, fluxes, day, dt, G, US, CS)
       fluxes%latent_fprec_diag(i,j)    = -fluxes%fprec(i,j)*CS%latent_heat_fusion
       fluxes%latent_frunoff_diag(i,j)  = -fluxes%frunoff(i,j)*CS%latent_heat_fusion
     enddo ; enddo
-
-  endif ! time_lev /= CS%buoy_last_lev_read
+  endif ! fluxes have changed and need to be masked
 
 
   ! restoring surface boundary fluxes
@@ -1550,8 +1516,55 @@ subroutine buoyancy_forcing_linear(sfc_state, fluxes, day, dt, G, US, CS)
   call callTree_leave("buoyancy_forcing_linear")
 end subroutine buoyancy_forcing_linear
 
+!> Return a time record to read from a file based on the model time, the number of time records in
+!! that file and the number of time records per model day.
+function get_file_time_level(Time, nlev_file, days_per_rec) result (time_lev)
+  type(time_type), intent(in) :: Time         !< The time of the fluxes
+  integer ,        intent(in) :: nlev_file    !< The number of time records in a forcing file
+  integer ,        intent(in) :: days_per_rec !< If positive, the number of days spanned by each
+                                              !! time record in a file, if negative the number
+                                              !! time records per day, or if 0 determine this
+                                              !! by guessing based on the number of records in
+                                              !! the file.  If this is 31, the time levels will
+                                              !! be based on the months of the calendar.
+                                              !! Setting this larger than 1000000 will always
+                                              !! cause the time level to be set to 1.
+  integer :: time_lev                !< The time level in a file that will be read.
 
-! Sets the necessary MARBL forcings via the data override facility.
+  ! Local variables
+  integer :: days, seconds           ! The number of days and seconds since the start of the calendar
+  integer :: year, month, day, hour, minute, second ! The components of the model time
+  integer :: recs_per_day            ! The number of file time records per day
+  integer :: recs                    ! The number of time levels into the file to read without
+                                     ! taking the periodicity of the file into account.
+
+  if ( (days_per_rec >= 1000000) .or. &
+       ( (days_per_rec == 0) .and. .not.((nlev_file == 12) .or. (nlev_file == 365)) ) ) then
+    ! The second condition above is to recreate the existing behavior, but it should perhaps be
+    ! phased out.
+    time_lev = 1
+  elseif ( (days_per_rec == 31) .or. ((days_per_rec == 0) .and. (nlev_file == 12)) ) then
+    call get_date(Time, year, month, day, hour, minute, second)
+    time_lev = month
+  else
+    call get_time(Time, seconds, days)
+    if ( (days_per_rec == 0) .or. (abs(days_per_rec) == 1) ) then
+      recs = days
+    elseif (days_per_rec < 0) then
+      recs_per_day = -days_per_rec
+      recs = days * recs_per_day + ( (recs_per_day*set_time(seconds, 0)) / set_time(0, 1) )
+      ! When integer rounding in the time-type arithmetic is considered, the line above is equivalent to:
+      !   seconds_per_day = set_time(0, 1) / set_time(1, 0)
+      !   recs = days * recs_per_day + floor(real(recs_per_day*seconds) / real(seconds_per_day))
+    else
+      recs = days / days_per_rec
+    endif
+    time_lev = recs - nlev_file*floor(real(recs) / real(nlev_file)) + 1
+  endif
+
+end function get_file_time_level
+
+!> Sets the necessary MARBL forcings via the data override facility.
 subroutine MARBL_forcing_from_data_override(fluxes, day, G, US, CS)
   type(forcing),            intent(inout) :: fluxes !< A structure containing thermodynamic forcing fields
   type(time_type),          intent(in)    :: day    !< The time of the fluxes
@@ -1643,7 +1656,6 @@ subroutine MARBL_forcing_from_data_override(fluxes, day, G, US, CS)
   call callTree_leave("MARBL_forcing_from_data_override")
 
 end subroutine MARBL_forcing_from_data_override
-
 
 !> Save a restart file for the forcing fields
 subroutine forcing_save_restart(CS, G, Time, directory, time_stamped, &
@@ -1787,12 +1799,22 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "given by LONGWAVE_FORCING_VAR.", fail_if_missing=.true.)
       call get_param(param_file, mdl, "LONGWAVE_FORCING_VAR", CS%LW_var, &
                  "The variable with the longwave forcing field.", default="LW")
+      call get_param(param_file, mdl, "LONGWAVE_FILE_DAYS_PER_RECORD", CS%LW_days_per_rec, &
+                 "If positive the number of days of longwave fluxes per time level in LONGWAVE_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=0)
 
       call get_param(param_file, mdl, "SHORTWAVE_FILE", CS%shortwave_file, &
                  "The file with the shortwave heat flux, in the variable "//&
                  "given by SHORTWAVE_FORCING_VAR.", fail_if_missing=.true.)
       call get_param(param_file, mdl, "SHORTWAVE_FORCING_VAR", CS%SW_var, &
                  "The variable with the shortwave forcing field.", default="SW")
+      call get_param(param_file, mdl, "SHORTWAVE_FILE_DAYS_PER_RECORD", CS%SW_days_per_rec, &
+                 "If positive the number of days of shortwave fluxes per time level in SHORTWAVE_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=CS%LW_days_per_rec)
 
       call get_param(param_file, mdl, "EVAPORATION_FILE", CS%evaporation_file, &
                  "The file with the evaporative moisture flux, in the "//&
@@ -1800,18 +1822,33 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
       call get_param(param_file, mdl, "EVAP_FORCING_VAR", CS%evap_var, &
                  "The variable with the evaporative moisture flux.", &
                  default="evap")
+      call get_param(param_file, mdl, "EVAPORATION_FILE_DAYS_PER_RECORD", CS%evap_days_per_rec, &
+                 "If positive the number of days of evaporation per time level in EVAPORATION_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=CS%LW_days_per_rec)
 
       call get_param(param_file, mdl, "LATENTHEAT_FILE", CS%latentheat_file, &
                  "The file with the latent heat flux, in the variable "//&
                  "given by LATENT_FORCING_VAR.", fail_if_missing=.true.)
       call get_param(param_file, mdl, "LATENT_FORCING_VAR", CS%latent_var, &
                  "The variable with the latent heat flux.", default="latent")
+      call get_param(param_file, mdl, "LATENTHEAT_FILE_DAYS_PER_RECORD", CS%latent_days_per_rec, &
+                 "If positive the number of days of latent heat fluxes per time level in LATENTHEAT_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=CS%LW_days_per_rec)
 
       call get_param(param_file, mdl, "SENSIBLEHEAT_FILE", CS%sensibleheat_file, &
                  "The file with the sensible heat flux, in the variable "//&
                  "given by SENSIBLE_FORCING_VAR.", fail_if_missing=.true.)
       call get_param(param_file, mdl, "SENSIBLE_FORCING_VAR", CS%sens_var, &
                  "The variable with the sensible heat flux.", default="sensible")
+      call get_param(param_file, mdl, "SENSIBLEHEAT_FILE_DAYS_PER_RECORD", CS%sens_days_per_rec, &
+                 "If positive the number of days of sensible heat fluxes per time level in SENSIBLEHEAT_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=CS%LW_days_per_rec)
 
       call get_param(param_file, mdl, "RAIN_FILE", CS%rain_file, &
                  "The file with the liquid precipitation flux, in the "//&
@@ -1819,12 +1856,22 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
       call get_param(param_file, mdl, "RAIN_FORCING_VAR", CS%rain_var, &
                  "The variable with the liquid precipitation flux.", &
                  default="liq_precip")
+      call get_param(param_file, mdl, "RAIN_FILE_DAYS_PER_RECORD", CS%precip_days_per_rec, &
+                 "If positive the number of days of rain fluxes per time level in RAIN_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=CS%LW_days_per_rec)
       call get_param(param_file, mdl, "SNOW_FILE", CS%snow_file, &
                  "The file with the frozen precipitation flux, in the "//&
                  "variable given by SNOW_FORCING_VAR.", fail_if_missing=.true.)
       call get_param(param_file, mdl, "SNOW_FORCING_VAR", CS%snow_var, &
                  "The variable with the frozen precipitation flux.", &
                  default="froz_precip")
+      call get_param(param_file, mdl, "SHORTWAVE_FILE_DAYS_PER_RECORD", CS%SW_days_per_rec, &
+                 "If positive the number of days of shortwave fluxes per time level in SHORTWAVE_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=CS%LW_days_per_rec)
 
       call get_param(param_file, mdl, "RUNOFF_FILE", CS%runoff_file, &
                  "The file with the fresh and frozen runoff/calving "//&
@@ -1836,6 +1883,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
       call get_param(param_file, mdl, "FROZ_RUNOFF_FORCING_VAR", CS%frunoff_var, &
                  "The variable with the frozen runoff flux.", &
                  default="froz_runoff")
+      call get_param(param_file, mdl, "RUNOFF_FILE_DAYS_PER_RECORD", CS%SW_days_per_rec, &
+                 "If positive the number of days of runoff per time level in RUNOFF_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=0)
     endif
 
     call get_param(param_file, mdl, "SSTRESTORE_FILE", CS%SSTrestore_file, &
@@ -1851,9 +1903,19 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
       call get_param(param_file, mdl, "SST_RESTORE_VAR", CS%SST_restore_var, &
                  "The variable with the SST toward which to restore.", &
                  default="SST")
+      call get_param(param_file, mdl, "SSTRESTORE_FILE_DAYS_PER_RECORD", CS%SST_days_per_rec, &
+                 "If positive the number of days of SST per time level in SSTRESTORE_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=0)
       call get_param(param_file, mdl, "SSS_RESTORE_VAR", CS%SSS_restore_var, &
                  "The variable with the SSS toward which to restore.", &
                  default="SSS")
+      call get_param(param_file, mdl, "SALINITYRESTORE_FILE_DAYS_PER_RECORD", CS%SSS_days_per_rec, &
+                 "If positive the number of days of salinity per time level in SALINITYRESTORE_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=CS%SST_days_per_rec)
     endif
 
     ! Add inputdir to the file names.
@@ -1882,8 +1944,8 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
   call get_param(param_file, mdl, "WIND_CONFIG", CS%wind_config, &
                  "The character string that indicates how wind forcing is specified.  Valid "//&
                  "options include (file), (data_override), (2gyre), (1gyre), (gyres), (zero), "//&
-                 "(const), (Neverworld), (scurves), (ideal_hurr), (SCM_ideal_hurr), "//&
-                 "(SCM_CVmix_tests) and (USER).", default="zero")
+                 "(const), (Neverworld), (scurves), (ideal_hurr), (SCM_CVmix_tests) and (USER).", &
+                 default="zero")
   if (trim(CS%wind_config) == "file") then
     call get_param(param_file, mdl, "WIND_FILE", CS%wind_file, &
                  "The file in which the wind stresses are found in "//&
@@ -1906,6 +1968,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
                  "or blank to get ustar from the wind stresses plus the "//&
                  "gustiness.", default=" ")
     CS%wind_file = trim(CS%inputdir) // trim(CS%wind_file)
+    call get_param(param_file, mdl, "WIND_FILE_DAYS_PER_RECORD", CS%wind_days_per_rec, &
+                 "If positive the number of days of wind stress per time level in WIND_FILE, "//&
+                 "or if negative the number of time levels per day.  If 31 change forcing monthly, "//&
+                 "or if 0 the model will guess the right value based on the file size.", &
+                 default=0)
   endif
   if (trim(CS%wind_config) == "gyres") then
     call get_param(param_file, mdl, "TAUX_CONST", CS%gyres_taux_const, &
@@ -2039,7 +2106,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
 
   call get_param(param_file, mdl, "GUST_CONST", CS%gust_const, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2)
+                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2*US%L_to_Z)
 
   call get_param(param_file, mdl, "USTAR_GUSTLESS_BUG", CS%ustar_gustless_bug, &
                  "If true include a bug in the time-averaging of the gustless wind friction velocity", &
@@ -2079,7 +2146,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     ! NOTE: There are certain cases where FMS is unable to read this file, so
     ! we use read_netCDF_data in place of MOM_read_data.
     call read_netCDF_data(filename, 'gustiness', CS%gust, G%Domain, &
-                          rescale=US%Pa_to_RLZ_T2) ! units in file should be [Pa]
+                          rescale=US%Pa_to_RLZ_T2*US%L_to_Z) ! units in file should be [Pa]
   endif
   call get_param(param_file, mdl, "USE_MARBL_TRACERS", CS%use_marbl_tracers, &
                   default=.false., do_not_log=.true.)
@@ -2094,9 +2161,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, tracer_flow_C
     call dumbbell_surface_forcing_init(Time, G, US, param_file, diag, CS%dumbbell_forcing_CSp)
   elseif (trim(CS%wind_config) == "MESO" .or. trim(CS%buoy_config) == "MESO" ) then
     call MESO_surface_forcing_init(Time, G, US, param_file, diag, CS%MESO_forcing_CSp)
-  elseif (trim(CS%wind_config) == "ideal_hurr" .or.&
-          trim(CS%wind_config) == "SCM_ideal_hurr") then
+  elseif (trim(CS%wind_config) == "ideal_hurr") then
     call idealized_hurricane_wind_init(Time, G, US, param_file, CS%idealized_hurricane_CSp)
+  elseif (trim(CS%wind_config) == "SCM_ideal_hurr") then
+    call MOM_error(FATAL, "MOM_surface_forcing (surface_forcing_init): "//&
+          'WIND_CONFIG = "SCM_ideal_hurr" is a depricated option.  '//&
+          'To obtain mathematically equivalent results set '//&
+          'WIND_CONFIG = "ideal_hurr", IDL_HURR_SCM = True and IDL_HURR_X0 = 6.48e+05.')
   elseif (trim(CS%wind_config) == "const") then
     call get_param(param_file, mdl, "CONST_WIND_TAUX", CS%tau_x0, &
                  "With wind_config const, this is the constant zonal wind-stress", &

@@ -143,10 +143,13 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
                  "for vertical remapping for all variables. "//&
                  "It can be one of the following schemes: "//&
                  trim(remappingSchemesDoc), default=remappingDefaultScheme)
+  call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 do_not_log=.true., default=.true.)
+
   call get_param(param_file, mdl, "HBD_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  "If true, use the OM4 remapping-via-subcells algorithm for horizontal boundary diffusion. "//&
                  "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
-                 "We recommend setting this option to false.", default=.true.)
+                 "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
 
   ! GMM, TODO: add HBD params to control optional arguments in initialize_remapping.
   call initialize_remapping( CS%remap_CS, string, boundary_extrapolation=boundary_extrap, &
@@ -414,7 +417,7 @@ subroutine hbd_grid(boundary, G, GV, hbl, h, CS)
 
 end subroutine hbd_grid
 
-!> Calculate the harmonic mean of two quantities
+!> Calculate the harmonic mean of two quantities [arbitrary]
 !! See \ref section_harmonic_mean.
 real function harmonic_mean(h1,h2)
   real :: h1 !< Scalar quantity [arbitrary]

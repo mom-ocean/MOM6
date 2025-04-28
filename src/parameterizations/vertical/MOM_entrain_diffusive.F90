@@ -841,9 +841,9 @@ subroutine entrainment_diffusive(h, tv, fluxes, dt, G, GV, US, CS, ea, eb, &
 
     if (CS%id_diff_work > 0) then
       if (GV%Boussinesq .or. .not.associated(tv%eqn_of_state)) then
-        g_2dt = 0.5 * GV%H_to_Z**2 * US%L_to_Z**2 * (GV%g_Earth / dt)
+        g_2dt = 0.5 * GV%H_to_Z**2 * (GV%g_Earth_Z_T2 / dt)
       else
-        g_2dt = 0.5 * GV%H_to_RZ**2 * US%L_to_Z**2 * (GV%g_Earth / dt)
+        g_2dt = 0.5 * GV%H_to_RZ**2 * (GV%g_Earth_Z_T2 / dt)
       endif
       do i=is,ie ; diff_work(i,j,1) = 0.0 ; diff_work(i,j,nz+1) = 0.0 ; enddo
       if (associated(tv%eqn_of_state)) then

@@ -49,10 +49,11 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
   real :: min_depth  ! The minimum ocean depth [Z ~> m]
   real :: shelf_depth ! The ocean depth on the shelf in the DOME configuration [Z ~> m]
   real :: slope      ! The bottom slope in the DOME configuration [Z L-1 ~> nondim]
-  real :: shelf_edge_lat ! The latitude of the edge of the topographic shelf [km]
-  real :: inflow_lon ! The edge longitude of the DOME inflow [km]
-  real :: inflow_width ! The longitudinal width of the DOME inflow channel [km]
-  real :: km_to_L    ! The conversion factor from the units of latitude to L [L km-1 ~> 1e3]
+  real :: shelf_edge_lat ! The latitude of the edge of the topographic shelf in the same units as geolat, often [km]
+  real :: inflow_lon ! The edge longitude of the DOME inflow in the same units as geolon, often [km]
+  real :: inflow_width ! The longitudinal width of the DOME inflow channel in the same units as geolat, often [km]
+  real :: km_to_grid_unit ! The conversion factor from km to the units of latitude often 1 [nondim],
+                          ! but this could be 1000 [m km-1]
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "DOME_initialize_topography" ! This subroutine's name.
@@ -60,7 +61,16 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  km_to_L = 1.0e3*US%m_to_L
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "DOME_initialization: "//&
+          "DOME_initialize_topography is only set to work with Cartesian axis units.")
+  if (abs(G%grid_unit_to_L*US%L_to_m - 1000.0) < 1.0e-3) then ! The grid latitudes are in km.
+    km_to_grid_unit = 1.0
+  elseif (abs(G%grid_unit_to_L*US%L_to_m - 1.0) < 1.0e-6) then ! The grid latitudes are in m.
+    km_to_grid_unit = 1000.0
+  else
+    call MOM_error(FATAL, "DOME_initialization: "//&
+          "DOME_initialize_topography is not recognizing the value of G%grid_unit_to_L.")
+  endif
 
   call MOM_mesg("  DOME_initialization.F90, DOME_initialize_topography: setting topography", 5)
 
@@ -75,15 +85,16 @@ subroutine DOME_initialize_topography(D, G, param_file, max_depth, US)
                  default=600.0, units="m", scale=US%m_to_Z)
   call get_param(param_file, mdl, "DOME_SHELF_EDGE_LAT", shelf_edge_lat, &
                  "The latitude of the shelf edge in the DOME configuration.", &
-                 default=600.0, units="km")
+                 default=600.0, units="km", scale=km_to_grid_unit)
   call get_param(param_file, mdl, "DOME_INFLOW_LON", inflow_lon, &
-                 "The edge longitude of the DOME inflow.", units="km", default=1000.0)
+                 "The edge longitude of the DOME inflow.", units="km", default=1000.0, scale=km_to_grid_unit)
   call get_param(param_file, mdl, "DOME_INFLOW_WIDTH", inflow_width, &
-                 "The longitudinal width of the DOME inflow channel.", units="km", default=100.0)
+                 "The longitudinal width of the DOME inflow channel.", &
+                 units="km", default=100.0, scale=km_to_grid_unit)
 
   do j=js,je ; do i=is,ie
     if (G%geoLatT(i,j) < shelf_edge_lat) then
-      D(i,j) = min(shelf_depth - slope * (G%geoLatT(i,j)-shelf_edge_lat)*km_to_L, max_depth)
+      D(i,j) = min(shelf_depth - slope * (G%geoLatT(i,j)-shelf_edge_lat)*G%grid_unit_to_L, max_depth)
     else
       if ((G%geoLonT(i,j) > inflow_lon) .AND. (G%geoLonT(i,j) < inflow_lon+inflow_width)) then
         D(i,j) = shelf_depth
@@ -177,7 +188,6 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
   real :: min_depth    ! The minimum depth at which to apply damping [Z ~> m]
   real :: damp_W, damp_E ! Damping rates in the western and eastern sponges [T-1 ~> s-1]
   real :: peak_damping ! The maximum sponge damping rates as the edges [T-1 ~> s-1]
-  real :: km_to_L      ! The conversion factor from the units of longitude to L [L km-1 ~> 1e3]
   real :: edge_dist    ! The distance to an edge [L ~> m]
   real :: sponge_width ! The width of the sponges [L ~> m]
   character(len=40)  :: mdl = "DOME_initialize_sponges" ! This subroutine's name.
@@ -186,7 +196,8 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
-  km_to_L = 1.0e3*US%m_to_L
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "DOME_initialization: "//&
+          "DOME_initialize_sponges is only set to work with Cartesian axis units.")
 
   !   Set up sponges for the DOME configuration
   call get_param(PF, mdl, "MINIMUM_DEPTH", min_depth, &
@@ -196,7 +207,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
                  default=10.0, units="day-1", scale=1.0/(86400.0*US%s_to_T))
   call get_param(PF, mdl, "DOME_SPONGE_WIDTH", sponge_width, &
                  "The width of the the DOME sponges.", &
-                 default=200.0, units="km", scale=km_to_L)
+                 default=200.0, units="km", scale=1.0e3*US%m_to_L)
 
   ! Here the inverse damping time [T-1 ~> s-1], is set. Set Idamp to 0 wherever
   ! there is no sponge, and the subroutines that are called will automatically
@@ -204,7 +215,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
 
   Idamp(:,:) = 0.0
   do j=js,je ; do i=is,ie ; if (depth_tot(i,j) > min_depth) then
-    edge_dist = (G%geoLonT(i,j) - G%west_lon) * km_to_L
+    edge_dist = (G%geoLonT(i,j) - G%west_lon) * G%grid_unit_to_L
     if (edge_dist < 0.5*sponge_width) then
       damp_W = peak_damping
     elseif (edge_dist < sponge_width) then
@@ -213,7 +224,7 @@ subroutine DOME_initialize_sponges(G, GV, US, tv, depth_tot, PF, CSp)
       damp_W = 0.0
     endif
 
-    edge_dist = ((G%len_lon + G%west_lon) - G%geoLonT(i,j)) * km_to_L
+    edge_dist = ((G%len_lon + G%west_lon) - G%geoLonT(i,j)) * G%grid_unit_to_L
     if (edge_dist < 0.5*sponge_width) then
       damp_E = peak_damping
     elseif (edge_dist < sponge_width) then
@@ -328,10 +339,12 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
                             ! properties [T-1 ~> s-1]
   real :: g_prime_tot       ! The reduced gravity across all layers [L2 Z-1 T-2 ~> m s-2]
   real :: Def_Rad           ! The deformation radius, based on fluid of thickness D_edge [L ~> m]
-  real :: inflow_lon        ! The edge longitude of the DOME inflow [km]
+  real :: inflow_lon        ! The edge longitude of the DOME inflow in the same units as geolon, often [km]
   real :: I_Def_Rad         ! The inverse of the deformation radius in the same units as G%geoLon [km-1]
   real :: Ri_trans          ! The shear Richardson number in the transition
                             ! region of the specified shear profile [nondim]
+  real :: km_to_grid_unit   ! The conversion factor from km to the units of latitude often 1 [nondim],
+                            ! but this could be 1000 [m km-1]
   character(len=32)  :: name ! The name of a tracer field.
   character(len=40)  :: mdl = "DOME_set_OBC_data" ! This subroutine's name.
   integer :: i, j, k, itt, is, ie, js, je, isd, ied, jsd, jed, m, nz, ntherm, ntr_id
@@ -342,6 +355,17 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "DOME_initialization: "//&
+          "DOME_initialize_topography is only set to work with Cartesian axis units.")
+  if (abs(G%grid_unit_to_L*US%L_to_m - 1000.0) < 1.0e-3) then ! The grid latitudes are in km.
+    km_to_grid_unit = 1.0
+  elseif (abs(G%grid_unit_to_L*US%L_to_m - 1.0) < 1.0e-6) then ! The grid latitudes are in m.
+    km_to_grid_unit = 1000.0
+  else
+    call MOM_error(FATAL, "DOME_initialization: "//&
+          "DOME_initialize_topography is not recognizing the value of G%grid_unit_to_L.")
+  endif
 
   call get_param(PF, mdl, "DOME_INFLOW_THICKNESS", D_edge, &
                  "The thickness of the dense DOME inflow at the inner edge.", &
@@ -362,7 +386,7 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
                  "The value of the Coriolis parameter that is used to determine the DOME "//&
                  "inflow properties.", units="s-1", default=f_0*US%s_to_T, scale=US%T_to_s)
   call get_param(PF, mdl, "DOME_INFLOW_LON", inflow_lon, &
-                 "The edge longitude of the DOME inflow.", units="km", default=1000.0)
+                 "The edge longitude of the DOME inflow.", units="km", default=1000.0, scale=km_to_grid_unit)
   if (associated(tv%S) .or. associated(tv%T)) then
     call get_param(PF, mdl, "S_REF", S_ref, &
                  units="ppt", default=35.0, scale=US%ppt_to_S, do_not_log=.true.)
@@ -383,7 +407,9 @@ subroutine DOME_set_OBC_data(OBC, tv, G, GV, US, PF, tr_Reg)
     tr_0 = (-D_edge*sqrt(D_edge*g_prime_tot)*0.5*Def_Rad) * (Rlay_Ref + 0.5*Rlay_range) * GV%RZ_to_H
   endif
 
-  I_Def_Rad = 1.0 / (1.0e-3*US%L_to_m*Def_Rad)
+  I_Def_Rad = 1.0 / ((1.0e-3*US%L_to_m*km_to_grid_unit) * Def_Rad)
+  ! This is mathematically equivalent to
+  ! I_Def_Rad = G%grid_unit_to_L / Def_Rad
 
   if (OBC%number_of_segments /= 1) then
     call MOM_error(WARNING, 'Error in DOME OBC segment setup', .true.)

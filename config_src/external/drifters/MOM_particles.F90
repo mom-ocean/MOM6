@@ -28,7 +28,7 @@ subroutine particles_init(parts, Grid, Time, dt, u, v, h)
 end subroutine particles_init
 
 !> The main driver the steps updates particles
-subroutine particles_run(parts, time, uo, vo, ho, tv, use_uh, stagger)
+subroutine particles_run(parts, time, uo, vo, ho, tv, dt_adv, use_uh)
   ! Arguments
   type(particles), pointer :: parts !< Container for all types and memory
   type(time_type), intent(in) :: time !< Model time
@@ -40,8 +40,8 @@ subroutine particles_run(parts, time, uo, vo, ho, tv, use_uh, stagger)
                                            !! that are used to advect tracers [H L2 ~> m3 or kg]
   real, dimension(:,:,:), intent(in) :: ho !< Ocean layer thickness [H ~> m or kg m-2]
   type(thermo_var_ptrs),  intent(in) :: tv !< structure containing pointers to available thermodynamic fields
+  real, intent(in) :: dt_adv !< timestep for advecting particles [s]
   logical :: use_uh !< Flag for whether u and v are weighted by thickness
-  integer, optional, intent(in) :: stagger !< Flag for whether velocities are staggered
 
 end subroutine particles_run
 

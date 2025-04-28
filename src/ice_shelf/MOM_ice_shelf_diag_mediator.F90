@@ -132,6 +132,7 @@ subroutine set_IS_axes_info(G, param_file, diag_cs, axes_set_name)
 
   G%x_axis_units = "degrees_E" ; G%y_axis_units = "degrees_N"
   G%x_ax_unit_short = "degrees_E" ; G%y_ax_unit_short = "degrees_N"
+  G%grid_unit_to_L = 0.0
 
   if (index(lowercase(trim(grid_config)),"cartesian") > 0) then
     ! This is a cartesian grid, and may have different axis units.
@@ -145,9 +146,11 @@ subroutine set_IS_axes_info(G, param_file, diag_cs, axes_set_name)
     if (units_temp(1:1) == 'k') then
       G%x_axis_units = "kilometers" ; G%y_axis_units = "kilometers"
       G%x_ax_unit_short = "km" ; G%y_ax_unit_short = "km"
+      G%grid_unit_to_L = 1000.0*diag_cs%US%m_to_L
     elseif (units_temp(1:1) == 'm') then
       G%x_axis_units = "meters" ; G%y_axis_units = "meters"
       G%x_ax_unit_short = "m" ; G%y_ax_unit_short = "m"
+      G%grid_unit_to_L = diag_cs%US%m_to_L
     endif
     call log_param(param_file, mdl, "explicit AXIS_UNITS", G%x_axis_units)
   else

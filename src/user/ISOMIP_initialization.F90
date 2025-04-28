@@ -59,7 +59,6 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
   real :: ly              ! domain width (across ice flow) [L ~> m]
   real :: bx, by          ! The x- and y- contributions to the bathymetric profiles at a point [Z ~> m]
   real :: xtil            ! x-positon normalized by the characteristic along-flow length scale [nondim]
-  real :: km_to_L         ! The conversion factor from the axis units to L [L km-1 ~> 1e3]
   logical :: is_2D        ! If true, use a 2D setup
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -93,7 +92,8 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
                  "Characteristic width of the side walls of the channel in the ISOMIP configuration.", &
                  units="m", default=4.0e3, scale=US%m_to_L)
 
-  km_to_L = 1.0e3*US%m_to_L
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "ISOMIP_initialization.F90: " //&
+          "ISOMIP_initialize_topography is only set to work with Cartesian axis units.")
 
   ! The following variables should be transformed into runtime parameters.
   b0 = -150.0*US%m_to_Z ; b2 = -728.8*US%m_to_Z ; b4 = 343.91*US%m_to_Z ; b6 = -50.57*US%m_to_Z
@@ -101,8 +101,8 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
   if (is_2D) then
     do j=js,je ; do i=is,ie
       ! For the 2D setup take a slice through the middle of the domain
-      xtil = G%geoLonT(i,j)*km_to_L / xbar
-      !xtil = 450.*km_to_L / xbar
+      xtil = G%geoLonT(i,j)*G%grid_unit_to_L / xbar
+      ! xtil = 450.0e3*US%m_to_L / xbar
       bx = b0 + b2*xtil**2 + b4*xtil**4 + b6*xtil**6
 
       by = 2.0 * dc / (1.0 + exp(2.0*wc / fc))
@@ -117,17 +117,17 @@ subroutine ISOMIP_initialize_topography(D, G, param_file, max_depth, US)
       ! 3D setup
       ! ===== TEST =====
       !if (G%geoLonT(i,j)<500.) then
-      !  xtil = 500.*km_to_L / xbar
+      !  xtil = 500.0e3*US%m_to_L / xbar
       !else
-      !  xtil = G%geoLonT(i,j)*km_to_L / xbar
+      !  xtil = G%geoLonT(i,j)*G%grid_unit_to_L / xbar
       !endif
       ! ===== TEST =====
 
-      xtil = G%geoLonT(i,j)*km_to_L / xbar
+      xtil = G%geoLonT(i,j)*G%grid_unit_to_L / xbar
 
       bx = b0 + b2*xtil**2 + b4*xtil**4 + b6*xtil**6
-      by = (dc / (1.0 + exp(-2.*(G%geoLatT(i,j)*km_to_L - 0.5*ly - wc) / fc))) + &
-           (dc / (1.0 + exp(2.*(G%geoLatT(i,j)*km_to_L - 0.5*ly + wc) / fc)))
+      by = (dc / (1.0 + exp(-2.*(G%geoLatT(i,j)*G%grid_unit_to_L - 0.5*ly - wc) / fc))) + &
+           (dc / (1.0 + exp(2.*(G%geoLatT(i,j)*G%grid_unit_to_L - 0.5*ly + wc) / fc)))
 
       D(i,j) = -max(bx+by, -bmax)
       if (D(i,j) > max_depth) D(i,j) = max_depth

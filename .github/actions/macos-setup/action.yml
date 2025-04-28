@@ -26,7 +26,7 @@ runs:
       run: |
         cd .testing
         echo "FCFLAGS_DEBUG = -g -O0 -Wextra -Wno-compare-reals -fbacktrace -fcheck=bounds" >> config.mk
-        echo "FCFLAGS_REPRO = -g -O2 -fbacktrace" >> config.mk
+        echo "FCFLAGS_REPRO = -g -O1 -ffp-contract=off -fbacktrace" >> config.mk
         echo "FCFLAGS_INIT = -finit-real=snan -finit-integer=2147483647 -finit-derived" >> config.mk
         echo "FCFLAGS_FMS = -g -fbacktrace -O0" >> config.mk
         cat config.mk

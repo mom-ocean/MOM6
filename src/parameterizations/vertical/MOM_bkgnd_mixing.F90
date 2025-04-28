@@ -60,7 +60,7 @@ type, public :: bkgnd_mixing_cs ; private
                                     !! twice the Earth's rotation period, used with the
                                     !! Henyey scaling from the mixing [nondim]
   real    :: Henyey_max_lat         !< A latitude poleward of which the Henyey profile
-                                    !! is returned to the minimum diffusivity [degN]
+                                    !! is returned to the minimum diffusivity [degrees_N]
   real    :: prandtl_bkgnd          !< Turbulent Prandtl number used to convert
                                     !! vertical background diffusivity into viscosity [nondim]
   real    :: Kd_tanh_lat_scale      !< A nondimensional scaling for the range of

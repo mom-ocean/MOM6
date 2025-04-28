@@ -73,12 +73,12 @@ subroutine diapyc_energy_req_test(h_3d, dt, tv, G, GV, US, CS, Kd_int)
     Kd, &        ! A column of diapycnal diffusivities at interfaces [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
     h_top, h_bot ! Distances from the top or bottom [H ~> m or kg m-2].
   real :: dz_h_int  ! The ratio of the vertical distances across the layers surrounding an interface
-                 ! over the layer thicknesses [H Z-1 ~> nonodim or kg m-3]
+                 ! over the layer thicknesses [H Z-1 ~> nondim or kg m-3]
   real :: ustar  ! The local friction velocity [Z T-1 ~> m s-1]
   real :: absf   ! The absolute value of the Coriolis parameter [T-1 ~> s-1]
   real :: htot   ! The sum of the thicknesses [H ~> m or kg m-2].
   real :: energy_Kd ! The energy used by diapycnal mixing [R Z L2 T-3 ~> W m-2].
-  real :: tmp1  ! A temporary array [H2 ~> m2 or kg2 m-6]
+  real :: tmp1  ! A temporary array [H2 ~> m2 or kg2 m-4]
   integer :: i, j, k, is, ie, js, je, nz
   logical :: may_print
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -851,7 +851,7 @@ subroutine diapyc_energy_req_calc(h_in, dz_in, T_in, S_in, Kd, energy_Kd, dt, tv
       do K=2,nz
         call calculate_density(0.5*(T0(k-1) + T0(k)), 0.5*(S0(k-1) + S0(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((US%L_to_Z**2*GV%g_Earth) * rho_here / (0.5*(dz_tr(k-1) + dz_tr(k)))) * &
+        N2(K) = (GV%g_Earth_Z_T2 * rho_here / (0.5*(dz_tr(k-1) + dz_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (T0(k-1) - T0(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (S0(k-1) - S0(k)) )
       enddo
@@ -862,7 +862,7 @@ subroutine diapyc_energy_req_calc(h_in, dz_in, T_in, S_in, Kd, energy_Kd, dt, tv
       do K=2,nz
         call calculate_density(0.5*(Tf(k-1) + Tf(k)), 0.5*(Sf(k-1) + Sf(k)), &
                                pres(K), rho_here, tv%eqn_of_state)
-        N2(K) = ((US%L_to_Z**2*GV%g_Earth) * rho_here / (0.5*(dz_tr(k-1) + dz_tr(k)))) * &
+        N2(K) = (GV%g_Earth_Z_T2 * rho_here / (0.5*(dz_tr(k-1) + dz_tr(k)))) * &
                 ( 0.5*(dSV_dT(k-1) + dSV_dT(k)) * (Tf(k-1) - Tf(k)) + &
                   0.5*(dSV_dS(k-1) + dSV_dS(k)) * (Sf(k-1) - Sf(k)) )
       enddo

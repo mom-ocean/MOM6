@@ -273,7 +273,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       if (allocated(MEKE%mom_src)) &
         call hchksum(MEKE%mom_src, 'MEKE mom_src', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%mom_src_bh)) &
-        call hchksum(MEKE%mom_src_bh, 'MEKE mom_src_bh', G%HI, scale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
+        call hchksum(MEKE%mom_src_bh, 'MEKE mom_src_bh', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%GME_snk)) &
         call hchksum(MEKE%GME_snk, 'MEKE GME_snk', G%HI, unscale=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
       if (allocated(MEKE%GM_src)) &
@@ -856,13 +856,13 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
     call time_interp_external(CS%eke_handle, Time, data_eke, scale=US%m_s_to_L_T**2)
     do j=js,je ; do i=is,ie
       MEKE%MEKE(i,j) = data_eke(i,j) * G%mask2dT(i,j)
-    enddo; enddo
+    enddo ; enddo
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, depth_tot, bottomFac2, barotrFac2, LmixScale)
   case(EKE_DBCLIENT)
     call pass_vector(u, v, G%Domain)
     call MEKE_lengthScales(CS, MEKE, G, GV, US, SN_u, SN_v, MEKE%MEKE, depth_tot, bottomFac2, barotrFac2, LmixScale)
     call ML_MEKE_calculate_features(G, GV, US, CS, MEKE%Rd_dx_h, u, v, tv, h, dt, features_array)
-    call predict_MEKE(G, CS, SIZE(h), Time, features_array, MEKE%MEKE)
+    call predict_MEKE(G, US, CS, SIZE(h), Time, features_array, MEKE%MEKE)
   case default
     call MOM_error(FATAL,"Invalid method specified for calculating EKE")
   end select
@@ -1011,7 +1011,7 @@ subroutine MEKE_equilibrium(CS, MEKE, G, GV, US, SN_u, SN_v, drag_rate_visc, I_m
   real :: ldamping  ! The MEKE damping rate [T-1 ~> s-1].
   real :: EKE, EKEmin, EKEmax, EKEerr ! [L2 T-2 ~> m2 s-2]
   real :: resid, ResMin, ResMax ! Residuals [L2 T-3 ~> W kg-1]
-  real :: FatH    ! Coriolis parameter at h points; to compute topographic beta [T-1 ~> s-1]
+  real :: FatH    ! Coriolis parameter at h points, used to compute topographic beta [T-1 ~> s-1]
   real :: beta_topo_x, beta_topo_y    ! Topographic PV gradients in x and y [T-1 L-1 ~> s-1 m-1]
   real :: h_neglect ! A negligible thickness [H ~> m or kg m-2]
   integer :: i, j, is, ie, js, je, n1, n2
@@ -1781,7 +1781,7 @@ subroutine ML_MEKE_init(diag, G, US, Time, param_file, dbcomms_CS, CS)
                  "Filename of the a saved pyTorch model to use", fail_if_missing = .true.)
   call get_param(param_file, mdl, "EKE_MAX", CS%eke_max, &
                  "Maximum value of EKE allowed when inferring EKE", &
-                 units="m2 s-2", default=2., scale=US%L_T_to_m_s**2)
+                 units="m2 s-2", default=2., scale=US%m_s_to_L_T**2)
 
   ! Set the machine learning model
   if (dbcomms_CS%colocated) then
@@ -1866,22 +1866,22 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
 
   ! Calculate various features for used to infer eddy kinetic energy
   ! Linear interpolation to estimate thickness at a velocity points
-  do k=1,nz; do j=js-1,je+1; do i=is-1,ie+1
+  do k=1,nz ; do j=js-1,je+1 ; do i=is-1,ie+1
     h_u(I,j,k) = 0.5*(h(i,j,k)*G%mask2dT(i,j) + h(i+1,j,k)*G%mask2dT(i+1,j)) + GV%Angstrom_H
     h_v(i,J,k) = 0.5*(h(i,j,k)*G%mask2dT(i,j) + h(i,j+1,k)*G%mask2dT(i,j+1)) + GV%Angstrom_H
-  enddo; enddo; enddo;
+  enddo ; enddo ; enddo
   call find_eta(h, tv, G, GV, US, e, halo_size=2)
   ! Note the hard-coded dimenisional constant in the following line.
   call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*1.e-7*GV%m2_s_to_HZ_T, .false., slope_x, slope_y)
   call pass_vector(slope_x, slope_y, G%Domain)
-  do j=js-1,je+1; do i=is-1,ie+1
+  do j=js-1,je+1 ; do i=is-1,ie+1
     slope_x_vert_avg(I,j) = vertical_average_interface(slope_x(i,j,:), h_u(i,j,:), GV%H_subroundoff)
     slope_y_vert_avg(i,J) = vertical_average_interface(slope_y(i,j,:), h_v(i,j,:), GV%H_subroundoff)
-  enddo; enddo
+  enddo ; enddo
   slope_z(:,:) = 0.
 
   call pass_vector(slope_x_vert_avg, slope_y_vert_avg, G%Domain)
-  do j=js,je; do i=is,ie
+  do j=js,je ; do i=is,ie
     ! Calculate weights for interpolation from velocity points to h points
     sum_area = G%areaCu(I-1,j) + G%areaCu(I,j)
     if (sum_area>0.0) then
@@ -1911,7 +1911,7 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
     slope_z(i,j) = sqrt(slope_t*slope_t)
     slope_t = slope_y_vert_avg(i,J)*a_n+slope_y_vert_avg(i,J-1)*a_s
     slope_z(i,j) = 0.5*(slope_z(i,j) + sqrt(slope_t*slope_t))*G%mask2dT(i,j)
-  enddo; enddo
+  enddo ; enddo
   call pass_var(slope_z, G%Domain)
 
   ! Calculate relative vorticity
@@ -1920,11 +1920,11 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
     dudy = ((u(I,j+1,1)*G%dxCu(I,j+1)) - (u(I,j,1)*G%dxCu(I,j)))
     ! Assumed no slip
     rv_z(I,J) = (2.0-G%mask2dBu(I,J)) * (dvdx - dudy) * G%IareaBu(I,J)
-  enddo; enddo
+  enddo ; enddo
   ! Interpolate RV to t-point, revisit this calculation to include metrics
-  do j=js,je; do i=is,ie
+  do j=js,je ; do i=is,ie
     rv_z_t(i,j) = 0.25*(rv_z(i-1,j) + rv_z(i,j) + rv_z(i-1,j-1) + rv_z(i,j-1))
-  enddo; enddo
+  enddo ; enddo
 
 
   ! Construct the feature array
@@ -1941,8 +1941,9 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
 end subroutine ML_MEKE_calculate_features
 
 !> Use the machine learning interface to predict EKE
-subroutine predict_MEKE(G, CS, npts, Time, features_array, MEKE)
+subroutine predict_MEKE(G, US, CS, npts, Time, features_array, MEKE)
   type(ocean_grid_type),                                 intent(inout) :: G  !< Ocean grid
+  type(unit_scale_type),                                 intent(in)    :: US   !< A dimensional unit scaling type
   type(MEKE_CS),                                         intent(in   ) :: CS !< Control structure for MEKE
   integer,                                               intent(in   ) :: npts !< Number of T-grid cells on the local
                                                                                !! domain
@@ -1952,13 +1953,18 @@ subroutine predict_MEKE(G, CS, npts, Time, features_array, MEKE)
                                                                           !! learning inference, with different units
                                                                           !! for the various subarrays [various]
   real, dimension(SZI_(G),SZJ_(G)),                      intent(  out) :: MEKE !< Eddy kinetic energy [L2 T-2 ~> m2 s-2]
+
+  ! Local variables
   integer :: db_return_code
   character(len=255), dimension(1) :: model_out, model_in
   character(len=255) :: time_suffix
-  real(kind=real32), dimension(SIZE(MEKE)) :: MEKE_vec ! A one-dimensional array of eddy kinetic
-                                                       ! energy [L2 T-2 ~> m2 s-2]
-
+  real(kind=real32), dimension(SIZE(MEKE)) :: MEKE_vec ! A one-dimensional array of the natural log of eddy kinetic
+                                                       ! energy in mks units [m2 s-2]
+  real, dimension(size(MEKE,1),size(MEKE,2)) :: ln_MEKE  ! the natural log of eddy kinetic energy
+                                                       ! in mks units [m2 s-2]
+  real, dimension(size(MEKE,1),size(MEKE,2)) :: MEKE_mks  ! The eddy kinetic energy in mks units [m2 s-2]
   integer :: i, j, is, ie, js, je
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 !> Use the database client to call a machine learning model to predict eddy kinetic energy
   call cpu_clock_begin(CS%id_put_tensor)
@@ -1978,21 +1984,30 @@ subroutine predict_MEKE(G, CS, npts, Time, features_array, MEKE)
   db_return_code = CS%client%unpack_tensor( model_out(1), MEKE_vec, shape(MEKE_vec) )
   call cpu_clock_end(CS%id_unpack_tensor)
 
-  !### Does MEKE_vec need to be rescaled from [m2 s-2] to [L2 T-2 ~> m2 s-2] by
-  !    multiplying MEKE_vec by US%m_s_to_L_T**2 here?
-  MEKE = reshape(MEKE_vec, shape(MEKE))
-  do j=js,je; do i=is,ie
-    MEKE(i,j) = MIN(MAX(exp(MEKE(i,j)),0.),CS%eke_max)
-  enddo; enddo
-  call pass_var(MEKE,G%Domain)
+  ln_MEKE = reshape(MEKE_vec, shape(MEKE))
+  ! Zero out the halos.  These will usually be reset by the pass_var in a few lines.
+  MEKE_mks(:,:) = 0.0
+  do j=js,je ; do i=is,ie
+    MEKE_mks(i,j) = MIN(exp(ln_MEKE(i,j)), US%L_T_to_m_s**2*CS%eke_max)
+  enddo ; enddo
+  call pass_var(MEKE_mks, G%Domain, halo=1)
 
   if (CS%online_analysis) then
     write(time_suffix,"(F16.0)") time_type_to_real(Time)
-    db_return_code = CS%client%put_tensor(trim("EKE_")//trim(adjustl(time_suffix))//CS%key_suffix, MEKE, shape(MEKE))
+    db_return_code = CS%client%put_tensor(trim("EKE_")//trim(adjustl(time_suffix))//CS%key_suffix, &
+                                          MEKE_mks, shape(MEKE))
   endif
+
+  ! Copy MEKE_mks into the argument in rescaled units.
+  ! MEKE(:,:) = 0.0  ! This would fill in the wider halos of this intent(out) array.
+  do j=js-1,je+1 ; do i=is-1,ie+1
+    MEKE(i,j) = US%m_s_to_L_T**2 * MEKE_mks(i,j)
+  enddo ; enddo
+
 end subroutine predict_MEKE
 
-!> Compute average of interface quantities weighted by the thickness of the surrounding layers
+!> Compute average of interface quantities weighted by the thickness of the surrounding
+!! layers [arbitrary]
 real function vertical_average_interface(h, w, h_min)
 
   real, dimension(:), intent(in) :: h  !< Layer Thicknesses [H ~> m or kg m-2]
@@ -2034,7 +2049,7 @@ subroutine MEKE_alloc_register_restart(HI, US, param_file, MEKE, restart_CS)
   integer :: isd, ied, jsd, jed
 
 ! Determine whether this module will be used
-  useMEKE = .false.; call read_param(param_file,"USE_MEKE",useMEKE)
+  useMEKE = .false. ; call read_param(param_file,"USE_MEKE",useMEKE)
 
 ! Read these parameters to determine what should be in the restarts
   MEKE_GMcoeff = -1. ; call read_param(param_file,"MEKE_GMCOEFF",MEKE_GMcoeff)

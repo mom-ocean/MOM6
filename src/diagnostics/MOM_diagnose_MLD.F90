@@ -30,7 +30,8 @@ contains
 !> Diagnose a mixed layer depth (MLD) determined by a given density difference with the surface.
 !> This routine is appropriate in MOM_diabatic_aux due to its position within the time stepping.
 subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US, diagPtr, &
-                                          ref_h_mld, id_ref_z, id_ref_rho, id_N2subML, id_MLDsq, dz_subML)
+                                          ref_h_mld, id_ref_z, id_ref_rho, id_N2subML, id_MLDsq, &
+                                          dz_subML, MLD_out)
   type(ocean_grid_type),   intent(in) :: G           !< Grid type
   type(verticalGrid_type), intent(in) :: GV          !< ocean vertical grid structure
   type(unit_scale_type),   intent(in) :: US          !< A dimensional unit scaling type
@@ -48,6 +49,8 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   integer,       optional, intent(in) :: id_MLDsq    !< Optional handle (ID) of squared MLD
   real,          optional, intent(in) :: dz_subML    !< The distance over which to calculate N2subML
                                                      !! or 50 m if missing [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+              optional, intent(out)   :: MLD_out     !< Send MLD to other routines [Z ~> m]
 
   ! Local variables
   real, dimension(SZI_(G)) :: deltaRhoAtKm1, deltaRhoAtK ! Density differences [R ~> kg m-3].
@@ -93,7 +96,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
     endif
   endif
 
-  gE_rho0 = (US%L_to_Z**2 * GV%g_Earth) / GV%H_to_RZ
+  gE_rho0 = GV%g_Earth_Z_T2 / GV%H_to_RZ
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -234,11 +237,16 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   if ((id_ref_z > 0) .and. (pRef_MLD(is)/=0.)) call post_data(id_ref_z, z_ref_diag , diagPtr)
   if (id_ref_rho > 0) call post_data(id_ref_rho, rhoSurf_2d , diagPtr)
 
+  if (present(MLD_out)) then
+    MLD_out(:,:) = 0.0
+    MLD_out(is:ie,js:je) = MLD(is:ie,js:je)
+  endif
+
 end subroutine diagnoseMLDbyDensityDifference
 
 !> Diagnose a mixed layer depth (MLD) determined by the depth a given energy value would mix.
 !> This routine is appropriate in MOM_diabatic_aux due to its position within the time stepping.
-subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
+subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr, MLD_out)
   ! Author: Brandon Reichl
   ! Date: October 2, 2020
   ! //
@@ -270,6 +278,8 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
                                                      !! available thermodynamic fields.
   type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
+  real, dimension(SZI_(G),SZJ_(G)), &
+              optional, intent(out)   :: MLD_out     !< Send MLD to other routines [Z ~> m]
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),3) :: MLD  ! Diagnosed mixed layer depth [Z ~> m].
@@ -322,10 +332,8 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   PE_Threshold_fraction = 1.e-4 !Fixed threshold of 0.01%, could be runtime.
 
   do iM=1,3
-    PE_threshold(iM) = Mixing_Energy(iM) / (US%L_to_Z**2*GV%g_Earth)
+    PE_threshold(iM) = Mixing_Energy(iM) / GV%g_Earth_Z_T2
   enddo
-
-  MLD(:,:,:) = 0.0
 
   EOSdom(:) = EOS_domain(G%HI)
 
@@ -466,6 +474,11 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr)
   if (id_MLD(1) > 0) call post_data(id_MLD(1), MLD(:,:,1), diagPtr)
   if (id_MLD(2) > 0) call post_data(id_MLD(2), MLD(:,:,2), diagPtr)
   if (id_MLD(3) > 0) call post_data(id_MLD(3), MLD(:,:,3), diagPtr)
+
+  if (present(MLD_out)) then
+    MLD_out(:,:) = 0.0
+    MLD_out(is:ie,js:je) = MLD(is:ie,js:je,1)
+  endif
 
 end subroutine diagnoseMLDbyEnergy
 

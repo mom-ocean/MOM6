@@ -820,9 +820,11 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
   logical, dimension(:),   intent(out) :: averaged_mask  !< Mask for horizontally averaged field [nondim]
 
   ! Local variables
-  real :: volume(G%isc:G%iec, G%jsc:G%jec, size(field,3)) ! The area [m2], volume [m3] or mass [kg] of each cell.
+  real :: volume(G%isc:G%iec, G%jsc:G%jec, size(field,3)) ! The area [L2 ~> m2], volume [L2 m ~> m3]
+                                             ! or mass [L2 kg m-2 ~> kg] of each cell.
   real :: stuff(G%isc:G%iec, G%jsc:G%jec, size(field,3))  ! The area, volume or mass-weighted integral of the
-                                             ! field being averaged in each cell, in [m2 A], [m3 A] or [kg A],
+                                             ! field being averaged in each cell, in [L2 a ~> m2 A],
+                                             ! [L2 m a ~> m3 A] or [L2 kg m-2 A ~> kg A],
                                              ! depending on the weighting for the averages and whether the
                                              ! model makes the Boussinesq approximation.
   real, dimension(size(field, 3)) :: vol_sum   ! The global sum of the areas [m2], volumes [m3] or mass [kg]
@@ -847,14 +849,13 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
         stuff_sum(k) = 0.
         if (is_extensive) then
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
-            volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) * G%mask2dCu(I,j)
+            volume(I,j,k) = G%areaCu(I,j) * G%mask2dCu(I,j)
             stuff(I,j,k) = volume(I,j,k) * field(I,j,k)
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do I=G%isc, G%iec
             height = 0.5 * (h(i,j,k) + h(i+1,j,k))
-            volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) &
-                * (GV%H_to_MKS * height) * G%mask2dCu(I,j)
+            volume(I,j,k) = G%areaCu(I,j)  * (GV%H_to_MKS * height) * G%mask2dCu(I,j)
             stuff(I,j,k) = volume(I,j,k) * field(I,j,k)
           enddo ; enddo
         endif
@@ -862,7 +863,7 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
     else ! Interface
       do k=1,nz
         do j=G%jsc, G%jec ; do I=G%isc, G%iec
-          volume(I,j,k) = (G%US%L_to_m**2 * G%areaCu(I,j)) * G%mask2dCu(I,j)
+          volume(I,j,k) = G%areaCu(I,j) * G%mask2dCu(I,j)
           stuff(I,j,k) = volume(I,j,k) * field(I,j,k)
         enddo ; enddo
       enddo
@@ -873,14 +874,13 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
       do k=1,nz
         if (is_extensive) then
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
-            volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) * G%mask2dCv(i,J)
+            volume(i,J,k) = G%areaCv(i,J) * G%mask2dCv(i,J)
             stuff(i,J,k) = volume(i,J,k) * field(i,J,k)
           enddo ; enddo
         else ! Intensive
           do J=G%jsc, G%jec ; do i=G%isc, G%iec
             height = 0.5 * (h(i,j,k) + h(i,j+1,k))
-            volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) &
-                * (GV%H_to_MKS * height) * G%mask2dCv(i,J)
+            volume(i,J,k) = G%areaCv(i,J) * (GV%H_to_MKS * height) * G%mask2dCv(i,J)
             stuff(i,J,k) = volume(i,J,k) * field(i,J,k)
           enddo ; enddo
         endif
@@ -888,7 +888,7 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
     else ! Interface
       do k=1,nz
         do J=G%jsc, G%jec ; do i=G%isc, G%iec
-          volume(i,J,k) = (G%US%L_to_m**2 * G%areaCv(i,J)) * G%mask2dCv(i,J)
+          volume(i,J,k) = G%areaCv(i,J) * G%mask2dCv(i,J)
           stuff(i,J,k) = volume(i,J,k) * field(i,J,k)
         enddo ; enddo
       enddo
@@ -900,7 +900,7 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
         if (is_extensive) then
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
             if (h(i,j,k) > 0.) then
-              volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) * G%mask2dT(i,j)
+              volume(i,j,k) = G%areaT(i,j) * G%mask2dT(i,j)
               stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
             else
               volume(i,j,k) = 0.
@@ -909,8 +909,7 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
           enddo ; enddo
         else ! Intensive
           do j=G%jsc, G%jec ; do i=G%isc, G%iec
-            volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) &
-                * (GV%H_to_MKS * h(i,j,k)) * G%mask2dT(i,j)
+            volume(i,j,k) = G%areaT(i,j) * (GV%H_to_MKS * h(i,j,k)) * G%mask2dT(i,j)
             stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
           enddo ; enddo
         endif
@@ -918,7 +917,7 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
     else ! Interface
       do k=1,nz
         do j=G%jsc, G%jec ; do i=G%isc, G%iec
-          volume(i,j,k) = (G%US%L_to_m**2 * G%areaT(i,j)) * G%mask2dT(i,j)
+          volume(i,j,k) = G%areaT(i,j) * G%mask2dT(i,j)
           stuff(i,j,k) = volume(i,j,k) * field(i,j,k)
         enddo ; enddo
       enddo
@@ -930,8 +929,8 @@ subroutine horizontally_average_field(G, GV, isdf, jsdf, h, staggered_in_x, stag
   ! Packing the sums into a single array with a single call to sum across PEs saves reduces
   ! the costs of communication.
   do k=1,nz
-    sums_EFP(2*k-1) = reproducing_sum_EFP(volume(:,:,k), only_on_PE=.true.)
-    sums_EFP(2*k)   = reproducing_sum_EFP(stuff(:,:,k), only_on_PE=.true.)
+    sums_EFP(2*k-1) = reproducing_sum_EFP(volume(:,:,k), only_on_PE=.true., unscale=G%US%L_to_m**2)
+    sums_EFP(2*k)   = reproducing_sum_EFP(stuff(:,:,k), only_on_PE=.true., unscale=G%US%L_to_m**2)
   enddo
   call EFP_sum_across_PEs(sums_EFP, 2*nz)
   do k=1,nz

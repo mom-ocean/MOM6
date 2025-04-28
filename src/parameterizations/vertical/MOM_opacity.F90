@@ -17,7 +17,7 @@ implicit none ; private
 
 #include <MOM_memory.h>
 
-public set_opacity, opacity_init, opacity_end, opacity_manizza, opacity_morel
+public set_opacity, opacity_init, opacity_end
 public extract_optics_slice, extract_optics_fields, optics_nbands
 public absorbRemainingSW, sumSWoverBands
 
@@ -78,8 +78,21 @@ type, public :: opacity_CS ; private
                              !! radiation that is in the blue band [nondim].
   real :: opacity_land_value !< The value to use for opacity over land [Z-1 ~> m-1].
                              !! The default is 10 m-1 - a value for muddy water.
+  real, allocatable, dimension(:,:) &
+       :: opacity_coef       !< Groups of coefficients, in [Z-1 ~> m-1] or [Z ~> m] depending on the
+                             !! scheme, in expressions for opacity, with the second index being the
+                             !! wavelength band.  For example, when OPACITY_SCHEME = MANIZZA_05,
+                             !! these are coef_1 and coef_2 in the
+                             !! expression opacity = coef_1 + coef_2 * chl**pow.
+  real, allocatable, dimension(:) &
+       :: sw_pen_frac_coef   !< Coefficients in the expression for the penetrating shortwave
+                             !! fracetion [nondim]
+  real, allocatable, dimension(:) &
+       :: chl_power          !< Powers of chlorophyll [nondim] for each band for expressions for
+                             !! opacity of the form opacity = coef_1 + coef_2 * chl**pow.
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
+  integer :: chl_dep_bands   !< The number of bands that depend on the Chlorophyll concentrations.
   logical :: warning_issued  !< A flag that is used to avoid repetitive warnings.
 
   !>@{ Diagnostic IDs
@@ -368,9 +381,9 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
         SW_pen_tot = 0.0
         if (G%mask2dT(i,j) > 0.0) then
           if (multiband_vis_input) then
-            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * (sw_vis_dir(i,j) + sw_vis_dif(i,j))
+            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j), CS) * (sw_vis_dir(i,j) + sw_vis_dif(i,j))
           elseif (total_sw_input) then
-            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j)) * 0.5*sw_total(i,j)
+            SW_pen_tot = SW_pen_frac_morel(chl_data(i,j), CS) * 0.5*sw_total(i,j)
           endif
         endif
 
@@ -426,19 +439,21 @@ subroutine opacity_from_chl(optics, sw_total, sw_vis_dir, sw_vis_dif, sw_nir_dir
               optics%opacity_band(n,i,j,k) = CS%opacity_land_value
             enddo
           else
-            ! Band 1 is Manizza blue.
-            optics%opacity_band(1,i,j,k) = (0.0232 + 0.074*chl_data(i,j)**0.674) * US%Z_to_m
-            if (nbands >= 2) &  !  Band 2 is Manizza red.
-              optics%opacity_band(2,i,j,k) = (0.225 + 0.037*chl_data(i,j)**0.629) * US%Z_to_m
-            ! All remaining bands are NIR, for lack of something better to do.
-            do n=3,nbands ; optics%opacity_band(n,i,j,k) = 2.86*US%Z_to_m ; enddo
+            do n=1,CS%chl_dep_bands
+              optics%opacity_band(n,i,j,k) = CS%opacity_coef(1,n) + &
+                      CS%opacity_coef(2,n) * chl_data(i,j)**CS%chl_power(n)
+            enddo
+            do n=CS%chl_dep_bands+1,optics%nbands  !  These bands do not depend on the chlorophyll.
+              ! Any nonzero values that were in opacity_coef(2,n) have been added to opacity_coef(1,n).
+              optics%opacity_band(n,i,j,k) = CS%opacity_coef(1,n)
+            enddo
           endif
         enddo ; enddo
       case (MOREL_88)
         do j=js,je ; do i=is,ie
           optics%opacity_band(1,i,j,k) = CS%opacity_land_value
           if (G%mask2dT(i,j) > 0.0) &
-            optics%opacity_band(1,i,j,k) = US%Z_to_m * opacity_morel(chl_data(i,j))
+            optics%opacity_band(1,i,j,k) = opacity_morel(chl_data(i,j), CS)
 
           do n=2,optics%nbands
             optics%opacity_band(n,i,j,k) = optics%opacity_band(1,i,j,k)
@@ -463,28 +478,25 @@ end subroutine opacity_from_chl
 
 !> This sets the blue-wavelength opacity according to the scheme proposed by
 !! Morel and Antoine (1994).
-function opacity_morel(chl_data)
+function opacity_morel(chl_data, CS)
   real, intent(in)  :: chl_data !< The chlorophyll-A concentration in [mg m-3]
-  real :: opacity_morel !< The returned opacity [m-1]
+  type(opacity_CS)  :: CS       !< Opacity control structure
+  real :: opacity_morel !< The returned opacity [Z-1 ~> m-1]
 
-  !   The following are coefficients for the optical model taken from Morel and
-  ! Antoine (1994). These coefficients represent a non uniform distribution of
-  ! chlorophyll-a through the water column.  Other approaches may be more
-  ! appropriate when using an interactive ecosystem model that predicts
-  ! three-dimensional chl-a values.
-  real, dimension(6), parameter :: &
-    Z2_coef = (/7.925, -6.644, 3.662, -1.815, -0.218,  0.502/) ! Extinction length coefficients [m]
   real :: Chl, Chl2 ! The log10 of chl_data (in mg m-3), and Chl^2 [nondim]
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
-  opacity_morel = 1.0 / ( (Z2_coef(1) + Z2_coef(2)*Chl) + Chl2 * &
-      ((Z2_coef(3) + Chl*Z2_coef(4)) + Chl2*(Z2_coef(5) + Chl*Z2_coef(6))) )
-end function
+  ! All frequency bands currently use the same opacities.
+  opacity_morel = 1.0 / ( (CS%opacity_coef(1,1) + CS%opacity_coef(2,1)*Chl) + Chl2 * &
+                          ((CS%opacity_coef(3,1) + Chl*CS%opacity_coef(4,1)) + &
+                            Chl2*(CS%opacity_coef(5,1) + Chl*CS%opacity_coef(6,1))) )
+end function opacity_morel
 
 !> This sets the penetrating shortwave fraction according to the scheme proposed by
 !! Morel and Antoine (1994).
-function SW_pen_frac_morel(chl_data)
+function SW_pen_frac_morel(chl_data, CS)
   real, intent(in)  :: chl_data !< The chlorophyll-A concentration [mg m-3]
+  type(opacity_CS)  :: CS       !< Opacity control structure
   real :: SW_pen_frac_morel     !< The returned penetrating shortwave fraction [nondim]
 
   !   The following are coefficients for the optical model taken from Morel and
@@ -493,23 +505,12 @@ function SW_pen_frac_morel(chl_data)
   ! appropriate when using an interactive ecosystem model that predicts
   ! three-dimensional chl-a values.
   real :: Chl, Chl2         ! The log10 of chl_data in mg m-3, and Chl^2 [nondim]
-  real, dimension(6), parameter :: &
-    V1_coef = (/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/) ! Penetrating fraction coefficients [nondim]
 
   Chl = log10(min(max(chl_data,0.02),60.0)) ; Chl2 = Chl*Chl
-  SW_pen_frac_morel = 1.0 - ( (V1_coef(1) + V1_coef(2)*Chl) + Chl2 * &
-       ((V1_coef(3) + Chl*V1_coef(4)) + Chl2*(V1_coef(5) + Chl*V1_coef(6))) )
+  SW_pen_frac_morel = 1.0 - ( (CS%SW_pen_frac_coef(1) + CS%SW_pen_frac_coef(2)*Chl) + Chl2 * &
+                              ((CS%SW_pen_frac_coef(3) + Chl*CS%SW_pen_frac_coef(4)) + &
+                               Chl2*(CS%SW_pen_frac_coef(5) + Chl*CS%SW_pen_frac_coef(6))) )
 end function SW_pen_frac_morel
-
-!>   This sets the blue-wavelength opacity according to the scheme proposed by
-!! Manizza, M. et al, 2005.
-function opacity_manizza(chl_data)
-  real, intent(in)  :: chl_data !< The chlorophyll-A concentration [mg m-3]
-  real :: opacity_manizza !< The returned opacity [m-1]
-!   This sets the blue-wavelength opacity according to the scheme proposed by Manizza, M. et al, 2005.
-
-  opacity_manizza = 0.0232 + 0.074*chl_data**0.674
-end function
 
 !> This subroutine returns a 2-d slice at constant j of fields from an optics_type, with the potential
 !! for rescaling these fields.
@@ -710,9 +711,9 @@ subroutine absorbRemainingSW(G, GV, US, h, opacity_band, nsw, optics, j, dt, H_l
   TKE_calc = (present(TKE) .and. present(dSV_dT))
 
   if (optics%answer_date < 20190101) then
-    g_Hconv2 = (US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ) * GV%H_to_RZ
+    g_Hconv2 = (GV%g_Earth_Z_T2 * GV%H_to_RZ) * GV%H_to_RZ
   else
-    g_Hconv2 = US%L_to_Z**2*GV%g_Earth * GV%H_to_RZ**2
+    g_Hconv2 = GV%g_Earth_Z_T2 * GV%H_to_RZ**2
   endif
 
   h_heat(:) = 0.0
@@ -1035,9 +1036,25 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
   character(len=40)  :: scheme_string
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
+  real :: opacity_coefs(6)      ! Pairs of opacity coefficients [Z-1 ~> m-1] for blue, red and
+                                ! near-infrared radiation with parameterizations following the
+                                ! functional form from Manizza et al., GRL 2005, namely in the form
+                                ! opacity = coef_1 + coef_2 * chl**pow for each band.
+  real :: opacity_powers(3)     ! Powers of chlorophyll [nondim] for blue, red and near-infrared
+                                ! radiation bands, in expressions for opacity of the form
+                                ! opacity = coef_1 + coef_2 * chl**pow.
+  real :: extinction_coefs(6)   ! Extinction length coefficients [Z ~> m] for penetrating shortwave
+                                ! radiation in the form proposed by Morel and Antoine (1994), namely
+                                ! opacity = 1 / (sum(n=1:6, Coef(n) * log10(Chl)**(n-1)))
+  real :: sw_pen_frac_coefs(6)  ! Coefficients for the shortwave radiation fraction [nondim] in a
+                                ! fifth order polynomial fit as a funciton of log10(Chlorophyll).
   real :: PenSW_absorb_minthick ! A thickness that is used to absorb the remaining shortwave heat
                                 ! flux when that flux drops below PEN_SW_FLUX_ABSORB [H ~> m or kg m-2]
-  real :: PenSW_minthick_dflt ! The default for PenSW_absorb_minthick [m]
+  real :: PenSW_minthick_dflt   ! The default for PenSW_absorb_minthick [m]
+  real :: I_NIR_bands           ! The inverse of the number of near-infrared bands being used [nondim]
+  real, allocatable :: band_wavelengths(:) ! The bounding wavelengths for the penetrating shortwave
+                                ! radiation bands [nm]
+  real, allocatable :: band_wavelen_default(:) ! The defaults for band_wavelengths [nm]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   integer :: isd, ied, jsd, jed, nz, n
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
@@ -1166,24 +1183,103 @@ subroutine opacity_init(Time, G, GV, US, param_file, diag, CS, optics)
                  default=PenSW_minthick_dflt, units="m", scale=GV%m_to_H)
   optics%PenSW_absorb_Invlen = 1.0 / (PenSW_absorb_minthick + GV%H_subroundoff)
 
+  ! The defaults for the following coefficients are taken from Manizza et al., GRL, 2005.
+  call get_param(param_file, mdl, "OPACITY_VALUES_MANIZZA", opacity_coefs, &
+                 "Pairs of opacity coefficients for blue, red and near-infrared radiation with "//&
+                 "parameterizations following the functional form from Manizza et al., GRL 2005, "//&
+                 "namely in the form opacity = coef_1 + coef_2 * chl**pow for each band.  Although "//&
+                 "coefficients are set for 3 bands, more or less bands may actually be used, with "//&
+                 "extra bands following the same properties as band 3.", &
+                 units="m-1", scale=US%Z_to_m, defaults=(/0.0232, 0.074, 0.225, 0.037, 2.86, 0.0/), &
+                 do_not_log=(CS%opacity_scheme/=MANIZZA_05))
+  call get_param(param_file, mdl, "CHOROPHYLL_POWER_MANIZZA", opacity_powers, &
+                 "Powers of chlorophyll for blue, red and near-infrared radiation bands in "//&
+                 "expressions for opacity of the form opacity = coef_1 + coef_2 * chl**pow.", &
+                 units="nondim", defaults=(/0.674, 0.629, 0.0/), &
+                 do_not_log=(CS%opacity_scheme/=MANIZZA_05))
+
+  ! The defaults for the following coefficients are taken from Morel and Antoine (1994).
+  call get_param(param_file, mdl, "OPACITY_VALUES_MOREL", extinction_coefs, &
+                 "Shortwave extinction length coefficients for shortwave radiation in the form "//&
+                 "proposed by Morel (1988), opacity = 1 / (sum(Coef(n) * log10(Chl)**(n-1))).", &
+                 units="m", scale=US%m_to_Z, defaults=(/7.925, -6.644, 3.662, -1.815, -0.218, 0.502/), &
+                 do_not_log=(CS%opacity_scheme/=MOREL_88))
+  call get_param(param_file, mdl, "SW_PEN_FRAC_COEFS_MOREL", sw_pen_frac_coefs, &
+                 "Coefficients for the shortwave radiation fraction in a fifth order polynomial "//&
+                 "fit as a function of log10(Chlorophyll).", &
+                 units="nondim", defaults=(/0.321,  0.008, 0.132,  0.038, -0.017, -0.007/), &
+                 do_not_log=(CS%opacity_scheme/=MOREL_88))
+
   if (.not.allocated(optics%min_wavelength_band)) &
     allocate(optics%min_wavelength_band(optics%nbands))
   if (.not.allocated(optics%max_wavelength_band)) &
     allocate(optics%max_wavelength_band(optics%nbands))
 
+  ! Set the wavelengths of the opacity bands
+  allocate(band_wavelengths(optics%nbands+1), source=0.0)
+  allocate(band_wavelen_default(optics%nbands+1), source=0.0)
   if (CS%opacity_scheme == MANIZZA_05) then
-    optics%min_wavelength_band(1) =0
-    optics%max_wavelength_band(1) =550
-    if (optics%nbands >= 2) then
-      optics%min_wavelength_band(2)=550
-      optics%max_wavelength_band(2)=700
-    endif
-    if (optics%nbands > 2) then
+    if (optics%nbands >= 1) band_wavelen_default(2) = 550.0
+    if (optics%nbands >= 2) band_wavelen_default(3) = 700.0
+    if (optics%nbands >= 3) then
+      I_NIR_bands = 1.0 / real(optics%nbands - 2)
       do n=3,optics%nbands
-        optics%min_wavelength_band(n) =700
-        optics%max_wavelength_band(n) =2800
+        band_wavelen_default(n+1) = 2800. - (optics%nbands-n)*2100.0*I_NIR_bands
       enddo
     endif
+  endif
+  call get_param(param_file, mdl, "OPACITY_BAND_WAVELENGTHS", band_wavelengths, &
+                 "The bounding wavelengths for the various bands of shortwave radiation, with "//&
+                 "defaults that depend on the setting for OPACITY_SCHEME.", &
+                 units="nm", defaults=band_wavelen_default, do_not_log=(optics%nbands<2))
+  do n=1,optics%nbands
+    optics%min_wavelength_band(n) = band_wavelengths(n)
+    optics%max_wavelength_band(n) = band_wavelengths(n+1)
+  enddo
+  deallocate(band_wavelengths, band_wavelen_default)
+
+  ! Set opacity scheme dependent parameters.
+
+  if (CS%opacity_scheme == MANIZZA_05) then
+    allocate(CS%opacity_coef(2,optics%nbands))
+    allocate(CS%chl_power(optics%nbands))
+    do n=1,min(3,optics%nbands)
+      CS%opacity_coef(1,n) = opacity_coefs(2*n-1) ; CS%opacity_coef(2,n) = opacity_coefs(2*n)
+      CS%chl_power(n) = opacity_powers(n)
+    enddo
+    ! All remaining bands use the same properties as NIR, for lack of something better to do.
+    do n=4,optics%nbands
+      CS%opacity_coef(1,n) = CS%opacity_coef(1,n-1) ; CS%opacity_coef(2,n) = CS%opacity_coef(2,n-1)
+      CS%chl_power(n) = CS%chl_power(n-1)
+    enddo
+    ! Determine the last band that is dependent on chlorophyll.
+    CS%chl_dep_bands = optics%nbands
+    do n=optics%nbands,1,-1
+      if (CS%chl_power(n) /= 0.0) exit
+      CS%chl_dep_bands = n - 1
+    enddo
+    do n=CS%chl_dep_bands+1,optics%nbands
+      if (CS%opacity_coef(2,n) /= 0.0) then
+        call MOM_error(WARNING, "set_opacity: A non-zero value of the chlorophyll dependence in "//&
+            "OPACITY_VALUES_MANIZZA was set for a band with zero power in its chlorophyll dependence "//&
+            "as set by CHOROPHYLL_POWER_MANIZZA.")
+        CS%opacity_coef(1,n) = CS%opacity_coef(1,n) + CS%opacity_coef(2,n)
+        CS%opacity_coef(2,n) = 0.0
+      endif
+    enddo
+
+  elseif (CS%opacity_scheme == MOREL_88) then
+    !   The Morel opacity scheme represents a non uniform distribution of chlorophyll-a through the
+    ! water column.  Other approaches may be more appropriate when using an interactive ecosystem
+    ! model that predicts three-dimensional chl-a values.
+    allocate(CS%opacity_coef(6, optics%nbands))
+    allocate(CS%sw_pen_frac_coef(6))
+
+    ! As presently implemented, all frequency bands use the same opacities.
+    do n=1,optics%nbands
+      CS%opacity_coef(1:6,n) = extinction_coefs(1:6)
+    enddo
+    CS%sw_pen_frac_coef(:) = sw_pen_frac_coefs(:)
   endif
 
   call get_param(param_file, mdl, "OPACITY_LAND_VALUE", CS%opacity_land_value, &
@@ -1394,6 +1490,12 @@ subroutine opacity_end(CS, optics)
 
   if (allocated(CS%id_opacity)) &
     deallocate(CS%id_opacity)
+  if (allocated(CS%opacity_coef)) &
+    deallocate(CS%opacity_coef)
+  if (allocated(CS%sw_pen_frac_coef)) &
+    deallocate(CS%sw_pen_frac_coef)
+  if (allocated(CS%chl_power)) &
+    deallocate(CS%chl_power)
   if (allocated(optics%sw_pen_band)) &
     deallocate(optics%sw_pen_band)
   if (allocated(optics%opacity_band)) &

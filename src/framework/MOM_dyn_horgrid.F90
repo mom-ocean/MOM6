@@ -175,17 +175,20 @@ type, public :: dyn_horgrid_type
     df_dx, &      !< Derivative d/dx f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
     df_dy         !< Derivative d/dy f (Coriolis parameter) at h-points [T-1 L-1 ~> s-1 m-1].
 
-  ! These variables are global sums that are useful for 1-d diagnostics and should not be rescaled.
-  real :: areaT_global  !< Global sum of h-cell area [m2]
-  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [m-2]
+  ! These variables are global sums that are useful for 1-d diagnostics.
+  real :: areaT_global  !< Global sum of h-cell area [L2 ~> m2]
+  real :: IareaT_global !< Global sum of inverse h-cell area (1/areaT_global) [L-2 ~> m-2]
 
   ! These parameters are run-time parameters that are used during some
   ! initialization routines (but not all)
+  real :: grid_unit_to_L !< A factor that converts a the geoLat and geoLon variables and related
+                        !! variables like len_lat and len_lon into rescaled horizontal distance
+                        !! units on a Cartesian grid, in [L km ~> 1000] or [L m-1 ~> 1] or
+                        !! is 0 for a non-Cartesian grid.
   real :: south_lat     !< The latitude (or y-coordinate) of the first v-line [degrees_N] or [km] or [m]
   real :: west_lon      !< The longitude (or x-coordinate) of the first u-line [degrees_E] or [km] or [m]
   real :: len_lat       !< The latitudinal (or y-coord) extent of physical domain [degrees_N] or [km] or [m]
   real :: len_lon       !< The longitudinal (or x-coord) extent of physical domain [degrees_E] or [km] or [m]
-  real :: Rad_Earth     !< The radius of the planet [m]
   real :: Rad_Earth_L   !< The radius of the planet in rescaled units [L ~> m]
   real :: max_depth     !< The maximum depth of the ocean [Z ~> m]
 end type dyn_horgrid_type
@@ -400,9 +403,9 @@ subroutine rotate_dyn_horgrid(G_in, G, US, turns)
   G%len_lon = G_in%len_lon
 
   ! Rotation-invariant fields
+  G%grid_unit_to_L = G_in%grid_unit_to_L
   G%areaT_global = G_in%areaT_global
   G%IareaT_global = G_in%IareaT_global
-  G%Rad_Earth = G_in%Rad_Earth
   G%Rad_Earth_L = G_in%Rad_Earth_L
   G%max_depth = G_in%max_depth
 

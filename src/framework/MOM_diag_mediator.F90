@@ -31,6 +31,7 @@ use MOM_io,               only : get_filename_appendix
 use MOM_safe_alloc,       only : safe_alloc_ptr, safe_alloc_alloc
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,     only : time_type
+use MOM_time_manager,     only : get_time
 use MOM_unit_scaling,     only : unit_scale_type
 use MOM_variables,        only : thermo_var_ptrs
 use MOM_verticalGrid,     only : verticalGrid_type
@@ -972,7 +973,7 @@ subroutine register_cell_measure(G, diag, Time)
   ! Local variables
   integer :: id
   id = register_diag_field('ocean_model', 'volcello', diag%axesTL, &
-                           Time, 'Ocean grid-cell volume', 'm3', &
+                           Time, 'Ocean grid-cell volume', units='m3', conversion=1.0, &
                            standard_name='ocean_volume', v_extensive=.true., &
                            x_cell_method='sum', y_cell_method='sum')
   call diag_associate_volume_cell_measure(diag, id)
@@ -1285,6 +1286,10 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
   logical :: used, is_stat
   type(diag_type), pointer :: diag => null()
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1300,7 +1305,12 @@ subroutine post_data_0d(diag_field_id, field, diag_cs, is_static)
       locfield = locfield * diag%conversion_factor
 
     if (diag_cs%diag_as_chksum) then
-      call chksum0(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
+      ! Append timestep to mesg
+      call get_time(diag_cs%time_end, time_seconds, days=time_days)
+      write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+          trim(diag%debug_str), time_days, time_seconds
+
+      call chksum0(locfield, debug_mesg, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
       used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
@@ -1328,6 +1338,10 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
   integer :: k, ks, ke
   type(diag_type), pointer :: diag => null()
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   if (id_clock_diag_mediator>0) call cpu_clock_begin(id_clock_diag_mediator)
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
 
@@ -1353,7 +1367,12 @@ subroutine post_data_1d_k(diag_field_id, field, diag_cs, is_static)
     endif
 
     if (diag_cs%diag_as_chksum) then
-      call zchksum(locfield, diag%debug_str, logunit=diag_cs%chksum_iounit)
+      ! Append timestep to mesg
+      call get_time(diag_cs%time_end, time_seconds, days=time_days)
+      write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+          trim(diag%debug_str), time_days, time_seconds
+
+      call zchksum(locfield, debug_mesg, logunit=diag_cs%chksum_iounit)
     elseif (is_stat) then
       used = send_data_infra(diag%fms_diag_id, locfield)
     elseif (diag_cs%ave_enabled) then
@@ -1414,6 +1433,10 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:), allocatable, target :: locfield_dsamp ! A downsampled version of locfield [a]
   real, dimension(:,:), allocatable, target :: locmask_dsamp  ! A downsampled version of locmask [nondim]
   integer :: dl
+
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
 
   locfield => NULL()
   locmask => NULL()
@@ -1493,17 +1516,22 @@ subroutine post_data_2d_low(diag, field, diag_cs, is_static, mask)
   endif
 
   if (diag_cs%diag_as_chksum) then
+    ! Append timestep to mesg
+    call get_time(diag_cs%time_end, time_seconds, days=time_days)
+    write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+        trim(diag%debug_str), time_days, time_seconds
+
     if (diag%axes%is_h_point) then
-      call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call hchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     elseif (diag%axes%is_u_point) then
-      call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call uchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     elseif (diag%axes%is_v_point) then
-      call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call vchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     elseif (diag%axes%is_q_point) then
-      call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+      call Bchksum(locfield, debug_mesg, diag_cs%G%HI, &
                    logunit=diag_cs%chksum_iounit)
     else
       call MOM_error(FATAL, "post_data_2d_low: unknown axis type.")
@@ -1735,6 +1763,10 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
   real, dimension(:,:,:), allocatable, target :: locmask_dsamp  ! A downsampled version of locmask [nondim]
   integer :: dl
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   locfield => NULL()
   locmask => NULL()
   is_stat = .false. ; if (present(is_static)) is_stat = is_static
@@ -1831,17 +1863,22 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
 
   if (diag%fms_diag_id>0) then
     if (diag_cs%diag_as_chksum) then
+      ! Append timestep to mesg
+      call get_time(diag_cs%time_end, time_seconds, days=time_days)
+      write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+          trim(diag%debug_str), time_days, time_seconds
+
       if (diag%axes%is_h_point) then
-        call hchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call hchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       elseif (diag%axes%is_u_point) then
-        call uchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call uchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       elseif (diag%axes%is_v_point) then
-        call vchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call vchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       elseif (diag%axes%is_q_point) then
-        call Bchksum(locfield, diag%debug_str, diag_cs%G%HI, &
+        call Bchksum(locfield, debug_mesg, diag_cs%G%HI, &
                      logunit=diag_cs%chksum_iounit)
       else
         call MOM_error(FATAL, "post_data_3d_low: unknown axis type.")
@@ -1998,6 +2035,10 @@ subroutine post_xy_average(diag_cs, diag, field)
   logical :: staggered_in_x, staggered_in_y, used
   integer :: nz, remap_nz, coord
 
+  integer :: time_days
+  integer :: time_seconds
+  character(len=300) :: debug_mesg
+
   if (.not. diag_cs%ave_enabled) then
     return
   endif
@@ -2031,8 +2072,12 @@ subroutine post_xy_average(diag_cs, diag, field)
   endif
 
   if (diag_cs%diag_as_chksum) then
-    call zchksum(averaged_field, trim(diag%debug_str)//'_xyave', &
-                 logunit=diag_CS%chksum_iounit)
+    ! Append timestep to mesg
+    call get_time(diag_cs%time_end, time_seconds, days=time_days)
+    write(debug_mesg, '(a, 1x, i0, 1x, i0)') &
+        trim(diag%debug_str)//'_xyave', time_days, time_seconds
+
+    call zchksum(averaged_field, debug_mesg, logunit=diag_CS%chksum_iounit)
   else
     used = send_data_infra(diag%fms_xyave_diag_id, averaged_field, &
                            time=diag_cs%time_end, weight=diag_cs%time_int, mask=averaged_mask)
@@ -2164,6 +2209,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
   character(len=256) :: msg, cm_string
   character(len=256) :: new_module_name
   character(len=480) :: module_list, var_list
+  character(len=16)  :: dimensions
   integer :: num_modnm, num_varnm
   logical :: active
 
@@ -2384,6 +2430,22 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     enddo ! i
   enddo
 
+  dimensions = ""
+  if (axes_in%is_h_point)   dimensions = trim(dimensions)//" xh, yh,"
+  if (axes_in%is_q_point)   dimensions = trim(dimensions)//" xq, yq,"
+  if (axes_in%is_u_point)   dimensions = trim(dimensions)//" xq, yh,"
+  if (axes_in%is_v_point)   dimensions = trim(dimensions)//" xh, yq,"
+  if (axes_in%is_layer)     dimensions = trim(dimensions)//" zl,"
+  if (axes_in%is_interface) dimensions = trim(dimensions)//" zi,"
+
+  if (len_trim(dimensions) > 0) then
+    dimensions = trim(adjustl(dimensions))
+    if (dimensions(len_trim(dimensions):len_trim(dimensions)) == ",") then
+        dimensions = dimensions(1:len_trim(dimensions) - 1)
+    endif
+    dimensions = trim(dimensions)
+  endif
+
   if (is_root_pe() .and. (diag_CS%available_diag_doc_unit > 0)) then
     msg = ''
     if (present(cmor_field_name)) msg = 'CMOR equivalent is "'//trim(cmor_field_name)//'"'
@@ -2395,7 +2457,7 @@ integer function register_diag_field(module_name, field_name, axes_in, init_time
     if (num_varnm <= 1) var_list = ''
 
     call log_available_diag(dm_id>0, module_list, field_name, cm_string, msg, diag_CS, &
-                            long_name, units, standard_name, variants=var_list)
+                            long_name, units, standard_name, variants=var_list, dimensions=dimensions)
   endif
 
   register_diag_field = dm_id
@@ -2897,6 +2959,7 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
   integer :: dm_id, fms_id
   type(diag_type), pointer :: diag => null(), cmor_diag => null()
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
+  character(len=16)  :: dimensions
 
   MOM_missing_value = diag_cs%missing_value
   if (present(missing_value)) MOM_missing_value = missing_value
@@ -2956,15 +3019,18 @@ function register_scalar_field(module_name, field_name, init_time, diag_cs, &
     endif
   endif
 
+  dimensions = "scalar"
+
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     if (present(cmor_field_name)) then
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name, &
-                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}", &
+                              dimensions=dimensions)
     else
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
-                              long_name, units, standard_name)
+                              long_name, units, standard_name, dimensions=dimensions)
     endif
   endif
 
@@ -3016,6 +3082,7 @@ function register_static_field(module_name, field_name, axes, &
   integer :: dm_id, fms_id
   character(len=256) :: posted_cmor_units, posted_cmor_standard_name, posted_cmor_long_name
   character(len=9) :: axis_name
+  character(len=16) :: dimensions
 
   MOM_missing_value = axes%diag_cs%missing_value
   if (present(missing_value)) MOM_missing_value = missing_value
@@ -3108,15 +3175,32 @@ function register_static_field(module_name, field_name, axes, &
     endif
   endif
 
+  dimensions = ""
+  if (axes%is_h_point)   dimensions = trim(dimensions)//" xh, yh,"
+  if (axes%is_q_point)   dimensions = trim(dimensions)//" xq, yq,"
+  if (axes%is_u_point)   dimensions = trim(dimensions)//" xq, yh,"
+  if (axes%is_v_point)   dimensions = trim(dimensions)//" xh, yq,"
+  if (axes%is_layer)     dimensions = trim(dimensions)//" zl,"
+  if (axes%is_interface) dimensions = trim(dimensions)//" zi,"
+
+  if (len_trim(dimensions) > 0) then
+    dimensions = trim(adjustl(dimensions))
+    if (dimensions(len_trim(dimensions):len_trim(dimensions)) == ",") then
+        dimensions = dimensions(1:len_trim(dimensions) - 1)
+    endif
+    dimensions = trim(dimensions)
+  endif
+
   ! Document diagnostics in list of available diagnostics
   if (is_root_pe() .and. diag_CS%available_diag_doc_unit > 0) then
     if (present(cmor_field_name)) then
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
                               long_name, units, standard_name, &
-                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}")
+                              variants="{"//trim(field_name)//","//trim(cmor_field_name)//"}", &
+                              dimensions=dimensions)
     else
       call log_available_diag(associated(diag), module_name, field_name, '', '', diag_CS, &
-                              long_name, units, standard_name)
+                              long_name, units, standard_name, dimensions=dimensions)
     endif
   endif
 
@@ -3153,10 +3237,13 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
   character(len=48) :: units            ! A variable's units.
   character(len=240) :: longname        ! A variable's longname.
   character(len=8) :: hor_grid, z_grid  ! Variable grid info.
+  real :: conversion ! A multiplicative factor for unit conversions for output,
+                     ! as might be needed to convert from intensive to extensive
+                     ! or for dimensional consistency testing [various] or [a A-1 ~> 1]
   type(axes_grp), pointer :: axes => NULL()
 
   call query_vardesc(var_desc, units=units, longname=longname, hor_grid=hor_grid, &
-                     z_grid=z_grid, caller="ocean_register_diag")
+                     z_grid=z_grid, conversion=conversion, caller="ocean_register_diag")
 
   ! Use the hor_grid and z_grid components of vardesc to determine the
   ! desired axes to register the diagnostic field for.
@@ -3211,8 +3298,8 @@ function ocean_register_diag(var_desc, G, diag_CS, day)
         "ocean_register_diag: unknown z_grid component "//trim(z_grid))
   end select
 
-  ocean_register_diag = register_diag_field("ocean_model", trim(var_name), &
-          axes, day, trim(longname), trim(units), missing_value=-1.0e+34)
+  ocean_register_diag = register_diag_field("ocean_model", trim(var_name), axes, day, &
+          trim(longname), units=trim(units), conversion=conversion, missing_value=-1.0e+34)
 
 end function ocean_register_diag
 
@@ -3280,10 +3367,12 @@ subroutine diag_mediator_init(G, GV, US, nz, param_file, diag_cs, doc_file_dir)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
                  default=99991231)
+  call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                 do_not_log=.true., default=.true.)
   call get_param(param_file, mdl, "DIAG_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  "If true, use the OM4 remapping-via-subcells algorithm for diagnostics. "//&
                  "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
-                 "We recommend setting this option to false.", default=.true.)
+                 "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
   call get_param(param_file, mdl, "REMAPPING_ANSWER_DATE", remap_answer_date, &
                  "The vintage of the expressions and order of arithmetic to use for remapping.  "//&
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
@@ -3860,13 +3949,14 @@ end subroutine alloc_diag_with_id
 
 !> Log a diagnostic to the available diagnostics file.
 subroutine log_available_diag(used, module_name, field_name, cell_methods_string, comment, &
-                              diag_CS, long_name, units, standard_name, variants)
+                              diag_CS, long_name, units, standard_name, variants, dimensions)
   logical,          intent(in) :: used !< Whether this diagnostic was in the diag_table or not
   character(len=*), intent(in) :: module_name !< Name of the diagnostic module
   character(len=*), intent(in) :: field_name !< Name of this diagnostic field
   character(len=*), intent(in) :: cell_methods_string !< The spatial component of the CF cell_methods attribute
   character(len=*), intent(in) :: comment !< A comment to append after [Used|Unused]
   type(diag_ctrl),  intent(in) :: diag_CS  !< The diagnotics control structure
+  character(len=*), optional, intent(in) :: dimensions !< Descriptor of the horizontal and vertical dimensions
   character(len=*), optional, intent(in) :: long_name !< CF long name of diagnostic
   character(len=*), optional, intent(in) :: units !< Units for diagnostic
   character(len=*), optional, intent(in) :: standard_name !< CF standardized name of diagnostic
@@ -3886,6 +3976,11 @@ subroutine log_available_diag(used, module_name, field_name, cell_methods_string
     write(diag_CS%available_diag_doc_unit, '(a)') trim(mesg)
   endif
   call describe_option("modules", module_name, diag_CS)
+  if (present(dimensions)) then
+    if (len(trim(dimensions)) > 0) then
+      call describe_option("dimensions", dimensions, diag_CS)
+    endif
+  endif
   if (present(long_name)) call describe_option("long_name", long_name, diag_CS)
   if (present(units)) call describe_option("units", units, diag_CS)
   if (present(standard_name)) &

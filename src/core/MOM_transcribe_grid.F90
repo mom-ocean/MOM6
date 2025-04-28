@@ -135,10 +135,11 @@ subroutine copy_dyngrid_to_MOM_grid(dG, oG, US)
   ! Copy various scalar variables and strings.
   oG%x_axis_units = dG%x_axis_units ; oG%y_axis_units = dG%y_axis_units
   oG%x_ax_unit_short = dG%x_ax_unit_short ; oG%y_ax_unit_short = dG%y_ax_unit_short
+  oG%grid_unit_to_L = dG%grid_unit_to_L
   oG%areaT_global = dG%areaT_global ; oG%IareaT_global = dG%IareaT_global
   oG%south_lat = dG%south_lat ; oG%west_lon  = dG%west_lon
   oG%len_lat = dG%len_lat ; oG%len_lon = dG%len_lon
-  oG%Rad_Earth = dG%Rad_Earth ; oG%Rad_Earth_L = dG%Rad_Earth_L
+  oG%Rad_Earth_L = dG%Rad_Earth_L
   oG%max_depth = dG%max_depth
 
 ! Update the halos in case the dynamic grid has smaller halos than the ocean grid.
@@ -296,10 +297,11 @@ subroutine copy_MOM_grid_to_dyngrid(oG, dG, US)
   ! Copy various scalar variables and strings.
   dG%x_axis_units = oG%x_axis_units ; dG%y_axis_units = oG%y_axis_units
   dG%x_ax_unit_short = oG%x_ax_unit_short ; dG%y_ax_unit_short = oG%y_ax_unit_short
+  dG%grid_unit_to_L = oG%grid_unit_to_L
   dG%areaT_global = oG%areaT_global ; dG%IareaT_global = oG%IareaT_global
   dG%south_lat = oG%south_lat ; dG%west_lon  = oG%west_lon
   dG%len_lat = oG%len_lat ; dG%len_lon = oG%len_lon
-  dG%Rad_Earth = oG%Rad_Earth ; dG%Rad_Earth_L = oG%Rad_Earth_L
+  dG%Rad_Earth_L = oG%Rad_Earth_L
   dG%max_depth = oG%max_depth
 
 ! Update the halos in case the dynamic grid has smaller halos than the ocean grid.

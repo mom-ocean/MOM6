@@ -262,7 +262,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
     h_neglect = GV%kg_m2_to_H * 1.0e-30 ; h_neglect_edge = GV%kg_m2_to_H * 1.0e-10
   endif
 
-  call initialize_remapping( CS%remapCS, string, &
+  call initialize_remapping( CS%remapCS, string, nk=GV%ke, &
                              boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
@@ -270,7 +270,7 @@ subroutine ALE_init( param_file, GV, US, max_depth, CS)
                              om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
                              answer_date=CS%answer_date, &
                              h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
-  call initialize_remapping( CS%vel_remapCS, vel_string, &
+  call initialize_remapping( CS%vel_remapCS, vel_string, nk=GV%ke, &
                              boundary_extrapolation=init_boundary_extrap, &
                              check_reconstruction=check_reconstruction, &
                              check_remapping=check_remapping, &
@@ -776,7 +776,7 @@ subroutine ALE_remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: work_conc ! The rate of change of concentrations [Conc T-1 ~> Conc s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: work_cont ! The rate of change of cell-integrated tracer
                                                        ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1] or
-                                                       ! cell thickness [H T-1 ~> m s-1 or Conc kg m-2 s-1]
+                                                       ! cell thickness [H T-1 ~> m s-1 or kg m-2 s-1]
   real, dimension(SZI_(G),SZJ_(G))          :: work_2d ! The rate of change of column-integrated tracer
                                                        ! content [Conc H T-1 ~> Conc m s-1 or Conc kg m-2 s-1]
   logical :: PCM(GV%ke) ! If true, do PCM remapping from a cell.

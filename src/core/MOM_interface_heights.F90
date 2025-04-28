@@ -339,7 +339,7 @@ subroutine find_col_avg_SpV(h, SpV_avg, tv, G, GV, US, halo_size)
   integer,        optional, intent(in)    :: halo_size !< width of halo points on which to work
 
   ! Local variables
-  real :: h_tot(SZI_(G))        ! Sum of the layer thicknesses [H ~> m or kg m-3]
+  real :: h_tot(SZI_(G))        ! Sum of the layer thicknesses [H ~> m or kg m-2]
   real :: SpV_x_h_tot(SZI_(G))  ! Vertical sum of the layer average specific volume times
                                 ! the layer thicknesses [H R-1 ~> m4 kg-1 or m]
   real :: I_rho                 ! The inverse of the Boussiensq reference density [R-1 ~> m3 kg-1]

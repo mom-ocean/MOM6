@@ -319,7 +319,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
     p_surf(i,j) = 0.75*p_surf_begin(i,j) + 0.25*p_surf_end(i,j)
   enddo ; enddo ; endif
   call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
-                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+                     CS%PressureForce_CSp, CS%ALE_CSp, CS%ADp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then ; if (CS%OBC%update_OBC) then
@@ -386,7 +386,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
     p_surf(i,j) = 0.25*p_surf_begin(i,j) + 0.75*p_surf_end(i,j)
   enddo ; enddo ; endif
   call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
-                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+                     CS%PressureForce_CSp, CS%ALE_CSp, CS%ADp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then ; if (CS%OBC%update_OBC) then
@@ -479,7 +479,7 @@ subroutine step_MOM_dyn_unsplit(u, v, h, tv, visc, Time_local, dt, forces, &
 ! PFu = d/dx M(h_av,T,S)
   call cpu_clock_begin(id_clock_pres)
   call PressureForce(h_av, tv, CS%PFu, CS%PFv, G, GV, US, &
-                     CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+                     CS%PressureForce_CSp, CS%ALE_CSp, CS%ADp, p_surf)
   call cpu_clock_end(id_clock_pres)
 
   if (associated(CS%OBC)) then ; if (CS%OBC%update_OBC) then
@@ -710,9 +710,9 @@ subroutine initialize_dyn_unsplit(u, v, h, Time, G, GV, US, param_file, diag, CS
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
-  if (CS%calculate_SAL) call SAL_init(G, US, param_file, CS%SAL_CSp)
+  if (CS%calculate_SAL) call SAL_init(G, GV, US, param_file, CS%SAL_CSp)
   if (CS%use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
-  call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
+  call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &
                           CS%SAL_CSp, CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &

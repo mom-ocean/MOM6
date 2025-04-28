@@ -202,7 +202,7 @@ actions:intel:
   script:
     - echo -e "\e[0Ksection_start:`date +%s`:compile[collapsed=true]\r\e[0KCompiling executables"
     - cd .testing
-    - module unload darshan-runtime ; module unload intel cray-libsci cray-mpich PrgEnv-intel ; module load PrgEnv-intel intel/2023.2.0 cray-hdf5 cray-netcdf cray-mpich
+    - module unload darshan-runtime intel cray-mpich PrgEnv-intel ; module load PrgEnv-intel intel/2023.2.0 cray-hdf5 cray-netcdf cray-mpich ; module unload cray-libsci
     - FC=ftn MPIFC=ftn CC=cc make -s -j
     - MPIRUN= FC=ftn MPIFC=ftn CC=cc make preproc -s -j
     - echo -e "\e[0Ksection_end:`date +%s`:compile\r\e[0K"

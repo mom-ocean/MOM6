@@ -47,6 +47,7 @@ type, public :: unit_scale_type
   real :: QRZ_T_to_W_m2   !< Convert heat fluxes from Q R Z T-1 to W m-2                    [W T Q-1 R-1 Z-1 m-2 ~> 1]
   ! Not used enough:  real :: kg_m2_to_RZ   !< Convert mass loads from kg m-2 to R Z                [R Z m2 kg-1 ~> 1]
   real :: RZ_to_kg_m2     !< Convert mass loads from R Z to kg m-2                               [kg R-1 Z-1 m-2 ~> 1]
+  real :: RZL2_to_kg      !< Convert masses from R Z L2 to kg                                    [kg R-1 Z-1 L-2 ~> 1]
   real :: kg_m2s_to_RZ_T  !< Convert mass fluxes from kg m-2 s-1 to R Z T-1                   [R Z m2 s T-1 kg-1 ~> 1]
   real :: RZ_T_to_kg_m2s  !< Convert mass fluxes from R Z T-1 to kg m-2 s-1                [T kg R-1 Z-1 m-2 s-1 ~> 1]
   real :: RZ3_T3_to_W_m2  !< Convert turbulent kinetic energy fluxes from R Z3 T-3 to W m-2    [W T3 R-1 Z-3 m-2 ~> 1]
@@ -224,6 +225,8 @@ subroutine set_unit_scaling_combos(US)
   ! Wind stresses:
   US%RLZ_T2_to_Pa = US%R_to_kg_m3 * US%L_T_to_m_s**2 * US%Z_to_L
   US%Pa_to_RLZ_T2 = US%kg_m3_to_R * US%m_s_to_L_T**2 * US%L_to_Z
+  ! Masses:
+  US%RZL2_to_kg = US%R_to_kg_m3 * US%Z_to_m * US%L_to_m**2
 
 end subroutine set_unit_scaling_combos
 

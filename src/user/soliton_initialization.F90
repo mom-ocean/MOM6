@@ -79,10 +79,12 @@ subroutine soliton_initialize_thickness(h, depth_tot, G, GV, US, param_file, jus
   if (abs(beta) <= 0.0) call MOM_error(FATAL, &
       "soliton_initialization, soliton_initialize_thickness: "//&
       "This module requires a non-zero value of BETA.")
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "soliton_initialization.F90: "//&
+          "soliton_initialize_thickness() is only set to work with Cartesian axis units.")
 
   cg_max = sqrt(GV%g_Earth * max_depth)
   L_eq = sqrt(cg_max / abs(beta))
-  scale_pos = US%m_to_L / L_eq
+  scale_pos = G%grid_unit_to_L / L_eq
   I_nz = 1.0 / real(nz)
 
   x0 = 2.0*G%len_lon/3.0
@@ -150,10 +152,12 @@ subroutine soliton_initialize_velocity(u, v, G, GV, US, param_file, just_read)
   if (abs(beta) <= 0.0) call MOM_error(FATAL, &
       "soliton_initialization, soliton_initialize_velocity: "//&
       "This module requires a non-zero value of BETA.")
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "soliton_initialization.F90: "//&
+          "soliton_initialize_velocity() is only set to work with Cartesian axis units.")
 
   cg_max = sqrt(GV%g_Earth * max_depth)
   L_eq = sqrt(cg_max / abs(beta))
-  scale_pos = US%m_to_L / L_eq
+  scale_pos = G%grid_unit_to_L / L_eq
 
   x0 = 2.0*G%len_lon/3.0
   y0 = 0.0
