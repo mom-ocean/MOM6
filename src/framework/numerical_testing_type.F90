@@ -6,7 +6,7 @@ module numerical_testing_type
 implicit none ; private
 
 public testing
-public testing_type_unit_test
+public numerical_testing_type_unit_tests
 
 !> Class to assist in unit tests, not to be used outside of Recon1d types
 type :: testing
@@ -272,100 +272,136 @@ subroutine int_arr(this, n, i_test, i_true, label, ignore)
 end subroutine int_arr
 
 !> Tests the testing type itself
-logical function testing_type_unit_test(verbose)
+logical function numerical_testing_type_unit_tests(verbose)
   logical, intent(in) :: verbose !< If true, write results to stdout
   ! Local variables
-  type(testing) :: test ! The instance to be tested
+  type(testing) :: tester ! An instance to record tests
+  type(testing) :: test ! The instance used for testing (is mutable)
   logical :: tmpflag ! Temporary for return flags
 
-  testing_type_unit_test = .false. ! Assume all is well at the outset
-  if (verbose) write(test%stdout,*) "  ===== testing_type: testing_type_unit_test ============"
+  numerical_testing_type_unit_tests = .false. ! Assume all is well at the outset
+  if (verbose) write(test%stdout,*) "  ===== testing_type: numerical_testing_type_unit_tests ====="
+  call tester%set( verbose=verbose ) ! Sets the verbosity flag in tester
 
   call test%set( verbose=verbose ) ! Sets the verbosity flag in test
-  call test%set( stderr=0 ) ! Sets stderr
+  call test%set( stderr=6 ) ! Sets stderr (redirect errors for "test" since they are not real)
   call test%set( stdout=6 ) ! Sets stdout
   call test%set( stop_instantly=.false. ) ! Sets stop_instantly
   call test%set( ignore_fail=.false. ) ! Sets ignore_fail
 
-  call test%test( .false., "This should pass" )
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => test(F) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
+  ! Check that %summary() reports nothing when %state is unset
+  ! (note this has to be confirmed visually since everything is in stdout)
+  tmpflag = test%summarize("Summary is for a passing state")
+  call tester%test(tmpflag, "test%summarize() with no fails")
 
-  call test%test( .true., "This should fail but be ignored", ignore=.true. )
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => test(T,ignore) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
+  ! Check that %test(.false.,...) leaves %state unchanged
+  call test%test( .false., "test(F) should pass" )
+  call tester%test(test%state, "test%test(F)")
 
-  call test%real_scalar(1., 1., "s == s should pass", robits=0, tol=0.)
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => real(s,s) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
+  ! Check that %test(.true.,...,ignore=.true.) leaves %state unchanged
+  call test%test( .true., "test(T) should fail but be ignored", ignore=.true. )
+  call tester%test(test%state, "test%test(T,ignore)")
 
-  call test%real_scalar(1., 2., "s != t but ignored", ignore=.true.)
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => real(s,t,ignore) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
-
-  call test%real_arr(2, (/1.,2./), (/1.,2./), "a == a should pass", robits=0, tol=0.)
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => real(a,a) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
-
-  call test%real_arr(2, (/1.,2./), (/3.,4./), "a != b but ignored", ignore=.true.)
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => real(a,b,ignore) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
-
-  call test%int_arr(2, (/1,2/), (/1,2/), "i == i should pass")
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => int(a,a) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
-
-  call test%int_arr(2, (/1,2/), (/3,4/), "i != j but ignored", ignore=.true.)
-  if (verbose .and. .not. test%state) then
-    write(test%stdout,*) "   => int(a,b,ignore) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
-
-  tmpflag = test%summarize("This summary is for a passing state")
-  if (verbose .and. .not. tmpflag) then
-    write(test%stdout,*) "   => summarize(F) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
-
-  ! This following all fail
+  ! Check that %test(.true.,...) sets %state
+  call test%test( .true., "test(T) should fail" )
+  call tester%test(.not. test%state, "test%test(T,ignore)")
   test%state = .false. ! reset
-  call test%test( .true., "This should fail" )
-  if (verbose .and. test%state) then
-    write(test%stdout,*) "   => test(T) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
 
-  test%state = .false. ! reset
+  ! Check that %real_scalar(a,a,...) leaves %state unchanged
+  call test%real_scalar(1., 1., "real_scalar(s,s) should pass", robits=0, tol=0.)
+  call tester%test(test%state, "test%real_scalar(s,s)")
+
+  ! Check that %real_scalar(a,b,...,ignore=.true.) leaves %state unchanged
+  call test%real_scalar(1., 2., "real_scalar(s,t) should fail but be ignored", ignore=.true.)
+  call tester%test(test%state, "test%real_scalar(s,t,ignore)")
+
+  ! Check that %real_scalar(a,a,...) sets %state
   call test%real_scalar(1., 2., "s != t should fail")
-  if (verbose .and. test%state) then
-    write(test%stdout,*) "   => real(s,t) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
-
+  call tester%test(.not. test%state, "test%real_scalar(s,t)")
   test%state = .false. ! reset
-  call test%real_arr(2, (/1.,2./), (/3.,4./), "a != b and should fail")
-  if (verbose .and. test%state) then
-    write(test%stdout,*) "   => real(a,b) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
 
+  ! Check that %real_arr(a,a,...) leaves %state unchanged
+  call test%real_arr(2, (/1.,2./), (/1.,2./), "real_arr(a,a) should pass", robits=0, tol=0.)
+  call tester%test(test%state, "test%real_arr(a,a)")
+
+  ! Check that %real_arr(a,b,...,ignore=.true.) leaves %state unchanged
+  call test%real_arr(2, (/1.,2./), (/3.,4./), "real_arr(a,b) should fail but be ignored", ignore=.true.)
+  call tester%test(test%state, "test%real_arr(a,b,ignore)")
+
+  ! Check that %real_arr(a,b,...) sets %state
+  call test%real_arr(2, (/1.,2./), (/3.,4./), "real(a,b) should fail")
+  call tester%test(.not. test%state, "test%real_arr(a,b)")
   test%state = .false. ! reset
-  call test%int_arr(2, (/1,2/), (/3,4/), "i != j and should fail")
-  if (verbose .and. test%state) then
-    write(test%stdout,*) "   => int(a,b) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
 
-  tmpflag = test%summarize("This summary should have 3 fails")
-  if (verbose .and. tmpflag) then
-    write(test%stdout,*) "   => summarize(T) passed"
-  else; testing_type_unit_test = testing_type_unit_test .or. .true. ; endif
+  ! Check that %int_arr(a,a,...) leaves %state unchanged
+  call test%int_arr(2, (/1,2/), (/1,2/), "int_arr(i,i) should pass")
+  call tester%test(test%state, "test%int_arr(i,i)")
 
-  if (verbose .and. .not. testing_type_unit_test) write(test%stdout,*) "testing_type_unit_test passed"
+  ! Check that %int_arr(a,b,...,ignore=.true.) leaves %state unchanged
+  call test%int_arr(2, (/1,2/), (/3,4/), "int_arr(i,j) should fail but be ignored", ignore=.true.)
+  call tester%test(test%state, "test%int_arr(i,j,ignore)")
 
-end function testing_type_unit_test
+  ! Check that %int_arr(a,b,...) sets %state
+  call test%int_arr(2, (/1,2/), (/3,4/), "int(arr(i,j) should fail")
+  call tester%test(.not. test%state, "test%int_arr(i,j)")
+  test%state = .false. ! reset
+
+  ! Check that %summary() reports nothing when %state is set
+  ! (note this has to be confirmed visually since everything is in stdout)
+  test%state = .true. ! reset to fail for testing %summary()
+  tmpflag = test%summarize("This summary should report 4 fails")
+  call tester%test(.not. tmpflag, "test%summarize() with fails")
+
+  numerical_testing_type_unit_tests = tester%summarize("numerical_testing_type_unit_tests")
+
+end function numerical_testing_type_unit_tests
 
 !> \namespace numerical_testing_type
 !!
+!! numerical_testing_type is a helper class to facilitate implementing
+!! tests of a numerical nature.
+!! The class helps hide the logic and code associated with handling the
+!! results of a test, essentially reducing the multiple lines of `if
+!! ... then ... print ... else ... error_mesg ...` into one line.
+!!
+!! The class is light weight, meaning is does not depend on anything else,
+!! allowing to be particularly useful in unit tests and small drivers.
+!! However, this means it is up to the user to do something with the results,
+!! e.g. `call MOM_error()` appropriately.
+!!
+!! Each test, e.g. real_scalar(), is expected to pass.
+!! If a fail is encountered, it is immediately reported to stderr and stdour,
+!! recorded internally, but does not terminate execuation unless
+!! `set(stop_instantly=.true.)` was called previously.
+!! Most tests take the form of `f(a,b)` where `a` should equal `b`.
+!! Only test() takes a single input (boolean) which is expected to
+!! be false for the test to pass.
+!!
+!! summarize() is used to "finalize" the tests.
+!! It prints a summary of how many and which tests faield, and returns a logical
+!! that is set to .true. if any test failed.
+!!
+!! Usage by example:
+!! \verbatim
+!! use numerical_testing_type, only : testing
+!! ...
+!!
+!! !> Runs my unit_tests. Returns .true. if a test fails, .false. otherwise
+!! logical function my_unit_tests(verbose)
+!!   logical, intent(in) :: verbose !< If true, write results to stdout
+!!   ...
+!!   type(testing) :: test ! An instance of the numerical_testing_type
+!!   ...
+!!   call test%set( verbose=.true. ) ! Show intermediate results rather than just the fails
+!!   ...
+!!
+!!   call test%test(flag, 'Flag is not set')               ! Check flag=.false.
+!!   call test%real_scalar(a, 1., 'u = 1')                 ! Check a=1
+!!   call test%real_arr(3, u, (/1.,2.,3./), 'u = [1,2,3]') ! Check u(:)=[1,2,3]
+!!   call test%int_arr(2, iv, (/1,2/), 'iv = [1,2]')       ! Check that iv(:)=[1,2]
+!!
+!!   my_unit_tests = test%summarize('my_unit_tests') ! Return true if a fail occurs
+!! end function my_unit_tests(verbose)
+!! \endverbatim
+
 end module numerical_testing_type
