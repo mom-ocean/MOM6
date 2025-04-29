@@ -72,7 +72,7 @@ subroutine RGC_initialize_sponges(G, GV, US, tv, u, v, depth_tot, PF, use_ALE, C
   real :: min_depth                 ! The minimum depth of the ocean [Z ~> m]
   real :: dummy1                    ! The position relative to the sponge width [nondim]
   real :: min_thickness             ! A minimum layer thickness [H ~> m or kg m-2] (unused)
-  real :: lensponge                 ! The width of the sponge [km]
+  real :: lensponge                 ! The width of the sponge in axis units, [km] or [m]
   character(len=40) :: filename, state_file
   character(len=40) :: temp_var, salt_var, eta_var, inputdir, h_var
 

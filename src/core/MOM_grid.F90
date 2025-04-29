@@ -75,8 +75,8 @@ type, public :: ocean_grid_type
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     mask2dT, &   !< 0 for land points and 1 for ocean points on the h-grid [nondim].
-    geoLatT, &   !< The geographic latitude at q points [degrees_N] or [km] or [m].
-    geoLonT, &   !< The geographic longitude at q points [degrees_E] or [km] or [m].
+    geoLatT, &   !< The geographic latitude at tracer (h) points [degrees_N] or [km] or [m]
+    geoLonT, &   !< The geographic longitude at tracer (h) points [degrees_E] or [km] or [m]
     dxT, &       !< dxT is delta x at h points [L ~> m].
     IdxT, &      !< 1/dxT [L-1 ~> m-1].
     dyT, &       !< dyT is delta y at h points [L ~> m].

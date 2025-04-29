@@ -115,7 +115,6 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
   real :: S_range         ! The range of salinities in this test case [S ~> ppt]
   real :: S_light, S_dense ! The lightest and densest salinities in the sponges [S ~> ppt].
   real :: eta_IC_quanta   ! The granularity of quantization of initial interface heights [Z-1 ~> m-1].
-  real :: x               ! Along-channel position in the axis units [m] or [km] or [deg]
   logical :: dbrotate     ! If true, rotate the domain.
   logical :: use_ALE      ! True if ALE is being used, False if in layered mode
 
@@ -156,16 +155,10 @@ subroutine dumbbell_initialize_thickness ( h, depth_tot, G, GV, US, param_file, 
                  default=.false., do_not_log=just_read)
     do j=js,je
       do i=is,ie
-        ! Compute normalized zonal coordinates (x,y=0 at center of domain)
-        if (dbrotate) then
-          ! This is really y in the rotated case
-          x = G%geoLatT(i,j)
-        else
-          x = G%geoLonT(i,j)
-        endif
+        ! Work relative to the center of the domain, where geoLonT and geoLatT are both 0.
         eta1D(1) = 0.0
         eta1D(nz+1) = -depth_tot(i,j)
-        if (x<0.0) then
+        if (((.not.dbrotate) .and. (G%geoLonT(i,j)<0.0)) .or. (dbrotate .and. (G%geoLatT(i,j)<0.0))) then
           do k=nz,2, -1
             eta1D(k) =  eta1D(k+1) + min_thickness
           enddo
