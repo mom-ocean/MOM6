@@ -1931,26 +1931,19 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
       !$omp end target data
     else
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * (e(i,j,1) - G%Z_ref)
-      enddo ; enddo
-      !$omp end target
+      enddo
     endif
 
-    !$omp target
     do k=1,nz
-      !$omp parallel loop collapse(2)
-      do j=js,je ; do I=Isq,Ieq
+      do concurrent (I=Isq:Ieq, j=js:je)
         PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
-      enddo ; enddo
-      !$omp parallel loop collapse(2)
-      do J=Jsq,Jeq ; do i=is,ie
+      enddo
+      do concurrent (i=is:ie, J=Jsq:Jeq)
         PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
-      enddo ; enddo
+      enddo
     enddo
-    !$omp end target
 
     !$omp end target data
   endif
