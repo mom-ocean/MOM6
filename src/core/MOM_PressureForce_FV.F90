@@ -1967,33 +1967,27 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   if (present(eta)) then
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
     ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
-    !$omp target
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       eta(i,j) = e(i,j,1)*GV%Z_to_H
-    enddo ; enddo
+    enddo
 
     if (CS%tides .and. (.not.CS%bq_sal_tides)) then
       if (CS%tides_answer_date>20230630) then
-        !$omp parallel loop collapse(2)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
           eta(i,j) = eta(i,j) + (e_tidal_eq(i,j)+e_tidal_sal(i,j))*GV%Z_to_H
-        enddo ; enddo
+        enddo
       else
-        !$omp parallel loop collapse(2)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
           eta(i,j) = eta(i,j) + e_sal_and_tide(i,j)*GV%Z_to_H
-        enddo ; enddo
+        enddo
       endif
     endif
 
     if (CS%calculate_SAL .and. (CS%tides_answer_date>20230630) .and. (.not.CS%bq_sal_tides)) then
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
         eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
-      enddo ; enddo
+      enddo
     endif
-    !$omp end target
   endif
 
   !$omp target exit data map(delete: e)
