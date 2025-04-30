@@ -1203,6 +1203,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = VarMix%Res_fn_h(i,j) * Kh(i,j)
         enddo ; enddo
+        !$omp target update to(Kh)
       endif
 
       if (legacy_bound) then
@@ -1211,6 +1212,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = min(Kh(i,j), CS%Kh_Max_xx(i,j))
         enddo ; enddo
+        !$omp target update to(Kh)
       endif
 
       ! Place a floor on the viscosity, if desired.
@@ -1309,6 +1311,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       if (CS%id_sh_xx_h>0) then
+        !$omp target update from(sh_xx)
         do j=js,je ; do i=is,ie
           sh_xx_h(i,j,k) = sh_xx(i,j)
         enddo ; enddo
@@ -1324,8 +1327,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif ! Get Kh at h points and get Laplacian component of str_xx
 
     if (CS%anisotropic) then
-      !$omp target update from(str_xx)
-      !$omp target update from(sh_xx, sh_xy)
+      !$omp target update from(str_xx, sh_xy)
       do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
         ! Shearing-strain averaged to h-points
         local_strain = 0.25 * ( (sh_xy(I,J) + sh_xy(I-1,J-1)) + (sh_xy(I-1,J) + sh_xy(I,J-1)) )
@@ -1645,12 +1647,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
            G, GV, CS%ZB2020, k)
     endif
 
-    !$omp target update from(sh_xx, sh_xy)
-    !$omp target update from(h_u, h_v, hq)
-    !$omp target update from(str_xx)
-    !$omp target update from(Shear_mag) if (use_Smag)
-    !$omp target update from(Del2u, Del2v) if (CS%biharmonic)
-    !$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
+    !!$omp target update from(sh_xx, sh_xy)
+    !!$omp target update from(h_u, h_v, hq)
+    !!$omp target update from(str_xx)
+    !!$omp target update from(Shear_mag) if (use_Smag)
+    !!$omp target update from(Del2u, Del2v) if (CS%biharmonic)
+    !!$omp target update from(dDel2vdx, dDel2udy) if (CS%biharmonic)
 
     if (CS%Laplacian) then
       ! Determine the Laplacian viscosity at q points, using the
@@ -1980,6 +1982,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     if (CS%use_GME) then
       !$omp target update from(str_xx, str_xy)
+      !$omp target update from(hq) if (CS%no_slip)
 
       ! The wider halo here is to permit one pass of smoothing without a halo update.
       do j=Jsq-1,Jeq+2 ; do i=Isq-1,Ieq+2
