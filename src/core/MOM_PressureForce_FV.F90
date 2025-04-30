@@ -1265,22 +1265,18 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp target enter data map(to: p_atm) if (use_p_atm)
   !$omp target enter data map(alloc: pa)
 
-  !$omp target
   ! Set the surface boundary conditions on pressure anomaly and its horizontal
   ! integrals, assuming that the surface pressure anomaly varies linearly
   ! in x and y.
   if (use_p_atm) then
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       pa(i,j,1) = GxRho_ref * (e(i,j,1) - G%Z_ref) + p_atm(i,j)
-    enddo ; enddo
+    enddo
   else
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       pa(i,j,1) = GxRho_ref * (e(i,j,1) - G%Z_ref)
-    enddo ; enddo
+    enddo
   endif
-  !$omp end target
 
   if (use_EOS) then
     !$omp target enter data map(alloc: Z_0p) if (use_EOS)
@@ -1372,15 +1368,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp end target data
   endif
 
-  !$omp target
   ! Set the pressure anomalies at the interfaces.
   do k=1,nz
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       pa(i,j,K+1) = pa(i,j,K) + dpa(i,j,k)
-    enddo ; enddo
+    enddo
   enddo
-  !$omp end target
 
   ! Calculate and add SAL geopotential anomaly to interface height (new answers)
   if (CS%calculate_SAL .and. CS%tides_answer_date>20250131) then
