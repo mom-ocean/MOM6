@@ -1211,14 +1211,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp target update to(e(:,:,nz+1))
   endif
 
-  !$omp target
   do k=nz,1,-1
-    !$omp parallel loop collapse(2)
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
       e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_Z
-    enddo ; enddo
+    enddo
   enddo
-  !$omp end target
 
   if (use_EOS) then
     if (nkmb>0) then
@@ -1265,7 +1262,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo ; enddo ; enddo
   endif
 
-  !$omp target enter data map(to: e)
   !$omp target enter data map(to: p_atm) if (use_p_atm)
   !$omp target enter data map(alloc: pa)
 
