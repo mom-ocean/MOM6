@@ -1355,6 +1355,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo
     !$omp target update to(dpa, intx_dpa, inty_dpa, intz_dpa)
   else
+    !$omp target data map(alloc: dz_geo)
     do k=1,nz
       do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
         dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
@@ -1368,6 +1369,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
         inty_dpa(i,J,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i,j+1))
       enddo
     enddo
+    !$omp end target data
   endif
 
   !$omp target
