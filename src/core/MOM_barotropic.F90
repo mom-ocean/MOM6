@@ -351,6 +351,7 @@ type, public :: barotropic_CS ; private
   integer :: id_BTC_vbt_NN = -1, id_BTC_vbt_SS = -1
   integer :: id_BTC_FA_u_rat0 = -1, id_BTC_FA_v_rat0 = -1, id_BTC_FA_h_rat0 = -1
   integer :: id_uhbt0 = -1, id_vhbt0 = -1
+  integer :: id_SSH_u_OBC = -1, id_SSH_v_OBC = -1, id_ubt_OBC = -1, id_vbt_OBC = -1
   !>@}
 
 end type barotropic_CS
@@ -1680,6 +1681,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                   unscale=GV%m_to_H, scalar_pair=.true.)
     call uvchksum("BT visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, &
                   haloshift=1, scalar_pair=.true.)
+
+    if (apply_OBCs) then
+      call uvchksum("BT_OBC%[uv]bt_outer", CS%BT_OBC%ubt_outer,  CS%BT_OBC%vbt_outer, CS%debug_BT_HI, &
+                    symmetric=.true., omit_corners=.true., unscale=US%L_T_to_m_s)
+      if (allocated(CS%BT_OBC%SSH_outer_u) .and. allocated(CS%BT_OBC%SSH_outer_v)) &
+        call uvchksum("BT_OBC%SSH_outer[uv]",  CS%BT_OBC%SSH_outer_u,  CS%BT_OBC%SSH_outer_v, CS%debug_BT_HI, &
+                    symmetric=.true., omit_corners=.true., unscale=US%Z_to_m, scalar_pair=.true.)
+      if (allocated(CS%BT_OBC%Cg_u) .and. allocated(CS%BT_OBC%Cg_v)) &
+        call uvchksum("BT_OBC%Cg_[uv]",  CS%BT_OBC%Cg_u,  CS%BT_OBC%Cg_v, CS%debug_BT_HI, &
+                    symmetric=.true., omit_corners=.true., unscale=US%L_T_to_m_s, scalar_pair=.true.)
+      if (allocated(CS%BT_OBC%dZ_u) .and. allocated(CS%BT_OBC%dZ_v)) &
+        call uvchksum("BT_OBC%dZ_[uv]",  CS%BT_OBC%dZ_u,  CS%BT_OBC%dZ_v, CS%debug_BT_HI, &
+                    symmetric=.true., omit_corners=.true., unscale=US%Z_to_m, scalar_pair=.true.)
+    endif
   endif
 
   if (CS%id_ubtdt > 0) then
@@ -2098,6 +2113,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         call post_data(CS%id_BTC_FA_h_rat0, tmp_h, CS%diag)
       endif
     endif
+
+    if (CS%id_SSH_u_OBC > 0) call post_data(CS%id_SSH_u_OBC, CS%BT_OBC%SSH_outer_u(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_SSH_v_OBC > 0) call post_data(CS%id_SSH_v_OBC, CS%BT_OBC%SSH_outer_v(isd:ied,JsdB:JedB), CS%diag)
+    if (CS%id_ubt_OBC > 0) call post_data(CS%id_ubt_OBC, CS%BT_OBC%ubt_outer(IsdB:IedB,jsd:jed), CS%diag)
+    if (CS%id_vbt_OBC > 0) call post_data(CS%id_vbt_OBC, CS%BT_OBC%vbt_outer(isd:ied,JsdB:JedB), CS%diag)
   else
     if (CS%id_frhatu1 > 0) CS%frhatu1(:,:,:) = CS%frhatu(:,:,:)
     if (CS%id_frhatv1 > 0) CS%frhatv1(:,:,:) = CS%frhatv(:,:,:)
@@ -6035,6 +6055,18 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
       'Barotropic zonal transport difference', 'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
   CS%id_vhbt0 = register_diag_field('ocean_model', 'vhbt0', diag%axesCv1, Time, &
       'Barotropic meridional transport difference', 'm3 s-1', conversion=GV%H_to_m*US%L_to_m**2*US%s_to_T)
+  if (associated(OBC)) then
+    if (OBC%Flather_u_BCs_exist_globally .or. OBC%Flather_v_BCs_exist_globally) then
+      CS%id_SSH_u_OBC = register_diag_field('ocean_model', 'SSH_u_OBC', diag%axesCu1, Time, &
+        'Outer sea surface height at u OBC points', 'm', conversion=US%Z_to_m)
+      CS%id_SSH_v_OBC = register_diag_field('ocean_model', 'SSH_v_OBC', diag%axesCv1, Time, &
+          'Outer sea surface height at v OBC points', 'm', conversion=US%Z_to_m)
+      CS%id_ubt_OBC = register_diag_field('ocean_model', 'ubt_OBC', diag%axesCu1, Time, &
+        'Outer u velocity at OBC points', 'm', conversion=US%L_T_to_m_s)
+      CS%id_vbt_OBC = register_diag_field('ocean_model', 'vbt_OBC', diag%axesCv1, Time, &
+        'Outer v velocity at OBC points', 'm', conversion=US%L_T_to_m_s)
+    endif
+  endif
 
   if (CS%id_frhatu1 > 0) allocate(CS%frhatu1(IsdB:IedB,jsd:jed,nz), source=0.)
   if (CS%id_frhatv1 > 0) allocate(CS%frhatv1(isd:ied,JsdB:JedB,nz), source=0.)
