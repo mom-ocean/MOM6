@@ -446,13 +446,15 @@ subroutine open_boundary_config(G, US, param_file, OBC)
 
   ! Local variables
   integer :: l ! For looping over segments
-  logical :: debug, debug_OBC, mask_outside, reentrant_x, reentrant_y
+  logical :: debug, mask_outside, reentrant_x, reentrant_y
   character(len=15) :: segment_param_str ! The run-time parameter name for each segment
   character(len=1024) :: segment_str      ! The contents (rhs) for parameter "segment_param_str"
   character(len=200) :: config1          ! String for OBC_USER_CONFIG
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: check_remapping, force_bounds_in_subcell
+  logical :: debugging_tests ! If true, do additional calls resetting values to help debug the performance
+                             ! of the open boundary condition code.
   logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -549,21 +551,25 @@ subroutine open_boundary_config(G, US, param_file, OBC)
     endif
 
     call get_param(param_file, mdl, "DEBUG", debug, default=.false.)
-    ! This extra get_param call is to enable logging if either DEBUG or DEBUG_OBC are true.
-    call get_param(param_file, mdl, "DEBUG_OBC", debug_OBC, default=debug)
-    call get_param(param_file, mdl, "DEBUG_OBC", OBC%debug, &
+    call get_param(param_file, mdl, "DEBUG_OBCS", OBC%debug, &
                  "If true, do additional calls to help debug the performance "//&
                  "of the open boundary condition code.", &
-                 default=debug, do_not_log=.not.(debug_OBC.or.debug), debuggingParam=.true.)
+                 default=.false., debuggingParam=.true.)
+    if (OBC%debug .and. (num_PEs() > 1)) &
+      call MOM_error(FATAL, "DEBUG_OBCS = True is currently only supported for single PE runs.")
+    call get_param(param_file, mdl, "OBC_DEBUGGING_TESTS", debugging_tests, &
+                 "If true, do additional calls resetting certain values to help verify the correctness "//&
+                 "of the open boundary condition code.", &
+                 default=.false., old_name="DEBUG_OBC", debuggingParam=.true.)
 
     call get_param(param_file, mdl, "OBC_SILLY_THICK", OBC%silly_h, &
                  "A silly value of thicknesses used outside of open boundary "//&
                  "conditions for debugging.", units="m", default=0.0, scale=US%m_to_Z, &
-                 do_not_log=.not.OBC%debug, debuggingParam=.true.)
+                 do_not_log=.not.debugging_tests, debuggingParam=.true.)
     call get_param(param_file, mdl, "OBC_SILLY_VEL", OBC%silly_u, &
                  "A silly value of velocities used outside of open boundary "//&
                  "conditions for debugging.", units="m/s", default=0.0, scale=US%m_s_to_L_T, &
-                 do_not_log=.not.OBC%debug, debuggingParam=.true.)
+                 do_not_log=.not.debugging_tests, debuggingParam=.true.)
     call get_param(param_file, mdl, "EXTERIOR_OBC_BUG", OBC%exterior_OBC_bug, &
                  "If true, recover a bug in barotropic solver and other routines when "//&
                  "boundary contitions interior to the domain are used.", &

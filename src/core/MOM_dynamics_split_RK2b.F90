@@ -171,7 +171,8 @@ type, public :: MOM_dyn_split_RK2b_CS ; private
                      !! is forward-backward (0) or simulated backward
                      !! Euler (1) [nondim].  0 is often used.
   logical :: debug   !< If true, write verbose checksums for debugging purposes.
-  logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
+  logical :: debug_OBC !< If true, do additional calls resetting values to help verify the correctness
+                       !! of the open boundary condition code.
   logical :: fpmix = .false.                 !< If true, applies profiles of momentum flux magnitude and direction.
   logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
   logical :: visc_rem_dt_bug = .true. !< If true, recover a bug that uses dt_pred rather than dt for vertvisc_rem
@@ -1359,7 +1360,10 @@ subroutine initialize_dyn_split_RK2b(u, v, h, tv, uh, vh, eta, Time, G, GV, US, 
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
-  call get_param(param_file, mdl, "DEBUG_OBC", CS%debug_OBC, default=.false.)
+  call get_param(param_file, mdl, "OBC_DEBUGGING_TESTS", CS%debug_OBC, &
+                 "If true, do additional calls resetting certain values to help verify the "//&
+                 "correctness of the open boundary condition code.", &
+                 default=.false., old_name="DEBUG_OBC", debuggingParam=.true., do_not_log=.true.)
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
   call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, &

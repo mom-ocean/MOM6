@@ -181,7 +181,8 @@ type, public :: MOM_dyn_split_RK2_CS ; private
                      !! Euler (1) [nondim].  0 is often used.
   real    :: Cemp_NL   !< Empirical coefficient of non-local momentum mixing [nondim]
   logical :: debug     !< If true, write verbose checksums for debugging purposes.
-  logical :: debug_OBC !< If true, do debugging calls for open boundary conditions.
+  logical :: debug_OBC !< If true, do additional calls resetting values to help debug the correctness
+                       !! of the open boundary condition code.
   logical :: fpmix     !< If true, add non-local momentum flux increments and diffuse down the Eulerian gradient.
   logical :: module_is_initialized = .false. !< Record whether this module has been initialized.
   logical :: visc_rem_dt_bug = .true. !< If true, recover a bug that uses dt_pred rather than dt for vertvisc_rem
@@ -1473,7 +1474,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   call get_param(param_file, mdl, "DEBUG", CS%debug, &
                  "If true, write out verbose debugging data.", &
                  default=.false., debuggingParam=.true.)
-  call get_param(param_file, mdl, "DEBUG_OBC", CS%debug_OBC, default=.false.)
+  call get_param(param_file, mdl, "OBC_DEBUGGING_TESTS", CS%debug_OBC, &
+                 "If true, do additional calls resetting certain values to help verify the "//&
+                 "correctness of the open boundary condition code.", &
+                 default=.false., old_name="DEBUG_OBC", debuggingParam=.true., do_not_log=.true.)
   call get_param(param_file, mdl, "DEBUG_TRUNCATIONS", debug_truncations, &
                  default=.false.)
   call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, &

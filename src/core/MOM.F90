@@ -115,7 +115,7 @@ use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
 use MOM_open_boundary,         only : open_boundary_setup_vert, update_OBC_segment_data
-use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
+use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init, write_OBC_info, chksum_OBC_segments
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
@@ -286,6 +286,7 @@ type, public :: MOM_control_struct ; private
   logical :: count_calls = .false.   !< If true, count the calls to step_MOM, rather than the
                                      !! number of dynamics steps in nstep_tot
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
+  logical :: debug_OBCs              !< If true, write verbose OBC values for debugging purposes.
   integer :: ntrunc                  !< number u,v truncations since last call to write_energy
 
   integer :: cont_stencil            !< The stencil for thickness from the continuity solver.
@@ -1283,6 +1284,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
       endif
     endif
   endif
+  if (CS%debug_OBCs .and. associated(CS%OBC)) call chksum_OBC_segments(CS%OBC, G, GV, US, 3)
 
   if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
     ! This section uses a split time stepping scheme for the dynamic equations,
@@ -2319,7 +2321,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   logical :: semi_Boussinesq   ! If true, this run is partially non-Boussinesq
   logical :: use_KPP           ! If true, diabatic is using KPP vertical mixing
   logical :: MLE_use_PBL_MLD   ! If true, use stored boundary layer depths for submesoscale restratification.
-  integer :: nkml, nkbl, verbosity, write_geom
+  integer :: nkml, nkbl, verbosity, write_geom, number_of_OBC_segments
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
   real :: salin_underflow      ! A tiny value of salinity below which the it is set to 0 [S ~> ppt]
@@ -2500,6 +2502,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, "MOM", "DEBUG_TRUNCATIONS", debug_truncations, &
                  "If true, calculate all diagnostics that are useful for "//&
                  "debugging truncations.", default=.false., debuggingParam=.true.)
+  call get_param(param_file, "MOM", "OBC_NUMBER_OF_SEGMENTS", number_of_OBC_segments, &
+                 default=0, do_not_log=.true.)
+  call get_param(param_file, "MOM", "DEBUG_OBCS", CS%debug_OBCs, &
+                 "If true, write out verbose debugging data about OBCs.", &
+                 default=.false., debuggingParam=.true., do_not_log=(number_of_OBC_segments<=0))
 
   call get_param(param_file, "MOM", "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.  The time-step that "//&
@@ -2882,9 +2889,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     call copy_dyngrid_to_MOM_grid(dG, G, US)
 
     if (associated(OBC_in)) then
-      ! TODO: General OBC index rotations is not yet supported.
-      if (modulo(turns, 4) /= 1) &
-        call MOM_error(FATAL, "OBC index rotation of 180 and 270 degrees is not yet supported.")
       allocate(CS%OBC)
       call rotate_OBC_config(OBC_in, dG_in, CS%OBC, dG, turns)
     endif
@@ -3080,8 +3084,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   if (associated(CS%OBC)) then
     ! Set up remaining information about open boundary conditions that is needed for OBCs.
+    ! Package specific changes to OBCs occur here.
     call call_OBC_register(G, GV, US, param_file, CS%update_OBC_CSp, CS%OBC, CS%tracer_Reg)
-  !### Package specific changes to OBCs need to go here?
 
     ! This is the equivalent to 2 calls to register_segment_tracer (per segment), which
     ! could occur with the call to update_OBC_data or after the main initialization.
@@ -3094,27 +3098,34 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     ! reservoirs are used.
     call open_boundary_register_restarts(HI, GV, US, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
-    if (turns /= 0) then
-      if (CS%OBC%radiation_BCs_exist_globally) then
-        OBC_in%rx_normal => CS%OBC%rx_normal
-        OBC_in%ry_normal => CS%OBC%ry_normal
-      endif
-      if (CS%OBC%oblique_BCs_exist_globally) then
-        OBC_in%rx_oblique_u => CS%OBC%rx_oblique_u
-        OBC_in%ry_oblique_u => CS%OBC%ry_oblique_u
-        OBC_in%rx_oblique_v => CS%OBC%rx_oblique_v
-        OBC_in%ry_oblique_v => CS%OBC%ry_oblique_v
-        OBC_in%cff_normal_u => CS%OBC%cff_normal_u
-        OBC_in%cff_normal_v => CS%OBC%cff_normal_v
-      endif
-      if (any(CS%OBC%tracer_x_reservoirs_used)) then
-        OBC_in%tres_x => CS%OBC%tres_x
-      endif
-      if (any(CS%OBC%tracer_y_reservoirs_used)) then
-        OBC_in%tres_y => CS%OBC%tres_y
-      endif
+    ! Is block of code this necessary at all?
+    if (CS%rotate_index .and. associated(OBC_in)) then
+      ! if (mod(turns,2) == 0) then
+        if (CS%OBC%radiation_BCs_exist_globally) then
+          OBC_in%rx_normal => CS%OBC%rx_normal
+          OBC_in%ry_normal => CS%OBC%ry_normal
+        endif
+        if (CS%OBC%oblique_BCs_exist_globally) then
+          OBC_in%rx_oblique_u => CS%OBC%rx_oblique_u
+          OBC_in%ry_oblique_u => CS%OBC%ry_oblique_u
+          OBC_in%rx_oblique_v => CS%OBC%rx_oblique_v
+          OBC_in%ry_oblique_v => CS%OBC%ry_oblique_v
+          OBC_in%cff_normal_u => CS%OBC%cff_normal_u
+          OBC_in%cff_normal_v => CS%OBC%cff_normal_v
+        endif
+        if (any(CS%OBC%tracer_x_reservoirs_used)) then
+          OBC_in%tres_x => CS%OBC%tres_x
+        endif
+        if (any(CS%OBC%tracer_y_reservoirs_used)) then
+          OBC_in%tres_y => CS%OBC%tres_y
+        endif
+      ! else
+        ! Do we need to swap around the u- and v-components?
+      ! endif
     endif
   endif
+
+  if (CS%debug_OBCs .and. associated(CS%OBC)) call write_OBC_info(CS%OBC, G, GV, US)
 
   if (present(waves_CSp)) then
     call waves_register_restarts(waves_CSp, HI, GV, US, param_file, restart_CSp)

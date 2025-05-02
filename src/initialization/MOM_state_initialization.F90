@@ -177,7 +177,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                         ! allows the use of Fatal unused parameters.
   type(EOS_type), pointer :: eos => NULL()
   logical :: debug      ! If true, write debugging output.
-  logical :: debug_obc  ! If true, do debugging calls related to OBCs.
+  logical :: debug_obc  ! If true, do additional calls resetting values to help debug the correctness
+                        ! of the open boundary condition code.
   logical :: debug_layers = .false.
   logical :: use_ice_shelf
   character(len=80) :: mesg
@@ -194,7 +195,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   call callTree_enter("MOM_initialize_state(), MOM_state_initialization.F90")
   call log_version(PF, mdl, version, "")
   call get_param(PF, mdl, "DEBUG", debug, default=.false.)
-  call get_param(PF, mdl, "DEBUG_OBC", debug_obc, default=.false.)
+  call get_param(PF, mdl, "OBC_DEBUGGING_TESTS", debug_obc, &
+                 "If true, do additional calls resetting values to help verify the correctness "//&
+                 "of the open boundary condition code.", default=.false.,  &
+                 do_not_log=.true., old_name="DEBUG_OBC", debuggingParam=.true.)
 
   new_sim = is_new_run(restart_CS)
   just_read = .not.new_sim
