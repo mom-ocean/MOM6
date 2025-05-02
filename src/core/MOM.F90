@@ -3115,10 +3115,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
           OBC_in%cff_normal_u => CS%OBC%cff_normal_u
           OBC_in%cff_normal_v => CS%OBC%cff_normal_v
         endif
-        if (any(CS%OBC%tracer_x_reservoirs_used)) then
+        if (associated(CS%OBC%tres_x)) then
           OBC_in%tres_x => CS%OBC%tres_x
         endif
-        if (any(CS%OBC%tracer_y_reservoirs_used)) then
+        if (associated(CS%OBC%tres_y)) then
           OBC_in%tres_y => CS%OBC%tres_y
         endif
       ! else

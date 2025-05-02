@@ -10,7 +10,7 @@ use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_W
 use MOM_open_boundary,  only : OBC_segment_type, register_OBC
-use MOM_open_boundary,  only : OBC_registry_type
+use MOM_open_boundary,  only : OBC_registry_type, rotate_OBC_segment_direction
 use MOM_time_manager,   only : time_type, time_type_to_real
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -156,15 +156,16 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: y   ! Position relative to the southern boundary [km] or [m] or [degrees_N]
   real :: I_yscale  ! A factor to give the correct inflow velocity [km-1] or [m-1] or [degrees_N-1] or
                     ! to compensate for the variable units of the y-coordinate [km axis_unit-1], usually 1 [nondim]
-  integer :: i, j, is, ie, js, je, isd, ied, jsd, jed, n
-  integer :: IsdB, IedB, JsdB, JedB
+  real :: my_amp    ! Amplitude of the open boundary current inflows, including sign changes
+                    ! to account for grid rotation [L T-1 ~> m s-1]
+  integer :: i, j, is, ie, js, je, n
+  integer :: turns    ! Number of index quarter turns
   type(OBC_segment_type), pointer :: segment => NULL()
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
   if (.not.associated(OBC)) return
+
+  turns = modulo(G%HI%turns, 4)
+  my_amp = CS%my_amp ; if ((turns==2) .or. (turns==3)) my_amp = -CS%my_amp
 
   time_sec = US%s_to_T*time_type_to_real(Time)
   if (CS%shelfwave_correct_amplitude) then
@@ -178,21 +179,33 @@ subroutine shelfwave_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
-    if (segment%direction /= OBC_DIRECTION_W) cycle
+    if (rotate_OBC_segment_direction(segment%direction, -turns) /= OBC_DIRECTION_W) cycle
 
-    IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
-    jsd = segment%HI%jsd ; jed = segment%HI%jed
-    do j=jsd,jed ; do I=IsdB,IedB
-      x = G%geoLonCu(I,j) - G%west_lon
-      y = G%geoLatCu(I,j) - G%south_lat
+    if (segment%is_E_or_W) then
+      ! segment thicknesses are defined at cell face centers.
+      is = segment%HI%isdB ; ie = segment%HI%iedB
+      js = segment%HI%jsd ; je = segment%HI%jed
+    else
+      is = segment%HI%isd ; ie = segment%HI%ied
+      js = segment%HI%jsdB ; je = segment%HI%jedB
+    endif
+
+    do j=js,je ; do I=is,ie
+      if (segment%is_E_or_W) then
+        x = G%geoLonCu(I,j) - G%west_lon
+        y = G%geoLatCu(I,j) - G%south_lat
+      else
+        x = G%geoLonCv(i,J) - G%west_lon
+        y = G%geoLatCv(i,J) - G%south_lat
+      endif
       sin_wt = sin(CS%ll*x - CS%omega*time_sec)
       cos_wt = cos(CS%ll*x - CS%omega*time_sec)
       sin_ky = sin(CS%kk * y)
       cos_ky = cos(CS%kk * y)
-      segment%normal_vel_bt(I,j) = CS%my_amp * exp(- CS%alpha * y) * cos_wt * &
+      segment%normal_vel_bt(I,j) = my_amp * exp(- CS%alpha * y) * cos_wt * &
            ((CS%alpha * sin_ky + CS%kk * cos_ky) * I_yscale)
-!     segment%tangential_vel_bt(I,j) = CS%my_amp * (CS%ll * I_yscale) * exp(- CS%alpha * y) * sin_wt * sin_ky
-!     segment%vorticity_bt(I,j) = CS%my_amp * exp(- CS%alpha * y) * cos_wt * sin_ky * &
+!     segment%tangential_vel_bt(I,j) = my_amp * (CS%ll * I_yscale) * exp(- CS%alpha * y) * sin_wt * sin_ky
+!     segment%vorticity_bt(I,j) = my_amp * exp(- CS%alpha * y) * cos_wt * sin_ky * &
 !           ((CS%ll**2 + CS%kk**2 + CS%alpha**2) * (I_yscale / G%grid_unit_to_L))
     enddo ; enddo
   enddo
