@@ -321,12 +321,7 @@ jobs:
           path: |
             .testing/build/cov/MOM6
             .testing/build/cov/*.gcno
-            .testing/build/unit/test_MOM_EOS
-            .testing/build/unit/test_MOM_file_parser
-            .testing/build/unit/test_MOM_mixedlayer_restrat
-            .testing/build/unit/test_MOM_remapping
-            .testing/build/unit/test_MOM_string_functions
-            .testing/build/unit/test_numerical_testing_type
+            .testing/build/unit/test_*
             .testing/build/unit/*.gcno
           retention-days: 1
 
@@ -728,31 +723,19 @@ jobs:
 
       - name: Generate unit test coverage
         run: |
-          chmod u+rx .testing/build/unit/test_MOM_EOS
-          chmod u+rx .testing/build/unit/test_MOM_file_parser
-          chmod u+rx .testing/build/unit/test_MOM_mixedlayer_restrat
-          chmod u+rx .testing/build/unit/test_MOM_remapping
-          chmod u+rx .testing/build/unit/test_MOM_string_functions
-          chmod u+rx .testing/build/unit/test_numerical_testing_type
+          UNIT_EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*"`
+          chmod u+rx $UNIT_EXECS
+          UNIT_EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*" | sed 's:.testing/::'`
           make -C .testing -j run.cov.unit \
-          -o build/unit/test_MOM_file_parser \
-          -o build/unit/test_MOM_EOS \
-          -o build/unit/test_MOM_mixedlayer_restrat \
-          -o build/unit/test_MOM_remapping \
-          -o build/unit/test_MOM_string_functions \
-          -o build/unit/test_numerical_testing_type
+          $( for f in $UNIT_EXECS; do echo "-o $f" ; done )
 
       - name: Report coverage to CI
         run: |
           make -C .testing report.cov \
           -o build/cov/MOM6
+          UNIT_EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*" | sed 's:.testing/::'`
           make -C .testing report.cov.unit \
-          -o build/unit/test_MOM_file_parser \
-          -o build/unit/test_MOM_EOS \
-          -o build/unit/test_MOM_mixedlayer_restrat \
-          -o build/unit/test_MOM_remapping \
-          -o build/unit/test_MOM_string_functions \
-          -o build/unit/test_numerical_testing_type
+          $( for f in $UNIT_EXECS; do echo "-o $f" ; done )
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
