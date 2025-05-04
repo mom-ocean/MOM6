@@ -75,10 +75,12 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   ! The following variables are used to set up the transport in the tidal_bay example.
   real :: time_sec    ! Elapsed model time [T ~> s]
   real :: cff_eta     ! The sea surface height anomalies associated with the inflow [Z ~> m]
-  real :: my_flux     ! The vlume flux through the face [L2 Z T-1 ~> m3 s-1]
+  real :: my_flux     ! The volume flux through the face [L2 Z T-1 ~> m3 s-1]
   real :: total_area  ! The total face area of the OBCs [L Z ~> m2]
+  real :: normal_vel  ! The normal velocity through the inflow face [L T-1 ~> m s-1]
   real :: PI          ! The ratio of the circumference of a circle to its diameter [nondim]
   real, allocatable :: my_area(:,:) ! The total OBC inflow area [L Z ~> m2]
+  integer :: turns    ! Number of index quarter turns
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz, n
   integer :: IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL()
@@ -89,32 +91,63 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
   PI = 4.0*atan(1.0)
 
-  if (.not.associated(OBC)) return
+  turns = modulo(G%HI%turns, 4)
 
-  allocate(my_area(1:1,js:je))
+  if (.not.associated(OBC)) return
 
   time_sec = US%s_to_T*time_type_to_real(Time)
   cff_eta = CS%tide_ssh_amp * sin(2.0*PI*time_sec / CS%tide_period)
-  my_area = 0.0
-  my_flux = 0.0
+
   segment => OBC%segment(1)
 
-  do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
-    if (OBC%segnum_u(I,j) /= OBC_NONE) then
-      do k=1,nz
-        my_area(1,j) = my_area(1,j) + h(I,j,k)*(GV%H_to_m*US%m_to_Z)*G%dyCu(I,j)
-      enddo
-    endif
-  enddo ; enddo
+  if (turns == 0) then
+    allocate(my_area(1:1,js:je), source=0.0)
+    do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
+      if (OBC%segnum_u(I,j) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_E)
+        do k=1,nz
+          my_area(1,j) = my_area(1,j) + h(i,j,k)*(GV%H_to_m*US%m_to_Z)*G%dyCu(I,j)
+        enddo
+      endif
+    enddo ; enddo
+  elseif (turns == 1) then
+    allocate(my_area(is:ie,1:1), source=0.0)
+    do J=segment%HI%JscB,segment%HI%JecB ; do i=segment%HI%isc,segment%HI%iec
+      if (OBC%segnum_v(i,J) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_N)
+        do k=1,nz
+          my_area(i,1) = my_area(i,1) + h(i,j,k)*(GV%H_to_m*US%m_to_Z)*G%dxCv(i,J)
+        enddo
+      endif
+    enddo ; enddo
+  elseif (turns == 2) then
+    allocate(my_area(1:1,js:je), source=0.0)
+    do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
+      if (OBC%segnum_u(I,j) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_W)
+        do k=1,nz
+          my_area(1,j) = my_area(1,j) + h(i+1,j,k)*(GV%H_to_m*US%m_to_Z)*G%dyCu(I,j)
+        enddo
+      endif
+    enddo ; enddo
+  elseif (turns == 3) then
+    allocate(my_area(is:ie,1:1), source=0.0)
+    do J=segment%HI%JscB,segment%HI%JecB ; do i=segment%HI%isc,segment%HI%iec
+      if (OBC%segnum_v(i,J) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_S)
+        do k=1,nz
+          my_area(i,1) = my_area(i,1) + h(i,j+1,k)*(GV%H_to_m*US%m_to_Z)*G%dxCv(i,J)
+        enddo
+      endif
+    enddo ; enddo
+  endif
+
   total_area = reproducing_sum(my_area, unscale=US%Z_to_m*US%L_to_m)
   my_flux = - CS%tide_flow * SIN(2.0*PI*time_sec / CS%tide_period)
+  normal_vel = my_flux / total_area
+  if ((turns==2) .or. (turns==3)) normal_vel = -1.0 * normal_vel
 
   do n = 1, OBC%number_of_segments
     segment => OBC%segment(n)
-
     if (.not. segment%on_pe) cycle
 
-    segment%normal_vel_bt(:,:) = my_flux / total_area
+    segment%normal_vel_bt(:,:) = normal_vel
     segment%SSH(:,:) = cff_eta
 
   enddo ! end segment loop
