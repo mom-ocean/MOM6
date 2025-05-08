@@ -1047,36 +1047,30 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   !   Use u_Cor and v_Cor as the reference values for the Coriolis terms,
   ! including the viscous remnant.
-  !$OMP parallel do default(shared)
-  do j=js-1,je+1 ; do I=is-1,ie ; ubt_Cor(I,j) = 0.0 ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do J=js-1,je ; do i=is-1,ie+1 ; vbt_Cor(i,J) = 0.0 ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do j=js,je ; do k=1,nz ; do I=is-1,ie
+  do concurrent (j=js-1:je+1, I=is-1:ie) ; ubt_Cor(I,j) = 0.0 ; enddo
+  do concurrent (J=js-1:je, i=is-1:ie+1) ; vbt_Cor(i,J) = 0.0 ; enddo
+  do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
     ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
-  enddo ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do J=js-1,je ; do k=1,nz ; do i=is,ie
+  enddo ; enddo
+  do k=1,nz ; do concurrent (J=js-1:je, i=is:ie)
     vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
-  enddo ; enddo ; enddo
+  enddo ; enddo
 
   ! The gtot arrays are the effective layer-weighted reduced gravities for
   ! accelerations across the various faces, with names for the relative
   ! locations of the faces to the pressure point.  They will have their halos
   ! updated later on.
-  !$OMP parallel do default(shared)
-  do j=js,je
-    do k=1,nz ; do I=is-1,ie
+  do k=1,nz
+    do concurrent (j=js:je, i=is-1:ie)
       gtot_E(i,j)   = gtot_E(i,j)   + pbce(i,j,k)   * wt_u(I,j,k)
       gtot_W(i+1,j) = gtot_W(i+1,j) + pbce(i+1,j,k) * wt_u(I,j,k)
-    enddo ; enddo
+    enddo
   enddo
-  !$OMP parallel do default(shared)
-  do J=js-1,je
-    do k=1,nz ; do i=is,ie
+  do k=1,nz
+    do concurrent (J=js-1:je, i=is:ie)
       gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
       gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
-    enddo ; enddo
+    enddo
   enddo
 
   if (CS%BT_OBC%u_OBCs_on_PE) then
