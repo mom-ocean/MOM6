@@ -1226,8 +1226,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 ! Calculate the initial barotropic velocities from the layer's velocities.
   call btstep_ubt_from_layer(U_in, V_in, wt_u, wt_v, ubt, vbt, G, GV, CS)
 
-  uhbt(:,:) = 0.0 ; vhbt(:,:) = 0.0
-  u_accel_bt(:,:) = 0.0 ; v_accel_bt(:,:) = 0.0
+  do concurrent (j=SZJW_(CS), i=SZIBW_(CS))
+    uhbt(i,j) = 0.0 ; u_accel_bt(i,j) = 0.0
+  enddo
+  do concurrent (j=SZJBW_(CS), i=SZIW_(CS))
+    vhbt(i,j) = 0.0 ; v_accel_bt(i,j) = 0.0
+  enddo
 
   if (apply_OBCs) then
     ubt_first(:,:) = ubt(:,:) ; vbt_first(:,:) = vbt(:,:)
@@ -1239,8 +1243,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 ! between the accelerations due to the average of the layer equations and the
 ! barotropic calculation.
 
-  !$OMP parallel do default(shared)
-  do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
+  do concurrent (j=js:je, I=is-1:ie) local(Htot_avg) ; if (G%mask2dCu(I,j) > 0.0) then
     if (CS%nonlin_stress) then
       if (GV%Boussinesq) then
         Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
@@ -1264,9 +1267,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     BT_force_u(I,j) = forces%taux(I,j) * GV%RZ_to_H * CS%IDatu(I,j)*visc_rem_u(I,j,1)
   else
     BT_force_u(I,j) = 0.0
-  endif ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.0) then
+  endif ; enddo
+  do concurrent (J=js-1:je, i=is:ie) local(Htot_avg) ; if (G%mask2dCv(i,J) > 0.0) then
     if (CS%nonlin_stress) then
       if (GV%Boussinesq) then
         Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
@@ -1290,7 +1292,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     BT_force_v(i,J) = forces%tauy(i,J) * GV%RZ_to_H * CS%IDatv(i,J)*visc_rem_v(i,J,1)
   else
     BT_force_v(i,J) = 0.0
-  endif ; enddo ; enddo
+  endif ; enddo
   if (associated(taux_bot) .and. associated(tauy_bot)) then
     !$OMP parallel do default(shared)
     do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
@@ -1304,14 +1306,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! bc_accel_u & bc_accel_v are only available on the potentially
   ! non-symmetric computational domain.
-  !$OMP parallel do default(shared)
-  do j=js,je ; do k=1,nz ; do I=Isq,Ieq
+  do k=1,nz ; do concurrent (j=js:je, I=Isq:Ieq)
     BT_force_u(I,j) = BT_force_u(I,j) + wt_u(I,j,k) * bc_accel_u(I,j,k)
-  enddo ; enddo ; enddo
-  !$OMP parallel do default(shared)
-  do J=Jsq,Jeq ; do k=1,nz ; do i=is,ie
+  enddo ; enddo
+  do k=1,nz ; do concurrent (J=Jsq:Jeq, i=is:ie)
     BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * bc_accel_v(i,J,k)
-  enddo ; enddo ; enddo
+  enddo ; enddo
 
   if (CS%gradual_BT_ICs) then
     !$OMP parallel do default(shared)
@@ -4623,7 +4623,7 @@ end function find_uhbt
 
 !> The function find_duhbt_du determines the marginal zonal face area for a given velocity, or
 !! with INTEGRAL_BT_CONT=True for a given time-integrated velocity.
-function find_duhbt_du(u, BTC) result(duhbt_du)
+pure function find_duhbt_du(u, BTC) result(duhbt_du)
   real, intent(in) :: u    !< The local zonal velocity [L T-1 ~> m s-1] or time integrated velocity [L ~> m]
   type(local_BT_cont_u_type), intent(in) :: BTC !< A structure containing various fields that
                            !! allow the barotropic transports to be calculated consistently
@@ -4756,7 +4756,7 @@ end function find_vhbt
 
 !> The function find_dvhbt_dv determines the marginal meridional face area for a given velocity, or
 !! with INTEGRAL_BT_CONT=True for a given time-integrated velocity.
-function find_dvhbt_dv(v, BTC) result(dvhbt_dv)
+pure function find_dvhbt_dv(v, BTC) result(dvhbt_dv)
   real, intent(in) :: v    !< The local meridional velocity [L T-1 ~> m s-1] or time integrated velocity [L ~> m]
   type(local_BT_cont_v_type), intent(in) :: BTC !< A structure containing various fields that
                            !! allow the barotropic transports to be calculated consistently
