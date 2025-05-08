@@ -2848,20 +2848,18 @@ subroutine btstep_find_Cor(q, DCor_u, DCor_v, f_4_u, f_4_v, isvf, ievf, jsvf, je
   integer :: i, j
 
   if (CS%Sadourny) then
-    !$OMP parallel do default(shared)
-    do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
+    do concurrent (J=jsvf-1:jevf, i=isvf-1:ievf+1)
       f_4_v(1,i,J) = CS%OBCmask_v(i,J) * DCor_u(I-1,j) * q(I-1,J)
       f_4_v(2,i,J) = CS%OBCmask_v(i,J) * DCor_u(I,j) * q(I,J)
       f_4_v(4,i,J) = CS%OBCmask_v(i,J) * DCor_u(I,j+1) * q(I,J)
       f_4_v(3,i,J) = CS%OBCmask_v(i,J) * DCor_u(I-1,j+1) * q(I-1,J)
-    enddo ; enddo
-    !$OMP parallel do default(shared)
-    do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
+    enddo
+    do concurrent (j=jsvf-1:jevf+1, I=isvf-1:ievf)
       f_4_u(4,I,j) = CS%OBCmask_u(I,j) * DCor_v(i+1,J) * q(I,J)
       f_4_u(3,I,j) = CS%OBCmask_u(I,j) * DCor_v(i,J) * q(I,J)
       f_4_u(1,I,j) = CS%OBCmask_u(I,j) * DCor_v(i,J-1) * q(I,J-1)
       f_4_u(2,I,j) = CS%OBCmask_u(I,j) * DCor_v(i+1,J-1) * q(I,J-1)
-    enddo ; enddo
+    enddo
   else  !### if (CS%answer_date < 20250601) then  ! Uncomment this later.
     !$OMP parallel do default(shared)
     do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
