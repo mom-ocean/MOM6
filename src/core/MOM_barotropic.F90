@@ -1452,38 +1452,29 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-  !$OMP parallel default(shared) private(u_max_cor,uint_cor,v_max_cor,vint_cor,eta_cor_max,Htot)
-  !$OMP do
-  do j=js-1,je+1 ; do I=is-1,ie ; av_rem_u(I,j) = 0.0 ; enddo ; enddo
-  !$OMP do
-  do J=js-1,je ; do i=is-1,ie+1 ; av_rem_v(i,J) = 0.0 ; enddo ; enddo
-  !$OMP do
-  do j=js,je ; do k=1,nz ; do I=is-1,ie
+  do concurrent (j=js-1:je+1, I=is-1:ie) ; av_rem_u(I,j) = 0.0 ; enddo
+  do concurrent (J=js-1:je, i=is-1:ie+1) ; av_rem_v(i,J) = 0.0 ; enddo
+  do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
     av_rem_u(I,j) = av_rem_u(I,j) + CS%frhatu(I,j,k) * visc_rem_u(I,j,k)
-  enddo ; enddo ; enddo
-  !$OMP do
-  do J=js-1,je ; do k=1,nz ; do i=is,ie
+  enddo ; enddo
+  do k=1,nz ; do concurrent (J=js-1:je, i=is:ie)
     av_rem_v(i,J) = av_rem_v(i,J) + CS%frhatv(i,J,k) * visc_rem_v(i,J,k)
-  enddo ; enddo ; enddo
+  enddo ; enddo
   if (CS%strong_drag) then
-    !$OMP do
     do j=js,je ; do I=is-1,ie
       bt_rem_u(I,j) = G%mask2dCu(I,j) * &
          ((nstep * av_rem_u(I,j)) / (1.0 + (nstep-1)*av_rem_u(I,j)))
     enddo ; enddo
-    !$OMP do
     do J=js-1,je ; do i=is,ie
       bt_rem_v(i,J) = G%mask2dCv(i,J) * &
          ((nstep * av_rem_v(i,J)) / (1.0 + (nstep-1)*av_rem_v(i,J)))
     enddo ; enddo
   else
-    !$OMP do
     do j=js,je ; do I=is-1,ie
       bt_rem_u(I,j) = 0.0
       if (G%mask2dCu(I,j) * av_rem_u(I,j) > 0.0) &
         bt_rem_u(I,j) = G%mask2dCu(I,j) * (av_rem_u(I,j)**Instep)
     enddo ; enddo
-    !$OMP do
     do J=js-1,je ; do i=is,ie
       bt_rem_v(i,J) = 0.0
       if (G%mask2dCv(i,J) * av_rem_v(i,J) > 0.0) &
@@ -1491,7 +1482,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo ; enddo
   endif
   if (CS%linear_wave_drag) then
-    !$OMP do
     do j=js,je ; do I=is-1,ie ; if (CS%lin_drag_u(I,j) > 0.0) then
       Htot = 0.5 * (eta(i,j) + eta(i+1,j))
       if (GV%Boussinesq) &
@@ -1500,7 +1490,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
       Rayleigh_u(I,j) = CS%lin_drag_u(I,j) / Htot
     endif ; enddo ; enddo
-    !$OMP do
     do J=js-1,je ; do i=is,ie ; if (CS%lin_drag_v(i,J) > 0.0) then
       Htot = 0.5 * (eta(i,j) + eta(i,j+1))
       if (GV%Boussinesq) &
@@ -1513,20 +1502,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Avoid changing the velocities at OBC points due to non-OBC calculations.
   if (CS%BT_OBC%u_OBCs_on_PE) then
-    !$OMP do
     do j=js,je ; do I=is-1,ie ; if (CS%BT_OBC%u_OBC_type(I,j) /= 0) then
       bt_rem_u(I,j) = 1.0
     endif ; enddo ; enddo
   endif
   if (CS%BT_OBC%v_OBCs_on_PE) then
-    !$OMP do
     do J=js-1,je ; do i=is,ie ; if (CS%BT_OBC%v_OBC_type(i,J) /= 0) then
       bt_rem_v(i,J) = 1.0
     endif ; enddo ; enddo
   endif
 
   ! Set the mass source, after first initializing the halos to 0.
-  !$OMP do
   do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1 ; eta_src(i,j) = 0.0 ; enddo ; enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
     do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
@@ -1563,11 +1549,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j)) &
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j), CS%eta_cor(i,j))
   enddo ; enddo ; endif ; endif
-  !$OMP do
   do j=js,je ; do i=is,ie
     eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j))
   enddo ; enddo
-  !$OMP end parallel
 
   if (CS%dynamic_psurf) then
     ice_is_rigid = (associated(forces%rigidity_ice_u) .and. &
