@@ -4902,32 +4902,26 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
   dt = 1.0 ; if (present(dt_baroclinic)) dt = dt_baroclinic
 
   ! Copy the BT_cont arrays into symmetric, potentially wide haloed arrays.
-  !$OMP parallel default(shared)
-  !$OMP do
-  do j=js-hs,je+hs ; do i=is-hs-1,ie+hs
+  do concurrent (j=js-hs:je+hs, i=is-hs-1:ie+hs)
     u_polarity(i,j) = 1.0
     uBT_EE(i,j) = 0.0 ; uBT_WW(i,j) = 0.0
     FA_u_EE(i,j) = 0.0 ; FA_u_E0(i,j) = 0.0 ; FA_u_W0(i,j) = 0.0 ; FA_u_WW(i,j) = 0.0
-  enddo ; enddo
-  !$OMP do
-  do j=js-hs-1,je+hs ; do i=is-hs,ie+hs
+  enddo
+  do concurrent (j=js-hs-1:je+hs, i=is-hs:ie+hs)
     v_polarity(i,j) = 1.0
     vBT_NN(i,j) = 0.0 ; vBT_SS(i,j) = 0.0
     FA_v_NN(i,j) = 0.0 ; FA_v_N0(i,j) = 0.0 ; FA_v_S0(i,j) = 0.0 ; FA_v_SS(i,j) = 0.0
-  enddo ; enddo
-  !$OMP do
-  do j=js,je ; do I=is-1,ie
+  enddo
+  do concurrent (j=js:je, I=is-1:ie)
     uBT_EE(I,j) = BT_cont%uBT_EE(I,j) ; uBT_WW(I,j) = BT_cont%uBT_WW(I,j)
     FA_u_EE(I,j) = BT_cont%FA_u_EE(I,j) ; FA_u_E0(I,j) = BT_cont%FA_u_E0(I,j)
     FA_u_W0(I,j) = BT_cont%FA_u_W0(I,j) ; FA_u_WW(I,j) = BT_cont%FA_u_WW(I,j)
-  enddo ; enddo
-  !$OMP do
-  do J=js-1,je ; do i=is,ie
+  enddo
+  do concurrent (J=js-1:je, i=is:ie)
     vBT_NN(i,J) = BT_cont%vBT_NN(i,J) ; vBT_SS(i,J) = BT_cont%vBT_SS(i,J)
     FA_v_NN(i,J) = BT_cont%FA_v_NN(i,J) ; FA_v_N0(i,J) = BT_cont%FA_v_N0(i,J)
     FA_v_S0(i,J) = BT_cont%FA_v_S0(i,J) ; FA_v_SS(i,J) = BT_cont%FA_v_SS(i,J)
-  enddo ; enddo
-  !$OMP end parallel
+  enddo
 
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
@@ -4947,9 +4941,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
-  !$OMP parallel default(shared)
-  !$OMP do
-  do j=js-hs,je+hs ; do I=is-hs-1,ie+hs
+  do concurrent (j=js-hs:je+hs, I=is-hs-1:ie+hs)
     BTCL_u(I,j)%FA_u_EE = FA_u_EE(I,j) ; BTCL_u(I,j)%FA_u_E0 = FA_u_E0(I,j)
     BTCL_u(I,j)%FA_u_W0 = FA_u_W0(I,j) ; BTCL_u(I,j)%FA_u_WW = FA_u_WW(I,j)
     BTCL_u(I,j)%uBT_EE = dt*uBT_EE(I,j)   ; BTCL_u(I,j)%uBT_WW = dt*uBT_WW(I,j)
@@ -4970,9 +4962,8 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
       (C1_3 * (BTCL_u(I,j)%FA_u_WW - BTCL_u(I,j)%FA_u_W0)) / BTCL_u(I,j)%uBT_WW**2
     if (abs(BTCL_u(I,j)%uBT_EE) > 0.0) BTCL_u(I,j)%uh_crvE = &
       (C1_3 * (BTCL_u(I,j)%FA_u_EE - BTCL_u(I,j)%FA_u_E0)) / BTCL_u(I,j)%uBT_EE**2
-  enddo ; enddo
-  !$OMP do
-  do J=js-hs-1,je+hs ; do i=is-hs,ie+hs
+  enddo
+  do concurrent (J=js-hs-1:je+hs, i=is-hs:ie+hs)
     BTCL_v(i,J)%FA_v_NN = FA_v_NN(i,J) ; BTCL_v(i,J)%FA_v_N0 = FA_v_N0(i,J)
     BTCL_v(i,J)%FA_v_S0 = FA_v_S0(i,J) ; BTCL_v(i,J)%FA_v_SS = FA_v_SS(i,J)
     BTCL_v(i,J)%vBT_NN = dt*vBT_NN(i,J)   ; BTCL_v(i,J)%vBT_SS = dt*vBT_SS(i,J)
@@ -4993,8 +4984,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
       (C1_3 * (BTCL_v(i,J)%FA_v_SS - BTCL_v(i,J)%FA_v_S0)) / BTCL_v(i,J)%vBT_SS**2
     if (abs(BTCL_v(i,J)%vBT_NN) > 0.0) BTCL_v(i,J)%vh_crvN = &
       (C1_3 * (BTCL_v(i,J)%FA_v_NN - BTCL_v(i,J)%FA_v_N0)) / BTCL_v(i,J)%vBT_NN**2
-  enddo ; enddo
-  !$OMP end parallel
+  enddo
 end subroutine set_local_BT_cont_types
 
 
@@ -5129,7 +5119,7 @@ subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, US, MS, halo)
 end subroutine BT_cont_to_face_areas
 
 !> Swap the values of two real variables
-subroutine swap(a,b)
+pure subroutine swap(a,b)
   real, intent(inout) :: a !< The first variable to be swapped [arbitrary units]
   real, intent(inout) :: b !< The second variable to be swapped [arbitrary units]
   real :: tmp ! A temporary variable [arbitrary units]
