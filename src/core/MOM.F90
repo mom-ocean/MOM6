@@ -3024,7 +3024,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! initialization routine for tv.
   if (use_EOS) then
     allocate(CS%tv%eqn_of_state)
-    call EOS_init(param_file, CS%tv%eqn_of_state, US)
+    call EOS_init(param_file, CS%tv%eqn_of_state, US, use_conT_absS)
   endif
   if (use_temperature) then
     allocate(CS%tv%TempxPmE(isd:ied,jsd:jed), source=0.0)

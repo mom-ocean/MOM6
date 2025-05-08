@@ -17,7 +17,7 @@ use MOM_EOS_UNESCO, only : UNESCO_EOS
 use MOM_EOS_Roquet_rho, only : Roquet_rho_EOS
 use MOM_EOS_Roquet_SpV, only : Roquet_SpV_EOS
 use MOM_EOS_TEOS10, only : TEOS10_EOS
-use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct, gsw_sr_from_sp
+use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct, gsw_sr_from_sp, gsw_ct_from_pt
 use MOM_temperature_convert, only : poTemp_to_consTemp, consTemp_to_poTemp
 use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_TFreeze,    only : calculate_TFreeze_teos10, calculate_TFreeze_TEOS_poly
@@ -120,6 +120,13 @@ type, public :: EOS_type ; private
   real :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
   real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1]
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
+! The following are logicals pertaining to definitions of the thermodynamic state variables
+  logical :: use_conT_absS =.false. !< True if the model internal temperature is the conservative temperature and
+                           !! the salinity is absolute salinity.  These could be separated into two flags,
+                           !! but right now it is controlled by one input parameter and there is no known
+                           !! need to have one True and one False.
+  logical :: TFreeze_S_is_pracS =.true. !< True if the freezing point expression is formulated from practical salinity
+  logical :: TFreeze_T_is_potT = .true. !< True if the freezing point expression yields a potential temperature
 
   logical :: use_Wright_2nd_deriv_bug = .false.  !< If true, use a separate subroutine that
                            !! retains a buggy version of the calculations of the second
@@ -529,27 +536,49 @@ subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale, scale_fr
   ! Local variables
   real :: p_scale ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: S_scale ! A factor to convert salinity to units of ppt [ppt S-1 ~> 1]
+  real :: iS_scale! A factor to convert salinity to units of S [S ppt-1 ~> 1]
+  real :: absS    ! A salinity converted to absolute salinity, only used in specific scenarios [ppt]
+  real :: TFreeze_S ! The salinity for the freezing equation in model units [S ~> PSU or ppt]
 
-  p_scale = 1.0 ; S_scale = 1.0
+  p_scale = 1.0 ; S_scale = 1.0 ; iS_scale = 1.0
   if (present(pres_scale)) p_scale = pres_scale
   if (present(scale_from_EOS)) then ; if (scale_from_EOS) then
     p_scale = EOS%RL2_T2_to_Pa
     S_scale = EOS%S_to_ppt
+    iS_scale = EOS%ppt_to_S
   endif ; endif
+
+  if (EOS%use_conT_absS) then
+    ! Otherwise absS is unneeded and therefore unset
+    absS = S*S_scale
+    if (EOS%TFreeze_S_is_pracS) then
+      TFreeze_S = gsw_sp_from_sr(absS)*iS_scale
+    else
+      TFreeze_S = S
+    endif
+  else
+    TFreeze_S = S
+  endif
 
   select case (EOS%form_of_TFreeze)
     case (TFREEZE_LINEAR)
-      call calculate_TFreeze_linear(S_scale*S, p_scale*pressure, T_fr, EOS%TFr_S0_P0, &
+      call calculate_TFreeze_linear(S_scale*TFreeze_S, p_scale*pressure, T_fr, EOS%TFr_S0_P0, &
                                     EOS%dTFr_dS, EOS%dTFr_dp)
     case (TFREEZE_MILLERO)
-      call calculate_TFreeze_Millero(S_scale*S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_Millero(S_scale*TFreeze_S, p_scale*pressure, T_fr)
     case (TFREEZE_TEOSPOLY)
-      call calculate_TFreeze_TEOS_poly(S_scale*S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_TEOS_poly(S_scale*TFreeze_S, p_scale*pressure, T_fr)
     case (TFREEZE_TEOS10)
-      call calculate_TFreeze_teos10(S_scale*S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_teos10(S_scale*TFreeze_S, p_scale*pressure, T_fr)
     case default
       call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
   end select
+
+  if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
+    ! absS is set only if EOS%use_conT_absS is True
+    ! absS and T_fr have physical units here and don't need converted
+    T_fr = gsw_ct_from_pt(absS,T_fr)
+  endif
 
   if (present(scale_from_EOS)) then ; if (scale_from_EOS) then
     T_fr = EOS%degC_to_C * T_fr
@@ -561,8 +590,8 @@ end subroutine calculate_TFreeze_scalar
 subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_scale)
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure, in [Pa] or [R L2 T-2 ~> Pa] depending on pres_scale
-  real, dimension(:), intent(inout) :: T_fr     !< Freezing point potential temperature referenced
-                                                !! to the surface [degC]
+  real, dimension(:), intent(inout) :: T_fr     !< Freezing point, either potential temperature referenced to the
+                                                !! surface or conservative temperature depending on settings [degC]
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
@@ -572,21 +601,35 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: p_scale  ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real, dimension(size(S)) :: absS ! A salinity converted to absolute salinity, only used in specific scenarios [ppt]
+  real, dimension(size(S)) :: TFreeze_S ! The salinity for the freezing equation in model units [S ~> PSU or ppt]
   integer :: j
 
   p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
 
+  if (EOS%use_conT_absS) then
+    ! Otherwise absS is unneeded and therefore unset
+    absS(:) = S(:)
+    if (EOS%TFreeze_S_is_pracS) then
+      TFreeze_S(:) = gsw_sp_from_sr(absS(:))
+    else
+      TFreeze_S(:) = S(:)
+    endif
+  else
+    TFreeze_S(:) = S(:)
+  endif
+
   if (p_scale == 1.0) then
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
-        call calculate_TFreeze_linear(S, pressure, T_fr, start, npts, &
+        call calculate_TFreeze_linear(TFreeze_S, pressure, T_fr, start, npts, &
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
-        call calculate_TFreeze_Millero(S, pressure, T_fr, start, npts)
+        call calculate_TFreeze_Millero(TFreeze_S, pressure, T_fr, start, npts)
       case (TFREEZE_TEOSPOLY)
-        call calculate_TFreeze_TEOS_poly(S, pressure, T_fr, start, npts)
+        call calculate_TFreeze_TEOS_poly(TFreeze_S, pressure, T_fr, start, npts)
       case (TFREEZE_TEOS10)
-        call calculate_TFreeze_teos10(S, pressure, T_fr, start, npts)
+        call calculate_TFreeze_teos10(TFreeze_S, pressure, T_fr, start, npts)
       case default
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
@@ -594,18 +637,24 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
     do j=start,start+npts-1 ; pres(j) = p_scale * pressure(j) ; enddo
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
-        call calculate_TFreeze_linear(S, pres, T_fr, start, npts, &
+        call calculate_TFreeze_linear(TFreeze_S, pres, T_fr, start, npts, &
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
-        call calculate_TFreeze_Millero(S, pres, T_fr, start, npts)
+        call calculate_TFreeze_Millero(TFreeze_S, pres, T_fr, start, npts)
       case (TFREEZE_TEOS10)
-        call calculate_TFreeze_teos10(S, pres, T_fr, start, npts)
+        call calculate_TFreeze_teos10(TFreeze_S, pres, T_fr, start, npts)
       case (TFREEZE_TEOSPOLY)
-        call calculate_TFreeze_TEOS_poly(S, pres, T_fr, start, npts)
+        call calculate_TFreeze_TEOS_poly(TFreeze_S, pres, T_fr, start, npts)
       case default
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
   endif
+
+  if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
+    ! absS is set only if EOS%use_conT_absS is True!
+    T_fr(:) = gsw_ct_from_pt(absS(:),T_fr(:))
+  endif
+
 
 end subroutine calculate_TFreeze_array
 
@@ -614,8 +663,9 @@ end subroutine calculate_TFreeze_array
 subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
   real, dimension(:), intent(in)    :: S        !< Salinity [S ~> ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
-  real, dimension(:), intent(inout) :: T_fr     !< Freezing point potential temperature referenced
-                                                !! to the surface [C ~> degC]
+  real, dimension(:), intent(inout) :: T_fr     !< Freezing point, either potential temperature referenced to the
+                                                !! surface or conservative temperature depending on settings
+                                                !! [C ~> degC]
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
@@ -623,6 +673,8 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
   ! Local variables
   real, dimension(size(T_fr)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(T_fr)) :: Sa    ! Salinity converted to [ppt]
+  real, dimension(size(T_fr)) :: absS  ! Salinity converted to absoluate salinity [ppt]
+  real, dimension(size(T_fr)) :: TFreeze_S ! The salinity for the freezing equation in model units [S ~> PSU or ppt]
   integer :: i, is, ie, npts
 
   if (present(dom)) then
@@ -631,24 +683,36 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
     is = 1 ; ie = size(T_Fr) ; npts = 1 + ie - is
   endif
 
+  if (EOS%use_conT_absS) then
+    ! Otherwise absS is unneeded and therefore unset
+    absS(:) = S(:)*EOS%S_to_ppt
+    if (EOS%TFreeze_S_is_pracS) then
+      TFreeze_S(:) = gsw_sp_from_sr(absS(:))*EOS%ppt_to_S
+    else
+      TFreeze_S(:) = S(:)
+    endif
+  else
+    TFreeze_S(:) = S(:)
+  endif
+
   if ((EOS%RL2_T2_to_Pa == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
-        call calculate_TFreeze_linear(S, pressure, T_fr, is, npts, &
+        call calculate_TFreeze_linear(TFreeze_S, pressure, T_fr, is, npts, &
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
-        call calculate_TFreeze_Millero(S, pressure, T_fr, is, npts)
+        call calculate_TFreeze_Millero(TFreeze_S, pressure, T_fr, is, npts)
       case (TFREEZE_TEOSPOLY)
-        call calculate_TFreeze_TEOS_poly(S, pressure, T_fr, is, npts)
+        call calculate_TFreeze_TEOS_poly(TFreeze_S, pressure, T_fr, is, npts)
       case (TFREEZE_TEOS10)
-        call calculate_TFreeze_teos10(S, pressure, T_fr, is, npts)
+        call calculate_TFreeze_teos10(TFreeze_S, pressure, T_fr, is, npts)
       case default
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
   else
     do i=is,ie
       pres(i) = EOS%RL2_T2_to_Pa * pressure(i)
-      Sa(i) = EOS%S_to_ppt * S(i)
+      Sa(i) = EOS%S_to_ppt * TFreeze_S(i)
     enddo
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
@@ -664,6 +728,13 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
   endif
+
+  if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
+    ! absS is set only if EOS%use_conT_absS is True!
+    ! absS is in ppt and T_fr is in degC at this point.
+    T_fr(:) = gsw_ct_from_pt(absS(:),T_fr(:))
+  endif
+
 
   if (EOS%degC_to_C /= 1.0) then
     do i=is,ie ; T_fr(i) = EOS%degC_to_C * T_fr(i) ; enddo
@@ -1462,17 +1533,19 @@ end function get_EOS_name
 
 !> Initializes EOS_type by allocating and reading parameters.  The scaling factors in
 !! US are stored in EOS for later use.
-subroutine EOS_init(param_file, EOS, US)
+subroutine EOS_init(param_file, EOS, US, use_conT_absS)
   type(param_file_type), intent(in) :: param_file !< Parameter file structure
   type(EOS_type), intent(inout)     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
+  logical, intent(in), optional     :: use_conT_absS !< True if the model is formulated for
+                                                     !! conservative temp and absolute salinity
   optional :: US
   ! Local variables
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_EOS" ! This module's name.
   character(len=12)  :: TFREEZE_DEFAULT ! The default freezing point expression
   character(len=40)  :: tmpstr
-  logical :: EOS_quad_default
+  logical :: EOS_quad_default, EOS_TS_default
   real :: Rho_Tref_Sref ! Density at Tref degC and Sref ppt [kg m-3]
   real :: Tref          ! Reference temperature [degC]
   real :: Sref          ! Reference salinity [psu]
@@ -1551,6 +1624,12 @@ subroutine EOS_init(param_file, EOS, US)
     call EOS_manual_init(EOS, form_of_EOS=EOS_WRIGHT, use_Wright_2nd_deriv_bug=EOS%use_Wright_2nd_deriv_bug)
   endif
 
+  if (present(use_conT_absS)) then
+    EOS%use_conT_absS = use_conT_absS
+  else
+    EOS%use_conT_absS = .false. ! Assuming it is not needed, it is set to false
+  endif
+
   EOS_quad_default = .not.((EOS%form_of_EOS == EOS_LINEAR) .or. &
                            (EOS%form_of_EOS == EOS_WRIGHT) .or. &
                            (EOS%form_of_EOS == EOS_WRIGHT_REDUCED) .or. &
@@ -1599,10 +1678,25 @@ subroutine EOS_init(param_file, EOS, US)
                  units="degC Pa-1", default=0.0)
   endif
 
+  if ((EOS%form_of_TFreeze==TFREEZE_TEOSPOLY) .or. (EOS%form_of_TFreeze==TFREEZE_TEOS10)) then
+     ! Which default is appropriate for Millero?
+     EOS_TS_default = .false.
+  else
+     EOS_TS_default = .true.
+  endif
+  call get_param(param_file, mdl, "TFREEZE_S_IS_PRACS", EOS%TFreeze_S_is_pracS, &
+               "When True, the model will check if the model internal salinity is "//&
+               "practical salinity.  If the model uses absolute salinity, a "//&
+               "conversion will be applied.", default=EOS_TS_default)
+  call get_param(param_file, mdl, "TFREEZE_T_IS_POTT", EOS%TFreeze_T_is_potT, &
+               "When True, the model will check if the model internal temperature is "//&
+               "potential temperature.  If the model uses conservative temperature, a "//&
+               "conversion will be applied.", default=EOS_TS_default)
+
   if ((EOS%form_of_EOS == EOS_TEOS10 .or. EOS%form_of_EOS == EOS_ROQUET_RHO .or. &
        EOS%form_of_EOS == EOS_ROQUET_SPV) .and. &
       .not.((EOS%form_of_TFreeze == TFREEZE_TEOS10) .or. (EOS%form_of_TFreeze == TFREEZE_TEOSPOLY)) ) then
-    call MOM_error(FATAL, "interpret_eos_selection:  EOS_TEOS10 or EOS_ROQUET_RHO or EOS_ROQUET_SPV "//&
+    call MOM_error(WARNING, "interpret_eos_selection:  EOS_TEOS10 or EOS_ROQUET_RHO or EOS_ROQUET_SPV "//&
                    "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 or TFREEZE_TEOSPOLY.")
   endif
 
