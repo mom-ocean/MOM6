@@ -865,18 +865,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 ! barotropic momentum equations.  This has to be done quite early to start
 ! the halo update that needs to be completed before the next calculations.
   if (CS%linearized_BT_PV) then
-    !$OMP parallel do default(shared)
-    do J=jsvf-2,jevf+1 ; do I=isvf-2,ievf+1
+    do concurrent (J=jsvf-2:jevf+1, I=isvf-2:ievf+1)
       q(I,J) = CS%q_D(I,j)
-    enddo ; enddo
-    !$OMP parallel do default(shared)
-    do j=jsvf-1,jevf+1 ; do I=isvf-2,ievf+1
+    enddo
+    do concurrent (j=jsvf-1:jevf+1, I=isvf-2:ievf+1)
       DCor_u(I,j) = CS%D_u_Cor(I,j)
-    enddo ; enddo
-    !$OMP parallel do default(shared)
-    do J=jsvf-2,jevf+1 ; do i=isvf-1,ievf+1
+    enddo
+    do concurrent (J=jsvf-2:jevf+1, i=isvf-1:ievf+1)
       DCor_v(i,J) = CS%D_v_Cor(i,J)
-    enddo ; enddo
+    enddo
   else
     q(:,:) = 0.0 ; DCor_u(:,:) = 0.0 ; DCor_v(:,:) = 0.0
     if (GV%Boussinesq) then
