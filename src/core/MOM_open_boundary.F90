@@ -353,25 +353,27 @@ type, public :: ocean_OBC_type
   type(remapping_CS),      pointer :: remap_h_CS=> NULL() !< ALE remapping control structure for
                                                           !! thickness-based fields on segments
   type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
-  real, allocatable :: rx_normal(:,:,:)  !< Array storage for normal phase speed for EW radiation OBCs in units of
-                                         !! grid points per timestep [nondim]
-  real, allocatable :: ry_normal(:,:,:)  !< Array storage for normal phase speed for NS radiation OBCs in units of
-                                         !! grid points per timestep [nondim]
-  real, allocatable :: rx_oblique_u(:,:,:) !< X-direction oblique boundary condition radiation speeds squared
-                                           !! at u points for restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: ry_oblique_u(:,:,:) !< Y-direction oblique boundary condition radiation speeds squared
-                                           !! at u points for restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: rx_oblique_v(:,:,:) !< X-direction oblique boundary condition radiation speeds squared
-                                           !! at v points for restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: ry_oblique_v(:,:,:) !< Y-direction oblique boundary condition radiation speeds squared
-                                           !! at v points for restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: cff_normal_u(:,:,:) !< Denominator for normalizing EW oblique boundary condition radiation
-                                           !! rates at u points for restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: cff_normal_v(:,:,:) !< Denominator for normalizing NS oblique boundary condition radiation
-                                           !! rates at v points for restarts [L2 T-2 ~> m2 s-2]
-  real, allocatable :: tres_x(:,:,:,:)   !< Array storage of tracer reservoirs for restarts, in unscaled units [conc]
-  real, allocatable :: tres_y(:,:,:,:)   !< Array storage of tracer reservoirs for restarts, in unscaled units [conc]
-  logical :: debug                       !< If true, write verbose checksums for debugging purposes.
+  real, pointer :: rx_normal(:,:,:) => Null()  !< Array storage for normal phase speed for EW radiation OBCs
+                                               !! in units of grid points per timestep [nondim]
+  real, pointer :: ry_normal(:,:,:) => Null()  !< Array storage for normal phase speed for NS radiation OBCs
+                                               !! in units of grid points per timestep [nondim]
+  real, pointer :: rx_oblique_u(:,:,:) => Null() !< X-direction oblique boundary condition radiation speeds
+                                                 !! squared at u points for restarts [L2 T-2 ~> m2 s-2]
+  real, pointer :: ry_oblique_u(:,:,:) => Null() !< Y-direction oblique boundary condition radiation speeds
+                                                 !! squared at u points for restarts [L2 T-2 ~> m2 s-2]
+  real, pointer :: rx_oblique_v(:,:,:) => Null() !< X-direction oblique boundary condition radiation speeds
+                                                 !! squared at v points for restarts [L2 T-2 ~> m2 s-2]
+  real, pointer :: ry_oblique_v(:,:,:) => Null() !< Y-direction oblique boundary condition radiation speeds
+                                                 !! squared at v points for restarts [L2 T-2 ~> m2 s-2]
+  real, pointer :: cff_normal_u(:,:,:) => Null() !< Denominator for normalizing EW oblique boundary condition
+                                                 !! radiation rates at u points for restarts [L2 T-2 ~> m2 s-2]
+  real, pointer :: cff_normal_v(:,:,:) => Null() !< Denominator for normalizing NS oblique boundary condition
+                                                 !! radiation rates at v points for restarts [L2 T-2 ~> m2 s-2]
+  real, pointer :: tres_x(:,:,:,:) => Null()     !< Array storage of tracer reservoirs for restarts,
+                                                 !! in unscaled units [conc]
+  real, pointer :: tres_y(:,:,:,:) => Null()     !< Array storage of tracer reservoirs for restarts,
+                                                 !! in unscaled units [conc]
+  logical :: debug                         !< If true, write verbose checksums for debugging purposes.
   real :: silly_h  !< A silly value of thickness outside of the domain that can be used to test
                    !! the independence of the OBCs to this external data [Z ~> m].
   real :: silly_u  !< A silly value of velocity outside of the domain that can be used to test
@@ -1963,15 +1965,15 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
     call create_group_pass(OBC%pass_oblique, OBC%cff_normal_u, OBC%cff_normal_v, G%Domain, To_All+Scalar_Pair)
     call do_group_pass(OBC%pass_oblique, G%Domain)
   endif
-  if (allocated(OBC%tres_x) .and. allocated(OBC%tres_y)) then
+  if (associated(OBC%tres_x) .and. associated(OBC%tres_y)) then
     do m=1,OBC%ntr
       call pass_vector(OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%Domain, To_All+Scalar_Pair)
     enddo
-  elseif (allocated(OBC%tres_x)) then
+  elseif (associated(OBC%tres_x)) then
     do m=1,OBC%ntr
       call pass_var(OBC%tres_x(:,:,:,m), G%Domain, position=EAST_FACE)
     enddo
-  elseif (allocated(OBC%tres_y)) then
+  elseif (associated(OBC%tres_y)) then
     do m=1,OBC%ntr
       call pass_var(OBC%tres_y(:,:,:,m), G%Domain, position=NORTH_FACE)
     enddo
@@ -2016,16 +2018,27 @@ subroutine open_boundary_dealloc(OBC)
   if (allocated(OBC%segment)) deallocate(OBC%segment)
   if (allocated(OBC%segnum_u)) deallocate(OBC%segnum_u)
   if (allocated(OBC%segnum_v)) deallocate(OBC%segnum_v)
-  if (allocated(OBC%rx_normal)) deallocate(OBC%rx_normal)
-  if (allocated(OBC%ry_normal)) deallocate(OBC%ry_normal)
-  if (allocated(OBC%rx_oblique_u)) deallocate(OBC%rx_oblique_u)
-  if (allocated(OBC%ry_oblique_u)) deallocate(OBC%ry_oblique_u)
-  if (allocated(OBC%rx_oblique_v)) deallocate(OBC%rx_oblique_v)
-  if (allocated(OBC%ry_oblique_v)) deallocate(OBC%ry_oblique_v)
-  if (allocated(OBC%cff_normal_u)) deallocate(OBC%cff_normal_u)
-  if (allocated(OBC%cff_normal_v)) deallocate(OBC%cff_normal_v)
-  if (allocated(OBC%tres_x)) deallocate(OBC%tres_x)
-  if (allocated(OBC%tres_y)) deallocate(OBC%tres_y)
+  if (associated(OBC%rx_normal)) deallocate(OBC%rx_normal)
+  if (associated(OBC%ry_normal)) deallocate(OBC%ry_normal)
+  if (associated(OBC%rx_oblique_u)) deallocate(OBC%rx_oblique_u)
+  if (associated(OBC%ry_oblique_u)) deallocate(OBC%ry_oblique_u)
+  if (associated(OBC%rx_oblique_v)) deallocate(OBC%rx_oblique_v)
+  if (associated(OBC%ry_oblique_v)) deallocate(OBC%ry_oblique_v)
+  if (associated(OBC%cff_normal_u)) deallocate(OBC%cff_normal_u)
+  if (associated(OBC%cff_normal_v)) deallocate(OBC%cff_normal_v)
+  if (associated(OBC%tres_x)) deallocate(OBC%tres_x)
+  if (associated(OBC%tres_y)) deallocate(OBC%tres_y)
+
+  if (associated(OBC%rx_normal)) nullify(OBC%rx_normal)
+  if (associated(OBC%ry_normal)) nullify(OBC%ry_normal)
+  if (associated(OBC%rx_oblique_u)) nullify(OBC%rx_oblique_u)
+  if (associated(OBC%ry_oblique_u)) nullify(OBC%ry_oblique_u)
+  if (associated(OBC%rx_oblique_v)) nullify(OBC%rx_oblique_v)
+  if (associated(OBC%ry_oblique_v)) nullify(OBC%ry_oblique_v)
+  if (associated(OBC%cff_normal_u)) nullify(OBC%cff_normal_u)
+  if (associated(OBC%cff_normal_v)) nullify(OBC%cff_normal_v)
+  if (associated(OBC%tres_x)) nullify(OBC%tres_x)
+  if (associated(OBC%tres_y)) nullify(OBC%tres_y)
   if (associated(OBC%remap_z_CS)) deallocate(OBC%remap_z_CS)
   if (associated(OBC%remap_h_CS)) deallocate(OBC%remap_h_CS)
   deallocate(OBC)
@@ -3384,7 +3397,7 @@ subroutine radiation_open_bdry_conds(OBC, u_new, u_old, v_new, v_old, G, GV, US,
                   haloshift=0, symmetric=sym, unscale=1.0/US%L_T_to_m_s**2)
     endif
     if (OBC%ntr == 0) return
-    if (.not. allocated (OBC%tres_x) .or. .not. allocated (OBC%tres_y)) return
+    if (.not. associated (OBC%tres_x) .or. .not. associated (OBC%tres_y)) return
     do m=1,OBC%ntr
       write(var_num,'(I3.3)') m
       call uvchksum("radiation_OBCs: OBC%tres_[xy]_"//var_num, OBC%tres_x(:,:,:,m), OBC%tres_y(:,:,:,m), G%HI, &
@@ -5504,7 +5517,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
                               ((1.0-a_out+a_in)*segment%tr_Reg%Tr(m)%tres(I,j,k)+ &
                               ((u_L_out+a_out)*Reg%Tr(ntr_id)%t(I+ishift,j,k) - &
                                (u_L_in+a_in)*segment%tr_Reg%Tr(m)%t(I,j,k)))
-            if (allocated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(I,j,k)
+            if (associated(OBC%tres_x)) OBC%tres_x(I,j,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(I,j,k)
           enddo ; endif
         enddo
       enddo
@@ -5544,7 +5557,7 @@ subroutine update_segment_tracer_reservoirs(G, GV, uhr, vhr, h, OBC, dt, Reg)
                               ((1.0-a_out+a_in)*segment%tr_Reg%Tr(m)%tres(i,J,k) + &
                               ((v_L_out+a_out)*Reg%Tr(ntr_id)%t(i,J+jshift,k) - &
                                (v_L_in+a_in)*segment%tr_Reg%Tr(m)%t(i,J,k)))
-            if (allocated(OBC%tres_y)) OBC%tres_y(i,J,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(i,J,k)
+            if (associated(OBC%tres_y)) OBC%tres_y(i,J,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(i,J,k)
           enddo ; endif
         enddo
       enddo
@@ -5620,7 +5633,7 @@ subroutine remap_OBC_fields(G, GV, h_old, h_new, OBC, PCM_cell)
 
           ! Update tracer concentrations
           segment%tr_Reg%Tr(m)%tres(I,j,:) = tr_column(:)
-          if (allocated(OBC%tres_x)) then ; do k=1,nz
+          if (associated(OBC%tres_x)) then ; do k=1,nz
             OBC%tres_x(I,j,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(I,j,k)
           enddo ; endif
 
@@ -5687,7 +5700,7 @@ subroutine remap_OBC_fields(G, GV, h_old, h_new, OBC, PCM_cell)
 
           ! Update tracer concentrations
           segment%tr_Reg%Tr(m)%tres(i,J,:) = tr_column(:)
-          if (allocated(OBC%tres_y)) then ; do k=1,nz
+          if (associated(OBC%tres_y)) then ; do k=1,nz
             OBC%tres_y(i,J,k,m) = I_scale * segment%tr_Reg%Tr(m)%tres(i,J,k)
           enddo ; endif
 
@@ -6070,13 +6083,14 @@ subroutine rotate_OBC_init(OBC_in, G, GV, US, param_file, tv, restart_CS, OBC)
                  "If true, Temperature and salinity are used as state "//&
                  "variables.", default=.true., do_not_log=.true.)
 
+  if (use_temperature) &
+    call fill_temp_salt_segments(G, GV, US, OBC, tv)
+
   do l = 1, OBC%number_of_segments
     call rotate_OBC_segment_data(OBC_in%segment(l), OBC%segment(l), G%HI%turns)
   enddo
 
-  if (use_temperature) &
-    call fill_temp_salt_segments(G, GV, US, OBC, tv)
-
+  call setup_OBC_tracer_reservoirs(G, GV, OBC)
   call open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
 end subroutine rotate_OBC_init
 
@@ -6098,6 +6112,14 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
   do n = 1, num_fields
     segment%field(n)%handle = segment_in%field(n)%handle
     segment%field(n)%dz_handle = segment_in%field(n)%dz_handle
+
+    if (allocated(segment_in%field(n)%buffer_dst)) then
+      call allocate_rotated_array(segment_in%field(n)%buffer_dst, &
+          lbound(segment_in%field(n)%buffer_dst), turns, &
+          segment%field(n)%buffer_dst)
+      call rotate_array(segment_in%field(n)%buffer_dst, turns, &
+          segment%field(n)%buffer_dst)
+    endif
 
     if (modulo(turns, 2) /= 0) then
       select case (segment_in%field(n)%name)
@@ -6143,6 +6165,102 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
     endif
 
     segment%field(n)%value = segment_in%field(n)%value
+  enddo
+
+  if (allocated(segment_in%SSH)) &
+      call rotate_array(segment_in%SSH, turns, segment%SSH)
+  if (allocated(segment_in%cg)) &
+      call rotate_array(segment_in%cg, turns, segment%cg)
+  if (allocated(segment_in%htot)) &
+      call rotate_array(segment_in%htot, turns, segment%htot)
+  if (allocated(segment_in%dztot)) &
+      call rotate_array(segment_in%dztot, turns, segment%dztot)
+  if (allocated(segment_in%h)) &
+      call rotate_array(segment_in%h, turns, segment%h)
+  if (allocated(segment_in%normal_vel)) &
+      call rotate_array(segment_in%normal_vel, turns, segment%normal_vel)
+  if (allocated(segment_in%normal_trans)) &
+      call rotate_array(segment_in%normal_trans, turns, segment%normal_trans)
+  if (allocated(segment_in%normal_vel_bt)) &
+      call rotate_array(segment_in%normal_vel_bt, turns, segment%normal_vel_bt)
+  if (allocated(segment_in%tangential_vel)) &
+      call rotate_array(segment_in%tangential_vel, turns, segment%tangential_vel)
+  if (allocated(segment_in%tangential_grad)) &
+      call rotate_array(segment_in%tangential_grad, turns, segment%tangential_grad)
+  if (allocated(segment_in%grad_normal)) &
+      call rotate_array(segment_in%grad_normal, turns, segment%grad_normal)
+  if (allocated(segment_in%grad_tan)) &
+      call rotate_array(segment_in%grad_tan, turns, segment%grad_tan)
+  if (allocated(segment_in%grad_gradient)) &
+      call rotate_array(segment_in%grad_gradient, turns, segment%grad_gradient)
+  if (modulo(turns, 2) /= 0) then
+    if (allocated(segment_in%rx_norm_rad)) &
+        call rotate_array(segment_in%rx_norm_rad, turns, segment%ry_norm_rad)
+    if (allocated(segment_in%ry_norm_rad)) &
+        call rotate_array(segment_in%ry_norm_rad, turns, segment%rx_norm_rad)
+    if (allocated(segment_in%rx_norm_obl)) &
+        call rotate_array(segment_in%rx_norm_obl, turns, segment%ry_norm_obl)
+    if (allocated(segment_in%ry_norm_obl)) &
+        call rotate_array(segment_in%ry_norm_obl, turns, segment%rx_norm_obl)
+  else
+    if (allocated(segment_in%rx_norm_rad)) &
+        call rotate_array(segment_in%rx_norm_rad, turns, segment%rx_norm_rad)
+    if (allocated(segment_in%ry_norm_rad)) &
+        call rotate_array(segment_in%ry_norm_rad, turns, segment%ry_norm_rad)
+    if (allocated(segment_in%rx_norm_obl)) &
+        call rotate_array(segment_in%rx_norm_obl, turns, segment%rx_norm_obl)
+    if (allocated(segment_in%ry_norm_obl)) &
+        call rotate_array(segment_in%ry_norm_obl, turns, segment%ry_norm_obl)
+  endif
+  if (allocated(segment_in%cff_normal)) &
+      call rotate_array(segment_in%cff_normal, turns, segment%cff_normal)
+  if (allocated(segment_in%nudged_normal_vel)) &
+      call rotate_array(segment_in%nudged_normal_vel, turns, segment%nudged_normal_vel)
+  if (allocated(segment_in%nudged_tangential_vel)) &
+      call rotate_array(segment_in%nudged_tangential_vel, turns, segment%nudged_tangential_vel)
+  if (allocated(segment_in%nudged_tangential_grad)) &
+      call rotate_array(segment_in%nudged_tangential_grad, turns, segment%nudged_tangential_grad)
+  if (associated(segment_in%tr_Reg)) then
+    do n = 1, segment_in%tr_Reg%ntseg
+      call rotate_array(segment_in%tr_Reg%tr(n)%t, turns, segment%tr_Reg%tr(n)%t)
+      call rotate_array(segment_in%tr_Reg%tr(n)%tres, turns, segment%tr_Reg%tr(n)%tres)
+      ! Testing this to see if it works for contant tres values. Probably wrong otherwise.
+      segment%tr_Reg%Tr(n)%is_initialized=.true.
+    enddo
+  endif
+
+  do n = 1, num_fields
+    if ((segment%field(n)%name == 'U' .or. segment%field(n)%name == 'Uamp') .and. &
+         (modulo(turns, 4) == 1 .or. modulo(turns, 4) == 2)) then
+      segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
+      if (segment%is_E_or_W) then
+        segment%normal_trans(:,:,:) = -segment%normal_trans(:,:,:)
+        segment%normal_vel(:,:,:) = -segment%normal_vel(:,:,:)
+        segment%normal_vel_bt(:,:) = -segment%normal_vel_bt(:,:)
+        if (allocated(segment%nudged_normal_vel)) &
+            segment%nudged_normal_vel(:,:,:) = -segment%nudged_normal_vel(:,:,:)
+      else
+        if (allocated(segment%tangential_vel)) &
+            segment%tangential_vel(:,:,:) = -segment%tangential_vel(:,:,:)
+        if (allocated(segment%nudged_tangential_vel)) &
+            segment%nudged_tangential_vel(:,:,:) = -segment%nudged_tangential_vel(:,:,:)
+      endif
+    elseif ((segment%field(n)%name == 'V' .or. segment%field(n)%name == 'Vamp') .and. &
+         (modulo(turns, 4) == 3 .or. modulo(turns, 4) == 2)) then
+      segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
+      if (segment%is_N_or_S) then
+        segment%normal_trans(:,:,:) = -segment%normal_trans(:,:,:)
+        segment%normal_vel(:,:,:) = -segment%normal_vel(:,:,:)
+        segment%normal_vel_bt(:,:) = -segment%normal_vel_bt(:,:)
+        if (allocated(segment%nudged_normal_vel)) &
+            segment%nudged_normal_vel(:,:,:) = -segment%nudged_normal_vel(:,:,:)
+      else
+        if (allocated(segment%tangential_vel)) &
+            segment%tangential_vel(:,:,:) = -segment%tangential_vel(:,:,:)
+        if (allocated(segment%nudged_tangential_vel)) &
+            segment%nudged_tangential_vel(:,:,:) = -segment%nudged_tangential_vel(:,:,:)
+      endif
+    endif
   enddo
 
   segment%temp_segment_data_exists = segment_in%temp_segment_data_exists

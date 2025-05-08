@@ -114,7 +114,7 @@ use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
-use MOM_open_boundary,         only : open_boundary_setup_vert
+use MOM_open_boundary,         only : open_boundary_setup_vert, update_OBC_segment_data
 use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
@@ -3094,6 +3094,26 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     ! reservoirs are used.
     call open_boundary_register_restarts(HI, GV, US, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
+    if (turns /= 0) then
+      if (CS%OBC%radiation_BCs_exist_globally) then
+        OBC_in%rx_normal => CS%OBC%rx_normal
+        OBC_in%ry_normal => CS%OBC%ry_normal
+      endif
+      if (CS%OBC%oblique_BCs_exist_globally) then
+        OBC_in%rx_oblique_u => CS%OBC%rx_oblique_u
+        OBC_in%ry_oblique_u => CS%OBC%ry_oblique_u
+        OBC_in%rx_oblique_v => CS%OBC%rx_oblique_v
+        OBC_in%ry_oblique_v => CS%OBC%ry_oblique_v
+        OBC_in%cff_normal_u => CS%OBC%cff_normal_u
+        OBC_in%cff_normal_v => CS%OBC%cff_normal_v
+      endif
+      if (any(CS%OBC%tracer_x_reservoirs_used)) then
+        OBC_in%tres_x => CS%OBC%tres_x
+      endif
+      if (any(CS%OBC%tracer_y_reservoirs_used)) then
+        OBC_in%tres_y => CS%OBC%tres_y
+      endif
+    endif
   endif
 
   if (present(waves_CSp)) then
@@ -3228,8 +3248,13 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, G, GV, CS%S)
     endif
 
-    if (associated(OBC_in)) &
+    if (associated(OBC_in)) then
       call rotate_OBC_init(OBC_in, G, GV, US, param_file, CS%tv, restart_CSp, CS%OBC)
+      if (CS%OBC%some_need_no_IO_for_data) then
+        call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
+        call update_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
+      endif
+    endif
 
     deallocate(u_in)
     deallocate(v_in)
