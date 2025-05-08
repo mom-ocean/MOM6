@@ -2420,42 +2420,36 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
   ! Zero out the arrays for various time-averaged quantities.
   if (find_etaav) then
-    !$OMP do
-    do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
+    do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1)
       eta_sum(i,j) = 0.0 ; eta_wtd(i,j) = 0.0
-    enddo ; enddo
+    enddo
   else
-    !$OMP do
-    do j=jsvf-1,jevf+1 ; do i=isvf-1,ievf+1
+    do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1)
       eta_wtd(i,j) = 0.0
-    enddo ; enddo
+    enddo
   endif
-  !$OMP do
-  do j=js,je ; do I=is-1,ie
+  do concurrent (j=js:je, I=is-1:ie)
     CS%ubtav(I,j) = 0.0 ; uhbtav(I,j) = 0.0
     PFu_avg(I,j) = 0.0 ; Coru_avg(I,j) = 0.0
     LDu_avg(I,j) = 0.0 ; ubt_wtd(I,j) = 0.0
-  enddo ; enddo
-  !$OMP do
-  do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
+  enddo
+  do concurrent (j=jsvf-1:jevf+1, I=isvf-1:ievf)
     ubt_trans(I,j) = 0.0
-  enddo ; enddo
-  !$OMP do
-  do J=js-1,je ; do i=is,ie
+  enddo
+  do concurrent (J=js-1:je, i=is:ie)
     CS%vbtav(i,J) = 0.0 ; vhbtav(i,J) = 0.0
     PFv_avg(i,J) = 0.0 ; Corv_avg(i,J) = 0.0
     LDv_avg(i,J) = 0.0 ; vbt_wtd(i,J) = 0.0
-  enddo ; enddo
-  !$OMP do
-  do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
+  enddo
+  do concurrent (J=jsvf-1:jevf, i=isvf-1:ievf+1)
     vbt_trans(i,J) = 0.0
-  enddo ; enddo
+  enddo
   if (integral_BT_cont) then
     ubt_int(:,:) = 0.0 ; uhbt_int(:,:) = 0.0
     vbt_int(:,:) = 0.0 ; vhbt_int(:,:) = 0.0
   endif
 
-  p_surf_dyn(:,:) = 0.0
+  do concurrent (j=SZJW_(CS), i=SZIW_(CS)) ; p_surf_dyn(i,j) = 0.0 ; enddo
 
   ! Set up the group pass used for halo updates within the barotropic time stepping loops.
   call create_group_pass(CS%pass_eta_ubt, eta, CS%BT_Domain)
