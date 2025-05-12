@@ -2349,10 +2349,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                                                                 ! (To be used for writing out ocean geometry)
   character(len=240) :: geom_file ! Name of the ocean geometry file
 
-  ! XXX: This may need to happen even soon, at the driver level
-  ! NOTE: This must precede copy of G to GPU!
-  !$omp target enter data map(to: CS)
-
   CS%Time => Time
 
   id_clock_init = cpu_clock_id('Ocean Initialization', grain=CLOCK_SUBCOMPONENT)
