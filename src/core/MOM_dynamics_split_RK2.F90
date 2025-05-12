@@ -449,6 +449,10 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   else
     p_surf => forces%p_surf
   endif
+  ! TODO: This should probably be resolved in step_MOM, if not higher.  But
+  !   p_surf setup is a bit complicated, and may even depend on the driver, so
+  !   for now we alloc/delete in the dynamic core step.
+  !$omp target enter data map(to: p_surf) if (associated(p_surf))
 
   if (associated(CS%OBC)) then
     if (CS%debug_OBC) call open_boundary_test_extern_h(G, GV, CS%OBC, h)
@@ -839,6 +843,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     ! PFu = d/dx M(hp,T,S)
     ! pbce = dM/deta
     call cpu_clock_begin(id_clock_pres)
+    ! XXX: GPU error?? why no hp upload?
     call PressureForce(hp, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                        CS%ALE_CSp, CS%ADp, p_surf, CS%pbce, CS%eta_PF)
     !$omp target exit data map(from: CS%PFu, CS%PFv)
@@ -867,6 +872,9 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call cpu_clock_end(id_clock_pres)
     if (showCallTree) call callTree_wayPoint("done with PressureForce[hp=(1-b).h+b.h] (step_MOM_dyn_split_RK2)")
   endif
+
+  ! TODO: Move p_surf handling outside of this function
+  !$omp target exit data map(delete: p_surf) if (associated(p_surf))
 
   if (G%nonblocking_updates) &
     call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)

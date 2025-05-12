@@ -1262,7 +1262,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     enddo ; enddo ; enddo
   endif
 
-  !$omp target enter data map(to: p_atm) if (use_p_atm)
   !$omp target enter data map(alloc: pa)
 
   ! Set the surface boundary conditions on pressure anomaly and its horizontal
@@ -1956,9 +1955,6 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp   map(delete:tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
 
   !$omp target exit data map(delete: Z_0p) if (use_EOS)
-
-  !$omp target exit data if (use_p_atm) &
-  !$omp   map(delete: p_atm)
 
   !$omp target exit data &
   !$omp   map(delete: pa, dpa) &
