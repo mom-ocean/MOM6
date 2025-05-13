@@ -201,7 +201,6 @@ jobs:
           retention-days: 1
 
   build-opt:
-    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs: build-fms
 
@@ -228,17 +227,17 @@ jobs:
           path: .testing/build/opt/MOM6
           retention-days: 1
 
-      - name: Compile unit tests
+      - name: Compile timing tests
         run: |
           make -C .testing build.timing -j \
           -o build/deps/lib/libFMS.a
 
       - uses: actions/upload-artifact@v4
         with:
-          name: mom6-unit-artifact
+          name: mom6-timing-artifact
           path: |
-            .testing/build/timing/time_MOM_EOS
-            .testing/build/timing/time_MOM_remapping
+            .testing/build/timing/time_*
+            !.testing/build/timing/time_*.o
           retention-days: 1
 
   build-opt-target:
@@ -272,21 +271,20 @@ jobs:
           path: .testing/build/opt_target/MOM6
           retention-days: 1
 
-      - name: Compile target unit tests
+      - name: Compile target timing tests
         run: |
-          make -C .testing build.timing_target -j \
+          make -C .testing/build/target_codebase/.testing build.timing -j \
           -o build/deps/lib/libFMS.a
           MOM_TARGET_SLUG=$GITHUB_REPOSITORY \
           MOM_TARGET_LOCAL_BRANCH=$GITHUB_BASE_REF \
           DO_REGRESSION_TESTS=true
 
-      # XXX: This attempts to create an empty artifact!
       - uses: actions/upload-artifact@v4
         with:
-          name: mom6-unit-target-artifact
+          name: mom6-timing-target-artifact
           path: |
-            .testing/build/target_codebase/.testing/build/timing/time_MOM_EOS
-            .testing/build/target_codebase/.testing/build/timing/time_MOM_remapping
+            .testing/build/target_codebase/.testing/build/timing/time_*
+            !.testing/build/target_codebase/.testing/build/timing/time_*.o
           retention-days: 1
 
   build-coverage:
@@ -323,6 +321,7 @@ jobs:
             .testing/build/cov/*.gcno
             .testing/build/unit/test_*
             .testing/build/unit/*.gcno
+            !.testing/build/unit/test_*.o
           retention-days: 1
 
   build-coupled-api:
@@ -723,24 +722,56 @@ jobs:
 
       - name: Generate unit test coverage
         run: |
-          UNIT_EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*"`
-          chmod u+rx $UNIT_EXECS
-          UNIT_EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*" | sed 's:.testing/::'`
+          EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*"`
+          chmod u+rx $EXECS
+          EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*" | sed 's:.testing/::'`
           make -C .testing -j run.cov.unit \
-          $( for f in $UNIT_EXECS; do echo "-o $f" ; done )
+          $( for f in $EXECS; do echo "-o $f" ; done )
 
       - name: Report coverage to CI
         run: |
           make -C .testing report.cov \
           -o build/cov/MOM6
-          UNIT_EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*" | sed 's:.testing/::'`
+          EXECS=`find .testing/build/unit -regextype sed -regex ".*/test_[A-Za-z0-9_]*" | sed 's:.testing/::'`
           make -C .testing report.cov.unit \
-          $( for f in $UNIT_EXECS; do echo "-o $f" ; done )
+          $( for f in $EXECS; do echo "-o $f" ; done )
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
   # These are most likely nonsense on a GitHub node, but someday it could work.
   run-timings:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    needs:
+      - build-opt
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - uses: ./.github/actions/ubuntu-setup
+
+      - name: Download timing tests
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-timing-artifact
+          path: .testing/build/timing/
+
+      - name: Run unit test timings
+        run: |
+          chmod u+rx .testing/build/timing/time_*
+          EXECS=`cd .testing ; find build/timing -regextype sed -regex ".*/time_[A-Za-z0-9_]*"`
+          make -C .testing run.timing -j \
+          $( for f in $EXECS; do echo "-o $f" ; done )
+
+      - name: Show timing results
+        run: |
+          make -C .testing show.timing \
+          DO_REGRESSION_TESTS=true
+
+  # These are most likely nonsense on a GitHub node, but someday it could work.
+  compare-timings:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     needs:
@@ -788,38 +819,42 @@ jobs:
       # Collapse run.timing run.timing_target and show.timing into one rule
       # TODO: Should this be a separate thing?
 
-      - name: Download unit tests
+      - name: Download timing tests
         uses: actions/download-artifact@v4
         with:
-          name: mom6-unit-artifact
-          path: .testing/build/timing
+          name: mom6-timing-artifact
+          path: .testing/build/timing/
 
-      # XXX: This fails because the files do not yet build.
-      #- name: Download unit tests
-      #  uses: actions/download-artifact@v4
-      #  with:
-      #    name: mom6-unit-target-artifact
-      #    path: .testing/build/timing
-
-      - name: Run unit test timings
+      - name: Run timing tests
         run: |
-          chmod u+rx .testing/build/timing/time_MOM_EOS
-          chmod u+rx .testing/build/timing/time_MOM_remapping
+          chmod u+rx .testing/build/timing/time_*
+          EXECS=`cd .testing ; find build/timing -regextype sed -regex ".*/time_[A-Za-z0-9_]*"`
           make -C .testing run.timing -j \
-          -o build/timing/time_MOM_EOS \
-          -o build/timing/time_MOM_remapping
-
-      - name: Run unit test target timings
-        run: |
-          make -C .testing run.timing_target -j \
-          -o build/target_codebase/.testing/build/timing/time_MOM_EOS \
-          -o build/target_codebase/.testing/build/timing/time_MOM_remapping \
-          DO_REGRESSION_TESTS=true
+          $( for f in $EXECS; do echo "-o $f" ; done )
 
       - name: Show timing results
         run: |
           make -C .testing show.timing \
           DO_REGRESSION_TESTS=true
+
+      - name: Re-clone target directory
+        run: |
+          make -C .testing build/target_codebase \
+          DO_REGRESSION_TESTS=True
+
+      - name: Download target timing tests
+        uses: actions/download-artifact@v4
+        with:
+          name: mom6-timing-target-artifact
+          path: .testing/build/target_codebase/.testing/build/timing/
+
+      - name: Run target timing tests
+        run: |
+          cd .testing/build/target_codebase/
+          chmod u+rx .testing/build/timing/time_*
+          EXECS=`cd .testing ; find build/timing -regextype sed -regex ".*/time_[A-Za-z0-9_]*"`
+          make -C .testing run.timing -j \
+          $( for f in $EXECS; do echo "-o $f" ; done )
 
       - name: Compare unit test timings
         run: |
@@ -868,13 +903,14 @@ jobs:
       - test-grid
       - test-openmp
       - test-repro
-      - run-coverage
+      - run-timings
 
     steps:
       - uses: geekyeggo/delete-artifact@v5
         with:
           name: |
             mom6-symmetric-artifact
+            mom6-timing-artifact
 
   cleanup-pr:
     if: github.event_name == 'pull_request'
@@ -895,9 +931,8 @@ jobs:
       - test-grid
       - test-openmp
       - test-repro
-      - run-coverage
       - test-regression
-      - run-timings
+      - compare-timings
 
     steps:
       - uses: geekyeggo/delete-artifact@v5
@@ -907,5 +942,5 @@ jobs:
             mom6-target-artifact
             mom6-opt-artifact
             mom6-opt-target-artifact
-            mom6-unit-artifact
-            mom6-unit-target-artifact
+            mom6-timing-artifact
+            mom6-timing-target-artifact
