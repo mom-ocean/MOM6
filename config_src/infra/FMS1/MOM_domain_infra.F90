@@ -1389,8 +1389,10 @@ subroutine create_MOM_domain(MOM_dom, n_global, n_halo, reentrant, tripolar_N, l
       "TRIPOLAR_N and REENTRANT_Y may not be used together.")
   endif
 
-  MOM_dom%nonblocking_updates = nonblocking
-  MOM_dom%thin_halo_updates = thin_halos
+  MOM_dom%nonblocking_updates = .false.
+  if (present(nonblocking)) MOM_dom%nonblocking_updates = nonblocking
+  MOM_dom%thin_halo_updates = .false.
+  if (present(thin_halos)) MOM_dom%thin_halo_updates = thin_halos
   MOM_dom%symmetric = .true. ; if (present(symmetric)) MOM_dom%symmetric = symmetric
   MOM_dom%niglobal = n_global(1) ; MOM_dom%njglobal = n_global(2)
   MOM_dom%nihalo = n_halo(1) ; MOM_dom%njhalo = n_halo(2)

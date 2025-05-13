@@ -35,6 +35,7 @@ public :: MOM_infra_init, MOM_infra_end
 public :: MOM_domain_type, domain2D, domain1D
 public :: MOM_domains_init, create_MOM_domain, clone_MOM_domain, deallocate_MOM_domain
 public :: MOM_thread_affinity_set, set_MOM_thread_affinity
+public :: MOM_define_layout
 !  Domain query routines
 public :: get_domain_extent, get_domain_components, get_global_shape, same_domain
 public :: PE_here, root_PE, num_PEs
