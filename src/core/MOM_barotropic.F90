@@ -1706,7 +1706,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   allocate(wt_vel(nstep+nfilter)) ; allocate(wt_eta(nstep+nfilter))
   allocate(wt_trans(nstep+nfilter+1)) ; allocate(wt_accel(nstep+nfilter+1))
   allocate(wt_accel2(nstep+nfilter+1))
-  do n=1,nstep+nfilter
+  do concurrent (n=1:nstep+nfilter)
     ! Modify this to use a different filter...
 
     ! This is a filter that ramps down linearly over a time dt_filt.
@@ -1722,8 +1722,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ! wt_eta(n) = wt_vel(n)
 
     ! The rest should not be changed.
+  enddo
+  ! do sum reduction on CPU to preserve fp summation order (nstep+filter is small)
+  do n=1,nstep+nfilter
     sum_wt_vel = sum_wt_vel + wt_vel(n) ; sum_wt_eta = sum_wt_eta + wt_eta(n)
   enddo
+  ! leaving this prefix sum on CPU, but could be ported using openmp scan
   wt_trans(nstep+nfilter+1) = 0.0 ; wt_accel(nstep+nfilter+1) = 0.0
   do n=nstep+nfilter,1,-1
     wt_trans(n) = wt_trans(n+1) + wt_eta(n)
@@ -1733,7 +1737,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Normalize the weights.
   I_sum_wt_vel = 1.0 / sum_wt_vel ; I_sum_wt_accel = 1.0 / sum_wt_accel
   I_sum_wt_eta = 1.0 / sum_wt_eta ; I_sum_wt_trans = 1.0 / sum_wt_trans
-  do n=1,nstep+nfilter
+  do concurrent (n=1:nstep+nfilter)
     wt_vel(n) = wt_vel(n) * I_sum_wt_vel
     if (CS%answer_date < 20190101) then
       wt_accel2(n) = wt_accel(n)
