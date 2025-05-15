@@ -2585,17 +2585,14 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
         vhbt(i,J) = (vhbt_int(i,J) - vhbt_int_prev(i,J)) * Idtbt
       enddo ; enddo
     elseif (use_BT_cont) then
-      !$OMP do schedule(static)
-      do j=jsv,jev ; do I=isv-1,iev
+      do concurrent (j=jsv:jev, I=isv-1:iev)
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*ubt_prev(I,j)
         uhbt(I,j) = find_uhbt(ubt_trans(I,j), BTCL_u(I,j)) + uhbt0(I,j)
-      enddo ; enddo
-      !$OMP end do nowait
-      !$OMP do schedule(static)
-      do J=jsv-1,jev ; do i=isv,iev
+      enddo
+      do concurrent (J=jsv-1:jev, i=isv:iev)
         vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vbt_prev(i,J)
         vhbt(i,J) = find_vhbt(vbt_trans(i,J), BTCL_v(i,J)) + vhbt0(i,J)
-      enddo ; enddo
+      enddo
     else
       !$OMP do schedule(static)
       do j=jsv,jev ; do I=isv-1,iev
