@@ -3302,8 +3302,7 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
   real :: vel_prev    ! The previous velocity [L T-1 ~> m s-1].
   integer :: i, j
 
-  !$OMP do schedule(static)
-  do j=js_u,je_u ; do I=Is_u,Ie_u
+  do concurrent (j=js_u:je_u, I=Is_u:Ie_u)
     Cor_u(I,j) = (((f_4_u(4,I,j) * vbt(i+1,J)) + (f_4_u(1,I,j) * vbt(i,J-1))) + &
                   ((f_4_u(3,I,j) * vbt(i,J)) + (f_4_u(2,I,j) * vbt(i+1,J-1)))) - &
                  Cor_ref_u(I,j)
@@ -3311,22 +3310,17 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
     ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
          dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
     if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
-  enddo ; enddo
-  !$OMP end do nowait
+  enddo
 
   if (CS%linear_wave_drag) then
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=Is_u,Ie_u
+    do concurrent (j=js_u:je_u, I=Is_u:Ie_u)
       u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel_n * &
           ((Cor_u(I,j) + PFu(I,j)) - ubt(I,j)*Rayleigh_u(I,j))
-    enddo ; enddo
-    !$OMP end do nowait
+    enddo
   else
-    !$OMP do schedule(static)
-    do j=js_u,je_u ; do I=Is_u,Ie_u
+    do concurrent (j=js_u:je_u, I=Is_u:Ie_u)
       u_accel_bt(I,j) = u_accel_bt(I,j) + wt_accel_n * (Cor_u(I,j) + PFu(I,j))
-    enddo ; enddo
-    !$OMP end do nowait
+    enddo
   endif
 
 end subroutine btloop_update_u
