@@ -853,7 +853,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! share with the main part of the MOM6 code.
   if (find_etaav) then
     call create_group_pass(CS%pass_etaav, etaav, G%Domain)
-  endif
+  endif                                                              
   call create_group_pass(CS%pass_e_anom, e_anom, G%Domain)
   call create_group_pass(CS%pass_ubta_uhbta, CS%ubtav, CS%vbtav, G%Domain)
   call create_group_pass(CS%pass_ubta_uhbta, uhbtav, vhbtav, G%Domain)
@@ -863,7 +863,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   !$omp target enter data &
   !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
-  !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q)
+  !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt)
 
 !   Calculate the constant coefficients for the Coriolis force terms in the
 ! barotropic momentum equations.  This has to be done quite early to start
@@ -1172,8 +1172,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       ! Fill in the halo data for ubt, vbt, uhbt, and vhbt.
       if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
       if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
+      !$omp target update from(ubt, vbt)
       call pass_vector(ubt, vbt, CS%BT_Domain, complete=.false., halo=1+ievf-ie)
       call pass_vector(uhbt, vhbt, CS%BT_Domain, complete=.true., halo=1+ievf-ie)
+      !$omp target update to(ubt, vbt)
       if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
       if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
@@ -2156,7 +2158,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   !$omp target exit data &
   !$omp   map(release: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
-  !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q)
+  !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt)
 
 end subroutine btstep
 
@@ -2492,7 +2494,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     ! Update the range of valid points, either by doing a halo update or by marching inward.
     if ((iev - stencil < ie) .or. (jev - stencil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
+      !$omp target update from(ubt, vbt)
       call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain, clock=id_clock_pass_step)
+      !$omp target update to(ubt, vbt)
       isv = isvf ; iev = ievf ; jsv = jsvf ; jev = jevf
       if (id_clock_calc > 0) call cpu_clock_begin(id_clock_calc)
     else
