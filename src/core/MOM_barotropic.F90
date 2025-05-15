@@ -2676,12 +2676,11 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
         eta_wtd(i,j) = eta_wtd(i,j) + eta(i,j) * wt_eta(n)
       enddo ; enddo
     else
-      !$OMP do
-      do j=jsv,jev ; do i=isv,iev
+      do concurrent (j=jsv:jev, i=isv:iev)
         eta(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT_OBCmask(i,j)) * &
                    ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
         eta_wtd(i,j) = eta_wtd(i,j) + eta(i,j) * wt_eta(n)
-      enddo ; enddo
+      enddo
     endif
 
     if (CS%debug_bt) then
