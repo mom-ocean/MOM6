@@ -1777,19 +1777,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
 
-  if (find_etaav) then ; do j=js,je ; do i=is,ie
+  if (find_etaav) then ; do concurrent (j=js:je, i=is:ie)
     etaav(i,j) = eta_sum(i,j) * I_sum_wt_accel
-  enddo ; enddo ; endif
-  do j=js-1,je+1 ; do i=is-1,ie+1 ; e_anom(i,j) = 0.0 ; enddo ; enddo
+  enddo ; endif
+  do concurrent (j=js-1:je+1, i=is-1:ie+1) ; e_anom(i,j) = 0.0 ; enddo
   if (interp_eta_PF) then
     do j=js,je ; do i=is,ie
       e_anom(i,j) = dgeo_de * (0.5 * (eta(i,j) + eta_in(i,j)) - &
                                (eta_PF_1(i,j) + 0.5*d_eta_PF(i,j)))
     enddo ; enddo
   else
-    do j=js,je ; do i=is,ie
+    do concurrent (j=js:je, i=is:ie)
       e_anom(i,j) = dgeo_de * (0.5 * (eta(i,j) + eta_in(i,j)) - eta_PF(i,j))
-    enddo ; enddo
+    enddo
   endif
   if (apply_OBCs) then
     ! This block of code may be unnecessary because e_anom is only used for accelerations that
@@ -2691,6 +2691,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     endif
 
     ! Issue warnings if there are unphysical values of the sea surface height or total water column mass.
+    ! Leaving this unported for now
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
         if ((eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) .and. (G%mask2dT(i,j) > 0.0)) then
