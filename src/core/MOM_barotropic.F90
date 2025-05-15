@@ -861,7 +861,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
 !--- end setup for group halo update
 
-  !$omp target enter data map(alloc: ubt_Cor, vbt_Cor)
+  !$omp target enter data &
+  !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
+  !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q)
 
 !   Calculate the constant coefficients for the Coriolis force terms in the
 ! barotropic momentum equations.  This has to be done quite early to start
@@ -921,10 +923,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ! These calculations can be done almost immediately, but the halo updates
     ! must be done before the [abcd]mer and [abcd]zon are calculated.
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
+    !$omp target update from(q)
     if (nonblock_setup) then
       call start_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
     else
       call do_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
+      !$omp target update to(q)
     endif
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
@@ -1106,6 +1110,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (nonblock_setup .and. .not.CS%linearized_BT_PV) then
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
     call complete_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
+      !$omp target update to(q)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
 
@@ -1832,11 +1837,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
   if (id_clock_pass_post > 0) call cpu_clock_begin(id_clock_pass_post)
+  !$omp target update from(e_anom)
   if (G%nonblocking_updates) then
     call start_group_pass(CS%pass_e_anom, G%Domain)
   else
     if (find_etaav) call do_group_pass(CS%pass_etaav, G%Domain)
     call do_group_pass(CS%pass_e_anom, G%Domain)
+    !$omp target update to(e_anom)
   endif
   if (id_clock_pass_post > 0) call cpu_clock_end(id_clock_pass_post)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
@@ -1880,6 +1887,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     call complete_group_pass(CS%pass_e_anom, G%Domain)
     if (find_etaav) call start_group_pass(CS%pass_etaav, G%Domain)
     call start_group_pass(CS%pass_ubta_uhbta, G%DoMain)
+    !$omp target update to(e_anom)
   else
     call do_group_pass(CS%pass_ubta_uhbta, G%Domain)
   endif
@@ -2146,7 +2154,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
-  !$omp target exit data map(release: ubt_Cor, vbt_Cor)
+  !$omp target exit data &
+  !$omp   map(release: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
+  !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q)
 
 end subroutine btstep
 
