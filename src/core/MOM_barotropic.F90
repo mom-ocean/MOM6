@@ -3417,20 +3417,17 @@ subroutine btstep_layer_accel(dt, u_accel_bt, v_accel_bt, pbce, gtot_E, gtot_W, 
   accel_underflow = CS%vel_underflow * Idt
 
   ! Now calculate each layer's accelerations.
-  !$OMP parallel do default(shared)
-  do k=1,nz
-    do j=js,je ; do I=is-1,ie
-      accel_layer_u(I,j,k) = (u_accel_bt(I,j) - &
-           (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
-            ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j) )
-      if (abs(accel_layer_u(I,j,k)) < accel_underflow) accel_layer_u(I,j,k) = 0.0
-    enddo ; enddo
-    do J=js-1,je ; do i=is,ie
-      accel_layer_v(i,J,k) = (v_accel_bt(i,J) - &
-           (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
-            ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J) )
-      if (abs(accel_layer_v(i,J,k)) < accel_underflow) accel_layer_v(i,J,k) = 0.0
-    enddo ; enddo
+  do concurrent (k=1:nz, j=js:je, I=is-1:ie)
+    accel_layer_u(I,j,k) = (u_accel_bt(I,j) - &
+          (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
+          ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j) )
+    if (abs(accel_layer_u(I,j,k)) < accel_underflow) accel_layer_u(I,j,k) = 0.0
+  enddo
+  do concurrent (k=1:nz, J=js-1:je, i=is:ie)
+    accel_layer_v(i,J,k) = (v_accel_bt(i,J) - &
+          (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
+          ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J) )
+    if (abs(accel_layer_v(i,J,k)) < accel_underflow) accel_layer_v(i,J,k) = 0.0
   enddo
 
 end subroutine btstep_layer_accel
