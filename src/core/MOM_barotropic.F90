@@ -3084,28 +3084,22 @@ subroutine btloop_find_PF(PFu, PFv, isv, iev, jsv, jev, eta_PF_BT, eta_PF, &
     is_v = isv ; ie_v = iev ; js_u = jsv-1 ; je_u = jev+1
   endif
 
-  !$OMP do schedule(static)
-  do j=js_u,je_u ; do I=isv-1,iev
+  do concurrent (j=js_u:je_u, I=isv-1:iev)
     PFu(I,j) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_E(i,j)) - &
                 ((eta_PF_BT(i+1,j)-eta_PF(i+1,j))*gtot_W(i+1,j))) * &
                 dgeo_de * CS%IdxCu(I,j)
-  enddo ; enddo
-  !$OMP end do nowait
+  enddo
 
-  !$OMP do schedule(static)
-  do J=jsv-1,jev ; do i=is_v,ie_v
+  do concurrent (J=jsv-1:jev, i=is_v:ie_v)
     PFv(i,J) = (((eta_PF_BT(i,j)-eta_PF(i,j))*gtot_N(i,j)) - &
                 ((eta_PF_BT(i,j+1)-eta_PF(i,j+1))*gtot_S(i,j+1))) * &
                 dgeo_de * CS%IdyCv(i,J)
-  enddo ; enddo
-  !$OMP end do nowait
+  enddo
 
   if (find_etaav .and. (abs(wt_accel2_n) > 0.0)) then
-    !$OMP do
-    do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    do concurrent (j=G%jsc:G%jec, i=G%isc:G%iec)
       eta_sum(i,j) = eta_sum(i,j) + wt_accel2_n * eta_PF_BT(i,j)
-    enddo ; enddo
-    !$OMP end do nowait
+    enddo
   endif
 
 end subroutine btloop_find_PF
