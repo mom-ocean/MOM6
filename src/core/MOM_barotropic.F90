@@ -1812,9 +1812,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
 
   ! Note that it is possible that eta_out and eta_in are the same array.
-  do j=js,je ; do i=is,ie
+  do concurrent (j=js:je, i=is:ie)
     eta_out(i,j) = eta_wtd(i,j) * I_sum_wt_eta
-  enddo ; enddo
+  enddo
 
   ! Accumulator is updated at the end of every baroclinic time step.
   ! Harmonic analysis will not be performed of a field that is not registered.
