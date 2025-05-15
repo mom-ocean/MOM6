@@ -3219,41 +3219,33 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
 
   ! The bracket bug only applies if v is second, use ioff to check.
   if (use_bracket_bug) then
-   !$OMP do schedule(static)
-   do J=Js_v,Je_v ; do i=is_v,ie_v
+   do concurrent (J=Js_v:Je_v, i=is_v:ie_v)
      Cor_v(i,J) = -1.0*(((f_4_v(1,i,J) * ubt(I-1,j)) + (f_4_v(2,i,J) * ubt(I,j))) + &
              ((f_4_v(4,i,J) * ubt(I,j+1)) + (f_4_v(3,i,J) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
-   enddo ; enddo
-   !$OMP end do nowait
+   enddo
   else
-   !$OMP do schedule(static)
-   do J=Js_v,Je_v ; do i=is_v,ie_v
+   do concurrent (J=Js_v:Je_v, i=is_v:ie_v)
      Cor_v(i,J) = -1.0*(((f_4_v(1,i,J) * ubt(I-1,j)) + (f_4_v(4,i,J) * ubt(I,j+1))) + &
              ((f_4_v(2,i,J) * ubt(I,j)) + (f_4_v(3,i,J) * ubt(I-1,j+1)))) - Cor_ref_v(i,J)
-   enddo ; enddo
-   !$OMP end do nowait
+   enddo
   endif
 
-  !$OMP do schedule(static)
   ! This updates the v-velocity, except at OBC points.
-  do J=Js_v,Je_v ; do i=is_v,ie_v
+  do concurrent (J=Js_v:Je_v, i=is_v:ie_v)
     vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
          dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
     if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
-  enddo ; enddo
-  !$OMP end do nowait
+  enddo
 
   if (CS%linear_wave_drag) then
-    !$OMP do schedule(static)
-    do J=Js_v,Je_v ; do i=is_v,ie_v
+    do concurrent (J=Js_v:Je_v, i=is_v:ie_v)
       v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel_n * &
           ((Cor_v(i,J) + PFv(i,J)) - vbt(i,J)*Rayleigh_v(i,J))
-    enddo ; enddo
+    enddo
   else
-    !$OMP do schedule(static)
-    do J=Js_v,Je_v ; do i=is_v,ie_v
+    do concurrent (J=Js_v:Je_v, i=is_v:ie_v)
       v_accel_bt(i,J) = v_accel_bt(i,J) + wt_accel_n * (Cor_v(i,J) + PFv(i,J))
-    enddo ; enddo
+    enddo
   endif
 
 end subroutine btloop_update_v
