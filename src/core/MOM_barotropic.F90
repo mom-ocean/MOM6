@@ -867,7 +867,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, ubt_prev, vbt_prev, &
   !$omp       ubt_trans, vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, &
   !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
-  !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v)
+  !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, &
+  !$omp       PFu_avg, PFv_avg)
 
 !   Calculate the constant coefficients for the Coriolis force terms in the
 ! barotropic momentum equations.  This has to be done quite early to start
@@ -2205,7 +2206,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       ubt_trans, vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, &
   !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
   !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, &
-  !$omp       wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
+  !$omp       wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2, PFu_avg, PFv_avg)
 
   deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
