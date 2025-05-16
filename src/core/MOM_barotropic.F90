@@ -864,10 +864,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp target enter data &
   !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
-  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, &
-  !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, Datu, Datv, &
-  !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF, &
-  !$omp       gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v)
+  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, ubt_prev, vbt_prev, &
+  !$omp       ubt_trans, vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, &
+  !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
+  !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v)
 
 !   Calculate the constant coefficients for the Coriolis force terms in the
 ! barotropic momentum equations.  This has to be done quite early to start
@@ -1469,6 +1469,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
     ! The following halo update is not needed without wide halos.  RWH
     !$omp target update from(BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v)
+    !$omp target update if(add_uh0) from(uhbt0, vhbt0)
     call start_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain)
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
@@ -1645,8 +1646,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       !$omp target update to(Datu, Datv)
     endif
     !$omp target update from(BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v)
+    !$omp target update if(add_uh0) from(uhbt0, vhbt0)
     call do_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain)
     !$omp target update to(BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v)
+    !$omp target update if(add_uh0) to(uhbt0, vhbt0)
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1667,6 +1670,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     !$omp target update if(.not.interp_eta_PF) to(eta_PF)
     !$omp target update if(interp_eta_PF) to(eta_PF_1, d_eta_PF)
     !$omp target update if(CS%dynamic_psurf) to(dyn_coef_eta)
+    !$omp target update if(add_uh0) to(uhbt0, vhbt0)
 
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -2197,11 +2201,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp target exit data &
   !$omp   map(release: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
-  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, &
-  !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, Datu, Datv, &
-  !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF, &
-  !$omp       gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, wt_vel, wt_eta, &
-  !$omp       wt_trans, wt_accel, wt_accel2)
+  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, ubt_prev, vbt_prev, &
+  !$omp       ubt_trans, vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, &
+  !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
+  !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, &
+  !$omp       wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
   deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
