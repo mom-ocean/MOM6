@@ -624,11 +624,10 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   if (associated(OBC)) then
     call initialize_segment_data(G, GV, US, OBC, PF)
 !     call open_boundary_config(G, US, PF, OBC)
-    ! Call this once to fill boundary arrays from fixed values
-    if (OBC%some_need_no_IO_for_data) then
-      call calc_derived_thermo(tv, h, G, GV, US)
-      call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
-    endif
+
+    call calc_derived_thermo(tv, h, G, GV, US)
+    ! Call this during initialization to fill boundary arrays from fixed values
+    call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
                  "A string that sets how the user code is invoked to set open boundary data: \n"//&

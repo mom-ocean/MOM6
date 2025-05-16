@@ -3250,10 +3250,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
     if (associated(OBC_in)) then
       call rotate_OBC_init(OBC_in, G, GV, US, param_file, CS%tv, restart_CSp, CS%OBC)
-      if (CS%OBC%some_need_no_IO_for_data) then
-        call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
-        call update_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
-      endif
+      call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
+      call update_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
     endif
 
     deallocate(u_in)

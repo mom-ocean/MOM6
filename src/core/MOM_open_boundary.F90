@@ -4,7 +4,6 @@ module MOM_open_boundary
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform,      only : rotate_array, rotate_array_pair
-use MOM_array_transform,      only : allocate_rotated_array
 use MOM_coms,                 only : sum_across_PEs, Set_PElist, Get_PElist, PE_here, num_PEs
 use MOM_cpu_clock,            only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_debugging,            only : hchksum, uvchksum
@@ -293,7 +292,6 @@ type, public :: ocean_OBC_type
                                                       !! require less frequent update
   logical :: needs_IO_for_data = .false.              !< Is any i/o needed for OBCs on the current PE
   logical :: any_needs_IO_for_data = .false.          !< Is any i/o needed for OBCs globally
-  logical :: some_need_no_IO_for_data = .false.       !< Are there any PEs with OBCs that do not need i/o.
   logical :: zero_vorticity = .false.                 !< If True, sets relative vorticity to zero on open boundaries.
   logical :: freeslip_vorticity = .false.             !< If True, sets normal gradient of tangential velocity to zero
                                                       !! in the relative vorticity on open boundaries.
@@ -806,7 +804,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
   integer, dimension(1) :: single_pelist
   type(external_tracers_segments_props), pointer :: obgc_segments_props_list =>NULL()
   !will be able to dynamically switch between sub-sampling refined grid data or model grid
-  integer :: IO_needs(3) ! Sums to determine global OBC data use and update patterns.
+  integer :: IO_needs(2) ! Sums to determine global OBC data use and update patterns.
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
 
@@ -1123,11 +1121,9 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
   ! Determine global IO data requirement patterns.
   IO_needs(1) = 0 ; if (OBC%needs_IO_for_data) IO_needs(1) = 1
   IO_needs(2) = 0 ; if (OBC%update_OBC) IO_needs(2) = 1
-  IO_needs(3) = 0 ; if (.not.OBC%needs_IO_for_data) IO_needs(3) = 1
-  call sum_across_PES(IO_needs, 3)
+  call sum_across_PES(IO_needs, 2)
   OBC%any_needs_IO_for_data = (IO_needs(1) > 0)
   OBC%update_OBC = (IO_needs(2) > 0)
-  OBC%some_need_no_IO_for_data = (IO_needs(3) > 0)
 
 end subroutine initialize_segment_data
 
@@ -5908,7 +5904,6 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
   OBC%update_OBC = OBC_in%update_OBC
   OBC%needs_IO_for_data = OBC_in%needs_IO_for_data
   OBC%any_needs_IO_for_data = OBC_in%any_needs_IO_for_data
-  OBC%some_need_no_IO_for_data = OBC_in%some_need_no_IO_for_data
 
   OBC%ntr = OBC_in%ntr
 
@@ -6114,11 +6109,9 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
     segment%field(n)%dz_handle = segment_in%field(n)%dz_handle
 
     if (allocated(segment_in%field(n)%buffer_dst)) then
-      call allocate_rotated_array(segment_in%field(n)%buffer_dst, &
-          lbound(segment_in%field(n)%buffer_dst), turns, &
-          segment%field(n)%buffer_dst)
-      call rotate_array(segment_in%field(n)%buffer_dst, turns, &
-          segment%field(n)%buffer_dst)
+      call allocate_rotated_seg_data(segment_in%field(n)%buffer_dst, segment_in%HI, &
+                                     segment%field(n)%buffer_dst, segment)
+      call rotate_array(segment_in%field(n)%buffer_dst, turns, segment%field(n)%buffer_dst)
     endif
 
     if (modulo(turns, 2) /= 0) then
@@ -6147,21 +6140,16 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
     endif
 
     if (allocated(segment_in%field(n)%buffer_src)) then
-      call allocate_rotated_array(segment_in%field(n)%buffer_src, &
-          lbound(segment_in%field(n)%buffer_src), turns, &
-          segment%field(n)%buffer_src)
-      call rotate_array(segment_in%field(n)%buffer_src, turns, &
-          segment%field(n)%buffer_src)
+      call allocate_rotated_seg_data(segment_in%field(n)%buffer_src, segment_in%HI, &
+                                     segment%field(n)%buffer_src, segment)
+      call rotate_array(segment_in%field(n)%buffer_src, turns, segment%field(n)%buffer_src)
     endif
 
     segment%field(n)%nk_src = segment_in%field(n)%nk_src
 
     if (allocated(segment_in%field(n)%dz_src)) then
-      call allocate_rotated_array(segment_in%field(n)%dz_src, &
-          lbound(segment_in%field(n)%dz_src), turns, &
-          segment%field(n)%dz_src)
-      call rotate_array(segment_in%field(n)%dz_src, turns, &
-          segment%field(n)%dz_src)
+      call allocate_rotated_seg_data(segment_in%field(n)%dz_src, segment_in%HI, segment%field(n)%dz_src, segment)
+      call rotate_array(segment_in%field(n)%dz_src, turns, segment%field(n)%dz_src)
     endif
 
     segment%field(n)%value = segment_in%field(n)%value
@@ -6266,6 +6254,35 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
   segment%temp_segment_data_exists = segment_in%temp_segment_data_exists
   segment%salt_segment_data_exists = segment_in%salt_segment_data_exists
 end subroutine rotate_OBC_segment_data
+
+
+!> Allocate an array of data for a field on a segment based on the size of a potentially rotated source array
+subroutine allocate_rotated_seg_data(src_array, HI_in, tgt_array, segment)
+  real, dimension(:,:,:), intent(in) :: src_array !< The segment data on the unrotated source grid
+  type(hor_index_type),   intent(in) :: HI_in !< Horizontal indices on the source grid
+  real, dimension(:,:,:), allocatable, intent(inout) :: tgt_array !< The segment data that is being allocated
+  type(OBC_segment_type), intent(inout) :: segment !< OBC segment on the target grid
+
+  ! Local variables
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nk
+  logical :: corner  ! True if this field is discretized at the OBC segment nodes rather than the faces.
+
+  isd = segment%HI%isd ; ied = segment%HI%ied ; IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+  jsd = segment%HI%jsd ; jed = segment%HI%jed ; JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+  nk = size(src_array, 3)
+
+  ! Determine whether the source array is allocated at a segment face or at the corners.
+  corner = (size(src_array, 1) == abs(HI_in%IedB - HI_in%IsdB) + 1 ) .and. &
+           (size(src_array, 2) == abs(HI_in%JedB - HI_in%JsdB) + 1 )
+
+  if (corner) then
+    allocate(tgt_array(IsdB:IedB,JsdB:JedB,nk), source=0.0)
+  elseif (segment%is_E_or_W) then
+    allocate(tgt_array(IsdB:IedB,jsd:jed,nk), source=0.0)
+  elseif (segment%is_N_or_S) then
+    allocate(tgt_array(isd:ied,JsdB:JedB,nk), source=0.0)
+  endif
+end subroutine allocate_rotated_seg_data
 
 !> \namespace mom_open_boundary
 !! This module implements some aspects of internal open boundary
