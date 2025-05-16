@@ -865,7 +865,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
   !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, &
-  !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v)
+  !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v)
 
 !   Calculate the constant coefficients for the Coriolis force terms in the
 ! barotropic momentum equations.  This has to be done quite early to start
@@ -925,12 +925,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ! These calculations can be done almost immediately, but the halo updates
     ! must be done before the [abcd]mer and [abcd]zon are calculated.
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-    !$omp target update from(q)
+    !$omp target update from(q, DCor_u, DCor_v)
     if (nonblock_setup) then
       call start_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
     else
       call do_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
-      !$omp target update to(q)
+      !$omp target update to(q, DCor_u, DCor_v)
     endif
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
@@ -2169,7 +2169,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp   map(release: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
   !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, &
-  !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v)
+  !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v)
 
 end subroutine btstep
 
