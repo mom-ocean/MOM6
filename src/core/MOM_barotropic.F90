@@ -866,7 +866,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
   !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, &
   !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, Datu, Datv, &
-  !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF)
+  !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF, &
+  !$omp       gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v)
 
 !   Calculate the constant coefficients for the Coriolis force terms in the
 ! barotropic momentum equations.  This has to be done quite early to start
@@ -1413,7 +1414,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
     ! ensure correct data on host to be exchanged
-    !$omp target update from(ubt_Cor, vbt_Cor)
+    !$omp target update from(ubt_Cor, vbt_Cor, gtot_E, gtot_W, gtot_N, gtot_S)
     call start_group_pass(CS%pass_gtot, CS%BT_Domain)
     call start_group_pass(CS%pass_ubt_Cor, G%Domain)
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
@@ -1435,12 +1436,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     call complete_group_pass(CS%pass_gtot, CS%BT_Domain)
     call complete_group_pass(CS%pass_ubt_Cor, G%Domain)
   else
-    !$omp target update from(ubt_Cor, vbt_Cor)
+    !$omp target update from(ubt_Cor, vbt_Cor, gtot_E, gtot_W, gtot_N, gtot_S)
     call do_group_pass(CS%pass_gtot, CS%BT_Domain)
     call do_group_pass(CS%pass_ubt_Cor, G%Domain)
   endif
   ! Update MPI-updated values are on GPU
-  !$omp target update to(Ubt_Cor, vbt_Cor)
+  !$omp target update to(Ubt_Cor, vbt_Cor, gtot_E, gtot_W, gtot_N, gtot_S)
   ! The various elements of gtot are positive definite but directional, so use
   ! the polarity arrays to sort out when the directions have shifted.
   do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1)
@@ -1619,22 +1620,25 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
   if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
   if (nonblock_setup) then
-    !$omp target update from(bt_rem_u, bt_rem_v)
+    !$omp target update from(bt_rem_u, bt_rem_v, eta_src)
     !$omp target update if(integral_BT_cont) from(eta_IC)
     !$omp target update if(.not.interp_eta_PF) from(eta_PF)
     !$omp target update if(interp_eta_PF) from(eta_PF_1, d_eta_PF)
+    !$omp target update if(CS%dynamic_psurf) from(dyn_coef_eta)
     call start_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
     ! The following halo update is not needed without wide halos.  RWH
   else
-    !$omp target update from(bt_rem_u, bt_rem_v)
+    !$omp target update from(bt_rem_u, bt_rem_v, eta_src)
     !$omp target update if(integral_BT_cont) from(eta_IC)
     !$omp target update if(.not.interp_eta_PF) from(eta_PF)
     !$omp target update if(interp_eta_PF) from(eta_PF_1, d_eta_PF)
+    !$omp target update if(CS%dynamic_psurf) from(dyn_coef_eta)
     call do_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
-    !$omp target update to(bt_rem_u, bt_rem_v)
+    !$omp target update to(bt_rem_u, bt_rem_v, eta_src)
     !$omp target update if(integral_BT_cont) to(eta_IC)
     !$omp target update if(.not.interp_eta_PF) to(eta_PF)
     !$omp target update if(interp_eta_PF) to(eta_PF_1, d_eta_PF)
+    !$omp target update if(CS%dynamic_psurf) to(dyn_coef_eta)
     if (.not.use_BT_cont) then
       !$omp target update from(Datu, Datv)
       call do_group_pass(CS%pass_Dat_uv, CS%BT_Domain)
@@ -1658,10 +1662,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     endif
     call complete_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain)
     call complete_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
-    !$omp target update to(bt_rem_u, bt_rem_v, BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v)
+    !$omp target update to(bt_rem_u, bt_rem_v, BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v, eta_src)
     !$omp target update if(integral_BT_cont) to(eta_IC)
     !$omp target update if(.not.interp_eta_PF) to(eta_PF)
     !$omp target update if(interp_eta_PF) to(eta_PF_1, d_eta_PF)
+    !$omp target update if(CS%dynamic_psurf) to(dyn_coef_eta)
 
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1750,6 +1755,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   allocate(wt_vel(nstep+nfilter)) ; allocate(wt_eta(nstep+nfilter))
   allocate(wt_trans(nstep+nfilter+1)) ; allocate(wt_accel(nstep+nfilter+1))
   allocate(wt_accel2(nstep+nfilter+1))
+  ! leaving above arrays to be managed by compiler
   do concurrent (n=1:nstep+nfilter)
     ! Modify this to use a different filter...
 
@@ -2191,7 +2197,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
   !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, &
   !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, Datu, Datv, &
-  !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF)
+  !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF, &
+  !$omp       gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v)
 
 end subroutine btstep
 
