@@ -2488,6 +2488,10 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     dtbt_diag = dt/(nstep+nfilter) ! Note that this is not dtbt.
   endif
 
+  !$omp target enter data &
+  !$omp   map(alloc: uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, vbt_trans, PFu, PFv, Cor_u, Cor_v, &
+  !$omp       p_surf_dyn)
+
   ! Zero out the arrays for various time-averaged quantities.
   if (find_etaav) then
     do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1)
@@ -2850,6 +2854,10 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
       endif
     endif
   enddo ! end of do n=1,ntimestep
+
+  !$omp target exit data &
+  !$omp   map(release: uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, vbt_trans, PFu, PFv, Cor_u, Cor_v, &
+  !$omp       p_surf_dyn)
 
   ! Reset the time information in the diag type.
   if (do_hifreq_output) call enable_averaging(time_int_in, time_end_in, CS%diag)
