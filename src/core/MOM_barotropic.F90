@@ -1755,7 +1755,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   allocate(wt_vel(nstep+nfilter)) ; allocate(wt_eta(nstep+nfilter))
   allocate(wt_trans(nstep+nfilter+1)) ; allocate(wt_accel(nstep+nfilter+1))
   allocate(wt_accel2(nstep+nfilter+1))
-  ! leaving above arrays to be managed by compiler
+  !$omp target enter data map(alloc: wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
   do concurrent (n=1:nstep+nfilter)
     ! Modify this to use a different filter...
 
@@ -1774,6 +1774,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ! The rest should not be changed.
   enddo
   ! do sum reduction on CPU to preserve fp summation order (nstep+filter is small)
+  !$omp target update from(wt_vel, wt_eta)
   do n=1,nstep+nfilter
     sum_wt_vel = sum_wt_vel + wt_vel(n) ; sum_wt_eta = sum_wt_eta + wt_eta(n)
   enddo
@@ -1784,6 +1785,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     wt_accel(n) = wt_accel(n+1) + wt_vel(n)
     sum_wt_accel = sum_wt_accel + wt_accel(n) ; sum_wt_trans = sum_wt_trans + wt_trans(n)
   enddo
+  !$omp target update to(wt_trans, wt_accel)
   ! Normalize the weights.
   I_sum_wt_vel = 1.0 / sum_wt_vel ; I_sum_wt_accel = 1.0 / sum_wt_accel
   I_sum_wt_eta = 1.0 / sum_wt_eta ; I_sum_wt_trans = 1.0 / sum_wt_trans
@@ -1813,6 +1815,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   else
     I_sum_wt_vel = 1.0 ; I_sum_wt_eta = 1.0 ; I_sum_wt_accel = 1.0 ; I_sum_wt_trans = 1.0
   endif
+
+  !$omp target update from(wt_accel, wt_accel2) ! needed inside btstep_timeloop
 
   ! March the barotropic solver through all of its time steps.
   call btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL_v, eta_IC, &
@@ -2198,7 +2202,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, &
   !$omp       vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, Datu, Datv, &
   !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF, &
-  !$omp       gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v)
+  !$omp       gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, wt_vel, wt_eta, &
+  !$omp       wt_trans, wt_accel, wt_accel2)
 
 end subroutine btstep
 
