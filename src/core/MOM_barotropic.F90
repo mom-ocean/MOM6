@@ -2194,8 +2194,6 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     call complete_group_pass(CS%pass_ubta_uhbta, G%Domain)
   endif
 
-  deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
-
   !$omp target exit data &
   !$omp   map(release: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
@@ -2204,6 +2202,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, d_eta_PF, &
   !$omp       gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, wt_vel, wt_eta, &
   !$omp       wt_trans, wt_accel, wt_accel2)
+
+  deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
 end subroutine btstep
 
