@@ -5294,30 +5294,43 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  !$OMP parallel do default(shared) private(eta_h,h_tot,d_eta)
+  !$omp target teams distribute private(eta_h,h_tot,d_eta) &
+  !$omp   map(to: CS, G, G%bathyT, GV, h, eta) &
+  !$omp   map(tofrom: CS%eta_cor) &
+  !$omp   map(alloc: eta_h, h_tot)
   do j=js,je
+    !$omp parallel
+    !$omp do simd
     do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
     if (GV%Boussinesq) then
+      !$omp do simd
       do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*GV%Z_to_H ; enddo
     else
+      !$omp do simd
       do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
     endif
-    do k=2,nz ; do i=is,ie
-      eta_h(i) = eta_h(i) + h(i,j,k)
-      h_tot(i) = h_tot(i) + h(i,j,k)
-    enddo ; enddo
+    do k=2,nz
+      !$omp do simd
+      do i=is,ie
+        eta_h(i) = eta_h(i) + h(i,j,k)
+        h_tot(i) = h_tot(i) + h(i,j,k)
+      enddo
+    enddo
 
     if (set_cor) then
+      !$omp do private(d_eta)
       do i=is,ie
         d_eta = eta_h(i) - eta(i,j)
         CS%eta_cor(i,j) = d_eta
       enddo
     else
+      !$omp do private(d_eta)
       do i=is,ie
         d_eta = eta_h(i) - eta(i,j)
         CS%eta_cor(i,j) = CS%eta_cor(i,j) + d_eta
       enddo
     endif
+    !$omp end parallel
   enddo
 
 end subroutine bt_mass_source
