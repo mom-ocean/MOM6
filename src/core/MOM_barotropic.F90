@@ -862,6 +862,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 !--- end setup for group halo update
 
   !$omp target enter data &
+  !$omp   map(to: G%dxT, G%dyT, G%mask2dT, G%mask2dCu, G%mask2dCv, eta_in, bc_accel_u, bc_accel_v, visc_rem_u, visc_rem_v, &
+  !$omp       forces, forces%taux, forces%tauy, CS, CS%frhatu, CS%frhatv, CS%q_d, CS%D_u_Cor, &
+  !$omp       CS%D_v_Cor, CS%eta_cor, CS%bathyT, CS%IareaT, CS%ua_polarity, CS%va_polarity, &
+  !$omp       CS%IDatu, CS%IDatv, CS%dx_Cv, CS%dy_Cu, uh0, vh0) &
+  !$omp   map(alloc: eta_out, etaav)
+
+  !$omp target enter data &
   !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
   !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, ubt_prev, vbt_prev, &
@@ -1533,7 +1540,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Set the mass source, after first initializing the halos to 0.
   do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1) ; eta_src(i,j) = 0.0 ; enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
-    do concurrent (j=js:je, i=is:ie) ; if (G%mask2dT(i,j) > 0.0) then
+    do concurrent (j=js:je, i=is:ie) local(uint_cor, vint_cor, u_max_cor, v_max_cor, eta_cor_max); if (G%mask2dT(i,j) > 0.0) then
       if (CS%eta_cor(i,j) > 0.0) then
         !   Limit the source (outward) correction to be a fraction the mass that
         ! can be transported out of the cell by velocities with a CFL number of CFL_cor.
@@ -2202,6 +2209,13 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
   !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, &
   !$omp       wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2, PFu_avg, PFv_avg)
+
+  !$omp target exit data &
+  !$omp   map(release: G%dxT, G%dyT, G%mask2dT, G%mask2dCu, G%mask2dCv, eta_in, bc_accel_u, bc_accel_v,visc_rem_u, &
+  !$omp       visc_rem_v, forces, forces%taux, forces%tauy, CS, CS%frhatu, CS%frhatv, CS%q_d, &
+  !$omp       CS%D_u_Cor, CS%D_v_Cor, CS%eta_cor, CS%bathyT, CS%IareaT, CS%ua_polarity, &
+  !$omp       CS%va_polarity, CS%IDatu, CS%IDatv, CS%dx_Cv, CS%dy_Cu, uh0, vh0) &
+  !$omp   map(from: eta_out, etaav)
 
   deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
