@@ -41,7 +41,7 @@ implicit none ; private
 public open_boundary_apply_normal_flow
 public open_boundary_config
 public open_boundary_setup_vert
-public open_boundary_init
+public open_boundary_halo_update
 public open_boundary_query
 public open_boundary_end
 public open_boundary_impose_normal_slope
@@ -1945,21 +1945,13 @@ subroutine parse_for_tracer_reservoirs(OBC, PF, use_temperature)
 
 end subroutine parse_for_tracer_reservoirs
 
-!> Initialize open boundary control structure and do any necessary rescaling of OBC
-!! fields that have been read from a restart file.
-subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
+!> Do any necessary halo updates on OBC-related fields.
+subroutine open_boundary_halo_update(G, OBC)
   type(ocean_grid_type),   intent(in) :: G   !< Ocean grid structure
-  type(verticalGrid_type), intent(in) :: GV  !< Container for vertical grid information
-  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
-  type(param_file_type),   intent(in) :: param_file !< Parameter file handle
   type(ocean_OBC_type),    pointer    :: OBC !< Open boundary control structure
-  type(MOM_restart_CS),    intent(in) :: restart_CS !< Restart structure, data intent(inout)
 
   ! Local variables
-  integer :: i, j, k, isd, ied, jsd, jed, nz, m
-  integer :: IsdB, IedB, JsdB, JedB
-  isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
+  integer :: m
 
   if (.not.associated(OBC)) return
 
@@ -1989,7 +1981,7 @@ subroutine open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
     enddo
   endif
 
-end subroutine open_boundary_init
+end subroutine open_boundary_halo_update
 
 logical function open_boundary_query(OBC, apply_open_OBC, apply_specified_OBC, apply_Flather_OBC, &
                                      apply_nudged_OBC, needs_ext_seg_data)
@@ -5053,12 +5045,13 @@ subroutine fill_obgc_segments(G, GV, OBC, tr_ptr, tr_name)
   enddo
 end subroutine fill_obgc_segments
 
+!> Set the value of temperatures and salinities on OBC segments
 subroutine fill_temp_salt_segments(G, GV, US, OBC, tv)
   type(ocean_grid_type),   intent(in)    :: G   !< Ocean grid structure
   type(verticalGrid_type), intent(in)    :: GV  !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US  !< Unit scaling
   type(ocean_OBC_type),    pointer       :: OBC !< Open boundary structure
-  type(thermo_var_ptrs),   intent(inout) :: tv  !< Thermodynamics structure
+  type(thermo_var_ptrs),   intent(in)    :: tv  !< Thermodynamics structure
 
   integer :: isd, ied, IsdB, IedB, jsd, jed, JsdB, JedB, n, nz
   integer :: i, j, k
@@ -5067,9 +5060,6 @@ subroutine fill_temp_salt_segments(G, GV, US, OBC, tv)
   if (.not. associated(OBC)) return
   if (.not. associated(tv%T) .and. associated(tv%S)) return
   ! Both temperature and salinity fields
-
-  call pass_var(tv%T, G%Domain)
-  call pass_var(tv%S, G%Domain)
 
   nz = GV%ke
 
@@ -5110,7 +5100,6 @@ subroutine fill_temp_salt_segments(G, GV, US, OBC, tv)
     segment%tr_Reg%Tr(2)%tres(:,:,:) = segment%tr_Reg%Tr(2)%t(:,:,:)
   enddo
 
-  call setup_OBC_tracer_reservoirs(G, GV, OBC)
 end subroutine fill_temp_salt_segments
 
 !> Find the region outside of all open boundary segments and
@@ -6279,36 +6268,20 @@ end function rotate_OBC_segment_direction
 
 
 !> Initialize the segments and field-related data of a rotated OBC.
-subroutine rotate_OBC_init(OBC_in, G, GV, US, param_file, tv, restart_CS, OBC)
+subroutine rotate_OBC_init(OBC_in, G, OBC)
   type(ocean_OBC_type), intent(in) :: OBC_in            !< OBC on input map
   type(ocean_grid_type), intent(in) :: G                !< Rotated grid metric
-  type(verticalGrid_type), intent(in) :: GV             !< Vertical grid
-  type(unit_scale_type), intent(in) :: US               !< Unit scaling
-  type(param_file_type), intent(in) :: param_file       !< Input parameters
-  type(thermo_var_ptrs), intent(inout) :: tv            !< Tracer fields
-  type(MOM_restart_CS), intent(in) :: restart_CS        !< Restart CS
   type(ocean_OBC_type), pointer, intent(inout) :: OBC   !< Rotated OBC
 
-  logical :: use_temperature
-  integer :: l
+  integer :: l_seg
 
   ! update_OBC may have been updated during initialization.
   OBC%update_OBC = OBC_in%update_OBC
 
-  call get_param(param_file, "MOM", "ENABLE_THERMODYNAMICS", use_temperature, &
-                 "If true, Temperature and salinity are used as state "//&
-                 "variables.", default=.true., do_not_log=.true.)
-
-  if (use_temperature) &
-    call fill_temp_salt_segments(G, GV, US, OBC, tv)
-
-  do l = 1, OBC%number_of_segments
-    call rotate_OBC_segment_data(OBC_in%segment(l), OBC%segment(l), G%HI%turns)
+  do l_seg = 1, OBC%number_of_segments
+    call rotate_OBC_segment_data(OBC_in%segment(l_seg), OBC%segment(l_seg), G%HI%turns)
   enddo
 
-  ! There is already a call to setup_OBC_tracer_reservoirs in fill_temp_salt_segments
-  call setup_OBC_tracer_reservoirs(G, GV, OBC)
-  call open_boundary_init(G, GV, US, param_file, OBC, restart_CS)
 end subroutine rotate_OBC_init
 
 

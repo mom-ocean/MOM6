@@ -20,12 +20,12 @@ use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta, dz_to_thickness, dz_to_thickness_simple
 use MOM_interface_heights, only : calc_derived_thermo
 use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
-use MOM_open_boundary, only : ocean_OBC_type, open_boundary_init, set_tracer_data
+use MOM_open_boundary, only : ocean_OBC_type, open_boundary_halo_update, set_tracer_data
 use MOM_open_boundary, only : OBC_NONE
 use MOM_open_boundary, only : open_boundary_query
 use MOM_open_boundary, only : set_tracer_data, initialize_segment_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
-use MOM_open_boundary, only : fill_temp_salt_segments
+use MOM_open_boundary, only : fill_temp_salt_segments, setup_OBC_tracer_reservoirs
 use MOM_open_boundary, only : update_OBC_segment_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
@@ -437,8 +437,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       end select
     endif
   endif  ! not from_Z_file.
-  if (use_temperature .and. use_OBC) &
+
+  if (use_temperature .and. use_OBC) then
+    ! These calls should be moved down to join the OBC code, but doing so changes answers because
+    ! the temperatures and salinities can change due to the remapping and reading from the restarts.
+    call pass_var(tv%T, G%Domain, complete=.false.)
+    call pass_var(tv%S, G%Domain, complete=.true.)
     call fill_temp_salt_segments(G, GV, US, OBC, tv)
+  endif
 
   ! Convert thicknesses from geometric distances in depth units to thickness units or mass-per-unit-area.
   if (new_sim .and. convert) call dz_to_thickness(dz, tv, h, G, GV, US)
@@ -487,6 +493,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
       if (new_sim .and. debug) &
         call hchksum(h, "Pre-ALE_regrid: h ", G%HI, haloshift=1, unscale=GV%H_to_MKS)
+      ! In this call, OBC is only used for the directions of OBCs when setting thicknesses at
+      ! velocity points.
       call ALE_regrid_accelerated(ALE_CSp, G, GV, US, h, tv, regrid_iterations, u, v, OBC, tracer_Reg, &
                                   dt=dt, initial=.true.)
     endif
@@ -561,6 +569,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         call copy_restart_var(tv%T, "Temp", restart_CS, .true.)
         call copy_restart_var(tv%S, "Salt", restart_CS, .true.)
       endif
+      ! if (use_OBC) then
+        ! We might need to rotate OBC fields from the restart file?
+      ! endif
     endif
   endif
 
@@ -621,11 +632,19 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     end select
   endif
 
-  ! Reads OBC parameters not pertaining to the location of the boundaries
-  call open_boundary_init(G, GV, US, PF, OBC, restart_CS)
-
-  ! This controls user code for setting open boundary data
   if (associated(OBC)) then
+    if (use_temperature) then
+      ! Because tv%T and tv%S may have been remapped or updated from a restart file, putting
+      ! this call to fill_temp_salt_segments here could change answers.
+      ! call fill_temp_salt_segments(G, GV, US, OBC, tv)
+      ! Set up OBC%trex_x and OBC%tres_y unless they have been read from a restart file.
+      if (new_sim) &
+        call setup_OBC_tracer_reservoirs(G, GV, OBC)
+    endif
+    ! This does halo updates for OBC-related fields, but it is not needed?
+    ! call open_boundary_halo_update(G, OBC)
+
+    ! This allocates the arrays on the segments for open boundary data
     call initialize_segment_data(G, GV, US, OBC, PF)
 !     call open_boundary_config(G, US, PF, OBC)
 
@@ -633,6 +652,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     ! Call this during initialization to fill boundary arrays from fixed values
     call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
+    ! This controls user code for setting open boundary data
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
                  "A string that sets how the user code is invoked to set open boundary data: \n"//&
                  "   DOME - specified inflow on northern boundary\n"//&
@@ -664,22 +684,24 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       call MOM_error(FATAL, "The open boundary conditions specified by "//&
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
+
     if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
       call set_tracer_data(OBC, tv, h, G, GV, PF)
     endif
-  endif
-! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
-!   call set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
-! endif
-  ! Still need a way to specify the boundary values
-  if (debug.and.associated(OBC)) then
-    call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
-    call uvchksum('MOM_initialize_state: mask2dC[uv]', G%mask2dCu,  &
-                  G%mask2dCv, G%HI)
-    call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
+
+  ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
+  !   call set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
+  ! endif
+    ! Still need a way to specify the boundary values
+
+    if (debug) then
+      call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
+      call uvchksum('MOM_initialize_state: mask2dC[uv]', G%mask2dCu, G%mask2dCv, G%HI)
+      call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
+    endif
+    if (debug_OBC) call open_boundary_test_extern_h(G, GV, OBC, h)
   endif
 
-  if (debug_OBC) call open_boundary_test_extern_h(G, GV, OBC, h)
   call callTree_leave('MOM_initialize_state()')
 
   ! Set-up of data Assimilation with incremental update

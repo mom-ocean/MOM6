@@ -113,9 +113,11 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
+use MOM_open_boundary,         only : setup_OBC_tracer_reservoirs, fill_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
 use MOM_open_boundary,         only : open_boundary_setup_vert, update_OBC_segment_data
-use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init, write_OBC_info, chksum_OBC_segments
+use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init, open_boundary_halo_update
+use MOM_open_boundary,         only : write_OBC_info, chksum_OBC_segments
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
@@ -3260,7 +3262,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     endif
 
     if (associated(OBC_in)) then
-      call rotate_OBC_init(OBC_in, G, GV, US, param_file, CS%tv, restart_CSp, CS%OBC)
+      if (use_temperature) then
+        call pass_var(CS%tv%T, G%Domain)
+        call pass_var(CS%tv%S, G%Domain)
+        call fill_temp_salt_segments(G, GV, US, CS%OBC, CS%tv)
+        call setup_OBC_tracer_reservoirs(G, GV, CS%OBC)
+      endif
+
+      call rotate_OBC_init(OBC_in, G, CS%OBC)
+      call setup_OBC_tracer_reservoirs(G, GV, CS%OBC)
       call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
       call update_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
     endif
@@ -3297,6 +3307,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     else
       CS%first_dir_restart = real(modulo(first_direction, 2))
     endif
+  endif
+
+  if (associated(CS%OBC)) then
+    call open_boundary_halo_update(G, CS%OBC)
   endif
 
   ! Allocate any derived densities or other equation of state derived fields.
@@ -3343,8 +3357,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
   if (ALE_remap_init_conds(CS%ALE_CSp) .and. .not. query_initialized(CS%h,"h",restart_CSp)) then
     ! This block is controlled by the ALE parameter REMAP_AFTER_INITIALIZATION.
-    ! \todo This block exists for legacy reasons and we should phase it out of
-    ! all examples. !###
+    ! \todo This block exists for legacy reasons and we should phase it out of all examples. !###
     if (CS%debug) then
       call uvchksum("Pre ALE adjust init cond [uv]", CS%u, CS%v, G%HI, haloshift=1, unscale=US%L_T_to_m_s)
       call hchksum(CS%h,"Pre ALE adjust init cond h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
