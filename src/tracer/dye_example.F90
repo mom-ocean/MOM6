@@ -24,6 +24,7 @@ use MOM_tracer_Z_init,      only : tracer_Z_init
 use MOM_unit_scaling,       only : unit_scale_type
 use MOM_variables,          only : surface, thermo_var_ptrs
 use MOM_verticalGrid,       only : verticalGrid_type
+use MOM_tracer_advect_schemes, only : set_tracer_advect_scheme, TracerAdvectionSchemeDoc
 
 implicit none ; private
 
@@ -63,7 +64,7 @@ type, public :: dye_tracer_CS ; private
   type(MOM_restart_CS), pointer :: restart_CSp => NULL() !< A pointer to the restart control structure
 
   type(vardesc), allocatable :: tr_desc(:) !< Descriptions and metadata for the tracers
-  logical :: tracers_may_reinit = .false. !< If true the tracers may be initialized if not found in a restart file
+  logical :: tracers_may_reinit = .true. !< If true the tracers may be initialized if not found in a restart file
 end type dye_tracer_CS
 
 contains
@@ -85,11 +86,15 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
   character(len=40)  :: mdl = "regional_dyes" ! This module's name.
   character(len=48)  :: var_name ! The variable's name.
   character(len=48)  :: desc_name ! The variable's descriptor.
+  character(len=48)  :: param_name ! The param's name suffix.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   real, pointer :: tr_ptr(:,:,:) => NULL() ! A pointer to one of the tracers [CU ~> conc]
   logical :: register_dye_tracer
   integer :: isd, ied, jsd, jed, nz, m
+  integer :: advect_scheme   ! Advection scheme value for this tracer
+  character(len=256) :: mesg ! Advection scheme name for this tracer
+
   isd = HI%isd ; ied = HI%ied ; jsd = HI%jsd ; jed = HI%jed ; nz = GV%ke
 
   if (associated(CS)) then
@@ -156,11 +161,19 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
                  "This is the maximum depth at which we inject dyes.", &
                  units="m", scale=US%m_to_Z, fail_if_missing=.true.)
   if (minval(CS%dye_source_maxdepth(:)) < -1.e29*US%m_to_Z) &
-    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH ")
+    call MOM_error(FATAL, "register_dye_tracer: Not enough values provided for DYE_SOURCE_MAXDEPTH")
 
   allocate(CS%tr(isd:ied,jsd:jed,nz,CS%ntr), source=0.0)
 
   do m = 1, CS%ntr
+    write(param_name(:),'(A,I3.3,A)') "DYE",m,"_TRACER_ADVECTION_SCHEME"
+    call get_param(param_file, mdl, trim(param_name), mesg, &
+          desc="The horizontal transport scheme for dye tracer:\n"//&
+          trim(TracerAdvectionSchemeDoc)//&
+          "\n Set to blank (the default) to use TRACER_ADVECTION_SCHEME.", default="")
+    ! Get the integer value of the tracer scheme
+    call set_tracer_advect_scheme(advect_scheme, mesg)
+
     write(var_name(:),'(A,I3.3)') "dye",m
     write(desc_name(:),'(A,I3.3)') "Dye Tracer ",m
     CS%tr_desc(m) = var_desc(trim(var_name), "conc", trim(desc_name), caller=mdl)
@@ -173,7 +186,8 @@ function register_dye_tracer(HI, GV, US, param_file, CS, tr_Reg, restart_CS)
     ! Register the tracer for horizontal advection, diffusion, and restarts.
     call register_tracer(tr_ptr, tr_Reg, param_file, HI, GV, &
                          tr_desc=CS%tr_desc(m), registry_diags=.true., &
-                         restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit)
+                         restart_CS=restart_CS, mandatory=.not.CS%tracers_may_reinit,&
+                         advect_scheme=advect_scheme)
 
     !   Set coupled_tracers to be true (hard-coded above) to provide the surface
     ! values to the coupler (if any).  This is meta-code and its arguments will
@@ -420,5 +434,8 @@ end subroutine regional_dyes_end
 !!  are set to 1 within the geographical region specified. The depth
 !!  which a tracer is set is determined by calculating the depth from
 !!  the seafloor upwards through the column.
+!!
+!! The advection scheme of these tracers can be set to be different
+!! to that used by active tracers.
 
 end module regional_dyes

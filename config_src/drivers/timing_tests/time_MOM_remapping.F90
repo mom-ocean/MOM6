@@ -9,8 +9,30 @@ use MOM_remapping, only : remapping_core_h
 implicit none
 
 type(remapping_CS) :: CS
-integer, parameter :: nk=75, nij=20*20, nits=10, nsamp=100, nschemes = 2
-character(len=10) :: scheme_labels(nschemes)
+integer, parameter :: nk=75, nij=20*20, nits=10, nsamp=100, nschemes = 22
+character(len=16) :: scheme_labels(nschemes) = [ character(len=16) :: &
+      'PCM', &
+      'C_PCM', &
+      'PLM', &
+      'C_MPLM_WA', &
+      'C_EMPLM_WA', &
+      'C_PLM_HYBGEN', &
+      'C_PLM_CW', &
+      'C_PLM_CWK', &
+      'C_MPLM_WA_POLY', &
+      'C_EMPLM_WA_POLY', &
+      'C_MPLM_CWK', &
+      'PPM_H4', &
+      'PPM_IH4', &
+      'PQM_IH4IH3', &
+      'PPM_CW', &
+      'PPM_HYBGEN', &
+      'C_PPM_H4_2018', &
+      'C_PPM_H4_2019', &
+      'C_PPM_HYBGEN', &
+      'C_PPM_CW', &
+      'C_PPM_CWK', &
+      'C_EPPM_CWK' ]
 real, dimension(nschemes) :: timings ! Time for nits of nij calls for each scheme [s]
 real, dimension(nschemes) :: tmean ! Mean time for a call [s]
 real, dimension(nschemes) :: tstd ! Standard deviation of time for a call [s]
@@ -30,9 +52,6 @@ call random_seed(size=seed_size)
 allocate( seed(seed_Size) )
 seed(:) = 102030405
 call random_seed(put=seed)
-
-scheme_labels(1) = 'PCM'
-scheme_labels(2) = 'PLM'
 
 ! Set up some test data (note: using k,i indexing rather than i,k)
 allocate( u0(nk,nij), h0(nk,nij), u1(nk,nij), h1(nk,nij) )
@@ -61,8 +80,8 @@ tmax(:) = 0.
 do isamp = 1, nsamp
   ! Time reconstruction + remapping
   do ischeme = 1, nschemes
-    call initialize_remapping(CS, remapping_scheme=trim(scheme_labels(ischeme)), &
-                 h_neglect=h_neglect, h_neglect_edge=h_neglect)
+    call initialize_remapping(CS, remapping_scheme=trim(scheme_labels(ischeme)), nk=nk, &
+                              h_neglect=h_neglect, h_neglect_edge=h_neglect)
     call cpu_time(start)
     do iter = 1, nits ! Make many passes to reduce sampling error
       do ij = 1, nij ! Calling nij times to make similar to cost in MOM_ALE()

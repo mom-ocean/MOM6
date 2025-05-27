@@ -181,9 +181,9 @@ subroutine calculate_CVMix_conv(h, tv, G, GV, US, CS, hbl, Kd, Kv, Kd_aux)
   integer :: i, j, k
 
   if (GV%Boussinesq) then
-    g_o_rho0 = (US%L_to_Z**2*US%s_to_T**2*GV%Z_to_H) * GV%g_Earth / GV%Rho0
+    g_o_rho0 = (US%s_to_T**2*GV%Z_to_H) * GV%g_Earth_Z_T2 / GV%Rho0
   else
-    g_o_rho0 = (US%L_to_Z**2*US%s_to_T**2*GV%RZ_to_H) * GV%g_Earth
+    g_o_rho0 = (US%s_to_T**2*GV%RZ_to_H) * GV%g_Earth_Z_T2
   endif
 
   ! initialize dummy variables

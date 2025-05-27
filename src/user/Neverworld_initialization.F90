@@ -82,7 +82,7 @@ subroutine Neverworld_initialize_topography(D, G, param_file, max_depth)
 
 end subroutine Neverworld_initialize_topography
 
-!> Returns the value of a cosine-bell function evaluated at x/L
+!> Returns the value of a cosine-bell function evaluated at x/L [nondim]
 real function cosbell(x, L)
   real , intent(in) :: x       !< Position in arbitrary units [A]
   real , intent(in) :: L       !< Width in arbitrary units [A]
@@ -92,7 +92,7 @@ real function cosbell(x, L)
   cosbell = 0.5 * (1 + cos(PI*MIN(ABS(x/L),1.0)))
 end function cosbell
 
-!> Returns the value of a sin-spike function evaluated at x/L
+!> Returns the value of a sin-spike function evaluated at x/L [nondim]
 real function spike(x, L)
 
   real , intent(in) :: x       !< Position in arbitrary units [A]
@@ -104,7 +104,7 @@ real function spike(x, L)
 end function spike
 
 !> Returns the value of a triangular function centered at x=x0 with value 1
-!! and linearly decreasing to 0 at x=x0+/-L, and 0 otherwise.
+!! and linearly decreasing to 0 at x=x0+/-L, and 0 otherwise [nondim].
 !! If clip is present the top of the cone is cut off at "clip", which
 !! effectively defaults to 1.
 real function cone(x, x0, L, clip)
@@ -117,7 +117,7 @@ real function cone(x, x0, L, clip)
   if (present(clip)) cone = min(clip, cone)
 end function cone
 
-!> Returns an s-curve s(x) s.t. s(x0)<=0, s(x0+L)>=1 and cubic in between.
+!> Returns an s-curve s(x) s.t. s(x0)<=0, s(x0+L)>=1 and cubic in between [nondim].
 real function scurve(x, x0, L)
   real, intent(in) :: x       !< Coordinate in arbitrary units [A]
   real, intent(in) :: x0      !< position of peak in arbitrary units [A]
@@ -130,7 +130,7 @@ end function scurve
 
 ! None of the following 7 functions appear to be used.
 
-!> Returns a "coastal" profile.
+!> Returns a "coastal" profile [nondim].
 real function cstprof(x, x0, L, lf, bf, sf, sh)
   real, intent(in) :: x       !< Coordinate in arbitrary units [A]
   real, intent(in) :: x0      !< position of peak in arbitrary units [A]
@@ -145,7 +145,7 @@ real function cstprof(x, x0, L, lf, bf, sf, sh)
   cstprof = sh * scurve(s-lf,0.,bf) + (1.-sh) * scurve(s - (1.-sf),0.,sf)
 end function cstprof
 
-!> Distance between points x,y and a line segment (x0,y0) and (x0,y1).
+!> Distance between points x,y and a line segment (x0,y0) and (x0,y1) in arbitrary units [A].
 real function dist_line_fixed_x(x, y, x0, y0, y1)
   real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
   real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
@@ -160,7 +160,7 @@ real function dist_line_fixed_x(x, y, x0, y0, y1)
   dist_line_fixed_x = sqrt( (dx*dx) + (dy*dy) )
 end function dist_line_fixed_x
 
-!> Distance between points x,y and a line segment (x0,y0) and (x1,y0).
+!> Distance between points x,y and a line segment (x0,y0) and (x1,y0) in arbitrary units [A].
 real function dist_line_fixed_y(x, y, x0, x1, y0)
   real, intent(in) :: x       !< X-coordinate in arbitrary units [A]
   real, intent(in) :: y       !< Y-coordinate in arbitrary units [A]
@@ -171,7 +171,7 @@ real function dist_line_fixed_y(x, y, x0, x1, y0)
   dist_line_fixed_y = dist_line_fixed_x(y, x, y0, x0, x1)
 end function dist_line_fixed_y
 
-!> A "coast profile" applied in an N-S line from lon0,lat0 to lon0,lat1.
+!> A "coast profile" applied in an N-S line from lon0,lat0 to lon0,lat1 [nondim].
 real function NS_coast(lon, lat, lon0, lat0, lat1, dlon, sh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -186,7 +186,7 @@ real function NS_coast(lon, lat, lon0, lat0, lat1, dlon, sh)
   NS_coast = cstprof(r, 0., dlon, 0.125, 0.125, 0.5, sh)
 end function NS_coast
 
-!> A "coast profile" applied in an E-W line from lon0,lat0 to lon1,lat0.
+!> A "coast profile" applied in an E-W line from lon0,lat0 to lon1,lat0 [nondim].
 real function EW_coast(lon, lat, lon0, lon1, lat0, dlat, sh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -201,7 +201,7 @@ real function EW_coast(lon, lat, lon0, lon1, lat0, dlat, sh)
   EW_coast = cstprof(r, 0., dlat, 0.125, 0.125, 0.5, sh)
 end function EW_coast
 
-!> A NS ridge
+!> A NS ridge [nondim]
 real function NS_ridge(lon, lat, lon0, lat0, lat1, dlon, rh)
   real, intent(in) :: lon     !< Longitude [degrees_E]
   real, intent(in) :: lat     !< Latitude [degrees_N]
@@ -217,7 +217,7 @@ real function NS_ridge(lon, lat, lon0, lat0, lat1, dlon, rh)
 end function NS_ridge
 
 
-!> A circular ridge
+!> A circular ridge [nondim]
 real function circ_ridge(lon, lat, lon0, lat0, ring_radius, ring_thickness, ridge_height)
   real, intent(in) :: lon            !< Longitude [degrees_E]
   real, intent(in) :: lat            !< Latitude [degrees_N]

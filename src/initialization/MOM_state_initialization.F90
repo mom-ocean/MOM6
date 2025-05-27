@@ -29,8 +29,8 @@ use MOM_open_boundary, only : fill_temp_salt_segments
 use MOM_open_boundary, only : update_OBC_segment_data
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
-use MOM_restart, only : restore_state, is_new_run, MOM_restart_CS
-use MOM_restart, only : restart_registry_lock
+use MOM_restart, only : restore_state, is_new_run, copy_restart_var, copy_restart_vector
+use MOM_restart, only : restart_registry_lock, MOM_restart_CS
 use MOM_sponge, only : set_up_sponge_field, set_up_sponge_ML_density
 use MOM_sponge, only : initialize_sponge, sponge_CS
 use MOM_ALE_sponge, only : set_up_ALE_sponge_field, set_up_ALE_sponge_vel_field
@@ -161,7 +161,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   real :: dt          ! The baroclinic dynamics timestep for this run [T ~> s].
 
   logical :: from_Z_file, useALE
-  logical :: new_sim
+  logical :: new_sim, rotate_index
   logical :: use_temperature, use_sponge, use_OBC, use_oda_incupd
   logical :: verify_restart_time
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
@@ -278,6 +278,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
              " \t uniform - uniform thickness layers evenly distributed \n"//&
              " \t\t between the surface and MAXIMUM_DEPTH. \n"//&
              " \t list - read a list of positive interface depths. \n"//&
+             " \t param - use thicknesses from parameter THICKNESS_INIT_VALUES. \n"//&
              " \t DOME - use a slope and channel configuration for the \n"//&
              " \t\t DOME sill-overflow test case. \n"//&
              " \t ISOMIP - use a configuration for the \n"//&
@@ -317,6 +318,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       case ("uniform"); call initialize_thickness_uniform(dz, depth_tot, G, GV, PF, &
                                  just_read=just_read)
       case ("list"); call initialize_thickness_list(dz, depth_tot, G, GV, US, PF, &
+                                 just_read=just_read)
+      case ("param"); call initialize_thickness_param(dz, depth_tot, G, GV, US, PF, &
                                  just_read=just_read)
       case ("DOME"); call DOME_initialize_thickness(dz, depth_tot, G, GV, PF, &
                               just_read=just_read)
@@ -542,6 +545,18 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
       if (verify_restart_time .and. (Time /= Time_in)) call MOM_error(FATAL, &
         "MOM6 attempted to restart from a file from a different time than given by Time_in.")
       Time = Time_in
+    endif
+    call get_param(PF, mdl, "ROTATE_INDEX", rotate_index, &
+                 "Enable rotation of the horizontal indices.", &
+                 default=.false., debuggingParam=.true., do_not_log=.true.)
+    if (rotate_index) then
+      ! This model is using a rotated grid, so the unrotated variables used here have not been set yet.
+      call copy_restart_var(h, "h", restart_CS, .true.)
+      call copy_restart_vector(u, v, "u", "v", restart_CS, .true.)
+      if ( use_temperature ) then
+        call copy_restart_var(tv%T, "Temp", restart_CS, .true.)
+        call copy_restart_var(tv%S, "Salt", restart_CS, .true.)
+      endif
     endif
   endif
 
@@ -1014,6 +1029,68 @@ subroutine initialize_thickness_list(h, depth_tot, G, GV, US, param_file, just_r
   call callTree_leave(trim(mdl)//'()')
 end subroutine initialize_thickness_list
 
+!> Initializes thickness based on a run-time parameter with nominal thickness
+!! for each layer
+subroutine initialize_thickness_param(h, depth_tot, G, GV, US, param_file, just_read)
+  type(ocean_grid_type),   intent(in)  :: G           !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)  :: GV          !< The ocean's vertical grid structure.
+  type(unit_scale_type),   intent(in)  :: US          !< A dimensional unit scaling type
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(out) :: h           !< The thickness that is being initialized [Z ~> m]
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)  :: depth_tot   !< The nominal total depth of the ocean [Z ~> m]
+  type(param_file_type),   intent(in)  :: param_file  !< A structure indicating the open file
+                                                      !! to parse for model parameter values.
+  logical,                 intent(in)  :: just_read   !< If true, this call will only read
+                                                      !! parameters without changing h.
+  ! Local variables
+  character(len=40)  :: mdl = "initialize_thickness_param" ! This subroutine's name.
+  real :: e0(SZK_(GV)+1)  ! The resting interface heights [Z ~> m], usually
+                          ! negative because it is positive upward.
+  real :: eta1D(SZK_(GV)+1)! Interface height relative to the sea surface,
+                          ! positive upward [Z ~> m].
+  real :: dz(SZK_(GV))    ! The nominal initial layer thickness [Z ~> m], usually
+  real :: h0_def(SZK_(GV)) ! Uniform default values for dz [Z ~> m], usually
+  integer :: i, j, k, is, ie, js, je, nz
+
+  call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
+  if (G%max_depth<=0.) call MOM_error(FATAL, "initialize_thickness_param: "// &
+      "MAXIMUM_DEPTH has a nonsensical value! Was it set?")
+
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+
+  h0_def(:) = ( G%max_depth / real(nz) ) * US%Z_to_m
+  call get_param(param_file, mdl, "THICKNESS_INIT_VALUES", dz, &
+                 "A list of nominal thickness for each layer to initialize with", &
+                 units="m", scale=US%m_to_Z, defaults=h0_def, do_not_log=just_read)
+  if (just_read) return ! This subroutine has no run-time parameters.
+
+  e0(nz+1) = -G%max_depth
+  do k=nz, 1, -1
+    e0(K) = e0(K+1) + dz(k)
+  enddo
+
+  do j=js,je ; do i=is,ie
+    ! This sets the initial thickness (in m) of the layers.  The
+    ! thicknesses are set to insure that: 1.  each layer is at least an
+    ! Angstrom thick, and 2.  the interfaces are where they should be
+    ! based on the resting depths and interface height perturbations,
+    ! as long at this doesn't interfere with 1.
+    eta1D(nz+1) = -depth_tot(i,j)
+    do k=nz,1,-1
+      eta1D(K) = e0(K)
+      if (eta1D(K) < (eta1D(K+1) + GV%Angstrom_Z)) then
+        eta1D(K) = eta1D(K+1) + GV%Angstrom_Z
+        h(i,j,k) = GV%Angstrom_Z
+      else
+        h(i,j,k) = eta1D(K) - eta1D(K+1)
+      endif
+    enddo
+  enddo ; enddo
+
+  call callTree_leave(trim(mdl)//'()')
+end subroutine initialize_thickness_param
+
 !> Search density space for location of layers (not implemented!)
 subroutine initialize_thickness_search
   call MOM_error(FATAL,"  MOM_state_initialization.F90, initialize_thickness_search: NOT IMPLEMENTED")
@@ -1143,6 +1220,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
                                   ! answers from 2018, while higher values use more robust
                                   ! forms of the same remapping expressions.
   logical :: use_remapping ! If true, remap the initial conditions.
+  logical :: use_frac_dp_bugfix   ! If true, use bugfix. Otherwise, pressure input to EOS is negative.
   type(remapping_CS), pointer :: remap_CS => NULL()
 
   call get_param(PF, mdl, "SURFACE_PRESSURE_FILE", p_surf_file, &
@@ -1165,7 +1243,10 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
                  "The tolerance with which to find the depth matching the specified "//&
                  "surface pressure with TRIM_IC_FOR_P_SURF.", &
                  units="m", default=1.0e-5, scale=US%m_to_Z, do_not_log=just_read)
-
+  call get_param(PF, mdl, "FRAC_DP_AT_POS_NEGATIVE_P_BUGFIX", use_frac_dp_bugfix, &
+                 "If true, use bugfix in ice shelf TRIM_IC initialization. "//&
+                 "Otherwise, pressure input to density EOS is negative.", &
+                 default=.false., do_not_log=just_read)
   call get_param(PF, mdl, "TRIMMING_USES_REMAPPING", use_remapping, &
                  'When trimming the column, also remap T and S.', &
                  default=.false., do_not_log=just_read)
@@ -1215,7 +1296,8 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     call cut_off_column_top(GV%ke, tv, GV, US, GV%g_Earth, G%bathyT(i,j)+G%Z_ref, min_thickness, &
                tv%T(i,j,:), T_t(i,j,:), T_b(i,j,:), tv%S(i,j,:), S_t(i,j,:), S_b(i,j,:), &
-               p_surf(i,j), h(i,j,:), remap_CS, z_tol=z_tolerance)
+               p_surf(i,j), h(i,j,:), remap_CS, z_tol=z_tolerance, &
+               frac_dp_bugfix=use_frac_dp_bugfix)
   enddo ; enddo
 
 end subroutine trim_for_ice
@@ -1306,7 +1388,7 @@ end subroutine calc_sfc_displacement
 !> Adjust the layer thicknesses by removing the top of the water column above the
 !! depth where the hydrostatic pressure matches p_surf
 subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, T_t, T_b, &
-                              S, S_t, S_b, p_surf, h, remap_CS, z_tol)
+                              S, S_t, S_b, p_surf, h, remap_CS, z_tol, frac_dp_bugfix)
   integer,               intent(in)    :: nk  !< Number of layers
   type(thermo_var_ptrs), intent(in)    :: tv  !< Thermodynamics structure
   type(verticalGrid_type), intent(in)  :: GV  !< The ocean's vertical grid structure.
@@ -1326,6 +1408,7 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
                                                    !! if associated
   real,                  intent(in)    :: z_tol !< The tolerance with which to find the depth
                                                 !! matching the specified pressure [Z ~> m].
+  logical,               intent(in)    :: frac_dp_bugfix !< If true, use bugfix in frac_dp_at_pos
 
   ! Local variables
   real, dimension(nk+1) :: e ! Top and bottom edge positions for reconstructions [Z ~> m]
@@ -1354,7 +1437,8 @@ subroutine cut_off_column_top(nk, tv, GV, US, G_earth, depth, min_thickness, T, 
     do k=1,nk
       call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), &
                                           P_t, p_surf, GV%Rho0, G_earth, tv%eqn_of_state, &
-                                          US, P_b, z_out, z_tol=z_tol)
+                                          US, P_b, z_out, z_tol=z_tol, &
+                                          frac_dp_bugfix=frac_dp_bugfix)
       if (z_out>=e(K)) then
         ! Imposed pressure was less that pressure at top of cell
         exit
@@ -1570,7 +1654,10 @@ subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read)
 
   if (just_read) return ! All run-time parameters have been read, so return.
 
-  dpi=acos(0.0)*2.0 ! pi
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, "MOM_state_initialization.F90: "//&
+          "initialize_velocity_circular() is only set to work with Cartesian axis units.")
+
+  dpi = acos(0.0)*2.0 ! pi
 
   do k=1,nz ; do j=js,je ; do I=Isq,Ieq
     psi1 = my_psi(I,j)
@@ -1597,7 +1684,7 @@ subroutine initialize_velocity_circular(u, v, G, GV, US, param_file, just_read)
     r = sqrt( (x**2) + (y**2) ) ! Circular stream function is a function of radius only
     r = min(1.0, r) ! Flatten stream function in corners of box
     my_psi = 0.5*(1.0 - cos(dpi*r))
-    my_psi = my_psi * (circular_max_u * G%US%m_to_L*G%len_lon*1e3 / dpi) ! len_lon is in km
+    my_psi = my_psi * (circular_max_u * G%len_lon * G%grid_unit_to_L / dpi) ! len_lon is in km
   end function my_psi
 
 end subroutine initialize_velocity_circular
@@ -2357,26 +2444,6 @@ subroutine set_velocity_depth_max(G)
   enddo ; enddo
 end subroutine set_velocity_depth_max
 
-!> Subroutine to pre-compute global integrals of grid quantities for
-!! later use in reporting diagnostics
-subroutine compute_global_grid_integrals(G, US)
-  type(ocean_grid_type), intent(inout) :: G !< The ocean's grid structure
-  type(unit_scale_type), intent(in)    :: US !< A dimensional unit scaling type
-  ! Local variables
-  real, dimension(G%isc:G%iec, G%jsc:G%jec) :: tmpForSumming ! Masked and unscaled areas for sums [m2]
-  real :: area_scale ! A conversion factor to prepare for reproducing sums [m2 L-2 ~> 1]
-  integer :: i,j
-
-  area_scale = US%L_to_m**2
-  tmpForSumming(:,:) = 0.
-  G%areaT_global = 0.0 ; G%IareaT_global = 0.0
-  do j=G%jsc,G%jec ; do i=G%isc,G%iec
-    tmpForSumming(i,j) = area_scale*G%areaT(i,j) * G%mask2dT(i,j)
-  enddo ; enddo
-  G%areaT_global = reproducing_sum(tmpForSumming)
-  G%IareaT_global = 1. / (G%areaT_global)
-end subroutine compute_global_grid_integrals
-
 !> This subroutine sets the 4 bottom depths at velocity points to be the
 !! minimum of the adjacent depths.
 subroutine set_velocity_depth_min(G)
@@ -2595,10 +2662,12 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
                  "robust and accurate forms of mathematically equivalent expressions.", &
                  default=default_answer_date, do_not_log=just_read.or.(.not.GV%Boussinesq))
+    call get_param(PF, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                   do_not_log=.true., default=.true.)
     call get_param(PF, mdl, "Z_INIT_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  "If true, use the OM4 remapping-via-subcells algorithm for initialization. "//&
                  "See REMAPPING_USE_OM4_SUBCELLS for more details. "//&
-                 "We recommend setting this option to false.", default=.true.)
+                 "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
     if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
   endif
   call get_param(PF, mdl, "HOR_REGRID_ANSWER_DATE", hor_regrid_answer_date, &
@@ -2899,8 +2968,8 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     if (homogenize) then
       ! Horizontally homogenize data to produce perfectly "flat" initial conditions
       do k=1,nz
-        call homogenize_field(tv%T(:,:,k), G%mask2dT, G, scale=US%degC_to_C, answer_date=hor_regrid_answer_date)
-        call homogenize_field(tv%S(:,:,k), G%mask2dT, G, scale=US%ppt_to_S, answer_date=hor_regrid_answer_date)
+        call homogenize_field(tv%T(:,:,k), G, tmp_scale=US%C_to_degC, answer_date=hor_regrid_answer_date)
+        call homogenize_field(tv%S(:,:,k), G, tmp_scale=US%S_to_ppt, answer_date=hor_regrid_answer_date)
       enddo
     endif
 
@@ -3110,7 +3179,8 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   P_t = 0.
   do k = 1, nk
     call find_depth_of_pressure_in_cell(T_t(k), T_b(k), S_t(k), S_b(k), e(K), e(K+1), P_t, 0.5*P_tot, &
-                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out, z_tol=z_tol)
+                                        GV%Rho0, GV%g_Earth, tv%eqn_of_state, US, P_b, z_out, z_tol=z_tol, &
+                                        frac_dp_bugfix=.false.)
     write(0,*) k, US%RL2_T2_to_Pa*P_t, US%RL2_T2_to_Pa*P_b, 0.5*US%RL2_T2_to_Pa*P_tot, &
                US%Z_to_m*e(K), US%Z_to_m*e(K+1), US%Z_to_m*z_out
     P_t = P_b
@@ -3129,7 +3199,8 @@ subroutine MOM_state_init_tests(G, GV, US, tv)
   !                             h_neglect=GV%H_subroundoff, h_neglect_edge=GV%H_subroundoff)
   ! endif
   call cut_off_column_top(nk, tv, GV, US, GV%g_Earth, -e(nk+1), GV%Angstrom_H, &
-                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS, z_tol=z_tol)
+                          T, T_t, T_b, S, S_t, S_b, 0.5*P_tot, h, remap_CS, z_tol=z_tol, &
+                          frac_dp_bugfix=.false.)
   write(0,*) GV%H_to_m*h(:)
   if (associated(remap_CS)) deallocate(remap_CS)
 

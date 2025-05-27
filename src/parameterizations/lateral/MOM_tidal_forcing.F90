@@ -45,12 +45,12 @@ type, public :: tidal_forcing_CS ; private
                       !! equilibrium tide. Set to false if providing tidal phases
                       !! that have already been shifted by the
                       !! astronomical/equilibrium argument.
-  real    :: sal_scalar !< The constant of proportionality between sea surface
-                      !! height (really it should be bottom pressure) anomalies
-                      !! and bottom geopotential anomalies [nondim].
+  real    :: sal_scalar = 0.0 !< The constant of proportionality between self-attraction and
+                      !! loading (SAL) geopotential anomaly and total geopotential geopotential
+                      !! anomalies. This is only used if USE_PREVIOUS_TIDES is true. [nondim].
   integer :: nc       !< The number of tidal constituents in use.
   real, dimension(MAX_CONSTITUENTS) :: &
-    freq, &           !< The frequency of a tidal constituent [T-1 ~> s-1].
+    freq, &           !< The frequency of a tidal constituent [rad T-1 ~> rad s-1].
     phase0, &         !< The phase of a tidal constituent at time 0 [rad].
     amp, &            !< The amplitude of a tidal constituent at time 0 [Z ~> m].
     love_no           !< The Love number of a tidal constituent at time 0 [nondim].
@@ -70,7 +70,9 @@ type, public :: tidal_forcing_CS ; private
     ampsal(:,:,:), &        !< The amplitude of the SAL [Z ~> m].
     cosphase_prev(:,:,:), & !< The cosine of the phase of the amphidromes in the previous tidal solutions [nondim].
     sinphase_prev(:,:,:), & !< The sine of the phase of the amphidromes in the previous tidal solutions [nondim].
-    amp_prev(:,:,:)         !< The amplitude of the previous tidal solution [Z ~> m].
+    amp_prev(:,:,:), &      !< The amplitude of the previous tidal solution [Z ~> m].
+    tide_fn(:), &           !< Amplitude modulation of tides by nodal cycle [nondim].
+    tide_un(:)              !< Phase modulation of tides by nodal cycle [rad].
 end type tidal_forcing_CS
 
 integer :: id_clock_tides !< CPU clock for tides
@@ -95,8 +97,8 @@ subroutine astro_longitudes_init(time_ref, longitudes)
   real :: T                                          !> Time in Julian centuries [centuries]
   real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159... [nondim]
 
-  ! Find date at time_ref in days since 1900-01-01
-  D = time_type_to_real(time_ref - set_date(1900, 1, 1)) / (24.0 * 3600.0)
+  ! Find date at time_ref in days since midnight at the start of 1900-01-01
+  D = time_type_to_real(time_ref - set_date(1900, 1, 1, 0, 0, 0)) / (24.0 * 3600.0)
   ! Time since 1900-01-01 in Julian centuries
   ! Kowalik and Luick use 36526, but Schureman uses 36525 which I think is correct.
   T = D / 36525.0
@@ -151,7 +153,7 @@ end function eq_phase
 !! Values used here are from previous versions of MOM.
 function tidal_frequency(constit)
   character (len=2), intent(in) :: constit !> Constituent to look up
-  real :: tidal_frequency                  !> Angular frequency [s-1]
+  real :: tidal_frequency                  !> Angular frequency [rad s-1]
 
   select case (constit)
     case ("M2")
@@ -246,21 +248,25 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
     phase, &          ! The phase of some tidal constituent [radians].
     lat_rad, lon_rad  ! Latitudes and longitudes of h-points [radians].
   real :: deg_to_rad  ! A conversion factor from degrees to radians [radian degree-1]
-  real, dimension(MAX_CONSTITUENTS) :: freq_def ! Default frequency for each tidal constituent [s-1]
+  real, dimension(MAX_CONSTITUENTS) :: freq_def ! Default frequency for each tidal constituent [rad s-1]
   real, dimension(MAX_CONSTITUENTS) :: phase0_def ! Default reference phase for each tidal constituent [rad]
   real, dimension(MAX_CONSTITUENTS) :: amp_def  ! Default amplitude for each tidal constituent [m]
   real, dimension(MAX_CONSTITUENTS) :: love_def ! Default love number for each constituent [nondim]
   integer, dimension(3) :: tide_ref_date !< Reference date (t = 0) for tidal forcing.
+  integer, dimension(3) :: nodal_ref_date !< Reference date for calculating nodal modulation for tidal forcing.
   logical :: use_M2, use_S2, use_N2, use_K2, use_K1, use_O1, use_P1, use_Q1
   logical :: use_MF, use_MM
   logical :: tides      ! True if a tidal forcing is to be used.
+  logical :: add_nodal_terms = .false.        !< If true, insert terms for the 18.6 year modulation when
+                                              !! calculating tidal forcing.
+  type(time_type) :: nodal_time               !< Model time to calculate nodal modulation for.
+  type(astro_longitudes) :: nodal_longitudes  !< Solar and lunar longitudes for tidal forcing
   logical :: HA_ssh, HA_ubt, HA_vbt
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
   character(len=128) :: mesg
   character(len=200) :: tidal_input_files(4*MAX_CONSTITUENTS)
-  real :: tide_sal_scalar_value ! The constant of proportionality with the scalar approximation to SAL [nondim]
   integer :: i, j, c, is, ie, js, je, isd, ied, jsd, jed, nc
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -355,18 +361,13 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
                  "If true, use the SAL from the previous iteration of the "//&
                  "tides to facilitate convergent iteration. "//&
                  "This is only used if TIDES is true.", default=.false.)
-  call get_param(param_file, '', "TIDE_SAL_SCALAR_VALUE", tide_sal_scalar_value, &
-                 units="m m-1", default=0.0, do_not_log=.True.)
-  if (tide_sal_scalar_value/=0.0) &
-    call MOM_error(WARNING, "TIDE_SAL_SCALAR_VALUE is a deprecated parameter. "//&
-                   "Use SAL_SCALAR_VALUE instead." )
-  call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, &
-                 "The constant of proportionality between sea surface "//&
-                 "height (really it should be bottom pressure) anomalies "//&
-                 "and bottom geopotential anomalies. This is only used if "//&
-                 "USE_SAL_SCALAR is true or USE_PREVIOUS_TIDES is true.", &
-                 default=tide_sal_scalar_value, units="m m-1", &
-                 do_not_log=(.not. CS%use_tidal_sal_prev))
+  if (CS%use_tidal_sal_prev) &
+    call get_param(param_file, mdl, "SAL_SCALAR_VALUE", CS%sal_scalar, "The constant of "//&
+                   "proportionality between self-attraction and loading (SAL) geopotential "//&
+                   "anomaly and barotropic geopotential anomalies. This is only used if "//&
+                   "SAL_SCALAR_APPROX is true or USE_PREVIOUS_TIDES is true.", default=0.0, &
+                   units="m m-1", do_not_log=(.not.CS%use_tidal_sal_prev), &
+                   old_name='TIDE_SAL_SCALAR_VALUE')
 
   if (nc > MAX_CONSTITUENTS) then
     write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
@@ -385,14 +386,14 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
   call get_param(param_file, mdl, "TIDE_REF_DATE", tide_ref_date, &
                  "Year,month,day to use as reference date for tidal forcing. "//&
                  "If not specified, defaults to 0.", &
-                 default=0)
+                 old_name="OBC_TIDE_REF_DATE", defaults=(/0, 0, 0/))
 
   call get_param(param_file, mdl, "TIDE_USE_EQ_PHASE", CS%use_eq_phase, &
                  "Correct phases by calculating equilibrium phase arguments for TIDE_REF_DATE. ", &
-                 default=.false., fail_if_missing=.false.)
+                 old_name="OBC_TIDE_ADD_EQ_PHASE", default=.false., fail_if_missing=.false.)
 
   if (sum(tide_ref_date) == 0) then  ! tide_ref_date defaults to 0.
-    CS%time_ref = set_date(1, 1, 1)
+    CS%time_ref = set_date(1, 1, 1, 0, 0, 0)
   else
     if (.not. CS%use_eq_phase) then
       ! Using a reference date but not using phase relative to equilibrium.
@@ -400,7 +401,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
       ! correctly simulating tidal phases is not desired.
       call MOM_mesg('Tidal phases will *not* be corrected with equilibrium arguments.')
     endif
-    CS%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3))
+    CS%time_ref = set_date(tide_ref_date(1), tide_ref_date(2), tide_ref_date(3), 0, 0, 0)
   endif
 
   ! Initialize reference time for tides and find relevant lunar and solar
@@ -480,7 +481,8 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
                    "Frequency of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
                    " are true, or if OBC_TIDE_N_CONSTITUENTS > 0 and "//trim(CS%const_name(c))// &
-                   " is in OBC_TIDE_CONSTITUENTS.", units="s-1", default=freq_def(c), scale=US%T_to_s)
+                   " is in OBC_TIDE_CONSTITUENTS.", units="rad s-1", default=freq_def(c), &
+                   scale=US%T_to_s)
     call get_param(param_file, mdl, "TIDE_"//trim(CS%const_name(c))//"_AMP", CS%amp(c), &
                    "Amplitude of the "//trim(CS%const_name(c))//" tidal constituent. "//&
                    "This is only used if TIDES and TIDE_"//trim(CS%const_name(c))// &
@@ -527,8 +529,46 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
     enddo
   endif
 
+  call get_param(param_file, mdl, "TIDE_ADD_NODAL", add_nodal_terms, &
+                 "If true, include 18.6 year nodal modulation in the astronomical tidal forcing.", &
+                 old_name="OBC_TIDE_ADD_NODAL", default=.false.)
+  call get_param(param_file, mdl, "TIDE_NODAL_REF_DATE", nodal_ref_date, &
+                 "Fixed reference date to use for nodal modulation of astronomical tidal forcing.", &
+                 old_name="OBC_TIDE_REF_DATE", fail_if_missing=.false., defaults=(/0, 0, 0/))
+
+  ! If the nodal correction is based on a different time, initialize that.
+  ! Otherwise, it can use N from the time reference.
+  if (add_nodal_terms) then
+    if (sum(nodal_ref_date) /= 0) then
+      ! A reference date was provided for the nodal correction
+      nodal_time = set_date(nodal_ref_date(1), nodal_ref_date(2), nodal_ref_date(3))
+      call astro_longitudes_init(nodal_time, nodal_longitudes)
+    elseif (CS%use_eq_phase) then
+      ! Astronomical longitudes were already calculated for use in equilibrium phases,
+      ! so use nodal longitude from that.
+      nodal_longitudes = CS%tidal_longitudes
+    else
+      ! Tidal reference time is a required parameter, so calculate the longitudes from that.
+      call astro_longitudes_init(CS%time_ref, nodal_longitudes)
+    endif
+  endif
+
+  allocate(CS%tide_fn(nc))
+  allocate(CS%tide_un(nc))
+
+  do c=1,nc
+    ! Find nodal corrections if needed
+    if (add_nodal_terms) then
+      call nodal_fu(trim(CS%const_name(c)), nodal_longitudes%N, CS%tide_fn(c), CS%tide_un(c))
+    else
+      CS%tide_fn(c) = 1.0
+      CS%tide_un(c) = 0.0
+    endif
+  enddo
+
   if (present(HA_CS)) then
-    call HA_init(Time, US, param_file, CS%time_ref, CS%nc, CS%freq, CS%phase0, CS%const_name, HA_CS)
+    call HA_init(Time, US, param_file, CS%time_ref, CS%nc, CS%freq, CS%phase0, CS%const_name, &
+                 CS%tide_fn, CS%tide_un, HA_CS)
     call get_param(param_file, mdl, "HA_SSH", HA_ssh, &
                    "If true, perform harmonic analysis of sea serface height.", default=.false.)
     if (HA_ssh) call HA_register('ssh', 'h', HA_CS)
@@ -613,8 +653,8 @@ subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
 
   do c=1,CS%nc
     m = CS%struct(c)
-    amp_cosomegat = CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
-    amp_sinomegat = CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
+    amp_cosomegat = CS%amp(c)*CS%love_no(c)*CS%tide_fn(c) * cos(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
+    amp_sinomegat = CS%amp(c)*CS%love_no(c)*CS%tide_fn(c) * sin(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e_tide_eq(i,j) = e_tide_eq(i,j) + (amp_cosomegat*CS%cos_struct(i,j,m) + &
                                          amp_sinomegat*CS%sin_struct(i,j,m))
@@ -622,8 +662,8 @@ subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
   enddo
 
   if (CS%use_tidal_sal_file) then ; do c=1,CS%nc
-    cosomegat = cos(CS%freq(c)*now)
-    sinomegat = sin(CS%freq(c)*now)
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e_tide_sal(i,j) = e_tide_sal(i,j) + CS%ampsal(i,j,c) * &
           (cosomegat*CS%cosphasesal(i,j,c) + sinomegat*CS%sinphasesal(i,j,c))
@@ -631,8 +671,8 @@ subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
   enddo ; endif
 
   if (CS%use_tidal_sal_prev) then ; do c=1,CS%nc
-    cosomegat = cos(CS%freq(c)*now)
-    sinomegat = sin(CS%freq(c)*now)
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       e_tide_sal(i,j) = e_tide_sal(i,j) - CS%sal_scalar * CS%amp_prev(i,j,c) * &
           (cosomegat*CS%cosphase_prev(i,j,c) + sinomegat*CS%sinphase_prev(i,j,c))
@@ -691,8 +731,8 @@ subroutine calc_tidal_forcing_legacy(Time, e_sal, e_sal_tide, e_tide_eq, e_tide_
 
   do c=1,CS%nc
     m = CS%struct(c)
-    amp_cosomegat = CS%amp(c)*CS%love_no(c) * cos(CS%freq(c)*now + CS%phase0(c))
-    amp_sinomegat = CS%amp(c)*CS%love_no(c) * sin(CS%freq(c)*now + CS%phase0(c))
+    amp_cosomegat = CS%amp(c)*CS%love_no(c)*CS%tide_fn(c) * cos(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
+    amp_sinomegat = CS%amp(c)*CS%love_no(c)*CS%tide_fn(c) * sin(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       amp_cossin = (amp_cosomegat*CS%cos_struct(i,j,m) + amp_sinomegat*CS%sin_struct(i,j,m))
       e_sal_tide(i,j) = e_sal_tide(i,j) + amp_cossin
@@ -701,8 +741,8 @@ subroutine calc_tidal_forcing_legacy(Time, e_sal, e_sal_tide, e_tide_eq, e_tide_
   enddo
 
   if (CS%use_tidal_sal_file) then ; do c=1,CS%nc
-    cosomegat = cos(CS%freq(c)*now)
-    sinomegat = sin(CS%freq(c)*now)
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       amp_cossin = CS%ampsal(i,j,c) &
         * (cosomegat*CS%cosphasesal(i,j,c) + sinomegat*CS%sinphasesal(i,j,c))
@@ -712,8 +752,8 @@ subroutine calc_tidal_forcing_legacy(Time, e_sal, e_sal_tide, e_tide_eq, e_tide_
   enddo ; endif
 
   if (CS%use_tidal_sal_prev) then ; do c=1,CS%nc
-    cosomegat = cos(CS%freq(c)*now)
-    sinomegat = sin(CS%freq(c)*now)
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c)*now + (CS%phase0(c) + CS%tide_un(c)))
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
       amp_cossin = -CS%sal_scalar * CS%amp_prev(i,j,c) &
         * (cosomegat*CS%cosphase_prev(i,j,c) + sinomegat*CS%sinphase_prev(i,j,c))

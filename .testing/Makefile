@@ -65,7 +65,10 @@
 SHELL = bash
 
 # No implicit rules, suffixes, or variables
-MAKEFLAGS += -rR
+MAKEFLAGS += --no-builtin-rules
+MAKEFLAGS += --no-builtin-variables
+
+.SUFFIXES:
 
 # Determine the MOM6 autoconf srcdir
 AC_SRCDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../ac
@@ -267,16 +270,16 @@ $(BUILD)/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 # Build executables
 .NOTPARALLEL:$(foreach e,$(UNIT_EXECS),$(BUILD)/unit/$(e))
 $(BUILD)/unit/test_%: $(BUILD)/unit/Makefile FORCE
-	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+	cd $(@D) && $(TIME) $(MAKE) $(@F)
 $(BUILD)/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
 
 .NOTPARALLEL:$(foreach e,$(TIMING_EXECS),$(BUILD)/timing/$(e))
 $(BUILD)/timing/time_%: $(BUILD)/timing/Makefile FORCE
-	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+	cd $(@D) && $(TIME) $(MAKE) $(@F)
 $(BUILD)/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
 
 $(BUILD)/%/MOM6: $(BUILD)/%/Makefile FORCE
-	cd $(@D) && $(TIME) $(MAKE) $(@F) -j
+	cd $(@D) && $(TIME) $(MAKE) $(@F)
 
 # Target codebase should use its own build system
 $(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
@@ -284,6 +287,12 @@ $(BUILD)/target/MOM6: $(BUILD)/target FORCE | $(TARGET_CODEBASE)
 
 $(BUILD)/target: | $(TARGET_CODEBASE)
 	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/symmetric $@
+
+$(BUILD)/opt_target/MOM6: $(BUILD)/opt_target FORCE | $(TARGET_CODEBASE)
+	$(MAKE) -C $(TARGET_CODEBASE)/.testing BUILD=build build/opt/MOM6
+
+$(BUILD)/opt_target: | $(TARGET_CODEBASE)
+	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/opt $@
 
 FORCE:
 
@@ -494,14 +503,10 @@ $(foreach c,$(CONFIGS),$(eval $(call CONFIG_DIM_RULE,$(c))))
 # Regression testing only checks for changes in existing diagnostics
 .PRECIOUS: $(WORK)/%/target/chksum_diag
 %.regression.diag: $(foreach b,symmetric target,$(WORK)/%/$(b)/chksum_diag)
-	@! diff $^ | grep "^[<>]" | grep "^>" > /dev/null \
-	  || ! (\
-	    mkdir -p $(WORK)/results/$*; \
-	    (diff $^ | tee $(WORK)/results/$*/chksum_diag.regression.diff | head -n 20) ; \
+	@tools/diff_diag.sh $^ || ! (\
 	    echo -e "$(FAIL): Diagnostics $*.regression.diag have changed." \
 	  )
-	@cmp $^ || ( \
-	  diff $^ | head -n 20; \
+	@tools/cmp_diag.sh $^ || ( \
 	  echo -e "$(WARN): New diagnostics in $<" \
 	)
 	@echo -e "$(PASS): Diagnostics $*.regression.diag agree."
@@ -545,8 +550,8 @@ $(WORK)/%/$(1)/ocean.stats $(WORK)/%/$(1)/chksum_diag: $(BUILD)/$(2)/MOM6 | prep
 	  && $(TIME) $(5) $(MPIRUN) -n $(6) $$(abspath $$<) 2> std.err > std.out \
 	  || !( \
 	    mkdir -p ../../../results/$$*/ ; \
-	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 40 ; \
-	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -n 40 ; \
+	    cat std.out | tee ../../../results/$$*/std.$(1).out | tail -n 100 ; \
+	    cat std.err | tee ../../../results/$$*/std.$(1).err | tail -n 100 ; \
 	    rm ocean.stats chksum_diag ; \
 	    echo -e "$(FAIL): $$*.$(1) failed at runtime." \
 	  )
@@ -629,8 +634,8 @@ $(WORK)/%/restart/ocean.stats: $(BUILD)/symmetric/MOM6 | preproc
 	# Run the first half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std1.err > std1.out \
 	  || !( \
-	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 40 ; \
-	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 40 ; \
+	    cat std1.out | tee ../../../results/$*/std.restart1.out | tail -n 100 ; \
+	    cat std1.err | tee ../../../results/$*/std.restart1.err | tail -n 100 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 	# Setup the next inputs
@@ -640,8 +645,8 @@ $(WORK)/%/restart/ocean.stats: $(BUILD)/symmetric/MOM6 | preproc
 	# Run the second half-period
 	cd $(@D) && $(TIME) $(MPIRUN) -n 1 $(abspath $<) 2> std2.err > std2.out \
 	  || !( \
-	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 40 ; \
-	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 40 ; \
+	    cat std2.out | tee ../../../results/$*/std.restart2.out | tail -n 100 ; \
+	    cat std2.err | tee ../../../results/$*/std.restart2.err | tail -n 100 ; \
 	    echo -e "$(FAIL): $*.restart failed at runtime." \
 	  )
 

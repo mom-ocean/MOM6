@@ -99,7 +99,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
     S_int, &      ! Salinity interpolated to interfaces [S ~> ppt]
     H_top, &      ! The distance of each filtered interface from the ocean surface [H ~> m or kg m-2]
     H_bot, &      ! The distance of each filtered interface from the bottom [H ~> m or kg m-2]
-    gprime        ! The reduced gravity across each interface [L2 H-1 T-2 ~> m s-2 or m4 s-1 kg-1].
+    gprime        ! The reduced gravity across each interface [L2 H-1 T-2 ~> m s-2 or m4 s-2 kg-1].
   real, dimension(SZK_(GV)) :: &
     Igl, Igu      ! The inverse of the reduced gravity across an interface times
                   ! the thickness of the layer below (Igl) or above (Igu) it, in [T2 L-2 ~> s2 m-2].
@@ -163,7 +163,7 @@ subroutine wave_speed(h, tv, G, GV, US, cg1, CS, halo_size, use_ebt_mode, mono_N
   integer :: i, j, k, k2, itt, is, ie, js, je, nz, halo
   real :: hw      ! The mean of the adjacent layer thicknesses [H ~> m or kg m-2]
   real :: sum_hc  ! The sum of the layer thicknesses [H ~> m or kg m-2]
-  real :: gp      ! A limited local copy of gprime [L2 H-1 T-2 ~> m s-2 or m4 s-1 kg-1]
+  real :: gp      ! A limited local copy of gprime [L2 H-1 T-2 ~> m s-2 or m4 s-2 kg-1]
   real :: N2min   ! A minimum buoyancy frequency, including a slope rescaling factor [L2 H-2 T-2 ~> s-2 or m6 kg-2 s-2]
   logical :: below_mono_N2_frac  ! True if an interface is below the fractional depth where N2 should not increase.
   logical :: below_mono_N2_depth ! True if an interface is below the absolute depth where N2 should not increase.
@@ -853,7 +853,7 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
   real :: drxh_sum   ! The sum of density differences across interfaces times thicknesses [R H ~> kg m-2 or kg2 m-5]
   real :: dSpVxh_sum ! The sum of specific volume differences across interfaces times
                      ! thicknesses [R-1 H ~> m4 kg-1 or m], negative for stable stratification.
-  real :: g_Rho0     ! G_Earth/Rho0 [L2 T-2 H-1 R-1 ~> m4 s-2 kg-1 pr m7 s-2 kg-1].
+  real :: g_Rho0     ! G_Earth/Rho0 [L2 T-2 H-1 R-1 ~> m4 s-2 kg-1 or m7 s-2 kg-2].
   real :: tol_Hfrac  ! Layers that together are smaller than this fraction of
                      ! the total water column can be merged for efficiency [nondim].
   real :: min_h_frac ! tol_Hfrac divided by the total number of layers [nondim].
@@ -1303,9 +1303,9 @@ subroutine wave_speeds(h, tv, G, GV, US, nmodes, cn, CS, w_struct, u_struct, u_s
               ! renormalization of the integral of the profile
               w2avg = 0.0
               do k=1,kc
-                w2avg = w2avg + 0.5*(mode_struct(K)**2+mode_struct(K+1)**2)*Hc(k) ! [H L4 T-4]
+                w2avg = w2avg + 0.5*(mode_struct(K)**2+mode_struct(K+1)**2)*Hc(k) ! [H L4 T-4 ~> m5 s-4 or kg m2 s-4]
               enddo
-              renorm = sqrt(htot(i)*a_int/w2avg) ! [T2 L-2]
+              renorm = sqrt(htot(i)*a_int/w2avg) ! [T2 L-2 ~> s2 m-2]
               do K=1,kc+1 ; mode_struct(K) = renorm * mode_struct(K) ; enddo
               ! after renorm, mode_struct is again [nondim]
               if (abs(dlam) < tol_solve*lam_1) exit

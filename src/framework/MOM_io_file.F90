@@ -128,6 +128,8 @@ end type axis_node_nc
 type :: MOM_field
   character(len=:), allocatable :: label
     !< Identifier for the field in the handle's list
+  real :: conversion
+    !< A factor to use to rescale the field before output [a A-1 ~> 1]
 end type MOM_field
 
 
@@ -454,7 +456,7 @@ interface
 
   !> Interface to register a field to a netCDF file
   function i_register_field(handle, axes, label, units, longname, &
-      pack, standard_name, checksum) result(field)
+      pack, standard_name, checksum, conversion) result(field)
     import :: MOM_file, MOM_axis, MOM_field, int64
     class(MOM_file), intent(inout) :: handle
         !< Handle for a file that is open for writing
@@ -473,6 +475,8 @@ interface
       !< The standard (e.g., CMOR) name for this variable
     integer(kind=int64), dimension(:), optional, intent(in) :: checksum
       !< Checksum values that can be used to verify reads.
+    real, optional, intent(in) :: conversion
+      !< A factor to use to rescale the field before output [a A-1 ~> 1]
     type(MOM_field) :: field
       !< IO handle for field in MOM_file
   end function i_register_field
@@ -1011,7 +1015,7 @@ end function register_axis_infra
 
 !> Register a field to the MOM framework file
 function register_field_infra(handle, axes, label, units, longname, pack, &
-    standard_name, checksum) result(field)
+    standard_name, checksum, conversion) result(field)
   class(MOM_infra_file), intent(inout) :: handle
     !< Handle for a file that is open for writing
   type(MOM_axis), dimension(:), intent(in) :: axes
@@ -1029,6 +1033,8 @@ function register_field_infra(handle, axes, label, units, longname, pack, &
     !< The standard (e.g., CMOR) name for this variable
   integer(kind=int64), dimension(:), optional, intent(in) :: checksum
     !< Checksum values that can be used to verify reads.
+  real, optional, intent(in) :: conversion
+    !< A factor to use to rescale the field before output [a A-1 ~> 1]
   type(MOM_field) :: field
     !< The field type where this information is stored
 
@@ -1047,6 +1053,7 @@ function register_field_infra(handle, axes, label, units, longname, pack, &
 
   call handle%fields%append(field_infra, label)
   field%label = label
+  field%conversion = 1.0 ; if (present(conversion)) field%conversion = conversion
 end function register_field_infra
 
 
@@ -1069,10 +1076,19 @@ subroutine write_field_4d_infra(handle, field_md, MOM_domain, field, tstamp, &
     !< Missing data fill value
 
   type(fieldtype) :: field_infra
+  real, allocatable :: unscaled_field(:,:,:,:) ! An unscaled version of field for output [a]
 
   field_infra = handle%fields%get(field_md%label)
-  call write_field(handle%handle_infra, field_infra, MOM_domain, field, &
-      tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+  if (field_md%conversion == 1.0) then
+    call write_field(handle%handle_infra, field_infra, MOM_domain, field, &
+        tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:,:,:,:) = field_md%conversion * field(:,:,:,:)
+    call write_field(handle%handle_infra, field_infra, MOM_domain, unscaled_field, &
+        tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+    deallocate(unscaled_field)
+  endif
 end subroutine write_field_4d_infra
 
 
@@ -1086,7 +1102,7 @@ subroutine write_field_3d_infra(handle, field_md, MOM_domain, field, tstamp, &
   type(MOM_domain_type), intent(in) :: MOM_domain
     !< The MOM_Domain that describes the decomposition
   real, intent(inout) :: field(:,:,:)
-    !< Field to write
+    !< Field to write, perhaps in arbitrary rescaled units [A ~> a]
   real, optional, intent(in) :: tstamp
     !< Model time of this field
   integer, optional, intent(in) :: tile_count
@@ -1095,10 +1111,20 @@ subroutine write_field_3d_infra(handle, field_md, MOM_domain, field, tstamp, &
     !< Missing data fill value
 
   type(fieldtype) :: field_infra
+  real, allocatable :: unscaled_field(:,:,:) ! An unscaled version of field for output [a]
 
   field_infra = handle%fields%get(field_md%label)
-  call write_field(handle%handle_infra, field_infra, MOM_domain, field, &
-      tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+  if (field_md%conversion == 1.0) then
+    call write_field(handle%handle_infra, field_infra, MOM_domain, field, &
+        tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:,:,:) = field_md%conversion * field(:,:,:)
+    call write_field(handle%handle_infra, field_infra, MOM_domain, unscaled_field, &
+        tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+    deallocate(unscaled_field)
+  endif
+
 end subroutine write_field_3d_infra
 
 
@@ -1121,10 +1147,19 @@ subroutine write_field_2d_infra(handle, field_md, MOM_domain, field, tstamp, &
     !< Missing data fill value
 
   type(fieldtype) :: field_infra
+  real, allocatable :: unscaled_field(:,:) ! An unscaled version of field for output [a]
 
   field_infra = handle%fields%get(field_md%label)
-  call write_field(handle%handle_infra, field_infra, MOM_domain, field, &
-      tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+  if (field_md%conversion == 1.0) then
+    call write_field(handle%handle_infra, field_infra, MOM_domain, field, &
+        tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:,:) = field_md%conversion * field(:,:)
+    call write_field(handle%handle_infra, field_infra, MOM_domain, unscaled_field, &
+        tstamp=tstamp, tile_count=tile_count, fill_value=fill_value)
+    deallocate(unscaled_field)
+  endif
 end subroutine write_field_2d_infra
 
 
@@ -1140,9 +1175,17 @@ subroutine write_field_1d_infra(handle, field_md, field, tstamp)
     !< Model time of this field
 
   type(fieldtype) :: field_infra
+  real, allocatable :: unscaled_field(:) ! An unscaled version of field for output [a]
 
   field_infra = handle%fields%get(field_md%label)
-  call write_field(handle%handle_infra, field_infra, field, tstamp=tstamp)
+  if (field_md%conversion == 1.0) then
+    call write_field(handle%handle_infra, field_infra, field, tstamp=tstamp)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:) = field_md%conversion * field(:)
+    call write_field(handle%handle_infra, field_infra, unscaled_field, tstamp=tstamp)
+    deallocate(unscaled_field)
+  endif
 end subroutine write_field_1d_infra
 
 
@@ -1158,9 +1201,11 @@ subroutine write_field_0d_infra(handle, field_md, field, tstamp)
     !< Model time of this field
 
   type(fieldtype) :: field_infra
+  real :: unscaled_field ! An unscaled version of field for output [a]
 
   field_infra = handle%fields%get(field_md%label)
-  call write_field(handle%handle_infra, field_infra, field, tstamp=tstamp)
+  unscaled_field = field_md%conversion*field
+  call write_field(handle%handle_infra, field_infra, unscaled_field, tstamp=tstamp)
 end subroutine write_field_0d_infra
 
 
@@ -1403,7 +1448,7 @@ end function register_axis_nc
 
 !> Register a field to the MOM netcdf file
 function register_field_nc(handle, axes, label, units, longname, pack, &
-    standard_name, checksum) result(field)
+    standard_name, checksum, conversion) result(field)
   class(MOM_netcdf_file), intent(inout) :: handle
     !< Handle for a file that is open for writing
   type(MOM_axis), intent(in) :: axes(:)
@@ -1421,6 +1466,8 @@ function register_field_nc(handle, axes, label, units, longname, pack, &
     !< The standard (e.g., CMOR) name for this variable
   integer(kind=int64), dimension(:), optional, intent(in) :: checksum
     !< Checksum values that can be used to verify reads.
+  real, optional, intent(in) :: conversion
+    !< A factor to use to rescale the field before output [a A-1 ~> 1]
   type(MOM_field) :: field
 
   type(netcdf_field) :: field_nc
@@ -1438,6 +1485,7 @@ function register_field_nc(handle, axes, label, units, longname, pack, &
     call handle%fields%append(field_nc, label)
   endif
   field%label = label
+  field%conversion = 1.0 ; if (present(conversion)) field%conversion = conversion
 end function register_field_nc
 
 
@@ -1475,11 +1523,19 @@ subroutine write_field_4d_nc(handle, field_md, MOM_domain, field, tstamp, &
     !< Missing data fill value
 
   type(netcdf_field) :: field_nc
+  real, allocatable :: unscaled_field(:,:,:,:) ! An unscaled version of field for output [a]
 
   if (.not. is_root_PE()) return
 
   field_nc = handle%fields%get(field_md%label)
-  call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  if (field_md%conversion == 1.0) then
+    call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:,:,:,:) = field_md%conversion * field(:,:,:,:)
+    call write_netcdf_field(handle%handle_nc, field_nc, unscaled_field, time=tstamp)
+    deallocate(unscaled_field)
+  endif
 end subroutine write_field_4d_nc
 
 
@@ -1502,11 +1558,19 @@ subroutine write_field_3d_nc(handle, field_md, MOM_domain, field, tstamp, &
     !< Missing data fill value
 
   type(netcdf_field) :: field_nc
+  real, allocatable :: unscaled_field(:,:,:) ! An unscaled version of field for output [a]
 
   if (.not. is_root_PE()) return
 
   field_nc = handle%fields%get(field_md%label)
-  call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  if (field_md%conversion == 1.0) then
+    call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:,:,:) = field_md%conversion * field(:,:,:)
+    call write_netcdf_field(handle%handle_nc, field_nc, unscaled_field, time=tstamp)
+    deallocate(unscaled_field)
+  endif
 end subroutine write_field_3d_nc
 
 
@@ -1529,11 +1593,19 @@ subroutine write_field_2d_nc(handle, field_md, MOM_domain, field, tstamp, &
     !< Missing data fill value
 
   type(netcdf_field) :: field_nc
+  real, allocatable :: unscaled_field(:,:) ! An unscaled version of field for output [a]
 
   if (.not. is_root_PE()) return
 
   field_nc = handle%fields%get(field_md%label)
-  call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  if (field_md%conversion == 1.0) then
+    call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:,:) = field_md%conversion * field(:,:)
+    call write_netcdf_field(handle%handle_nc, field_nc, unscaled_field, time=tstamp)
+    deallocate(unscaled_field)
+  endif
 end subroutine write_field_2d_nc
 
 
@@ -1549,11 +1621,19 @@ subroutine write_field_1d_nc(handle, field_md, field, tstamp)
     !< Model time of this field
 
   type(netcdf_field) :: field_nc
+  real, allocatable :: unscaled_field(:) ! An unscaled version of field for output [a]
 
   if (.not. is_root_PE()) return
 
   field_nc = handle%fields%get(field_md%label)
-  call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  if (field_md%conversion == 1.0) then
+    call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  else
+    allocate(unscaled_field, source=field)
+    unscaled_field(:) = field_md%conversion * field(:)
+    call write_netcdf_field(handle%handle_nc, field_nc, unscaled_field, time=tstamp)
+    deallocate(unscaled_field)
+  endif
 end subroutine write_field_1d_nc
 
 
@@ -1569,11 +1649,13 @@ subroutine write_field_0d_nc(handle, field_md, field, tstamp)
     !< Model time of this field
 
   type(netcdf_field) :: field_nc
+  real :: unscaled_field ! An unscaled version of field for output [a]
 
   if (.not. is_root_PE()) return
 
   field_nc = handle%fields%get(field_md%label)
-  call write_netcdf_field(handle%handle_nc, field_nc, field, time=tstamp)
+  unscaled_field = field_md%conversion * field
+  call write_netcdf_field(handle%handle_nc, field_nc, unscaled_field, time=tstamp)
 end subroutine write_field_0d_nc
 
 

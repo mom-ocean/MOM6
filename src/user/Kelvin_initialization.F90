@@ -45,6 +45,9 @@ type, public :: Kelvin_OBC_CS ; private
   real :: wave_period       !< Period of the mode-0 waves [T ~> s]
   real :: ssh_amp           !< Amplitude of the sea surface height forcing for mode-0 waves [Z ~> m]
   real :: inflow_amp        !< Amplitude of the boundary velocity forcing for internal waves [L T-1 ~> m s-1]
+  real :: OBC_nudging_time  !< The timescale with which the inflowing open boundary velocities are nudged toward
+                            !! their intended values with the Kelvin wave test case [T ~> s], or a negative
+                            !! value to retain the value that is set when the OBC segments are initialized.
 end type Kelvin_OBC_CS
 
 ! This include declares and sets the variable "version".
@@ -114,9 +117,20 @@ function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
                    "at the open boundaries.", units="m s-1", default=1.0, scale=US%m_s_to_L_T)
   endif
 
+  call get_param(param_file, mdl, "KELVIN_WAVE_VEL_NUDGING_TIMESCALE", CS%OBC_nudging_time, &
+                 "The timescale with which the inflowing open boundary velocities are nudged toward "//&
+                 "their intended values with the Kelvin wave test case, or a negative value to keep "//&
+                 "the value that is set when the OBC segments are initialized.", &
+                 units="s", default=1.0/(0.3*86400.), scale=US%s_to_T)
+                 !### Change the default nudging timescale to -1. or another value?
+
   ! Register the Kelvin open boundary.
   call register_OBC(casename, param_file, OBC_Reg)
   register_Kelvin_OBC = .true.
+
+  ! TODO: Revisit and correct the internal Kelvin wave test case.
+  ! Specifically, using wave_speed() and investigating adding eta_anom
+  ! noted in the comments below.
 
 end function register_Kelvin_OBC
 
@@ -193,12 +207,12 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real :: time_sec     ! The time in the run [T ~> s]
   real :: cff          ! The wave speed [L T-1 ~> m s-1]
   real :: N0           ! Brunt-Vaisala frequency times a rescaling of slopes [L Z-1 T-1 ~> s-1]
-  real :: lambda       ! Offshore decay scale [L-1 ~> m-1]
+  real :: lambda       ! Offshore decay scale, i.e. the inverse of the deformation radius of a mode [L-1 ~> m-1]
   real :: omega        ! Wave frequency [T-1 ~> s-1]
   real :: PI           ! The ratio of the circumference of a circle to its diameter [nondim]
   real :: depth_tot(SZI_(G),SZJ_(G))  ! The total depth of the ocean [Z ~> m]
   real    :: mag_SSH ! An overall magnitude of the external wave sea surface height at the coastline [Z ~> m]
-  real    :: mag_int ! An overall magnitude of the internal wave at the coastline [L2 T-2 ~> m2 s-2]
+  real    :: mag_int ! An overall magnitude of the internal wave at the coastline [L T-1 ~> m s-1]
   real    :: x1, y1  ! Various positions [L ~> m]
   real    :: x, y    ! Various positions [L ~> m]
   real    :: val1    ! The periodicity factor [nondim]
@@ -215,10 +229,11 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
 
   if (.not.associated(OBC)) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
         'Kelvin_set_OBC_data() was called but OBC type was not initialized!')
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
+          "Kelvin_set_OBC_data() is only set to work with Cartesian axis units.")
 
   time_sec = US%s_to_T*time_type_to_real(Time)
   PI = 4.0*atan(1.0)
-  km_to_L_scale = 1000.0*US%m_to_L
 
   do j=jsd,jed ; do i=isd,ied
     depth_tot(i,j) = 0.0
@@ -232,11 +247,14 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     omega = 2.0 * PI / CS%wave_period
     val1 = sin(omega * time_sec)
   else
-    mag_int = CS%inflow_amp**2
+    mag_int = CS%inflow_amp
     N0 = sqrt((CS%rho_range / CS%rho_0) * (GV%g_Earth / CS%H0))
     lambda = PI * CS%mode * CS%F_0 / (CS%H0 * N0)
     ! Two wavelengths in domain
-    omega = (4.0 * CS%H0 * N0)  / (CS%mode * US%m_to_L*G%len_lon)
+    omega = (4.0 * CS%H0 * N0)  / (CS%mode * (G%grid_unit_to_L*G%len_lon))
+    ! If the modal wave speed were calculated via wave_speeds(), we should have
+    !   lambda = CS%F_0 / CS%cg_mode
+    !   omega = (4.0 * PI / (G%grid_unit_to_L*G%len_lon)) * CS%cg_mode
   endif
 
   sina = sin(CS%coast_angle)
@@ -248,17 +266,17 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     if (segment%direction == OBC_DIRECTION_E) cycle
     if (segment%direction == OBC_DIRECTION_N) cycle
 
-    ! This should be somewhere else...
-    !### This is supposed to be a timescale [T ~> s] but appears to be a rate in [s-1].
-    segment%Velocity_nudging_timescale_in = US%s_to_T * 1.0/(0.3*86400)
+    ! If OBC_nudging_time is negative, the value of Velocity_nudging_timescale_in that was set
+    ! when the segments are initialized is retained.
+    if (CS%OBC_nudging_time >= 0.0) segment%Velocity_nudging_timescale_in = CS%OBC_nudging_time
 
     if (segment%direction == OBC_DIRECTION_W) then
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
       jsd = segment%HI%jsd ; jed = segment%HI%jed
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do j=jsd,jed ; do I=IsdB,IedB
-        x1 = km_to_L_scale * G%geoLonCu(I,j)
-        y1 = km_to_L_scale * G%geoLatCu(I,j)
+        x1 = G%grid_unit_to_L * G%geoLonCu(I,j)
+        y1 = G%grid_unit_to_L * G%geoLatCu(I,j)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = -(x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
@@ -278,18 +296,26 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
             enddo
           endif
         else
-          ! Baroclinic, not rotated yet
+          ! Baroclinic, not rotated yet (and apparently not working as intended yet).
           segment%SSH(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
+          ! I suspect that the velocities in both of the following loops should instead be
+          !   normal_vel(I,j,k) = CS%inflow_amp * CS%u_struct(k) * exp(-lambda * y) * cos(omega * time_sec)
+          ! In addition, there should be a specification of the interface-height anomalies at the
+          ! open boundaries that are specified as something like
+          !   eta_anom(I,j,K) = (CS%inflow_amp*depth_tot/CS%cg_mode) * CS%w_struct(K) * &
+          !                     exp(-lambda * y) * cos(omega * time_sec)
+          ! In these expressions CS%u_struct and CS%w_struct could be returned from the subroutine wave_speeds
+          ! in MOM_wave_speed() based on the horizontally uniform initial state.
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(I,j,k) = mag_int * lambda / CS%F_0 * &
+              segment%nudged_normal_vel(I,j,k) = mag_int * &
                    exp(-lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(I,j,k) = mag_int * lambda / CS%F_0 * &
+              segment%normal_vel(I,j,k) = mag_int * &
                    exp(-lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * &
                    cos(omega * time_sec)
               segment%normal_trans(I,j,k) = segment%normal_vel(I,j,k) * h(i+1,j,k) * G%dyCu(I,j)
@@ -299,8 +325,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       enddo ; enddo
       if (allocated(segment%tangential_vel)) then
         do J=JsdB+1,JedB-1 ; do I=IsdB,IedB
-          x1 = km_to_L_scale * G%geoLonBu(I,J)
-          y1 = km_to_L_scale * G%geoLatBu(I,J)
+          x1 = G%grid_unit_to_L * G%geoLonBu(I,J)
+          y1 = G%grid_unit_to_L * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
           cff = sqrt(GV%g_Earth * depth_tot(i+1,j) )
@@ -316,8 +342,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       isd = segment%HI%isd ; ied = segment%HI%ied
       JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
       do J=JsdB,JedB ; do i=isd,ied
-        x1 = km_to_L_scale * G%geoLonCv(i,J)
-        y1 = km_to_L_scale * G%geoLatCv(i,J)
+        x1 = G%grid_unit_to_L * G%geoLonCv(i,J)
+        y1 = G%grid_unit_to_L * G%geoLatCv(i,J)
         x = (x1 - CS%coast_offset1) * cosa + y1 * sina
         y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
         if (CS%mode == 0) then
@@ -336,17 +362,17 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
             enddo
           endif
         else
-          ! Not rotated yet
+          ! Not rotated yet (also see the notes above on how this case might be improved)
           segment%SSH(i,J) = 0.0
           segment%normal_vel_bt(i,J) = 0.0
           if (segment%nudged) then
             do k=1,nz
-              segment%nudged_normal_vel(i,J,k) = mag_int * lambda / CS%F_0 * &
+              segment%nudged_normal_vel(i,J,k) = mag_int * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
             enddo
           elseif (segment%specified) then
             do k=1,nz
-              segment%normal_vel(i,J,k) = mag_int * lambda / CS%F_0 * &
+              segment%normal_vel(i,J,k) = mag_int * &
                    exp(- lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cosa
               segment%normal_trans(i,J,k) = segment%normal_vel(i,J,k) * h(i,j+1,k) * G%dxCv(i,J)
             enddo
@@ -355,8 +381,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
       enddo ; enddo
       if (allocated(segment%tangential_vel)) then
         do J=JsdB,JedB ; do I=IsdB+1,IedB-1
-          x1 = km_to_L_scale * G%geoLonBu(I,J)
-          y1 = km_to_L_scale * G%geoLatBu(I,J)
+          x1 = G%grid_unit_to_L * G%geoLonBu(I,J)
+          y1 = G%grid_unit_to_L * G%geoLatBu(I,J)
           x = (x1 - CS%coast_offset1) * cosa + y1 * sina
           y = - (x1 - CS%coast_offset1) * sina + y1 * cosa
           cff = sqrt(GV%g_Earth * depth_tot(i,j+1) )

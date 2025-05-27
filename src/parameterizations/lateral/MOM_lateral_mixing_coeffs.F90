@@ -557,9 +557,9 @@ subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE)
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzSyN ! |Sy| N times dz at v-points [Z T-1 ~> m s-1]
   real, dimension(SZI_(G), SZJ_(G)) :: f  ! Absolute value of the Coriolis parameter at h point [T-1 ~> s-1]
   real :: N2             ! Positive buoyancy frequency square or zero [L2 Z-2 T-2 ~> s-2]
-  real :: dzc            ! Spacing between two adjacent layers in stretched vertical coordinate [m]
+  real :: dzc            ! Spacing between two adjacent layers in stretched vertical coordinate [Z ~> m]
   real :: f_subround     ! The minimal resolved value of Coriolis parameter to prevent division by zero [T-1 ~> s-1]
-  real, dimension(SZI_(G), SZJ_(G)) :: Le  ! Eddy length scale [m]
+  real, dimension(SZI_(G), SZJ_(G)) :: Le  ! Eddy length scale [L ~> m]
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -1834,10 +1834,12 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "INTERNAL_WAVE_SPEED_BETTER_EST", better_speed_est, &
                  "If true, use a more robust estimate of the first mode wave speed as the "//&
                  "starting point for iterations.", default=.true.)
+    call get_param(param_file, mdl, "REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
+                   do_not_log=.true., default=.true.)
     call get_param(param_file, mdl, "EBT_REMAPPING_USE_OM4_SUBCELLS", om4_remap_via_sub_cells, &
                  "If true, use the OM4 remapping-via-subcells algorithm for calculating EBT structure. "//&
                  "See REMAPPING_USE_OM4_SUBCELLS for details. "//&
-                 "We recommend setting this option to false.", default=.true.)
+                 "We recommend setting this option to false.", default=om4_remap_via_sub_cells)
     call wave_speed_init(CS%wave_speed, GV, use_ebt_mode=CS%Resoln_use_ebt, &
                          mono_N2_depth=N2_filter_depth, remap_answer_date=remap_answer_date, &
                          better_speed_est=better_speed_est, min_speed=wave_speed_min, &

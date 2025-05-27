@@ -114,6 +114,7 @@ subroutine find_obsolete_params(param_file)
 
   call obsolete_logical(param_file, "SMOOTH_RI", hint="Instead use N_SMOOTH_RI.")
 
+  call obsolete_logical(param_file, "INTERNAL_TIDE_CORNER_ADVECT", .false.)
   call obsolete_logical(param_file, "TIDE_USE_SAL_SCALAR", hint="Use SAL_SCALAR_APPROX instead.")
   call obsolete_logical(param_file, "TIDAL_SAL_SHT", hint="Use SAL_HARMONICS instead.")
   call obsolete_int(param_file, "TIDAL_SAL_SHT_DEGREE", hint="Use SAL_HARMONICS_DEGREE instead.")
@@ -168,29 +169,15 @@ subroutine obsolete_logical(param_file, varname, warning_val, hint)
   character(len=*), optional, intent(in) :: hint   !< A hint to the user about what to do.
   ! Local variables
   logical :: test_logic, fatal_err
+  logical :: var_is_set  ! True if this value was read by read_param.
   character(len=128) :: hint_msg
 
-  test_logic = .false. ; call read_param(param_file, varname, test_logic)
+  test_logic = .false. ; call read_param(param_file, varname, test_logic, set=var_is_set)
   fatal_err = .true.
-  if (present(warning_val)) fatal_err = (warning_val .neqv. .true.)
+  if (var_is_set .and. present(warning_val)) fatal_err = (warning_val .neqv. test_logic)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
 
-  if (test_logic) then
-    if (fatal_err) then
-      call MOM_ERROR(FATAL, "MOM_obsolete_params: "//trim(varname)//   &
-           " is an obsolete run-time flag, and should not be used. "// &
-           trim(hint_msg))
-    else
-      call MOM_ERROR(WARNING, "MOM_obsolete_params: "//trim(varname)// &
-           " is an obsolete run-time flag. "//trim(hint_msg))
-    endif
-  endif
-
-  test_logic = .true. ; call read_param(param_file, varname, test_logic)
-  fatal_err = .true.
-  if (present(warning_val)) fatal_err = (warning_val .neqv. .false.)
-
-  if (.not.test_logic) then
+  if (var_is_set) then
     if (fatal_err) then
       call MOM_ERROR(FATAL, "MOM_obsolete_params: "//trim(varname)//   &
            " is an obsolete run-time flag, and should not be used. "// &
@@ -211,12 +198,13 @@ subroutine obsolete_char(param_file, varname, warning_val, hint)
   character(len=*), optional, intent(in) :: hint  !< A hint to the user about what to do.
   ! Local variables
   character(len=200) :: test_string, hint_msg
+  logical :: var_is_set  ! True if this value was read by read_param.
   logical :: only_warn
 
-  test_string = ''; call read_param(param_file, varname, test_string)
+  test_string = ''; call read_param(param_file, varname, test_string, set=var_is_set)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
 
-  if (len_trim(test_string) > 0) then
+  if (var_is_set) then
     only_warn = .false.
     if (present(warning_val)) then ! Check if test_string and warning_val are the same.
       if (len_trim(warning_val) == len_trim(test_string)) then
@@ -246,15 +234,16 @@ subroutine obsolete_real(param_file, varname, warning_val, hint, only_warn)
 
   ! Local variables
   real :: test_val, warn_val
+  logical :: var_is_set  ! True if this value was read by read_param.
   logical :: issue_warning
   character(len=128) :: hint_msg
 
-  test_val = -9e35; call read_param(param_file, varname, test_val)
+  test_val = -9e35; call read_param(param_file, varname, test_val, set=var_is_set)
   warn_val = -9e35; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
   issue_warning = .false. ; if (present(only_warn)) issue_warning = only_warn
 
-  if (test_val /= -9e35) then
+  if (var_is_set) then
     if ((test_val == warn_val) .or. issue_warning) then
       call MOM_ERROR(WARNING, "MOM_obsolete_params: "//trim(varname)// &
          " is an obsolete run-time flag. "//trim(hint_msg))
@@ -273,14 +262,15 @@ subroutine obsolete_int(param_file, varname, warning_val, hint)
   integer,     optional, intent(in) :: warning_val !< An allowed value that causes a warning instead of an error.
   character(len=*), optional, intent(in) :: hint   !< A hint to the user about what to do.
   ! Local variables
+  logical :: var_is_set  ! True if this value was read by read_param.
   integer :: test_val, warn_val
   character(len=128) :: hint_msg
 
-  test_val = -123456788; call read_param(param_file, varname, test_val)
+  test_val = -123456788; call read_param(param_file, varname, test_val, set=var_is_set)
   warn_val = -123456788; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
 
-  if (test_val /= -123456788) then
+  if (var_is_set) then
     if (test_val == warn_val) then
       call MOM_ERROR(WARNING, "MOM_obsolete_params: "//trim(varname)// &
          " is an obsolete run-time flag. "//trim(hint_msg))

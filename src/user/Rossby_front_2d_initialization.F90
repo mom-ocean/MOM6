@@ -221,7 +221,7 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   real    :: I_f          ! The Adcroft reciprocal of the local Coriolis parameter [T ~> s]
   real    :: Ty           ! The meridional temperature gradient [C L-1 ~> degC m-1]
   real    :: hAtU         ! Interpolated layer thickness in height units [H ~> m or kg m-2].
-  real    :: u_int        ! The zonal velocity at an interface [L T-1 ~> m s=1]
+  real    :: u_int        ! The zonal velocity at an interface [L T-1 ~> m s-1]
   real    :: max_depth    ! Maximum depth of the model bathymetry [H ~> m or kg m-2]
   integer :: i, j, k, is, ie, js, je, nz
   character(len=40) :: verticalCoordinate
@@ -250,6 +250,8 @@ subroutine Rossby_front_initialize_velocity(u, v, h, G, GV, US, param_file, just
   if (max_depth <= 0.0) call MOM_error(FATAL, &
       "Rossby_front_initialize_thickness, Rossby_front_initialize_velocity: "//&
       "This module requires a positive value of MAXIMUM_DEPTH.")
+  if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, 'Rossby_front_2d_initialization.F90: '// &
+          "dTdy() is only set to work with Cartesian axis units.")
 
   v(:,:,:) = 0.0
   u(:,:,:) = 0.0
@@ -335,18 +337,16 @@ end function Hml
 real function dTdy( G, dT, lat, US )
   type(ocean_grid_type), intent(in) :: G     !< Grid structure
   real,                  intent(in) :: dT    !< Top to bottom temperature difference [C ~> degC]
-  real,                  intent(in) :: lat   !< Latitude in [km]
+  real,                  intent(in) :: lat   !< Latitude in the same units as geoLat, often [km]
   type(unit_scale_type), intent(in) :: US    !< A dimensional unit scaling type
   ! Local
   real :: PI   ! The ratio of the circumference of a circle to its diameter [nondim]
   real :: dHML ! The range of the mixed layer depths [Z ~> m]
   real :: dHdy ! The mixed layer depth gradient [Z L-1 ~> m m-1]
-  real :: km_to_L ! Horizontal axis unit conversion factor when AXIS_UNITS = 'k' (1000 m) [L km-1 ~> 1000]
 
   PI = 4.0 * atan(1.0)
-  km_to_L = 1.0e3*US%m_to_L
   dHML = 0.5 * ( HMLmax - HMLmin ) * G%max_depth
-  dHdy = dHML * ( PI / ( frontFractionalWidth * G%len_lat * km_to_L ) ) * cos( yPseudo(G, lat) )
+  dHdy = dHML * ( PI / ( frontFractionalWidth * G%len_lat * G%grid_unit_to_L ) ) * cos( yPseudo(G, lat) )
   dTdy = -( dT / G%max_depth ) * dHdy
 
 end function dTdy

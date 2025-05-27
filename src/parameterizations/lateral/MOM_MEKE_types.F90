@@ -24,7 +24,7 @@ type, public :: MEKE_type
                                     !! backscatter from unresolved eddies (see Jansen and Held, 2014).
   real, allocatable :: Au(:,:)      !< The MEKE-derived lateral biharmonic viscosity
                                     !! coefficient [L4 T-1 ~> m4 s-1].
-  real, allocatable :: Le(:,:)      !< Eddy length scale [L m]
+  real, allocatable :: Le(:,:)      !< Eddy length scale [L ~> m]
 
   ! Parameters
   real :: KhTh_fac = 1.0 !< Multiplier to map Kh(MEKE) to KhTh [nondim]

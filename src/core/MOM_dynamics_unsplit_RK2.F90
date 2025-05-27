@@ -313,7 +313,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   if (dyn_p_surf) then ; do j=js-2,je+2 ; do i=is-2,ie+2
     p_surf(i,j) = 0.5*p_surf_begin(i,j) + 0.5*p_surf_end(i,j)
   enddo ; enddo ; endif
-  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, CS%ALE_CSp, p_surf)
+  call PressureForce(h_in, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, CS%ALE_CSp, CS%ADp, p_surf)
   call cpu_clock_end(id_clock_pres)
   call pass_vector(CS%PFu, CS%PFv, G%Domain, clock=id_clock_pass)
   call pass_vector(CS%CAu, CS%CAv, G%Domain, clock=id_clock_pass)
@@ -673,9 +673,9 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, Time, G, GV, US, param_file, diag
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
-  if (CS%calculate_SAL) call SAL_init(G, US, param_file, CS%SAL_CSp)
+  if (CS%calculate_SAL) call SAL_init(G, GV, US, param_file, CS%SAL_CSp)
   if (CS%use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
-  call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, &
+  call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &
                           CS%SAL_CSp, CS%tides_CSp)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc)
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &

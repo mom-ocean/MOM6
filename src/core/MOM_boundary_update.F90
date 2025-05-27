@@ -145,9 +145,6 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
   type(update_OBC_CS),                       pointer       :: CS   !< Control structure for OBCs
   type(time_type),                           intent(in)    :: Time !< Model time
 
-! Something here... with CS%file_OBC_CSp?
-! if (CS%use_files) &
-!     call update_OBC_segment_data(G, GV, OBC, tv, h, Time)
   if (CS%use_tidal_bay) &
       call tidal_bay_set_OBC_data(OBC, CS%tidal_bay_OBC, G, GV, US, h, Time)
   if (CS%use_Kelvin)  &

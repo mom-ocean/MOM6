@@ -5,6 +5,7 @@ module MOM_tidal_mixing
 
 use MOM_diag_mediator,      only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,      only : safe_alloc_ptr, post_data
+use MOM_diagnose_Kdwork,    only : vbf_CS
 use MOM_debugging,          only : hchksum
 use MOM_error_handler,      only : MOM_error, is_root_pe, FATAL, WARNING, NOTE
 use MOM_file_parser,        only : openParameterBlock, closeParameterBlock
@@ -695,7 +696,7 @@ end function tidal_mixing_init
 !! tidal dissipation and to add the effect of internal-tide-driven mixing to the layer or interface
 !! diffusivities.
 subroutine calculate_tidal_mixing(dz, j, N2_bot, Rho_bot, N2_lay, N2_int, TKE_to_Kd, max_TKE, &
-                                  G, GV, US, CS, Kd_max, Kv, Kd_lay, Kd_int)
+                                  G, GV, US, CS, Kd_max, Kv, Kd_lay, Kd_int, VBF)
   type(ocean_grid_type),            intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),          intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),            intent(in)    :: US     !< A dimensional unit scaling type
@@ -729,13 +730,14 @@ subroutine calculate_tidal_mixing(dz, j, N2_bot, Rho_bot, N2_lay, N2_int, TKE_to
   real, dimension(SZI_(G),SZK_(GV)+1), &
                           optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
                                                             !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
+  type(vbf_CS), pointer                           :: VBF    !< A diagnostic structure for vertical buoyancy fluxes
 
   if (CS%Int_tide_dissipation .or. CS%Lee_wave_dissipation .or. CS%Lowmode_itidal_dissipation) then
     if (CS%use_CVMix_tidal) then
       call calculate_CVMix_tidal(dz, j, N2_int, G, GV, US, CS, Kv, Kd_lay, Kd_int)
     else
       call add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, max_TKE, &
-                                    G, GV, US, CS, Kd_max, Kd_lay, Kd_int)
+                                    G, GV, US, CS, Kd_max, Kd_lay, Kd_int, VBF)
     endif
   endif
 end subroutine calculate_tidal_mixing
@@ -992,7 +994,7 @@ end subroutine calculate_CVMix_tidal
 !! Will eventually need to add diffusivity due to other wave-breaking processes (e.g. Bottom friction,
 !! Froude-number-depending breaking, PSI, etc.).
 subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, max_TKE, &
-                                    G, GV, US, CS, Kd_max, Kd_lay, Kd_int)
+                                    G, GV, US, CS, Kd_max, Kd_lay, Kd_int, VBF)
   type(ocean_grid_type),             intent(in)    :: G      !< The ocean's grid structure
   type(verticalGrid_type),           intent(in)    :: GV     !< The ocean's vertical grid structure
   type(unit_scale_type),             intent(in)    :: US     !< A dimensional unit scaling type
@@ -1022,6 +1024,7 @@ subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, m
   real, dimension(SZI_(G),SZK_(GV)+1), &
                            optional, intent(inout) :: Kd_int !< The diapycnal diffusivity at interfaces
                                                              !! [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
+  type(vbf_CS), pointer                            :: VBF    !< A diagnostics structure for vertical buoyancy fluxes
 
   ! local
 
@@ -1302,38 +1305,57 @@ subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, m
       endif
 
       ! diagnostics
-      if (allocated(CS%dd%Kd_itidal)) then
+      if (allocated(CS%dd%Kd_itidal).or.(associated(VBF%Kd_itides))) then
         ! If at layers, CS%dd%Kd_itidal is just TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_itidal)) then
+          if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_itides)) then
+          !Not to be confused w/ Kd_itidal (this is to be consistent w/ output parameter names)
+          if (k>1)  VBF%Kd_itides(i,j,K)   = VBF%Kd_itides(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_itides(i,j,K+1) = VBF%Kd_itides(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
       if (allocated(CS%dd%Kd_Itidal_work)) &
         CS%dd%Kd_itidal_work(i,j,k) = GV%H_to_RZ * TKE_itide_lay
       if (allocated(CS%dd%Fl_itidal)) &
         CS%dd%Fl_itidal(i,j,k) = TKE_itidal_rem(i)
 
-      if (allocated(CS%dd%Kd_Niku)) then
+      if (allocated(CS%dd%Kd_Niku).or.(associated(VBF%Kd_Niku))) then
         ! If at layers, CS%dd%Kd_Niku(i,j,K) is just TKE_to_Kd(i,k) * TKE_Niku_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_Niku_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_Niku)) then
+          if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_Niku)) then
+          if (k>1) VBF%Kd_Niku(i,j,K)    = VBF%Kd_Niku(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_Niku(i,j,K+1) = VBF%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
 !     if (associated(CS%dd%Kd_Niku)) CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (allocated(CS%dd%Kd_Niku_work)) &
         CS%dd%Kd_Niku_work(i,j,k) = GV%H_to_RZ * TKE_Niku_lay
 
-      if (allocated(CS%dd%Kd_lowmode)) then
+      if (allocated(CS%dd%Kd_lowmode).or.(associated(VBF%Kd_lowmode))) then
         ! If at layers, CS%dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_lowmode)) then
+          if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_lowmode)) then
+          if (k>1)  VBF%Kd_lowmode(i,j,K)   = VBF%Kd_lowmode(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_lowmode(i,j,K+1) = VBF%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
       if (allocated(CS%dd%Kd_lowmode_work)) &
         CS%dd%Kd_lowmode_work(i,j,k) = GV%H_to_RZ * TKE_lowmode_lay
@@ -1398,36 +1420,55 @@ subroutine add_int_tide_diffusivity(dz, j, N2_bot, Rho_bot, N2_lay, TKE_to_Kd, m
       endif
 
       ! diagnostics
-      if (allocated(CS%dd%Kd_itidal)) then
+      if (allocated(CS%dd%Kd_itidal).or.(associated(VBF%Kd_itides))) then
         ! If at layers, this is just CS%dd%Kd_itidal(i,j,K) = TKE_to_Kd(i,k) * TKE_itide_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_itide_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_itidal)) then
+          if (k>1)  CS%dd%Kd_itidal(i,j,K)   = CS%dd%Kd_itidal(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_itidal(i,j,K+1) = CS%dd%Kd_itidal(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_itides)) then
+          !Not to be confused w/ Kd_itidal (this is to be consistent w/ output parameter names)
+          if (k>1)  VBF%Kd_itides(i,j,K)   = VBF%Kd_itides(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_itides(i,j,K+1) = VBF%Kd_itides(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
       if (allocated(CS%dd%Kd_Itidal_work)) &
         CS%dd%Kd_itidal_work(i,j,k) = GV%H_to_RZ * TKE_itide_lay
       if (allocated(CS%dd%Fl_itidal)) CS%dd%Fl_itidal(i,j,k) = TKE_itidal_rem(i)
 
-      if (allocated(CS%dd%Kd_Niku)) then
+      if (allocated(CS%dd%Kd_Niku).or.(associated(VBF%Kd_Niku))) then
         ! If at layers, this is just CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_Niku_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_Niku)) then
+          if (k>1) CS%dd%Kd_Niku(i,j,K)    = CS%dd%Kd_Niku(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_Niku(i,j,K+1) = CS%dd%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_Niku)) then
+          if (k>1) VBF%Kd_Niku(i,j,K)    = VBF%Kd_Niku(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_Niku(i,j,K+1) = VBF%Kd_Niku(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
    !  if (associated(CS%dd%Kd_Niku)) CS%dd%Kd_Niku(i,j,K) = TKE_to_Kd(i,k) * TKE_Niku_lay
       if (allocated(CS%dd%Kd_Niku_work)) CS%dd%Kd_Niku_work(i,j,k) = GV%H_to_RZ * TKE_Niku_lay
 
-      if (allocated(CS%dd%Kd_lowmode)) then
+      if (allocated(CS%dd%Kd_lowmode).or.(associated(VBF%Kd_lowmode))) then
         ! If at layers, CS%dd%Kd_lowmode is just TKE_to_Kd(i,k) * TKE_lowmode_lay
         ! The following sets the interface diagnostics.
         Kd_add = TKE_to_Kd(i,k) * TKE_lowmode_lay
         if (Kd_max >= 0.0) Kd_add = min(Kd_add, Kd_max)
-        if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
-        if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        if (allocated(CS%dd%Kd_lowmode)) then
+          if (k>1)  CS%dd%Kd_lowmode(i,j,K)   = CS%dd%Kd_lowmode(i,j,K)   + 0.5*Kd_add
+          if (k<nz) CS%dd%Kd_lowmode(i,j,K+1) = CS%dd%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        endif
+        if (associated(VBF%Kd_lowmode)) then
+          if (k>1)  VBF%Kd_lowmode(i,j,K)   = VBF%Kd_lowmode(i,j,K)   + 0.5*Kd_add
+          if (k<nz) VBF%Kd_lowmode(i,j,K+1) = VBF%Kd_lowmode(i,j,K+1) + 0.5*Kd_add
+        endif
       endif
       if (allocated(CS%dd%Kd_lowmode_work)) &
         CS%dd%Kd_lowmode_work(i,j,k) = GV%H_to_RZ * TKE_lowmode_lay

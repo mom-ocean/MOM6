@@ -14,9 +14,7 @@ module Idealized_hurricane
 !               w/ T/S initializations in CVMix_tests (which should be moved
 !               into the main state_initialization to their utility
 !               for multiple example cases).
-! To do
-! 1. Remove the legacy SCM_idealized_hurricane_wind_forcing code
-!
+! December 2024: Removed the legacy subroutine SCM_idealized_hurricane_wind_forcing
 
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : get_param, log_version, param_file_type
@@ -37,8 +35,6 @@ public idealized_hurricane_wind_init !Public interface to initialize the idealiz
                                      ! hurricane wind profile.
 public idealized_hurricane_wind_forcing !Public interface to update the idealized
                                         ! hurricane wind profile.
-public SCM_idealized_hurricane_wind_forcing !Public interface to the legacy idealized
-                                        ! hurricane wind profile for SCM.
 
 !> Container for parameters describing idealized wind structure
 type, public :: idealized_hurricane_CS ; private
@@ -55,7 +51,7 @@ type, public :: idealized_hurricane_CS ; private
   real    :: max_windspeed        !< Maximum wind speeds [L T-1 ~> m s-1]
   real    :: hurr_translation_spd !< Hurricane translation speed [L T-1 ~> m s-1]
   real    :: hurr_translation_dir !< Hurricane translation direction [radians]
-  real    :: gustiness            !< Gustiness (optional, used in u*) [R L Z T-2 ~> Pa]
+  real    :: gustiness            !< Gustiness (used in u*) [R Z2 T-2 ~> Pa]
   real    :: Rho0                 !< A reference ocean density [R ~> kg m-3]
   real    :: Hurr_cen_Y0          !< The initial y position of the hurricane
                                   !!  This experiment is conducted in a Cartesian
@@ -317,7 +313,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gustiness, &
                  "The background gustiness in the winds.", &
-                 units="Pa", default=0.0, scale=US%kg_m2s_to_RZ_T*US%m_s_to_L_T, do_not_log=.true.)
+                 units="Pa", default=0.0, scale=US%Pa_to_RLZ_T2*US%L_to_Z, do_not_log=.true.)
 
   if (CS%rad_edge >= CS%rad_ambient) call MOM_error(FATAL, &
     "idealized_hurricane_wind_init: IDL_HURR_RAD_AMBIENT must be larger than IDL_HURR_RAD_EDGE.")
@@ -353,7 +349,6 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   real :: fbench      !< The benchmark 'f' value [T-1 ~> s-1]
   real :: fbench_fac  !< A factor that is set to 0 to use the
                       !!  benchmark 'f' value [nondim]
-  real :: km_to_L     !< The conversion factor from the units of latitude to L [L km-1 ~> 1e3]
   real :: rel_tau_fac !< A factor that is set to 0 to disable
                       !!  current relative stress calculation [nondim]
 
@@ -363,7 +358,8 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   isd = G%isd   ; ied = G%ied   ; jsd = G%jsd   ; jed = G%jed
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
-  km_to_L = 1.0e3*US%m_to_L
+  if ((G%grid_unit_to_L <= 0.) .and. (.not.CS%SCM_mode)) call MOM_error(FATAL, "Idealized_Hurricane.F90: " //&
+          "idealized_hurricane_wind_forcing is only set to work with Cartesian axis units.")
 
   ! Allocate the forcing arrays, if necessary.
   call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., tau_mag=.true.)
@@ -379,7 +375,6 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
        cos(CS%hurr_translation_dir))
   YC = CS%Hurr_cen_Y0 + (time_type_to_real(day)*US%s_to_T * CS%hurr_translation_spd * &
        sin(CS%hurr_translation_dir))
-
 
   if (CS%BR_Bench) then
     ! f reset to value used in generated wind for benchmark test
@@ -407,8 +402,8 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
         YY = CS%dy_from_center - YC
         XX = -XC
       else
-        YY = G%geoLatCu(I,j)*km_to_L - YC
-        XX = G%geoLonCu(I,j)*km_to_L - XC
+        YY = G%geoLatCu(I,j) * G%grid_unit_to_L - YC
+        XX = G%geoLonCu(I,j) * G%grid_unit_to_L - XC
       endif
       call idealized_hurricane_wind_profile(CS, US, f_local, YY, XX, Uocn, Vocn, TX, TY)
       forces%taux(I,j) = G%mask2dCu(I,j) * TX
@@ -431,8 +426,8 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
         YY = CS%dy_from_center - YC
         XX = -XC
       else
-        YY = G%geoLatCv(i,J)*km_to_L - YC
-        XX = G%geoLonCv(i,J)*km_to_L - XC
+        YY = G%geoLatCv(i,J) * G%grid_unit_to_L - YC
+        XX = G%geoLonCv(i,J) * G%grid_unit_to_L - XC
       endif
       call idealized_hurricane_wind_profile(CS, US, f_local, YY, XX, Uocn, Vocn, TX, TY)
       forces%tauy(i,J) = G%mask2dCv(i,J) * TY
@@ -442,16 +437,16 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   !> Get Ustar
   if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
     !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
-                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0))
+    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(CS%gustiness/CS%Rho0 + &
+            US%L_to_Z * sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                             0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0)
   enddo ; enddo ; endif
 
-  !> Get tau_mag [R L Z T-2 ~> Pa]
+  !> Get tau_mag [R Z2 T-2 ~> Pa]
   if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
     forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
-            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
-                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
+            US%L_to_Z * sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
+                             0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
   enddo ; enddo ; endif
 
 end subroutine idealized_hurricane_wind_forcing
@@ -655,196 +650,6 @@ subroutine idealized_hurricane_wind_profile(CS, US, absf, YY, XX, UOCN, VOCN, Tx
   TX = US%L_to_Z * CS%rho_a * Cd * du10 * dU
   TY = US%L_to_Z * CS%rho_a * Cd * du10 * dV
 end subroutine idealized_hurricane_wind_profile
-
-!> This subroutine is primarily needed as a legacy for reproducing answers.
-!! It is included as an additional subroutine rather than padded into the previous
-!! routine with flags to ease its eventual removal.  Its functionality is replaced
-!! with the new routines and it can be deleted when answer changes are acceptable.
-subroutine SCM_idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
-  type(surface),                intent(in)    :: sfc_state  !< Surface state structure
-  type(mech_forcing),           intent(inout) :: forces !< A structure with the driving mechanical forces
-  type(time_type),              intent(in)    :: day    !< Time in days
-  type(ocean_grid_type),        intent(inout) :: G      !< Grid structure
-  type(unit_scale_type),        intent(in)    :: US     !< A dimensional unit scaling type
-  type(idealized_hurricane_CS), pointer       :: CS     !< Container for SCM parameters
-  ! Local variables
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
-  real :: du10 ! The magnitude of the difference between the 10 m wind and the ocean flow [L T-1 ~> m s-1]
-  real :: U10  ! The 10 m wind speed [L T-1 ~> m s-1]
-  real :: A    ! The radius of the maximum winds raised to the power given by B, used in the
-               ! wind profile expression, in [km^B]
-  real :: B    ! A power used in the wind profile expression [nondim]
-  real :: C    ! A temporary variable in units of the square root of a specific volume [sqrt(m3 kg-1)]
-  real :: rad  ! The distance from the hurricane center [L ~> m]
-  real :: radius10  ! The distance from the hurricane center to its edge [L ~> m]
-  real :: rkm  ! The distance from the hurricane center, sometimes scaled to km [L ~> m] or [1000 L ~> km]
-  real :: f_local  ! The local Coriolis parameter [T-1 ~> s-1]
-  real :: xx  ! x-position [L ~> m]
-  real :: t0  ! Time at which the eye crosses the origin [T ~> s]
-  real :: dP  ! The pressure difference across the hurricane [R L2 T-2 ~> Pa]
-  real :: rB  ! The distance from the center raised to the power given by B, in [m^B]
-              ! or [km^B] if BR_Bench is true.
-  real :: Cd  ! Air-sea drag coefficient [nondim]
-  real :: Uocn, Vocn ! Surface ocean velocity components [L T-1 ~> m s-1]
-  real :: dU, dV ! Air-sea differential motion [L T-1 ~> m s-1]
-  ! Wind angle variables
-  real :: Alph     ! The wind inflow angle (positive outward) [radians]
-  real :: Rstr     ! A function of the position normalized by the radius of maximum winds [nondim]
-  real :: A0       ! The axisymmetric inflow angle [degrees]
-  real :: A1       ! The inflow angle asymmetry [degrees]
-  real :: P1       ! The angle difference between the translation direction and the inflow direction [radians]
-  real :: Adir     ! The angle of the direction from the center to a point [radians]
-  real :: transdir   ! Translation direction [radians]
-  real :: V_TS, U_TS ! Components of the translation speed [L T-1 ~> m s-1]
-
-  ! Bounds for loops and memory allocation
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
-
-  ! Allocate the forcing arrays, if necessary.
-  call allocate_mech_forcing(G, forces, stress=.true., ustar=.true., tau_mag=.true.)
-
-  ! Implementing Holland (1980) parameteric wind profile
-  !------------------------------------------------------------|
-  t0 = 129600.*US%s_to_T  ! TC 'eye' crosses (0,0) at 36 hours |
-  transdir = CS%pi        ! translation direction (-x)         |
-  !------------------------------------------------------------|
-  dP = CS%pressure_ambient - CS%pressure_central
-  if (CS%answer_date < 20190101) then
-    C = CS%max_windspeed / sqrt( US%R_to_kg_m3*dP )
-    B = C**2 * US%R_to_kg_m3*CS%rho_a * exp(1.0)
-    if (CS%BR_Bench) then ! rho_a reset to value used in generated wind for benchmark test
-      B = C**2 * 1.2 * exp(1.0)
-    endif
-  else
-    B = (CS%max_windspeed**2 / dP ) * CS%rho_a * exp(1.0)
-  endif
-
-  if (CS%BR_Bench) then
-    A = (US%L_to_m*CS%rad_max_wind / 1000.)**B
-  else
-    A = (US%L_to_m*CS%rad_max_wind)**B
-  endif
-  ! f_local = f(x,y), but in the SCM it is constant
-  if (CS%BR_Bench) then ! (CS%SCM_mode) then
-    f_local = CS%f_column
-  else
-    f_local = G%CoriolisBu(is,js)
-  endif
-
-  ! Calculate x position relative to hurricane center as a function of time.
-  xx = (t0 - time_type_to_real(day)*US%s_to_T) * CS%hurr_translation_spd * cos(transdir)
-  rad = sqrt((xx**2) + (CS%dy_from_center**2))
-
-  ! rkm - rad converted to km for Holland prof.
-  !       used in km due to error, correct implementation should
-  !       not need rkm, but to match winds w/ experiment this must
-  !       be maintained.  Causes winds far from storm center to be a
-  !       couple of m/s higher than the correct Holland prof.
-  if (CS%BR_Bench) then
-    rkm = rad/1000.
-    rB = (US%L_to_m*rkm)**B
-  else
-    ! if not comparing to benchmark, then use correct Holland prof.
-    rkm = rad
-    rB = (US%L_to_m*rad)**B
-  endif
-
-  ! Calculate U10 in the interior (inside of the hurricane edge radius),
-  ! while adjusting U10 to 0 outside of the ambient wind radius.
-  if (rad > 0.001*CS%rad_max_wind .AND. rad < CS%rad_edge*CS%rad_max_wind) then
-    U10 = sqrt( A*B*dP*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(rkm*f_local)**2 ) - 0.5*rkm*f_local
-  elseif (rad > CS%rad_edge*CS%rad_max_wind .AND. rad < CS%rad_ambient*CS%rad_max_wind) then
-    radius10 = CS%rad_max_wind*CS%rad_edge
-    if (CS%BR_Bench) then
-      rkm = radius10/1000.
-      rB = (US%L_to_m*rkm)**B
-    else
-      rkm = radius10
-      rB = (US%L_to_m*radius10)**B
-    endif
-    if (CS%edge_taper_bug) rad = radius10
-    U10 = ( sqrt( A*B*dP*exp(-A/rB)/(CS%rho_a*rB) + 0.25*(rkm*f_local)**2 ) - 0.5*rkm*f_local) &
-          * (CS%rad_ambient - rad/CS%rad_max_wind)/(CS%rad_ambient - CS%rad_edge)
-  else
-    U10 = 0.
-  endif
-  Adir = atan2(CS%dy_from_center,xx)
-
-  ! Wind angle model following Zhang and Ulhorn (2012)
-  ! ALPH is inflow angle positive outward.
-  RSTR = min(CS%rad_edge, rad / CS%rad_max_wind)
-  A0 = CS%A0_Rnorm*RSTR + CS%A0_speed*CS%max_windspeed + CS%A0_0
-  A1 = -A0*(CS%A1_Rnorm*RSTR + CS%A1_speed*CS%hurr_translation_spd + CS%A1_0)
-  P1 = (CS%P1_Rnorm*RSTR + CS%P1_speed*CS%hurr_translation_spd + CS%P1_0) * CS%pi/180.
-  ALPH = A0 - A1*cos( (TRANSDIR - ADIR ) - P1)
-  if (rad > CS%rad_edge*CS%rad_max_wind .AND. rad < CS%rad_ambient*CS%rad_max_wind) then
-    ALPH = ALPH* (CS%rad_ambient - rad/CS%rad_max_wind) / (CS%rad_ambient - CS%rad_edge)
-  elseif (rad > CS%rad_ambient*CS%rad_max_wind) then
-    ALPH = 0.0
-  endif
-  ALPH = ALPH * CS%Deg2Rad
-
-  ! Prepare for wind calculation
-  ! X_TS is component of translation speed added to wind vector
-  ! due to background steering wind.
-  U_TS = CS%hurr_translation_spd*0.5*cos(transdir)
-  V_TS = CS%hurr_translation_spd*0.5*sin(transdir)
-
-  ! Set the surface wind stresses, in [R L Z T-2 ~> Pa]. A positive taux
-  ! accelerates the ocean to the (pseudo-)east.
-  !   The i-loop extends to is-1 so that taux can be used later in the
-  ! calculation of ustar - otherwise the lower bound would be Isq.
-  do j=js,je ; do I=is-1,Ieq
-    ! Turn off surface current for stress calculation to be
-    ! consistent with test case.
-    Uocn = 0. ! sfc_state%u(I,j)
-    Vocn = 0. ! 0.25*( (sfc_state%v(i,J) + sfc_state%v(i+1,J-1)) + &
-              !        (sfc_state%v(i+1,J) + sfc_state%v(i,J-1)) )
-    ! Wind vector calculated from location/direction (sin/cos flipped b/c
-    ! cyclonic wind is 90 deg. phase shifted from position angle).
-    dU = U10*sin(Adir - CS%pi - Alph) - Uocn + U_TS
-    dV = U10*cos(Adir - Alph) - Vocn + V_TS
-    !/----------------------------------------------------|
-    !  Add a simple drag coefficient as a function of U10 |
-    !/----------------------------------------------------|
-    du10 = sqrt((du**2) + (dv**2))
-    Cd = simple_wind_scaled_Cd(u10, du10, CS)
-
-    forces%taux(I,j) = CS%rho_a * US%L_to_Z * G%mask2dCu(I,j) * Cd*du10*dU
-  enddo ; enddo
-
-  ! See notes above
-  do J=js-1,Jeq ; do i=is,ie
-    Uocn = 0. ! 0.25*( (sfc_state%u(I,j) + sfc_state%u(I-1,j+1)) + &
-              !        (sfc_state%u(I-1,j) + sfc_state%u(I,j+1)) )
-    Vocn = 0. ! sfc_state%v(i,J)
-    dU = U10*sin(Adir - CS%pi - Alph) - Uocn + U_TS
-    dV = U10*cos(Adir-Alph) - Vocn + V_TS
-    du10 = sqrt((du**2) + (dv**2))
-    Cd = simple_wind_scaled_Cd(u10, du10, CS)
-    forces%tauy(I,j) = CS%rho_a * US%L_to_Z * G%mask2dCv(I,j) * Cd*dU10*dV
-  enddo ; enddo
-
-  ! Set the surface friction velocity [Z T-1 ~> m s-1]. ustar is always positive.
-  if (associated(forces%ustar)) then ; do j=js,je ; do i=is,ie
-    !  This expression can be changed if desired, but need not be.
-    forces%ustar(i,j) = G%mask2dT(i,j) * sqrt(US%L_to_Z * (CS%gustiness/CS%Rho0 + &
-            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
-                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2)))/CS%Rho0))
-  enddo ; enddo ; endif
-
-  !> Set magnitude of the wind stress [R L Z T-2 ~> Pa]
-  if (associated(forces%tau_mag)) then ; do j=js,je ; do i=is,ie
-    forces%tau_mag(i,j) = G%mask2dT(i,j) * (CS%gustiness + &
-            sqrt(0.5*((forces%taux(I-1,j)**2) + (forces%taux(I,j)**2)) + &
-                 0.5*((forces%tauy(i,J-1)**2) + (forces%tauy(i,J)**2))))
-  enddo ; enddo ; endif
-
-end subroutine SCM_idealized_hurricane_wind_forcing
 
 !> This function returns the air-sea drag coefficient using a simple function of the air-sea velocity difference.
 function simple_wind_scaled_Cd(u10, du10, CS) result(Cd)

@@ -675,9 +675,9 @@ subroutine apply_oda_tracer_increments(dt, Time_end, G, GV, tv, h, CS)
   integer :: i, j
   integer :: isc, iec, jsc, jec
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: T_tend_inc !< an adjustment to the temperature
-                                                    !! tendency [C T-1 -> degC s-1]
+                                                    !! tendency [C T-1 ~> degC s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(G)) :: S_tend_inc !< an adjustment to the salinity
-                                                    !! tendency [S T-1 -> ppt s-1]
+                                                    !! tendency [S T-1 ~> ppt s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: T_tend !< The temperature tendency adjustment from
                                                            !! DA [C T-1 ~> degC s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(CS%Grid)) :: S_tend !< The salinity tendency adjustment from DA

@@ -46,7 +46,9 @@ type, public :: harmonic_analysis_CS ; private
     time_ref                                 !< Reference time (t = 0) used to calculate tidal forcing
   real, dimension(MAX_CONSTITUENTS) :: &
     freq, &                                  !< The frequency of a tidal constituent [T-1 ~> s-1]
-    phase0                                   !< The phase of a tidal constituent at time 0 [rad]
+    phase0, &                                !< The phase of a tidal constituent at time 0 [rad]
+    tide_fn, &                               !< Amplitude modulation of tides by nodal cycle [nondim].
+    tide_un                                  !< Phase modulation of tides by nodal cycle [rad].
   real, allocatable :: FtF(:,:)              !< Accumulator of (F' * F) for all fields [nondim]
   integer :: nc                              !< The number of tidal constituents in use
   integer :: length                          !< Number of fields of which harmonic analysis is to be performed
@@ -60,13 +62,15 @@ contains
 
 !> This subroutine sets static variables used by this module and initializes CS%list.
 !! THIS MUST BE CALLED AT THE END OF tidal_forcing_init.
-subroutine HA_init(Time, US, param_file, time_ref, nc, freq, phase0, const_name, CS)
+subroutine HA_init(Time, US, param_file, time_ref, nc, freq, phase0, const_name, tide_fn, tide_un, CS)
   type(time_type),       intent(in)  :: Time        !< The current model time
   type(time_type),       intent(in)  :: time_ref    !< Reference time (t = 0) used to calculate tidal forcing
   type(unit_scale_type), intent(in)  :: US          !< A dimensional unit scaling type
   type(param_file_type), intent(in)  :: param_file  !< A structure to parse for run-time parameters
-  real, dimension(MAX_CONSTITUENTS), intent(in) :: freq   !< The frequency of a tidal constituent [T-1 ~> s-1]
-  real, dimension(MAX_CONSTITUENTS), intent(in) :: phase0 !< The phase of a tidal constituent at time 0 [rad]
+  real, intent(in) :: freq(MAX_CONSTITUENTS)        !< The frequency of a tidal constituent [T-1 ~> s-1]
+  real, intent(in) :: phase0(MAX_CONSTITUENTS)      !< The phase of a tidal constituent at time 0 [rad]
+  real, intent(in) :: tide_fn(MAX_CONSTITUENTS)     !< Amplitude modulation of tides by nodal cycle [nondim].
+  real, intent(in) :: tide_un(MAX_CONSTITUENTS)     !< Phase modulation of tides by nodal cycle [rad].
   integer,               intent(in)  :: nc          !< The number of tidal constituents in use
   character(len=16),     intent(in)  :: const_name(MAX_CONSTITUENTS) !< The name of each constituent
   type(harmonic_analysis_CS), intent(out) :: CS     !< Control structure of the MOM_harmonic_analysis module
@@ -135,6 +139,8 @@ subroutine HA_init(Time, US, param_file, time_ref, nc, freq, phase0, const_name,
   CS%time_ref   =  time_ref
   CS%freq       =  freq
   CS%phase0     =  phase0
+  CS%tide_fn    =  tide_fn
+  CS%tide_un    =  tide_un
   CS%nc         =  nc
   CS%const_name =  const_name
   CS%length     =  0
@@ -173,6 +179,7 @@ end subroutine HA_register
 
 !> This subroutine accumulates the temporal basis functions in FtF.
 !! The tidal constituents are those used in MOM_tidal_forcing, plus the mean (of zero frequency).
+!! Only the main diagonal and entries below it are calculated, which are needed for Cholesky decomposition.
 subroutine HA_accum_FtF(Time, CS)
   type(time_type),            intent(in)    :: Time    !< The current model time
   type(harmonic_analysis_CS), intent(inout) :: CS      !< Control structure of the MOM_harmonic_analysis module
@@ -191,27 +198,31 @@ subroutine HA_accum_FtF(Time, CS)
   nc  = CS%nc
   now = CS%US%s_to_T * time_type_to_real(Time - CS%time_ref)
 
-  ! Accumulate FtF
-  CS%FtF(1,1) = CS%FtF(1,1) + 1.0         !< For the zero frequency
+  !< First entry, corresponding to the zero frequency constituent (mean)
+  CS%FtF(1,1) = CS%FtF(1,1) + 1.0
+
   do c=1,nc
     icos = 2*c
     isin = 2*c+1
-    cosomegat = cos(CS%freq(c) * now + CS%phase0(c))
-    sinomegat = sin(CS%freq(c) * now + CS%phase0(c))
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
+
+    ! First column, corresponding to the zero frequency constituent (mean)
     CS%FtF(icos,1) = CS%FtF(icos,1) + cosomegat
     CS%FtF(isin,1) = CS%FtF(isin,1) + sinomegat
-    CS%FtF(1,icos) = CS%FtF(icos,1)
-    CS%FtF(1,isin) = CS%FtF(isin,1)
-    do cc=c,nc
+
+    do cc=1,c
       iccos = 2*cc
       issin = 2*cc+1
-      ccosomegat = cos(CS%freq(cc) * now + CS%phase0(cc))
-      ssinomegat = sin(CS%freq(cc) * now + CS%phase0(cc))
+      ccosomegat = CS%tide_fn(cc) * cos(CS%freq(cc) * now + (CS%phase0(cc) + CS%tide_un(cc)))
+      ssinomegat = CS%tide_fn(cc) * sin(CS%freq(cc) * now + (CS%phase0(cc) + CS%tide_un(cc)))
+
+      ! Interior of the matrix, corresponding to the products of cosine and sine terms
       CS%FtF(icos,iccos) = CS%FtF(icos,iccos) + cosomegat * ccosomegat
       CS%FtF(icos,issin) = CS%FtF(icos,issin) + cosomegat * ssinomegat
       CS%FtF(isin,iccos) = CS%FtF(isin,iccos) + sinomegat * ccosomegat
       CS%FtF(isin,issin) = CS%FtF(isin,issin) + sinomegat * ssinomegat
-    enddo ! cc=c,nc
+    enddo ! cc=1,c
   enddo ! c=1,nc
 
 end subroutine HA_accum_FtF
@@ -276,14 +287,18 @@ subroutine HA_accum_FtSSH(key, data, Time, G, CS)
 
   is = ha1%is ; ie = ha1%ie ; js = ha1%js ; je = ha1%je
 
-  ! Accumulate FtF and FtSSH
+  !< First entry, corresponding to the zero frequency constituent (mean)
+  do j=js,je ; do i=is,ie
+    ha1%FtSSH(i,j,1) = ha1%FtSSH(i,j,1) + (data(i,j) - ha1%ref(i,j))
+  enddo ; enddo
+
+  !< The remaining entries
   do c=1,nc
     icos = 2*c
     isin = 2*c+1
-    cosomegat = cos(CS%freq(c) * now + CS%phase0(c))
-    sinomegat = sin(CS%freq(c) * now + CS%phase0(c))
+    cosomegat = CS%tide_fn(c) * cos(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
+    sinomegat = CS%tide_fn(c) * sin(CS%freq(c) * now + (CS%phase0(c) + CS%tide_un(c)))
     do j=js,je ; do i=is,ie
-      ha1%FtSSH(i,j,1)    = ha1%FtSSH(i,j,1)    + (data(i,j) - ha1%ref(i,j))
       ha1%FtSSH(i,j,icos) = ha1%FtSSH(i,j,icos) + (data(i,j) - ha1%ref(i,j)) * cosomegat
       ha1%FtSSH(i,j,isin) = ha1%FtSSH(i,j,isin) + (data(i,j) - ha1%ref(i,j)) * sinomegat
     enddo ; enddo
@@ -315,7 +330,7 @@ subroutine HA_write(ha1, Time, G, CS)
   ! Local variables
   real, dimension(:,:,:), allocatable :: FtSSHw    !< An array containing the harmonic constants [A]
   integer :: year, month, day, hour, minute, second
-  integer :: nc, k, is, ie, js, je
+  integer :: nc, i, j, k, is, ie, js, je
 
   character(len=255)           :: filename         !< Output file name
   type(MOM_infra_file)         :: cdf              !< The file handle for output harmonic constants
@@ -348,6 +363,11 @@ subroutine HA_write(ha1, Time, G, CS)
   call create_MOM_file(cdf, trim(filename), cdf_vars, &
                        2*nc+1, cdf_fields, SINGLE_FILE, 86400.0, G=G)
 
+  ! Add the initial field back to the mean state
+  do j=js,je ; do i=is,ie
+    FtSSHw(i,j,1) = FtSSHw(i,j,1) + ha1%ref(i,j)
+  enddo ; enddo
+
   ! Write data
   call MOM_write_field(cdf, cdf_fields(1), G%domain, FtSSHw(:,:,1), 0.0)
   do k=1,nc
@@ -362,74 +382,67 @@ subroutine HA_write(ha1, Time, G, CS)
 
 end subroutine HA_write
 
-!> This subroutine computes the harmonic constants (stored in FtSSHw) using the dot products of the temporal
+!> This subroutine computes the harmonic constants (stored in x) using the dot products of the temporal
 !! basis functions accumulated in FtF, and the dot products of the SSH (or other fields) with the temporal basis
 !! functions accumulated in FtSSH. The system is solved by Cholesky decomposition,
 !!
-!!     FtF * FtSSHw = FtSSH,    =>    FtFw * (FtFw' * FtSSHw) = FtSSH,
+!!     FtF * x = FtSSH,    =>    L * (L' * x) = FtSSH,    =>    L * y = FtSSH,
 !!
-!! where FtFw is a lower triangular matrix, and the prime denotes matrix transpose.
+!! where L is the lower triangular matrix, y = L' * x, and x is the solution vector.
 !!
-subroutine HA_solver(ha1, nc, FtF, FtSSHw)
+subroutine HA_solver(ha1, nc, FtF, x)
   type(HA_type), pointer,              intent(in)  :: ha1    !< Control structure for the current field
   integer,                             intent(in)  :: nc     !< Number of harmonic constituents
   real, dimension(:,:),                intent(in)  :: FtF    !< Accumulator of (F' * F) for all fields [nondim]
-  real, dimension(:,:,:), allocatable, intent(out) :: FtSSHw !< Work array for Cholesky decomposition [A]
+  real, dimension(ha1%is:ha1%ie,ha1%js:ha1%je,2*nc+1), &
+                                       intent(out) :: x      !< Solution vector of harmonic constants [A]
 
   ! Local variables
-  real :: tmp0                              !< Temporary variable for Cholesky decomposition [nondim]
-  real, dimension(:),   allocatable :: tmp1 !< Temporary variable for Cholesky decomposition [nondim]
-  real, dimension(:,:), allocatable :: tmp2 !< Temporary variable for Cholesky decomposition [A]
-  real, dimension(:,:), allocatable :: FtFw !< Lower triangular matrix for Cholesky decomposition [nondim]
-  integer :: k, m, n, is, ie, js, je
+  real :: tmp0                                !< Temporary variable for Cholesky decomposition [nondim]
+  real, dimension(2*nc+1,2*nc+1)      :: L    !< Lower triangular matrix of Cholesky decomposition [nondim]
+  real, dimension(2*nc+1)             :: tmp1 !< Inverse of the diagonal entries of L [nondim]
+  real, dimension(ha1%is:ha1%ie,ha1%js:ha1%je)        :: tmp2 !< 2D temporary array involving FtSSH [A]
+  real, dimension(ha1%is:ha1%ie,ha1%js:ha1%je,2*nc+1) :: y    !< 3D temporary array, i.e., L' * x [A]
+  integer :: k, m, n
 
-  is = ha1%is ; ie = ha1%ie ; js = ha1%js ; je = ha1%je
-
-  allocate(tmp1(1:2*nc+1), source=0.0)
-  allocate(tmp2(is:ie,js:je), source=0.0)
-  allocate(FtFw(1:2*nc+1,1:2*nc+1), source=0.0)
-  allocate(FtSSHw(is:ie,js:je,2*nc+1), source=0.0)
-
-  ! Construct FtFw
-  FtFw(:,:) = 0.0
+  ! Cholesky decomposition
   do m=1,2*nc+1
+
+    ! First, calculate the diagonal entries
     tmp0 = 0.0
-    do k=1,m-1
-      tmp0 = tmp0 + FtFw(m,k) * FtFw(m,k)
+    do k=1,m-1                             ! This loop operates along the m-th row
+      tmp0 = tmp0 + L(m,k) * L(m,k)
     enddo
-    FtFw(m,m) = sqrt(FtF(m,m) - tmp0)
-    tmp1(m) = 1 / FtFw(m,m)
-    do k=m+1,2*nc+1
+    L(m,m) = sqrt(FtF(m,m) - tmp0)         ! This is the m-th diagonal entry
+
+    ! Now calculate the off-diagonal entries
+    tmp1(m) = 1 / L(m,m)
+    do k=m+1,2*nc+1                        ! This loop operates along the column below the m-th diagonal entry
       tmp0 = 0.0
       do n=1,m-1
-        tmp0 = tmp0 + FtFw(k,n) * FtFw(m,n)
+        tmp0 = tmp0 + L(k,n) * L(m,n)
       enddo
-      FtFw(k,m) = (FtF(k,m) - tmp0) * tmp1(m)
+      L(k,m) = (FtF(k,m) - tmp0) * tmp1(m) ! This is the k-th off-diagonal entry below the m-th diagonal entry
     enddo
   enddo
 
-  ! Solve for (FtFw' * FtSSHw)
-  FtSSHw(:,:,:) = ha1%FtSSH(:,:,:)
+  ! Solve for y from L * y = FtSSH
   do k=1,2*nc+1
     tmp2(:,:) = 0.0
     do m=1,k-1
-      tmp2(:,:) = tmp2(:,:) + FtFw(k,m) * FtSSHw(:,:,m)
+      tmp2(:,:) = tmp2(:,:) + L(k,m) * y(:,:,m)
     enddo
-    FtSSHw(:,:,k) = (FtSSHw(:,:,k) - tmp2(:,:)) * tmp1(k)
+    y(:,:,k) = (ha1%FtSSH(:,:,k) - tmp2(:,:)) * tmp1(k)
   enddo
 
-  ! Solve for FtSSHw
+  ! Solve for x from L' * x = y
   do k=2*nc+1,1,-1
     tmp2(:,:) = 0.0
     do m=k+1,2*nc+1
-      tmp2(:,:) = tmp2(:,:) + FtSSHw(:,:,m) * FtFw(m,k)
+      tmp2(:,:) = tmp2(:,:) + L(m,k) * x(:,:,m)
     enddo
-    FtSSHw(:,:,k) = (FtSSHw(:,:,k) - tmp2(:,:)) * tmp1(k)
+    x(:,:,k) = (y(:,:,k) - tmp2(:,:)) * tmp1(k)
   enddo
-
-  deallocate(tmp1)
-  deallocate(tmp2)
-  deallocate(FtFw)
 
 end subroutine HA_solver
 
@@ -441,7 +454,7 @@ end subroutine HA_solver
 !! step, and x is a 2*nc-by-1 vector containing the constant coefficients of the sine/cosine for each constituent
 !! (i.e., the harmonic constants). At each grid point, the harmonic constants are computed using least squares,
 !!
-!!     (F' * F) * x = F' * SSH_in,
+!!     (F' * F) * x = F' * SSH_in,    =>    FtF * x = FtSSH,
 !!
 !! where the prime denotes matrix transpose, and SSH_in is the sea surface height (or other fields) determined by
 !! the model. The dot products (F' * F) and (F' * SSH_in) are computed by accumulating the sums as the model is

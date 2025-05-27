@@ -4,9 +4,10 @@ module MOM_restart
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use, intrinsic :: iso_fortran_env, only : int64
-use MOM_checksums, only : chksum => rotated_field_chksum
+use MOM_array_transform, only : rotate_array, rotate_vector, rotate_array_pair
+use MOM_checksums, only : chksum => field_checksum
 use MOM_domains, only : PE_here, num_PEs, AGRID, BGRID_NE, CGRID_NE
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, is_root_pe
+use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, NOTE, is_root_pe, MOM_get_verbosity
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_MOM_file, file_exists
@@ -24,6 +25,7 @@ use MOM_verticalGrid,  only : verticalGrid_type
 implicit none ; private
 
 public restart_init, restart_end, restore_state, register_restart_field
+public copy_restart_var, copy_restart_vector
 public save_restart, query_initialized, set_initialized, only_read_from_restarts
 public restart_registry_lock, restart_init_end, vardesc
 public restart_files_exist, determine_is_new_run, is_new_run
@@ -73,7 +75,7 @@ type field_restart
   real    :: conv = 1.0         !< A factor by which a restart field should be multiplied before it
                                 !! is written to a restart file, usually to convert it to MKS or
                                 !! other standard units [a A-1 ~> 1].  When read, the restart field
-                                !! is multiplied by the Adcroft reciprocal of this factor.
+                                !! is multiplied by the reciprocal of this factor.
 end type field_restart
 
 !> A structure to store information about restart fields that are no longer used
@@ -100,6 +102,17 @@ type, public :: MOM_restart_CS ; private
                                     !! Users may want to avoid this comparison if for example the restarts are
                                     !! made from a run with a different mask_table than the current run,
                                     !! in which case the checksums will not match and cause crash.
+  logical :: symmetric_checksums    !< If true, do the restart checksums on all the edge points for
+                                    !! a non-reentrant grid.  Setting this to true requires that
+                                    !! SYMMETRIC_MEMORY_ is defined at compile time.
+  logical :: unsigned_zeros         !< If true, convert any negative zeros that would be written to
+                                    !! the restart file into ordinary unsigned zeros.  This does not
+                                    !! change answers, but it can be helpful in comparing restart
+                                    !! files after grid rotation, for example.
+  logical :: reentrant_x            !< If true, the domain is reentrant in the x-direction.  This is only
+                                    !! used here to determine the extent of the restart checksums.
+  logical :: reentrant_y            !< If true, the domain is reentrant in the y-direction.  This is only
+                                    !! used here to determine the extent of the restart checksums.
   character(len=240) :: restartfile !< The name or name root for MOM restart files.
   integer :: turns                  !< Number of quarter turns from input to model domain
   logical :: locked = .false.       !< If true this registry has been locked and no further restart
@@ -153,6 +166,17 @@ interface set_initialized
   module procedure set_initialized_1d_name, set_initialized_2d_name
   module procedure set_initialized_3d_name, set_initialized_4d_name
 end interface
+
+!> Copy the restart variable with the specified name into an array, perhaps after rotation
+interface copy_restart_var
+  module procedure copy_restart_var_3d
+end interface copy_restart_var
+
+!> Copy the restart vector component variables with the specified names into a pair of arrays,
+!! perhaps after rotation
+interface copy_restart_vector
+  module procedure copy_restart_vector_3d
+end interface copy_restart_vector
 
 !> Read optional variables from restart files.
 interface only_read_from_restarts
@@ -368,7 +392,7 @@ end subroutine register_restart_field_ptr0d
 
 !> Register a pair of rotationally equivalent 2d restart fields
 subroutine register_restart_pair_ptr2d(a_ptr, b_ptr, a_desc, b_desc, &
-                mandatory, CS, conversion)
+                mandatory, CS, conversion, scalar_pair)
   real, dimension(:,:), target, intent(in) :: a_ptr   !< First field pointer
                                                       !! in arbitrary rescaled units [A ~> a]
   real, dimension(:,:), target, intent(in) :: b_ptr   !< Second field pointer
@@ -379,22 +403,30 @@ subroutine register_restart_pair_ptr2d(a_ptr, b_ptr, a_desc, b_desc, &
   type(MOM_restart_CS),      intent(inout) :: CS      !< MOM restart control structure
   real,               optional, intent(in) :: conversion !< A factor to multiply a restart field by
                                                       !! before it is written [a A-1 ~> 1], 1 by default.
+  logical,            optional, intent(in) :: scalar_pair !< If true, the arrays describe a pair of
+                                                      !! scalars, instead of vector components
+                                                      !! whose signs change when rotated
+
+  ! Local variables
+  real :: a_conv, b_conv  ! Factors to multipy the a- and b-components by before they are written,
+                          ! including sign changes to account for grid rotation [a A-1 ~> 1]
 
   call lock_check(CS, a_desc)
+  call set_conversion_pair(a_conv, b_conv, CS%turns, conversion, scalar_pair)
 
-  if (modulo(CS%turns, 2) /= 0) then
-    call register_restart_field(b_ptr, a_desc, mandatory, CS, conversion)
-    call register_restart_field(a_ptr, b_desc, mandatory, CS, conversion)
+  if (modulo(CS%turns, 2) == 0) then  ! This is the usual case.
+    call register_restart_field(a_ptr, a_desc, mandatory, CS, conversion=a_conv)
+    call register_restart_field(b_ptr, b_desc, mandatory, CS, conversion=b_conv)
   else
-    call register_restart_field(a_ptr, a_desc, mandatory, CS, conversion)
-    call register_restart_field(b_ptr, b_desc, mandatory, CS, conversion)
+    call register_restart_field(b_ptr, a_desc, mandatory, CS, conversion=a_conv)
+    call register_restart_field(a_ptr, b_desc, mandatory, CS, conversion=b_conv)
   endif
 end subroutine register_restart_pair_ptr2d
 
 
 !> Register a pair of rotationally equivalent 3d restart fields
 subroutine register_restart_pair_ptr3d(a_ptr, b_ptr, a_desc, b_desc, &
-                mandatory, CS, conversion)
+                mandatory, CS, conversion, scalar_pair)
   real, dimension(:,:,:), target, intent(in) :: a_ptr !< First field pointer
                                                       !! in arbitrary rescaled units [A ~> a]
   real, dimension(:,:,:), target, intent(in) :: b_ptr !< Second field pointer
@@ -405,22 +437,30 @@ subroutine register_restart_pair_ptr3d(a_ptr, b_ptr, a_desc, b_desc, &
   type(MOM_restart_CS),      intent(inout) :: CS      !< MOM restart control structure
   real,               optional, intent(in) :: conversion !< A factor to multiply a restart field by
                                                       !! before it is written [a A-1 ~> 1], 1 by default.
+  logical,            optional, intent(in) :: scalar_pair !< If true, the arrays describe a pair of
+                                                      !! scalars, instead of vector components
+                                                      !! whose signs change when rotated
+
+  ! Local variables
+  real :: a_conv, b_conv  ! Factors to multipy the a- and b-components by before they are written,
+                          ! including sign changes to account for grid rotation [a A-1 ~> 1]
 
   call lock_check(CS, a_desc)
+  call set_conversion_pair(a_conv, b_conv, CS%turns, conversion, scalar_pair)
 
-  if (modulo(CS%turns, 2) /= 0) then
-    call register_restart_field(b_ptr, a_desc, mandatory, CS, conversion)
-    call register_restart_field(a_ptr, b_desc, mandatory, CS, conversion)
+  if (modulo(CS%turns, 2) == 0) then  ! This is the usual case.
+    call register_restart_field(a_ptr, a_desc, mandatory, CS, conversion=a_conv)
+    call register_restart_field(b_ptr, b_desc, mandatory, CS, conversion=b_conv)
   else
-    call register_restart_field(a_ptr, a_desc, mandatory, CS, conversion)
-    call register_restart_field(b_ptr, b_desc, mandatory, CS, conversion)
+    call register_restart_field(b_ptr, a_desc, mandatory, CS, conversion=a_conv)
+    call register_restart_field(a_ptr, b_desc, mandatory, CS, conversion=b_conv)
   endif
 end subroutine register_restart_pair_ptr3d
 
 
 !> Register a pair of rotationally equivalent 2d restart fields
 subroutine register_restart_pair_ptr4d(a_ptr, b_ptr, a_desc, b_desc, &
-                mandatory, CS, conversion)
+                mandatory, CS, conversion, scalar_pair)
   real, dimension(:,:,:,:), target, intent(in) :: a_ptr !< First field pointer
                                                       !! in arbitrary rescaled units [A ~> a]
   real, dimension(:,:,:,:), target, intent(in) :: b_ptr !< Second field pointer
@@ -431,17 +471,61 @@ subroutine register_restart_pair_ptr4d(a_ptr, b_ptr, a_desc, b_desc, &
   type(MOM_restart_CS),      intent(inout) :: CS      !< MOM restart control structure
   real,               optional, intent(in) :: conversion !< A factor to multiply a restart field by
                                                       !! before it is written [a A-1 ~> 1], 1 by default.
+  logical,            optional, intent(in) :: scalar_pair !< If true, the arrays describe a pair of
+                                                      !! scalars, instead of vector components
+                                                      !! whose signs change when rotated
+
+  ! Local variables
+  real :: a_conv, b_conv  ! Factors to multipy the a- and b-components by before they are written,
+                          ! including sign changes to account for grid rotation [a A-1 ~> 1]
 
   call lock_check(CS, a_desc)
+  call set_conversion_pair(a_conv, b_conv, CS%turns, conversion, scalar_pair)
 
-  if (modulo(CS%turns, 2) /= 0) then
-    call register_restart_field(b_ptr, a_desc, mandatory, CS, conversion)
-    call register_restart_field(a_ptr, b_desc, mandatory, CS, conversion)
+  if (modulo(CS%turns, 2) == 0) then  ! This is the usual case.
+    call register_restart_field(a_ptr, a_desc, mandatory, CS, conversion=a_conv)
+    call register_restart_field(b_ptr, b_desc, mandatory, CS, conversion=b_conv)
   else
-    call register_restart_field(a_ptr, a_desc, mandatory, CS, conversion)
-    call register_restart_field(b_ptr, b_desc, mandatory, CS, conversion)
+    call register_restart_field(b_ptr, a_desc, mandatory, CS, conversion=a_conv)
+    call register_restart_field(a_ptr, b_desc, mandatory, CS, conversion=b_conv)
   endif
 end subroutine register_restart_pair_ptr4d
+
+!> Set a pair of factors to multiply by the components of a vector when writing
+!! that include any sign changes needed to account for grid rotation.
+subroutine set_conversion_pair(u_conv, v_conv, turns, conversion, scalar_pair)
+  real,   intent(out) :: u_conv !< A factor to multiply the u-component of a vector by before it is
+                                !! written, including sign changes due to grid rotation [a A-1 ~> 1]
+  real,   intent(out) :: v_conv !< A factor to multiply the u-component of a vector by before it is
+                                !! written, including sign changes due to grid rotation [a A-1 ~> 1]
+  integer, intent(in) :: turns  !< Number of quarter turns from input to model domain
+  real,    optional, intent(in) :: conversion !< A factor to multiply a restart field by
+                                !! before it is written [a A-1 ~> 1], 1 by default.
+  logical, optional, intent(in) :: scalar_pair !< If true, the arrays describe a pair of scalars,
+                                 !! instead of vector components whose signs change when rotated
+
+  ! Local variables
+  integer :: q_turns
+  logical :: scalars
+
+  u_conv = 1.0 ; v_conv = 1.0
+  if (present(conversion)) then
+    u_conv = conversion ; v_conv = conversion
+  endif
+
+  scalars = .false. ; if (present(scalar_pair)) scalars = scalar_pair
+  if (scalars) return
+
+  q_turns = modulo(turns, 4)
+  if (q_turns == 1) then
+    v_conv = -1.0*v_conv
+  elseif (q_turns == 2) then
+    u_conv = -1.0*u_conv ; v_conv = -1.0*v_conv
+  elseif (q_turns == 3) then
+    u_conv = -1.0*u_conv
+  endif
+
+end subroutine set_conversion_pair
 
 
 ! The following provide alternate interfaces to register restarts.
@@ -1324,12 +1408,167 @@ end function find_var_in_restart_files
 !====================== end of the only_read_from_restarts variants =======================
 
 
+!> Copy the restart variable with the specified name into a 3-d array, perhaps after rotation
+subroutine copy_restart_var_3d(var, name, CS, unrotate)
+  real, dimension(:,:,:), intent(inout) :: var   !< The field that is being copied [arbitrary]
+  character(len=*),       intent(in)    :: name  !< The name of the field that is being copied
+  type(MOM_restart_CS),   intent(in)    :: CS    !< MOM restart control struct
+  logical, optional,      intent(in)    :: unrotate !< If present and true, the output is on an unrotated grid.
+
+  logical :: keep_rotation
+  character(len=256) :: size_msg  !< The array sizes
+  integer :: m, n
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+
+  if (CS%novars > CS%max_fields) call restart_error(CS)
+
+  keep_rotation = .true. ; if (present(unrotate)) keep_rotation = .not.unrotate
+
+  n = CS%novars+1
+  do m=1,CS%novars
+    if (trim(name) == CS%restart_field(m)%var_name) then
+      if (.not.associated(CS%var_ptr3d(m)%p)) then
+        call MOM_error(FATAL, "MOM_restart: copy_restart_var(_3d) "//&
+                      "attempted to copy restart variable "//name//" with the wrong rank.")
+      elseif (CS%restart_field(m)%initialized) then
+        if (CS%turns == 0 .or. keep_rotation) then
+          if ( size_mismatch_3d(var, CS%var_ptr3d(m)%p, CS%turns, size_msg) ) &
+            call MOM_error(FATAL, "MOM_restart: copy_restart_var(_3d) "//&
+                      "attempted to copy restart variable "//name//" with the wrong sizes, "//trim(size_msg))
+
+          var(:,:,:) = CS%var_ptr3d(m)%p(:,:,:)
+        else
+          call rotate_array(CS%var_ptr3d(m)%p, -CS%turns, var)
+        endif
+      else
+        call MOM_error(NOTE, "MOM_restart: copy_restart_var(_3d) "//&
+                      "attempted to copy uninitialized restart variable "//name//".")
+      endif
+      n = m ; exit
+    endif
+  enddo
+  if ((n==CS%novars+1) .and. (is_root_pe())) &
+    call MOM_error(NOTE, "MOM_restart: copy_restart_var(_3d) "//&
+                  "attempted to copy unknown restart variable "//name//".")
+
+end subroutine copy_restart_var_3d
+
+
+!> Copy the restart vector component variables with the specified names into a pair
+!! of 3-d arrays, perhaps after rotation
+subroutine copy_restart_vector_3d(u_var, v_var, u_name, v_name, CS, unrotate, scalar_pair)
+  real, dimension(:,:,:), intent(inout) :: u_var !< The u-component of the field that is being copied [arbitrary]
+  real, dimension(:,:,:), intent(inout) :: v_var !< The u-component of the field that is being copied [arbitrary]
+  character(len=*),       intent(in)    :: u_name !< The name of the u-component of the field that is being copied
+  character(len=*),       intent(in)    :: v_name !< The name of the v-component of the field that is being copied
+  type(MOM_restart_CS),   intent(in)    :: CS    !< MOM restart control struct
+  logical, optional,      intent(in)    :: unrotate !< If present and true, the output is on an unrotated grid.
+  logical,      optional, intent(in)    :: scalar_pair !< If true, the arrays describe a pair of
+                                                 !! scalars, instead of vector components
+                                                 !! whose signs change when rotated
+
+  logical :: keep_rotation, scalars
+  character(len=256) :: size_msg  !< The array sizes
+  integer :: m, n_u, n_v
+
+  if (.not.CS%initialized) call MOM_error(FATAL, "MOM_restart " // &
+      "query_initialized: Module must be initialized before it is used.")
+
+  if (CS%novars > CS%max_fields) call restart_error(CS)
+
+  keep_rotation = .true. ; if (present(unrotate)) keep_rotation = .not.unrotate
+
+  n_u = CS%novars+1 ; n_v = CS%novars+1
+  do m=1,CS%novars
+    if (trim(u_name) == CS%restart_field(m)%var_name) then
+      if (.not.associated(CS%var_ptr3d(m)%p)) then
+        call MOM_error(FATAL, "MOM_restart: copy_restart_vector(_3d) "//&
+                      "attempted to copy restart variable "//trim(u_name)//" with the wrong rank.")
+      elseif (CS%restart_field(m)%initialized) then
+        n_u = m
+      else
+        call MOM_error(NOTE, "MOM_restart: copy_restart_vector(_3d) "//&
+                      "attempted to copy uninitialized restart variable "//trim(u_name)//".")
+        n_u = -1
+      endif
+    endif
+    if (trim(v_name) == CS%restart_field(m)%var_name) then
+      if (.not.associated(CS%var_ptr3d(m)%p)) then
+        call MOM_error(FATAL, "MOM_restart: copy_restart_vector(_3d) "//&
+                      "attempted to copy restart variable "//trim(v_name)//" with the wrong rank.")
+      elseif (CS%restart_field(m)%initialized) then
+        n_v = m
+      else
+        call MOM_error(NOTE, "MOM_restart: copy_restart_vector(_3d) "//&
+                      "attempted to copy uninitialized restart variable "//trim(v_name)//".")
+        n_v = -1
+      endif
+    endif
+  enddo
+  if ((n_u==CS%novars+1) .and. (is_root_pe())) &
+    call MOM_error(NOTE, "MOM_restart: copy_restart_vector(_3d) "//&
+                  "attempted to copy unknown restart variable "//trim(u_name)//".")
+  if ((n_v==CS%novars+1) .and. (is_root_pe())) &
+    call MOM_error(NOTE, "MOM_restart: copy_restart_vector(_3d) "//&
+                  "attempted to copy unknown restart variable "//trim(v_name)//".")
+
+  if ((n_u>0) .and. (n_u<=CS%novars) .and. (n_v>0) .and. (n_v<=CS%novars)) then
+    ! Now actually update the vector.
+    if ( size_mismatch_3d(u_var, CS%var_ptr3d(n_u)%p, CS%turns, size_msg) ) &
+      call MOM_error(FATAL, "MOM_restart: copy_restart_vector(_3d) "//&
+                "attempted to copy restart variable "//trim(u_name)//" with the wrong sizes, "//trim(size_msg))
+    if ( size_mismatch_3d(v_var, CS%var_ptr3d(n_v)%p, CS%turns, size_msg) ) &
+      call MOM_error(FATAL, "MOM_restart: copy_restart_vector(_3d) "//&
+                "attempted to copy restart variable "//trim(v_name)//" with the wrong sizes, "//trim(size_msg))
+
+    if (CS%turns == 0 .or. keep_rotation) then
+      u_var(:,:,:) = CS%var_ptr3d(n_u)%p(:,:,:)
+      v_var(:,:,:) = CS%var_ptr3d(n_v)%p(:,:,:)
+    else
+      scalars = .false. ; if (present(scalar_pair)) scalars = scalar_pair
+      if ((modulo(CS%turns, 2) == 0) .and. scalars) then
+        call rotate_array_pair(CS%var_ptr3d(n_u)%p, CS%var_ptr3d(n_v)%p, -CS%turns, u_var, v_var)
+      elseif (modulo(CS%turns, 2) == 0) then
+        call rotate_vector(CS%var_ptr3d(n_u)%p, CS%var_ptr3d(n_v)%p, -CS%turns, u_var, v_var)
+      elseif (scalars) then  ! This is less common
+        call rotate_array_pair(CS%var_ptr3d(n_v)%p, CS%var_ptr3d(n_u)%p, -CS%turns, u_var, v_var)
+      else
+        call rotate_vector(CS%var_ptr3d(n_v)%p, CS%var_ptr3d(n_u)%p, -CS%turns, u_var, v_var)
+      endif
+    endif
+  endif
+
+end subroutine copy_restart_vector_3d
+
+!> Indicate if two 3-d arrays are not of the same size after rotation is considered.
+logical function size_mismatch_3d(var_a, var_b, turns, size_msg)
+  real,    intent(in) :: var_a(:,:,:)   !< The first field being compared
+  real,    intent(in) :: var_b(:,:,:)   !< The second field being compared
+  integer, intent(in) :: turns          !< Number of quarter turns from input to model domain
+  character(len=256), intent(out) :: size_msg  !< The array sizes
+
+  if (modulo(turns, 2) == 0) then
+    size_mismatch_3d = ( (size(var_a,1) /= size(var_b,1)) .or. &
+                         (size(var_a,2) /= size(var_b,2)) .or. &
+                         (size(var_a,3) /= size(var_b,3)) )
+  else
+    size_mismatch_3d = ( (size(var_a,1) /= size(var_b,2)) .or. &
+                         (size(var_a,2) /= size(var_b,1)) .or. &
+                         (size(var_a,3) /= size(var_b,3)) )
+  endif
+  write(size_msg, '(3(I8), " vs ", 3(I8))') size(var_a,1), size(var_a,2), size(var_a,3), &
+                                           size(var_b,1), size(var_b,2), size(var_b,3)
+end function size_mismatch_3d
+
+
 !> save_restart saves all registered variables to restart files.
 subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_rest_files, write_IC)
   character(len=*),        intent(in)    :: directory !< The directory where the restart files
                                                   !! are to be written
   type(time_type),         intent(in)    :: time  !< The current model time
-  type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure
+  type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure as seen from the driver.
   type(MOM_restart_CS),    intent(inout) :: CS    !< MOM restart control struct
   logical,       optional, intent(in)    :: time_stamped !< If present and true, add time-stamp
                                                   !! to the restart file names
@@ -1361,14 +1600,17 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   integer :: m, nz, na
   integer :: num_files                  ! The number of restart files that will be used.
   integer :: seconds, days, year, month, hour, minute
-  character(len=8) :: hor_grid, z_grid, t_grid ! Variable grid info.
+  character(len=8) :: z_grid, t_grid    ! Variable grid info.
+  integer :: pos                        ! A coded integer indicating the horizontal staggering of a variable
   real :: conv                          ! Shorthand for the conversion factor [a A-1 ~> 1]
   real :: restart_time                  ! The model time at whic the restart file is being written [days]
   character(len=32) :: filename_appendix = '' ! Appendix to filename for ensemble runs
   integer :: length                     ! The length of a text string.
+  character(len=256) :: mesg, var_name
   integer(kind=int64) :: check_val(CS%max_fields,1)
-  integer :: isL, ieL, jsL, jeL, pos
-  integer :: turns
+  logical :: verbose
+  integer :: isL, ieL, jsL, jeL
+  integer :: turns                      ! Number of quarter turns from input to model domain
   integer, parameter :: nmax_extradims = 5
   type(axis_info), dimension(:), allocatable :: extra_axes
 
@@ -1380,6 +1622,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
       "save_restart: Module must be initialized before it is used.")
 
   if (CS%novars > CS%max_fields) call restart_error(CS)
+  verbose = (is_root_pe() .and. (MOM_get_verbosity() >= 7))
 
   ! With parallel read & write, it is possible to disable the following...
   num_files = 0
@@ -1424,11 +1667,11 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     size_in_file = 8*(2*G%Domain%niglobal+2*G%Domain%njglobal+2*nz+1000)
 
     do m=start_var,CS%novars
-      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
+      call query_vardesc(CS%restart_field(m)%vars, position=pos, &
                          z_grid=z_grid, t_grid=t_grid, caller="save_restart", &
                          extra_axes=extra_axes)
 
-      var_sz = get_variable_byte_size(hor_grid, z_grid, t_grid, G, nz)
+      var_sz = get_variable_byte_size(pos, z_grid, t_grid, G, nz)
       ! factor in size of extra axes, or multiply by 1
       do na=1,nmax_extradims
         var_sz = var_sz*extra_axes(na)%ax_size
@@ -1464,41 +1707,46 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     do m=start_var,next_var-1
       vars(m-start_var+1) = CS%restart_field(m)%vars
     enddo
-    call query_vardesc(vars(1), t_grid=t_grid, hor_grid=hor_grid, caller="save_restart")
+    call query_vardesc(vars(1), t_grid=t_grid, position=pos, caller="save_restart")
     t_grid = adjustl(t_grid)
     if (t_grid(1:1) /= 'p') &
       call modify_vardesc(vars(1), t_grid='s', caller="save_restart")
-    select case (hor_grid)
-      case ('q') ; pos = CORNER
-      case ('h') ; pos = CENTER
-      case ('u') ; pos = EAST_FACE
-      case ('v') ; pos = NORTH_FACE
-      case ('Bu') ; pos = CORNER
-      case ('T')  ; pos = CENTER
-      case ('Cu') ; pos = EAST_FACE
-      case ('Cv') ; pos = NORTH_FACE
-      case ('1') ; pos = 0
-      case default ; pos = 0
-    end select
 
     !Prepare the checksum of the restart fields to be written to restart files
-    if (modulo(turns, 2) /= 0) then
-      call get_checksum_loop_ranges(G, pos, jsL, jeL, isL, ieL)
-    else
-      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
-    endif
     do m=start_var,next_var-1
+
+      call query_vardesc(vars(m), position=pos, name=var_name, caller="save_restart")
+      if (modulo(turns, 2) == 0) then
+        call get_checksum_loop_ranges(G, CS, pos, isL, ieL, jsL, jeL)
+      else   ! Note that G is always the unrotated grid as it is seen by the driver level.
+        call get_checksum_loop_ranges(G, CS, pos, jsL, jeL, isL, ieL)
+      endif
+      if (verbose) then
+        if (pos == CENTER) then
+          write(mesg, '(" is in CENTER position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+        elseif (pos == CORNER) then
+          write(mesg, '(" is in CORNER position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+        elseif (pos == NORTH_FACE) then
+          write(mesg, '(" is in NORTH_FACE position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+        elseif (pos == EAST_FACE) then
+          write(mesg, '(" is in EAST_FACE position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+        else
+          write(mesg, '(" is in another position, ",I4,", checksum range ",4(I8))') pos, isL, ieL, jsL, jeL
+        endif
+        call MOM_mesg(trim(var_name)//mesg)
+      endif
+
       conv = CS%restart_field(m)%conv
       if (associated(CS%var_ptr3d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), turns=-turns, unscale=conv)
       elseif (associated(CS%var_ptr2d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), turns=-turns, unscale=conv)
       elseif (associated(CS%var_ptr4d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns)
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), turns=-turns, unscale=conv)
       elseif (associated(CS%var_ptr1d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr1d(m)%p(:))
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr1d(m)%p(:), unscale=conv)
       elseif (associated(CS%var_ptr0d(m)%p)) then
-        check_val(m-start_var+1,1) = chksum(conv*CS%var_ptr0d(m)%p, pelist=(/PE_here()/))
+        check_val(m-start_var+1,1) = chksum(CS%var_ptr0d(m)%p, pelist=(/PE_here()/), unscale=conv)
       endif
     enddo
 
@@ -1513,19 +1761,24 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
     do m=start_var,next_var-1
       if (associated(CS%var_ptr3d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr3d(m)%p, &
-                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns, &
+                             zero_zeros=CS%unsigned_zeros)
       elseif (associated(CS%var_ptr2d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr2d(m)%p, &
-                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns, &
+                             zero_zeros=CS%unsigned_zeros)
       elseif (associated(CS%var_ptr4d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), G%Domain, CS%var_ptr4d(m)%p, &
-                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns)
+                             restart_time, unscale=CS%restart_field(m)%conv, turns=-turns, &
+                             zero_zeros=CS%unsigned_zeros)
       elseif (associated(CS%var_ptr1d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr1d(m)%p, &
-                             restart_time, unscale=CS%restart_field(m)%conv)
+                             restart_time, unscale=CS%restart_field(m)%conv, &
+                             zero_zeros=CS%unsigned_zeros)
       elseif (associated(CS%var_ptr0d(m)%p)) then
         call MOM_write_field(IO_handle, fields(m-start_var+1), CS%var_ptr0d(m)%p, &
-                             restart_time, unscale=CS%restart_field(m)%conv)
+                             restart_time, unscale=CS%restart_field(m)%conv, &
+                             zero_zeros=CS%unsigned_zeros)
       endif
     enddo
 
@@ -1566,7 +1819,6 @@ subroutine restore_state(filename, directory, day, G, CS)
   character(len=200) :: unit_path(CS%max_fields) ! The file names.
   logical :: unit_is_global(CS%max_fields) ! True if the file is global.
 
-  character(len=8)   :: hor_grid ! Variable grid info.
   real    :: t1, t2 ! Two times from the start of different files [days].
   real, allocatable :: time_vals(:)  ! Times from a file extracted with getl_file_times [days]
   type(MOM_field), allocatable :: fields(:)
@@ -1648,24 +1900,15 @@ subroutine restore_state(filename, directory, day, G, CS)
 
     do m=1,CS%novars
       if (CS%restart_field(m)%initialized) cycle
-      call query_vardesc(CS%restart_field(m)%vars, hor_grid=hor_grid, &
-                         caller="restore_state")
-      select case (hor_grid)
-        case ('q') ; pos = CORNER
-        case ('h') ; pos = CENTER
-        case ('u') ; pos = EAST_FACE
-        case ('v') ; pos = NORTH_FACE
-        case ('Bu') ; pos = CORNER
-        case ('T')  ; pos = CENTER
-        case ('Cu') ; pos = EAST_FACE
-        case ('Cv') ; pos = NORTH_FACE
-        case ('1') ; pos = 0
-        case default ; pos = 0
-      end select
+      call query_vardesc(CS%restart_field(m)%vars, position=pos, caller="restore_state")
       conv = CS%restart_field(m)%conv
       if (conv == 0.0) then ; scale = 1.0 ; else ; scale = 1.0 / conv ; endif
 
-      call get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
+      if (modulo(CS%turns, 2) == 0) then
+        call get_checksum_loop_ranges(G, CS, pos, isL, ieL, jsL, jeL)
+      else   ! Note that G is always the unrotated grid as it is used during initialization.
+        call get_checksum_loop_ranges(G, CS, pos, jsL, jeL, isL, ieL)
+      endif
       do i=1, nvar
         call IO_handles(n)%get_field_atts(fields(i), name=varname)
         if (lowercase(trim(varname)) == lowercase(trim(CS%restart_field(m)%var_name))) then
@@ -1681,41 +1924,42 @@ subroutine restore_state(filename, directory, day, G, CS)
             ! Read a 1d array, which should be invariant to domain decomposition.
             call MOM_read_data(unit_path(n), varname, CS%var_ptr1d(m)%p, &
                                timelevel=1, scale=scale, MOM_Domain=G%Domain)
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr1d(m)%p(:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr1d(m)%p(:), unscale=conv)
           elseif (associated(CS%var_ptr0d(m)%p)) then ! Read a scalar...
             call MOM_read_data(unit_path(n), varname, CS%var_ptr0d(m)%p, &
                                timelevel=1, scale=scale, MOM_Domain=G%Domain)
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr0d(m)%p, pelist=(/PE_here()/))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr0d(m)%p, pelist=(/PE_here()/), unscale=conv)
           elseif (associated(CS%var_ptr2d(m)%p)) then  ! Read a 2d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr2d(m)%p, &
-                                 G%Domain, timelevel=1, position=pos, scale=scale)
+                                 G%Domain, timelevel=1, position=pos, scale=scale, turns=CS%turns)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
               call MOM_error(FATAL, &
                         "MOM_restart does not support 2-d arrays without domain decomposition.")
               ! call read_data(unit_path(n), varname, CS%var_ptr2d(m)%p,no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr2d(m)%p(isL:ieL,jsL:jeL), unscale=conv)
           elseif (associated(CS%var_ptr3d(m)%p)) then  ! Read a 3d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, &
-                                 G%Domain, timelevel=1, position=pos, scale=scale)
+                                 G%Domain, timelevel=1, position=pos, scale=scale, turns=CS%turns)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
               call MOM_error(FATAL, &
                         "MOM_restart does not support 3-d arrays without domain decomposition.")
               ! call read_data(unit_path(n), varname, CS%var_ptr3d(m)%p, no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr3d(m)%p(isL:ieL,jsL:jeL,:), unscale=conv)
           elseif (associated(CS%var_ptr4d(m)%p)) then  ! Read a 4d array.
             if (pos /= 0) then
               call MOM_read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, &
-                                 G%Domain, timelevel=1, position=pos, scale=scale, global_file=unit_is_global(n))
+                                 G%Domain, timelevel=1, position=pos, scale=scale, &
+                                 global_file=unit_is_global(n), turns=CS%turns)
             else ! This array is not domain-decomposed.  This variant may be under-tested.
               call MOM_error(FATAL, &
                         "MOM_restart does not support 4-d arrays without domain decomposition.")
               ! call read_data(unit_path(n), varname, CS%var_ptr4d(m)%p, no_domain=.true., timelevel=1)
             endif
-            if (is_there_a_checksum) checksum_data = chksum(conv*CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:))
+            if (is_there_a_checksum) checksum_data = chksum(CS%var_ptr4d(m)%p(isL:ieL,jsL:jeL,:,:), unscale=conv)
           else
             call MOM_error(FATAL, "MOM_restart restore_state: No pointers set for "//trim(varname))
           endif
@@ -1758,6 +2002,8 @@ subroutine restore_state(filename, directory, day, G, CS)
   CS%locked = .true.
 
 end subroutine restore_state
+
+
 
 !> restart_files_exist determines whether any restart files exist.
 function restart_files_exist(filename, directory, G, CS)
@@ -2022,8 +2268,12 @@ subroutine restart_init(param_file, CS, restart_root)
   call get_param(param_file, mdl, "MAX_FIELDS", CS%max_fields, default=100, do_not_log=.true.)
   call get_param(param_file, mdl, "RESTART_CHECKSUMS_REQUIRED", CS%checksum_required, &
                  default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "RESTART_SYMMETRIC_CHECKSUMS", CS%symmetric_checksums, &
+                 default=.false., do_not_log=.true.)
+  call get_param(param_file, mdl, "RESTART_UNSIGNED_ZEROS", CS%unsigned_zeros, &
+                 default=.false., do_not_log=.true.)
   all_default = ((.not.CS%parallel_restartfiles) .and. (CS%max_fields == 100) .and. &
-                 (CS%checksum_required))
+                 (CS%checksum_required) .and. (.not.CS%symmetric_checksums) .and. (.not.CS%unsigned_zeros))
   if (.not.present(restart_root)) then
     call get_param(param_file, mdl, "RESTARTFILE", CS%restartfile, &
                    default="MOM.res", do_not_log=.true.)
@@ -2054,6 +2304,19 @@ subroutine restart_init(param_file, CS, restart_root)
                  "made from a run with a different mask_table than the current run, "//&
                  "in which case the checksums will not match and cause crash.",&
                  default=.true.)
+  call get_param(param_file, mdl, "RESTART_SYMMETRIC_CHECKSUMS", CS%symmetric_checksums, &
+                 "If true, do the restart checksums on all the edge points for a non-reentrant "//&
+                 "grid.  This requires that SYMMETRIC_MEMORY_ is defined at compile time.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "RESTART_UNSIGNED_ZEROS", CS%unsigned_zeros, &
+                 "If true, convert any negative zeros that would be written to the restart file "//&
+                 "into ordinary unsigned zeros.  This does not change answers, but it can be "//&
+                 "helpful in comparing restart files after grid rotation, for example.", &
+                 default=.false.)
+  call get_param(param_file, mdl, "REENTRANT_X", CS%reentrant_x, &
+                 "If true, the domain is zonally reentrant.", default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "REENTRANT_Y", CS%reentrant_y, &
+                 "If true, the domain is meridionally reentrant.", default=.false., do_not_log=.true.)
 
   ! Maybe not the best place to do this?
   call get_param(param_file, mdl, "ROTATE_INDEX", rotate_index, &
@@ -2150,9 +2413,11 @@ subroutine restart_error(CS)
 end subroutine restart_error
 
 !> Return bounds for computing checksums to store in restart files
-subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
-  type(ocean_grid_type), intent(in)  :: G !< The ocean's grid structure
-  integer,               intent(in)  :: pos !< An integer indicating staggering of variable
+subroutine get_checksum_loop_ranges(G, CS, pos, isL, ieL, jsL, jeL)
+  type(ocean_grid_type), intent(in)  :: G   !< The ocean's grid structure
+  type(MOM_restart_CS),  intent(in)  :: CS  !< MOM restart control structure
+  integer,               intent(in)  :: pos !< A coded integer indicating the horizontal staggering
+                                            !! of a variable
   integer,               intent(out) :: isL !< i-start for checksum
   integer,               intent(out) :: ieL !< i-end for checksum
   integer,               intent(out) :: jsL !< j-start for checksum
@@ -2165,20 +2430,24 @@ subroutine get_checksum_loop_ranges(G, pos, isL, ieL, jsL, jeL)
   jeL = G%jec-G%jsd+1
 
   ! Expand range east or south for symmetric arrays
-  if (G%symmetric) then
-    if ((pos == EAST_FACE) .or. (pos == CORNER)) then ! For u-, q-points only
-      if (G%idg_offset == 0) isL = isL - 1 ! include western edge in checksums only for western PEs
+  if (CS%symmetric_checksums) then
+    if (.not.G%symmetric) call MOM_error(FATAL, &
+        "Setting SYMMETRIC_RESTART_CHECKSUMS to true only works with symmetric memory allocation, "//&
+        "which is specified at compile time by defining the cpp macro SYMMETRIC_MEMORY_.")
+
+    if (((pos == EAST_FACE) .or. (pos == CORNER)) .and. (.not.CS%reentrant_x)) then ! For u-, q-points only
+      if (G%isc+G%idg_offset == 1) isL = isL - 1 ! Include western edge in checksums only for western PEs
     endif
-    if ((pos == NORTH_FACE) .or. (pos == CORNER)) then ! For v-, q-points only
-      if (G%jdg_offset == 0) jsL = jsL - 1 ! include western edge in checksums only for southern PEs
+    if (((pos == NORTH_FACE) .or. (pos == CORNER)) .and. (.not.CS%reentrant_y)) then ! For v-, q-points only
+      if (G%jsc+G%jdg_offset == 1) jsL = jsL - 1 ! Include southern edge in checksums only for southern PEs
     endif
   endif
 
 end subroutine get_checksum_loop_ranges
 
 !> get the size of a variable in bytes
-function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_z) result(var_sz)
-  character(len=8),      intent(in) :: hor_grid !< The horizontal grid string to interpret
+function get_variable_byte_size(pos, z_grid, t_grid, G, num_z) result(var_sz)
+  integer,               intent(in) :: pos      !< An integer indicating the horizontal staggering position
   character(len=8),      intent(in) :: z_grid   !< The vertical grid string to interpret
   character(len=8),      intent(in) :: t_grid   !< A time string to interpret
   type(ocean_grid_type), intent(in) :: G        !< The ocean's grid structure
@@ -2189,7 +2458,7 @@ function get_variable_byte_size(hor_grid, z_grid, t_grid, G, num_z) result(var_s
   integer :: var_periods  ! The number of entries in a time-periodic axis
   character(len=8) :: t_grid_read, t_grid_tmp ! Modified versions of t_grid
 
-  if (trim(hor_grid) == '1') then
+  if (pos == 0) then
     var_sz = 8
   else ! This may be an overestimate, as it is based on symmetric-memory corner points.
     var_sz = 8*(G%Domain%niglobal+1)*(G%Domain%njglobal+1)

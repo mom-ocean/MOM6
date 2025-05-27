@@ -625,27 +625,24 @@ real function remaining_transport_sum(G, GV, US, uhtr, vhtr, h_new)
 
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G)) :: trans_rem_col !< The vertical sum of the absolute value of
-                     !! transports through the faces of a column, in MKS units [kg].
+                     !! transports through the faces of a column [R Z L2 ~> kg].
   real :: trans_cell !< The sum of the absolute value of the remaining transports through the faces
                      !! of a tracer cell [H L2 ~> m3 or kg]
-  real :: HL2_to_kg_scale !< Unit conversion factor to cell mass [kg H-1 L-2 ~> kg m-3 or 1]
   integer :: i, j, k, is, ie, js, je, nz
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
-
-  HL2_to_kg_scale = GV%H_to_kg_m2 * US%L_to_m**2
 
   trans_rem_col(:,:) = 0.0
   do k=1,nz ; do j=js,je ; do i=is,ie
     trans_cell = (ABS(uhtr(I-1,j,k)) + ABS(uhtr(I,j,k))) + &
                  (ABS(vhtr(i,J-1,k)) + ABS(vhtr(i,J,k)))
     if (trans_cell > max(1.0e-16*h_new(i,j,k), GV%H_subroundoff) * G%areaT(i,j)) &
-      trans_rem_col(i,j) =  trans_rem_col(i,j) + HL2_to_kg_scale * trans_cell
+      trans_rem_col(i,j) =  trans_rem_col(i,j) + GV%H_to_RZ * trans_cell
   enddo ; enddo ; enddo
 
   ! The factor of 0.5 here is to avoid double-counting because two cells share a face.
-  remaining_transport_sum = 0.5 * GV%kg_m2_to_H*US%m_to_L**2 * &
-      reproducing_sum(trans_rem_col, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
+  remaining_transport_sum = 0.5 * GV%RZ_to_H * reproducing_sum(trans_rem_col, &
+                             is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd), unscale=US%RZL2_to_kg)
 
 end function remaining_transport_sum
 
@@ -673,7 +670,7 @@ subroutine offline_diabatic_ale(fluxes, Time_start, Time_end, G, GV, US, CS, h_p
   real, dimension(SZI_(G),SZJ_(G)) :: &
     sw, sw_vis, sw_nir !< Save old values of shortwave radiation [Q R Z T-1 ~> W m-2]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! Vertical distance across layers [Z ~> m]
-  real :: I_dZval  ! An inverse distance between layer centers [Z-1 ~> m]
+  real :: I_dZval  ! An inverse distance between layer centers [Z-1 ~> m-1]
   integer :: i, j, k, is, ie, js, je, nz
   integer :: k_nonzero
   real :: Kd_bot  ! Near-bottom diffusivity [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
@@ -876,8 +873,8 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: vhtr_sub ! Remaining meridional mass transports [H L2 ~> m3 or kg]
 
   real, dimension(SZI_(G),SZJB_(G)) :: rem_col_flux ! The summed absolute value of the remaining
-                         ! fluxes through the faces of a column or within a column, in mks units [kg]
-  real :: sum_flux       ! Globally summed absolute value of fluxes in mks units [kg], which is
+                         ! mass fluxes through the faces of a column or within a column [R Z L2 ~> kg]
+  real :: sum_flux       ! Globally summed absolute value of fluxes [R Z L2 ~> kg], which is
                          ! used to keep track of how close to convergence we are.
 
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
@@ -890,7 +887,6 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
   ! Work arrays for temperature and salinity
   integer :: iter
   real    :: dt_iter  ! The timestep of each iteration [T ~> s]
-  real    :: HL2_to_kg_scale ! Unit conversion factors to cell mass [kg H-1 L-2 ~> kg m-3 or 1]
   character(len=160) :: mesg  ! The text of an error message
   integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
@@ -993,22 +989,22 @@ subroutine offline_advection_layer(fluxes, Time_start, time_interval, G, GV, US,
     call pass_vector(uhtr,vhtr,G%Domain)
 
     ! Calculate how close we are to converging by summing the remaining fluxes at each point
-    HL2_to_kg_scale = US%L_to_m**2*GV%H_to_kg_m2
     rem_col_flux(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do i=is,ie
-      rem_col_flux(i,j) = rem_col_flux(i,j) + HL2_to_kg_scale * &
+      rem_col_flux(i,j) = rem_col_flux(i,j) + GV%H_to_RZ * &
           ( (abs(eatr(i,j,k)) + abs(ebtr(i,j,k))) + &
            ((abs(uhtr(I-1,j,k)) + abs(uhtr(I,j,k))) + &
             (abs(vhtr(i,J-1,k)) + abs(vhtr(i,J,k))) ) )
     enddo ; enddo ; enddo
-    sum_flux = reproducing_sum(rem_col_flux, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd))
+    sum_flux = reproducing_sum(rem_col_flux, is+(1-G%isd), ie+(1-G%isd), js+(1-G%jsd), je+(1-G%jsd), &
+                               unscale=US%RZL2_to_kg)
 
     if (sum_flux==0) then
       write(mesg,*) 'offline_advection_layer: Converged after iteration', iter
       call MOM_mesg(mesg)
       exit
     else
-      write(mesg,*) "offline_advection_layer: Iteration ", iter, " remaining total fluxes: ", sum_flux
+      write(mesg,*) "offline_advection_layer: Iteration ", iter, " remaining total fluxes: ", sum_flux*US%RZL2_to_kg
       call MOM_mesg(mesg)
     endif
 

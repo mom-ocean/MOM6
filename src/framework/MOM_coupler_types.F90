@@ -391,27 +391,33 @@ subroutine extract_coupler_type_data(var_in, bc_index, array_out, scale_factor, 
   ! Local variables
   real, allocatable :: array_unrot(:,:)  ! Array on the unrotated grid in arbitrary units [A]
   integer :: q_turns ! The number of quarter turns through which array_out is to be rotated
-  integer :: index, is, ie, js, je, halo
+  integer :: index
 
   index = ind_flux ; if (present(field_index)) index = field_index
   q_turns = 0 ; if (present(turns)) q_turns = modulo(turns, 4)
-  halo = 0 ; if (present(halo_size)) halo = halo_size
 
   ! The case with non-trivial grid rotation is complicated by the fact that the data fields
   ! in the coupler_2d_bc_type are never rotated, so they need to be handled separately.
   if (q_turns == 0) then
     call CT_extract_data(var_in, bc_index, index, array_out, &
-                    scale_factor=scale_factor, halo_size=halo_size, idim=idim, jdim=jdim)
+        scale_factor=scale_factor, halo_size=halo_size, idim=idim, jdim=jdim)
   elseif (present(idim) .and. present(jdim)) then
-    ! Work only on the computational domain plus symmetric halos.
-    is = idim(2)-halo ; ie = idim(3)+halo ; js = jdim(2)-halo ; je = jdim(3)+halo
-    call allocate_rotated_array(array_out(is:ie,js:je), [1,1], -q_turns, array_unrot)
-    call CT_extract_data(var_in, bc_index, index, array_unrot, scale_factor=scale_factor, halo_size=halo)
-    call rotate_array(array_unrot, q_turns, array_out(is:ie,js:je))
+    call allocate_rotated_array(array_out, [1,1], -q_turns, array_unrot)
+
+    if (modulo(q_turns, 2) /= 0) then
+      call CT_extract_data(var_in, bc_index, index, array_unrot, &
+          idim=jdim, jdim=idim, scale_factor=scale_factor, halo_size=halo_size)
+    else
+      call CT_extract_data(var_in, bc_index, index, array_unrot, &
+          idim=idim, jdim=jdim, scale_factor=scale_factor, halo_size=halo_size)
+    endif
+
+    call rotate_array(array_unrot, q_turns, array_out)
     deallocate(array_unrot)
   else
     call allocate_rotated_array(array_out, [1,1], -q_turns, array_unrot)
-    call CT_extract_data(var_in, bc_index, index, array_unrot, scale_factor=scale_factor, halo_size=halo)
+    call CT_extract_data(var_in, bc_index, index, array_unrot, &
+        scale_factor=scale_factor, halo_size=halo_size)
     call rotate_array(array_unrot, q_turns, array_out)
     deallocate(array_unrot)
   endif
@@ -453,14 +459,12 @@ subroutine set_coupler_type_data(array_in, bc_index, var, solubility, scale_fact
                                          ! as array_in [A]
   integer :: subfield ! An integer indicating which field to set.
   integer :: q_turns ! The number of quarter turns through which array_in is rotated
-  integer :: is, ie, js, je, halo
 
   q_turns = 0 ; if (present(turns)) q_turns = modulo(turns, 4)
 
   subfield = ind_csurf
   if (present(solubility)) then ; if (solubility) subfield = ind_alpha ; endif
   if (present(field_index)) subfield = field_index
-  halo = 0 ; if (present(halo_size)) halo = halo_size
 
   ! The case with non-trivial grid rotation is complicated by the fact that the data fields
   ! in the coupler_2d_bc_type are never rotated, so they need to be handled separately.
@@ -468,12 +472,19 @@ subroutine set_coupler_type_data(array_in, bc_index, var, solubility, scale_fact
     call CT_set_data(array_in, bc_index, subfield, var, &
                      scale_factor=scale_factor, halo_size=halo_size, idim=idim, jdim=jdim)
   elseif (present(idim) .and. present(jdim)) then
-    ! Work only on the computational domain plus symmetric halos.
-    is = idim(2)-halo ; ie = idim(3)+halo ; js = jdim(2)-halo ; je = jdim(3)+halo
-    call allocate_rotated_array(array_in(is:ie,js:je), [1,1], -q_turns, array_unrot)
+    call allocate_rotated_array(array_in, [1,1], -q_turns, array_unrot)
     call rotate_array(array_in, -q_turns, array_unrot)
-    call CT_set_data(array_unrot, bc_index, subfield, var, &
-                     scale_factor=scale_factor, halo_size=halo_size)
+
+    if (modulo(q_turns, 2) /= 0) then
+      call CT_set_data(array_unrot, bc_index, subfield, var, &
+          idim=jdim, jdim=idim, &
+          scale_factor=scale_factor, halo_size=halo_size)
+    else
+      call CT_set_data(array_unrot, bc_index, subfield, var, &
+          idim=idim, jdim=jdim, &
+          scale_factor=scale_factor, halo_size=halo_size)
+    endif
+
     deallocate(array_unrot)
   else
     call allocate_rotated_array(array_in, [1,1], -q_turns, array_unrot)

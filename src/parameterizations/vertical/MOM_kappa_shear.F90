@@ -90,6 +90,10 @@ type, public :: Kappa_shear_CS ; private
                              !! greater than 1.  The lower limit for the permitted fractional
                              !! decrease is (1 - 0.5/kappa_src_max_chg).  These limits could
                              !! perhaps be made dynamic with an improved iterative solver.
+  real    :: VS_GeoMean_Kdmin !< A minimum diffusivity for computing the horizontal averages
+                             !! when using the geometric mean with VERTEX_SHEAR=True.  The model
+                             !! is sensitive to this value, which is a drawback of using the
+                             !! geometric average as currently implemented.
   logical :: psurf_bug       !< If true, do a simple average of the cell surface pressures to get a
                              !! surface pressure at the corner if VERTEX_SHEAR=True.  Otherwise mask
                              !! out any land points in the average.
@@ -97,6 +101,11 @@ type, public :: Kappa_shear_CS ; private
                              !! time average TKE when there is mass in all layers.  Otherwise always
                              !! report the time-averaged TKE, as is currently done when there
                              !! are some massless layers.
+  logical :: VS_viscosity_bug !< If true, use a bug in the calculation of the viscosity that sets
+                             !! it to zero for all vertices that are on a coastline.
+  logical :: VS_GeometricMean !< If true use geometric averaging for Kd from vertices to tracer points
+  logical :: VS_ThicknessMean !< If true use thickness weighting when averaging Kd from vertices to
+                             !! tracer points
   logical :: restrictive_tolerance_check !< If false, uses the less restrictive tolerance check to
                              !! determine if a timestep is acceptable for the KS_it outer iteration
                              !! loop, as the code was originally written.  True uses the more
@@ -107,7 +116,8 @@ type, public :: Kappa_shear_CS ; private
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that is used to
                              !! regulate the timing of diagnostic output.
   !>@{ Diagnostic IDs
-  integer :: id_Kd_shear = -1, id_TKE = -1
+  integer :: id_Kd_shear = -1, id_TKE = -1, id_Kd_vertex = -1, &
+             id_S2_init = -1, id_N2_init = -1, id_S2_mean = -1, id_N2_mean = -1
   !>@}
 end type Kappa_shear_CS
 
@@ -149,6 +159,11 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
                                                    !! call to kappa_shear_init.
 
   ! Local variables
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: &
+    diag_N2_init, & ! Diagnostic of N2 as provided to this routine [T-2 ~> s-2]
+    diag_S2_init, & ! Diagnostic of S2 as provided to this routine [T-2 ~> s-2]
+    diag_N2_mean, & ! Diagnostic of N2 averaged over the timestep applied [T-2 ~> s-2]
+    diag_S2_mean ! Diagnostic of S2 averaged over the timestep applied [T-2 ~> s-2]
   real, dimension(SZI_(G),SZK_(GV)) :: &
     h_2d, &             ! A 2-D version of h [H ~> m or kg m-2].
     dz_2d, &            ! Vertical distance between interface heights [Z ~> m].
@@ -170,7 +185,12 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [H Z T-1 ~> m2 s-1 or Pa s]
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [Z2 T-2 ~> m2 s-2].
     kappa_avg, & ! The time-weighted average of kappa [H Z T-1 ~> m2 s-1 or Pa s]
-    tke_avg     ! The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
+    tke_avg, &  ! The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
+    N2_init, &  ! N2 as provided to this routine [T-2 ~> s-2].
+    S2_init, &  ! S2 as provided to this routine [T-2 ~> s-2].
+    N2_mean, &  ! The time-weighted average of N2 [T-2 ~> s-2].
+    S2_mean     ! The time-weighted average of S2 [T-2 ~> s-2].
+
   real :: f2    ! The squared Coriolis parameter of each column [T-2 ~> s-2].
   real :: surface_pres  ! The top surface pressure [R L2 T-2 ~> Pa].
 
@@ -194,8 +214,14 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
   k0dt = dt*CS%kappa_0
   dz_massless = 0.1*sqrt((US%Z_to_m*GV%m_to_H)*k0dt)
 
+  if (CS%id_N2_init>0) diag_N2_init(:,:,:) = 0.0
+  if (CS%id_S2_init>0) diag_S2_init(:,:,:) = 0.0
+  if (CS%id_N2_mean>0) diag_N2_mean(:,:,:) = 0.0
+  if (CS%id_S2_mean>0) diag_S2_mean(:,:,:) = 0.0
+
   !$OMP parallel do default(private) shared(js,je,is,ie,nz,h,u_in,v_in,use_temperature,tv,G,GV,US, &
-  !$OMP                                     CS,kappa_io,dz_massless,k0dt,p_surf,dt,tke_io,kv_io)
+  !$OMP                                     CS,kappa_io,dz_massless,k0dt,p_surf,dt,tke_io,kv_io, &
+  !$OMP                                     diag_N2_init,diag_S2_init,diag_N2_mean,diag_S2_mean)
   do j=js,je
 
     ! Convert layer thicknesses into geometric thickness in height units.
@@ -282,7 +308,6 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
         nzc = nz
         do k=1,nzc+1 ; kc(k) = k ; kf(k) = 0.0 ; enddo
       endif
-
       f2 = 0.25 * ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
                    (G%Coriolis2Bu(I,J-1) + G%Coriolis2Bu(I-1,J)))
       surface_pres = 0.0 ; if (associated(p_surf)) surface_pres = p_surf(i,j)
@@ -295,7 +320,8 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               h_lay, dz_lay, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
-                              tke_avg, tv, CS, GV, US)
+                              tke_avg, N2_init, S2_init, N2_mean, S2_mean, &
+                              tv, CS, GV, US)
 
     ! call cpu_clock_begin(id_clock_setup)
     ! Extrapolate from the vertically reduced grid back to the original layers.
@@ -308,16 +334,43 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
             tke_2d(i,K) = tke_avg(K)
           endif
         enddo
+        if (CS%id_N2_mean>0) then ; do K=1,nz+1
+          diag_N2_mean(i,j,K) = N2_mean(K)
+        enddo ; endif
+        if (CS%id_S2_mean>0) then ; do K=1,nz+1
+          diag_S2_mean(i,j,K) = S2_mean(K)
+        enddo ; endif
+        if (CS%id_N2_init>0) then ; do K=1,nz+1
+          diag_N2_init(i,j,K) = N2_init(K)
+        enddo ; endif
+        if (CS%id_S2_init>0) then ; do K=1,nz+1
+          diag_S2_init(i,j,K) = S2_init(K)
+        enddo ; endif
       else
         do K=1,nz+1
           if (kf(K) == 0.0) then
             kappa_2d(i,K) = kappa_avg(kc(K))
             tke_2d(i,K) = tke_avg(kc(K))
           else
-            kappa_2d(i,K) = (1.0-kf(K)) * kappa_avg(kc(K)) + &
-                             kf(K) * kappa_avg(kc(K)+1)
-            tke_2d(i,K) = (1.0-kf(K)) * tke_avg(kc(K)) + &
-                           kf(K) * tke_avg(kc(K)+1)
+            kappa_2d(i,K) = (1.0-kf(K)) * kappa_avg(kc(K)) + kf(K) * kappa_avg(kc(K)+1)
+            tke_2d(i,K) = (1.0-kf(K)) * tke_avg(kc(K)) + kf(K) * tke_avg(kc(K)+1)
+          endif
+        enddo
+        do K=1,nz+1
+          if (kf(K) == 0.0) then
+            if (CS%id_N2_mean>0) diag_N2_mean(i,j,K) = N2_mean(kc(K))
+            if (CS%id_S2_mean>0) diag_S2_mean(i,j,K) = S2_mean(kc(K))
+            if (CS%id_N2_init>0) diag_N2_init(i,j,K) = N2_init(kc(K))
+            if (CS%id_S2_init>0) diag_S2_init(i,j,K) = S2_init(kc(K))
+          else
+            if (CS%id_N2_mean>0) &
+              diag_N2_mean(i,j,K) = (1.0-kf(K)) * N2_mean(kc(K)) + kf(K) * N2_mean(kc(K)+1)
+            if (CS%id_S2_mean>0) &
+              diag_S2_mean(i,j,K) = (1.0-kf(K)) * S2_mean(kc(K)) + kf(K) * S2_mean(kc(K)+1)
+            if (CS%id_N2_init>0) &
+              diag_N2_init(i,j,K) = (1.0-kf(K)) * N2_init(kc(K)) + kf(K) * N2_init(kc(K)+1)
+            if (CS%id_S2_init>0) &
+              diag_S2_init(i,j,K) = (1.0-kf(K)) * S2_init(kc(K)) + kf(K) * S2_init(kc(K)+1)
           endif
         enddo
       endif
@@ -332,6 +385,7 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
       kappa_io(i,j,K) = G%mask2dT(i,j) * kappa_2d(i,K)
       tke_io(i,j,K) = G%mask2dT(i,j) * tke_2d(i,K)
       kv_io(i,j,K) = ( G%mask2dT(i,j) * kappa_2d(i,K) ) * CS%Prandtl_turb
+
     enddo ; enddo
 
   enddo ! end of j-loop
@@ -343,6 +397,10 @@ subroutine Calculate_kappa_shear(u_in, v_in, h, tv, p_surf, kappa_io, tke_io, &
 
   if (CS%id_Kd_shear > 0) call post_data(CS%id_Kd_shear, kappa_io, CS%diag)
   if (CS%id_TKE > 0) call post_data(CS%id_TKE, tke_io, CS%diag)
+  if (CS%id_N2_init > 0) call post_data(CS%id_N2_init, diag_N2_init, CS%diag)
+  if (CS%id_S2_init > 0) call post_data(CS%id_S2_init, diag_S2_init, CS%diag)
+  if (CS%id_N2_mean > 0) call post_data(CS%id_N2_mean, diag_N2_mean, CS%diag)
+  if (CS%id_S2_mean > 0) call post_data(CS%id_S2_mean, diag_S2_mean, CS%diag)
 
 end subroutine Calculate_kappa_shear
 
@@ -385,15 +443,25 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                                                    !! call to kappa_shear_init.
 
   ! Local variables
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1) :: &
+    diag_N2_init, & ! Diagnostic of N2 as provided to this routine [T-2 ~> s-2]
+    diag_S2_init, & ! Diagnostic of S2 as provided to this routine [T-2 ~> s-2]
+    diag_N2_mean, & ! Diagnostic of N2 averaged over the timestep applied [T-2 ~> s-2]
+    diag_S2_mean    ! Diagnostic of S2 averaged over the timestep applied [T-2 ~> s-2]
+
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
-    dz_3d               ! Vertical distance between interface heights [Z ~> m].
+    dz_3d           ! Vertical distance between interface heights [Z ~> m].
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1) :: &
+    kappa_vertex    ! Diffusivity at interfaces and vertices [H Z T-1 ~> m2 s-1 or Pa s]
+  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1) :: &
+    h_vert          ! Thicknesses interpolated to vertices [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZIB_(G),SZK_(GV)) :: &
-    h_2d, &             ! A 2-D version of h [H ~> m or kg m-2].
+    h_2d, &             ! A 2-D version of h interpolated to vertices [H ~> m or kg m-2].
     dz_2d, &            ! Vertical distance between interface heights [Z ~> m].
     u_2d, v_2d, &       ! 2-D versions of u_in and v_in, converted to [L T-1 ~> m s-1].
     T_2d, S_2d, rho_2d  ! 2-D versions of T [C ~> degC], S [S ~> ppt], and rho [R ~> kg m-3].
-  real, dimension(SZIB_(G),SZK_(GV)+1,2) :: &
-    kappa_2d    ! Quasi 2-D versions of kappa_io [H Z T-1 ~> m2 s-1 or Pa s]
+  real, dimension(SZIB_(G),SZK_(GV)+1) :: &
+    kappa_2d    ! 2-D slice of kappa_vert [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZIB_(G),SZK_(GV)+1) :: &
     tke_2d      ! 2-D version tke_io [Z2 T-2 ~> m2 s-2].
   real, dimension(SZK_(GV)) :: &
@@ -408,14 +476,20 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
     kappa, &    ! The shear-driven diapycnal diffusivity at an interface [H Z T-1 ~> m2 s-1 or Pa s]
     tke, &      ! The Turbulent Kinetic Energy per unit mass at an interface [Z2 T-2 ~> m2 s-2].
     kappa_avg, & ! The time-weighted average of kappa [H Z T-1 ~> m2 s-1 or Pa s]
-    tke_avg     ! The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
+    tke_avg, &  ! The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
+    N2_init, &  ! N2 as provided to this routine [T-2 ~> s-2].
+    S2_init, &  ! S2 as provided to this routine [T-2 ~> s-2].
+    N2_mean, &  ! The time-weighted average of N2 [T-2 ~> s-2].
+    S2_mean     ! The time-weighted average of S2 [T-2 ~> s-2].
+
   real :: f2    ! The squared Coriolis parameter of each column [T-2 ~> s-2].
   real :: surface_pres  ! The top surface pressure [R L2 T-2 ~> Pa].
 
   real :: dz_in_lay     !   The running sum of the thickness in a layer [H ~> m or kg m-2]
   real :: k0dt          ! The background diffusivity times the timestep [H Z ~> m2 or kg m-1]
   real :: dz_massless   ! A layer thickness that is considered massless [H ~> m or kg m-2]
-  real :: I_hwt         ! The inverse of the masked thickness weights [H-1 ~> m-1 or m2 kg-1].
+  real :: I_hwt         ! The inverse of the sum of the adjacent masked thickness weights [H-1 ~> m-1 or m2 kg-1]
+  real :: I_htot        ! The inverse of the sum of the thicknesses at adjacent vertices [H-1 ~> m-1 or m2 kg-1]
   real :: I_Prandtl     ! The inverse of the turbulent Prandtl number [nondim].
   logical :: use_temperature  !  If true, temperature and salinity have been
                         ! allocated and are being used as state variables.
@@ -425,10 +499,20 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
                         ! merged into nearby massive layers.
   real, dimension(SZK_(GV)+1) :: kf ! The fractional weight of interface kc+1 for
                         ! interpolating back to the original index space [nondim].
-  integer :: IsB, IeB, JsB, JeB, i, j, k, nz, nzc, J2, J2m1
+  real :: h_SW, h_SE, h_NW, h_NE ! Thicknesses at adjacent vertices [H ~> m or kg m-2]
+  real :: mks_to_HZ_T   ! A factor used to restore dimensional scaling after the geomentric mean
+                        ! diffusivity is taken using thickness weighted powers [H Z s m-2 T-1 ~> 1]
+                        ! or [H Z m s kg-1 T-1 ~> 1]
+  integer :: IsB, IeB, JsB, JeB, i, j, k, nz, nzc
 
   ! Diagnostics that should be deleted?
   isB = G%isc-1 ; ieB = G%iecB ; jsB = G%jsc-1 ; jeB = G%jecB ; nz = GV%ke
+
+  if (CS%id_N2_init>0) diag_N2_init(:,:,:) = 0.0
+  if (CS%id_S2_init>0) diag_S2_init(:,:,:) = 0.0
+  if (CS%id_N2_mean>0) diag_N2_mean(:,:,:) = 0.0
+  if (CS%id_S2_mean>0) diag_S2_mean(:,:,:) = 0.0
+  kappa_vertex(:,:,:) = 0.0
 
   use_temperature = associated(tv%T)
 
@@ -439,10 +523,10 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   ! Convert layer thicknesses into geometric thickness in height units.
   call thickness_to_dz(h, tv, dz_3d, G, GV, US, halo_size=1)
 
-  !$OMP parallel do default(private) shared(jsB,jeB,isB,ieB,nz,h,u_in,v_in,use_temperature,tv,G,GV, &
-  !$OMP                                US,CS,kappa_io,dz_massless,k0dt,p_surf,dt,tke_io,kv_io,I_Prandtl)
+  !$OMP parallel do default(private) shared(jsB,jeB,isB,ieB,nz,h,u_in,v_in,use_temperature,tv,G,GV,US,CS,kappa_io, &
+  !$OMP                                     dz_massless,k0dt,p_surf,dt,tke_io,kv_io,kappa_vertex,h_vert,I_Prandtl, &
+  !$OMP                                     diag_N2_init,diag_S2_init,diag_N2_mean,diag_S2_mean)
   do J=JsB,JeB
-    J2 = mod(J,2)+1 ; J2m1 = 3-J2 ! = mod(J-1,2)+1
 
     ! Interpolate the various quantities to the corners, using masks.
     do k=1,nz ; do I=IsB,IeB
@@ -577,48 +661,143 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 
       call kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, &
                               h_lay, dz_lay, u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, &
-                              tke_avg, tv, CS, GV, US)
+                              tke_avg, N2_init, S2_init, N2_mean, S2_mean, tv, CS, GV, US)
     ! call cpu_clock_begin(Id_clock_setup)
     ! Extrapolate from the vertically reduced grid back to the original layers.
       if (nz == nzc) then
         do K=1,nz+1
-          kappa_2d(I,K,J2) = kappa_avg(K)
+          kappa_2d(I,K) = kappa_avg(K)
           if (CS%all_layer_TKE_bug) then
             tke_2d(i,K) = tke(K)
           else
             tke_2d(i,K) = tke_avg(K)
           endif
         enddo
+        if (CS%id_N2_mean>0) then ; do K=1,nz+1
+          diag_N2_mean(i,j,K) = N2_mean(K)
+        enddo ; endif
+        if (CS%id_S2_mean>0) then ; do K=1,nz+1
+          diag_S2_mean(i,j,K) = S2_mean(K)
+        enddo ; endif
+        if (CS%id_N2_init>0) then ; do K=1,nz+1
+          diag_N2_init(i,j,K) = N2_init(K)
+        enddo ; endif
+        if (CS%id_S2_init>0) then ; do K=1,nz+1
+          diag_S2_init(i,j,K) = S2_init(K)
+        enddo ; endif
       else
         do K=1,nz+1
           if (kf(K) == 0.0) then
-            kappa_2d(I,K,J2) = kappa_avg(kc(K))
+            kappa_2d(I,K) = kappa_avg(kc(K))
             tke_2d(I,K) = tke_avg(kc(K))
           else
-            kappa_2d(I,K,J2) = (1.0-kf(K)) * kappa_avg(kc(K)) + kf(K) * kappa_avg(kc(K)+1)
+            kappa_2d(I,K) = (1.0-kf(K)) * kappa_avg(kc(K)) + kf(K) * kappa_avg(kc(K)+1)
             tke_2d(I,K) = (1.0-kf(K)) * tke_avg(kc(K)) + kf(K) * tke_avg(kc(K)+1)
+          endif
+        enddo
+        do K=1,nz+1
+          if (kf(K) == 0.0) then
+            if (CS%id_N2_mean>0) diag_N2_mean(I,J,K) = N2_mean(kc(K))
+            if (CS%id_S2_mean>0) diag_S2_mean(I,J,K) = S2_mean(kc(K))
+            if (CS%id_N2_init>0) diag_N2_init(I,J,K) = N2_init(kc(K))
+            if (CS%id_S2_init>0) diag_S2_init(I,J,K) = S2_init(kc(K))
+          else
+            if (CS%id_N2_mean>0) &
+              diag_N2_mean(I,J,K) = (1.0-kf(K)) * N2_mean(kc(K)) + kf(K) * N2_mean(kc(K)+1)
+            if (CS%id_S2_mean>0) &
+              diag_S2_mean(I,J,K) = (1.0-kf(K)) * S2_mean(kc(K)) + kf(K) * S2_mean(kc(K)+1)
+            if (CS%id_N2_init>0) &
+              diag_N2_init(I,J,K) = (1.0-kf(K)) * N2_init(kc(K)) + kf(K) * N2_init(kc(K)+1)
+            if (CS%id_S2_init>0) &
+              diag_S2_init(I,J,K) = (1.0-kf(K)) * S2_init(kc(K)) + kf(K) * S2_init(kc(K)+1)
           endif
         enddo
       endif
     ! call cpu_clock_end(Id_clock_setup)
     else  ! Land points, still inside the i-loop.
       do K=1,nz+1
-        kappa_2d(I,K,J2) = 0.0 ; tke_2d(I,K) = 0.0
+        kappa_2d(I,K) = 0.0 ; tke_2d(I,K) = 0.0
       enddo
     endif ; enddo ! i-loop
 
-    do K=1,nz+1 ; do I=IsB,IeB
-      tke_io(I,J,K) = G%mask2dBu(I,J) * tke_2d(I,K)
-      kv_io(I,J,K) = ( G%mask2dBu(I,J) * kappa_2d(I,K,J2) ) * CS%Prandtl_turb
-    enddo ; enddo
-    if (J>=G%jsc) then ; do K=1,nz+1 ; do i=G%isc,G%iec
-      ! Set the diffusivities in tracer columns from the values at vertices.
-      kappa_io(i,j,K) = G%mask2dT(i,j) * 0.25 * &
-                        ((kappa_2d(I-1,K,J2m1) + kappa_2d(I,K,J2)) + &
-                         (kappa_2d(I-1,K,J2)   + kappa_2d(I,K,J2m1)))
-    enddo ; enddo ; endif
-
+    ! Store the 2-d slices back in the 3-d arrays for restarts or interpolation back to tracer points.
+    if (CS%VS_ThicknessMean) then
+      do K=1,nz+1 ; do I=IsB,IeB
+        h_vert(I,J,k) = h_2d(I,k)
+      enddo ; enddo
+    endif
+    if (CS%VS_viscosity_bug) then
+      do K=1,nz+1 ; do I=IsB,IeB
+        kappa_vertex(I,J,K) = kappa_2d(I,K)
+        tke_io(I,J,K) = G%mask2dBu(I,J) * tke_2d(I,K)
+        kv_io(I,J,K) = ( G%mask2dBu(I,J) * kappa_vertex(I,J,K) ) * CS%Prandtl_turb
+      enddo ; enddo
+    else
+      do K=1,nz+1 ; do I=IsB,IeB
+        kappa_vertex(I,J,K) = kappa_2d(I,K)
+        tke_io(I,J,K) = tke_2d(I,K)
+        kv_io(I,J,K) = kappa_vertex(I,J,K) * CS%Prandtl_turb
+      enddo ; enddo
+    endif
   enddo ! end of J-loop
+
+  ! Set the diffusivities in tracer columns from the values at vertices.
+
+  !$OMP parallel do default(private) shared(G,kappa_io)
+  do j=G%jsc,G%jec ; do i=G%isc,G%iec
+    ! The turbulent length scales (and hence turbulent diffusivity) should always go to 0 at the top and bottom.
+    kappa_io(i,j,1) = 0.0
+    kappa_io(i,j,nz+1) = 0.0
+  enddo ; enddo
+  if (CS%VS_ThicknessMean) then
+    ! This conversion factor is required to allow for aribtrary fracional powers of the diffusivities.
+    if (CS%VS_GeometricMean) mks_to_HZ_T = 1.0 /  GV%HZ_T_to_MKS
+    !$OMP parallel do default(private) shared(nz,G,GV,CS,kappa_io,kappa_vertex,h_vert)
+    do K=2,nz ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      h_SW = 0.5 * (h_vert(I-1,J-1,k) + h_vert(I-1,J-1,k-1))
+      h_NE = 0.5 * (h_vert(I,J,k) + h_vert(I,J,k-1))
+      h_NW = 0.5 * (h_vert(I-1,J,k) + h_vert(I-1,J,k-1))
+      h_SE = 0.5 * (h_vert(I,J-1,k) + h_vert(I,J-1,k-1))
+      if (CS%VS_GeometricMean) then
+        if ((h_SW + h_NE) + (h_NW + h_SE) > 0.0) then
+          !  The geometric mean is zero if any component is zero, hence the need to use a floor
+          !  on the value of kappa_trunc in regions on boundaries of shear zones.
+          I_htot = 1.0 / ((h_SW + h_NE) + (h_NW + h_SE))
+          kappa_io(i,j,K) = G%mask2dT(i,j) * mks_to_HZ_T * &
+                              ( ((GV%HZ_T_to_MKS * max(kappa_vertex(I-1,J-1,K),CS%VS_GeoMean_Kdmin))**(h_SW*I_htot) * &
+                                   (GV%HZ_T_to_MKS * max(kappa_vertex(I,J,K),CS%VS_GeoMean_Kdmin))**(h_NE*I_htot)) * &
+                                  ((GV%HZ_T_to_MKS * max(kappa_vertex(I-1,J,K),CS%VS_GeoMean_Kdmin))**(h_NW*I_htot) * &
+                                   (GV%HZ_T_to_MKS * max(kappa_vertex(I,J-1,K),CS%VS_GeoMean_Kdmin))**(h_SE*I_htot)) )
+        else
+          ! If all points have zero thickness, the thikncess-weighted geometric mean is undefined, so use
+          ! the non-thickness weighted geometric mean instead.
+          kappa_io(i,j,K) = G%mask2dT(i,j) * sqrt(sqrt( &
+                (max(kappa_vertex(I-1,J-1,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J,K),CS%VS_GeoMean_Kdmin)) * &
+                (max(kappa_vertex(I-1,J,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J-1,K),CS%VS_GeoMean_Kdmin)) ))
+        endif
+      else
+        ! The following expression is a thickness weighted arithmetic mean at tracer points:
+        I_htot = 1.0 / (((h_SW + h_NE) + (h_NW + h_SE)) + GV%H_subroundoff)
+        kappa_io(i,j,K) = G%mask2dT(i,j) * &
+              (((kappa_vertex(I-1,J-1,K)*h_SW) + (kappa_vertex(I,J,K)*h_NE)) + &
+               ((kappa_vertex(I-1,J,K)*h_NW) + (kappa_vertex(I,J-1,K)*h_SE))) * I_htot
+      endif
+    enddo ; enddo ; enddo
+  elseif (CS%VS_GeometricMean) then   ! The geometic mean diffusivities are not thickness weighted.
+    !$OMP parallel do default(private) shared(nz,G,CS,kappa_io,kappa_vertex)
+    do K=2,nz ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      kappa_io(i,j,K) = G%mask2dT(i,j) * sqrt(sqrt( &
+            (max(kappa_vertex(I-1,J-1,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J,K),CS%VS_GeoMean_Kdmin)) * &
+            (max(kappa_vertex(I-1,J,K),CS%VS_GeoMean_Kdmin) * max(kappa_vertex(I,J-1,K),CS%VS_GeoMean_Kdmin)) ))
+    enddo ; enddo ; enddo
+  else   ! Use a non-thickness weighted arithmetic mean.
+    !$OMP parallel do default(private) shared(nz,G,CS,kappa_io,kappa_vertex)
+    do K=2,nz ; do j=G%jsc,G%jec ; do i=G%isc,G%iec
+      kappa_io(i,j,K) = G%mask2dT(i,j) * 0.25 * &
+                       ((kappa_vertex(I-1,J-1,K) + kappa_vertex(I,J,K)) +&
+                        (kappa_vertex(I-1,J,K) + kappa_vertex(I,J-1,K)))
+    enddo ; enddo ; enddo
+  endif
 
   if (CS%debug) then
     call hchksum(kappa_io, "kappa", G%HI, unscale=GV%HZ_T_to_m2_s)
@@ -627,13 +806,19 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
 
   if (CS%id_Kd_shear > 0) call post_data(CS%id_Kd_shear, kappa_io, CS%diag)
   if (CS%id_TKE > 0) call post_data(CS%id_TKE, tke_io, CS%diag)
+  if (CS%id_Kd_vertex > 0) call post_data(CS%id_Kd_vertex, kappa_vertex, CS%diag)
+  if (CS%id_N2_init > 0) call post_data(CS%id_N2_init, diag_N2_init, CS%diag)
+  if (CS%id_S2_init > 0) call post_data(CS%id_S2_init, diag_S2_init, CS%diag)
+  if (CS%id_N2_mean > 0) call post_data(CS%id_N2_mean, diag_N2_mean, CS%diag)
+  if (CS%id_S2_mean > 0) call post_data(CS%id_S2_mean, diag_S2_mean, CS%diag)
 
 end subroutine Calc_kappa_shear_vertex
 
 
 !> This subroutine calculates shear-driven diffusivity and TKE in a single column
 subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_lay, &
-                              u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, tke_avg, tv, CS, GV, US)
+                              u0xdz, v0xdz, T0xdz, S0xdz, kappa_avg, tke_avg, N2_init, S2_init, &
+                              N2_mean, S2_mean, tv, CS, GV, US )
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZK_(GV)+1), &
                      intent(inout) :: kappa !< The time-weighted average of kappa [H Z T-1 ~> m2 s-1 or Pa s]
@@ -660,6 +845,14 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
                      intent(out)   :: kappa_avg !< The time-weighted average of kappa [H Z T-1 ~> m2 s-1 or Pa s]
   real, dimension(SZK_(GV)+1), &
                      intent(out)   :: tke_avg  !< The time-weighted average of TKE [Z2 T-2 ~> m2 s-2].
+  real, dimension(SZK_(GV)+1), &
+                     intent(out)   :: N2_mean  !< The time-weighted average of N2 [Z2 T-2 ~> m2 s-2].
+  real, dimension(SZK_(GV)+1), &
+                     intent(out)   :: S2_mean  !< The time-weighted average of S2 [Z2 T-2 ~> m2 s-2].
+  real, dimension(SZK_(GV)+1), &
+                     intent(out)   :: N2_init  !< The initial value of N2 [Z2 T-2 ~> m2 s-2].
+  real, dimension(SZK_(GV)+1), &
+                     intent(out)   :: S2_init  !< The initial value of S2 [Z2 T-2 ~> m2 s-2].
   real,                    intent(in)    :: dt !< Time increment [T ~> s].
   type(thermo_var_ptrs),   intent(in)    :: tv !< A structure containing pointers to any
                                                !! available thermodynamic fields. Absent fields
@@ -766,7 +959,7 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
 
   Ri_crit = CS%Rino_crit
   gR0 = GV%H_to_RZ * GV%g_Earth
-  g_R0 = (US%L_to_Z**2 * GV%g_Earth) / GV%Rho0
+  g_R0 = GV%g_Earth_Z_T2 / GV%Rho0
   k0dt = dt*CS%kappa_0
 
   I_lz_rescale_sqr = 1.0; if (CS%lz_rescale > 0) I_lz_rescale_sqr = 1/(CS%lz_rescale*CS%lz_rescale)
@@ -901,19 +1094,19 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
                                     tv%eqn_of_state, (/2,nzc/) )
       call calculate_density(T_int, Sal_int, pressure, rho_int, tv%eqn_of_state, (/2,nzc/) )
       do K=2,nzc
-        dbuoy_dT(K) = (US%L_to_Z**2 * GV%g_Earth) * (rho_int(K) * dSpV_dT(K))
-        dbuoy_dS(K) = (US%L_to_Z**2 * GV%g_Earth) * (rho_int(K) * dSpV_dS(K))
+        dbuoy_dT(K) = GV%g_Earth_Z_T2 * (rho_int(K) * dSpV_dT(K))
+        dbuoy_dS(K) = GV%g_Earth_Z_T2 * (rho_int(K) * dSpV_dS(K))
       enddo
     endif
   elseif (GV%Boussinesq .or. GV%semi_Boussinesq) then
     do K=1,nzc+1 ; dbuoy_dT(K) = -g_R0 ; dbuoy_dS(K) = 0.0 ; enddo
   else
     do K=1,nzc+1 ; dbuoy_dS(K) = 0.0 ; enddo
-    dbuoy_dT(1) = -(US%L_to_Z**2 * GV%g_Earth) / GV%Rlay(1)
+    dbuoy_dT(1) = -GV%g_Earth_Z_T2 / GV%Rlay(1)
     do K=2,nzc
-      dbuoy_dT(K) = -(US%L_to_Z**2 * GV%g_Earth) / (0.5*(GV%Rlay(k-1) + GV%Rlay(k)))
+      dbuoy_dT(K) = -GV%g_Earth_Z_T2 / (0.5*(GV%Rlay(k-1) + GV%Rlay(k)))
     enddo
-    dbuoy_dT(nzc+1) = -(US%L_to_Z**2 * GV%g_Earth) / GV%Rlay(nzc)
+    dbuoy_dT(nzc+1) = -GV%g_Earth_Z_T2 / GV%Rlay(nzc)
   endif
 
   ! N2_debug(1) = 0.0 ; N2_debug(nzc+1) = 0.0
@@ -926,13 +1119,19 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
   ! This call just calculates N2 and S2.
   call calculate_projected_state(kappa, u, v, T, Sal, 0.0, nzc, hlay, I_dz_int, dbuoy_dT, dbuoy_dS, &
                                  CS%vel_underflow, u, v, T, Sal, N2, S2, GV, US)
+  do K=1,nzc+1
+    N2_init(K) = N2(K)
+    S2_init(K) = S2(K)
+  enddo
+
+
 ! ----------------------------------------------------
 ! Iterate
 ! ----------------------------------------------------
   dt_rem = dt
   do K=1,nzc+1
     K_Q(K) = 0.0
-    kappa_avg(K) = 0.0 ; tke_avg(K) = 0.0
+    kappa_avg(K) = 0.0 ; tke_avg(K) = 0.0 ; N2_mean(K) = 0.0 ; S2_mean(K) = 0.0
     local_src_avg(K) = 0.0
     ! Use the grid spacings to scale errors in the source.
     if ( h_Int(K) > 0.0 ) &
@@ -1104,8 +1303,11 @@ subroutine kappa_shear_column(kappa, tke, dt, nzc, f2, surface_pres, hlay, dz_la
         kappa_mid(K) = 0.5*(kappa_out(K) + kappa_pred(K))
         kappa_avg(K) = kappa_avg(K) + kappa_mid(K)*dt_wt
         tke_avg(K) = tke_avg(K) + dt_wt*0.5*(tke_pred(K) + tke(K))
+        N2_mean(K) = N2_mean(K) + dt_wt*N2(K)
+        S2_mean(K) = S2_mean(K) + dt_wt*S2(K)
         kappa(K) = kappa_pred(K) ! First guess for the next iteration.
       enddo
+
     ! call cpu_clock_end(id_clock_avg)
     endif
 
@@ -1873,6 +2075,25 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, do the calculations of the shear-driven mixing "//&
                  "at the cell vertices (i.e., the vorticity points).", &
                  default=.false., do_not_log=just_read)
+  call get_param(param_file, mdl, "VERTEX_SHEAR_VISCOSITY_BUG", CS%VS_viscosity_bug, &
+                 "If true, use a bug in vertex shear that zeros out viscosities at "//&
+                 "vertices on coastlines.", &
+                 default=.true., do_not_log=just_read.or.(.not.CS%KS_at_vertex))
+  call get_param(param_file, mdl, "VERTEX_SHEAR_GEOMETRIC_MEAN", CS%VS_GeometricMean, &
+                 "If true, use a geometric mean for moving diffusivity from "//&
+                 "vertices to tracer points.  False uses algebraic mean.", &
+                 default=.false., do_not_log=just_read.or.(.not.CS%KS_at_vertex))
+  call get_param(param_file, mdl, "VERTEX_SHEAR_THICKNESS_MEAN", CS%VS_ThicknessMean, &
+                 "If true, apply thickness weighting to horizontal averagings of diffusivity "//&
+                 "to tracer points in the kappa shear solver.", &
+                 default=.false.)
+  if (CS%VS_GeometricMean) then
+    call get_param(param_file, mdl, "VERTEX_SHEAR_GEOMETRIC_MEAN_KDMIN", &
+                   CS%VS_GeoMean_Kdmin, "If using the geometric mean in vertex shear, "//&
+                   "use this minimum value for Kd. This is an ad-hoc parameter, the "//&
+                   "diffusivities on the edge of shear regions are sensitive to the choice.",&
+                   units="m2 s-1",default=0.0, scale=GV%m2_s_to_HZ_T, do_not_log=just_read)
+  endif
   call get_param(param_file, mdl, "RINO_CRIT", CS%RiNo_crit, &
                  "The critical Richardson number for shear mixing.", &
                  units="nondim", default=0.25, do_not_log=just_read)
@@ -1956,7 +2177,7 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  default=13, do_not_log=just_read)
   call get_param(param_file, mdl, "PRANDTL_TURB", CS%Prandtl_turb, &
                  "The turbulent Prandtl number applied to shear instability.", &
-                 units="nondim", default=1.0, do_not_log=.true.)
+                 units="nondim", default=1.0, do_not_log=just_read)
   call get_param(param_file, mdl, "VEL_UNDERFLOW", CS%vel_underflow, &
                  "A negligibly small velocity magnitude below which velocity components are set "//&
                  "to 0.  A reasonable value might be 1e-30 m/s, which is less than an "//&
@@ -2013,9 +2234,38 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   CS%diag => diag
 
   CS%id_Kd_shear = register_diag_field('ocean_model','Kd_shear', diag%axesTi, Time, &
-      'Shear-driven Diapycnal Diffusivity', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
-  CS%id_TKE = register_diag_field('ocean_model','TKE_shear', diag%axesTi, Time, &
-      'Shear-driven Turbulent Kinetic Energy', 'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
+      'Shear-driven Diapycnal Diffusivity at horizontal tracer points', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
+  if (CS%KS_at_vertex) then
+    CS%id_TKE = register_diag_field('ocean_model','TKE_shear', diag%axesBi, Time, &
+       'Shear-driven Turbulent Kinetic Energy at horizontal vertices', 'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
+    CS%id_Kd_vertex = register_diag_field('ocean_model','Kd_shear_vertex', diag%axesBi, Time, &
+         'Shear-driven Diapycnal Diffusivity at horizontal vertices', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)
+    CS%id_S2_init = register_diag_field('ocean_model','S2_shear_in', diag%axesBi, Time, &
+         'Interface shear squared at horizontal vertices, as input to kappa-shear', 's-2', conversion=US%s_to_T**2)
+    CS%id_N2_init = register_diag_field('ocean_model','N2_shear_in', diag%axesBi, Time, &
+         'Interface stratification at horizontal vertices, as input to kappa-shear', 's-2', conversion=US%s_to_T**2)
+    CS%id_S2_mean = register_diag_field('ocean_model','S2_shear_mean', diag%axesBi, Time, &
+         'Interface shear squared at horizontal vertices, averaged over timestep in kappa-shear', &
+         's-2', conversion=US%s_to_T**2)
+    CS%id_N2_mean = register_diag_field('ocean_model','N2_shear_mean', diag%axesBi, Time, &
+         'Interface stratification at horizontal vertices, averaged over timestep in kappa-shear', &
+         's-2', conversion=US%s_to_T**2)
+  else
+    CS%id_TKE = register_diag_field('ocean_model','TKE_shear', diag%axesTi, Time, &
+         'Shear-driven Turbulent Kinetic Energy at horizontal tracer points', &
+         'm2 s-2', conversion=US%Z_to_m**2*US%s_to_T**2)
+    CS%id_S2_init = register_diag_field('ocean_model','S2_shear_in', diag%axesTi, Time, &
+         'Interface shear squared at horizontal tracer points, as input to kappa-shear', 's-2', conversion=US%s_to_T**2)
+    CS%id_N2_init = register_diag_field('ocean_model','N2_shear_in', diag%axesTi, Time, &
+         'Interface stratification at horizontal tracer points, as input to kappa-shear', &
+         's-2', conversion=US%s_to_T**2)
+    CS%id_S2_mean = register_diag_field('ocean_model','S2_shear_mean', diag%axesTi, Time, &
+         'Interface shear squared at horizontal tracer points, averaged over timestep in kappa-shear', &
+         's-2', conversion=US%s_to_T**2)
+    CS%id_N2_mean = register_diag_field('ocean_model','N2_shear_mean', diag%axesTi, Time, &
+         'Interface stratification at horizontal tracer points, averaged ove timestep in kappa-shear', &
+         's-2', conversion=US%s_to_T**2)
+  endif
 
 end function kappa_shear_init
 

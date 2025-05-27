@@ -654,7 +654,7 @@ subroutine update_offline_from_files(G, GV, US, nk_input, mean_file, sum_file, s
 
   logical :: do_ale
   real    :: convert_to_H  ! A scale conversion factor from the thickness units in the
-                           ! file to H [H m-1 or H m2 kg-1 ~> 1]
+                           ! file to H [H m-1 ~> 1] or [H m2 kg-1 ~> 1]
   integer :: i, j, k, is, ie, js, je, nz
 
   do_ale = .false.

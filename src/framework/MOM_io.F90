@@ -555,10 +555,10 @@ subroutine create_MOM_file(IO_handle, filename, vars, novars, fields, &
     pack = 1
     if (present(checksums)) then
       fields(k) = IO_handle%register_field(axes(1:numaxes), vars(k)%name, vars(k)%units, &
-                          vars(k)%longname, pack=pack, checksum=checksums(k,:))
+                          vars(k)%longname, pack=pack, checksum=checksums(k,:), conversion=vars(k)%conversion)
     else
       fields(k) = IO_handle%register_field(axes(1:numaxes), vars(k)%name, vars(k)%units, &
-                          vars(k)%longname, pack=pack)
+                          vars(k)%longname, pack=pack, conversion=vars(k)%conversion)
     endif
   enddo
 
@@ -1880,6 +1880,8 @@ subroutine modify_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
   if (present(cmor_longname))   call safe_string_copy(cmor_longname, vd%cmor_longname, &
                                      "vd%cmor_longname of "//trim(vd%name), cllr)
 
+  if (present(conversion)) vd%conversion = conversion
+
   if (present(dim_names)) then
     do n=1,min(5,size(dim_names)) ; if (len_trim(dim_names(n)) > 0) then
       call safe_string_copy(dim_names(n), vd%dim_names(n), "vd%dim_names of "//trim(vd%name), cllr)
@@ -2084,6 +2086,9 @@ subroutine query_vardesc(vd, name, units, longname, hor_grid, z_grid, t_grid, &
                                      "vd%cmor_units of "//trim(vd%name), cllr)
   if (present(cmor_longname))   call safe_string_copy(vd%cmor_longname, cmor_longname, &
                                      "vd%cmor_longname of "//trim(vd%name), cllr)
+
+  if (present(conversion)) conversion = vd%conversion
+
   if (present(position)) then
     position = vd%position
     if (position == -1) position = position_from_horgrid(vd%hor_grid)
@@ -2126,9 +2131,8 @@ subroutine MOM_read_data_0d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                   !! as 4d arrays in the file.
 
   call read_field(filename, fieldname, data, &
-    timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
-    global_file=global_file, file_may_be_4d=file_may_be_4d &
-  )
+                  timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
+                  global_file=global_file, file_may_be_4d=file_may_be_4d)
 end subroutine MOM_read_data_0d
 
 
@@ -2159,9 +2163,9 @@ subroutine MOM_read_data_1d(filename, fieldname, data, timelevel, scale, MOM_Dom
                                                   !! as 4d arrays in the file.
 
   call read_field(filename, fieldname, data, &
-    timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
-    global_file=global_file, file_may_be_4d=file_may_be_4d &
-  )
+                  timelevel=timelevel, scale=scale, MOM_Domain=MOM_Domain, &
+                  global_file=global_file, file_may_be_4d=file_may_be_4d)
+
 end subroutine MOM_read_data_1d
 
 
@@ -2177,12 +2181,13 @@ end subroutine MOM_read_data_1d_int
 
 
 !> Read a 2d array from file using infrastructure I/O.
-subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file, file_may_be_4d)
+subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, timelevel, position, &
+                            scale, global_file, file_may_be_4d, turns)
   character(len=*), intent(in)  :: filename  !< Input filename
   character(len=*), intent(in)  :: fieldname !< Field variable name
   real, dimension(:,:), intent(inout) :: data   !< Field value in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain !< Model domain decomposition
   integer, optional, intent(in) :: timelevel !< Time level to read in file
   integer, optional, intent(in) :: position  !< Grid positioning flag
   real, optional, intent(in)    :: scale     !< A scaling factor that the variable is multiplied by
@@ -2191,31 +2196,39 @@ subroutine MOM_read_data_2d(filename, fieldname, data, MOM_Domain, &
   logical, optional, intent(in) :: global_file    !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns    ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns   ! Number of quarter-turns from input to model grid
   real, allocatable :: data_in(:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_field(filename, fieldname, data, MOM_Domain, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
   else
-    call allocate_rotated_array(data, [1,1], -turns, data_in)
-    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
-    call rotate_array(data_in, turns, data)
+    call allocate_rotated_array(data, [1,1], -qturns, data_in)
+    call rotate_array(data, -qturns, data_in)
+    call read_field(filename, fieldname, data_in, domain_ptr, &
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
+    call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
+
 end subroutine MOM_read_data_2d
 
 
 !> Read a 2d array (which might have halos) from a file using native netCDF I/O.
 subroutine read_netCDF_data_2d(filename, fieldname, values, MOM_Domain, &
-                            timelevel, position, rescale)
+                            timelevel, position, rescale, turns)
   character(len=*), intent(in) :: filename
     !< Input filename
   character(len=*), intent(in)  :: fieldname
@@ -2231,8 +2244,11 @@ subroutine read_netCDF_data_2d(filename, fieldname, values, MOM_Domain, &
     !< Grid positioning flag
   real, optional, intent(in) :: rescale
     !< Rescale factor, omitting this is the same as setting it to 1.
+  integer, optional, intent(in) :: turns
+    !< Number of quarter-turns to rotate the data.  If absent the number of turns is taken
+    !! from MOM_Domain.
 
-  integer :: turns
+  integer :: qturns
     ! Number of quarter-turns from input to model grid
   real, allocatable :: values_in(:,:)
     ! Field array on the unrotated input grid
@@ -2253,13 +2269,15 @@ subroutine read_netCDF_data_2d(filename, fieldname, values, MOM_Domain, &
   call handle%open(filename, action=READONLY_FILE, MOM_domain=MOM_domain)
   call handle%update()
 
-  turns = MOM_domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  if (qturns == 0) then
     call handle%read(fieldname, values, rescale=rescale)
   else
-    call allocate_rotated_array(values, [1,1], -turns, values_in)
+    call allocate_rotated_array(values, [1,1], -qturns, values_in)
+    call rotate_array(values, -qturns, values_in)
     call handle%read(fieldname, values_in, rescale=rescale)
-    call rotate_array(values_in, turns, values)
+    call rotate_array(values_in, qturns, values)
     deallocate(values_in)
   endif
 
@@ -2294,13 +2312,17 @@ subroutine MOM_read_data_2d_region(filename, fieldname, data, start, nread, MOM_
 
   if (qturns == 0) then
     call read_field(filename, fieldname, data, start, nread, &
-      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
-    )
+                    MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
   else
     call allocate_rotated_array(data, [1,1], -qturns, data_in)
-    call read_field(filename, fieldname, data_in, start, nread, &
-      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale &
-    )
+    call rotate_array(data, -qturns, data_in)
+    if (associated(MOM_Domain%domain_in)) then
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale)
+    else
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
+    endif
     call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
@@ -2308,12 +2330,13 @@ end subroutine MOM_read_data_2d_region
 
 
 !> Read a 3d array from file using infrastructure I/O.
-subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file, file_may_be_4d)
+subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, timelevel, position, &
+                            scale, global_file, file_may_be_4d, turns)
   character(len=*), intent(in)  :: filename     !< Input filename
   character(len=*), intent(in)  :: fieldname    !< Field variable name
   real, dimension(:,:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
   real, optional, intent(in)    :: scale        !< A scaling factor that the variable is multiplied by
@@ -2322,25 +2345,32 @@ subroutine MOM_read_data_3d(filename, fieldname, data, MOM_Domain, &
   logical, optional, intent(in) :: global_file  !< If true, read from a single file
   logical, optional, intent(in) :: file_may_be_4d !< If true, fields may be stored
                                                   !! as 4d arrays in the file.
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns    ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns   ! Number of quarter-turns from input to model grid
   real, allocatable :: data_in(:,:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_domain%turns
-  if (turns == 0) then
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+  if (qturns == 0) then
     call read_field(filename, fieldname, data, MOM_Domain, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
   else
-    call allocate_rotated_array(data, [1,1,1], -turns, data_in)
-    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file, file_may_be_4d=file_may_be_4d &
-    )
-    call rotate_array(data_in, turns, data)
+    call allocate_rotated_array(data, [1,1,1], -qturns, data_in)
+    call rotate_array(data, -qturns, data_in)
+    call read_field(filename, fieldname, data_in, domain_ptr, &
+                    timelevel=timelevel, position=position, scale=scale, &
+                    global_file=global_file, file_may_be_4d=file_may_be_4d)
+    call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
+
 end subroutine MOM_read_data_3d
 
 !> Read a 3d region array from file using infrastructure I/O.
@@ -2368,13 +2398,17 @@ subroutine MOM_read_data_3d_region(filename, fieldname, data, start, nread, MOM_
 
   if (qturns == 0) then
     call read_field(filename, fieldname, data, start, nread, &
-      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale &
-    )
+                    MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
   else
     call allocate_rotated_array(data, [1,1,1], -qturns, data_in)
-    call read_field(filename, fieldname, data_in, start, nread, &
-      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale &
-    )
+    call rotate_array(data, -qturns, data_in)
+    if (associated(MOM_Domain%domain_in)) then
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain%domain_in, no_domain=no_domain, scale=scale)
+    else
+      call read_field(filename, fieldname, data_in, start, nread, &
+                      MOM_Domain=MOM_Domain, no_domain=no_domain, scale=scale)
+    endif
     call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
@@ -2382,129 +2416,162 @@ end subroutine MOM_read_data_3d_region
 
 !> Read a 4d array from file using infrastructure I/O.
 subroutine MOM_read_data_4d(filename, fieldname, data, MOM_Domain, &
-                            timelevel, position, scale, global_file)
+                            timelevel, position, scale, global_file, turns)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: fieldname     !< Field variable name
   real, dimension(:,:,:,:), intent(inout) :: data !< Field value in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: position     !< Grid positioning flag
-  real, optional, intent(in)    :: scale        !< A scaling factor that the variable is multiplied by
+  real,    optional, intent(in) :: scale        !< A scaling factor that the variable is multiplied by
                                                 !! before it is returned to convert from the units in the file
                                                 !! to the internal units for this variable [A a-1 ~> 1]
   logical, optional, intent(in) :: global_file  !< If true, read from a single file
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns    ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns   ! Number of quarter-turns from input to model grid
   real, allocatable :: data_in(:,:,:,:)  ! Field array on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_domain%turns
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
 
-  if (turns == 0) then
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_field(filename, fieldname, data, MOM_Domain, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file &
-    )
+        timelevel=timelevel, position=position, scale=scale, &
+        global_file=global_file)
   else
     ! Read field along the input grid and rotate to the model grid
-    call allocate_rotated_array(data, [1,1,1,1], -turns, data_in)
-    call read_field(filename, fieldname, data_in, MOM_Domain%domain_in, &
-      timelevel=timelevel, position=position, scale=scale, &
-      global_file=global_file &
-    )
-    call rotate_array(data_in, turns, data)
+    call allocate_rotated_array(data, [1,1,1,1], -qturns, data_in)
+    call rotate_array(data, -qturns, data_in)
+    call read_field(filename, fieldname, data_in, domain_ptr, timelevel=timelevel, &
+                    position=position, scale=scale, global_file=global_file)
+    call rotate_array(data_in, qturns, data)
     deallocate(data_in)
   endif
+
 end subroutine MOM_read_data_4d
 
 
 !> Read a 2d vector tuple from file using infrastructure I/O.
 subroutine MOM_read_vector_2d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+                              timelevel, stagger, scalar_pair, scale, turns)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
   real, dimension(:,:), intent(inout) :: u_data !< Field value at u points in arbitrary units [A ~> a]
   real, dimension(:,:), intent(inout) :: v_data !< Field value at v points in arbitrary units  [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
   logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
-  real, optional, intent(in) :: scale           !< A scaling factor that the vector is multiplied by
+  real,    optional, intent(in) :: scale        !< A scaling factor that the vector is multiplied by
                                                 !! before it is returned to convert from the units in the file
                                                 !! to the internal units for this variable [A a-1 ~> 1]
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns  ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns ! Number of quarter-turns from input to model grid
   real, allocatable :: u_data_in(:,:), v_data_in(:,:)   ! [uv] on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_Domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_vector(filename, u_fieldname, v_fieldname, &
-        u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
-        scalar_pair=scalar_pair, scale=scale &
-    )
+                     u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
+                     scalar_pair=scalar_pair, scale=scale)
   else
-    call allocate_rotated_array(u_data, [1,1], -turns, u_data_in)
-    call allocate_rotated_array(v_data, [1,1], -turns, v_data_in)
-    call read_vector(filename, u_fieldname, v_fieldname, &
-      u_data_in, v_data_in, MOM_domain%domain_in, timelevel=timelevel, &
-        stagger=stagger, scalar_pair=scalar_pair, scale=scale &
-    )
+    call allocate_rotated_array(u_data, [1,1], -qturns, u_data_in)
+    call allocate_rotated_array(v_data, [1,1], -qturns, v_data_in)
     if (scalar_pair) then
-      call rotate_array_pair(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_array_pair(u_data, v_data, -qturns, u_data_in, v_data_in)
     else
-      call rotate_vector(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_vector(u_data, v_data, -qturns, u_data_in, v_data_in)
+    endif
+    call read_vector(filename, u_fieldname, v_fieldname, u_data_in, v_data_in, &
+                     domain_ptr, timelevel=timelevel, &
+                     stagger=stagger, scalar_pair=scalar_pair, scale=scale)
+    if (scalar_pair) then
+      call rotate_array_pair(u_data_in, v_data_in, qturns, u_data, v_data)
+    else
+      call rotate_vector(u_data_in, v_data_in, qturns, u_data, v_data)
     endif
     deallocate(v_data_in)
     deallocate(u_data_in)
   endif
+
 end subroutine MOM_read_vector_2d
 
 
 !> Read a 3d vector tuple from file using infrastructure I/O.
 subroutine MOM_read_vector_3d(filename, u_fieldname, v_fieldname, u_data, v_data, MOM_Domain, &
-                              timelevel, stagger, scalar_pair, scale)
+                              timelevel, stagger, scalar_pair, scale, turns)
   character(len=*), intent(in) :: filename      !< Input filename
   character(len=*), intent(in) :: u_fieldname   !< Field variable name in u
   character(len=*), intent(in) :: v_fieldname   !< Field variable name in v
   real, dimension(:,:,:), intent(inout) :: u_data !< Field value in u in arbitrary units [A ~> a]
   real, dimension(:,:,:), intent(inout) :: v_data !< Field value in v in arbitrary units [A ~> a]
-  type(MOM_domain_type), intent(in) :: MOM_Domain !< Model domain decomposition
+  type(MOM_domain_type), target, &
+                     intent(in) :: MOM_Domain   !< Model domain decomposition
   integer, optional, intent(in) :: timelevel    !< Time level to read in file
   integer, optional, intent(in) :: stagger      !< Grid staggering flag
   logical, optional, intent(in) :: scalar_pair  !< True if tuple is not a vector
-  real, optional, intent(in) :: scale           !< A scaling factor that the vector is multiplied by
+  real,    optional, intent(in) :: scale        !< A scaling factor that the vector is multiplied by
                                                 !! before it is returned to convert from the units in the file
                                                 !! to the internal units for this variable [A a-1 ~> 1]
+  integer, optional, intent(in) :: turns        !< Number of quarter-turns to rotate the data.  If absent
+                                                !! the number of turns is taken from MOM_Domain.
 
-  integer :: turns  ! Number of quarter-turns from input to model grid
+  ! Local variables
+  integer :: qturns ! Number of quarter-turns from input to model grid
   real, allocatable :: u_data_in(:,:,:), v_data_in(:,:,:) ! [uv] on the input grid in arbitrary units [A ~> a]
+  type(MOM_domain_type), pointer :: domain_ptr => NULL()  ! Pointer to the unrotated domain for reading
 
-  turns = MOM_Domain%turns
-  if (turns == 0) then
+  qturns = MOM_domain%turns ; if (present(turns)) qturns = modulo(turns, 4)
+
+  domain_ptr => MOM_Domain
+  if (associated(MOM_Domain%domain_in) .and. (qturns /= 0)) domain_ptr => MOM_Domain%domain_in
+
+  if (qturns == 0) then
     call read_vector(filename, u_fieldname, v_fieldname, &
-        u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
-        scalar_pair=scalar_pair, scale=scale &
-    )
+                     u_data, v_data, MOM_domain, timelevel=timelevel, stagger=stagger, &
+                     scalar_pair=scalar_pair, scale=scale)
   else
-    call allocate_rotated_array(u_data, [1,1,1], -turns, u_data_in)
-    call allocate_rotated_array(v_data, [1,1,1], -turns, v_data_in)
-    call read_vector(filename, u_fieldname, v_fieldname, &
-        u_data_in, v_data_in, MOM_domain%domain_in, timelevel=timelevel, &
-        stagger=stagger, scalar_pair=scalar_pair, scale=scale &
-    )
+    call allocate_rotated_array(u_data, [1,1,1], -qturns, u_data_in)
+    call allocate_rotated_array(v_data, [1,1,1], -qturns, v_data_in)
     if (scalar_pair) then
-      call rotate_array_pair(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_array_pair(u_data, v_data, -qturns, u_data_in, v_data_in)
     else
-      call rotate_vector(u_data_in, v_data_in, turns, u_data, v_data)
+      call rotate_vector(u_data, v_data, -qturns, u_data_in, v_data_in)
+    endif
+    call read_vector(filename, u_fieldname, v_fieldname, u_data_in, v_data_in, &
+                     domain_ptr, timelevel=timelevel, &
+                     stagger=stagger, scalar_pair=scalar_pair, scale=scale)
+    if (scalar_pair) then
+      call rotate_array_pair(u_data_in, v_data_in, qturns, u_data, v_data)
+    else
+      call rotate_vector(u_data_in, v_data_in, qturns, u_data, v_data)
     endif
     deallocate(v_data_in)
     deallocate(u_data_in)
   endif
+
 end subroutine MOM_read_vector_3d
 
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   type(file_type),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2521,6 +2588,8 @@ subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tst
                                                         !! from its internal units to the desired units for output.
                                                         !! Here scale and unscale are synonymous, but unscale
                                                         !! takes precedence if both are present.
+  logical,        optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                        !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units [a] or
@@ -2532,13 +2601,13 @@ subroutine MOM_write_field_legacy_4d(IO_handle, field_md, MOM_domain, field, tst
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2548,7 +2617,7 @@ end subroutine MOM_write_field_legacy_4d
 
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2565,6 +2634,8 @@ subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tst
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units [a] or
@@ -2576,13 +2647,13 @@ subroutine MOM_write_field_legacy_3d(IO_handle, field_md, MOM_domain, field, tst
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2592,7 +2663,7 @@ end subroutine MOM_write_field_legacy_3d
 
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2609,6 +2680,8 @@ subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tst
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units [a] or
@@ -2620,13 +2693,13 @@ subroutine MOM_write_field_legacy_2d(IO_handle, field_md, MOM_domain, field, tst
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call write_field(IO_handle, field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call write_field(IO_handle, field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2635,7 +2708,7 @@ end subroutine MOM_write_field_legacy_2d
 
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2649,22 +2722,30 @@ subroutine MOM_write_field_legacy_1d(IO_handle, field_md, field, tstamp, fill_va
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, dimension(:), allocatable :: array ! A rescaled copy of field [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
+  logical :: design_zeros ! If true, convert negative zeros into ordinary signless zeros.
   integer :: i
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if (scale_fac == 1.0) then
+  design_zeros = .false. ; if (present(zero_zeros)) design_zeros = zero_zeros
+
+  if ((scale_fac == 1.0) .and. (.not.design_zeros)) then
     call write_field(IO_handle, field_md, field, tstamp=tstamp)
   else
     allocate(array(size(field)))
     array(:) = scale_fac * field(:)
     if (present(fill_value)) then
       do i=1,size(field) ; if (field(i) == fill_value) array(i) = fill_value ; enddo
+    endif
+    if (design_zeros) then ! Convert negative zeros into zeros
+      do i=1,size(field) ; if (array(i) == 0.0) array(i) = 0.0 ; enddo
     endif
     call write_field(IO_handle, field_md, array, tstamp=tstamp)
     deallocate(array)
@@ -2673,7 +2754,7 @@ end subroutine MOM_write_field_legacy_1d
 
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   type(file_type),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(fieldtype),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2687,6 +2768,8 @@ subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_va
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real :: scale_fac  ! A scaling factor to use before writing the field [a A-1 ~> 1]
@@ -2698,6 +2781,7 @@ subroutine MOM_write_field_legacy_0d(IO_handle, field_md, field, tstamp, fill_va
   scaled_val = field * scale_fac
 
   if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
+  if (present(zero_zeros)) then ; if (zero_zeros .and. (scaled_val == 0.0)) scaled_val = 0.0 ; endif
 
   call write_field(IO_handle, field_md, scaled_val, tstamp=tstamp)
 end subroutine MOM_write_field_legacy_0d
@@ -2705,7 +2789,7 @@ end subroutine MOM_write_field_legacy_0d
 
 !> Write a 4d field to an output file, potentially with rotation
 subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   class(MOM_file),          intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),          intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),    intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2722,6 +2806,8 @@ subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, ti
                                                         !! from its internal units to the desired units for output.
                                                         !! Here scale and unscale are synonymous, but unscale
                                                         !! takes precedence if both are present.
+  logical,        optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                        !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:,:)  ! A rotated version of field, with the same units or rescaled [a]
@@ -2732,13 +2818,13 @@ subroutine MOM_write_field_4d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call IO_handle%write_field(field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2747,7 +2833,7 @@ end subroutine MOM_write_field_4d
 
 !> Write a 3d field to an output file, potentially with rotation
 subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2764,6 +2850,8 @@ subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, ti
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:,:)  ! A rotated version of field, with the same units or rescaled [a]
@@ -2774,13 +2862,13 @@ subroutine MOM_write_field_3d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call IO_handle%write_field(field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2789,7 +2877,7 @@ end subroutine MOM_write_field_3d
 
 !> Write a 2d field to an output file, potentially with rotation
 subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, tile_count, &
-                              fill_value, turns, scale, unscale)
+                              fill_value, turns, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   type(MOM_domain_type),  intent(in)    :: MOM_domain !< The MOM_Domain that describes the decomposition
@@ -2806,6 +2894,8 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, allocatable :: field_rot(:,:)  ! A rotated version of field, with the same units or rescaled [a]
@@ -2816,13 +2906,13 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if ((qturns == 0) .and. (scale_fac == 1.0)) then
+  if ((qturns == 0) .and. (scale_fac == 1.0) .and. .not.present(zero_zeros)) then
     call IO_handle%write_field(field_md, MOM_domain, field, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
   else
     call allocate_rotated_array(field, [1,1], qturns, field_rot)
     call rotate_array(field, qturns, field_rot)
-    if (scale_fac /= 1.0) call rescale_comp_data(MOM_Domain, field_rot, scale_fac)
+    call rescale_comp_data(MOM_Domain, field_rot, scale_fac, zero_zeros)
     call IO_handle%write_field(field_md, MOM_domain, field_rot, tstamp=tstamp, &
                          tile_count=tile_count, fill_value=fill_value)
     deallocate(field_rot)
@@ -2830,7 +2920,7 @@ subroutine MOM_write_field_2d(IO_handle, field_md, MOM_domain, field, tstamp, ti
 end subroutine MOM_write_field_2d
 
 !> Write a 1d field to an output file
-subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   real, dimension(:),     intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2844,16 +2934,21 @@ subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, sc
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real, dimension(:), allocatable :: array ! A rescaled copy of field in arbtrary unscaled units [a]
   real :: scale_fac ! A scaling factor to use before writing the array [a A-1 ~> 1]
+  logical :: design_zeros ! If true, convert negative zeros into ordinary signless zeros.
   integer :: i
 
   scale_fac = 1.0 ; if (present(scale)) scale_fac = scale
   if (present(unscale)) scale_fac = unscale
 
-  if (scale_fac == 1.0) then
+  design_zeros = .false. ; if (present(zero_zeros)) design_zeros = zero_zeros
+
+  if ((scale_fac == 1.0) .and. (.not.design_zeros)) then
     call IO_handle%write_field(field_md, field, tstamp=tstamp)
   else
     allocate(array(size(field)))
@@ -2861,13 +2956,16 @@ subroutine MOM_write_field_1d(IO_handle, field_md, field, tstamp, fill_value, sc
     if (present(fill_value)) then
       do i=1,size(field) ; if (field(i) == fill_value) array(i) = fill_value ; enddo
     endif
+    if (design_zeros) then ! Convert negative zeros into zeros
+      do i=1,size(field) ; if (array(i) == 0.0) array(i) = 0.0 ; enddo
+    endif
     call IO_handle%write_field(field_md, array, tstamp=tstamp)
     deallocate(array)
   endif
 end subroutine MOM_write_field_1d
 
 !> Write a 0d field to an output file
-subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale)
+subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, scale, unscale, zero_zeros)
   class(MOM_file),        intent(inout) :: IO_handle  !< Handle for a file that is open for writing
   type(MOM_field),        intent(in)    :: field_md   !< Field type with metadata
   real,                   intent(in)    :: field      !< Field to write in arbitrary units [A ~> a]
@@ -2881,6 +2979,8 @@ subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, sc
                                                       !! from its internal units to the desired units for output.
                                                       !! Here scale and unscale are synonymous, but unscale
                                                       !! takes precedence if both are present.
+  logical,      optional, intent(in)    :: zero_zeros !< If present and true, convert negative zeros
+                                                      !! into ordinary signless zeros.
 
   ! Local variables
   real :: scale_fac  ! A scaling factor to use before writing the field [a A-1 ~> 1]
@@ -2892,6 +2992,7 @@ subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, sc
   scaled_val = field * scale_fac
 
   if (present(fill_value)) then ; if (field == fill_value) scaled_val = fill_value ; endif
+  if (present(zero_zeros)) then ; if (zero_zeros .and. (scaled_val == 0.0)) scaled_val = 0.0 ; endif
 
   call IO_handle%write_field(field_md, scaled_val, tstamp=tstamp)
 end subroutine MOM_write_field_0d
