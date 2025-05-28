@@ -1757,7 +1757,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         if (k>1)    Kd_leak(i,K) = 0.5*Kd_leak_lay(k-1)
         if (k<nz+1) Kd_leak(i,K) = Kd_leak(i,K) + 0.5*Kd_leak_lay(k)
         ! add to Kd_int
-        if (CS%update_Kd) Kd_int(i,K) = min(Kd_int(i,K) + Kd_leak(i,K), Kd_max)
+        if (CS%update_Kd) Kd_int(i,K) = Kd_int(i,K) + min(Kd_leak(i,K), Kd_max)
       enddo
     endif
 
@@ -1766,7 +1766,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         if (k>1)    Kd_itidal(i,K) = 0.5*Kd_itidal_lay(k-1)
         if (k<nz+1) Kd_itidal(i,K) = Kd_itidal(i,K) + 0.5*Kd_itidal_lay(k)
         ! add to Kd_int
-        if (CS%update_Kd) Kd_int(i,K) = min(Kd_int(i,K) + Kd_itidal(i,K), Kd_max)
+        if (CS%update_Kd) Kd_int(i,K) = Kd_int(i,K) + min(Kd_itidal(i,K), Kd_max)
       enddo
     endif
 
@@ -1775,7 +1775,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         if (k>1)    Kd_Froude(i,K) = 0.5*Kd_Froude_lay(k-1)
         if (k<nz+1) Kd_Froude(i,K) = Kd_Froude(i,K) + 0.5*Kd_Froude_lay(k)
         ! add to Kd_int
-        if (CS%update_Kd) Kd_int(i,K) = min(Kd_int(i,K) + Kd_Froude(i,K), Kd_max)
+        if (CS%update_Kd) Kd_int(i,K) = Kd_int(i,K) + min(Kd_Froude(i,K), Kd_max)
       enddo
     endif
 
@@ -1784,7 +1784,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         if (k>1)    Kd_slope(i,K) = 0.5*Kd_slope_lay(k-1)
         if (k<nz+1) Kd_slope(i,K) = Kd_slope(i,K) + 0.5*Kd_slope_lay(k)
         ! add to Kd_int
-        if (CS%update_Kd) Kd_int(i,K) = min(Kd_int(i,K) + Kd_slope(i,K), Kd_max)
+        if (CS%update_Kd) Kd_int(i,K) = Kd_int(i,K) + min(Kd_slope(i,K), Kd_max)
       enddo
     endif
 
@@ -1793,7 +1793,7 @@ subroutine get_lowmode_diffusivity(G, GV, h, tv, US, h_bot, k_bot, j, N2_lay, N2
         if (k>1)    Kd_quad(i,K) = 0.5*Kd_quad_lay(k-1)
         if (k<nz+1) Kd_quad(i,K) = Kd_quad(i,K) + 0.5*Kd_quad_lay(k)
         ! add to Kd_int
-        if (CS%update_Kd) Kd_int(i,K) = min(Kd_int(i,K) + Kd_quad(i,K), Kd_max)
+        if (CS%update_Kd) Kd_int(i,K) = Kd_int(i,K) + min(Kd_quad(i,K), Kd_max)
       enddo
     endif
   enddo ! i-loop

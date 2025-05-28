@@ -631,19 +631,19 @@ subroutine set_diffusivity(u, v, h, u_h, v_h, tv, fluxes, optics, visc, dt, Kd_i
         dd%Kd_slope(i,j,K) = Kd_slope_2d(i,K)
       enddo ; enddo ; endif
       if (associated (VBF%Kd_leak)) then ; do K=1,nz+1 ; do i=is,ie
-        VBF%Kd_leak(i,j,K) = Kd_leak_2d(i,K)
+        VBF%Kd_leak(i,j,K) = min(Kd_leak_2d(i,K), CS%Kd_max)
       enddo ; enddo ; endif
       if (associated (VBF%Kd_quad)) then ; do K=1,nz+1 ; do i=is,ie
-        VBF%Kd_quad(i,j,K) = Kd_quad_2d(i,K)
+        VBF%Kd_quad(i,j,K) = min(Kd_quad_2d(i,K), CS%Kd_max)
       enddo ; enddo ; endif
       if (associated (VBF%Kd_itidal)) then ; do K=1,nz+1 ; do i=is,ie
-        VBF%Kd_itidal(i,j,K) = Kd_itidal_2d(i,K)
+        VBF%Kd_itidal(i,j,K) = min(Kd_itidal_2d(i,K), CS%Kd_max)
       enddo ; enddo ; endif
       if (associated (VBF%Kd_Froude)) then ; do K=1,nz+1 ; do i=is,ie
-        VBF%Kd_Froude(i,j,K) = Kd_Froude_2d(i,K)
+        VBF%Kd_Froude(i,j,K) = min(Kd_Froude_2d(i,K), CS%Kd_max)
       enddo ; enddo ; endif
       if (associated (VBF%Kd_slope)) then ; do K=1,nz+1 ; do i=is,ie
-        VBF%Kd_slope(i,j,K) = Kd_slope_2d(i,K)
+        VBF%Kd_slope(i,j,K) = min(Kd_slope_2d(i,K), CS%Kd_max)
       enddo ; enddo ; endif
 
       if (CS%id_prof_leak > 0) then ; do k=1,nz; do i=is,ie
