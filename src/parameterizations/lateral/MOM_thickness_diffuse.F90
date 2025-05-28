@@ -39,6 +39,7 @@ type, public :: thickness_diffuse_CS ; private
   logical :: initialized = .false. !< True if this control structure has been initialized.
   real    :: Khth                !< Background isopycnal depth diffusivity [L2 T-1 ~> m2 s-1]
   real    :: Khth_Slope_Cff      !< Slope dependence coefficient of Khth [nondim]
+  real    :: Grad_Khani_Scale    !< Gradient model coefficient [nondim]
   real    :: max_Khth_CFL        !< Maximum value of the diffusive CFL for isopycnal height diffusion [nondim]
   real    :: Khth_Min            !< Minimum value of Khth [L2 T-1 ~> m2 s-1]
   real    :: Khth_Max            !< Maximum value of Khth [L2 T-1 ~> m2 s-1], or 0 for no max
@@ -186,7 +187,7 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   real :: KH_v_lay(SZI_(G),SZJ_(G)) ! Diagnostic of isopycnal height diffusivities at v-points averaged
                                     ! to layer centers [L2 T-1 ~> m2 s-1]
   logical :: use_VarMix, Resoln_scaled, Depth_scaled, use_stored_slopes, khth_use_vert_struct, use_Visbeck
-  logical :: use_QG_Leith
+  logical :: use_QG_Leith, use_gradient_model
   integer :: i, j, k, is, ie, js, je, nz
 
   if (.not. CS%initialized) call MOM_error(FATAL, "MOM_thickness_diffuse: "//&
@@ -208,13 +209,14 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   Depth_scaled = .false.
 
   if (VarMix%use_variable_mixing) then
-    use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.)
+    use_VarMix = VarMix%use_variable_mixing .and. (CS%KHTH_Slope_Cff > 0.) .or. (CS%Grad_Khani_Scale > 0.)
     Resoln_scaled = VarMix%Resoln_scaled_KhTh
     Depth_scaled = VarMix%Depth_scaled_KhTh
     use_stored_slopes = VarMix%use_stored_slopes
     khth_use_vert_struct = allocated(VarMix%khth_struct)
     use_Visbeck = VarMix%use_Visbeck
     use_QG_Leith = VarMix%use_QG_Leith_GM
+    use_gradient_model = VarMix%use_gradient_model
     if (allocated(VarMix%cg1)) cg1 => VarMix%cg1
   else
     cg1 => null()
@@ -333,6 +335,18 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
     endif
   endif
 
+  if (use_VarMix) then
+    if (use_gradient_model) then  !< Gradient model (Khani & Dawson, JAMES 2023)
+!!    if (CS%Grad_Khani_Scale > 0.0) then
+      !$OMP do
+      do k=1,nz ; do j=js,je ; do I=is-1,ie
+        KH_u(I,j,k) = 1.0*CS%Grad_Khani_Scale*VarMix%L2grad_u(I,j)*VarMix%UH_grad(I,j,k)
+!!        print*, "KH_u=  ", KH_u(I,j,k)
+      enddo ; enddo ; enddo
+    endif
+  endif
+
+
   if (CS%use_GME_thickness_diffuse) then
     !$OMP do
     do k=1,nz+1 ; do j=js,je ; do I=is-1,ie
@@ -433,6 +447,17 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
       !$OMP do
       do k=1,nz ; do J=js-1,je ; do i=is,ie
         KH_v(i,J,k) = VarMix%KH_v_QG(i,J,k)
+      enddo ; enddo ; enddo
+    endif
+  endif
+
+  if (use_VarMix) then
+    if (use_gradient_model) then      !< Gradient model (Khani & Dawson, JAMES 2023)
+!!    if (CS%Grad_Khani_Scale > 0.0) then
+      !$OMP do
+      do k=1,nz ; do J=js-1,je ; do i=is,ie
+        KH_v(i,J,k) = 1.0*CS%Grad_Khani_Scale*VarMix%L2grad_v(i,J)*VarMix%VH_grad(i,J,k)
+!!        print*, "KH_v=", KH_v(i,J,k)
       enddo ; enddo ; enddo
     endif
   endif
@@ -2237,6 +2262,9 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
   call get_param(param_file, mdl, "KHTH_SLOPE_CFF", CS%KHTH_Slope_Cff, &
                  "The nondimensional coefficient in the Visbeck formula for "//&
                  "the interface depth diffusivity", units="nondim", default=0.0)
+  call get_param(param_file, mdl, "GRAD_Khani_SCALE", CS%GRAD_Khani_Scale, &
+                 "The nondimensional coefficient in the Gradient model for "//&
+                 "the thickness depth diffusivity", units="nondim", default=1.0)
   call get_param(param_file, mdl, "KHTH_MIN", CS%KHTH_Min, &
                  "The minimum horizontal thickness diffusivity.", &
                  default=0.0, units="m2 s-1", scale=US%m_to_L**2*US%T_to_s)
