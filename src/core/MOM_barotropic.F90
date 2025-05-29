@@ -6227,6 +6227,20 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   if (dtbt_input <= 0.0) &
     id_clock_sync = cpu_clock_id('(Ocean BT global synch)', grain=CLOCK_ROUTINE)
 
+  ! send initialized data to GPU
+  !$omp target enter data map(to: CS%bathyT)
+  !$omp target enter data map(to: CS%D_u_Cor, CS%D_v_Cor)
+  !$omp target enter data map(to: CS%dx_Cv, CS%dy_Cu)
+  !$omp target enter data map(to: CS%eta_cor)
+  !$omp target enter data map(to: CS%frhatu, CS%frhatv)
+  !$omp target enter data map(to: CS%IareaT, CS%IareaT_OBCmask)
+  !$omp target enter data map(to: CS%IDatu, CS%IDatv)
+  !$omp target enter data map(to: CS%IdxCu, CS%IdyCv)
+  !$omp target enter data map(to: CS%OBCmask_u, CS%OBCmask_v)
+  !$omp target enter data map(to: CS%q_d)
+  !$omp target enter data map(to: CS%ua_polarity, CS%va_polarity)
+  !$omp target enter data map(to: CS%ubtav, CS%vbtav)
+
 end subroutine barotropic_init
 
 !> Copies ubtav and vbtav from private type into arrays
