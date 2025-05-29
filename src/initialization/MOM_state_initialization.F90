@@ -26,7 +26,7 @@ use MOM_open_boundary, only : open_boundary_query
 use MOM_open_boundary, only : set_tracer_data, initialize_segment_data
 use MOM_open_boundary, only : open_boundary_test_extern_h
 use MOM_open_boundary, only : fill_temp_salt_segments, setup_OBC_tracer_reservoirs
-use MOM_open_boundary, only : update_OBC_segment_data
+use MOM_open_boundary, only : update_OBC_segment_data, set_initialized_OBC_tracer_reservoirs
 !use MOM_open_boundary, only : set_3D_OBC_data
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, is_new_run, copy_restart_var, copy_restart_vector
@@ -164,6 +164,9 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: new_sim, rotate_index
   logical :: use_temperature, use_sponge, use_OBC, use_oda_incupd
   logical :: verify_restart_time
+  logical :: OBC_reservoir_init_bug  ! If true, set the OBC tracer reservoirs at the startup of a new
+                         ! run from the interior tracer concentrations regardless of properties that
+                         ! may be explicitly specified for the reservoir concentrations.
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
                          ! by a large surface pressure by squeezing the column.
@@ -439,11 +442,19 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   endif  ! not from_Z_file.
 
   if (use_temperature .and. use_OBC) then
-    ! These calls should be moved down to join the OBC code, but doing so changes answers because
-    ! the temperatures and salinities can change due to the remapping and reading from the restarts.
-    call pass_var(tv%T, G%Domain, complete=.false.)
-    call pass_var(tv%S, G%Domain, complete=.true.)
-    call fill_temp_salt_segments(G, GV, US, OBC, tv)
+    ! Log this parameter later with the other OBC parameters.
+    call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
+                 "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
+                 "interior tracer concentrations regardless of properties that may be explicitly "//&
+                 "specified for the reservoir concentrations.", default=.true., do_not_log=.true.)
+                 !### Change the default of OBC_RESERVOIR_INIT_BUG to false.
+    if (OBC_reservoir_init_bug) then
+      ! These calls should be moved down to join the OBC code, but doing so changes answers because
+      ! the temperatures and salinities can change due to the remapping and reading from the restarts.
+      call pass_var(tv%T, G%Domain, complete=.false.)
+      call pass_var(tv%S, G%Domain, complete=.true.)
+      call fill_temp_salt_segments(G, GV, US, OBC, tv)
+    endif
   endif
 
   ! Convert thicknesses from geometric distances in depth units to thickness units or mass-per-unit-area.
@@ -569,9 +580,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
         call copy_restart_var(tv%T, "Temp", restart_CS, .true.)
         call copy_restart_var(tv%S, "Salt", restart_CS, .true.)
       endif
-      ! if (use_OBC) then
-        ! We might need to rotate OBC fields from the restart file?
-      ! endif
     endif
   endif
 
@@ -633,14 +641,27 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   endif
 
   if (associated(OBC)) then
+    call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
+                 "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
+                 "interior tracer concentrations regardless of properties that may be explicitly "//&
+                 "specified for the reservoir concentrations.", default=.true.)
+                 !### Change the default of OBC_RESERVOIR_INIT_BUG to false.
     if (use_temperature) then
-      ! Because tv%T and tv%S may have been remapped or updated from a restart file, putting
-      ! this call to fill_temp_salt_segments here could change answers.
-      ! call fill_temp_salt_segments(G, GV, US, OBC, tv)
-      ! Set up OBC%trex_x and OBC%tres_y unless they have been read from a restart file.
-      if (new_sim) &
-        call setup_OBC_tracer_reservoirs(G, GV, OBC)
+      if (OBC_reservoir_init_bug) then
+        if (new_sim) then
+          ! Set up OBC%trex_x and OBC%tres_y as they have not been read from a restart file.
+          call setup_OBC_tracer_reservoirs(G, GV, OBC)
+          ! Ensure that the values of the tracer reservoirs that have just been set will not be revised.
+          call set_initialized_OBC_tracer_reservoirs(G, OBC, restart_CS)
+        endif
+      else
+        ! Store the updated temperatures and salinities at the open boundaries, noting that they may
+        ! still be updated by the calls in the next 50 lines, so the code setting the tracer
+        ! reservoir values will come later in the calling routine.
+        call fill_temp_salt_segments(G, GV, US, OBC, tv)
+      endif
     endif
+
     ! This does halo updates for OBC-related fields, but it is not needed?
     ! call open_boundary_halo_update(G, OBC)
 

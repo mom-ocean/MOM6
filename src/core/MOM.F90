@@ -1286,7 +1286,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
       endif
     endif
   endif
-  if (CS%debug_OBCs .and. associated(CS%OBC)) call chksum_OBC_segments(CS%OBC, G, GV, US, 3)
+  ! if (CS%debug_OBCs .and. associated(CS%OBC)) call chksum_OBC_segments(CS%OBC, G, GV, US, 3)
 
   if (CS%do_dynamics .and. CS%split) then !--------------------------- start SPLIT
     ! This section uses a split time stepping scheme for the dynamic equations,
@@ -3266,11 +3266,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
         call pass_var(CS%tv%T, G%Domain)
         call pass_var(CS%tv%S, G%Domain)
         call fill_temp_salt_segments(G, GV, US, CS%OBC, CS%tv)
-        call setup_OBC_tracer_reservoirs(G, GV, CS%OBC)
       endif
 
       call rotate_OBC_init(OBC_in, G, CS%OBC)
-      call setup_OBC_tracer_reservoirs(G, GV, CS%OBC)
       call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
       call update_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
     endif
@@ -3284,7 +3282,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     endif
     if (use_ice_shelf) &
       deallocate(frac_shelf_in,mass_shelf_in)
-  else
+  else  ! The model is being run without grid rotation.  This is true of all production runs.
     if (use_ice_shelf) then
       call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr, Time_init, &
                                dirs%output_directory, calve_ice_shelf_bergs=point_calving)
@@ -3307,10 +3305,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     else
       CS%first_dir_restart = real(modulo(first_direction, 2))
     endif
-  endif
-
-  if (associated(CS%OBC)) then
-    call open_boundary_halo_update(G, CS%OBC)
   endif
 
   ! Allocate any derived densities or other equation of state derived fields.
@@ -3668,6 +3662,14 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                               tracer_flow_CSp=CS%tracer_flow_CSp, tracer_Reg=CS%tracer_Reg, &
                               tv=CS%tv, x_before_y=(MODULO(first_direction,2)==0), debug=CS%debug )
     call register_diags_offline_transport(Time, CS%diag, CS%offline_CSp, GV, US)
+  endif
+
+  if (associated(CS%OBC)) then
+    ! At this point any information related to the tracer reservoirs has either been read from
+    ! the restart file or has been specified in the segments.  Initialize the tracer reservoir
+    ! values from the segments if they have not been set via the restart file.
+    call setup_OBC_tracer_reservoirs(G, GV, CS%OBC, restart_CSp)
+    call open_boundary_halo_update(G, CS%OBC)
   endif
 
   call register_obsolete_diagnostics(param_file, CS%diag)
