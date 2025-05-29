@@ -17,9 +17,9 @@ use MOM_unit_scaling,      only : unit_scale_type
 use MOM_variables,         only : thermo_var_ptrs
 use MOM_verticalGrid,      only : verticalGrid_type
 use MOM_wave_speed,        only : wave_speed, wave_speed_CS, wave_speed_init
-use MOM_open_boundary,     only : ocean_OBC_type
+use MOM_open_boundary,     only : ocean_OBC_type, OBC_NONE
+use MOM_open_boundary,     only : OBC_DIRECTION_E, OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S
 use MOM_MEKE_types,        only : MEKE_type
-
 
 implicit none ; private
 
@@ -80,10 +80,13 @@ type, public :: VarMix_CS
                                   !! in its denominator, rather than just the nominal depth of
                                   !! the bathymetry.  This only applies when using the model
                                   !! interface heights as a proxy for isopycnal slopes.
+  logical :: OBC_friendly         !< If true, use only interior data for thickness weighting and
+                                  !! to calculate stratification and other fields at open boundary
+                                  !!  condition faces.
   real :: cropping_distance       !< Distance from surface or bottom to filter out outcropped or
                                   !! incropped interfaces for the Eady growth rate calc [Z ~> m]
   real :: h_min_N2                !< The minimum vertical distance to use in the denominator of the
-                                  !! bouyancy frequency used in the slope calculation [H ~> m or kg m-2]
+                                  !! buoyancy frequency used in the slope calculation [H ~> m or kg m-2]
 
   real, allocatable :: SN_u(:,:)      !< S*N at u-points [T-1 ~> s-1]
   real, allocatable :: SN_v(:,:)      !< S*N at v-points [T-1 ~> s-1]
@@ -232,7 +235,7 @@ subroutine calc_depth_function(G, CS)
 end subroutine calc_depth_function
 
 !> Calculates and stores the non-dimensional resolution functions
-subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, dt)
+subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
   type(ocean_grid_type),                     intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -240,6 +243,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, dt)
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control structure
   type(MEKE_type),                           intent(in)    :: MEKE !< MEKE struct
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure
   real,                                      intent(in)    :: dt !< Time increment [T ~> s]
 
   ! Local variables
@@ -284,7 +288,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, dt)
   endif
   if (CS%BS_use_sqg_struct .or. CS%khth_use_sqg_struct .or. CS%khtr_use_sqg_struct &
       .or. CS%kdgl90_use_sqg_struct .or. CS%id_sqg_struct>0) then
-    call calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE)
+    call calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE, OBC)
     call pass_var(CS%sqg_struct, G%Domain)
   endif
 
@@ -536,21 +540,21 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, dt)
 end subroutine calc_resoln_function
 
 !> Calculates and stores functions of SQG mode
-subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE)
+subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE, OBC)
   type(ocean_grid_type),                     intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
-  type(thermo_var_ptrs),                    intent(in)     :: tv !<Thermodynamic variables
-   real,                                      intent(in)    :: dt !< Time increment [T ~> s]
+  type(thermo_var_ptrs),                     intent(in)    :: tv !<Thermodynamic variables
+   real,                                     intent(in)    :: dt !< Time increment [T ~> s]
   type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control struct
-  type(MEKE_type),                           intent(in)     :: MEKE !< MEKE struct
+  type(MEKE_type),                           intent(in)    :: MEKE !< MEKE struct
+  type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure
 
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G),SZK_(GV)+1) :: &
-    e             ! The interface heights relative to mean sea level [Z ~> m].
-  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [L2 Z-2 T-2 ~> s-2]
-  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: e    ! The interface heights relative to mean sea level [Z ~> m]
+  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of buoyancy frequency at u-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of buoyancy frequency at v-points [L2 Z-2 T-2 ~> s-2]
   real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzu ! Z-thickness at u-points [Z ~> m]
   real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzv ! Z-thickness at v-points [Z ~> m]
   real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzSxN ! |Sx| N times dz at u-points [Z T-1 ~> m s-1]
@@ -570,8 +574,8 @@ subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE)
 
   call find_eta(h, tv, G, GV, US, e, halo_size=2)
   call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
-                                  CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v,dzu=dzu, dzv=dzv, &
-                                  dzSxN=dzSxN, dzSyN=dzSyN, halo=1)
+                                  CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
+                                  dzSxN=dzSxN, dzSyN=dzSyN, halo=1, OBC=OBC, OBC_N2=CS%OBC_friendly)
 
   if (CS%sqg_expo<=0.) then
     CS%sqg_struct(:,:,:) = 1.
@@ -620,10 +624,11 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
   real,                                      intent(in)    :: dt !< Time increment [T ~> s]
   type(VarMix_CS),                           intent(inout) :: CS !< Variable mixing control structure
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure
+
   ! Local variables
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1)  :: e    ! The interface heights relative to mean sea level [Z ~> m]
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of Brunt-Vaisala freq at u-points [L2 Z-2 T-2 ~> s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of Brunt-Vaisala freq at v-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of buoyancy frequency at u-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of buoyancy frequency at v-points [L2 Z-2 T-2 ~> s-2]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: dzu  ! Z-thickness at u-points [Z ~> m]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: dzv  ! Z-thickness at v-points [Z ~> m]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: dzSxN ! |Sx| N times dz at u-points [Z T-1 ~> m s-1]
@@ -637,12 +642,13 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
     if (CS%use_simpler_Eady_growth_rate) then
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
                                   CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
-                                  dzSxN=dzSxN, dzSyN=dzSyN, halo=1, OBC=OBC)
+                                  dzSxN=dzSxN, dzSyN=dzSyN, halo=1, OBC=OBC, OBC_N2=CS%OBC_friendly)
       call calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN, CS%SN_u, CS%SN_v)
     elseif (CS%use_stored_slopes) then
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
-                                  CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, halo=1, OBC=OBC)
-      call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS)
+                                  CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, halo=1, OBC=OBC, &
+                                  OBC_N2=CS%OBC_friendly)
+      call calc_Visbeck_coeffs_old(h, CS%slope_x, CS%slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
     else
       call calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
     endif
@@ -666,7 +672,7 @@ end subroutine calc_slope_functions
 !> Calculates factors used when setting diffusivity coefficients similar to Visbeck et al., 1997.
 !! This is on older implementation that is susceptible to large values of Eady growth rate
 !! for incropping layers.
-subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS)
+subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, CS, OBC)
   type(ocean_grid_type),                        intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                      intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),    intent(in)    :: h  !< Layer thickness [H ~> m or kg m-2]
@@ -679,6 +685,7 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
                                                                          !! at v-points [L2 Z-2 T-2 ~> s-2]
   type(unit_scale_type),                        intent(in)    :: US !< A dimensional unit scaling type
   type(VarMix_CS),                              intent(inout) :: CS !< Variable mixing control structure
+  type(ocean_OBC_type),                         pointer       :: OBC  !< Open boundaries control structure.
 
   ! Local variables
   real :: S2            ! Interface slope squared [Z2 L-2 ~> nondim]
@@ -697,7 +704,14 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   real :: S2_v(SZI_(G),SZJB_(G)) ! At first the thickness-weighted depth integral of the squared
                                  ! slope [H Z2 L-2 ~> m or kg m-2] and then the average of the
                                  ! squared slope [Z2 L-2 ~> nondim] at v points.
-
+  integer :: OBC_dir_u(SZIB_(G),SZJ_(G))  ! An integer indicating where there are u OBCs: +1 for
+                                 ! eastern OBCs, -1 for western OBCs and 0 at points with no OBCs.
+  integer :: OBC_dir_v(SZI_(G),SZJB_(G))  ! An integer indicating where there are v OBCs: +1 for
+                                 ! northern OBCs, -1 for southern OBCs and 0 at points with no OBCs.
+  real :: h4_u(SZIB_(G),SZJ_(G),SZK_(GV)+1)  ! The product of the 4 thicknesses surrounding a u-point
+                                 ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg2 m-4]
+  real :: h4_v(SZI_(G),SZJB_(G),SZK_(GV)+1)  ! The product of the 4 thicknesses surrounding a v-point
+                                 ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg2 m-4]
   integer :: i, j, k, is, ie, js, je, nz, l_seg
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_Visbeck_coeffs_old: "// &
@@ -713,11 +727,61 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
 
   S2max = CS%Visbeck_S_max**2
 
-  !$OMP parallel do default(shared)
-  do j=js-1,je+1 ; do i=is-1,ie+1
-    CS%SN_u(i,j) = 0.0
-    CS%SN_v(i,j) = 0.0
-  enddo ; enddo
+  CS%SN_u(:,:) = 0.0
+  CS%SN_v(:,:) = 0.0
+
+  ! These settings apply where there are not open boundary conditions.
+  OBC_dir_u(:,:) = 0 ; OBC_dir_v(:,:) = 0
+
+  if (associated(OBC).and. CS%OBC_friendly) then
+   ! Store the direction of any OBC faces.
+   !$OMP parallel do default(shared) private(l_seg)
+    do j=js-1,je+1 ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
+      l_seg = OBC%segnum_u(I,j)
+      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) OBC_dir_u(I,j) = 1
+      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) OBC_dir_u(I,j) = -1
+    endif ; enddo ; enddo
+   !$OMP parallel do default(shared)
+    do J=js-1,je ; do i=is-1,ie+1 ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
+      l_seg = OBC%segnum_v(i,J)
+      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) OBC_dir_v(i,J) = 1
+      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) OBC_dir_v(i,J) = -1
+    endif ; enddo ; enddo
+
+    ! Use the masked product of the 4 (or 2) thicknesses around a velocity-point interface for weights.
+    !$OMP parallel do default(shared)
+    do K=2,nz
+      do j=js-1,je+1 ; do I=is-1,ie
+        if (OBC_dir_u(I,j) == 0) then
+          h4_u(I,j,K) = G%mask2dCu(I,j) * ( (h(i,j,k)*h(i+1,j,k)) * (h(i,j,k-1)*h(i+1,j,k-1)) )
+        elseif (OBC_dir_u(I,j) == 1) then  ! OBC_DIRECTION_E
+          h4_u(I,j,K) = G%mask2dCu(I,j) * ( (h(i,j,k)**2) * (h(i,j,k-1)**2) )
+        elseif (OBC_dir_u(I,j) == -1) then  ! OBC_DIRECTION_W
+          h4_u(I,j,K) = G%mask2dCu(I,j) * ( (h(i+1,j,k)**2) * (h(i+1,j,k-1)**2) )
+        endif
+      enddo ; enddo
+      do J=js-1,je ; do i=is-1,ie+1
+        if (OBC_dir_v(i,J) == 0) then
+          h4_v(i,J,K) = G%mask2dCv(i,J) * ( (h(i,j,k)*h(i,j+1,k)) * (h(i,j,k-1)*h(i,j+1,k-1)) )
+        elseif (OBC_dir_v(i,J) == 1) then  ! OBC_DIRECTION_N
+          h4_v(i,J,K) = G%mask2dCv(i,J) * ( (h(i,j,k)**2) * (h(i,j,k-1)**2) )
+        elseif (OBC_dir_v(i,J) == -1) then  ! OBC_DIRECTION_S
+          h4_v(i,J,K) = G%mask2dCv(i,J) * ( (h(i,j+1,k)**2) * (h(i,j+1,k-1)**2) )
+        endif
+      enddo ; enddo
+    enddo
+  else  ! The land mask is sufficient and there are no special considerations taken at OBC points.
+    ! Use the masked product of the 4 thicknesses around a velocity-point interface for weights.
+    !$OMP parallel do default(shared)
+    do K=2,nz
+      do j=js-1,je+1 ; do I=is-1,ie
+        h4_u(I,j,K) = G%mask2dCu(I,j) * ( (h(i,j,k)*h(i+1,j,k)) * (h(i,j,k-1)*h(i+1,j,k-1)) )
+      enddo ; enddo
+      do J=js-1,je ; do i=is-1,ie+1
+        h4_v(i,J,K) = G%mask2dCv(i,J) * ( (h(i,j,k)*h(i,j+1,k)) * (h(i,j,k-1)*h(i,j+1,k-1)) )
+      enddo ; enddo
+    enddo
+  endif
 
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
@@ -734,10 +798,17 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = G%mask2dCv(i+1,J-1) * ( (h(i+1,j,k)*h(i+1,j-1,k)) * (h(i+1,j,k-1)*h(i+1,j-1,k-1)) )
-      wNW = G%mask2dCv(i  ,J  ) * ( (h(i  ,j,k)*h(i  ,j+1,k)) * (h(i  ,j,k-1)*h(i  ,j+1,k-1)) )
-      wNE = G%mask2dCv(i+1,J  ) * ( (h(i+1,j,k)*h(i+1,j+1,k)) * (h(i+1,j,k-1)*h(i+1,j+1,k-1)) )
-      wSW = G%mask2dCv(i  ,J-1) * ( (h(i  ,j,k)*h(i  ,j-1,k)) * (h(i  ,j,k-1)*h(i  ,j-1,k-1)) )
+      wSE = h4_v(i+1,J-1,K)
+      wNW = h4_v(i,J,K)
+      wNE = h4_v(i+1,J,K)
+      wSW = h4_v(i,J-1,K)
+      if (OBC_dir_u(I,j) == 1) then  ! OBC_DIRECTION_E
+        wSE = 0.0 ; wNE = 0.0
+        H_geom = sqrt( h(i,j,k) * h(i,j,k-1) )
+      elseif (OBC_dir_u(I,j) == -1) then  ! OBC_DIRECTION_W
+        wSW = 0.0 ; wNW = 0.0
+        H_geom = sqrt( h(i+1,j,k) * h(i+1,j,k-1) )
+      endif
       S2 =  slope_x(I,j,K)**2 + &
               (((wNW*slope_y(i,J,K)**2) + (wSE*slope_y(i+1,J-1,K)**2)) + &
                ((wNE*slope_y(i+1,J,K)**2) + (wSW*slope_y(i,J-1,K)**2)) ) / &
@@ -770,10 +841,17 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
       H_geom = sqrt( Hdn * Hup )
      !H_geom = H_geom * sqrt(N2) ! WKB-ish
      !H_geom = H_geom * N2       ! WKB-ish
-      wSE = G%mask2dCu(I,j)     * ( (h(i,j  ,k)*h(i+1,j  ,k)) * (h(i,j  ,k-1)*h(i+1,j  ,k-1)) )
-      wNW = G%mask2dCu(I-1,j+1) * ( (h(i,j+1,k)*h(i-1,j+1,k)) * (h(i,j+1,k-1)*h(i-1,j+1,k-1)) )
-      wNE = G%mask2dCu(I,j+1)   * ( (h(i,j+1,k)*h(i+1,j+1,k)) * (h(i,j+1,k-1)*h(i+1,j+1,k-1)) )
-      wSW = G%mask2dCu(I-1,j)   * ( (h(i,j  ,k)*h(i-1,j  ,k)) * (h(i,j  ,k-1)*h(i-1,j  ,k-1)) )
+      wSE = h4_u(I,j,K)
+      wNW = h4_u(I-1,j+1,K)
+      wNE = h4_u(I,j+1,K)
+      wSW = h4_u(I-1,j,K)
+      if (OBC_dir_v(i,J) == 1) then  ! OBC_DIRECTION_N
+        wNW = 0.0 ; wNE = 0.0
+        H_geom = sqrt( h(i,j,k) *  h(i,j,k-1) )
+      elseif (OBC_dir_v(i,J) == -1) then  ! OBC_DIRECTION_S
+        wSW = 0.0 ; wSE = 0.0
+        H_geom = sqrt( h(i,j+1,k) * h(i,j+1,k-1) )
+      endif
       S2 = slope_y(i,J,K)**2 + &
              (((wSE*slope_x(I,j,K)**2) + (wNW*slope_x(I-1,j+1,K)**2)) + &
               ((wNE*slope_x(I,j+1,K)**2) + (wSW*slope_x(I-1,j,K)**2)) ) / &
@@ -804,6 +882,8 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   if (CS%debug) then
     call uvchksum("calc_Visbeck_coeffs_old slope_[xy]", slope_x, slope_y, G%HI, &
                   unscale=US%Z_to_L, haloshift=1)
+    ! call uvchksum("calc_Visbeck_coeffs_old S2_[uv]", S2_u, S2_v, G%HI, &
+    !               unscale=US%Z_to_L**2, scalar_pair=.true.)
     call uvchksum("calc_Visbeck_coeffs_old N2_u, N2_v", N2_u, N2_v, G%HI, &
                   unscale=US%L_to_Z**2*US%s_to_T**2, scalar_pair=.true.)
     call uvchksum("calc_Visbeck_coeffs_old SN_[uv]", CS%SN_u, CS%SN_v, G%HI, &
@@ -1149,7 +1229,7 @@ subroutine calc_QG_slopes(h, tv, dt, G, GV, US, slope_x, slope_y, CS, OBC)
 
   call find_eta(h, tv, G, GV, US, e, halo_size=3)
   call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
-                              slope_x, slope_y, halo=2, OBC=OBC)
+                              slope_x, slope_y, halo=2, OBC=OBC, OBC_N2=CS%OBC_friendly)
 
 end subroutine calc_QG_slopes
 
@@ -1337,10 +1417,14 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                               ! mode wave speed as the starting point for iterations.
   real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
                            ! temperature variance [nondim]
-  logical :: om4_remap_via_sub_cells ! Use the OM4-era ramap_via_sub_cells for calculating the EBT structure
+  logical :: om4_remap_via_sub_cells ! Use the OM4-era remap_via_sub_cells for calculating the EBT structure
+  logical :: mixing_coefs_OBC_bug ! If false, use only interior data for thickness weighting in
+                           ! lateral mixing coefficient calculations and to calculate stratification
+                           ! and other fields at open boundary condition faces.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_lateral_mixing_coeffs" ! This module's name.
+  integer :: number_of_OBC_segments
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, i, j
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -1471,6 +1555,14 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     if (Stanley_coeff < 0.0) call MOM_error(FATAL, &
                  "STANLEY_COEFF must be set >= 0 if USE_STANLEY_ISO is true.")
   endif
+  call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", number_of_OBC_segments, &
+                 default=0, do_not_log=.true.)
+  call get_param(param_file, mdl, "MIXING_COEFS_OBC_BUG", mixing_coefs_OBC_bug, &
+                 "If false, use only interior data for thickness weighting in lateral mixing "//&
+                 "coefficient calculations and to calculate stratification and other fields at "//&
+                 "open boundary condition faces.", default=.true., do_not_log=(number_of_OBC_segments<=0))
+                 !### Change the default for MIXING_COEFS_OBC_BUG to false.
+  CS%OBC_friendly = .not. MIXING_COEFS_OBC_BUG
 
   if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct .or. CS%kdgl90_use_ebt_struct &
       .or. CS%BS_EBT_power>0. .or. CS%khtr_use_ebt_struct) then
@@ -2027,7 +2119,7 @@ end subroutine VarMix_end
 !! \section section_vertical_structure_khth Vertical structure function for KhTh
 !!
 !! The thickness diffusivity can be prescribed a vertical distribution with the shape of the equivalent barotropic
-!! velocity mode.  The structure function is stored in the control structure for thie module (varmix_cs) but is
+!! velocity mode.  The structure function is stored in the control structure for this module (varmix_cs) but is
 !! calculated using subroutines in mom_wave_speed.
 !!
 !! | Symbol                | Module parameter |
