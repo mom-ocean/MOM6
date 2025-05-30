@@ -424,6 +424,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! allocate internal variables on GPU
   !$omp target enter data map(alloc: u_bc_accel, v_bc_accel)
+  !$omp target update to(eta)
 
   !$OMP parallel do default(shared)
   do k=1,nz
@@ -1298,7 +1299,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
   ALLOC_(CS%u_av(IsdB:IedB,jsd:jed,nz)) ; CS%u_av(:,:,:) = 0.0
   ALLOC_(CS%v_av(isd:ied,JsdB:JedB,nz)) ; CS%v_av(:,:,:) = 0.0
   ALLOC_(CS%h_av(isd:ied,jsd:jed,nz))   ; CS%h_av(:,:,:) = GV%Angstrom_H
-  !$omp target enter data map(to: CS%u_av, CS%v_av, CS%h_av)
+  !$omp target enter data map(to: CS%eta, CS%u_av, CS%v_av, CS%h_av)
 
   thickness_units = get_thickness_units(GV)
   flux_units = get_flux_units(GV)
