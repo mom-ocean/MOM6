@@ -6229,6 +6229,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     id_clock_sync = cpu_clock_id('(Ocean BT global synch)', grain=CLOCK_ROUTINE)
 
   ! send initialized data to GPU
+  !$omp target enter data map(to: CS)
   !$omp target enter data map(to: CS%bathyT)
   !$omp target enter data map(to: CS%D_u_Cor, CS%D_v_Cor)
   !$omp target enter data map(to: CS%dx_Cv, CS%dy_Cu)
