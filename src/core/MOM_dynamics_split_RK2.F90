@@ -422,6 +422,9 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("step_MOM_dyn_split_RK2(), MOM_dynamics_split_RK2.F90")
 
+  ! allocate internal variables on GPU
+  !$omp target enter data map(alloc: u_bc_accel, v_bc_accel)
+
   !$OMP parallel do default(shared)
   do k=1,nz
     do j=G%jsd,G%jed   ; do i=G%isdB,G%iedB ;  up(i,j,k) = 0.0 ; enddo ; enddo
@@ -680,7 +683,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
   ! The CS%ADp argument here stores the weights for certain integrated diagnostics.
-  !$omp target update to(uh_ptr, vh_ptr, u_ptr, v_ptr)
+  !$omp target update to(uh_ptr, vh_ptr, u_ptr, v_ptr, u_bc_accel, v_bc_accel)
   !$omp target enter data &
   !$omp   map(to: CS%barotropic_CSp, u_inst, v_inst, eta, forces, forces%taux, forces%tauy, &
   !$omp       CS%visc_rem_u, CS%visc_rem_v) &
@@ -970,6 +973,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the corrector step call to btstep.
   !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
+  !$omp target update to(u_bc_accel, v_bc_accel)
   call btstep(u_inst, v_inst, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, u_av, v_av, &
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, SpV_avg, CS%ADp, CS%OBC, CS%BT_cont, &
@@ -1118,6 +1122,9 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
       vhtr(i,J,k) = vhtr(i,J,k) + vh(i,J,k)*dt
     enddo ; enddo
   enddo
+
+  ! release internal variables
+  !$omp target exit data map(release: u_bc_accel, v_bc_accel)
 
   if (CS%store_CAu) then
     ! Calculate a predictor-step estimate of the Coriolis and momentum advection terms
