@@ -4942,6 +4942,10 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
   hs = max(halo,0)
   dt = 1.0 ; if (present(dt_baroclinic)) dt = dt_baroclinic
 
+  !$omp target enter data &
+  !$omp   map(alloc: u_polarity, uBT_EE, uBT_WW, FA_u_EE, FA_u_E0, FA_u_W0, FA_u_WW, &
+  !$omp              v_polarity, vBT_NN, vBT_SS, FA_v_NN, FA_v_N0, FA_v_S0, FA_v_SS)
+
   ! Copy the BT_cont arrays into symmetric, potentially wide haloed arrays.
   do concurrent (j=js-hs:je+hs, i=is-hs-1:ie+hs)
     u_polarity(i,j) = 1.0
@@ -4977,8 +4981,13 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
   call create_group_pass(BT_cont%pass_FA_uv, FA_u_WW, FA_v_SS, BT_Domain, To_All+Scalar_Pair)
 !--- end setup for group halo update
   ! Do halo updates on BT_cont.
+  ! data update directives for MPI transfers (via CPU) needed even for serial
+  !$omp target update from(u_polarity, v_polarity, uBT_EE, vBT_NN, uBT_WW, vBT_SS)
   call do_group_pass(BT_cont%pass_polarity_BT, BT_Domain)
+  !$omp target update to(u_polarity, v_polarity, uBT_EE, vBT_NN, uBT_WW, vBT_SS)
+  !$omp target update from(FA_u_EE, FA_v_NN, FA_u_E0, FA_v_N0, FA_u_W0, FA_v_S0, FA_u_WW, FA_v_SS)
   call do_group_pass(BT_cont%pass_FA_uv, BT_Domain)
+  !$omp target update to(FA_u_EE, FA_v_NN, FA_u_E0, FA_v_N0, FA_u_W0, FA_v_S0, FA_u_WW, FA_v_SS)
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
@@ -5026,6 +5035,10 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
     if (abs(BTCL_v(i,J)%vBT_NN) > 0.0) BTCL_v(i,J)%vh_crvN = &
       (C1_3 * (BTCL_v(i,J)%FA_v_NN - BTCL_v(i,J)%FA_v_N0)) / BTCL_v(i,J)%vBT_NN**2
   enddo
+
+  !$omp target exit data &
+  !$omp   map(release: u_polarity, uBT_EE, uBT_WW, FA_u_EE, FA_u_E0, FA_u_W0, FA_u_WW, &
+  !$omp                v_polarity, vBT_NN, vBT_SS, FA_v_NN, FA_v_N0, FA_v_S0, FA_v_SS)
 end subroutine set_local_BT_cont_types
 
 
