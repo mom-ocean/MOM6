@@ -684,9 +684,8 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
   ! The CS%ADp argument here stores the weights for certain integrated diagnostics.
-  !$omp target update to(uh_ptr, vh_ptr, u_ptr, v_ptr, u_bc_accel, v_bc_accel)
+  !$omp target update to(uh_ptr, vh_ptr, u_ptr, v_ptr, u_bc_accel, v_bc_accel, CS%visc_rem_u, CS%visc_rem_v)
   !$omp target enter data &
-  !$omp   map(to: u_inst, v_inst, CS%visc_rem_u, CS%visc_rem_v) &
   !$omp   map(alloc: eta_pred, CS%uhbt, CS%vhbt)
   call btstep(u_inst, v_inst, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, u_av, v_av, &
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
@@ -980,7 +979,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr, etaav=eta_av)
   !$omp target update from(CS%u_accel_bt, CS%v_accel_bt)
   !$omp target exit data &
-  !$omp   map(release: u_inst, v_inst, CS%visc_rem_u, CS%visc_rem_v) &
   !$omp   map(from: eta_pred, CS%uhbt, CS%vhbt)
   if (CS%id_deta_dt>0) then
     do j=js,je ; do i=is,ie ; deta_dt(i,j) = (eta_pred(i,j) - eta(i,j))*Idt_bc ; enddo ; enddo
@@ -1556,7 +1554,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   ALLOC_(CS%visc_rem_v(isd:ied,JsdB:JedB,nz)) ; CS%visc_rem_v(:,:,:) = 0.0
   ALLOC_(CS%eta_PF(isd:ied,jsd:jed))          ; CS%eta_PF(:,:)       = 0.0
   ALLOC_(CS%pbce(isd:ied,jsd:jed,nz))         ; CS%pbce(:,:,:)       = 0.0
-  !$omp target enter data map(alloc: CS%pbce, CS%eta_PF)
+  !$omp target enter data map(alloc: CS%visc_rem_u, CS%visc_rem_v, CS%pbce, CS%eta_PF)
   ALLOC_(CS%u_accel_bt(IsdB:IedB,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
   ALLOC_(CS%v_accel_bt(isd:ied,JsdB:JedB,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
   ALLOC_(CS%PFu_Stokes(IsdB:IedB,jsd:jed,nz)) ; CS%PFu_Stokes(:,:,:) = 0.0
