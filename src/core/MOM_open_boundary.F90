@@ -6161,9 +6161,12 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
     OBC%remap_h_CS = OBC_in%remap_h_CS
   endif
 
-  ! TODO: The OBC registry seems to be a list of "registered" OBC types.
+  ! TODO: The OBC registry is a list of "registered" OBC types that is set up
+  !   on the rotated grid after rotate_OBC_config is called.
   !   It does not appear to be used, so for now we skip this record.
-  !OBC%OBC_Reg => OBC_in%OBC_Reg
+  ! OBC%OBC_Reg => OBC_in%OBC_Reg
+  ! OBC%num_obgc_tracers = OBC_in%num_obgc_tracers
+  ! if (associated(OBC_in%OBC_Reg) .and. (.not.associated(OBC%OBC_Reg))) allocate(OBC%OBC_Reg)
 end subroutine rotate_OBC_config
 
 !> Rotate the OBC segment configuration data from the input to model index map.
@@ -6525,10 +6528,45 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
   if (allocated(segment_in%nudged_tangential_grad)) &
       call rotate_array(segment_in%nudged_tangential_grad, turns, segment%nudged_tangential_grad)
   if (associated(segment_in%tr_Reg)) then
+    isd = segment%HI%isd ; ied = segment%HI%ied ; IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
+    jsd = segment%HI%jsd ; jed = segment%HI%jed ; JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
+
+    if (.not.associated(segment%tr_Reg)) allocate(segment%tr_Reg)
+    segment%tr_Reg%ntseg = segment_in%tr_Reg%ntseg
+
     do n = 1, segment_in%tr_Reg%ntseg
-      call rotate_array(segment_in%tr_Reg%tr(n)%t, turns, segment%tr_Reg%tr(n)%t)
-      call rotate_array(segment_in%tr_Reg%tr(n)%tres, turns, segment%tr_Reg%tr(n)%tres)
-      ! Testing this to see if it works for contant tres values. Probably wrong otherwise.
+      ! segment_in already points to the rotated tracer fields in the registry.
+      if (associated(segment_in%tr_Reg%Tr(n)%Tr)) &
+        segment%tr_Reg%Tr(n)%Tr => segment_in%tr_Reg%Tr(n)%Tr
+      segment%tr_Reg%Tr(n)%name = segment_in%tr_Reg%Tr(n)%name
+      segment%tr_Reg%Tr(n)%ntr_index = segment_in%tr_Reg%Tr(n)%ntr_index
+      segment%tr_Reg%Tr(n)%fd_index = segment_in%tr_Reg%Tr(n)%fd_index
+      segment%tr_Reg%Tr(n)%scale = segment_in%tr_Reg%Tr(n)%scale
+      segment%tr_Reg%Tr(n)%OBC_inflow_conc = segment_in%tr_Reg%Tr(n)%OBC_inflow_conc
+
+      if (allocated(segment_in%tr_Reg%tr(n)%t)) then
+        if (.not.allocated(segment%tr_Reg%tr(n)%t)) then
+          ke = size(segment_in%tr_Reg%tr(n)%t, 3)
+          if (segment%is_E_or_W) then
+            allocate(segment%tr_Reg%Tr(n)%t(IsdB:IedB,jsd:jed,1:ke), source=0.0)
+          elseif (segment%is_N_or_S) then
+            allocate(segment%tr_Reg%Tr(n)%t(isd:ied,JsdB:JedB,1:ke), source=0.0)
+          endif
+        endif
+        call rotate_array(segment_in%tr_Reg%tr(n)%t, turns, segment%tr_Reg%tr(n)%t)
+      endif
+
+      if (allocated(segment_in%tr_Reg%tr(n)%tres)) then
+        if (.not.allocated(segment%tr_Reg%tr(n)%tres)) then
+          ke = size(segment_in%tr_Reg%tr(n)%tres, 3)
+          if (segment%is_E_or_W) then
+            allocate(segment%tr_Reg%Tr(n)%tres(IsdB:IedB,jsd:jed,1:ke), source=0.0)
+          elseif (segment%is_N_or_S) then
+            allocate(segment%tr_Reg%Tr(n)%tres(isd:ied,JsdB:JedB,1:ke), source=0.0)
+          endif
+        endif
+        call rotate_array(segment_in%tr_Reg%tr(n)%tres, turns, segment%tr_Reg%tr(n)%tres)
+      endif
       segment%tr_Reg%Tr(n)%is_initialized = segment_in%tr_Reg%Tr(n)%is_initialized
     enddo
   endif
