@@ -861,9 +861,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
 !--- end setup for group halo update
 
+  ! transfers of derived types and members being kept to minimize .attach. and .detach. data
   !$omp target enter data &
   !$omp   map(to: G%dxT, G%dyT, G%mask2dT, G%mask2dCu, G%mask2dCv, eta_in, bc_accel_u, bc_accel_v, &
-  !$omp       visc_rem_u, visc_rem_v, forces, forces%taux, forces%tauy, CS, CS%frhatu, CS%frhatv, &
+  !$omp       forces, forces%taux, forces%tauy, CS, CS%frhatu, CS%frhatv, &
   !$omp       CS%q_d, CS%D_u_Cor, CS%D_v_Cor, CS%eta_cor, CS%bathyT, CS%IareaT, CS%ua_polarity, &
   !$omp       CS%va_polarity, CS%IDatu, CS%IDatv, CS%dx_Cv, CS%dy_Cu, CS%ubtav, CS%vbtav, CS%IdxCu, &
   !$omp       CS%IdyCv, CS%IareaT_OBCmask, CS%OBCmask_u, CS%OBCmask_v, uh0, vh0) &
@@ -2213,7 +2214,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   !$omp target exit data &
   !$omp   map(release: G%dxT, G%dyT, G%mask2dT, G%mask2dCu, G%mask2dCv, eta_in, bc_accel_u, &
-  !$omp       bc_accel_v, visc_rem_u, visc_rem_v, forces, forces%taux, forces%tauy, CS, CS%frhatu, &
+  !$omp       bc_accel_v, forces, forces%taux, forces%tauy, CS, CS%frhatu, &
   !$omp       CS%frhatv, CS%q_d, CS%D_u_Cor, CS%D_v_Cor, CS%eta_cor, CS%bathyT, CS%IareaT, &
   !$omp       CS%ua_polarity, CS%va_polarity, CS%IDatu, CS%IDatv, CS%dx_Cv, CS%dy_Cu, CS%ubtav, &
   !$omp       CS%vbtav, CS%IdxCu, CS%IdyCv, CS%IareaT_OBCmask, CS%OBCmask_u, CS%OBCmask_v, uh0, vh0) &
