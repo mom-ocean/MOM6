@@ -423,7 +423,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (showCallTree) call callTree_enter("step_MOM_dyn_split_RK2(), MOM_dynamics_split_RK2.F90")
 
   ! allocate internal variables on GPU
-  !$omp target enter data map(alloc: u_bc_accel, v_bc_accel)
+  !$omp target enter data map(alloc: u_bc_accel, v_bc_accel, eta_pred)
   !$omp target update to(eta)
 
   !$OMP parallel do default(shared)
@@ -689,7 +689,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, SpV_avg, CS%ADp, CS%OBC, CS%BT_cont, &
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr)
-  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt)
+  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, CS%uhbt, CS%vhbt)
   if (showCallTree) call callTree_leave("btstep()")
   call cpu_clock_end(id_clock_btstep)
 
@@ -975,7 +975,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, SpV_avg, CS%ADp, CS%OBC, CS%BT_cont, &
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr, etaav=eta_av)
-  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, CS%uhbt, CS%vhbt)
+  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, CS%uhbt, CS%vhbt, eta_pred)
   if (CS%id_deta_dt>0) then
     do j=js,je ; do i=is,ie ; deta_dt(i,j) = (eta_pred(i,j) - eta(i,j))*Idt_bc ; enddo ; enddo
   endif
@@ -1118,7 +1118,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   enddo
 
   ! release internal variables
-  !$omp target exit data map(release: u_bc_accel, v_bc_accel)
+  !$omp target exit data map(release: u_bc_accel, v_bc_accel, eta_pred)
 
   if (CS%store_CAu) then
     ! Calculate a predictor-step estimate of the Coriolis and momentum advection terms
