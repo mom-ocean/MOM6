@@ -1226,12 +1226,15 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   ! Local variables
 
-  real :: b1(SZIB_(G))           ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: c1(SZIB_(G),SZK_(GV))  ! A variable used by the tridiagonal solver [nondim].
-  real :: d1(SZIB_(G))           ! d1=1-c1 is used by the tridiagonal solver [nondim].
-  real :: Ray(SZIB_(G),SZK_(GV)) ! Ray is the Rayleigh-drag velocity [H T-1 ~> m s-1 or Pa s m-1]
+  real :: b1(SZIB_(G),SZJB_(G))
+    ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
+  real :: c1(SZIB_(G),SZJB_(G),SZK_(GV))
+    ! A variable used by the tridiagonal solver [nondim].
+  real :: d1(SZIB_(G),SZJB_(G))
+    ! d1=1-c1 is used by the tridiagonal solver [nondim].
+  real :: Ray(SZIB_(G),SZJB_(G))
+    ! Ray is the Rayleigh-drag velocity [H T-1 ~> m s-1 or Pa s m-1]
   real :: b_denom_1   ! The first term in the denominator of b1 [H ~> m or kg m-2].
-  logical :: do_i(SZIB_(G))
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
@@ -1243,69 +1246,90 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(remant): "// &
          "Module must be initialized before it is used.")
 
-  do k=1,nz ; do i=Isq,Ieq ; Ray(i,k) = 0.0 ; enddo ; enddo
-
   ! Find the zonal viscous remnant using a modification of a standard tridagonal solver.
-  !$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
-  do j=G%jsc,G%jec
-    do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0.0) ; enddo
+  if (allocated(visc%Ray_u)) then
+    do j=G%jsc,G%jec ; do I=Isq,Ieq
+      Ray(I,j) = visc%Ray_u(I,j,1)
+    enddo ; enddo
+  else
+    do j=G%jsc,G%jec ; do I=Isq,Ieq
+      Ray(I,j) = 0.
+    enddo ; enddo
+  endif
 
-    if (allocated(visc%Ray_u)) then ; do k=1,nz ; do I=Isq,Ieq
-      Ray(I,k) = visc%Ray_u(I,j,k)
-    enddo ; enddo ; endif
+  do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+    b_denom_1 = CS%h_u(I,j,1) + dt * (Ray(I,j) + CS%a_u(I,j,1))
+    b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,2))
+    d1(I,j) = b_denom_1 * b1(I,j)
+    visc_rem_u(I,j,1) = b1(I,j) * CS%h_u(I,j,1)
+  endif ; enddo ; enddo
 
-    do I=Isq,Ieq ; if (do_i(I)) then
-      b_denom_1 = CS%h_u(I,j,1) + dt * (Ray(I,1) + CS%a_u(I,j,1))
-      b1(I) = 1.0 / (b_denom_1 + dt*CS%a_u(I,j,2))
-      d1(I) = b_denom_1 * b1(I)
-      visc_rem_u(I,j,1) = b1(I) * CS%h_u(I,j,1)
-    endif ; enddo
-    do k=2,nz ; do I=Isq,Ieq ; if (do_i(I)) then
-      c1(I,k) = dt * CS%a_u(I,j,K)*b1(I)
-      b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,k) + CS%a_u(I,j,K)*d1(I))
-      b1(I) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
-      d1(I) = b_denom_1 * b1(I)
-      visc_rem_u(I,j,k) = (CS%h_u(I,j,k) + dt * CS%a_u(I,j,K) * visc_rem_u(I,j,k-1)) * b1(I)
+  do k=2,nz
+    if (allocated(visc%Ray_u)) then
+      do j=G%jsc,G%jec ; do I=Isq,Ieq
+        Ray(I,j) = visc%Ray_u(I,j,k)
+      enddo ; enddo
+    endif
+
+    do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+      c1(I,j,k) = dt * CS%a_u(I,j,K)*b1(I,j)
+      b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,j) + CS%a_u(I,j,K) * d1(I,j))
+      b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
+      d1(I,j) = b_denom_1 * b1(I,j)
+      visc_rem_u(I,j,k) = (CS%h_u(I,j,k) + dt * CS%a_u(I,j,K) * visc_rem_u(I,j,k-1)) * b1(I,j)
     endif ; enddo ; enddo
-    do k=nz-1,1,-1 ; do I=Isq,Ieq ; if (do_i(I)) then
-      visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(I,k+1)*visc_rem_u(I,j,k+1)
+  enddo
 
-    endif ; enddo ; enddo ! i and k loops
-
-  enddo ! end u-component j loop
+  do k=nz-1,1,-1
+    do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+      visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(I,j,k+1) * visc_rem_u(I,j,k+1)
+    endif ; enddo ; enddo
+  enddo
 
   ! Now find the meridional viscous remnant using the robust tridiagonal solver.
-  !$OMP parallel do default(shared) firstprivate(Ray) private(do_i,b_denom_1,b1,d1,c1)
-  do J=Jsq,Jeq
-    do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0.0) ; enddo
+  if (allocated(visc%Ray_v)) then
+    do J=Jsq,Jeq ; do i=is,ie
+      Ray(i,J) = visc%Ray_v(i,J,1)
+    enddo ; enddo
+  else
+    do J=Jsq,Jeq ; do i=is,ie
+      Ray(i,J) = 0.
+    enddo ; enddo
+  endif
 
-    if (allocated(visc%Ray_v)) then ; do k=1,nz ; do i=is,ie
-      Ray(i,k) = visc%Ray_v(i,J,k)
-    enddo ; enddo ; endif
+  do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+    b_denom_1 = CS%h_v(i,J,1) + dt * (Ray(i,J) + CS%a_v(i,J,1))
+    b1(i,J) = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
+    d1(i,J) = b_denom_1 * b1(i,J)
+    visc_rem_v(i,J,1) = b1(i,J) * CS%h_v(i,J,1)
+  endif ; enddo ; enddo
 
-    do i=is,ie ; if (do_i(i)) then
-      b_denom_1 = CS%h_v(i,J,1) + dt * (Ray(i,1) + CS%a_v(i,J,1))
-      b1(i) = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
-      d1(i) = b_denom_1 * b1(i)
-      visc_rem_v(i,J,1) = b1(i) * CS%h_v(i,J,1)
-    endif ; enddo
-    do k=2,nz ; do i=is,ie ; if (do_i(i)) then
-      c1(i,k) = dt * CS%a_v(i,J,K)*b1(i)
-      b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,k) + CS%a_v(i,J,K)*d1(i))
-      b1(i) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
-      d1(i) = b_denom_1 * b1(i)
-      visc_rem_v(i,J,k) = (CS%h_v(i,J,k) + dt * CS%a_v(i,J,K) * visc_rem_v(i,J,k-1)) * b1(i)
+  do k=2,nz
+    if (allocated(visc%Ray_v)) then
+      do J=Jsq,Jeq ; do i=is,ie
+        Ray(i,J) = visc%Ray_v(i,J,k)
+      enddo ; enddo
+    endif
+
+    do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+      c1(i,J,k) = dt * CS%a_v(i,J,K) * b1(i,J)
+      b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,J) + CS%a_v(i,J,K) * d1(i,J))
+      b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
+      d1(i,J) = b_denom_1 * b1(i,J)
+      visc_rem_v(i,J,k) = (CS%h_v(i,J,k) + dt * CS%a_v(i,J,K) * visc_rem_v(i,J,k-1)) * b1(i,J)
     endif ; enddo ; enddo
-    do k=nz-1,1,-1 ; do i=is,ie ; if (do_i(i)) then
-      visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(i,k+1)*visc_rem_v(i,J,k+1)
+  enddo
+
+  do k=nz-1,1,-1
+    do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+      visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(i,J,k+1) * visc_rem_v(i,J,k+1)
     endif ; enddo ; enddo ! i and k loops
-  enddo ! end of v-component J loop
+  enddo
 
   if (CS%debug) then
     call uvchksum("visc_rem_[uv]", visc_rem_u, visc_rem_v, G%HI, haloshift=0, &
                   scalar_pair=.true.)
   endif
-
 end subroutine vertvisc_remnant
 
 
