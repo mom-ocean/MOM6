@@ -666,6 +666,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call set_derived_forcing_fields(forces, fluxes, G, US, GV%Rho0)
     endif
   endif
+  !$omp target enter data map(to: forces, forces%taux, forces%tauy)
 
   ! This will be replaced later with the pressures from forces or fluxes if they are available.
   if (associated(CS%tv%p_surf)) CS%tv%p_surf(:,:) = 0.0
