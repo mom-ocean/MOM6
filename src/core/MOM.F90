@@ -675,6 +675,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   if (do_dyn) then
     n_max = 1
     if (time_interval > CS%dt) n_max = ceiling(time_interval/CS%dt - 0.001)
+    ntstep = 1 ! initialization
     dt = time_interval / real(n_max)
     thermo_does_span_coupling = (CS%thermo_spans_coupling .and. &
                                 (CS%dt_therm > 1.5*cycle_time))
@@ -966,10 +967,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
-      do_advection = .false.
       if (tradv_does_span_coupling .or. .not.do_thermo) then
-        do_advection = (CS%t_dyn_rel_adv + 0.5*dt > dt_tr_adv)
-        if (CS%t_dyn_rel_thermo + 0.5*dt > dt_therm) do_advection = .true.
+        do_advection = ((CS%t_dyn_rel_adv + 0.5*dt > dt_tr_adv) .or. &
+                        (CS%t_dyn_rel_thermo + 0.5*dt > dt_therm))
       else
         do_advection = ((MOD(n,ntastep) == 0) .or. (n==n_max))
       endif
@@ -984,15 +984,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     !===========================================================================
     ! This is the second place where the diabatic processes and remapping could occur.
-    if (do_thermo) then
-      do_diabatic = .false.
-      if (thermo_does_span_coupling .or. .not.do_dyn) then
-        do_diabatic = (CS%t_dyn_rel_thermo + 0.5*dt > dt_therm)
-      else
-        do_diabatic = ((MOD(n,ntstep) == 0) .or. (n==n_max))
-      endif
+    if (thermo_does_span_coupling .or. .not.do_dyn) then
+      do_diabatic = (do_thermo .and. (CS%t_dyn_rel_thermo + 0.5*dt > dt_therm))
+    else
+      do_diabatic = (do_thermo .and. ((MOD(n,ntstep) == 0) .or. (n==n_max)))
     endif
-    if ((CS%t_dyn_rel_adv==0.0) .and. do_thermo .and. (.not.CS%diabatic_first) .and. do_diabatic) then
+    if ((CS%t_dyn_rel_adv==0.0) .and. (.not.CS%diabatic_first) .and. do_diabatic) then
 
       dtdia = CS%t_dyn_rel_thermo
       ! If the MOM6 dynamic and thermodynamic time stepping is being orchestrated
