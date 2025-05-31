@@ -94,6 +94,8 @@ type, public :: OBC_segment_data_type
   character(len=32) :: name                 !< A name identifier for the segment data.  When there is grid
                                             !! rotation, this is the name on the rotated internal grid.
   character(len=8)  :: genre                !< an identifier for the segment data
+  logical           :: on_face              !< If true, this field is discretized on the OBC segment
+                                            !! (velocity-point) faces, or if false it as the vorticiy points
   real              :: scale                !< A scaling factor for converting input data to
                                             !! the internal units of this field.  For salinity this would
                                             !! be in units of [S ppt-1 ~> 1]
@@ -827,7 +829,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
   character(len=128) :: inputdir
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
   character(len=256) :: mesg    ! Message for error messages.
-  integer, dimension(4) :: siz, siz2
+  integer, dimension(4) :: siz
   integer :: is, ie, js, je
   integer :: isd, ied, jsd, jed
   integer :: IsdB, IedB, JsdB, JedB
@@ -866,6 +868,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
 
   do n=1, OBC%number_of_segments
     segment => OBC%segment(n)
+    ! segment%values_needed is only true if this segment is on the local PE and some values need to be read.
     if (.not. segment%values_needed) cycle
 
     write(segnam,"('OBC_SEGMENT_',i3.3,'_DATA')") n
@@ -903,6 +906,7 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
     JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
 
     obgc_segments_props_list => OBC%obgc_segments_props !pointer to the head node
+
     do m=1,segment%num_fields
       if (m <= num_fields) then
         ! These are tracers with segments specified in MOM6 style override files
@@ -925,177 +929,76 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
           endif
         enddo
       endif
+
+      segment%field(m)%name = trim(fields(m))
+      ! The scale factor for tracers may also be set in register_segment_tracer, and a constant input
+      ! value is rescaled there.
+      segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US, segment%tr_Reg)
+      segment%field(m)%on_face = field_is_on_face(fields(m), segment%is_E_or_W)
+
       if (trim(filename) /= 'none') then
         OBC%update_OBC = .true. ! Data is assumed to be time-dependent if we are reading from file
         OBC%needs_IO_for_data = .true. ! At least one segment is using I/O for OBC data
 !       segment%values_needed = .true. ! Indicates that i/o will be needed for this segment
-        segment%field(m)%name = trim(fields(m))
-        ! The scale factor for tracers may also be set in register_segment_tracer, and a constant input
-        ! value is rescaled there.
-        segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US, segment%tr_Reg)
         segment%field(m)%use_IO = .true.
-        if (segment%field(m)%name == 'TEMP') then
-          segment%temp_segment_data_exists = .true.
-          segment%t_values_needed = .false.
-        endif
-        if (segment%field(m)%name == 'SALT') then
-          segment%salt_segment_data_exists = .true.
-          segment%s_values_needed = .false.
-        endif
+
         filename = trim(inputdir)//trim(filename)
         fieldname = trim(fieldname)//trim(suffix)
-        call field_size(filename,fieldname,siz,no_domain=.true.)
+        call field_size(filename, fieldname, siz, no_domain=.true.)
 !       if (siz(4) == 1) segment%values_needed = .false.
+
         if (.not.file_exists(filename)) &
           call MOM_error(FATAL," Unable to open OBC file " // trim(filename))
-        if (segment%on_pe) then
-          if (OBC%brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
-            write(mesg,'("Brushcutter mode sizes ", I6, I6)') siz(1), siz(2)
-            call MOM_error(WARNING, mesg // " " // trim(filename) // " " // trim(fieldname))
-            call MOM_error(FATAL,'segment data are not on the supergrid')
-          endif
-          siz2(1) = 1
 
-          if (siz(1)>1) then
-            if (OBC%brushcutter_mode) then
-              siz2(1) = (siz(1)-1)/2
-            else
-              siz2(1) = siz(1)
-            endif
-          endif
-          siz2(2) = 1
-          if (siz(2)>1) then
-            if (OBC%brushcutter_mode) then
-              siz2(2) = (siz(2)-1)/2
-            else
-              siz2(2) = siz(2)
-            endif
-          endif
-          siz2(3) = siz(3)
-
-          if (segment%is_E_or_W) then
-            if (segment%field(m)%name == 'V') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%v_values_needed = .false.
-            elseif (segment%field(m)%name == 'Vamp') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%vamp_values_needed = .false.
-              segment%vamp_index = m
-            elseif (segment%field(m)%name == 'Vphase') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%vphase_values_needed = .false.
-              segment%vphase_index = m
-            elseif (segment%field(m)%name == 'DVDX') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%g_values_needed = .false.
-            else
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,jsd:jed,siz2(3)))
-              if (segment%field(m)%name == 'U') then
-                segment%u_values_needed = .false.
-              elseif (segment%field(m)%name == 'Uamp') then
-                segment%uamp_values_needed = .false.
-                segment%uamp_index = m
-              elseif (segment%field(m)%name == 'Uphase') then
-                segment%uphase_values_needed = .false.
-                segment%uphase_index = m
-              elseif (segment%field(m)%name == 'SSH') then
-                segment%z_values_needed = .false.
-              elseif (segment%field(m)%name == 'SSHamp') then
-                segment%zamp_values_needed = .false.
-                segment%zamp_index = m
-              elseif (segment%field(m)%name == 'SSHphase') then
-                segment%zphase_values_needed = .false.
-                segment%zphase_index = m
-              elseif (segment%field(m)%name == 'TEMP') then
-                segment%t_values_needed = .false.
-              elseif (segment%field(m)%name == 'SALT') then
-                segment%s_values_needed = .false.
-              endif
-            endif
-          else
-            if (segment%field(m)%name == 'U') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%u_values_needed = .false.
-            elseif (segment%field(m)%name == 'DUDY') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%g_values_needed = .false.
-            elseif (segment%field(m)%name == 'Uamp') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%uamp_values_needed = .false.
-              segment%uamp_index = m
-            elseif (segment%field(m)%name == 'Uphase') then
-              allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz2(3)))
-              segment%uphase_values_needed = .false.
-              segment%uphase_index = m
-            else
-              allocate(segment%field(m)%buffer_src(isd:ied,JsdB:JedB,siz2(3)))
-              if (segment%field(m)%name == 'V') then
-                segment%v_values_needed = .false.
-              elseif (segment%field(m)%name == 'Vamp') then
-                segment%vamp_values_needed = .false.
-                segment%vamp_index = m
-              elseif (segment%field(m)%name == 'Vphase') then
-                segment%vphase_values_needed = .false.
-                segment%vphase_index = m
-              elseif (segment%field(m)%name == 'SSH') then
-                segment%z_values_needed = .false.
-              elseif (segment%field(m)%name == 'SSHamp') then
-                segment%zamp_values_needed = .false.
-                segment%zamp_index = m
-              elseif (segment%field(m)%name == 'SSHphase') then
-                segment%zphase_values_needed = .false.
-                segment%zphase_index = m
-              elseif (segment%field(m)%name == 'TEMP') then
-                segment%t_values_needed = .false.
-              elseif (segment%field(m)%name == 'SALT') then
-                segment%s_values_needed = .false.
-              endif
-            endif
-          endif
-          segment%field(m)%buffer_src(:,:,:) = 0.0
-          segment%field(m)%handle = init_external_field(trim(filename), trim(fieldname), &
-                    ignore_axis_atts=.true., threading=SINGLE_FILE)
-          if (siz(3) > 1) then
-            if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
-              ! siz(3) is constituent for tidal variables
-              call field_size(filename, 'constituent', siz, no_domain=.true.)
-              ! expect third dimension to be number of constituents in MOM_input
-              if (siz(3) /= OBC%n_tide_constituents .and. OBC%add_tide_constituents) then
-                call MOM_error(FATAL, 'Number of constituents in input data is not '//&
-                    'the same as the number specified')
-              endif
-              segment%field(m)%nk_src=siz(3)
-            else
-              ! siz(3) is depth for everything else
-              fieldname = 'dz_'//trim(fieldname)
-              call field_size(filename,fieldname,siz,no_domain=.true.)
-              if (segment%is_E_or_W) then
-                if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
-                  allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)))
-                else
-                  allocate(segment%field(m)%dz_src(IsdB:IedB,jsd:jed,siz(3)))
-                endif
-              else
-                if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
-                  allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)))
-                else
-                  allocate(segment%field(m)%dz_src(isd:ied,JsdB:JedB,siz(3)))
-                endif
-              endif
-              segment%field(m)%dz_src(:,:,:) = 0.0
-              segment%field(m)%nk_src=siz(3)
-              segment%field(m)%dz_handle = init_external_field(trim(filename), trim(fieldname), &
-                        ignore_axis_atts=.true., threading=SINGLE_FILE)
-            endif
-          else
-            segment%field(m)%nk_src=1
-          endif
+        if (OBC%brushcutter_mode .and. (modulo(siz(1),2) == 0 .or. modulo(siz(2),2) == 0)) then
+          write(mesg,'("Brushcutter mode sizes ", I6, I6)') siz(1), siz(2)
+          call MOM_error(WARNING, mesg // " " // trim(filename) // " " // trim(fieldname))
+          call MOM_error(FATAL,'segment data are not on the supergrid')
         endif
-      else
-        segment%field(m)%name = trim(fields(m))
-        ! The scale factor for tracers may also be set in register_segment_tracer, and a constant input
-        ! value is rescaled there.
-        segment%field(m)%scale = scale_factor_from_name(fields(m), GV, US, segment%tr_Reg)
+
+        if (.not.segment%field(m)%on_face) then
+          allocate(segment%field(m)%buffer_src(IsdB:IedB,JsdB:JedB,siz(3)), source=0.0)
+        elseif (segment%is_E_or_W) then
+          allocate(segment%field(m)%buffer_src(IsdB:IedB,jsd:jed,siz(3)), source=0.0)
+        else
+          allocate(segment%field(m)%buffer_src(isd:ied,JsdB:JedB,siz(3)), source=0.0)
+        endif
+
+        segment%field(m)%handle = init_external_field(trim(filename), trim(fieldname), &
+                  ignore_axis_atts=.true., threading=SINGLE_FILE)
+        if (siz(3) > 1) then
+          if ((index(segment%field(m)%name, 'phase') > 0) .or. (index(segment%field(m)%name, 'amp') > 0)) then
+            ! siz(3) is constituent for tidal variables
+            call field_size(filename, 'constituent', siz, no_domain=.true.)
+            ! expect third dimension to be number of constituents in MOM_input
+            if (siz(3) /= OBC%n_tide_constituents .and. OBC%add_tide_constituents) then
+              call MOM_error(FATAL, 'Number of constituents in input data is not '//&
+                  'the same as the number specified')
+            endif
+          else
+            ! siz(3) is depth for everything else
+            fieldname = 'dz_'//trim(fieldname)
+            call field_size(filename, fieldname, siz, no_domain=.true.)
+
+            if (.not.segment%field(m)%on_face) then
+              allocate(segment%field(m)%dz_src(IsdB:IedB,JsdB:JedB,siz(3)), source=0.0)
+            elseif (segment%is_E_or_W) then
+              allocate(segment%field(m)%dz_src(IsdB:IedB,jsd:jed,siz(3)), source=0.0)
+            else
+              allocate(segment%field(m)%dz_src(isd:ied,JsdB:JedB,siz(3)), source=0.0)
+            endif
+            segment%field(m)%dz_handle = init_external_field(trim(filename), trim(fieldname), &
+                      ignore_axis_atts=.true., threading=SINGLE_FILE)
+          endif
+          segment%field(m)%nk_src = siz(3)
+        else
+          segment%field(m)%nk_src = 1
+        endif
+
+        if (segment%field(m)%name == 'TEMP') segment%temp_segment_data_exists = .true.
+        if (segment%field(m)%name == 'SALT') segment%salt_segment_data_exists = .true.
+
+      else  ! This data is not being read from a file.
         segment%field(m)%value = segment%field(m)%scale * value
         segment%field(m)%use_IO = .false.
 
@@ -1107,39 +1010,34 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
                 'tidal boundary conditions by value rather than file.')
           endif
         endif
-        if (segment%field(m)%name == 'U') then
-          segment%u_values_needed = .false.
-        elseif (segment%field(m)%name == 'Uamp') then
-          segment%uamp_values_needed = .false.
-          segment%uamp_index = m
-        elseif (segment%field(m)%name == 'Uphase') then
-          segment%uphase_values_needed = .false.
-          segment%uphase_index = m
-        elseif (segment%field(m)%name == 'V') then
-          segment%v_values_needed = .false.
-        elseif (segment%field(m)%name == 'Vamp') then
-          segment%vamp_values_needed = .false.
-          segment%vamp_index = m
-        elseif (segment%field(m)%name == 'Vphase') then
-          segment%vphase_values_needed = .false.
-          segment%vphase_index = m
-        elseif (segment%field(m)%name == 'SSH') then
-          segment%z_values_needed = .false.
-        elseif (segment%field(m)%name == 'SSHamp') then
-          segment%zamp_values_needed = .false.
-          segment%zamp_index = m
-        elseif (segment%field(m)%name == 'SSHphase') then
-          segment%zphase_values_needed = .false.
-          segment%zphase_index = m
-        elseif (segment%field(m)%name == 'TEMP') then
-          segment%t_values_needed = .false.
-        elseif (segment%field(m)%name == 'SALT') then
-          segment%s_values_needed = .false.
-        elseif (segment%field(m)%name == 'DVDX' .or. segment%field(m)%name == 'DUDY') then
-          segment%g_values_needed = .false.
-        endif
       endif
+
+      ! Check on which values this field is providing.
+      if (segment%field(m)%name == 'TEMP') segment%t_values_needed = .false.
+      if (segment%field(m)%name == 'SALT') segment%s_values_needed = .false.
+      if (segment%field(m)%name == 'U') segment%u_values_needed = .false.
+      if (segment%field(m)%name == 'V') segment%v_values_needed = .false.
+      if (segment%field(m)%name == 'SSH') segment%z_values_needed = .false.
+      if ((segment%is_N_or_S .and. segment%field(m)%name == 'DUDY') .or. &
+          (segment%is_E_or_W .and. segment%field(m)%name == 'DVDX')) segment%g_values_needed = .false.
+      if (segment%field(m)%name == 'Uamp') segment%uamp_values_needed = .false.
+      if (segment%field(m)%name == 'Uphase') segment%uphase_values_needed = .false.
+      if (segment%field(m)%name == 'Vamp') segment%vamp_values_needed = .false.
+      if (segment%field(m)%name == 'Vphase') segment%vphase_values_needed = .false.
+      if (segment%field(m)%name == 'SSHamp') segment%zamp_values_needed = .false.
+      if (segment%field(m)%name == 'SSHphase') segment%zphase_values_needed = .false.
+
+      ! Store the field number for later retrievals.
+      if (segment%field(m)%name == 'Uamp') segment%uamp_index = m
+      if (segment%field(m)%name == 'Uphase') segment%uphase_index = m
+      if (segment%field(m)%name == 'Vamp') segment%vamp_index = m
+      if (segment%field(m)%name == 'Vphase') segment%vphase_index = m
+      if (segment%field(m)%name == 'SSHamp') segment%zamp_index = m
+      if (segment%field(m)%name == 'SSHphase') segment%zphase_index = m
+
     enddo
+
+    ! Check for any values that have not been provided.
     if (segment%u_values_needed .or. segment%uamp_values_needed .or. segment%uphase_values_needed .or. &
         segment%v_values_needed .or. segment%vamp_values_needed .or. segment%vphase_values_needed .or. &
         segment%t_values_needed .or. segment%s_values_needed .or. segment%g_values_needed .or. &
@@ -1159,6 +1057,30 @@ subroutine initialize_segment_data(G, GV, US, OBC, PF)
   OBC%update_OBC = (IO_needs(2) > 0)
 
 end subroutine initialize_segment_data
+
+!> Determine whether a particular field is descretized at the normal-velocity faces of an open
+!! boundary condition segment.
+logical function field_is_on_face(name, is_E_or_W)
+  character(len=*), intent(in) :: name       !< The OBC segment data name to interpret
+  logical,          intent(in) :: is_E_or_W  !< This is true for an eastern or western open boundary condition
+
+  field_is_on_face = .true.
+  if (is_E_or_W) then
+    if ((name == 'V') .or. (name == 'Vamp') .or. (name == 'Vphase') .or. (name == 'DVDX')) &
+      field_is_on_face = .false.
+  else
+    if ((name == 'U') .or. (name == 'Uamp') .or. (name == 'Uphase') .or. (name == 'DUDY')) &
+      field_is_on_face = .false.
+  endif
+end function field_is_on_face
+
+!> Determine based on its name whether a particular field a barotropic tidal field, for which the
+!! third dimension is the tidal constituent rather than a vertical axis
+logical function field_is_tidal(name)
+  character(len=*), intent(in) :: name       !< The OBC segment data name to interpret
+
+  field_is_tidal = ((index(name, 'phase') > 0) .or. (index(name, 'amp') > 0))
+end function field_is_tidal
 
 !> Return an appropriate dimensional scaling factor for input data based on an OBC segment data
 !! name [various ~> 1], or 1 for tracers or other fields that do not match one of the specified names.
@@ -3715,8 +3637,8 @@ subroutine set_tracer_data(OBC, tv, h, G, GV, PF)
 
 end subroutine set_tracer_data
 
-!> Needs documentation
-function lookup_seg_field(OBC_seg,field)
+!> Return the field number on the segment for the named field, or -1 if there is no field with that name.
+function lookup_seg_field(OBC_seg, field)
   type(OBC_segment_type), intent(in) :: OBC_seg !< OBC segment
   character(len=32), intent(in) :: field !< The field name
   integer :: lookup_seg_field
@@ -3738,16 +3660,15 @@ function get_tracer_index(OBC_seg,tr_name)
   type(OBC_segment_type), pointer :: OBC_seg !< OBC segment
   character(len=*), intent(in) :: tr_name   !< The field name
   integer :: get_tracer_index, it
-  get_tracer_index=-1
-  it=1
+  get_tracer_index = -1
+  it = 1
   do while(allocated(OBC_seg%tr_Reg%Tr(it)%t))
     if (trim(OBC_seg%tr_Reg%Tr(it)%name) == trim(tr_name)) then
-      get_tracer_index=it
+      get_tracer_index = it
       exit
     endif
-    it=it+1
+    it = it + 1
   enddo
-  return
 end function get_tracer_index
 
 !> Allocate segment data fields
@@ -3981,7 +3902,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
   ! Local variables
   integer :: c, i, j, k, is, ie, js, je, isd, ied, jsd, jed
-  integer :: IsdB, IedB, JsdB, JedB, n, m, nz, nt
+  integer :: IsdB, IedB, JsdB, JedB, n, m, nz, nt, nk_dst
   type(OBC_segment_type), pointer :: segment => NULL()
   integer, dimension(4) :: siz
   real, dimension(:,:,:), pointer :: tmp_buffer_in => NULL()  ! Unrotated input [various units]
@@ -3999,6 +3920,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
   real :: scl_fac     ! A scaling factor to compensate for differences in total thicknesses [nondim]
   real :: tidal_vel   ! Interpolated tidal velocity at the OBC points [L T-1 ~> m s-1]
   real :: tidal_elev  ! Interpolated tidal elevation at the OBC points [Z ~> m]
+  real :: ramp_value  ! If OBC%ramp is True, where we are on the ramp from 0 to 1, or 1 otherwise [nondim].
   real, allocatable :: normal_trans_bt(:,:) ! barotropic transport [H L2 T-1 ~> m3 s-1]
   integer :: turns    ! Number of index quarter turns
   real :: time_delta  ! Time since tidal reference date [T ~> s]
@@ -4094,48 +4016,17 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         siz(3) = size(segment%field(m)%buffer_src,3)
         if (.not.allocated(segment%field(m)%buffer_dst)) then
           if (siz(3) /= segment%field(m)%nk_src) call MOM_error(FATAL,'nk_src inconsistency')
-          if (segment%field(m)%nk_src > 1) then
-            if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,GV%ke))
-              elseif (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3))) ! 3rd dim is constituent
-              elseif (segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase' .or. &
-                  segment%field(m)%name == 'SSHamp' .or. segment%field(m)%name == 'SSHphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,siz(3)))  ! 3rd dim is constituent
-              else
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,GV%ke))
-              endif
-            else
-              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,GV%ke))
-              elseif (segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,siz(3))) ! 3rd dim is constituent
-              elseif (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase' .or. &
-                  segment%field(m)%name == 'SSHamp' .or. segment%field(m)%name == 'SSHphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,siz(3))) ! 3rd dim is constituent
-              else
-                allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,GV%ke))
-              endif
-            endif
+
+          nk_dst = GV%ke
+          if (field_is_tidal(segment%field(m)%name)) nk_dst = siz(3)
+          if (segment%field(m)%nk_src <= 1) nk_dst = 1
+          if (.not.segment%field(m)%on_face) then
+            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc, js_obc:je_obc, nk_dst), source=0.0)
+          elseif (segment%is_E_or_W) then
+            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc, js_obc+1:je_obc, nk_dst), source=0.0)
           else
-            if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
-                  segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
-              else
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,1))
-              endif
-            else
-              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
-                segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-                allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
-              else
-                allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1))
-              endif
-            endif
+            allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc, js_obc:je_obc, nk_dst), source=0.0)
           endif
-          segment%field(m)%buffer_dst(:,:,:) = 0.0
         endif
         ! read source data interpolated to the current model time
         ! NOTE: buffer is sized for vertex points, but may be used for faces
@@ -4175,14 +4066,10 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           flip_buffer = ((turns==1) .or. (turns==3))
           if (OBC%brushcutter_mode .or. (.not.flip_buffer)) then
             call rotate_array(tmp_buffer_in, turns, tmp_buffer)
-          elseif ((flip_buffer .and. segment%is_E_or_W) .and. &
-              (.not. (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'Vamp' &
-                  .or. segment%field(m)%name == 'Vphase' .or. segment%field(m)%name == 'DVDX') )) then
+          elseif (flip_buffer .and. segment%is_E_or_W .and. segment%field(m)%on_face) then
             nj_buf = size(tmp_buffer, 2) - 1
             call rotate_array(tmp_buffer_in(:nj_buf,:,:), turns, tmp_buffer(:,:nj_buf,:))
-          elseif ((flip_buffer .and. segment%is_N_or_S) .and. &
-                  (.not. (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'Uamp' &
-                      .or. segment%field(m)%name == 'Uphase' .or. segment%field(m)%name == 'DUDY') )) then
+          elseif (flip_buffer .and. segment%is_N_or_S .and. segment%field(m)%on_face) then
             ni_buf = size(tmp_buffer, 1) - 1
             call rotate_array(tmp_buffer_in(:,:ni_buf,:), turns, tmp_buffer(:ni_buf,:,:))
           else
@@ -4202,12 +4089,11 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         if (OBC%brushcutter_mode) then
           ! In brushcutter mode, the input data includes vales at both the vorticity point nodes and
           ! the velocity point faces of the OBC segments.  The vorticity node values are at the odd
-          ! posiitons in tmp_buffer, while the faces are at the even points.  The bug that is being
+          ! positions in tmp_buffer, while the faces are at the even points.  The bug that is being
           ! corrected here is the use of the odd indexed points for both the corners and the faces.
           bug_offset = 0 ; if (OBC%hor_index_bug) bug_offset = -1
           if (segment%is_E_or_W) then
-            if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
-                segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
+            if (.not.segment%field(m)%on_face) then
               segment%field(m)%buffer_src(is_obc,:,:) = &
                   tmp_buffer(1, 2*(js_obc+j_seg_offset+1)-1:2*(je_obc+j_seg_offset)+1:2, :)
             else
@@ -4215,8 +4101,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                   tmp_buffer(1, 2*(js_obc+j_seg_offset+1)+bug_offset:2*(je_obc+j_seg_offset):2, :)
             endif
           else
-            if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
-                segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
+            if (.not.segment%field(m)%on_face) then
               segment%field(m)%buffer_src(:,js_obc,:) = &
                   tmp_buffer(2*(is_obc+i_seg_offset+1)-1:2*(ie_obc+i_seg_offset)+1:2, 1, :)
             else
@@ -4226,8 +4111,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           endif
         else  ! Not brushcutter_mode.
           if (segment%is_E_or_W) then
-            if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX' .or. &
-                segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
+            if (.not.segment%field(m)%on_face) then
               segment%field(m)%buffer_src(is_obc,:,:) = &
                    tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset+1,:)
             else
@@ -4235,8 +4119,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                    tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset,:)
             endif
           else
-            if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY' .or. &
-                segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
+            if (.not.segment%field(m)%on_face) then
               segment%field(m)%buffer_src(:,js_obc,:) = &
                    tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset+1,1,:)
             else
@@ -4247,19 +4130,22 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
         endif
 
         ! no dz for tidal variables
-        if (segment%field(m)%nk_src > 1 .and.&
-            (index(segment%field(m)%name, 'phase') <= 0 .and. index(segment%field(m)%name, 'amp') <= 0)) then
-          ! This is where the 2-d tidal data values (apart from phase and amp) are actually read in.
+        if (segment%field(m)%nk_src <= 1) then  ! This is 2-d data with no remapping.
+          segment%field(m)%buffer_dst(:,:,1) = segment%field(m)%buffer_src(:,:,1)
+        elseif (field_is_tidal(segment%field(m)%name)) then
+          ! The 3rd axis for tidal variables is the tidal constituent, so there is no remapping.
+          segment%field(m)%buffer_dst(:,:,:) = segment%field(m)%buffer_src(:,:,:)
+        else
+          ! Read in 3-d data that may need to be remapped onto the new grid
+          ! This is also where the 2-d tidal data values (apart from phase and amp) are actually read in.
           call time_interp_external(segment%field(m)%dz_handle, Time, tmp_buffer_in, scale=US%m_to_Z)
 
           if (turns /= 0) then
             flip_buffer = ((turns==1) .or. (turns==3))
-            if ((flip_buffer .and. segment%is_E_or_W) .and. &
-                (.not. (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') )) then
+            if (flip_buffer .and. segment%is_E_or_W .and. segment%field(m)%on_face) then
               nj_buf = size(tmp_buffer, 2) - 1
               call rotate_array(tmp_buffer_in(:nj_buf,:,:), turns, tmp_buffer(:,:nj_buf,:))
-            elseif ((flip_buffer .and. segment%is_N_or_S) .and. &
-                    (.not. (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') )) then
+            elseif (flip_buffer .and. segment%is_N_or_S .and. segment%field(m)%on_face) then
               ni_buf = size(tmp_buffer, 1) - 1
               call rotate_array(tmp_buffer_in(:,:ni_buf,:), turns, tmp_buffer(:ni_buf,:,:))
             else
@@ -4270,7 +4156,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
           if (OBC%brushcutter_mode) then
             bug_offset = 0 ; if (OBC%hor_index_bug) bug_offset = -1
             if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
+              if (.not.segment%field(m)%on_face) then
                 segment%field(m)%dz_src(is_obc,:,:) = &
                     tmp_buffer(1, 2*(js_obc+j_seg_offset+1)-1:2*(je_obc+j_seg_offset)+1:2, :)
               else
@@ -4278,7 +4164,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                     tmp_buffer(1, 2*(js_obc+j_seg_offset+1)+bug_offset:2*(je_obc+j_seg_offset):2, :)
               endif
             else
-              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
+              if (.not.segment%field(m)%on_face) then
                 segment%field(m)%dz_src(:,js_obc,:) = &
                     tmp_buffer(2*(is_obc+i_seg_offset+1)-1:2*(ie_obc+i_seg_offset)+1:2, 1, :)
               else
@@ -4288,7 +4174,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             endif
           else  ! Not brushcutter_mode.
             if (segment%is_E_or_W) then
-              if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
+              if (.not.segment%field(m)%on_face) then
                 segment%field(m)%dz_src(is_obc,:,:) = &
                     tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset+1,:)
               else
@@ -4296,7 +4182,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                     tmp_buffer(1,js_obc+j_seg_offset+1:je_obc+j_seg_offset,:)
               endif
             else
-              if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
+              if (.not.segment%field(m)%on_face) then
                 segment%field(m)%dz_src(:,js_obc,:) = &
                     tmp_buffer(is_obc+i_seg_offset+1:ie_obc+i_seg_offset+1,1,:)
               else
@@ -4306,9 +4192,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             endif
           endif
 
-          if ((((segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') .and. segment%is_E_or_W) .or. &
-               ((segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') .and. segment%is_N_or_S)) .and. &
-             (.not.OBC%hor_index_bug)) then
+          if ((.not.segment%field(m)%on_face) .and. (.not.OBC%hor_index_bug)) then
             ! This point is at the OBC vorticity point nodes, rather than the OBC velocity point faces.
             call adjustSegmentEtaToFitBathymetry(G, GV, US, segment, m, at_node=.true.)
           else
@@ -4319,7 +4203,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             ishift=1
             if (segment%direction == OBC_DIRECTION_E) ishift=0
             I=is_obc
-            if (segment%field(m)%name == 'V' .or. segment%field(m)%name == 'DVDX') then
+            if (.not.segment%field(m)%on_face) then
               ! Do q points for the whole segment
               do J=max(js_obc,jsd),min(je_obc,jed-1)
                 ! Using the h remapping approach
@@ -4367,7 +4251,7 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
             jshift=1
             if (segment%direction == OBC_DIRECTION_N) jshift=0
             J=js_obc
-            if (segment%field(m)%name == 'U' .or. segment%field(m)%name == 'DUDY') then
+            if (.not.segment%field(m)%on_face) then
               ! Do q points for the whole segment
               do I=max(is_obc,isd),min(ie_obc,ied-1)
                 segment%field(m)%buffer_dst(I,J,:) = 0.0  ! initialize remap destination buffer
@@ -4410,54 +4294,24 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               enddo
             endif
           endif
-        elseif (segment%field(m)%nk_src > 1 .and. &
-            (index(segment%field(m)%name, 'phase') > 0 .or. index(segment%field(m)%name, 'amp') > 0)) then
-          ! no dz for tidal variables
-          segment%field(m)%buffer_dst(:,:,:) = segment%field(m)%buffer_src(:,:,:)
-        else  ! 2d data
-          segment%field(m)%buffer_dst(:,:,1) = segment%field(m)%buffer_src(:,:,1)  ! initialize remap destination buffer
         endif
         deallocate(tmp_buffer)
-        if (turns /= 0) &
-          deallocate(tmp_buffer_in)
+        if (turns /= 0) deallocate(tmp_buffer_in)
       else ! use_IO = .false. (Uniform value)
         if (.not. allocated(segment%field(m)%buffer_dst)) then
-          if (segment%is_E_or_W) then
-            if (segment%field(m)%name == 'V') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,GV%ke))
-            else if (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
-            elseif (segment%field(m)%name == 'U') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,GV%ke))
-            elseif (segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,1))
-            elseif (segment%field(m)%name == 'DVDX') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,GV%ke))
-            elseif (segment%field(m)%name == 'SSH' .or. segment%field(m)%name == 'SSHamp' &
-                .or. segment%field(m)%name == 'SSHphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
-            else
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc+1:je_obc,GV%ke))
-            endif
+          nk_dst = GV%ke
+          if (field_is_tidal(segment%field(m)%name)) nk_dst = 1
+          if (segment%field(m)%name == 'SSH') nk_dst = 1
+          if (.not.segment%field(m)%on_face) then
+            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc, js_obc:je_obc, nk_dst), &
+                     source=segment%field(m)%value)
+          elseif (segment%is_E_or_W) then
+            allocate(segment%field(m)%buffer_dst(is_obc:ie_obc, js_obc+1:je_obc, nk_dst), &
+                     source=segment%field(m)%value)
           else
-            if (segment%field(m)%name == 'U') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,GV%ke))
-            elseif (segment%field(m)%name == 'Uamp' .or. segment%field(m)%name == 'Uphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
-            elseif (segment%field(m)%name == 'V') then
-              allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,GV%ke))
-            elseif (segment%field(m)%name == 'Vamp' .or. segment%field(m)%name == 'Vphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,1))
-            elseif (segment%field(m)%name == 'DUDY') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,GV%ke))
-            elseif (segment%field(m)%name == 'SSH' .or. segment%field(m)%name == 'SSHamp' &
-                .or. segment%field(m)%name == 'SSHphase') then
-              allocate(segment%field(m)%buffer_dst(is_obc:ie_obc,js_obc:je_obc,1))
-            else
-              allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc,js_obc:je_obc,GV%ke))
-            endif
+            allocate(segment%field(m)%buffer_dst(is_obc+1:ie_obc, js_obc:je_obc, nk_dst), &
+                     source=segment%field(m)%value)
           endif
-          segment%field(m)%buffer_dst(:,:,:) = segment%field(m)%value
         endif
       endif
     enddo ! end field loop
@@ -4592,78 +4446,38 @@ subroutine update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
       endif
 
       if (trim(segment%field(m)%name) == 'SSH') then
-        if (OBC%ramp) then
-          do j=js_obc2,je_obc
-            do i=is_obc2,ie_obc
-              tidal_elev = 0.0
-              if (OBC%add_tide_constituents) then
-                do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
-                      cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
-                          + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
-                enddo
-              endif
-              segment%SSH(i,j) = OBC%ramp_value * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
+        ramp_value = 1.0
+        if (OBC%ramp) ramp_value = OBC%ramp_value
+        do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
+          tidal_elev = 0.0
+          if (OBC%add_tide_constituents) then
+            do c=1,OBC%n_tide_constituents
+              tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
+                  cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
+                      + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
             enddo
-          enddo
-        else
-          do j=js_obc2,je_obc
-            do i=is_obc2,ie_obc
-              tidal_elev = 0.0
-              if (OBC%add_tide_constituents) then
-                do c=1,OBC%n_tide_constituents
-                  tidal_elev = tidal_elev + (OBC%tide_fn(c) * segment%field(segment%zamp_index)%buffer_dst(i,j,c)) * &
-                      cos((time_delta*OBC%tide_frequencies(c) - segment%field(segment%zphase_index)%buffer_dst(i,j,c)) &
-                          + (OBC%tide_eq_phases(c) + OBC%tide_un(c)))
-                enddo
-              endif
-              segment%SSH(i,j) = (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
-            enddo
-          enddo
-        endif
+          endif
+          segment%SSH(i,j) = ramp_value * (segment%field(m)%buffer_dst(i,j,1) + tidal_elev)
+        enddo ; enddo
       endif
 
-      if (trim(segment%field(m)%name) == 'TEMP') then
-        if (allocated(segment%field(m)%buffer_dst)) then
-          do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
-            segment%tr_Reg%Tr(1)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-          enddo ; enddo ; enddo
-          if (.not. segment%tr_Reg%Tr(1)%is_initialized) then
-            ! if the tracer reservoir has not yet been initialized, then set to external value.
-            do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
-              segment%tr_Reg%Tr(1)%tres(i,j,k) = segment%tr_Reg%Tr(1)%t(i,j,k)
-            enddo ; enddo ; enddo
-            segment%tr_Reg%Tr(1)%is_initialized=.true.
-          endif
-        else
-          segment%tr_Reg%Tr(1)%OBC_inflow_conc = segment%field(m)%value
-        endif
-      elseif (trim(segment%field(m)%name) == 'SALT') then
-        if (allocated(segment%field(m)%buffer_dst)) then
-          do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
-            segment%tr_Reg%Tr(2)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
-          enddo ; enddo ; enddo
-          if (.not. segment%tr_Reg%Tr(2)%is_initialized) then
-            !if the tracer reservoir has not yet been initialized, then set to external value.
-            do k=1,nz ; do j=js_obc2,je_obc ; do i=is_obc2,ie_obc
-              segment%tr_Reg%Tr(2)%tres(i,j,k) = segment%tr_Reg%Tr(2)%t(i,j,k)
-            enddo ; enddo ; enddo
-            segment%tr_Reg%Tr(2)%is_initialized=.true.
-          endif
-        else
-          segment%tr_Reg%Tr(2)%OBC_inflow_conc = segment%field(m)%value
-        endif
-      elseif (trim(segment%field(m)%genre) == 'obgc') then
-        nt=get_tracer_index(segment,trim(segment%field(m)%name))
-        if (nt < 0) then
-          call MOM_error(FATAL,"update_OBC_segment_data: Did not find tracer "//trim(segment%field(m)%name))
+      ! Set the inflow and reservoir data for tracers.
+      if ((trim(segment%field(m)%name) == 'TEMP') .or. (trim(segment%field(m)%name) == 'SALT') .or. &
+         (trim(segment%field(m)%genre) == 'obgc')) then
+        if (trim(segment%field(m)%name) == 'TEMP') then
+          nt = 1
+        elseif (trim(segment%field(m)%name) == 'SALT') then
+          nt = 2
+        elseif (trim(segment%field(m)%genre) == 'obgc') then
+          nt = get_tracer_index(segment,trim(segment%field(m)%name))
+          if (nt < 0) call MOM_error(FATAL,"update_OBC_segment_data: Did not find tracer "//trim(segment%field(m)%name))
         endif
         if (allocated(segment%field(m)%buffer_dst)) then
           do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
             segment%tr_Reg%Tr(nt)%t(i,j,k) = segment%field(m)%buffer_dst(i,j,k)
           enddo ; enddo ; enddo
           if (.not. segment%tr_Reg%Tr(nt)%is_initialized) then
-            !if the tracer reservoir has not yet been initialized, then set to external value.
+            ! If the tracer reservoir has not yet been initialized, then set to external value.
             do k=1,nz; do j=js_obc2, je_obc; do i=is_obc2,ie_obc
               segment%tr_Reg%Tr(nt)%tres(i,j,k) = segment%tr_Reg%Tr(nt)%t(i,j,k)
             enddo ; enddo ; enddo
@@ -6418,6 +6232,7 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
     segment%field(n)%scale = segment_in%field(n)%scale
     segment%field(n)%resrv_lfac_in = segment_in%field(n)%resrv_lfac_in
     segment%field(n)%resrv_lfac_out = segment_in%field(n)%resrv_lfac_out
+    segment%field(n)%on_face = segment_in%field(n)%on_face
 
     if (allocated(segment_in%field(n)%buffer_dst)) then
       call allocate_rotated_seg_data(segment_in%field(n)%buffer_dst, segment_in%HI, &
