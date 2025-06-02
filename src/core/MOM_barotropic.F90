@@ -4386,7 +4386,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   type(ocean_OBC_type), optional, pointer :: OBC !< Open boundary control structure.
 
   ! Local variables
-  real :: hatu(SZIB_(G),SZK_(GV)) ! The layer thicknesses interpolated to u points [H ~> m or kg m-2]
+  real :: hatu(SZIB_(G),SZJ_(G),SZK_(GV)) ! The layer thicknesses interpolated to u points [H ~> m or kg m-2]
   real :: hatv(SZI_(G),SZK_(GV))  ! The layer thicknesses interpolated to v points [H ~> m or kg m-2]
   real :: hatutot(SZIB_(G))    ! The sum of the layer thicknesses interpolated to u points [H ~> m or kg m-2].
   real :: hatvtot(SZI_(G))     ! The sum of the layer thicknesses interpolated to v points [H ~> m or kg m-2].
@@ -4441,13 +4441,13 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
     if (present(h_u)) then
       do k=1,nz ; do I=is-1,ie
-        hatu(I,k) = h_u(I,j,k)
-        hatutot(I) = hatutot(I) + hatu(I,k)
+        hatu(I,j,k) = h_u(I,j,k)
+        hatutot(I) = hatutot(I) + hatu(I,j,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == ARITHMETIC) then
       do k=1,nz ; do I=is-1,ie
-        hatu(I,k) = 0.5 * (h(i+1,j,k) + h(i,j,k))
-        hatutot(I) = hatutot(I) + hatu(I,k)
+        hatu(I,j,k) = 0.5 * (h(i+1,j,k) + h(i,j,k))
+        hatutot(I) = hatutot(I) + hatu(I,j,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HYBRID .or. use_default) then
       Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
@@ -4459,25 +4459,25 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         e_u(I,K) = e_u(I,K+1) + 0.5 * (h(i+1,j,k) + h(i,j,k))
         h_arith = 0.5 * (h(i+1,j,k) + h(i,j,k))
         if (e_u(I,K+1) >= D_shallow_u(I)) then
-          hatu(I,k) = h_arith
+          hatu(I,j,k) = h_arith
         else
           h_harm = (h(i+1,j,k) * h(i,j,k)) / (h_arith + h_neglect)
           if (e_u(I,K) <= D_shallow_u(I)) then
-            hatu(I,k) = h_harm
+            hatu(I,j,k) = h_harm
           else
             wt_arith = (e_u(I,K) - D_shallow_u(I)) / (h_arith + h_neglect)
-            hatu(I,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
+            hatu(I,j,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
-        hatutot(I) = hatutot(I) + hatu(I,k)
+        hatutot(I) = hatutot(I) + hatu(I,j,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HARMONIC) then
       !   Interpolates thicknesses onto u grid points with the
       ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
       do k=1,nz ; do I=is-1,ie
-        hatu(I,k) = 2.0*(h(i+1,j,k) * h(i,j,k)) / &
+        hatu(I,j,k) = 2.0*(h(i+1,j,k) * h(i,j,k)) / &
                         ((h(i+1,j,k) + h(i,j,k)) + h_neglect)
-        hatutot(I) = hatutot(I) + hatu(I,k)
+        hatutot(I) = hatutot(I) + hatu(I,j,k)
       enddo ; enddo
     endif
 
@@ -4488,8 +4488,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
           if (CS%BT_OBC%u_OBC_type(I,j) > 0) then ! Eastern boundary condition
             hatutot(I) = 0.0
             do k=1,nz
-              hatu(I,k) = h(i,j,k)
-              hatutot(I) = hatutot(I) + hatu(I,k)
+              hatu(I,j,k) = h(i,j,k)
+              hatutot(I) = hatutot(I) + hatu(I,j,k)
             enddo
           endif
         enddo
@@ -4499,8 +4499,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
           if (CS%BT_OBC%u_OBC_type(I,j) < 0) then ! Western boundary condition
             hatutot(I) = 0.0
             do k=1,nz
-              hatu(I,k) = h(i+1,j,k)
-              hatutot(I) = hatutot(I) + hatu(I,k)
+              hatu(I,j,k) = h(i+1,j,k)
+              hatutot(I) = hatutot(I) + hatu(I,j,k)
             enddo
           endif
         enddo
@@ -4510,7 +4510,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     ! Determine the fractional thickness of each layer at the velocity points.
     do I=is-1,ie ; Ihatutot(I) = G%mask2dCu(I,j) / (hatutot(I) + h_neglect) ; enddo
     do k=1,nz ; do I=is-1,ie
-      CS%frhatu(I,j,k) = hatu(I,k) * Ihatutot(I)
+      CS%frhatu(I,j,k) = hatu(I,j,k) * Ihatutot(I)
     enddo ; enddo
   enddo
 
