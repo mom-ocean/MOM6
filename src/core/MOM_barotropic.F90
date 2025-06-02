@@ -4387,7 +4387,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
   ! Local variables
   real :: hatu(SZIB_(G),SZJ_(G),SZK_(GV)) ! The layer thicknesses interpolated to u points [H ~> m or kg m-2]
-  real :: hatv(SZI_(G),SZK_(GV))  ! The layer thicknesses interpolated to v points [H ~> m or kg m-2]
+  real :: hatv(SZI_(G),SZJB_(G),SZK_(GV))  ! The layer thicknesses interpolated to v points [H ~> m or kg m-2]
   real :: hatutot(SZIB_(G))    ! The sum of the layer thicknesses interpolated to u points [H ~> m or kg m-2].
   real :: hatvtot(SZI_(G))     ! The sum of the layer thicknesses interpolated to v points [H ~> m or kg m-2].
   real :: Ihatutot(SZIB_(G))   ! Ihatutot is the inverse of hatutot [H-1 ~> m-1 or m2 kg-1].
@@ -4520,13 +4520,13 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     do i=is,ie ; hatvtot(i) = 0.0 ; enddo
     if (present(h_v)) then
       do k=1,nz ; do i=is,ie
-        hatv(i,k) = h_v(i,J,k)
-        hatvtot(i) = hatvtot(i) + hatv(i,k)
+        hatv(i,J,k) = h_v(i,J,k)
+        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == ARITHMETIC) then
       do k=1,nz ; do i=is,ie
-        hatv(i,k) = 0.5 * (h(i,j+1,k) + h(i,j,k))
-        hatvtot(i) = hatvtot(i) + hatv(i,k)
+        hatv(i,J,k) = 0.5 * (h(i,j+1,k) + h(i,j,k))
+        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HYBRID .or. use_default) then
       Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
@@ -4538,23 +4538,23 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         e_v(i,K) = e_v(i,K+1) + 0.5 * (h(i,j+1,k) + h(i,j,k))
         h_arith = 0.5 * (h(i,j+1,k) + h(i,j,k))
         if (e_v(i,K+1) >= D_shallow_v(i)) then
-          hatv(i,k) = h_arith
+          hatv(i,J,k) = h_arith
         else
           h_harm = (h(i,j+1,k) * h(i,j,k)) / (h_arith + h_neglect)
           if (e_v(i,K) <= D_shallow_v(i)) then
-            hatv(i,k) = h_harm
+            hatv(i,J,k) = h_harm
           else
             wt_arith = (e_v(i,K) - D_shallow_v(i)) / (h_arith + h_neglect)
-            hatv(i,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
+            hatv(i,J,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
-        hatvtot(i) = hatvtot(i) + hatv(i,k)
+        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HARMONIC) then
       do k=1,nz ; do i=is,ie
-        hatv(i,k) = 2.0*(h(i,j+1,k) * h(i,j,k)) / &
+        hatv(i,J,k) = 2.0*(h(i,j+1,k) * h(i,j,k)) / &
                         ((h(i,j+1,k) + h(i,j,k)) + h_neglect)
-        hatvtot(i) = hatvtot(i) + hatv(i,k)
+        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
       enddo ; enddo
     endif
 
@@ -4565,8 +4565,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
           if (CS%BT_OBC%v_OBC_type(i,J) > 0) then ! Northern boundary condition
             hatvtot(i) = 0.0
             do k=1,nz
-              hatv(i,k) = h(i,j,k)
-              hatvtot(i) = hatvtot(i) + hatv(i,k)
+              hatv(i,J,k) = h(i,j,k)
+              hatvtot(i) = hatvtot(i) + hatv(i,J,k)
             enddo
           endif
         enddo
@@ -4576,8 +4576,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
           if (CS%BT_OBC%v_OBC_type(i,J) < 0) then ! Southern boundary condition
             hatvtot(i) = 0.0
             do k=1,nz
-              hatv(i,k) = h(i,j+1,k)
-              hatvtot(i) = hatvtot(i) + hatv(i,k)
+              hatv(i,J,k) = h(i,j+1,k)
+              hatvtot(i) = hatvtot(i) + hatv(i,J,k)
             enddo
           endif
         enddo
@@ -4587,7 +4587,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     ! Determine the fractional thickness of each layer at the velocity points.
     do i=is,ie ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
     do k=1,nz ; do i=is,ie
-      CS%frhatv(i,J,k) = hatv(i,k) * Ihatvtot(i)
+      CS%frhatv(i,J,k) = hatv(i,J,k) * Ihatvtot(i)
     enddo ; enddo
   enddo
 
