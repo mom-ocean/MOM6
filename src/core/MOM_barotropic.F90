@@ -867,7 +867,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       forces%tauy, CS, CS%frhatu, CS%frhatv, CS%q_d, CS%D_u_Cor, CS%D_v_Cor, CS%eta_cor, &
   !$omp       CS%bathyT, CS%IareaT, CS%ua_polarity, CS%va_polarity, CS%IDatu, CS%IDatv, CS%dx_Cv, &
   !$omp       CS%dy_Cu, CS%ubtav, CS%vbtav, CS%IdxCu, CS%IdyCv, CS%IareaT_OBCmask, CS%OBCmask_u, &
-  !$omp       CS%OBCmask_v, uh0, vh0)
+  !$omp       CS%OBCmask_v, uh0, vh0, BT_cont, BT_cont%FA_u_E0, BT_cont%FA_u_EE, BT_cont%FA_u_W0, &
+  !$omp       BT_cont%FA_u_WW, BT_cont%FA_v_N0, BT_cont%FA_v_NN, BT_cont%FA_v_S0, BT_cont%FA_v_SS, &
+  !$omp       BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, BT_cont%vBT_SS)
 
   !$omp target enter data &
   !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
@@ -2216,7 +2218,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       forces%tauy, CS, CS%frhatu, CS%frhatv, CS%q_d, CS%D_u_Cor, CS%D_v_Cor, CS%eta_cor, &
   !$omp       CS%bathyT, CS%IareaT, CS%ua_polarity, CS%va_polarity, CS%IDatu, CS%IDatv, CS%dx_Cv, &
   !$omp       CS%dy_Cu, CS%ubtav, CS%vbtav, CS%IdxCu, CS%IdyCv, CS%IareaT_OBCmask, CS%OBCmask_u, &
-  !$omp       CS%OBCmask_v, uh0, vh0)
+  !$omp       CS%OBCmask_v, uh0, vh0, BT_cont, BT_cont%FA_u_E0, BT_cont%FA_u_EE, BT_cont%FA_u_W0, &
+  !$omp       BT_cont%FA_u_WW, BT_cont%FA_v_N0, BT_cont%FA_v_NN, BT_cont%FA_v_S0, BT_cont%FA_v_SS, &
+  !$omp       BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, BT_cont%vBT_SS)
 
   deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
