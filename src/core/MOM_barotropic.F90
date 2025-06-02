@@ -4390,8 +4390,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   real :: hatv(SZI_(G),SZJB_(G),SZK_(GV))  ! The layer thicknesses interpolated to v points [H ~> m or kg m-2]
   real :: hatutot(SZIB_(G),SZJ_(G))    ! The sum of the layer thicknesses interpolated to u points [H ~> m or kg m-2].
   real :: hatvtot(SZI_(G),SZJB_(G))     ! The sum of the layer thicknesses interpolated to v points [H ~> m or kg m-2].
-  real :: Ihatutot(SZIB_(G))   ! Ihatutot is the inverse of hatutot [H-1 ~> m-1 or m2 kg-1].
-  real :: Ihatvtot(SZI_(G))    ! Ihatvtot is the inverse of hatvtot [H-1 ~> m-1 or m2 kg-1].
+  real :: Ihatutot(SZIB_(G),SZJ_(G))   ! Ihatutot is the inverse of hatutot [H-1 ~> m-1 or m2 kg-1].
+  real :: Ihatvtot(SZI_(G),SZJB_(G))    ! Ihatvtot is the inverse of hatvtot [H-1 ~> m-1 or m2 kg-1].
   real :: h_arith              ! The arithmetic mean thickness [H ~> m or kg m-2].
   real :: h_harm               ! The harmonic mean thicknesses [H ~> m or kg m-2].
   real :: h_neglect            ! A thickness that is so small it is usually lost
@@ -4508,9 +4508,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     endif
 
     ! Determine the fractional thickness of each layer at the velocity points.
-    do I=is-1,ie ; Ihatutot(I) = G%mask2dCu(I,j) / (hatutot(I,j) + h_neglect) ; enddo
+    do I=is-1,ie ; Ihatutot(I,j) = G%mask2dCu(I,j) / (hatutot(I,j) + h_neglect) ; enddo
     do k=1,nz ; do I=is-1,ie
-      CS%frhatu(I,j,k) = hatu(I,j,k) * Ihatutot(I)
+      CS%frhatu(I,j,k) = hatu(I,j,k) * Ihatutot(I,j)
     enddo ; enddo
   enddo
 
@@ -4585,9 +4585,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     endif
 
     ! Determine the fractional thickness of each layer at the velocity points.
-    do i=is,ie ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i,J) + h_neglect) ; enddo
+    do i=is,ie ; Ihatvtot(i,J) = G%mask2dCv(i,J) / (hatvtot(i,J) + h_neglect) ; enddo
     do k=1,nz ; do i=is,ie
-      CS%frhatv(i,J,k) = hatv(i,J,k) * Ihatvtot(i)
+      CS%frhatv(i,J,k) = hatv(i,J,k) * Ihatvtot(i,J)
     enddo ; enddo
   enddo
 
