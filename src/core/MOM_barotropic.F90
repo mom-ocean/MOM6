@@ -4398,8 +4398,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
                                ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: wt_arith             ! The weight for the arithmetic mean thickness [nondim].
                                ! The harmonic mean uses a weight of (1 - wt_arith).
-  real :: e_u(SZIB_(G),SZK_(GV)+1) ! The interface heights at u-velocity points [H ~> m or kg m-2]
-  real :: e_v(SZI_(G),SZK_(GV)+1)  ! The interface heights at v-velocity points [H ~> m or kg m-2]
+  real :: e_u(SZIB_(G),SZJ_(G),SZK_(GV)+1) ! The interface heights at u-velocity points [H ~> m or kg m-2]
+  real :: e_v(SZI_(G),SZJB_(G),SZK_(GV)+1)  ! The interface heights at v-velocity points [H ~> m or kg m-2]
   real :: D_shallow_u(SZI_(G)) ! The height of the shallower of the adjacent bathymetric depths
                                ! around a u-point (positive upward) [H ~> m or kg m-2]
   real :: D_shallow_v(SZIB_(G))! The height of the shallower of the adjacent bathymetric depths
@@ -4452,20 +4452,20 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     elseif (CS%hvel_scheme == HYBRID .or. use_default) then
       Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
       do I=is-1,ie
-        e_u(I,nz+1) = -0.5 * Z_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
+        e_u(I,j,nz+1) = -0.5 * Z_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
         D_shallow_u(I) = -Z_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
       enddo
       do k=nz,1,-1 ; do I=is-1,ie
-        e_u(I,K) = e_u(I,K+1) + 0.5 * (h(i+1,j,k) + h(i,j,k))
+        e_u(I,j,K) = e_u(I,j,K+1) + 0.5 * (h(i+1,j,k) + h(i,j,k))
         h_arith = 0.5 * (h(i+1,j,k) + h(i,j,k))
-        if (e_u(I,K+1) >= D_shallow_u(I)) then
+        if (e_u(I,j,K+1) >= D_shallow_u(I)) then
           hatu(I,j,k) = h_arith
         else
           h_harm = (h(i+1,j,k) * h(i,j,k)) / (h_arith + h_neglect)
-          if (e_u(I,K) <= D_shallow_u(I)) then
+          if (e_u(I,j,K) <= D_shallow_u(I)) then
             hatu(I,j,k) = h_harm
           else
-            wt_arith = (e_u(I,K) - D_shallow_u(I)) / (h_arith + h_neglect)
+            wt_arith = (e_u(I,j,K) - D_shallow_u(I)) / (h_arith + h_neglect)
             hatu(I,j,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
@@ -4531,20 +4531,20 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     elseif (CS%hvel_scheme == HYBRID .or. use_default) then
       Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
       do i=is,ie
-        e_v(i,nz+1) = -0.5 * Z_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
+        e_v(i,J,nz+1) = -0.5 * Z_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
         D_shallow_v(I) = -Z_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
       enddo
       do k=nz,1,-1 ; do i=is,ie
-        e_v(i,K) = e_v(i,K+1) + 0.5 * (h(i,j+1,k) + h(i,j,k))
+        e_v(i,J,K) = e_v(i,J,K+1) + 0.5 * (h(i,j+1,k) + h(i,j,k))
         h_arith = 0.5 * (h(i,j+1,k) + h(i,j,k))
-        if (e_v(i,K+1) >= D_shallow_v(i)) then
+        if (e_v(i,J,K+1) >= D_shallow_v(i)) then
           hatv(i,J,k) = h_arith
         else
           h_harm = (h(i,j+1,k) * h(i,j,k)) / (h_arith + h_neglect)
-          if (e_v(i,K) <= D_shallow_v(i)) then
+          if (e_v(i,J,K) <= D_shallow_v(i)) then
             hatv(i,J,k) = h_harm
           else
-            wt_arith = (e_v(i,K) - D_shallow_v(i)) / (h_arith + h_neglect)
+            wt_arith = (e_v(i,J,K) - D_shallow_v(i)) / (h_arith + h_neglect)
             hatv(i,J,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
