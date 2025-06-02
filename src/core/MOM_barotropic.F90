@@ -4388,8 +4388,8 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   ! Local variables
   real :: hatu(SZIB_(G),SZJ_(G),SZK_(GV)) ! The layer thicknesses interpolated to u points [H ~> m or kg m-2]
   real :: hatv(SZI_(G),SZJB_(G),SZK_(GV))  ! The layer thicknesses interpolated to v points [H ~> m or kg m-2]
-  real :: hatutot(SZIB_(G))    ! The sum of the layer thicknesses interpolated to u points [H ~> m or kg m-2].
-  real :: hatvtot(SZI_(G))     ! The sum of the layer thicknesses interpolated to v points [H ~> m or kg m-2].
+  real :: hatutot(SZIB_(G),SZJ_(G))    ! The sum of the layer thicknesses interpolated to u points [H ~> m or kg m-2].
+  real :: hatvtot(SZI_(G),SZJB_(G))     ! The sum of the layer thicknesses interpolated to v points [H ~> m or kg m-2].
   real :: Ihatutot(SZIB_(G))   ! Ihatutot is the inverse of hatutot [H-1 ~> m-1 or m2 kg-1].
   real :: Ihatvtot(SZI_(G))    ! Ihatvtot is the inverse of hatvtot [H-1 ~> m-1 or m2 kg-1].
   real :: h_arith              ! The arithmetic mean thickness [H ~> m or kg m-2].
@@ -4437,17 +4437,17 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,h_u,CS,h_neglect,h,use_default,G,GV) &
   !$OMP                          private(hatu,hatutot,Ihatutot,e_u,D_shallow_u,h_arith,h_harm,wt_arith,Z_to_H)
   do j=js,je
-    do I=is-1,ie ; hatutot(I) = 0.0 ; enddo
+    do I=is-1,ie ; hatutot(I,j) = 0.0 ; enddo
 
     if (present(h_u)) then
       do k=1,nz ; do I=is-1,ie
         hatu(I,j,k) = h_u(I,j,k)
-        hatutot(I) = hatutot(I) + hatu(I,j,k)
+        hatutot(I,j) = hatutot(I,j) + hatu(I,j,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == ARITHMETIC) then
       do k=1,nz ; do I=is-1,ie
         hatu(I,j,k) = 0.5 * (h(i+1,j,k) + h(i,j,k))
-        hatutot(I) = hatutot(I) + hatu(I,j,k)
+        hatutot(I,j) = hatutot(I,j) + hatu(I,j,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HYBRID .or. use_default) then
       Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
@@ -4469,7 +4469,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
             hatu(I,j,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
-        hatutot(I) = hatutot(I) + hatu(I,j,k)
+        hatutot(I,j) = hatutot(I,j) + hatu(I,j,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HARMONIC) then
       !   Interpolates thicknesses onto u grid points with the
@@ -4477,7 +4477,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       do k=1,nz ; do I=is-1,ie
         hatu(I,j,k) = 2.0*(h(i+1,j,k) * h(i,j,k)) / &
                         ((h(i+1,j,k) + h(i,j,k)) + h_neglect)
-        hatutot(I) = hatutot(I) + hatu(I,j,k)
+        hatutot(I,j) = hatutot(I,j) + hatu(I,j,k)
       enddo ; enddo
     endif
 
@@ -4486,10 +4486,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       if ((j >= CS%BT_OBC%js_u_E_obc) .and. (j <= CS%BT_OBC%je_u_E_obc)) then
         do I = max(is-1,CS%BT_OBC%Is_u_E_obc), min(ie,CS%BT_OBC%Ie_u_E_obc)
           if (CS%BT_OBC%u_OBC_type(I,j) > 0) then ! Eastern boundary condition
-            hatutot(I) = 0.0
+            hatutot(I,j) = 0.0
             do k=1,nz
               hatu(I,j,k) = h(i,j,k)
-              hatutot(I) = hatutot(I) + hatu(I,j,k)
+              hatutot(I,j) = hatutot(I,j) + hatu(I,j,k)
             enddo
           endif
         enddo
@@ -4497,10 +4497,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       if ((j >= CS%BT_OBC%js_u_W_obc) .and. (j <= CS%BT_OBC%je_u_W_obc)) then
         do I = max(is-1,CS%BT_OBC%Is_u_W_obc), min(ie,CS%BT_OBC%Ie_u_W_obc)
           if (CS%BT_OBC%u_OBC_type(I,j) < 0) then ! Western boundary condition
-            hatutot(I) = 0.0
+            hatutot(I,j) = 0.0
             do k=1,nz
               hatu(I,j,k) = h(i+1,j,k)
-              hatutot(I) = hatutot(I) + hatu(I,j,k)
+              hatutot(I,j) = hatutot(I,j) + hatu(I,j,k)
             enddo
           endif
         enddo
@@ -4508,7 +4508,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     endif
 
     ! Determine the fractional thickness of each layer at the velocity points.
-    do I=is-1,ie ; Ihatutot(I) = G%mask2dCu(I,j) / (hatutot(I) + h_neglect) ; enddo
+    do I=is-1,ie ; Ihatutot(I) = G%mask2dCu(I,j) / (hatutot(I,j) + h_neglect) ; enddo
     do k=1,nz ; do I=is-1,ie
       CS%frhatu(I,j,k) = hatu(I,j,k) * Ihatutot(I)
     enddo ; enddo
@@ -4517,16 +4517,16 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   !$OMP parallel do default(none) shared(is,ie,js,je,nz,CS,G,GV,h_v,h_neglect,h,use_default) &
   !$OMP                          private(hatv,hatvtot,Ihatvtot,e_v,D_shallow_v,h_arith,h_harm,wt_arith,Z_to_H)
   do J=js-1,je
-    do i=is,ie ; hatvtot(i) = 0.0 ; enddo
+    do i=is,ie ; hatvtot(i,J) = 0.0 ; enddo
     if (present(h_v)) then
       do k=1,nz ; do i=is,ie
         hatv(i,J,k) = h_v(i,J,k)
-        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
+        hatvtot(i,J) = hatvtot(i,J) + hatv(i,J,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == ARITHMETIC) then
       do k=1,nz ; do i=is,ie
         hatv(i,J,k) = 0.5 * (h(i,j+1,k) + h(i,j,k))
-        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
+        hatvtot(i,J) = hatvtot(i,J) + hatv(i,J,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HYBRID .or. use_default) then
       Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
@@ -4548,13 +4548,13 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
             hatv(i,J,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
-        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
+        hatvtot(i,J) = hatvtot(i,J) + hatv(i,J,k)
       enddo ; enddo
     elseif (CS%hvel_scheme == HARMONIC) then
       do k=1,nz ; do i=is,ie
         hatv(i,J,k) = 2.0*(h(i,j+1,k) * h(i,j,k)) / &
                         ((h(i,j+1,k) + h(i,j,k)) + h_neglect)
-        hatvtot(i) = hatvtot(i) + hatv(i,J,k)
+        hatvtot(i,J) = hatvtot(i,J) + hatv(i,J,k)
       enddo ; enddo
     endif
 
@@ -4563,10 +4563,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       if ((J >= CS%BT_OBC%Js_v_N_obc) .and. (J <= CS%BT_OBC%Je_v_N_obc)) then
         do i = max(is,CS%BT_OBC%is_v_N_obc), min(ie,CS%BT_OBC%ie_v_N_obc)
           if (CS%BT_OBC%v_OBC_type(i,J) > 0) then ! Northern boundary condition
-            hatvtot(i) = 0.0
+            hatvtot(i,J) = 0.0
             do k=1,nz
               hatv(i,J,k) = h(i,j,k)
-              hatvtot(i) = hatvtot(i) + hatv(i,J,k)
+              hatvtot(i,J) = hatvtot(i,J) + hatv(i,J,k)
             enddo
           endif
         enddo
@@ -4574,10 +4574,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       if ((J >= CS%BT_OBC%Js_v_S_obc) .and. (J <= CS%BT_OBC%Je_v_S_obc)) then
         do i = max(is,CS%BT_OBC%is_v_S_obc), min(ie,CS%BT_OBC%ie_v_S_obc)
           if (CS%BT_OBC%v_OBC_type(i,J) < 0) then ! Southern boundary condition
-            hatvtot(i) = 0.0
+            hatvtot(i,J) = 0.0
             do k=1,nz
               hatv(i,J,k) = h(i,j+1,k)
-              hatvtot(i) = hatvtot(i) + hatv(i,J,k)
+              hatvtot(i,J) = hatvtot(i,J) + hatv(i,J,k)
             enddo
           endif
         enddo
@@ -4585,7 +4585,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     endif
 
     ! Determine the fractional thickness of each layer at the velocity points.
-    do i=is,ie ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i) + h_neglect) ; enddo
+    do i=is,ie ; Ihatvtot(i) = G%mask2dCv(i,J) / (hatvtot(i,J) + h_neglect) ; enddo
     do k=1,nz ; do i=is,ie
       CS%frhatv(i,J,k) = hatv(i,J,k) * Ihatvtot(i)
     enddo ; enddo
