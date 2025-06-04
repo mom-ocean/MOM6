@@ -583,6 +583,9 @@ subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
   allocate(BT_cont%FA_u_EE(IsdB:IedB,jsd:jed), source=0.0)
   allocate(BT_cont%uBT_WW(IsdB:IedB,jsd:jed), source=0.0)
   allocate(BT_cont%uBT_EE(IsdB:IedB,jsd:jed), source=0.0)
+  !$omp target enter data map(alloc: BT_cont) ! map(to: BT_cont) results in cuda memory access errors elsewhere...
+  !$omp target enter data map(to: BT_cont%FA_u_WW, BT_cont%FA_u_W0, BT_cont%FA_u_E0, &
+  !$omp   BT_cont%FA_u_EE, BT_cont%uBT_WW, BT_cont%uBT_EE)
 
   allocate(BT_cont%FA_v_SS(isd:ied,JsdB:JedB), source=0.0)
   allocate(BT_cont%FA_v_S0(isd:ied,JsdB:JedB), source=0.0)
@@ -590,6 +593,8 @@ subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
   allocate(BT_cont%FA_v_NN(isd:ied,JsdB:JedB), source=0.0)
   allocate(BT_cont%vBT_SS(isd:ied,JsdB:JedB), source=0.0)
   allocate(BT_cont%vBT_NN(isd:ied,JsdB:JedB), source=0.0)
+  !$omp target enter data map(to: BT_cont%FA_v_SS, BT_cont%FA_v_S0, BT_cont%FA_v_N0, &
+  !$omp   BT_cont%FA_v_NN, BT_cont%vBT_SS, BT_cont%vBT_NN)
 
   if (present(alloc_faces)) then ; if (alloc_faces) then
     allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:nz), source=0.0)
@@ -604,10 +609,14 @@ subroutine dealloc_BT_cont_type(BT_cont)
 
   if (.not.associated(BT_cont)) return
 
+  !$omp target exit data map(release: BT_cont, BT_cont%FA_u_WW, BT_cont%FA_u_W0, BT_cont%FA_u_E0, &
+  !$omp   BT_cont%FA_u_EE, BT_cont%uBT_WW, BT_cont%uBT_EE)
   deallocate(BT_cont%FA_u_WW) ; deallocate(BT_cont%FA_u_W0)
   deallocate(BT_cont%FA_u_E0) ; deallocate(BT_cont%FA_u_EE)
   deallocate(BT_cont%uBT_WW)  ; deallocate(BT_cont%uBT_EE)
 
+  !$omp target exit data map(release: BT_cont%FA_v_SS, BT_cont%FA_v_S0, BT_cont%FA_v_N0, &
+  !$omp   BT_cont%FA_v_NN, BT_cont%vBT_SS, BT_cont%vBT_NN)
   deallocate(BT_cont%FA_v_SS) ; deallocate(BT_cont%FA_v_S0)
   deallocate(BT_cont%FA_v_N0) ; deallocate(BT_cont%FA_v_NN)
   deallocate(BT_cont%vBT_SS)  ; deallocate(BT_cont%vBT_NN)

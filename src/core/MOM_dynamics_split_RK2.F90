@@ -685,11 +685,16 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   ! This is the predictor step call to btstep.
   ! The CS%ADp argument here stores the weights for certain integrated diagnostics.
   !$omp target update to(uh_ptr, vh_ptr, u_ptr, v_ptr, u_bc_accel, v_bc_accel, CS%visc_rem_u, CS%visc_rem_v)
+  !$omp target update to(CS%BT_cont%FA_u_E0, CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_W0, &
+  !$omp   CS%BT_cont%FA_u_WW, CS%BT_cont%FA_v_N0, CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS, &
+  !$omp   CS%BT_cont%uBT_EE, CS%BT_cont%uBT_WW, CS%BT_cont%vBT_NN, CS%BT_cont%vBT_SS)
   call btstep(u_inst, v_inst, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, u_av, v_av, &
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, SpV_avg, CS%ADp, CS%OBC, CS%BT_cont, &
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr)
-  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, CS%uhbt, CS%vhbt)
+  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, CS%uhbt, CS%vhbt, CS%BT_cont%FA_u_E0, CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_W0, &
+  !$omp   CS%BT_cont%FA_u_WW, CS%BT_cont%FA_v_N0, CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS, &
+  !$omp   CS%BT_cont%uBT_EE, CS%BT_cont%uBT_WW, CS%BT_cont%vBT_NN, CS%BT_cont%vBT_SS)
   if (showCallTree) call callTree_leave("btstep()")
   call cpu_clock_end(id_clock_btstep)
 
@@ -969,13 +974,18 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the corrector step call to btstep.
-  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
-  !$omp target update to(u_bc_accel, v_bc_accel)
+  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v, u_bc_accel, v_bc_accel, CS%BT_cont%FA_u_E0, &
+  !$omp   CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_W0, CS%BT_cont%FA_u_WW, CS%BT_cont%FA_v_N0, &
+  !$omp   CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS, CS%BT_cont%uBT_EE, &
+  !$omp   CS%BT_cont%uBT_WW, CS%BT_cont%vBT_NN, CS%BT_cont%vBT_SS)
   call btstep(u_inst, v_inst, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, u_av, v_av, &
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, SpV_avg, CS%ADp, CS%OBC, CS%BT_cont, &
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr, etaav=eta_av)
   !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, CS%uhbt, CS%vhbt, eta_pred)
+  !$omp target update from(CS%BT_cont%FA_u_E0, CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_W0, &
+  !$omp   CS%BT_cont%FA_u_WW, CS%BT_cont%FA_v_N0, CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS, &
+  !$omp   CS%BT_cont%uBT_EE, CS%BT_cont%uBT_WW, CS%BT_cont%vBT_NN, CS%BT_cont%vBT_SS)
   if (CS%id_deta_dt>0) then
     do j=js,je ; do i=is,ie ; deta_dt(i,j) = (eta_pred(i,j) - eta(i,j))*Idt_bc ; enddo ; enddo
   endif
