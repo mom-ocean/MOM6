@@ -599,6 +599,7 @@ subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
   if (present(alloc_faces)) then ; if (alloc_faces) then
     allocate(BT_cont%h_u(IsdB:IedB,jsd:jed,1:nz), source=0.0)
     allocate(BT_cont%h_v(isd:ied,JsdB:JedB,1:nz), source=0.0)
+    !$omp target enter data map(to: BT_cont%h_u, BT_cont%h_v)
   endif ; endif
 
 end subroutine alloc_BT_cont_type
@@ -621,6 +622,7 @@ subroutine dealloc_BT_cont_type(BT_cont)
   deallocate(BT_cont%FA_v_N0) ; deallocate(BT_cont%FA_v_NN)
   deallocate(BT_cont%vBT_SS)  ; deallocate(BT_cont%vBT_NN)
 
+  !$omp target exit data map(release: BT_cont%h_u, BT_cont%h_v)
   if (allocated(BT_cont%h_u)) deallocate(BT_cont%h_u)
   if (allocated(BT_cont%h_v)) deallocate(BT_cont%h_v)
 

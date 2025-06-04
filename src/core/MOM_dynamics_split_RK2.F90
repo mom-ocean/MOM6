@@ -659,6 +659,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call cpu_clock_begin(id_clock_continuity)
     call continuity(u_inst, v_inst, h, hp, uh_in, vh_in, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv, &
                     visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
+    !$omp target update to(CS%BT_cont%h_u, CS%BT_cont%h_v)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
       call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
@@ -803,6 +804,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
                   uhbt=CS%uhbt, vhbt=CS%vhbt, visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, &
                   u_cor=u_av, v_cor=v_av, BT_cont=CS%BT_cont)
   call cpu_clock_end(id_clock_continuity)
+  !$omp target update to(CS%BT_cont%h_u, CS%BT_cont%h_v)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
   call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
@@ -909,7 +911,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! TODO: Cleanup BT_cont%h_[uv] handling
   !$omp target update to(u_av, v_av, h_av, uh, vh)
-  !$omp target enter data map(to: CS%BT_cont%h_u, CS%BT_cont%h_v)
 
 ! diffu = horizontal viscosity terms (u_av)
   call cpu_clock_begin(id_clock_horvisc)
@@ -921,7 +922,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   call cpu_clock_end(id_clock_horvisc)
 
   !$omp target update from(CS%diffu, CS%diffv)
-  !$omp target exit data map(delete: CS%BT_cont%h_u, CS%BT_cont%h_v)
 
   if (showCallTree) call callTree_wayPoint("done with horizontal_viscosity (step_MOM_dyn_split_RK2)")
 
@@ -1662,12 +1662,10 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
       .not. query_initialized(CS%diffv, "diffv", restart_CS)) then
     ! TODO: Cleanup BT_cont%h_[uv] handling
     !$omp target update to(u, v, h, uh, vh)
-    !$omp target enter data map(to: CS%BT_cont%h_u, CS%BT_cont%h_v)
     call horizontal_viscosity(u, v, h, uh, vh, CS%diffu, CS%diffv, MEKE, VarMix, G, GV, US, CS%hor_visc, &
                               tv, dt, OBC=CS%OBC, BT=CS%barotropic_CSp, TD=thickness_diffuse_CSp, &
                               hu_cont=CS%BT_cont%h_u, hv_cont=CS%BT_cont%h_v)
     !$omp target update from(CS%diffu, CS%diffv)
-    !$omp target exit data map(delete: CS%BT_cont%h_u, CS%BT_cont%h_v)
     call set_initialized(CS%diffu, "diffu", restart_CS)
     call set_initialized(CS%diffv, "diffv", restart_CS)
   endif

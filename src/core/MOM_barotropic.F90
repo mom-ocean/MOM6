@@ -4451,7 +4451,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = GV%H_subroundoff
 
-  do j=js,je ; do I=is-1,ie ; hatutot(I,j) = 0.0 ; enddo ; enddo
+  !$omp target enter data map(alloc: hatutot, hatvtot, Ihatutot, Ihatvtot, CS, CS%frhatu, CS%frhatv) &
+  !$omp   map(to: h_u, h_v)
+
+  do concurrent (j=js:je, I=is-1:ie) ; hatutot(I,j) = 0.0 ; enddo
 
   if (present(h_u)) then
     do concurrent (k=1:nz, j=js:je, I=is-1:ie)
@@ -4469,6 +4472,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     enddo ; enddo
   elseif (CS%hvel_scheme == HYBRID .or. use_default) then
     Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
+    !$omp target data map(alloc: e_u, D_shallow_u)
     do concurrent (j=js:je, I=is-1:ie)
       e_u(I,j,nz+1) = -0.5 * Z_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
       D_shallow_u(I,j) = -Z_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
@@ -4488,6 +4492,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         endif
       endif
     enddo
+    !$omp end target data
     do concurrent (j=js:je, I=is-1:ie) ; do k=1,nz
       hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
     enddo ; enddo
@@ -4558,6 +4563,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     enddo ; enddo
   elseif (CS%hvel_scheme == HYBRID .or. use_default) then
     Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
+    !$omp target data map(alloc: e_v, D_shallow_v)
     do concurrent (J=js-1:je, i=is:ie)
       e_v(i,J,nz+1) = -0.5 * Z_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
       D_shallow_v(i,J) = -Z_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
@@ -4577,6 +4583,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
         endif
       endif
     enddo
+    !$omp end target data
     do concurrent (J=js-1:je, i=is:ie) ; do k=1,nz
       hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
     enddo ; enddo
@@ -4626,6 +4633,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   do concurrent (k=1:nz, J=js-1:je, i=is:ie)
     CS%frhatv(i,J,k) = CS%frhatv(i,J,k) * Ihatvtot(i,J)
   enddo
+
+  !$omp target exit data map(release: hatutot, hatvtot, Ihatutot, Ihatvtot, h_u, h_v, CS) &
+  !$omp   map(from: CS%frhatu, CS%frhatv)
 
   if (CS%debug) then
     call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, &
