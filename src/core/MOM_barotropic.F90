@@ -867,7 +867,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       forces%tauy, CS, CS%frhatu, CS%frhatv, CS%q_d, CS%D_u_Cor, CS%D_v_Cor, CS%eta_cor, &
   !$omp       CS%bathyT, CS%IareaT, CS%ua_polarity, CS%va_polarity, CS%IDatu, CS%IDatv, CS%dx_Cv, &
   !$omp       CS%dy_Cu, CS%ubtav, CS%vbtav, CS%IdxCu, CS%IdyCv, CS%IareaT_OBCmask, CS%OBCmask_u, &
-  !$omp       CS%OBCmask_v, uh0, vh0)
+  !$omp       CS%OBCmask_v)
 
   !$omp target enter data &
   !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
@@ -2216,7 +2216,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp       forces%tauy, CS, CS%frhatu, CS%frhatv, CS%q_d, CS%D_u_Cor, CS%D_v_Cor, CS%eta_cor, &
   !$omp       CS%bathyT, CS%IareaT, CS%ua_polarity, CS%va_polarity, CS%IDatu, CS%IDatv, CS%dx_Cv, &
   !$omp       CS%dy_Cu, CS%ubtav, CS%vbtav, CS%IdxCu, CS%IdyCv, CS%IareaT_OBCmask, CS%OBCmask_u, &
-  !$omp       CS%OBCmask_v, uh0, vh0)
+  !$omp       CS%OBCmask_v)
 
   deallocate(wt_vel, wt_eta, wt_trans, wt_accel, wt_accel2)
 
@@ -2558,6 +2558,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     ! Update the range of valid points, either by doing a halo update or by marching inward.
     if ((iev - stencil < ie) .or. (jev - stencil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
+      ! TODO: direct GPU-to-GPU transfer
       !$omp target update from(ubt, vbt, eta)
       call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain, clock=id_clock_pass_step)
       !$omp target update to(ubt, vbt, eta)
