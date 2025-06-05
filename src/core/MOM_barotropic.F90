@@ -1573,33 +1573,34 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         H_to_Z = GV%H_to_RZ / CS%Rho_BT_lin
       endif
       do concurrent (j=js:je, i=is:ie) local(Idt_max2,H_eff_dx2,dyn_coef_max,ice_strength)
-      ! First determine the maximum stable value for dyn_coef_eta.
+        ! First determine the maximum stable value for dyn_coef_eta.
 
-      !   This estimate of the maximum stable time step is pretty accurate for
-      ! gravity waves, but it is a conservative estimate since it ignores the
-      ! stabilizing effect of the bottom drag.
-      Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*CS%bebt)) * (G%IareaT(i,j) * &
-            (((gtot_E(i,j) * (Datu(I,j)*G%IdxCu(I,j))) + &
-              (gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j)))) + &
-             ((gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J))) + &
-              (gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1))))) + &
-            ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
-             (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))) * CS%BT_Coriolis_scale**2 )
-      H_eff_dx2 = max(H_min_dyn * ((G%IdxT(i,j)**2) + (G%IdyT(i,j)**2)), &
-                      G%IareaT(i,j) * &
-                        (((Datu(I,j)*G%IdxCu(I,j)) + (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
-                         ((Datv(i,J)*G%IdyCv(i,J)) + (Datv(i,J-1)*G%IdyCv(i,J-1))) ) )
-      dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
-                     (dtbt**2 * H_eff_dx2)
+        !   This estimate of the maximum stable time step is pretty accurate for
+        ! gravity waves, but it is a conservative estimate since it ignores the
+        ! stabilizing effect of the bottom drag.
+        Idt_max2 = 0.5 * (dgeo_de * (1.0 + 2.0*CS%bebt)) * (G%IareaT(i,j) * &
+              (((gtot_E(i,j) * (Datu(I,j)*G%IdxCu(I,j))) + &
+                (gtot_W(i,j) * (Datu(I-1,j)*G%IdxCu(I-1,j)))) + &
+              ((gtot_N(i,j) * (Datv(i,J)*G%IdyCv(i,J))) + &
+                (gtot_S(i,j) * (Datv(i,J-1)*G%IdyCv(i,J-1))))) + &
+              ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
+              (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))) * CS%BT_Coriolis_scale**2 )
+        H_eff_dx2 = max(H_min_dyn * ((G%IdxT(i,j)**2) + (G%IdyT(i,j)**2)), &
+                        G%IareaT(i,j) * &
+                          (((Datu(I,j)*G%IdxCu(I,j)) + (Datu(I-1,j)*G%IdxCu(I-1,j))) + &
+                          ((Datv(i,J)*G%IdyCv(i,J)) + (Datv(i,J-1)*G%IdyCv(i,J-1))) ) )
+        dyn_coef_max = CS%const_dyn_psurf * max(0.0, 1.0 - dtbt**2 * Idt_max2) / &
+                      (dtbt**2 * H_eff_dx2)
 
-      ! ice_strength has units of [L2 Z-1 T-2 ~> m s-2]. rigidity_ice_[uv] has units of [L4 Z-1 T-1 ~> m3 s-1].
-      ice_strength = ((forces%rigidity_ice_u(I,j) + forces%rigidity_ice_u(I-1,j)) + &
-                      (forces%rigidity_ice_v(i,J) + forces%rigidity_ice_v(i,J-1))) / &
-                      (CS%ice_strength_length**2 * dtbt)
+        ! ice_strength has units of [L2 Z-1 T-2 ~> m s-2]. rigidity_ice_[uv] has units of [L4 Z-1 T-1 ~> m3 s-1].
+        ice_strength = ((forces%rigidity_ice_u(I,j) + forces%rigidity_ice_u(I-1,j)) + &
+                        (forces%rigidity_ice_v(i,J) + forces%rigidity_ice_v(i,J-1))) / &
+                        (CS%ice_strength_length**2 * dtbt)
 
-      ! Units of dyn_coef: [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1]
-      dyn_coef_eta(i,j) = min(dyn_coef_max, ice_strength * H_to_Z)
-    enddo ; endif
+        ! Units of dyn_coef: [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1]
+        dyn_coef_eta(i,j) = min(dyn_coef_max, ice_strength * H_to_Z)
+      enddo
+    endif
   endif
 
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
@@ -1708,14 +1709,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
 
   if (CS%id_ubtdt > 0) then
-    do j=js-1,je+1 ; do I=is-1,ie
+    do concurrent (j=js-1:je+1, I=is-1:ie)
       ubt_st(I,j) = ubt(I,j)
-    enddo ; enddo
+    enddo
   endif
   if (CS%id_vbtdt > 0) then
-    do J=js-1,je ; do i=is-1,ie+1
+    do concurrent (J=js-1:je, i=is-1:ie+1)
       vbt_st(i,J) = vbt(i,J)
-    enddo ; enddo
+    enddo
   endif
 
   if (query_averaging_enabled(CS%diag)) then
@@ -1837,19 +1838,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ! This block of code may be unnecessary because e_anom is only used for accelerations that
     ! are then recalculated at OBC points.
     if (CS%BT_OBC%u_OBCs_on_PE) then  ! copy back the value for u-points on the boundary.
-      !GOMP parallel do default(shared)
-      do j=js,je ; do I=is-1,ie
+      do concurrent (j=js:je, I=is-1:ie)
         if (CS%BT_OBC%u_OBC_type(I,j) > 0) e_anom(i+1,j) = e_anom(i,j)  ! OBC_DIRECTION_E
         if (CS%BT_OBC%u_OBC_type(I,j) < 0) e_anom(i,j) = e_anom(i+1,j)  ! OBC_DIRECTION_W
-      enddo ; enddo
+      enddo
     endif
 
     if (CS%BT_OBC%v_OBCs_on_PE) then  ! copy back the value for v-points on the boundary.
-      !GOMP parallel do default(shared)
-      do J=js-1,je ; do i=is,ie
+      do concurrent (J=js-1:je, i=is:ie)
         if (CS%BT_OBC%v_OBC_type(i,J) > 0) e_anom(i,j+1) = e_anom(i,j)  ! OBC_DIRECTION_N
         if (CS%BT_OBC%v_OBC_type(i,J) < 0) e_anom(i,j) = e_anom(i,j+1)  ! OBC_DIRECTION_S
-      enddo ; enddo
+      enddo
     endif
   endif
 
@@ -1880,35 +1879,37 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Find or store the weighted time-mean velocities and transports.
   if (CS%answer_date < 20190101) then
-    do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie)
       CS%ubtav(I,j) = CS%ubtav(I,j) * I_sum_wt_trans
       uhbtav(I,j) = uhbtav(I,j) * I_sum_wt_trans
       ubt_wtd(I,j) = ubt_wtd(I,j) * I_sum_wt_vel
-    enddo ; enddo
+    enddo
 
-    do J=js-1,je ; do i=is,ie
+    do concurrent (J=js-1:je, i=is:ie)
       CS%vbtav(i,J) = CS%vbtav(i,J) * I_sum_wt_trans
       vhbtav(i,J) = vhbtav(i,J) * I_sum_wt_trans
       vbt_wtd(i,J) = vbt_wtd(i,J) * I_sum_wt_vel
-    enddo ; enddo
+    enddo
   endif
 
   if (CS%use_filter .and. CS%linear_freq_drag) then ! Apply frequency-dependent drag
-    !$OMP do
-    do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie)
       u_accel_bt(I,j) = u_accel_bt(I,j) - Drag_u(I,j)
-    enddo ; enddo
-    !$OMP do
-    do J=js-1,je ; do i=is,ie
+    enddo
+    do concurrent (J=js-1:je, i=is:ie)
       v_accel_bt(i,J) = v_accel_bt(i,J) - Drag_v(i,J)
-    enddo ; enddo
+    enddo
 
-    if ((CS%id_LDu_bt > 0) .or. (associated(ADp%bt_lwd_u))) then ; do j=js,je ; do I=is-1,ie
-      LDu_avg(I,j) = LDu_avg(I,j) - Drag_u(I,j)
-    enddo ; enddo ; endif
-    if ((CS%id_LDv_bt > 0) .or. (associated(ADp%bt_lwd_v))) then ; do J=js-1,je ; do i=is,ie
-      LDv_avg(i,J) = LDv_avg(i,J) - Drag_v(i,J)
-    enddo ; enddo ; endif
+    if ((CS%id_LDu_bt > 0) .or. (associated(ADp%bt_lwd_u))) then
+      do concurrent (j=js:je, I=is-1:ie)
+        LDu_avg(I,j) = LDu_avg(I,j) - Drag_u(I,j)
+      enddo
+    endif
+    if ((CS%id_LDv_bt > 0) .or. (associated(ADp%bt_lwd_v))) then
+      do concurrent (J=js-1:je, i=is:ie)
+        LDv_avg(i,J) = LDv_avg(i,J) - Drag_v(i,J)
+      enddo
+    endif
   endif
 
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
@@ -1951,8 +1952,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (query_averaging_enabled(CS%diag)) then
 
     if (CS%gradual_BT_ICs) then
-      do j=js,je ; do I=is-1,ie ; CS%ubt_IC(I,j) = ubt_wtd(I,j) ; enddo ; enddo
-      do J=js-1,je ; do i=is,ie ; CS%vbt_IC(i,J) = vbt_wtd(i,J) ; enddo ; enddo
+      do concurrent (j=js:je, I=is-1:ie) ; CS%ubt_IC(I,j) = ubt_wtd(I,j) ; enddo
+      do concurrent (J=js-1:je, i=is:ie) ; CS%vbt_IC(i,J) = vbt_wtd(i,J) ; enddo
     endif
 
     ! Calculate various time-averaged barotropic diagnostics.
@@ -1965,76 +1966,80 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       if (CS%id_LDv_bt > 0) call post_data(CS%id_LDv_bt, LDv_avg, CS%diag)
     else ! if (CS%answer_date < 20190101) then
       if (CS%id_PFu_bt > 0) then
-        do j=js,je ; do I=is-1,ie
+        do concurrent (j=js:je, I=is-1:ie)
           PFu_avg(I,j) = PFu_avg(I,j) * I_sum_wt_accel
-        enddo ; enddo
+        enddo
+        !$omp target update from(PFu_avg)
         call post_data(CS%id_PFu_bt, PFu_avg, CS%diag)
       endif
       if (CS%id_PFv_bt > 0) then
-        do J=js-1,je ; do i=is,ie
+        do concurrent (J=js-1:je, i=is:ie)
           PFv_avg(i,J) = PFv_avg(i,J) * I_sum_wt_accel
-        enddo ; enddo
+        enddo
+        !$omp target update from(PFv_avg)
         call post_data(CS%id_PFv_bt, PFv_avg, CS%diag)
       endif
       if (CS%id_Coru_bt > 0) then
-        do j=js,je ; do I=is-1,ie
+        do concurrent (j=js:je, I=is-1:ie)
           Coru_avg(I,j) = Coru_avg(I,j) * I_sum_wt_accel
-        enddo ; enddo
+        enddo
+        !$omp target update from(Coru_avg)
         call post_data(CS%id_Coru_bt, Coru_avg, CS%diag)
       endif
       if (CS%id_Corv_bt > 0) then
-        do J=js-1,je ; do i=is,ie
+        do concurrent (J=js-1:je, i=is:ie)
           Corv_avg(i,J) = Corv_avg(i,J) * I_sum_wt_accel
-        enddo ; enddo
+        enddo
+        !$omp target update from(Corv_avg)
         call post_data(CS%id_Corv_bt, Corv_avg, CS%diag)
       endif
     endif
 
     ! Diagnostics for time tendency
     if (CS%id_ubtdt > 0) then
-      do j=js,je ; do I=is-1,ie
+      do concurrent (j=js:je, I=is-1:ie)
         ubt_dt(I,j) = (ubt_wtd(I,j) - ubt_st(I,j))*Idt
-      enddo ; enddo
+      enddo
       call post_data(CS%id_ubtdt, ubt_dt(IsdB:IedB,jsd:jed), CS%diag)
     endif
     if (CS%id_vbtdt > 0) then
-      do J=js-1,je ; do i=is,ie
+      do concurrent (J=js-1:je, i=is:ie)
         vbt_dt(i,J) = (vbt_wtd(i,J) - vbt_st(i,J))*Idt
-      enddo ; enddo
+      enddo
       call post_data(CS%id_vbtdt, vbt_dt(isd:ied,JsdB:JedB), CS%diag)
     endif
 
     ! Copy decomposed barotropic accelerations to ADp
     if (associated(ADp%bt_pgf_u)) then
       ! Note that CS%IdxCu is 0 at OBC points, so ADp%bt_pgf_u is zeroed out there.
-      do k=1,nz ; do j=js,je ; do I=is-1,ie
+      do concurrent (k=1:nz, j=js:je, I=is-1:ie)
         ADp%bt_pgf_u(I,j,k) = PFu_avg(I,j) - &
           (((pbce(i+1,j,k) - gtot_W(i+1,j)) * e_anom(i+1,j)) - &
            ((pbce(i,j,k) - gtot_E(i,j)) * e_anom(i,j))) * CS%IdxCu(I,j)
-      enddo ; enddo ; enddo
+      enddo
     endif
     if (associated(ADp%bt_pgf_v)) then
       ! Note that CS%IdyCv is 0 at OBC points, so ADp%bt_pgf_v is zeroed out there.
-      do k=1,nz ; do J=js-1,je ; do i=is,ie
+      do concurrent (k=1:nz, J=js-1:je, i=is:ie)
         ADp%bt_pgf_v(i,J,k) = PFv_avg(i,J) - &
           (((pbce(i,j+1,k) - gtot_S(i,j+1)) * e_anom(i,j+1)) - &
            ((pbce(i,j,k) - gtot_N(i,j)) * e_anom(i,j))) * CS%IdyCv(i,J)
-      enddo ; enddo ; enddo
+      enddo
     endif
 
-    if (associated(ADp%bt_cor_u)) then ; do j=js,je ; do I=is-1,ie
+    if (associated(ADp%bt_cor_u)) then ; do concurrent (j=js:je, I=is-1:ie)
       ADp%bt_cor_u(I,j) = Coru_avg(I,j)
-    enddo ; enddo ; endif
-    if (associated(ADp%bt_cor_v)) then ; do J=js-1,je ; do i=is,ie
+    enddo ; endif
+    if (associated(ADp%bt_cor_v)) then ; do concurrent (J=js-1:je, i=is:ie)
       ADp%bt_cor_v(i,J) = Corv_avg(i,J)
-    enddo ; enddo ; endif
+    enddo ; endif
 
-    if (associated(ADp%bt_lwd_u)) then ; do j=js,je ; do I=is-1,ie
+    if (associated(ADp%bt_lwd_u)) then ; do concurrent (j=js:je, I=is-1:ie)
       ADp%bt_lwd_u(I,j) = LDu_avg(I,j)
-    enddo ; enddo ; endif
-    if (associated(ADp%bt_lwd_v)) then ; do J=js-1,je ; do i=is,ie
+    enddo ; endif
+    if (associated(ADp%bt_lwd_v)) then ; do concurrent (J=js-1:je, i=is:ie)
       ADp%bt_lwd_v(i,J) = LDv_avg(i,J)
-    enddo ; enddo ; endif
+    enddo ; endif
 
     if (CS%id_ubtforce > 0) call post_data(CS%id_ubtforce, BT_force_u(IsdB:IedB,jsd:jed), CS%diag)
     if (CS%id_vbtforce > 0) call post_data(CS%id_vbtforce, BT_force_v(isd:ied,JsdB:JedB), CS%diag)
@@ -2141,40 +2146,46 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (CS%id_ubt_OBC > 0) call post_data(CS%id_ubt_OBC, CS%BT_OBC%ubt_outer(IsdB:IedB,jsd:jed), CS%diag)
     if (CS%id_vbt_OBC > 0) call post_data(CS%id_vbt_OBC, CS%BT_OBC%vbt_outer(isd:ied,JsdB:JedB), CS%diag)
   else
-    if (CS%id_frhatu1 > 0) CS%frhatu1(:,:,:) = CS%frhatu(:,:,:)
-    if (CS%id_frhatv1 > 0) CS%frhatv1(:,:,:) = CS%frhatv(:,:,:)
+    if (CS%id_frhatu1 > 0) then
+      !$omp target update from(CS%frhatu)
+      CS%frhatu1(:,:,:) = CS%frhatu(:,:,:)
+    endif
+    if (CS%id_frhatv1 > 0) then
+      !$omp target update from(CS%frhatv)
+      CS%frhatv1(:,:,:) = CS%frhatv(:,:,:)
+    endif
   endif
 
   if (associated(ADp%diag_hfrac_u)) then
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
+    do concurrent (k=1:nz, j=js:je, I=is-1:ie)
       ADp%diag_hfrac_u(I,j,k) = CS%frhatu(I,j,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
   if (associated(ADp%diag_hfrac_v)) then
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
+    do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       ADp%diag_hfrac_v(i,J,k) = CS%frhatv(i,J,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   if (use_BT_cont .and. associated(ADp%diag_hu)) then
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
+    do concurrent (k=1:nz, j=js:je, I=is-1:ie)
       ADp%diag_hu(I,j,k) = BT_cont%h_u(I,j,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
   if (use_BT_cont .and. associated(ADp%diag_hv)) then
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
+    do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       ADp%diag_hv(i,J,k) = BT_cont%h_v(i,J,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
   if (associated(ADp%visc_rem_u)) then
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
+    do concurrent (k=1:nz, j=js:je, I=is-1:ie)
       ADp%visc_rem_u(I,j,k) = visc_rem_u(I,j,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
   if (associated(ADp%visc_rem_v)) then
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
+    do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       ADp%visc_rem_v(i,J,k) = visc_rem_v(i,J,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   if (G%nonblocking_updates) then
@@ -2551,14 +2562,12 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     enddo ; enddo
 
     if (integral_BT_cont) then
-      !$OMP parallel do default(shared)
-      do j=jsv-1,jev+1 ; do I=isv-2,iev+1
+      do concurrent (j=jsv-1:jev+1, I=isv-2:iev+1)
         uhbt_int_prev(I,j) = uhbt_int(I,j)
-      enddo ; enddo
-      !$OMP parallel do default(shared)
-      do J=jsv-2,jev+1 ; do i=isv-1,iev+1
+      enddo
+      do concurrent (J=jsv-2:jev+1, i=isv-1:iev+1)
         vhbt_int_prev(i,J) = vhbt_int(i,J)
-      enddo ; enddo
+      enddo
     endif
 
     ! Do a predictor step update of eta
@@ -2577,10 +2586,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     if (interp_eta_PF) then
       ! Interpolate the effective surface pressure in time
       wt_end = n*Instep  ! This could be (n-0.5)*Instep.
-      !$OMP parallel do default(shared)
-      do j=jsv-1,jev+1 ; do i=isv-1,iev+1
+      do concurrent (j=jsv-1:jev+1, i=isv-1:iev+1)
         eta_PF(i,j) = eta_PF_1(i,j) + wt_end*d_eta_PF(i,j)
-      enddo ; enddo
+      enddo
     endif
 
     v_first = (MOD(n+G%first_direction,2)==1)
@@ -2626,25 +2634,22 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     ! Determine the transports based on the updated velocities when no OBCs are applied
     if (integral_BT_cont) then
-      !$OMP do schedule(static)
-      do j=jsv,jev ; do I=isv-1,iev
+      do concurrent (j=jsv:jev, I=isv-1:iev)
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*ubt_prev(I,j)
         ubt_int_prev(I,j) = ubt_int(I,j) ! Store the previous integrated velocity so it can be reset by at OBC points
         ubt_int(I,j) = ubt_int(I,j) + dtbt * ubt_trans(I,j)
         uhbt_int(I,j) = find_uhbt(ubt_int(I,j), BTCL_u(I,j)) + n*dtbt*uhbt0(I,j)
         ! Estimate the mass flux within a single timestep to take the filtered average.
         uhbt(I,j) = (uhbt_int(I,j) - uhbt_int_prev(I,j)) * Idtbt
-      enddo ; enddo
-      !$OMP end do nowait
-      !$OMP do schedule(static)
-      do J=jsv-1,jev ; do i=isv,iev
+      enddo
+      do concurrent (J=jsv-1:jev, i=isv:iev)
         vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vbt_prev(i,J)
         vbt_int_prev(i,J) = vbt_int(i,J) ! Store the previous integrated velocity so it can be reset by at OBC points
         vbt_int(i,J) = vbt_int(i,J) + dtbt * vbt_trans(i,J)
         vhbt_int(i,J) = find_vhbt(vbt_int(i,J), BTCL_v(i,J)) + n*dtbt*vhbt0(i,J)
         ! Estimate the mass flux within a single timestep to take the filtered average.
         vhbt(i,J) = (vhbt_int(i,J) - vhbt_int_prev(i,J)) * Idtbt
-      enddo ; enddo
+      enddo
     elseif (use_BT_cont) then
       do concurrent (j=jsv:jev, I=isv-1:iev)
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*ubt_prev(I,j)
@@ -2655,17 +2660,14 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
         vhbt(i,J) = find_vhbt(vbt_trans(i,J), BTCL_v(i,J)) + vhbt0(i,J)
       enddo
     else
-      !$OMP do schedule(static)
-      do j=jsv,jev ; do I=isv-1,iev
+      do concurrent (j=jsv:jev, I=isv-1:iev)
         ubt_trans(I,j) = trans_wt1*ubt(I,j) + trans_wt2*ubt_prev(I,j)
         uhbt(I,j) = Datu(I,j)*ubt_trans(I,j) + uhbt0(I,j)
-      enddo ; enddo
-      !$OMP end do nowait
-      !$OMP do schedule(static)
-      do J=jsv-1,jev ; do i=isv,iev
+      enddo
+      do concurrent (J=jsv-1:jev, i=isv:iev)
         vbt_trans(i,J) = trans_wt1*vbt(i,J) + trans_wt2*vbt_prev(i,J)
         vhbt(i,J) = Datv(i,J)*vbt_trans(i,J) + vhbt0(i,J)
-      enddo ; enddo
+      enddo
     endif
 
     ! This might need to be moved outside of the OMP do loop directives.
@@ -2693,19 +2695,19 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     ! Apply open boundary condition considerations to revise the updated velocities and transports.
     if (CS%BT_OBC%u_OBCs_on_PE) then
-      !$OMP single
+      !$omp target update from(ubt, uhbt, ubt_trans, eta, SpV_col_avg, ubt_prev, Datu, BTCL_u, uhbt0)
       call apply_u_velocity_OBCs(ubt, uhbt, ubt_trans, eta, SpV_col_avg, ubt_prev, BT_OBC, &
              G, MS, GV, US, CS, iev-ie, dtbt, CS%bebt, use_BT_cont, integral_BT_cont, n*dtbt, &
              Datu, BTCL_u, uhbt0, ubt_int, ubt_int_prev, uhbt_int, uhbt_int_prev)
-      !$OMP end single
+      !$omp target update to(ubt, uhbt, ubt_trans)
     endif
 
     if (CS%BT_OBC%v_OBCs_on_PE) then
-      !$OMP single
+      !$omp target update from(vbt, vhbt, vbt_trans, eta, SpV_col_avg, vbt_prev, Datv, BTCL_v, vhbt0)
       call apply_v_velocity_OBCs(vbt, vhbt, vbt_trans, eta, SpV_col_avg, vbt_prev, BT_OBC, &
              G, MS, GV, US, CS, iev-ie, dtbt, CS%bebt, use_BT_cont, integral_BT_cont, n*dtbt, &
              Datv, BTCL_v, vhbt0, vbt_int, vbt_int_prev, vhbt_int, vhbt_int_prev)
-      !$OMP end single
+      !$omp target update to(vbt, vhbt, vbt_trans)
     endif
 
     ! Contribute to the running sums of the transports and velocities.
@@ -2730,12 +2732,11 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     ! Update eta in a corrector step using the barotropic continuity equation.
     if (integral_BT_cont) then
-      !$OMP do
-      do j=jsv,jev ; do i=isv,iev
+      do concurrent (j=jsv:jev, i=isv:iev)
         eta(i,j) = (eta_IC(i,j) + n*eta_src(i,j)) + CS%IareaT_OBCmask(i,j) * &
                    ((uhbt_int(I-1,j) - uhbt_int(I,j)) + (vhbt_int(i,J-1) - vhbt_int(i,J)))
         eta_wtd(i,j) = eta_wtd(i,j) + eta(i,j) * wt_eta(n)
-      enddo ; enddo
+      enddo
     else
       do concurrent (j=jsv:jev, i=isv:iev)
         eta(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT_OBCmask(i,j)) * &
@@ -2753,6 +2754,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     ! Issue warnings if there are unphysical values of the sea surface height or total water column mass.
     ! Leaving this unported for now
+    !$omp target update from(eta)
     if (GV%Boussinesq) then
       do j=js,je ; do i=is,ie
         if ((eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) .and. (G%mask2dT(i,j) > 0.0)) then
@@ -2779,48 +2781,36 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     ! Accumulate some diagnostics of time-averaged barotropic accelerations.
     if (do_ave) then
       if ((CS%id_PFu_bt > 0) .or. associated(ADp%bt_pgf_u)) then
-        !$OMP do
-        do j=js,je ; do I=is-1,ie
+        do concurrent (j=js:je, I=is-1:ie)
           PFu_avg(I,j)  = PFu_avg(I,j) + wt_accel2(n) * PFu(I,j)
-        enddo ; enddo
-        !$OMP end do nowait
+        enddo
       endif
       if ((CS%id_PFv_bt > 0) .or. associated(ADp%bt_pgf_v)) then
-        !$OMP do
-        do J=js-1,je ; do i=is,ie
+        do concurrent (J=js-1:je, i=is:ie)
           PFv_avg(i,J)  = PFv_avg(i,J) + wt_accel2(n) * PFv(i,J)
-        enddo ; enddo
-        !$OMP end do nowait
+        enddo
       endif
       if ((CS%id_Coru_bt > 0) .or. associated(ADp%bt_cor_u)) then
-        !$OMP do
-        do j=js,je ; do I=is-1,ie
+        do concurrent (j=js:je, I=is-1:ie)
           Coru_avg(I,j) = Coru_avg(I,j) + wt_accel2(n) * Cor_u(I,j)
-        enddo ; enddo
-        !$OMP end do nowait
+        enddo
       endif
       if ((CS%id_Corv_bt > 0) .or. associated(ADp%bt_cor_v)) then
-        !$OMP do
-        do J=js-1,je ; do i=is,ie
+        do concurrent (J=js-1:je, i=is:ie)
           Corv_avg(i,J) = Corv_avg(i,J) + wt_accel2(n) * Cor_v(i,J)
-        enddo ; enddo
-        !$OMP end do nowait
+        enddo
       endif
 
       if (CS%linear_wave_drag) then
         if ((CS%id_LDu_bt > 0) .or. (associated(ADp%bt_lwd_u))) then
-          !$OMP do
-          do j=js,je ; do I=is-1,ie
+          do concurrent (j=js:je, I=is-1:ie)
             LDu_avg(I,j) = LDu_avg(I,j) - wt_accel2(n) * (ubt(I,j) * Rayleigh_u(I,j))
-          enddo ; enddo
-          !$OMP end do nowait
+          enddo
         endif
         if ((CS%id_LDv_bt > 0) .or. (associated(ADp%bt_lwd_v))) then
-          !$OMP do
-          do J=js-1,je ; do i=is,ie
+          do concurrent (J=js-1:je, i=is:ie)
             LDv_avg(i,J) = LDv_avg(i,J) - wt_accel2(n) * (vbt(i,J) * Rayleigh_v(i,J))
-          enddo ; enddo
-          !$OMP end do nowait
+          enddo
         endif
       endif
     endif
@@ -2947,7 +2937,7 @@ subroutine truncate_velocities(ubt, vbt, dt, G, CS, isv, iev, jsv, jev)
   integer :: i, j
 
   if (CS%clip_velocity) then
-    do j=jsv,jev ; do I=isv-1,iev
+    do concurrent (j=jsv:jev, I=isv-1:iev)
       if ((ubt(I,j) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
         ! Add some error reporting later.
         ubt(I,j) = (-0.95*CS%CFL_trunc) * (G%areaT(i+1,j) / (dt * G%dy_Cu(I,j)))
@@ -2955,8 +2945,8 @@ subroutine truncate_velocities(ubt, vbt, dt, G, CS, isv, iev, jsv, jev)
         ! Add some error reporting later.
         ubt(I,j) = (0.95*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dy_Cu(I,j)))
       endif
-    enddo ; enddo
-    do J=jsv-1,jev ; do i=isv,iev
+    enddo
+    do concurrent (J=jsv-1:jev, i=isv:iev)
       if ((vbt(i,J) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
         ! Add some error reporting later.
         vbt(i,J) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
@@ -2964,7 +2954,7 @@ subroutine truncate_velocities(ubt, vbt, dt, G, CS, isv, iev, jsv, jev)
         ! Add some error reporting later.
         vbt(i,J) = (0.9*CS%CFL_trunc) * (G%areaT(i,j) / (dt * G%dx_Cv(i,J)))
       endif
-    enddo ; enddo
+    enddo
   endif
 
 end subroutine truncate_velocities
@@ -3034,47 +3024,37 @@ subroutine btloop_eta_predictor(n, dtbt, ubt, vbt, eta, ubt_int, vbt_int, uhbt, 
 
   integer :: i, j
 
-  !$OMP parallel default(shared)
   if (integral_BT_cont) then
-    !$OMP do
-    do j=jsv-1,jev+1 ; do I=isv-2,iev+1
+    do concurrent (j=jsv-1:jev+1, I=isv-2:iev+1)
       uhbt_int(I,j) = find_uhbt(ubt_int(I,j) + dtbt*ubt(I,j), BTCL_u(I,j)) + n*dtbt*uhbt0(I,j)
-    enddo ; enddo
-    !$OMP end do nowait
-    !$OMP do
-    do J=jsv-2,jev+1 ; do i=isv-1,iev+1
+    enddo
+    do concurrent (J=jsv-2:jev+1, i=isv-1:iev+1)
       vhbt_int(i,J) = find_vhbt(vbt_int(i,J) + dtbt*vbt(i,J), BTCL_v(i,J)) + n*dtbt*vhbt0(i,J)
-    enddo ; enddo
-    !$OMP do
-    do j=jsv-1,jev+1 ; do i=isv-1,iev+1
+    enddo
+    do concurrent (j=jsv-1:jev+1, i=isv-1:iev+1)
       eta_pred(i,j) = (eta_IC(i,j) + n*eta_src(i,j)) + CS%IareaT_OBCmask(i,j) * &
                  ((uhbt_int(I-1,j) - uhbt_int(I,j)) + (vhbt_int(i,J-1) - vhbt_int(i,J)))
-    enddo ; enddo
+    enddo
   elseif (use_BT_cont) then
-    !$OMP do
-    do j=jsv-1,jev+1 ; do I=isv-2,iev+1
+    do concurrent (j=jsv-1:jev+1, I=isv-2:iev+1)
       uhbt(I,j) = find_uhbt(ubt(I,j), BTCL_u(I,j)) + uhbt0(I,j)
-    enddo ; enddo
-    !$OMP do
-    do J=jsv-2,jev+1 ; do i=isv-1,iev+1
+    enddo
+    do concurrent (J=jsv-2:jev+1, i=isv-1:iev+1)
       vhbt(i,J) = find_vhbt(vbt(i,J), BTCL_v(i,J)) + vhbt0(i,J)
-    enddo ; enddo
-    !$OMP do
-    do j=jsv-1,jev+1 ; do i=isv-1,iev+1
+    enddo
+    do concurrent (j=jsv-1:jev+1, i=isv-1:iev+1)
       eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT_OBCmask(i,j)) * &
                  ((uhbt(I-1,j) - uhbt(I,j)) + (vhbt(i,J-1) - vhbt(i,J)))
-    enddo ; enddo
+    enddo
   else
-    !$OMP do
-    do j=jsv-1,jev+1 ; do i=isv-1,iev+1
+    do concurrent (j=jsv-1:jev+1, i=isv-1:iev+1)
       eta_pred(i,j) = (eta(i,j) + eta_src(i,j)) + (dtbt * CS%IareaT_OBCmask(i,j)) * &
           (((Datu(I-1,j)*ubt(I-1,j) + uhbt0(I-1,j)) - &
             (Datu(I,j)*ubt(I,j) + uhbt0(I,j))) + &
            ((Datv(i,J-1)*vbt(i,J-1) + vhbt0(i,J-1)) - &
             (Datv(i,J)*vbt(i,J) + vhbt0(i,J))))
-    enddo ; enddo
+    enddo
   endif
-  !$OMP end parallel
 
 end subroutine btloop_eta_predictor
 
@@ -3199,21 +3179,16 @@ subroutine btloop_add_dyn_PF(PFu, PFv, eta_pred, eta, dyn_coef_eta, p_surf_dyn, 
   endif
 
   ! Use the change in eta to estimate the flow divergence and dynamic pressure.
-  !$OMP do
-  do j=jsv-1,jev+1 ; do i=isv-1,iev+1
+  do concurrent (j=jsv-1:jev+1, i=isv-1:iev+1)
     p_surf_dyn(i,j) = dyn_coef_eta(i,j) * (eta_pred(i,j) - eta(i,j))
-  enddo ; enddo
+  enddo
 
-  !$OMP do schedule(static)
-  do j=js_u,je_u ; do I=isv-1,iev
+  do concurrent (j=js_u:je_u, I=isv-1:iev)
     PFu(I,j) = PFu(I,j) + (p_surf_dyn(i,j) - p_surf_dyn(i+1,j)) * CS%IdxCu(I,j)
-  enddo ; enddo
-  !$OMP end do nowait
-  !$OMP do schedule(static)
-  do J=jsv-1,jev ; do i=is_v,ie_v
+  enddo
+  do concurrent (J=jsv-1:jev, i=is_v:ie_v)
     PFv(i,J) = PFv(i,J) + (p_surf_dyn(i,j) - p_surf_dyn(i,j+1)) * CS%IdyCv(i,J)
-  enddo ; enddo
-  !$OMP end do nowait
+  enddo
 
 end subroutine btloop_add_dyn_PF
 
