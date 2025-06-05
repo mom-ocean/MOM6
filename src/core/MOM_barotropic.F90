@@ -1467,14 +1467,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     av_rem_v(i,J) = av_rem_v(i,J) + CS%frhatv(i,J,k) * visc_rem_v(i,J,k)
   enddo ; enddo
   if (CS%strong_drag) then
-    do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie)
       bt_rem_u(I,j) = G%mask2dCu(I,j) * &
          ((nstep * av_rem_u(I,j)) / (1.0 + (nstep-1)*av_rem_u(I,j)))
-    enddo ; enddo
-    do J=js-1,je ; do i=is,ie
+    enddo
+    do concurrent (J=js-1:je, i=is:ie)
       bt_rem_v(i,J) = G%mask2dCv(i,J) * &
          ((nstep * av_rem_v(i,J)) / (1.0 + (nstep-1)*av_rem_v(i,J)))
-    enddo ; enddo
+    enddo
   else
     do concurrent (j=js:je, I=is-1:ie)
       bt_rem_u(I,j) = 0.0
@@ -1488,40 +1488,40 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo
   endif
   if (CS%linear_wave_drag) then
-    do j=js,je ; do I=is-1,ie ; if (CS%lin_drag_u(I,j) > 0.0) then
+    do concurrent (j=js:je, I=is-1:ie, CS%lin_drag_u(I,j) > 0.0)
       Htot = 0.5 * (eta(i,j) + eta(i+1,j))
       if (GV%Boussinesq) &
         Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j))
       bt_rem_u(I,j) = bt_rem_u(I,j) * (Htot / (Htot + CS%lin_drag_u(I,j) * dtbt))
 
       Rayleigh_u(I,j) = CS%lin_drag_u(I,j) / Htot
-    endif ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie ; if (CS%lin_drag_v(i,J) > 0.0) then
+    enddo
+    do concurrent (J=js-1:je, i=is:ie, CS%lin_drag_v(i,J) > 0.0)
       Htot = 0.5 * (eta(i,j) + eta(i,j+1))
       if (GV%Boussinesq) &
         Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i,j+1))
       bt_rem_v(i,J) = bt_rem_v(i,J) * (Htot / (Htot + CS%lin_drag_v(i,J) * dtbt))
 
       Rayleigh_v(i,J) = CS%lin_drag_v(i,J) / Htot
-    endif ; enddo ; enddo
+    enddo
   endif
 
   ! Avoid changing the velocities at OBC points due to non-OBC calculations.
   if (CS%BT_OBC%u_OBCs_on_PE) then
-    do j=js,je ; do I=is-1,ie ; if (CS%BT_OBC%u_OBC_type(I,j) /= 0) then
+    do concurrent (j=js:je, I=is-1:ie, CS%BT_OBC%u_OBC_type(I,j) /= 0)
       bt_rem_u(I,j) = 1.0
-    endif ; enddo ; enddo
+    enddo
   endif
   if (CS%BT_OBC%v_OBCs_on_PE) then
-    do J=js-1,je ; do i=is,ie ; if (CS%BT_OBC%v_OBC_type(i,J) /= 0) then
+    do concurrent (J=js-1:je, i=is:ie, CS%BT_OBC%v_OBC_type(i,J) /= 0)
       bt_rem_v(i,J) = 1.0
-    endif ; enddo ; enddo
+    enddo
   endif
 
   ! Set the mass source, after first initializing the halos to 0.
   do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1) ; eta_src(i,j) = 0.0 ; enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
-    do concurrent (j=js:je, i=is:ie) local(uint_cor, vint_cor, u_max_cor, v_max_cor, eta_cor_max); if (G%mask2dT(i,j) > 0.0) then
+    do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0) local(uint_cor, vint_cor, u_max_cor, v_max_cor, eta_cor_max)
       if (CS%eta_cor(i,j) > 0.0) then
         !   Limit the source (outward) correction to be a fraction the mass that
         ! can be transported out of the cell by velocities with a CFL number of CFL_cor.
@@ -1550,11 +1550,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
         CS%eta_cor(i,j) = max(CS%eta_cor(i,j), -max(0.0,Htot))
       endif
-    endif ; enddo
-  else ; do j=js,je ; do i=is,ie
-    if (abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j)) &
+    enddo
+  else
+    do concurrent (j=js:je, i=is:ie, abs(CS%eta_cor(i,j)) > dt*CS%eta_cor_bound(i,j))
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j), CS%eta_cor(i,j))
-  enddo ; enddo ; endif ; endif
+    enddo
+  endif ; endif
   do concurrent (j=js:je, i=is:ie)
     eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j))
   enddo
@@ -1571,8 +1572,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       else
         H_to_Z = GV%H_to_RZ / CS%Rho_BT_lin
       endif
-      !$OMP parallel do default(shared) private(Idt_max2,H_eff_dx2,dyn_coef_max,ice_strength)
-      do j=js,je ; do i=is,ie
+      do concurrent (j=js:je, i=is:ie) local(Idt_max2,H_eff_dx2,dyn_coef_max,ice_strength)
       ! First determine the maximum stable value for dyn_coef_eta.
 
       !   This estimate of the maximum stable time step is pretty accurate for
@@ -1599,7 +1599,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
       ! Units of dyn_coef: [L2 T-2 H-1 ~> m s-2 or m4 s-2 kg-1]
       dyn_coef_eta(i,j) = min(dyn_coef_max, ice_strength * H_to_Z)
-    enddo ; enddo ; endif
+    enddo ; endif
   endif
 
   if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
@@ -5143,14 +5143,14 @@ subroutine BT_cont_to_face_areas(BT_cont, Datu, Datv, G, US, MS, halo)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = 1 ; if (present(halo)) hs = max(halo,0)
 
-  do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
+  do concurrent (j=js-hs:je+hs, I=is-1-hs:ie+hs)
     Datu(I,j) = max(BT_cont%FA_u_EE(I,j), BT_cont%FA_u_E0(I,j), &
                     BT_cont%FA_u_W0(I,j), BT_cont%FA_u_WW(I,j))
-  enddo ; enddo
-  do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
+  enddo
+  do concurrent (J=js-1-hs:je+hs, i=is-hs:ie+hs)
     Datv(i,J) = max(BT_cont%FA_v_NN(i,J), BT_cont%FA_v_N0(i,J), &
                     BT_cont%FA_v_S0(i,J), BT_cont%FA_v_SS(i,J))
-  enddo ; enddo
+  enddo
 
 end subroutine BT_cont_to_face_areas
 
