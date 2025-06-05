@@ -992,12 +992,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! Copy input arrays into their wide-halo counterparts.
   if (interp_eta_PF) then
-    !$OMP parallel do default(shared)
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied ! Was "do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1" but doing so breaks OBC. Not sure why?
+    do concurrent (j=G%jsd:G%jed, i=G%isd:G%ied) ! Was "do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1" but doing so breaks OBC. Not sure why?
       eta(i,j) = eta_in(i,j)
       eta_PF_1(i,j) = eta_PF_start(i,j)
       d_eta_PF(i,j) = eta_PF_in(i,j) - eta_PF_start(i,j)
-    enddo ; enddo
+    enddo
   else
     do concurrent (j=G%Jsd:G%Jed, i=G%isd:G%ied) !: Was "do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1" but doing so breaks OBC. Not sure why?
       eta(i,j) = eta_in(i,j)
@@ -1005,10 +1004,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo
   endif
   if (integral_BT_cont) then
-    !$OMP parallel do default(shared)
-    do j=G%jsd,G%jed ; do i=G%isd,G%ied
+    do concurrent (j=G%jsd:G%jed, i=G%isd:G%ied)
       eta_IC(i,j) = eta_in(i,j)
-    enddo ; enddo
+    enddo
   endif
 
   do concurrent (k=1:nz, j=js:je, I=is-1:ie) local(visc_rem)
@@ -1032,27 +1030,27 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo
 
   if (.not. CS%wt_uv_bug) then
-    do j=js,je ; do I=is-1,ie ; Iwt_u_tot(I,j) = wt_u(I,j,1) ; enddo ; enddo
-    do k=2,nz ; do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie) ; Iwt_u_tot(I,j) = wt_u(I,j,1) ; enddo
+    do k=2,nz ; do concurrent (j=js:je, I=is-1:ie)
       Iwt_u_tot(I,j) = Iwt_u_tot(I,j) + wt_u(I,j,k)
-    enddo ; enddo ; enddo
-    do j=js,je ; do I=is-1,ie
-      if (abs(Iwt_u_tot(I,j)) > 0.0 ) Iwt_u_tot(I,j) = G%mask2dCu(I,j) / Iwt_u_tot(I,j)
     enddo ; enddo
-    do k=1,nz ; do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie, abs(Iwt_u_tot(I,j)) > 0.0)
+      Iwt_u_tot(I,j) = G%mask2dCu(I,j) / Iwt_u_tot(I,j)
+    enddo
+    do concurrent (k=1:nz, j=js:je, I=is-1:ie)
       wt_u(I,j,k) = wt_u(I,j,k) * Iwt_u_tot(I,j)
-    enddo ; enddo ; enddo
+    enddo
 
-    do J=js-1,je ; do i=is,ie ; Iwt_v_tot(i,J) = wt_v(i,J,1) ; enddo ; enddo
-    do k=2,nz ; do J=js-1,je ; do i=is,ie
+    do concurrent (J=js-1:je, i=is:ie) ; Iwt_v_tot(i,J) = wt_v(i,J,1) ; enddo
+    do k=2,nz ; do concurrent (J=js-1:je, i=is:ie)
       Iwt_v_tot(i,J) = Iwt_v_tot(i,J) + wt_v(i,J,k)
-    enddo ; enddo ; enddo
-    do J=js-1,je ; do i=is,ie
-      if (abs(Iwt_v_tot(i,J)) > 0.0 ) Iwt_v_tot(i,J) = G%mask2dCv(i,J) / Iwt_v_tot(i,J)
     enddo ; enddo
-    do k=1,nz ; do J=js-1,je ; do i=is,ie
+    do concurrent (J=js-1:je, i=is:ie, abs(Iwt_v_tot(i,J)) > 0.0)
+      Iwt_v_tot(i,J) = G%mask2dCv(i,J) / Iwt_v_tot(i,J)
+    enddo
+    do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       wt_v(i,J,k) = wt_v(i,J,k) * Iwt_v_tot(i,J)
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   !   Use u_Cor and v_Cor as the reference values for the Coriolis terms,
@@ -1084,20 +1082,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo
 
   if (CS%BT_OBC%u_OBCs_on_PE) then
-    do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie)
       if (CS%BT_OBC%u_OBC_type(I,j) > 0) & ! Eastern boundary condition
         gtot_W(i+1,j) = gtot_W(i,j)  ! Perhaps this should be gtot_E(i,j)?
       if (CS%BT_OBC%u_OBC_type(I,j) < 0) & ! Western boundary condition
         gtot_E(i,j) = gtot_E(i+1,j)  ! Perhaps this should be gtot_W(i+1,j)?
-    enddo ; enddo
+    enddo
   endif
   if (CS%BT_OBC%v_OBCs_on_PE) then
-    do J=js-1,je ; do i=is,ie
+    do concurrent (J=js-1:je, i=is:ie)
       if (CS%BT_OBC%v_OBC_type(i,J) > 0) & ! Northern boundary condition
         gtot_S(i,j+1) = gtot_S(i,j)  !### Should this be gtot_N(i,j) to use wt_v at the same point?
       if (CS%BT_OBC%v_OBC_type(i,J) < 0) & ! Southern boundary condition
         gtot_N(i,j) = gtot_N(i,j+1)  ! Perhaps this should be gtot_S(i,j+1)?
-    enddo ; enddo
+    enddo
   endif
 
   if (CS%calculate_SAL) then
@@ -1135,6 +1133,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Set up fields related to the open boundary conditions.  These calls include halo updates that
   ! must occur on all PEs when there are open boundary conditions anywhere.
   if (apply_OBCs) then
+    !$omp target update from(eta, Datu, Datv, BTCL_u, BTCL_v)
     if (nonblock_setup .and. apply_OBC_flather .and. .not.GV%Boussinesq) &
       call complete_group_pass(CS%pass_SpV_avg, CS%BT_domain)
 
@@ -1149,16 +1148,14 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     do concurrent (j=js:je, I=is-1:ie) ; uhbt(I,j) = 0.0 ; ubt(I,j) = 0.0 ; enddo
     do concurrent (J=js-1:je, i=is:ie) ; vhbt(i,J) = 0.0 ; vbt(i,J) = 0.0 ; enddo
     if (CS%visc_rem_u_uh0) then
-      !$OMP parallel do default(shared)
-      do j=js,je ; do k=1,nz ; do I=is-1,ie
+      do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
         uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
         ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * u_uh0(I,j,k)
-      enddo ; enddo ; enddo
-      !$OMP parallel do default(shared)
-      do J=js-1,je ; do k=1,nz ; do i=is,ie
+      enddo ; enddo
+      do k=1,nz ; do concurrent (J=js-1:je, i=is:ie)
         vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
         vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * v_vh0(i,J,k)
-      enddo ; enddo ; enddo
+      enddo ; enddo
     else
       do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
         uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
@@ -1182,7 +1179,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       !$omp target update to(ubt, vbt, uhbt, vhbt)
       if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
       if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-
+      !$omp target update from(BTCL_u, BTCL_v)
       if (integral_BT_cont) then
         call adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
                                         G, US, MS, 1+ievf-ie, dt_baroclinic=dt)
@@ -1190,16 +1187,15 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         call adjust_local_BT_cont_types(ubt, uhbt, vbt, vhbt, BTCL_u, BTCL_v, &
                                         G, US, MS, 1+ievf-ie)
       endif
+      !$omp target update to(BTCL_u, BTCL_v)
     endif
     if (integral_BT_cont) then
-      !$OMP parallel do default(shared)
-      do j=js,je ; do I=is-1,ie
+      do concurrent (j=js:je, I=is-1:ie)
         uhbt0(I,j) = uhbt(I,j) - find_uhbt(dt*ubt(I,j), BTCL_u(I,j)) * Idt
-      enddo ; enddo
-      !$OMP parallel do default(shared)
-      do J=js-1,je ; do i=is,ie
+      enddo
+      do concurrent (J=js-1:je, i=is:ie)
         vhbt0(i,J) = vhbt(i,J) - find_vhbt(dt*vbt(i,J), BTCL_v(i,J)) * Idt
-      enddo ; enddo
+      enddo
     elseif (use_BT_cont) then
       do concurrent (j=js:je, I=is-1:ie)
         uhbt0(I,j) = uhbt(I,j) - find_uhbt(ubt(I,j), BTCL_u(I,j))
@@ -1208,26 +1204,22 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         vhbt0(i,J) = vhbt(i,J) - find_vhbt(vbt(i,J), BTCL_v(i,J))
       enddo
     else
-      !$OMP parallel do default(shared)
-      do j=js,je ; do I=is-1,ie
+      do concurrent (j=js:je, I=is-1:ie)
         uhbt0(I,j) = uhbt(I,j) - Datu(I,j)*ubt(I,j)
-      enddo ; enddo
-      !$OMP parallel do default(shared)
-      do J=js-1,je ; do i=is,ie
+      enddo
+      do concurrent (J=js-1:je, i=is:ie)
         vhbt0(i,J) = vhbt(i,J) - Datv(i,J)*vbt(i,J)
-      enddo ; enddo
+      enddo
     endif
     if (CS%BT_OBC%u_OBCs_on_PE) then  ! Zero out the reference transport at OBC points
-      !$OMP parallel do default(shared)
-      do j=js,je ; do I=is-1,ie ; if (CS%BT_OBC%u_OBC_type(I,j) /= 0) then
+      do concurrent(j=js:je, I=is-1:ie, CS%BT_OBC%u_OBC_type(I,j) /= 0)
         uhbt0(I,j) = 0.0
-      endif ; enddo ; enddo
+      enddo
     endif
     if (CS%BT_OBC%v_OBCs_on_PE) then  !Zero out the reference transport at OBC points
-      !$OMP parallel do default(shared)
-      do J=js-1,je ; do i=is,ie ; if (CS%BT_OBC%v_OBC_type(i,J) /= 0) then
+      do concurrent (J=js-1:je, i=is:ie, CS%BT_OBC%v_OBC_type(i,J) /= 0)
         vhbt0(i,J) = 0.0
-      endif ; enddo ; enddo
+      enddo
     endif
   endif
 
@@ -1242,6 +1234,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo
 
   if (apply_OBCs) then
+    !$omp target update from(ubt, vbt)
     ubt_first(:,:) = ubt(:,:) ; vbt_first(:,:) = vbt(:,:)
   endif
 
@@ -1302,14 +1295,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     BT_force_v(i,J) = 0.0
   endif ; enddo
   if (associated(taux_bot) .and. associated(tauy_bot)) then
-    !$OMP parallel do default(shared)
-    do j=js,je ; do I=is-1,ie ; if (G%mask2dCu(I,j) > 0.0) then
+    do concurrent (j=js:je, I=is-1:ie, G%mask2dCu(I,j) > 0.0)
       BT_force_u(I,j) = BT_force_u(I,j) - taux_bot(I,j) * GV%RZ_to_H * CS%IDatu(I,j)
-    endif ; enddo ; enddo
-    !$OMP parallel do default(shared)
-    do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.0) then
+    enddo
+    do concurrent (J=js-1:je, i=is:ie, G%mask2dCv(i,J) > 0.0)
       BT_force_v(i,J) = BT_force_v(i,J) - tauy_bot(i,J) * GV%RZ_to_H * CS%IDatv(i,J)
-    endif ; enddo ; enddo
+    enddo
   endif
 
   ! bc_accel_u & bc_accel_v are only available on the potentially
@@ -1322,32 +1313,30 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo ; enddo
 
   if (CS%gradual_BT_ICs) then
-    !$OMP parallel do default(shared)
-    do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie)
       BT_force_u(I,j) = BT_force_u(I,j) + (ubt(I,j) - CS%ubt_IC(I,j)) * Idt
       ubt(I,j) = CS%ubt_IC(I,j)
       if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
-    enddo ; enddo
-    !$OMP parallel do default(shared)
-    do J=js-1,je ; do i=is,ie
+    enddo
+    do concurrent (J=js-1:je, i=is:ie)
       BT_force_v(i,J) = BT_force_v(i,J) + (vbt(i,J) - CS%vbt_IC(i,J)) * Idt
       vbt(i,J) = CS%vbt_IC(i,J)
       if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
-    enddo ; enddo
+    enddo
   endif
 
   ! Compute instantaneous tidal velocities and apply frequency-dependent drag.
   ! Note that the filtered velocities are only updated during the current predictor step,
   ! and are calculated using the barotropic velocity from the previous correction step.
   if (CS%use_filter) then
+    !$omp target update from(ubt, vbt)
     call Filt_accum(ubt(G%IsdB:G%IedB,G%jsd:G%jed), ufilt, CS%Time, US, CS%Filt_CS_u)
     call Filt_accum(vbt(G%isd:G%ied,G%JsdB:G%JedB), vfilt, CS%Time, US, CS%Filt_CS_v)
   endif
 
   if (CS%use_filter .and. CS%linear_freq_drag) then
     call wave_drag_calc(ufilt, vfilt, Drag_u, Drag_v, G, CS%Drag_CS)
-    !$OMP do
-    do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie)
       Htot = 0.5 * (eta(i,j) + eta(i+1,j))
       if (GV%Boussinesq) &
         Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i+1,j))
@@ -1357,9 +1346,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       else
         Drag_u(I,j) = 0.0
       endif
-    enddo ; enddo
-    !$OMP do
-    do J=js-1,je ; do i=is,ie
+    enddo
+    do concurrent (J=js-1:je, i=is:ie)
       Htot = 0.5 * (eta(i,j) + eta(i,j+1))
       if (GV%Boussinesq) &
         Htot = Htot + 0.5*GV%Z_to_H * (CS%bathyT(i,j) + CS%bathyT(i,j+1))
@@ -1369,21 +1357,19 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       else
         Drag_v(i,J) = 0.0
       endif
-    enddo ; enddo
+    enddo
   endif
 
   ! Mask out the forcing at OBC points
   if (CS%BT_OBC%u_OBCs_on_PE) then
-    !$OMP do
-    do j=js,je ; do I=is-1,ie
+    do concurrent (j=js:je, I=is-1:ie)
       BT_force_u(I,j) = CS%OBCmask_u(I,j) * BT_force_u(I,j)
-    enddo ; enddo
+    enddo
   endif
   if (CS%BT_OBC%v_OBCs_on_PE) then
-    !$OMP do
-    do J=js-1,je ; do i=is,ie
+    do concurrent (J=js-1:je, i=is:ie)
       BT_force_v(i,J) = CS%OBCmask_v(i,J) * BT_force_v(i,J)
-    enddo ; enddo
+    enddo
   endif
 
   if ((Isq > is-1) .or. (Jsq > js-1)) then
@@ -1392,6 +1378,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
     if (id_clock_pass_pre > 0) call cpu_clock_begin(id_clock_pass_pre)
     tmp_u(:,:) = 0.0 ; tmp_v(:,:) = 0.0
+    !$omp target update from(BT_force_u, BT_force_v)
     do j=js,je ; do I=Isq,Ieq ; tmp_u(I,j) = BT_force_u(I,j) ; enddo ; enddo
     do J=Jsq,Jeq ; do i=is,ie ; tmp_v(i,J) = BT_force_v(i,J) ; enddo ; enddo
     if (nonblock_setup) then
@@ -1400,6 +1387,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       call do_group_pass(CS%pass_tmp_uv, G%Domain)
       do j=jsd,jed ; do I=IsdB,IedB ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
       do J=JsdB,JedB ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
+      !$omp target update to(BT_force_u, BT_force_v)
     endif
     if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1427,6 +1415,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       call complete_group_pass(CS%pass_tmp_uv, G%Domain)
       do j=jsd,jed ; do I=IsdB,IedB ; BT_force_u(I,j) = tmp_u(I,j) ; enddo ; enddo
       do J=JsdB,JedB ; do i=isd,ied ; BT_force_v(i,J) = tmp_v(i,J) ; enddo ; enddo
+      !$omp target update to(BT_force_u, BT_force_v)
     endif
     call complete_group_pass(CS%pass_gtot, CS%BT_Domain)
     call complete_group_pass(CS%pass_ubt_Cor, G%Domain)
@@ -2910,20 +2899,18 @@ subroutine btstep_find_Cor(q, DCor_u, DCor_v, f_4_u, f_4_v, isvf, ievf, jsvf, je
       f_4_u(2,I,j) = CS%OBCmask_u(I,j) * DCor_v(i+1,J-1) * q(I,J-1)
     enddo
   else  !### if (CS%answer_date < 20250601) then  ! Uncomment this later.
-    !$OMP parallel do default(shared)
-    do J=jsvf-1,jevf ; do i=isvf-1,ievf+1
+    do concurrent (J=jsvf-1:jevf, i=isvf-1:ievf+1)
       f_4_v(1,i,J) = CS%OBCmask_v(i,J) * DCor_u(I-1,j) * ((q(I,J) + q(I-1,J-1)) + q(I-1,J)) / 3.0
       f_4_v(2,i,J) = CS%OBCmask_v(i,J) * DCor_u(I,j) * (q(I,J) + (q(I-1,J) + q(I,J-1))) / 3.0
       f_4_v(4,i,J) = CS%OBCmask_v(i,J) * DCor_u(I,j+1) * (q(I,J) + (q(I-1,J) + q(I,J+1))) / 3.0
       f_4_v(3,i,J) = CS%OBCmask_v(i,J) * DCor_u(I-1,j+1) * ((q(I,J) + q(I-1,J+1)) + q(I-1,J)) / 3.0
-    enddo ; enddo
-    !$OMP parallel do default(shared)
-    do j=jsvf-1,jevf+1 ; do I=isvf-1,ievf
+    enddo
+    do concurrent (j=jsvf-1:jevf+1, I=isvf-1:ievf)
       f_4_u(4,I,j) = CS%OBCmask_u(I,j) * DCor_v(i+1,J) * (q(I,J) + (q(I+1,J) + q(I,J-1))) / 3.0
       f_4_u(3,I,j) = CS%OBCmask_u(I,j) * DCor_v(i,J) * (q(I,J) + (q(I-1,J) + q(I,J-1))) / 3.0
       f_4_u(1,I,j) = CS%OBCmask_u(I,j) * DCor_v(i,J-1) * ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) / 3.0
       f_4_u(2,I,j) = CS%OBCmask_u(I,j) * DCor_v(i+1,J-1) * ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) / 3.0
-    enddo ; enddo
+    enddo
   ! else
   !   C1_3 = 1.0 / 3.0
   !   !$OMP parallel do default(shared)
@@ -5201,72 +5188,62 @@ subroutine find_face_areas(Datu, Datv, G, GV, US, CS, MS, halo, eta, add_max)
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = max(halo,0)
 
-  !$OMP parallel default(shared) private(H1,H2,Z_to_H)
   if (present(eta)) then
     ! The use of harmonic mean thicknesses ensure positive definiteness.
     if (GV%Boussinesq) then
-      !$OMP do
-      do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
+      do concurrent (j=js-hs:je+hs, I=is-1-hs:ie+hs)
         H1 = CS%bathyT(i,j)*GV%Z_to_H + eta(i,j) ; H2 = CS%bathyT(i+1,j)*GV%Z_to_H + eta(i+1,j)
         Datu(I,j) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (H1 + H2)
-      enddo ; enddo
-      !$OMP do
-      do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
+      enddo
+      do concurrent (J=js-1-hs:je+hs, i=is-hs:ie+hs)
         H1 = CS%bathyT(i,j)*GV%Z_to_H + eta(i,j) ; H2 = CS%bathyT(i,j+1)*GV%Z_to_H + eta(i,j+1)
         Datv(i,J) = 0.0 ; if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
 !       Datv(i,J) = CS%dy_v(i,J) * 0.5 * (H1 + H2)
-      enddo ; enddo
+      enddo
     else
-      !$OMP do
-      do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
+      do concurrent (j=js-hs:je+hs, I=is-1-hs:ie+hs)
         Datu(I,j) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i+1,j) > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * eta(i,j) * eta(i+1,j)) / &
                                   (eta(i,j) + eta(i+1,j))
         ! Datu(I,j) = CS%dy_Cu(I,j) * 0.5 * (eta(i,j) + eta(i+1,j))
-      enddo ; enddo
-      !$OMP do
-      do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
+      enddo
+      do concurrent (J=js-1-hs:je+hs, i=is-hs:ie+hs)
         Datv(i,J) = 0.0 ; if ((eta(i,j) > 0.0) .and. (eta(i,j+1) > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * eta(i,j) * eta(i,j+1)) / &
                                   (eta(i,j) + eta(i,j+1))
         ! Datv(i,J) = CS%dy_v(i,J) * 0.5 * (eta(i,j) + eta(i,j+1))
-      enddo ; enddo
+      enddo
     endif
   elseif (present(add_max)) then
     Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
 
-    !$OMP do
-    do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
+    do concurrent (j=js-hs:je+hs, I=is-1-hs:ie+hs)
       Datu(I,j) = CS%dy_Cu(I,j) * Z_to_H * &
                  max(max(CS%bathyT(i+1,j), CS%bathyT(i,j)) + (G%Z_ref + add_max), 0.0)
-    enddo ; enddo
-    !$OMP do
-    do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
+    enddo
+    do concurrent (J=js-1-hs:je+hs, i=is-hs:ie+hs)
       Datv(i,J) = CS%dx_Cv(i,J) * Z_to_H * &
                  max(max(CS%bathyT(i,j+1), CS%bathyT(i,j)) + (G%Z_ref + add_max), 0.0)
-    enddo ; enddo
+    enddo
   else
     Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
 
-    !$OMP do
-    do j=js-hs,je+hs ; do I=is-1-hs,ie+hs
+    do concurrent (j=js-hs:je+hs, I=is-1-hs:ie+hs)
       H1 = (CS%bathyT(i,j) + G%Z_ref) * Z_to_H ; H2 = (CS%bathyT(i+1,j) + G%Z_ref) * Z_to_H
       Datu(I,j) = 0.0
       if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datu(I,j) = CS%dy_Cu(I,j) * (2.0 * H1 * H2) / (H1 + H2)
-    enddo ; enddo
-    !$OMP do
-    do J=js-1-hs,je+hs ; do i=is-hs,ie+hs
+    enddo
+    do concurrent (J=js-1-hs:je+hs, i=is-hs:ie+hs)
       H1 = (CS%bathyT(i,j) + G%Z_ref) * Z_to_H ; H2 = (CS%bathyT(i,j+1) + G%Z_ref) * Z_to_H
       Datv(i,J) = 0.0
       if ((H1 > 0.0) .and. (H2 > 0.0)) &
         Datv(i,J) = CS%dx_Cv(i,J) * (2.0 * H1 * H2) / (H1 + H2)
-    enddo ; enddo
+    enddo
   endif
-  !$OMP end parallel
 
 end subroutine find_face_areas
 
