@@ -1018,7 +1018,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
                         ! bathymetric depth for certain calculations.
   real    :: UH_grad_local(SZIB_(G), SZJ_(G),SZK_(GV))  ! The depth integral of grad slopes for UH at u-points
   real    :: VH_grad_local(SZI_(G), SZJB_(G),SZK_(GV))  ! The depth integral of grad slopes for VH at v-points
-  real    :: Lgrid      ! Grid lengthscale for the grad model [H ~> m]
+  real    :: Lgrid      ! Grid lengthscale for the gradient model [H ~> m]
   integer :: is, ie, js, je, nz
   integer :: i, j, k
   integer :: l_seg
@@ -1070,8 +1070,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
   !$OMP parallel do default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
 
   ! Set the length scale at u-points for the gradient model
-  use_gradient_model = CS%use_gradient_model
-  if (use_gradient_model) then
+  !if (CS%use_gradient_model) then
     do j=js,je ; do I=is-1,ie
       Lgrid = sqrt(G%dxCu(I,j)**2 + G%dyCu(I,j)**2)
       CS%L2grad_u(I,j) = 1.0 * Lgrid**2
@@ -1081,7 +1080,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
       Lgrid = sqrt(G%dxCv(i,J)**2 + G%dyCv(i,J)**2)
       CS%L2grad_v(i,J) = 1.0 * Lgrid**2
     enddo ; enddo
-  endif
+  !endif
 
   do k=nz,CS%VarMix_Ktop,-1
 
