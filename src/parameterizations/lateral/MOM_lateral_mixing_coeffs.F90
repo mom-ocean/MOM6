@@ -1141,7 +1141,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
       do j=js,je ; do I=is-1,ie
         gradUH = Ux_Hx(I,j) + 0.25*(Uy_Hy(I,j)+Uy_Hy(I,j-1)+Uy_Hy(I+1,j)+Uy_Hy(I+1,j-1))
         UH_grad_local(I,j,k) = gradUH
-      enddo ; enddo 
+      enddo ; enddo
     endif
 
     do J=js-1,je ; do i=is,ie
