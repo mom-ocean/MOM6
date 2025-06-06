@@ -1070,7 +1070,8 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
   !$OMP parallel do default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
 
   ! Set the length scale at u-points for the gradient model
-  if (CS%use_gradient_model) then
+  use_gradient_model = CS%use_gradient_model
+  if (use_gradient_model) then
     do j=js,je ; do I=is-1,ie
       Lgrid = sqrt(G%dxCu(I,j)**2 + G%dyCu(I,j)**2)
       CS%L2grad_u(I,j) = 1.0 * Lgrid**2
