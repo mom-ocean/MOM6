@@ -1047,18 +1047,18 @@ subroutine ALE_remap_set_h_vel_OBC(G, GV, h_new, h_u, h_v, OBC)
     ! Take open boundary conditions into account.
     !$OMP parallel do default(shared)
     do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (OBC%segnum_u(I,j) /= 0) then
-      if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+      if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
         do k=1,nz ; h_u(I,j,k) = h_new(i,j,k) ; enddo
-      else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+      else !  if (OBC%segnum_u(I,j) < 0) OBC_DIRECTION_W
         do k=1,nz ; h_u(I,j,k) = h_new(i+1,j,k) ; enddo
       endif
     endif ; enddo ; enddo
 
     !$OMP parallel do default(shared)
     do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (OBC%segnum_v(i,J) /= 0) then
-      if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+      if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
         do k=1,nz ; h_v(i,J,k) = h_new(i,j,k) ; enddo
-      else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+      else !  if (OBC%segnum_v(i,J)) < 0)  !  OBC_DIRECTION_S
         do k=1,nz ; h_v(i,J,k) = h_new(i,j+1,k) ; enddo
       endif
     endif ; enddo ; enddo

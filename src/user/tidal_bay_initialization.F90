@@ -9,7 +9,7 @@ use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
-use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE
+use MOM_open_boundary,  only : ocean_OBC_type
 use MOM_open_boundary,  only : OBC_segment_type, register_OBC
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_unit_scaling,   only : unit_scale_type
@@ -103,7 +103,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   if (turns == 0) then
     allocate(my_area(1:1,js:je), source=0.0)
     do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
-      if (OBC%segnum_u(I,j) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_E)
+      if (OBC%segnum_u(I,j) > 0) then ! (segment%direction == OBC_DIRECTION_E)
         do k=1,nz
           my_area(1,j) = my_area(1,j) + h(i,j,k)*(GV%H_to_m*US%m_to_Z)*G%dyCu(I,j)
         enddo
@@ -112,7 +112,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   elseif (turns == 1) then
     allocate(my_area(is:ie,1:1), source=0.0)
     do J=segment%HI%JscB,segment%HI%JecB ; do i=segment%HI%isc,segment%HI%iec
-      if (OBC%segnum_v(i,J) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_N)
+      if (OBC%segnum_v(i,J) > 0) then ! (segment%direction == OBC_DIRECTION_N)
         do k=1,nz
           my_area(i,1) = my_area(i,1) + h(i,j,k)*(GV%H_to_m*US%m_to_Z)*G%dxCv(i,J)
         enddo
@@ -121,7 +121,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   elseif (turns == 2) then
     allocate(my_area(1:1,js:je), source=0.0)
     do j=segment%HI%jsc,segment%HI%jec ; do I=segment%HI%IscB,segment%HI%IecB
-      if (OBC%segnum_u(I,j) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_W)
+      if (OBC%segnum_u(I,j) < 0) then ! (segment%direction == OBC_DIRECTION_W)
         do k=1,nz
           my_area(1,j) = my_area(1,j) + h(i+1,j,k)*(GV%H_to_m*US%m_to_Z)*G%dyCu(I,j)
         enddo
@@ -130,7 +130,7 @@ subroutine tidal_bay_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   elseif (turns == 3) then
     allocate(my_area(is:ie,1:1), source=0.0)
     do J=segment%HI%JscB,segment%HI%JecB ; do i=segment%HI%isc,segment%HI%iec
-      if (OBC%segnum_v(i,J) /= OBC_NONE) then ! (segment%direction == OBC_DIRECTION_S)
+      if (OBC%segnum_v(i,J) < 0) then ! (segment%direction == OBC_DIRECTION_S)
         do k=1,nz
           my_area(i,1) = my_area(i,1) + h(i,j+1,k)*(GV%H_to_m*US%m_to_Z)*G%dxCv(i,J)
         enddo

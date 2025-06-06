@@ -2042,15 +2042,13 @@ subroutine set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS, OBC)
         ! Determine if grid point is an OBC
         has_obc = .false.
         if (local_open_v_BC) then
-          l_seg = OBC%segnum_v(i,J)
-          if (l_seg /= OBC_NONE) then
-            has_obc = OBC%segment(l_seg)%open
-          endif
+          l_seg = abs(OBC%segnum_v(i,J))
+          if (l_seg /= 0) has_obc = OBC%segment(l_seg)%open
         endif
 
         ! Compute h based on OBC state
         if (has_obc) then
-          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
+          if (OBC%segnum_v(i,J) > 0) then ! OBC_DIRECTION_N
             hvel = dz(i,j,k)
           else
             hvel = dz(i,j+1,k)
@@ -2094,15 +2092,13 @@ subroutine set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS, OBC)
         ! Determine if grid point is an OBC
         has_obc = .false.
         if (local_open_u_BC) then
-          l_seg = OBC%segnum_u(I,j)
-          if (l_seg /= OBC_NONE) then
-            has_obc = OBC%segment(l_seg)%open
-          endif
+          l_seg = abs(OBC%segnum_u(I,j))
+          if (l_seg /= 0)  has_obc = OBC%segment(l_seg)%open
         endif
 
         ! Compute h based on OBC state
         if (has_obc) then
-          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+          if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
             hvel = dz(i,j,k)
           else ! OBC_DIRECTION_W
             hvel = dz(i+1,j,k)

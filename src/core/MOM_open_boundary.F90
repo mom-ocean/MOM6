@@ -338,8 +338,12 @@ type, public :: ocean_OBC_type
   ! Properties of the segments used.
   type(OBC_segment_type), allocatable :: segment(:)   !< List of segment objects.
   ! Which segment object describes the current point.
-  integer, allocatable :: segnum_u(:,:) !< Segment number of u-points.
-  integer, allocatable :: segnum_v(:,:) !< Segment number of v-points.
+  integer, allocatable :: segnum_u(:,:) !< The absolute value gives the segment number of any OBCs at u-points,
+                                        !! while the sign indicates whether they are Eastern (> 0) or Western (< 0)
+                                        !! OBCs, with 0 for velocities that are not on an OBC.
+  integer, allocatable :: segnum_v(:,:) !< The absolute value gives the segment number of any OBCs at v-points,
+                                        !! while the sign indicates whether they are Northern (> 0) or Southern (< 0)
+                                        !! OBCs, with 0 for velocities that are not on an OBC.
   ! Keep the OBC segment properties for external BGC tracers
   type(external_tracers_segments_props), pointer :: obgc_segments_props => NULL() !< obgc segment properties
   integer :: num_obgc_tracers = 0       !< The total number of obgc tracers
@@ -352,10 +356,12 @@ type, public :: ocean_OBC_type
   real :: rx_max   !< The maximum magnitude of the baroclinic radiation velocity (or speed of
                    !! characteristics) in units of grid points per timestep [nondim].
   logical :: OBC_pe !< Is there an open boundary on this tile?
-  type(remapping_CS),      pointer :: remap_z_CS=> NULL() !< ALE remapping control structure for
-                                                          !! z-space data on segments
-  type(remapping_CS),      pointer :: remap_h_CS=> NULL() !< ALE remapping control structure for
-                                                          !! thickness-based fields on segments
+  logical :: u_OBCs_on_PE   !< True if there are any u-point OBCs on this PE, including in its halos.
+  logical :: v_OBCs_on_PE   !< True if there are any v-point OBCs on this PE, including in its halos.
+  type(remapping_CS), pointer :: remap_z_CS => NULL() !< ALE remapping control structure for
+                                                      !! z-space data on segments
+  type(remapping_CS), pointer :: remap_h_CS => NULL() !< ALE remapping control structure for
+                                                      !! thickness-based fields on segments
   type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
   real, allocatable :: rx_normal(:,:,:)     !< Array storage for normal phase speed for EW radiation OBCs
                                             !! in units of grid points per timestep [nondim]
@@ -644,8 +650,10 @@ subroutine open_boundary_config(G, US, param_file, OBC)
       OBC%segment(l)%Velocity_nudging_timescale_out = 0.0
       OBC%segment(l)%num_fields = 0
     enddo
-    allocate(OBC%segnum_u(G%IsdB:G%IedB,G%jsd:G%jed), source=OBC_NONE)
-    allocate(OBC%segnum_v(G%isd:G%ied,G%JsdB:G%JedB), source=OBC_NONE)
+    allocate(OBC%segnum_u(G%IsdB:G%IedB,G%jsd:G%jed), source=0)
+    allocate(OBC%segnum_v(G%isd:G%ied,G%JsdB:G%JedB), source=0)
+    OBC%u_OBCs_on_PE = .false.
+    OBC%v_OBCs_on_PE = .false.
 
     do l = 1, OBC%number_of_segments
       write(segment_param_str(1:15),"('OBC_SEGMENT_',i3.3)") l
@@ -1082,6 +1090,35 @@ logical function field_is_tidal(name)
   field_is_tidal = ((index(name, 'phase') > 0) .or. (index(name, 'amp') > 0))
 end function field_is_tidal
 
+!> This subroutine sets the sign of the OBC%segnum_u and OBC%segnum_v arrays to indicate the
+!! direction of the faces - positive for logically eastern or northern OBCs and neagative
+!! for logically western or southern OBCs, or zero on non-OBC points.
+subroutine set_segnum_signs(OBC, G)
+  type(ocean_OBC_type),   intent(inout) :: OBC !< Open boundary control structure, perhaps on a rotated grid.
+  type(dyn_horgrid_type), intent(in)    :: G   !< Ocean grid structure used by OBC
+
+  integer :: i, j
+
+  OBC%u_OBCs_on_PE = .false. ; OBC%v_OBCs_on_PE = .false.
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    OBC%segnum_u(I,j) = abs(OBC%segnum_u(I,j))
+    if (abs(OBC%segnum_u(I,j)) > 0) then
+      OBC%u_OBCs_on_PE = .true.
+      if (OBC%segment(abs(OBC%segnum_u(I,j)))%direction == OBC_DIRECTION_W) &
+        OBC%segnum_u(I,j) = -abs(OBC%segnum_u(I,j))
+    endif
+  enddo ; enddo
+  do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+    OBC%segnum_v(i,J) = abs(OBC%segnum_v(i,J))
+    if (abs(OBC%segnum_v(i,J)) > 0) then
+      OBC%v_OBCs_on_PE = .true.
+      if (OBC%segment(abs(OBC%segnum_v(i,J)))%direction == OBC_DIRECTION_S) &
+        OBC%segnum_v(i,J) = -abs(OBC%segnum_v(i,J))
+    endif
+  enddo ; enddo
+
+end subroutine set_segnum_signs
+
 !> Return an appropriate dimensional scaling factor for input data based on an OBC segment data
 !! name [various ~> 1], or 1 for tracers or other fields that do not match one of the specified names.
 !! Note that calls to register_segment_tracer can come before or after calls to scale_factor_from_name.
@@ -1463,6 +1500,8 @@ subroutine setup_u_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_y)
   do j=G%HI%jsd, G%HI%jed
     if (j>Js_obc .and. j<=Je_obc) then
       OBC%segnum_u(I_obc,j) = l_seg
+      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) OBC%segnum_u(I_obc,j) = -l_seg
+      OBC%u_OBCs_on_PE = .true.
     endif
   enddo
   OBC%segment(l_seg)%Is_obc = I_obc
@@ -1602,6 +1641,8 @@ subroutine setup_v_point_obc(OBC, G, US, segment_str, l_seg, PF, reentrant_x)
   do i=G%HI%isd, G%HI%ied
     if (i>Is_obc .and. i<=Ie_obc) then
       OBC%segnum_v(i,J_obc) = l_seg
+      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) OBC%segnum_v(i,J_obc) = -l_seg
+      OBC%v_OBCs_on_PE = .true.
     endif
   enddo
   OBC%segment(l_seg)%Is_obc = Is_obc
@@ -2042,14 +2083,14 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
   if (.not.associated(OBC)) return
 
   do n=1,OBC%number_of_segments
-    segment=>OBC%segment(n)
+    segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
     if (segment%is_E_or_W) then
       ! Sweep along u-segments and delete the OBC for blocked points.
       ! Also, mask all points outside.
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        if (G%mask2dCu(I,j) == 0) OBC%segnum_u(I,j) = OBC_NONE
+        if (G%mask2dCu(I,j) == 0) OBC%segnum_u(I,j) = 0
         if (segment%direction == OBC_DIRECTION_W) then
           G%mask2dT(i,j) = 0.0
         else
@@ -2067,7 +2108,7 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
       ! Sweep along v-segments and delete the OBC for blocked points.
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        if (G%mask2dCv(i,J) == 0) OBC%segnum_v(i,J) = OBC_NONE
+        if (G%mask2dCv(i,J) == 0) OBC%segnum_v(i,J) = 0
         if (segment%direction == OBC_DIRECTION_S) then
           G%mask2dT(i,j) = 0.0
         else
@@ -2139,18 +2180,19 @@ subroutine open_boundary_impose_land_mask(OBC, G, areaCu, areaCv, US)
     if (segment%is_E_or_W) then
       I=segment%HI%IsdB
       do j=segment%HI%jsd,segment%HI%jed
-        if (OBC%segnum_u(I,j) /= OBC_NONE) any_U = .true.
+        if (OBC%segnum_u(I,j) /= 0) any_U = .true.
       enddo
     else
       J=segment%HI%JsdB
       do i=segment%HI%isd,segment%HI%ied
-        if (OBC%segnum_v(i,J) /= OBC_NONE) any_V = .true.
+        if (OBC%segnum_v(i,J) /= 0) any_V = .true.
       enddo
     endif
   enddo
 
-  OBC%OBC_pe = .true.
-  if (.not.(any_U .or. any_V)) OBC%OBC_pe = .false.
+  OBC%u_OBCs_on_PE = any_U
+  OBC%v_OBCs_on_PE = any_V
+  OBC%OBC_pe = (any_U .or. any_V)
 
 end subroutine open_boundary_impose_land_mask
 
@@ -5064,50 +5106,38 @@ subroutine mask_outside_OBCs(G, US, param_file, OBC)
   enddo
 
   do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
-    l_seg = OBC%segnum_u(I,j)
-    if (l_seg == OBC_NONE) cycle
-
-    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) then
+    if (OBC%segnum_u(I,j) < 0) then      !  OBC_DIRECTION_W
       if (color(i,j) == 0.0) color(i,j) = cout
       if (color(i+1,j) == 0.0) color(i+1,j) = cin
-    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+    elseif (OBC%segnum_u(I,j) > 0) then  !  OBC_DIRECTION_E
       if (color(i,j) == 0.0) color(i,j) = cin
       if (color(i+1,j) == 0.0) color(i+1,j) = cout
     endif
   enddo ; enddo
   do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
-    l_seg = OBC%segnum_v(i,J)
-    if (l_seg == OBC_NONE) cycle
-
-    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) then
+    if (OBC%segnum_v(i,J) < 0) then      ! OBC_DIRECTION_S
       if (color(i,j) == 0.0) color(i,j) = cout
       if (color(i,j+1) == 0.0) color(i,j+1) = cin
-    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
+    elseif (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
       if (color(i,j) == 0.0) color(i,j) = cin
       if (color(i,j+1) == 0.0) color(i,j+1) = cout
     endif
   enddo ; enddo
 
   do J=G%JsdB+1,G%JedB-1 ; do i=G%isd,G%ied
-    l_seg = OBC%segnum_v(i,J)
-    if (l_seg == OBC_NONE) cycle
-
-    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) then
+    if (OBC%segnum_v(i,J) < 0) then      ! OBC_DIRECTION_S
       if (color2(i,j) == 0.0) color2(i,j) = cout
       if (color2(i,j+1) == 0.0) color2(i,j+1) = cin
-    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
+    elseif (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
       if (color2(i,j) == 0.0) color2(i,j) = cin
       if (color2(i,j+1) == 0.0) color2(i,j+1) = cout
     endif
   enddo ; enddo
   do j=G%jsd,G%jed ; do i=G%IsdB+1,G%IedB-1
-    l_seg = OBC%segnum_u(I,j)
-    if (l_seg == OBC_NONE) cycle
-
-    if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) then
+    if (OBC%segnum_u(I,j) < 0) then      !  OBC_DIRECTION_W
       if (color2(i,j) == 0.0) color2(i,j) = cout
       if (color2(i+1,j) == 0.0) color2(i+1,j) = cin
-    elseif (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+    elseif (OBC%segnum_u(I,j) > 0) then  !  OBC_DIRECTION_E
       if (color2(i,j) == 0.0) color2(i,j) = cin
       if (color2(i+1,j) == 0.0) color2(i+1,j) = cout
     endif
@@ -5860,9 +5890,10 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
   enddo
 
   ! The horizontal segment map
-  allocate(OBC%segnum_u(G%IsdB:G%IedB,G%jsd:G%jed))
-  allocate(OBC%segnum_v(G%isd:G%ied,G%JsdB:G%JedB))
+  allocate(OBC%segnum_u(G%IsdB:G%IedB,G%jsd:G%jed), source=0)
+  allocate(OBC%segnum_v(G%isd:G%ied,G%JsdB:G%JedB), source=0)
   call rotate_array_pair(OBC_in%segnum_u, OBC_in%segnum_v, turns, OBC%segnum_u, OBC%segnum_v)
+  call set_segnum_signs(OBC, G)
 
   ! These are conditionally enabled during segment configuration
   if (modulo(turns,2) == 0) then

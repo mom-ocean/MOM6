@@ -4032,8 +4032,7 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
   real, dimension(SZIW_(CS),SZJBW_(CS)) :: &
     v_OBC        ! A set of integers encoding the nature of the v-point open boundary conditions,
                  ! converted to real numbers to work with the MOM6 halo update code [nondim]
-  real :: OBC_sign  ! A sign encoding the direction of the OBC being used at a point [nondim]
-  real :: OBC_type  ! A real copy of the integer encoding the type of OBC being used at a point [nondim]
+  integer :: OBC_type  ! The integer encoding the type of OBC being used at a point [nondim]
   logical :: reversed_OBCs  ! True of there any OBCs in the opposite halo on this PE, e.g. points
                             ! with a southern OBC in a northern halo.
   logical :: any_reversed_OBCs
@@ -4046,30 +4045,26 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
   v_OBC(:,:) = 0.0
 
   do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
-    l_seg = OBC%segnum_u(I,j)
 
-    OBC_sign = 0.0 ; OBC_type = 0.0
-    if (l_seg /= OBC_NONE) then
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) OBC_sign = 1.0
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) OBC_sign = -1.0
+    OBC_type = 0
+    if (OBC%segnum_u(I,j) /= 0) then
+      l_seg = abs(OBC%segnum_u(I,j))
       if (OBC%segment(l_seg)%gradient) OBC_type = GRADIENT_OBC
       if (OBC%segment(l_seg)%Flather) OBC_type = FLATHER_OBC
       if (OBC%segment(l_seg)%specified) OBC_type = SPECIFIED_OBC
+      u_OBC(I,j) = sign(OBC_type, OBC%segnum_u(I,j))
     endif
-    u_OBC(I,j) = OBC_sign * OBC_type
   enddo ; enddo
 
   do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
-    l_seg = OBC%segnum_v(i,J)
-    OBC_sign = 0.0 ; OBC_type = 0.0
-    if (l_seg /= OBC_NONE) then
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) OBC_sign = 1.0
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) OBC_sign = -1.0
+    OBC_type = 0
+    if (OBC%segnum_v(i,J) /= 0) then
+      l_seg = abs(OBC%segnum_v(i,J))
       if (OBC%segment(l_seg)%gradient) OBC_type = GRADIENT_OBC
       if (OBC%segment(l_seg)%Flather) OBC_type = FLATHER_OBC
       if (OBC%segment(l_seg)%specified) OBC_type = SPECIFIED_OBC
+      v_OBC(i,J) = sign(OBC_type, OBC%segnum_v(i,J))
     endif
-    v_OBC(i,J) = OBC_sign * OBC_type
   enddo ; enddo
 
   call pass_vector(u_OBC, v_OBC, CS%BT_Domain)

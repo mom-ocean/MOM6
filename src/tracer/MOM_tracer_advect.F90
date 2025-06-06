@@ -680,15 +680,12 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
     ! Update do_i so that nothing changes outside of the OBC (problem for interior OBCs only)
     if (associated(OBC)) then
-      if ((OBC%exterior_OBC_bug .eqv. .false.) .and. (OBC%OBC_pe)) then
+      if ((.not.OBC%exterior_OBC_bug) .and. (OBC%OBC_pe)) then
         if (OBC%specified_u_BCs_exist_globally .or. OBC%open_u_BCs_exist_globally) then
-          do i=is,ie-1 ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-            if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
-              do_i(i+1,j) = .false.
-            elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
-              do_i(i,j) = .false.
-            endif
-          endif ; enddo
+          do i=is,ie-1
+            if (OBC%segnum_u(I,j) > 0) do_i(i+1,j) = .false.  ! OBC_DIRECTION_E
+            if (OBC%segnum_u(I,j) < 0) do_i(i,j) = .false.    ! OBC_DIRECTION_W
+          enddo
         endif
       endif
     endif
@@ -1099,16 +1096,8 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
       if ((OBC%exterior_OBC_bug .eqv. .false.) .and. (OBC%OBC_pe)) then
         if (OBC%specified_v_BCs_exist_globally .or. OBC%open_v_BCs_exist_globally) then
           do i=is,ie
-            if (OBC%segnum_v(i,J-1) /= OBC_NONE) then
-              if (OBC%segment(OBC%segnum_v(i,J-1))%direction == OBC_DIRECTION_N) then
-                do_i(i,j) = .false.
-              endif
-            endif
-            if (OBC%segnum_v(i,J) /= OBC_NONE) then
-              if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
-                do_i(i,j) = .false.
-              endif
-            endif
+            if (OBC%segnum_v(i,J-1) > 0) do_i(i,j) = .false.  ! OBC_DIRECTION_N
+            if (OBC%segnum_v(i,J) < 0) do_i(i,j) = .false.  ! OBC_DIRECTION_S
           enddo
         endif
       endif

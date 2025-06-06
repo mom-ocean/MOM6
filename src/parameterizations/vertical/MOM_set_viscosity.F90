@@ -506,8 +506,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
       ! Apply a zero gradient projection of thickness across OBC points.
       if (m==1) then
-        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
-          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= 0)) then
+          if (OBC%segnum_u(I,j) > 0) then  ! OBC_DIRECTION_E
             do k=1,nz
               h_at_vel(I,k) = h(i,j,k) ; h_vel(I,k) = h(i,j,k)
               dz_at_vel(I,k) = dz(i,j,k) ; dz_vel(I,k) = dz(i,j,k)
@@ -524,7 +524,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
             if (allocated(tv%SpV_avg)) then ; do k=1,nz
               SpV_vel(I,k) = tv%SpV_avg(i,j,k)
             enddo ; endif
-          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+          elseif (OBC%segnum_u(I,j) < 0) then  ! OBC_DIRECTION_W
             do k=1,nz
               h_at_vel(I,k) = h(i+1,j,k) ; h_vel(I,k) = h(i+1,j,k)
               dz_at_vel(I,k) = dz(i+1,j,k) ; dz_vel(I,k) = dz(i+1,j,k)
@@ -544,8 +544,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           endif
         endif ; enddo
       else
-        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
-          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= 0)) then
+          if (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
             do k=1,nz
               h_at_vel(i,k) = h(i,j,k) ; h_vel(i,k) = h(i,j,k)
               dz_at_vel(i,k) = dz(i,j,k) ; dz_vel(i,k) = dz(i,j,k)
@@ -562,7 +562,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
             if (allocated(tv%SpV_avg)) then ; do k=1,nz
               SpV_vel(i,k) = tv%SpV_avg(i,j,k)
             enddo ;  endif
-          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+          elseif (OBC%segnum_v(i,J) < 0) then  ! OBC_DIRECTION_S
             do k=1,nz
               h_at_vel(i,k) = h(i,j+1,k) ; h_vel(i,k) = h(i,j+1,k)
               dz_at_vel(i,k) = dz(i,j+1,k) ; dz_vel(i,k) = dz(i,j+1,k)
@@ -1821,11 +1821,11 @@ function set_v_at_u(v, h, G, GV, i, j, k, mask2dCv, OBC)
   enddo ; enddo
 
   if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-    do j0 = -1,0 ; do i0 = 0,1 ; if ((OBC%segnum_v(i+i0,J+j0) /= OBC_NONE)) then
+    do j0 = -1,0 ; do i0 = 0,1 ; if (OBC%segnum_v(i+i0,J+j0) /= 0) then
       i1 = i+i0 ; J1 = J+j0
-      if (OBC%segment(OBC%segnum_v(i1,j1))%direction == OBC_DIRECTION_N) then
+      if (OBC%segnum_v(i1,j1) > 0) then ! OBC_DIRECTION_N
         hwt(i0,j0) = 2.0 * h(i1,j1,k) * mask2dCv(i1,J1)
-      elseif (OBC%segment(OBC%segnum_v(i1,J1))%direction == OBC_DIRECTION_S) then
+      elseif (OBC%segnum_v(i1,J1) < 0) then !  OBC_DIRECTION_S
         hwt(i0,j0) = 2.0 * h(i1,J1+1,k) * mask2dCv(i1,J1)
       endif
     endif ; enddo ; enddo
@@ -1866,11 +1866,11 @@ function set_u_at_v(u, h, G, GV, i, j, k, mask2dCu, OBC)
   enddo ; enddo
 
   if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-    do j0 = 0,1 ; do i0 = -1,0 ; if ((OBC%segnum_u(I+i0,j+j0) /= OBC_NONE)) then
+    do j0 = 0,1 ; do i0 = -1,0 ; if ((OBC%segnum_u(I+i0,j+j0) /= 0)) then
       I1 = I+i0 ; j1 = j+j0
-      if (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_E) then
+      if (OBC%segnum_u(I1,j1) > 0) then ! OBC_DIRECTION_E
         hwt(i0,j0) = 2.0 * h(I1,j1,k) * mask2dCu(I1,j1)
-      elseif (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_W) then
+      elseif (OBC%segnum_u(I1,j1) < 0) then ! OBC_DIRECTION_W
         hwt(i0,j0) = 2.0 * h(I1+1,j1,k) * mask2dCu(I1,j1)
       endif
     endif ; enddo ; enddo

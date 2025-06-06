@@ -712,7 +712,7 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
                                  ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg2 m-4]
   real :: h4_v(SZI_(G),SZJB_(G),SZK_(GV)+1)  ! The product of the 4 thicknesses surrounding a v-point
                                  ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg2 m-4]
-  integer :: i, j, k, is, ie, js, je, nz, l_seg
+  integer :: i, j, k, is, ie, js, je, nz
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_Visbeck_coeffs_old: "// &
          "Module must be initialized before it is used.")
@@ -735,17 +735,15 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
 
   if (associated(OBC).and. CS%OBC_friendly) then
    ! Store the direction of any OBC faces.
-   !$OMP parallel do default(shared) private(l_seg)
-    do j=js-1,je+1 ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-      l_seg = OBC%segnum_u(I,j)
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) OBC_dir_u(I,j) = 1
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_W) OBC_dir_u(I,j) = -1
+   !$OMP parallel do default(shared)
+    do j=js-1,je+1 ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= 0) then
+      if (OBC%segnum_u(I,j) > 0) OBC_dir_u(I,j) = 1   !  OBC_DIRECTION_E
+      if (OBC%segnum_u(I,j) < 0) OBC_dir_u(I,j) = -1  !  OBC_DIRECTION_W
     endif ; enddo ; enddo
    !$OMP parallel do default(shared)
-    do J=js-1,je ; do i=is-1,ie+1 ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
-      l_seg = OBC%segnum_v(i,J)
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) OBC_dir_v(i,J) = 1
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_S) OBC_dir_v(i,J) = -1
+    do J=js-1,je ; do i=is-1,ie+1 ; if (OBC%segnum_v(i,J) /= 0) then
+      if (OBC%segnum_v(i,J) > 0) OBC_dir_v(i,J) = 1   ! OBC_DIRECTION_N
+      if (OBC%segnum_v(i,J) < 0) OBC_dir_v(i,J) = -1  !  OBC_DIRECTION_S
     endif ; enddo ; enddo
 
     ! Use the masked product of the 4 (or 2) thicknesses around a velocity-point interface for weights.
