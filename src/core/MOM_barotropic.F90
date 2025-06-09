@@ -1009,7 +1009,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     enddo
   endif
 
-  do concurrent (k=1:nz, j=js:je, I=is-1:ie) local(visc_rem)
+  do concurrent (k=1:nz, j=js:je, I=is-1:ie)
     ! rem needs to be greater than visc_rem_u and 1-Instep/visc_rem_u.
     ! The 0.5 below is just for safety.
     ! NOTE: subroundoff is a negligible value used to prevent division by zero.
@@ -1021,7 +1021,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     visc_rem = max(visc_rem, 0.)
     wt_u(I,j,k) = CS%frhatu(I,j,k) * visc_rem
   enddo
-  do concurrent (k=1:nz, J=js-1:je, i=is:ie) local(visc_rem)
+  do concurrent (k=1:nz, J=js-1:je, i=is:ie)
     ! As above, rem must be greater than visc_rem_v and 1-Instep/visc_rem_v.
     visc_rem = min(visc_rem_v(I,j,k), 1.)
     visc_rem = max(visc_rem, 1. - 0.5 * Instep / (visc_rem + subroundoff))
@@ -1244,7 +1244,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 ! between the accelerations due to the average of the layer equations and the
 ! barotropic calculation.
 
-  do concurrent (j=js:je, I=is-1:ie) local(Htot_avg) ; if (G%mask2dCu(I,j) > 0.0) then
+  do concurrent (j=js:je, I=is-1:ie) ; if (G%mask2dCu(I,j) > 0.0) then
     if (CS%nonlin_stress) then
       if (GV%Boussinesq) then
         Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
@@ -1269,7 +1269,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   else
     BT_force_u(I,j) = 0.0
   endif ; enddo
-  do concurrent (J=js-1:je, i=is:ie) local(Htot_avg) ; if (G%mask2dCv(i,J) > 0.0) then
+  do concurrent (J=js-1:je, i=is:ie) ; if (G%mask2dCv(i,J) > 0.0) then
     if (CS%nonlin_stress) then
       if (GV%Boussinesq) then
         Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
@@ -1521,7 +1521,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Set the mass source, after first initializing the halos to 0.
   do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1) ; eta_src(i,j) = 0.0 ; enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
-    do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0) local(uint_cor, vint_cor, u_max_cor, v_max_cor, eta_cor_max)
+    do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0)
       if (CS%eta_cor(i,j) > 0.0) then
         !   Limit the source (outward) correction to be a fraction the mass that
         ! can be transported out of the cell by velocities with a CFL number of CFL_cor.
@@ -1572,7 +1572,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       else
         H_to_Z = GV%H_to_RZ / CS%Rho_BT_lin
       endif
-      do concurrent (j=js:je, i=is:ie) local(Idt_max2,H_eff_dx2,dyn_coef_max,ice_strength)
+      do concurrent (j=js:je, i=is:ie)
         ! First determine the maximum stable value for dyn_coef_eta.
 
         !   This estimate of the maximum stable time step is pretty accurate for
@@ -1763,10 +1763,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ! The rest should not be changed.
   enddo
   ! do sum reduction on CPU to preserve fp summation order (nstep+filter is small)
-  !$omp target update from(wt_vel, wt_eta)
-  do n=1,nstep+nfilter
+  do concurrent (n=1:nstep+nfilter) reduce(+:sum_wt_vel, sum_wt_eta)
     sum_wt_vel = sum_wt_vel + wt_vel(n) ; sum_wt_eta = sum_wt_eta + wt_eta(n)
   enddo
+  !$omp target update from(wt_vel, wt_eta)
   ! leaving this prefix sum on CPU, but could be ported using openmp scan
   wt_trans(nstep+nfilter+1) = 0.0 ; wt_accel(nstep+nfilter+1) = 0.0
   do n=nstep+nfilter,1,-1
