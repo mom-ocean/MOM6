@@ -1226,10 +1226,10 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 ! Calculate the initial barotropic velocities from the layer's velocities.
   call btstep_ubt_from_layer(U_in, V_in, wt_u, wt_v, ubt, vbt, G, GV, CS)
 
-  do concurrent (j=SZJW_(CS), i=SZIBW_(CS))
+  do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw-1:CS%iedw)
     uhbt(i,j) = 0.0 ; u_accel_bt(i,j) = 0.0
   enddo
-  do concurrent (j=SZJBW_(CS), i=SZIW_(CS))
+  do concurrent (j=CS%jsdw-1:CS%jedw, i=CS%isdw:CS%iedw)
     vhbt(i,j) = 0.0 ; v_accel_bt(i,j) = 0.0
   enddo
 
@@ -2522,7 +2522,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     vbt_int(:,:) = 0.0 ; vhbt_int(:,:) = 0.0
   endif
 
-  do concurrent (j=SZJW_(CS), i=SZIW_(CS)) ; p_surf_dyn(i,j) = 0.0 ; enddo
+  do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw:CS%iedw) ; p_surf_dyn(i,j) = 0.0 ; enddo
 
   ! Set up the group pass used for halo updates within the barotropic time stepping loops.
   call create_group_pass(CS%pass_eta_ubt, eta, CS%BT_Domain)
@@ -3378,8 +3378,8 @@ subroutine btstep_ubt_from_layer(U_in, V_in, wt_u, wt_v, ubt, vbt,  G, GV, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  do concurrent (j=SZJW_(CS), i=SZIBW_(CS)) ; ubt(i,j) = 0.0 ; enddo
-  do concurrent (j=SZJBW_(CS), i=SZIW_(CS)) ; vbt(i,j) = 0.0 ; enddo
+  do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw-1:CS%iedw) ; ubt(i,j) = 0.0 ; enddo
+  do concurrent (j=CS%jsdw-1:CS%jedw, i=CS%isdw:CS%iedw) ; vbt(i,j) = 0.0 ; enddo
 
   do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
     ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
