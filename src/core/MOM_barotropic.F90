@@ -853,7 +853,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! share with the main part of the MOM6 code.
   if (find_etaav) then
     call create_group_pass(CS%pass_etaav, etaav, G%Domain)
-  endif                                                              
+  endif
   call create_group_pass(CS%pass_e_anom, e_anom, G%Domain)
   call create_group_pass(CS%pass_ubta_uhbta, CS%ubtav, CS%vbtav, G%Domain)
   call create_group_pass(CS%pass_ubta_uhbta, uhbtav, vhbtav, G%Domain)
