@@ -4,6 +4,7 @@ module MOM_barotropic
 ! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums, only : chksum0
+use MOM_coms,      only : any_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_debugging, only : hchksum, uvchksum
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
@@ -92,6 +93,9 @@ type, private :: BT_OBC_type
   integer, allocatable :: v_OBC_type(:,:) !< An integer encoding the type and direction of v-point OBCs
   logical :: u_OBCs_on_PE !< True if this PE has an open boundary at any u-points.
   logical :: v_OBCs_on_PE !< True if this PE has an open boundary at any v-points.
+  logical :: wide_stencil !< If true, a wider stencil must be used in the barotropic iteration because
+                          !! of the presence of OBCs in the opposite halo (e.g., southern OBCs in a
+                          !! northern halo) on any processors anywhere in the domain.  This is uncommon.
   !>@{ Index ranges on the local PE for the open boundary conditions in various directions
   integer :: Is_u_W_obc, Ie_u_W_obc, js_u_W_obc, je_u_W_obc
   integer :: Is_u_E_obc, Ie_u_E_obc, js_u_E_obc, je_u_E_obc
@@ -2406,6 +2410,8 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   stencil = 1
   if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. (CS%Nonlin_cont_update_period > 0)) &
     stencil = 2
+  if (CS%BT_OBC%wide_stencil) stencil = 2
+
   num_cycles = 1
   if (CS%use_wide_halos) &
     num_cycles = min((is-CS%isdw) / stencil, (js-CS%jsdw) / stencil)
@@ -2508,6 +2514,14 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
       jsv = jsv+stencil ; jev = jev-stencil
     endif
 
+    ! Store the previous velocities for time-filtered transports and OBCs.
+    do j=jsv,jev ; do I=isv-2,iev+1
+      ubt_prev(I,j) = ubt(I,j)
+    enddo ; enddo
+    do J=jsv-2,jev+1 ; do i=isv,iev
+      vbt_prev(i,J) = vbt(i,J)
+    enddo ; enddo
+
     if (integral_BT_cont) then
       !$OMP parallel do default(shared)
       do j=jsv-1,jev+1 ; do I=isv-2,iev+1
@@ -2563,22 +2577,22 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     if (v_first) then
       ! On odd-steps, update v first.
       call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, isv-1, iev+1, jsv-1, jev, &
-                           f_4_v, bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
+                           f_4_v, bt_rem_v, BT_force_v, Cor_ref_v, Rayleigh_v, &
                            wt_accel(n), G, US, CS)
 
       ! Now update the zonal velocity.
       call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, isv-1, iev, jsv, jev, &
-                           f_4_u, bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
+                           f_4_u, bt_rem_u, BT_force_u, Cor_ref_u, Rayleigh_u, &
                            wt_accel(n), G, US, CS)
 
     else
       ! On even steps, update u first.
       call btloop_update_u(dtbt, ubt, vbt, u_accel_bt, Cor_u, PFu, isv-1, iev, jsv-1, jev+1, &
-                           f_4_u, bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
+                           f_4_u, bt_rem_u, BT_force_u, Cor_ref_u, Rayleigh_u, &
                            wt_accel(n), G, US, CS)
       ! Now update the meridional velocity.
       call btloop_update_v(dtbt, ubt, vbt, v_accel_bt, Cor_v, PFv, isv, iev, jsv-1, jev, &
-                           f_4_v, bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
+                           f_4_v, bt_rem_v, BT_force_v, Cor_ref_v, Rayleigh_v, &
                            wt_accel(n), G, US, CS, Cor_bracket_bug=CS%use_old_coriolis_bracket_bug)
     endif
 
@@ -3190,7 +3204,7 @@ end subroutine btloop_add_dyn_PF
 !> Update meridional velocity.
 subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
                            Cor_v, PFv, is_v, ie_v, Js_v, Je_v, f_4_v, &
-                           bt_rem_v, BT_force_v, vbt_prev, Cor_ref_v, Rayleigh_v, &
+                           bt_rem_v, BT_force_v, Cor_ref_v, Rayleigh_v, &
                            wt_accel_n, G, US, CS, Cor_bracket_bug)
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
   type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
@@ -3216,8 +3230,6 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
   integer, intent(in)  :: ie_v !< The ending i-index of the range of v-point values to calculate
   integer, intent(in)  :: Js_v !< The starting j-index of the range of v-point values to calculate
   integer, intent(in)  :: Je_v !< The ending j-index of the range of v-point values to calculate
-  real, dimension(SZIW_(CS),SZJBW_(CS)), intent(inout) :: &
-    vbt_prev      !< The previous velocity, stored for time-filtered transports and OBCs [L T-1 ~> m s-1]
   real, dimension(SZIW_(CS),SZJBW_(CS)), intent(in) :: &
     bt_rem_v      !< The fraction of the barotropic meridional velocity that
                   !! remains after a time step, the rest being lost to bottom
@@ -3265,7 +3277,6 @@ subroutine btloop_update_v(dtbt, ubt, vbt, v_accel_bt, &
   !$OMP do schedule(static)
   ! This updates the v-velocity, except at OBC points.
   do J=Js_v,Je_v ; do i=is_v,ie_v
-    vbt_prev(i,J) = vbt(i,J)
     vbt(i,J) = bt_rem_v(i,J) * (vbt(i,J) + &
          dtbt * ((BT_force_v(i,J) + Cor_v(i,J)) + PFv(i,J)))
     if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
@@ -3290,7 +3301,7 @@ end subroutine btloop_update_v
 !> Update zonal velocity.
 subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
                            Cor_u, PFu, Is_u, Ie_u, js_u, je_u, f_4_u, &
-                           bt_rem_u, BT_force_u, ubt_prev, Cor_ref_u, Rayleigh_u, &
+                           bt_rem_u, BT_force_u, Cor_ref_u, Rayleigh_u, &
                            wt_accel_n, G, US, CS)
   type(ocean_grid_type),   intent(inout) :: G     !< The ocean's grid structure.
   type(barotropic_CS),     intent(inout) :: CS    !< Barotropic control structure
@@ -3324,8 +3335,6 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     BT_force_u    !< The vertical average of all of the v-accelerations that are
                   !! not explicitly included in the barotropic equation [L T-2 ~> m s-2].
-  real, dimension(SZIBW_(CS),SZJW_(CS)), intent(inout) :: &
-    ubt_prev      !< The previous velocity, stored for time-filtered transports and OBCs  [L T-1 ~> m s-1]
   real, dimension(SZIBW_(CS),SZJW_(CS)), intent(in) :: &
     Cor_ref_u     !< The meridional barotropic Coriolis acceleration due
                   !! to the reference velocities [L T-2 ~> m s-2].
@@ -3347,7 +3356,6 @@ subroutine btloop_update_u(dtbt, ubt, vbt, u_accel_bt, &
                   ((f_4_u(3,I,j) * vbt(i,J)) + (f_4_u(2,I,j) * vbt(i+1,J-1)))) - &
                  Cor_ref_u(I,j)
 
-    ubt_prev(I,j) = ubt(I,j)
     ubt(I,j) = bt_rem_u(I,j) * (ubt(I,j) + &
          dtbt * ((BT_force_u(I,j) + Cor_u(I,j)) + PFu(I,j)))
     if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
@@ -4022,6 +4030,8 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
                  ! converted to real numbers to work with the MOM6 halo update code [nondim]
   real :: OBC_sign  ! A sign encoding the direction of the OBC being used at a point [nondim]
   real :: OBC_type  ! A real copy of the integer encoding the type of OBC being used at a point [nondim]
+  logical :: reversed_OBCs  ! True of there any OBCs in the opposite halo on this PE, e.g. points
+                            ! with a southern OBC in a northern halo.
   integer :: i, j, isdw, iedw, jsdw, jedw
   integer :: l_seg, Flather_OBC_in_halo
 
@@ -4120,6 +4130,14 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
 
   BT_OBC%u_OBCs_on_PE = ((BT_OBC%Is_u_E_obc <= iedw) .or. (BT_OBC%Is_u_W_obc <= iedw))
   BT_OBC%v_OBCs_on_PE = ((BT_OBC%is_v_N_obc <= iedw) .or. (BT_OBC%is_v_S_obc <= iedw))
+
+
+  ! Determine whether there are any OBCs in the opposite halo on any processors in the domain, e.g.,
+  ! points with OBC_DIRECTION_S in a northern halo.
+  reversed_OBCs = (BT_OBC%u_OBCs_on_PE .and. ((BT_OBC%Is_u_E_obc <= G%isc-1) .or. (BT_OBC%Ie_u_W_obc >= G%iec))) .or. &
+                  (BT_OBC%v_OBCs_on_PE .and. ((BT_OBC%Js_v_N_obc <= G%jsc-1) .or. (BT_OBC%Je_v_S_obc >= G%jec)))
+  BT_OBC%wide_stencil = any_across_PEs(reversed_OBCs)
+  if (BT_OBC%wide_stencil) call MOM_mesg("OBCs in an opposite halo require the use of a wider stencil.", 3)
 
   ! Allocate time-varying arrays that will be used for open boundary conditions.
 
@@ -5804,6 +5822,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   else ! There are no OBC points anywhere.
     CS%BT_OBC%u_OBCs_on_PE = .false.
     CS%BT_OBC%v_OBCs_on_PE = .false.
+    CS%BT_OBC%wide_stencil = .false.
     CS%integral_OBCs = .false.
   endif
 
