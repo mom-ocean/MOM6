@@ -5239,8 +5239,8 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   type(barotropic_CS),                intent(inout) :: CS    !< Barotropic control structure
 
   ! Local variables
-  real :: h_tot(SZI_(G))      ! The sum of the layer thicknesses [H ~> m or kg m-2].
-  real :: eta_h(SZI_(G))      ! The free surface height determined from
+  !real :: h_tot(SZI_(G),SZJ_(G))      ! The sum of the layer thicknesses [H ~> m or kg m-2].
+  real :: eta_h(SZI_(G),SZJ_(G))      ! The free surface height determined from
                               ! the sum of the layer thicknesses [H ~> m or kg m-2].
   real :: d_eta               ! The difference between estimates of the total
                               ! thicknesses [H ~> m or kg m-2].
@@ -5253,44 +5253,40 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  !$omp target teams distribute private(eta_h,h_tot,d_eta) &
-  !$omp   map(to: CS, G, G%bathyT, GV, h, eta) &
-  !$omp   map(tofrom: CS%eta_cor) &
-  !$omp   map(alloc: eta_h, h_tot)
-  do j=js,je
-    !$omp parallel
-    !$omp do simd
-    do i=is,ie ; h_tot(i) = h(i,j,1) ; enddo
-    if (GV%Boussinesq) then
-      !$omp do simd
-      do i=is,ie ; eta_h(i) = h(i,j,1) - G%bathyT(i,j)*GV%Z_to_H ; enddo
-    else
-      !$omp do simd
-      do i=is,ie ; eta_h(i) = h(i,j,1) ; enddo
-    endif
-    do k=2,nz
-      !$omp do simd
-      do i=is,ie
-        eta_h(i) = eta_h(i) + h(i,j,k)
-        h_tot(i) = h_tot(i) + h(i,j,k)
-      enddo
-    enddo
+  !$omp target enter data map(alloc: eta_h)
 
-    if (set_cor) then
-      !$omp do private(d_eta)
-      do i=is,ie
-        d_eta = eta_h(i) - eta(i,j)
-        CS%eta_cor(i,j) = d_eta
-      enddo
-    else
-      !$omp do private(d_eta)
-      do i=is,ie
-        d_eta = eta_h(i) - eta(i,j)
-        CS%eta_cor(i,j) = CS%eta_cor(i,j) + d_eta
-      enddo
-    endif
-    !$omp end parallel
+  ! do concurrent (j=js:je , i=is:ie)
+  !   h_tot(i,j) = h(i,j,1)
+  ! enddo
+
+  if (GV%Boussinesq) then
+    do concurrent (j=js:je, i=is:ie)
+      eta_h(i,j) = h(i,j,1) - G%bathyT(i,j)*GV%Z_to_H
+    enddo
+  else
+    do concurrent (j=js:je, i=is:ie)
+      eta_h(i,j) = h(i,j,1)
+    enddo
+  endif
+  do k=2,nz
+    do concurrent (j=js:je, i=is:ie)
+      eta_h(i,j) = eta_h(i,j) + h(i,j,k)
+      !h_tot(i,j) = h_tot(i,j) + h(i,j,k)
+    enddo
   enddo
+  if (set_cor) then
+    do concurrent (j=js:je, i=is:ie)
+      d_eta = eta_h(i,j) - eta(i,j)
+      CS%eta_cor(i,j) = d_eta
+    enddo
+  else
+    do concurrent (j=js:je, i=is:ie)
+      d_eta = eta_h(i,j) - eta(i,j)
+      CS%eta_cor(i,j) = CS%eta_cor(i,j) + d_eta
+    enddo
+  endif
+
+  !$omp target exit data map(release: eta_h)
 
 end subroutine bt_mass_source
 
