@@ -494,13 +494,9 @@ subroutine zonal_edge_thickness(h_in, h_W, h_E, G, GV, US, CS, OBC, LB_in)
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   if (CS%upwind_1st) then
-    ! untested
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: h_in(ish-1:ieh+1, :, :)) &
-    !$omp   map(from: h_W(ish-1:ieh+1, :, :), h_E(ish-1:ieh+1, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh+1
+    do concurrent (k=1:nz, j=jsh:jeh, i=ish-1:ieh+1)
       h_W(i,j,k) = h_in(i,j,k) ; h_E(i,j,k) = h_in(i,j,k)
-    enddo ; enddo ; enddo
+    enddo
   else
     call PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, &
                               2.0*GV%Angstrom_H, CS%monotonic, CS%simple_2nd, OBC)
@@ -3143,27 +3139,19 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target enter data &
-  !$omp   map(to: G, G%mask2dT(isl-2:iel+2, jsl:jel), h_in(isl-2:iel+2, :, :)) &
-  !$omp   map(alloc: h_W, h_E, slp) ! whole arrays as unclear range of loops in OBC regions
+  !$omp   map(to: G, G%mask2dT, h_in) &
+  !$omp   map(alloc: h_W, h_E, slp)
 
   if (simple_2nd) then
     ! untested
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   private(h_im1, h_ip1) &
-    !$omp   map(to: G, G%mask2dT(isl-1:iel+1, jsl:jel), h_in(isl-1:iel+1, :, :)) &
-    !$omp   map(from: h_W(isl:iel, :, :), h_E(isl:iel, :, :))
-    do k =1,nz ; do j=jsl,jel ; do i=isl,iel
+    do concurrent (k =1:nz, j=jsl:jel, i=isl:iel)
       h_im1 = G%mask2dT(i-1,j) * h_in(i-1,j,k) + (1.0-G%mask2dT(i-1,j)) * h_in(i,j,k)
       h_ip1 = G%mask2dT(i+1,j) * h_in(i+1,j,k) + (1.0-G%mask2dT(i+1,j)) * h_in(i,j,k)
       h_W(i,j,k) = 0.5*( h_im1 + h_in(i,j,k) )
       h_E(i,j,k) = 0.5*( h_ip1 + h_in(i,j,k) )
-    enddo ; enddo ; enddo
+    enddo
   else
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   private(dMx, dMn) &
-    !$omp   map(to: G, G%mask2dT(isl-2:iel+2, jsl:jel), h_in(isl-2:iel+2, :, :)) &
-    !$omp   map(from: slp(isl:iel, :, :))
-    do k=1,nz ; do j=jsl,jel ; do i=isl-1,iel+1
+    do concurrent (k=1:nz, j=jsl:jel, i=isl-1:iel+1)
       if ((G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j)) == 0.0) then
         slp(i,j,k) = 0.0
       else
@@ -3175,7 +3163,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
         slp(i,j,k) = sign(1.,slp(i,j,k)) * min(abs(slp(i,j,k)), 2. * min(dMx, dMn))
                 ! * (G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j))
       endif
-    enddo ; enddo ; enddo
+    enddo
 
     if (local_open_BC) then
       ! untested
@@ -3184,23 +3172,15 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
         if (.not. segment%on_pe) cycle
         if (segment%is_E_or_W) then
           I=segment%HI%IsdB
-          !$omp target teams distribute parallel do collapse(2) &
-          !$omp   map(to: segment) &
-          !$omp   map(tofrom: slp(i:i+1, :, :))
-          do k=1, nz ; do j=segment%HI%jsd,segment%HI%jed
+          do concurrent (k=1:nz, j=segment%HI%jsd:segment%HI%jed)
             slp(i+1,j,k) = 0.0
             slp(i,j,k) = 0.0
-          enddo ; enddo
+          enddo
         endif
       enddo
     endif
 
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   private(h_im1, h_ip1) &
-    !$omp   map(to: G, G%mask2dT(isl-1:iel+1, jsl:jel), h_in(isl-1:iel+1, :, :), &
-    !$omp       slp(isl-1:iel+1, :, :)) &
-    !$omp   map(from: h_W(isl:iel, :, :), h_E(isl:iel, :, :))
-    do k=1,nz ; do j=jsl,jel ; do i=isl,iel
+    do concurrent (k=1:nz, j=jsl:jel, i=isl:iel)
       ! Neighboring values should take into account any boundaries.  The 3
       ! following sets of expressions are equivalent.
     ! h_im1 = h_in(i-1,j,k) ; if (G%mask2dT(i-1,j) < 0.5) h_im1 = h_in(i,j)
@@ -3210,7 +3190,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
       ! Left/right values following Eq. B2 in Lin 1994, MWR (132)
       h_W(i,j,k) = 0.5*( h_im1 + h_in(i,j,k) ) + oneSixth*( slp(i-1,j,k) - slp(i,j,k) )
       h_E(i,j,k) = 0.5*( h_ip1 + h_in(i,j,k) ) + oneSixth*( slp(i,j,k) - slp(i+1,j,k) )
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   if (local_open_BC) then
@@ -3220,26 +3200,20 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
       if (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_E) then
         I=segment%HI%IsdB
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   map(to: segment, h_in(i, :, :)) &
-        !$omp   map(tofrom: h_W(i:i+1, :, :), h_E(i:i+1, :, :))
-        do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+        do concurrent (k=1:nz, j=segment%HI%jsd:segment%HI%jed)
           h_W(i+1,j,k) = h_in(i,j,k)
           h_E(i+1,j,k) = h_in(i,j,k)
           h_W(i,j,k) = h_in(i,j,k)
           h_E(i,j,k) = h_in(i,j,k)
-        enddo ; enddo
+        enddo
       elseif (segment%direction == OBC_DIRECTION_W) then
         I=segment%HI%IsdB
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   map(to: segment, h_in(i, :, :)) &
-        !$omp   map(tofrom: h_W(i:i+1, :, :), h_E(i:i+1, :, :))
-        do k=1,nz ; do j=segment%HI%jsd,segment%HI%jed
+        do concurrent (k=1:nz, j=segment%HI%jsd:segment%HI%jed)
           h_W(i,j,k) = h_in(i+1,j,k)
           h_E(i,j,k) = h_in(i+1,j,k)
           h_W(i+1,j,k) = h_in(i+1,j,k)
           h_E(i+1,j,k) = h_in(i+1,j,k)
-        enddo ; enddo
+        enddo
       endif
     enddo
   endif
@@ -3252,8 +3226,8 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target exit data &
-  !$omp   map(from: h_W, h_E) & ! whole arrays as unclear range of loops in OBC regions
-  !$omp   map(release: G, G%mask2dT(isl-2:iel+2, jsl:jel), h_in(isl-2:iel+2, :, :), slp)
+  !$omp   map(from: h_W, h_E) &
+  !$omp   map(release: G, G%mask2dT, h_in, slp)
 
   return
 end subroutine PPM_reconstruction_x
@@ -3313,27 +3287,19 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target enter data &
-  !$omp   map(to: G, G%mask2dT(isl:iel, jsl-2:jel+2), h_in(isl:iel, :, :)) &
+  !$omp   map(to: G, G%mask2dT, h_in) &
   !$omp   map(alloc: slp, h_S, h_N)
 
   if (simple_2nd) then
     ! untested
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   private(h_jm1, h_jp1) &
-    !$omp   map(to: G, G%mask2dT(isl:iel, jsl-1:jel+1), h_in(isl:iel, :, :)) &
-    !$omp   map(from: h_S(isl:iel, :, :), h_N(isl:iel, :, :))
-    do k=1,nz ; do j=jsl,jel ; do i=isl,iel
+    do concurrent (k=1:nz, j=jsl:jel, i=isl:iel)
       h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1,k) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j,k)
       h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1,k) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j,k)
       h_S(i,j,k) = 0.5*( h_jm1 + h_in(i,j,k) )
       h_N(i,j,k) = 0.5*( h_jp1 + h_in(i,j,k) )
-    enddo ; enddo ; enddo
+    enddo
   else
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   private(dMx, dMn) &
-    !$omp   map(to: G, G%mask2dT(isl:iel, jsl-2:jel+2), h_in(isl:iel, :, :)) &
-    !$omp   map(from: slp(isl:iel, :, :))
-    do k=1,nz ; do j=jsl-1,jel+1 ; do i=isl,iel
+    do concurrent (k=1:nz, j=jsl-1:jel+1, i=isl:iel)
       if ((G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1)) == 0.0) then
         slp(i,j,k) = 0.0
       else
@@ -3345,7 +3311,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
         slp(i,j,k) = sign(1.,slp(i,j,k)) * min(abs(slp(i,j,k)), 2. * min(dMx, dMn))
                 ! * (G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1))
       endif
-    enddo ; enddo ; enddo
+    enddo
 
     if (local_open_BC) then
       ! untested
@@ -3354,23 +3320,15 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
         if (.not. segment%on_pe) cycle
         if (segment%is_N_or_S) then
           J=segment%HI%JsdB
-          !$omp target teams distribute parallel do collapse(2) &
-          !$omp   map(to: segment) &
-          !$omp   map(tofrom: slp(segment%HI%isd:segment%HI%ied, :, :))
-          do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+          do concurrent (k=1:nz, i=segment%HI%isd:segment%HI%ied)
             slp(i,j+1,k) = 0.0
             slp(i,j,k) = 0.0
-          enddo ; enddo
+          enddo
         endif
       enddo
     endif
 
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   private(h_jm1, h_jp1) &
-    !$omp   map(to: G, G%mask2dT(isl:iel, jsl-1:jel+1), h_in(isl:iel, :, :), &
-    !$omp       slp(isl:iel, :, :)) &
-    !$Omp   map(from: h_S(isl:iel, :, :), h_N(isl:iel, :, :))
-    do k=1,nz ; do j=jsl,jel ; do i=isl,iel
+    do concurrent (k=1:nz, j=jsl:jel, i=isl:iel)
       ! Neighboring values should take into account any boundaries.  The 3
       ! following sets of expressions are equivalent.
       h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1,k) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j,k)
@@ -3378,7 +3336,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
       ! Left/right values following Eq. B2 in Lin 1994, MWR (132)
       h_S(i,j,k) = 0.5*( h_jm1 + h_in(i,j,k) ) + oneSixth*( slp(i,j-1,k) - slp(i,j,k) )
       h_N(i,j,k) = 0.5*( h_jp1 + h_in(i,j,k) ) + oneSixth*( slp(i,j,k) - slp(i,j+1,k) )
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   if (local_open_BC) then
@@ -3388,26 +3346,20 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
       if (.not. segment%on_pe) cycle
       if (segment%direction == OBC_DIRECTION_N) then
         J=segment%HI%JsdB
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   map(to: segment, h_in(i, :, :)) &
-        !$omp   map(tofrom: h_S(i, :, :), h_N(i, :, :))
-        do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+        do concurrent (k=1:nz, i=segment%HI%isd:segment%HI%ied)
           h_S(i,j+1,k) = h_in(i,j,k)
           h_N(i,j+1,k) = h_in(i,j,k)
           h_S(i,j,k) = h_in(i,j,k)
           h_N(i,j,k) = h_in(i,j,k)
-        enddo ; enddo
+        enddo
       elseif (segment%direction == OBC_DIRECTION_S) then
         J=segment%HI%JsdB
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   map(to: segment, h_in(i, :, :)) &
-        !$omp   map(tofrom: h_S(i, :, :), h_N(i, :, :))
-        do k=1,nz ; do i=segment%HI%isd,segment%HI%ied
+        do concurrent (k=1:nz, i=segment%HI%isd:segment%HI%ied)
           h_S(i,j,k) = h_in(i,j+1,k)
           h_N(i,j,k) = h_in(i,j+1,k)
           h_S(i,j+1,k) = h_in(i,j+1,k)
           h_N(i,j+1,k) = h_in(i,j+1,k)
-        enddo ; enddo
+        enddo
       endif
     enddo
   endif
@@ -3420,7 +3372,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target exit data &
-  !$omp   map(release: G, G%mask2dT(isl:iel, jsl-2:jel+2), h_in(isl:iel, :, :), slp) &
+  !$omp   map(release: G, G%mask2dT, h_in, slp) &
   !$omp   map(from: h_S, h_N)
 
   return
@@ -3450,11 +3402,7 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, GV, iis, iie, jis, jie, nz)
   real    :: scale ! A scaling factor to reduce the curvature of the fit               [nondim]
   integer :: i,j,k
 
-  !$omp target teams distribute parallel do collapse(3) &
-  !$omp   private(curv, dh, scale) &
-  !$omp   map(to: h_in(iis:iie, :, :)) &
-  !$omp   map(tofrom: h_L(iis:iie, :, :), h_R(iis:iie, :, :))
-  do k=1,nz ; do j=jis,jie ; do i=iis,iie
+  do concurrent (k=1:nz, j=jis:jie, i=iis:iie)
     ! This limiter prevents undershooting minima within the domain with
     ! values less than h_min.
     curv = 3.0*((h_L(i,j,k) + h_R(i,j,k)) - 2.0*h_in(i,j,k))
@@ -3472,7 +3420,7 @@ subroutine PPM_limit_pos(h_in, h_L, h_R, h_min, G, GV, iis, iie, jis, jie, nz)
         endif
       endif
     endif
-  enddo ; enddo ; enddo
+  enddo
 
 end subroutine PPM_limit_pos
 
@@ -3501,11 +3449,7 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, GV, iis, iie, jis, jie, nz)
   integer :: i, j, k
 
   ! untested
-  !!$omp target teams distribute parallel do collapse(3) &
-  !!$omp   private(h_i, RLdiff, RLdiff2, RLmean, FunFac) &
-  !!$omp   map(to: h_in(iis:iie, :, :)) &
-  !!$omp   map(tofrom: h_L(iis:iie, :, :), h_R(iis:iie, :, :))
-  do k=1,nz ; do j=jis,jie ; do i=iis,iie
+  do concurrent (k=1:nz, j=jis:jie, i=iis:iie)
     ! This limiter monotonizes the parabola following
     ! Colella and Woodward, 1984, Eq. 1.10
     h_i = h_in(i,j,k)
@@ -3519,7 +3463,7 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, GV, iis, iie, jis, jie, nz)
       if ( FunFac >  RLdiff2 ) h_L(i,j,k) = 3. * h_i - 2. * h_R(i,j,k)
       if ( FunFac < -RLdiff2 ) h_R(i,j,k) = 3. * h_i - 2. * h_L(i,j,k)
     endif
-  enddo ; enddo ; enddo
+  enddo
 
 end subroutine PPM_limit_CW84
 
