@@ -648,53 +648,33 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   I_dt = 1.0 / dt
   if (CS%aggress_adjust) CFL_dt = I_dt
 
-  !$omp target enter data if (use_visc_rem) map(to: visc_rem_u(ish-1:ieh, :, :))
+  !$omp target enter data if (use_visc_rem) map(to: visc_rem_u)
   !$omp target enter data &
-  !$omp   map(to: G, G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), G%areaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%dxT(ish-1:ieh+1, jsh:jeh), G%mask2dCu(ish-1:ieh, jsh:jeh), &
-  !$omp       G%dxCu(ish-1:ieh, jsh:jeh), u(ish-2:ieh+1, :, :), h_in(ish-1:ieh+1, :, :), &
-  !$omp       h_W(ish-1:ieh+1, :, :), h_E(ish-1:ieh+1, :, :), CS, por_face_areaU(ish-1:ieh, :, :), &
-  !$omp       uhbt(ish-1:ieh, jsh:jeh), BT_cont) &
-  !$omp   map(alloc: visc_rem_u_tmp(ish-1:ieh, :, :), do_I(ish-1:ieh, jsh:jeh), uh(ish-1:ieh, :, :), &
-  !$omp       u_cor(ish-1:ieh, :, :), BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%h_u(ish-1:ieh, :, :), &
-  !$omp       du_cor(ish-1:ieh, jsh:jeh), duhdu(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh), &
-  !$omp       du_min_CFL(ish-1:ieh, jsh:jeh), du_max_CFL(ish-1:ieh, jsh:jeh), &
-  !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), uh_tot_0(ish-1:ieh, jsh:jeh), &
-  !$omp       visc_rem_max(ish-1:ieh, jsh:jeh))
+  !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, u, h_in, &
+  !$omp       h_W, h_E, CS, por_face_areaU, uhbt, BT_cont) &
+  !$omp   map(alloc: visc_rem_u_tmp, do_I, uh, u_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, &
+  !$omp       BT_cont%FA_u_EE, BT_cont%FA_u_WW, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%h_u, &
+  !$omp       du_cor, duhdu, du, du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
 
   if (present(du_cor)) then
-    !$omp target teams distribute parallel do collapse(2) &
-    !$omp   map(from: du_cor(ish-1:ieh, jsh:jeh))
-    do j=jsh,jeh ; do i=ish-1,ieh
+    do concurrent (j=jsh:jeh, i=ish-1:ieh)
       du_cor(i,j) = 0.0
-    enddo ; enddo
+    enddo
   endif
 
-  ! a better solution is needed!
   if (.not.use_visc_rem) then
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(from: visc_rem_u_tmp(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
+    do concurrent (k=1:nz, j=jsh:jeh, i=ish-1:ieh)
       visc_rem_u_tmp(i,j,k) = 1.0
-    enddo ; enddo ; enddo
+    enddo
   else
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: visc_rem_u(ish-1:ieh, :, :)) &
-    !$omp   map(from: visc_rem_u_tmp(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
+    do concurrent (k=1:nz, j=jsh:jeh, i=ish-1:ieh)
       visc_rem_u_tmp(i,j,k) = visc_rem_u(i,j,k)
-    enddo ; enddo ; enddo
+    enddo
   end if
 
-  !$omp target teams distribute parallel do collapse(2) &
-  !$omp   map(from: do_I(ish-1:ieh, jsh:jeh))
-  do j=jsh,jeh ; do i=ish-1,ieh
+  do concurrent (j=jsh:jeh, i=ish-1:ieh)
     do_I(i, j) = .true.
-  enddo ; enddo
+  enddo
   
   ! Set uh and duhdu.
   call zonal_flux_layer(u, h_in, h_W, h_E, &
@@ -703,44 +683,31 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   
   ! untested!
   if (local_specified_BC) then
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   private(l_seg) &
-    !$omp   map(to: OBC, OBC%segnum_u(ish-1:ieh, jsh:jeh), OBC%segment(:)) &
-    !$omp   map(tofrom: uh(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
+    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh, OBC%segnum_u(I,j) /= 0)
       l_seg = abs(OBC%segnum_u(I,j))
       if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
-    endif ; enddo ; enddo ; enddo
+    enddo
   endif
 
   if (present(uhbt) .or. set_BT_cont) then
     if (use_visc_rem.and.CS%use_visc_rem_max) then
-      !$omp target teams distribute parallel do collapse(2) &
-      !$omp   map(to: visc_rem_u(ish-1:ieh, :, :)) &
-      !$omp   map(from: visc_rem_max(ish-1:ieh, jsh:jeh))
-      do j=jsh,jeh ; do i=ish-1,ieh
-        visc_rem_max(i, j) = 0.0
-        do k=1,nz
+      ! poor performance for nvfortran + do concurrent if k is inside loop
+      do concurrent (j=jsh:jeh, i=ish-1:ieh)
+        visc_rem_max(i, j) = visc_rem_u(I,j,1)
+      enddo
+      do k=2,nz
+        do concurrent (j=jsh:jeh, i=ish-1:ieh)
           visc_rem_max(I,j) = max(visc_rem_max(I,j), visc_rem_u(I,j,k))
         enddo
-      enddo ; enddo
+      enddo
     else
-      !$omp target teams distribute parallel do collapse(2) &
-      !$omp   map(from: visc_rem_max(ish-1:ieh, jsh:jeh))
-      do j=jsh,jeh ; do i=ish-1,ieh
+      do concurrent (j=jsh:jeh, i=ish-1:ieh)
         visc_rem_max(i, j) = 1.0
-      enddo ; enddo
+      enddo
     endif
     !   Set limits on du that will keep the CFL number between -1 and 1.
     ! This should be adequate to keep the root bracketed in all cases.
-    !$omp target teams distribute parallel do collapse(2) &
-    !$omp   private(I_vrm, dx_W, dx_E, du_lim) &
-    !$omp   map(to: visc_rem_max(ish-1:ieh, jsh:jeh), G, G%areaT(ish-1:ieh+1, jsh:jeh), &
-    !$omp       G%dy_Cu(ish-1:ieh, jsh:jeh), G%dxT(ish-1:ieh+1, jsh:jeh), duhdu(ish-1:ieh, :, :), &
-    !$omp       uh(ish-1:ieh, :, :)) &
-    !$omp   map(from: du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh), &
-    !$omp       uh_tot_0(ish-1:ieh, jsh:jeh), duhdu_tot_0(ish-1:ieh, jsh:jeh))
-    do j=jsh,jeh ; do I=ish-1,ieh
+    do concurrent (j=jsh:jeh, I=ish-1:ieh)
       I_vrm = 0.0
       if (visc_rem_max(I,j) > 0.0) I_vrm = 1.0 / visc_rem_max(I,j)
       if (CS%vol_CFL) then
@@ -750,22 +717,19 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       du_max_CFL(I,j) = 2.0* (CFL_dt * dx_W) * I_vrm
       du_min_CFL(I,j) = -2.0 * (CFL_dt * dx_E) * I_vrm
       uh_tot_0(I,j) = 0.0 ; duhdu_tot_0(I,j) = 0.0
-      do k=1,nz
+    enddo
+    ! poor performance for nvfortran + do concurrent if k is inside loop
+    do k=1,nz
+      do concurrent (j=jsh:jeh, I=ish-1:ieh)
         duhdu_tot_0(I,j) = duhdu_tot_0(I,j) + duhdu(I, j, k)
         uh_tot_0(I,j) = uh_tot_0(I,j) + uh(I,j,k)
       enddo
-    enddo ; enddo
+    enddo
 
     if (use_visc_rem) then
       if (CS%aggress_adjust) then
         ! untested!
-        !$omp target teams distribute parallel do &
-        !$omp   private(dx_W, dx_E, du_lim) &
-        !$omp   map(to: G, G%areaT(ish-1:ieh+1, jsh:jeh), G%dy_Cu(ish-1:ieh, jsh:jeh), &
-        !$omp       G%dxT(ish-1:ieh+1, jsh:jeh), u(ish-2:ieh, :, :), &
-        !$omp       visc_rem_u_tmp(ish-1:ieh, :, :)) &
-        !$omp   map(tofrom: du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh))
-        do j=jsh,jeh ; do I=ish-1,ieh ; do k=1,nz
+        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
           if (CS%vol_CFL) then
             dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
             dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
@@ -778,15 +742,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           du_lim = 0.499*((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k)))
           if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < du_lim) &
             du_min_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
-        enddo ; enddo ; enddo
+        enddo ; enddo
       else
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   private(dx_W, dx_E) &
-        !$omp   map(to: G, G%areaT(ish-1:ieh+1, jsh:jeh), G%dy_Cu(ish-1:ieh, jsh:jeh), &
-        !$omp       G%dxT(ish-1:ieh+1, jsh:jeh), G%mask2dCu(ish-1:ieh, jsh:jeh), u(ish-1:ieh, :, :), &
-        !$omp       visc_rem_u_tmp(ish-1:ieh, :, :)) &
-        !$omp   map(tofrom: du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh))
-        do j=jsh,jeh ; do I=ish-1,ieh ; do k=1,nz
+        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
           if (CS%vol_CFL) then
             dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
             dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
@@ -796,17 +754,12 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem_u_tmp(I,j,k)
           if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
             du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem_u_tmp(I,j,k)
-        enddo ; enddo ; enddo
+        enddo ; enddo
       endif
     else
       ! untested!
       if (CS%aggress_adjust) then
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   private(dx_W, dx_E) &
-        !$omp   map(to: G, G%areaT(ish-1:ieh+1, jsh:jeh), G%dy_Cu(ish-1:ieh, jsh:jeh), &
-        !$omp       G%dxT(ish-1:ieh+1, jsh:jeh), u(ish-2:ieh+1, :, :)) &
-        !$omp   map(tofrom: du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh))
-        do j=jsh,jeh ; do I=ish-1,ieh ; do k=1,nz
+        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
           if (CS%vol_CFL) then
             dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
             dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
@@ -816,14 +769,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                       ((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k))) )
           du_min_CFL(I,j) = MAX(du_min_CFL(I,j), 0.499 * &
                       ((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k))) )
-        enddo ; enddo ; enddo
+        enddo ; enddo
       else
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   private(dx_W, dx_E) &
-        !$omp   map(to: G, G%areaT(ish-1:ieh+1, jsh:jeh), G%dy_Cu(ish-1:ieh, jsh:jeh), &
-        !$omp       G%dxT(ish-1:ieh+1, jsh:jeh), u(ish-1:ieh, :, :)) &
-        !$omp   map(tofrom: du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh))
-        do j=jsh,jeh ; do I=ish-1,ieh ; do k=1,nz 
+        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
           if (CS%vol_CFL) then
             dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
             dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
@@ -831,26 +779,19 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
           du_max_CFL(I,j) = MIN(du_max_CFL(I,j), dx_W*CFL_dt - u(I,j,k))
           du_min_CFL(I,j) = MAX(du_min_CFL(I,j), -(dx_E*CFL_dt + u(I,j,k)))
-        enddo ; enddo ; enddo
+        enddo ; enddo
       endif
     endif
-    !$omp target teams distribute parallel do collapse(2) &
-    !$omp   map(tofrom: du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh))
-    do j=jsh,jeh ; do I=ish-1,ieh
+    do concurrent (j=jsh:jeh, I=ish-1:ieh)
       du_max_CFL(I,j) = max(du_max_CFL(I,j),0.0)
       du_min_CFL(I,j) = min(du_min_CFL(I,j),0.0)
-    enddo ; enddo
+    enddo
 
     any_simple_OBC = .false.
     if (present(uhbt) .or. set_BT_cont) then
       ! untested!
       if (local_specified_BC .or. local_Flather_OBC) then 
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   private(l_seg) &
-        !$omp   reduction(.or.: any_simple_OBC) &
-        !$omp   map(to: OBC, OBC%segnum_u(ish-1:ieh, jsh:jeh), OBC%segment(:)) &
-        !$omp   map(from: simple_OBC_pt(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh))
-        do j=jsh,jeh ; do I=ish-1,ieh
+        do concurrent (j=jsh:jeh, I=ish-1:ieh)
           l_seg = abs(OBC%segnum_u(I,j))
 
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
@@ -858,13 +799,11 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           if (l_seg /= OBC_NONE) simple_OBC_pt(I,j) = OBC%segment(l_seg)%specified
           do_I(I, j) = .not.simple_OBC_pt(I,j)
           any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I,j)
-        enddo ; enddo
+        enddo
       else
-        !$omp target teams distribute parallel do collapse(2) &
-        !$omp   map(from: do_I(ish-1:ieh, jsh:jeh))
-        do j=jsh,jeh ; do I=ish-1,ieh
+        do concurrent (j=jsh:jeh, I=ish-1:ieh)
           do_I(I, j) = .true.
-        enddo ; enddo
+        enddo
       endif
 
       if (present(uhbt)) then
@@ -874,29 +813,18 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                               ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
 
         if (present(u_cor)) then
-          !$omp target teams distribute parallel do collapse(3) &
-          !$omp   map(to: u(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh), &
-          !$omp       visc_rem_u_tmp(ish-1:ieh, :, :)) &
-          !$omp   map(from: u_cor(ish-1:ieh, :, :))
-          do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+          do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
             u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
-          enddo ; enddo ; enddo
+          enddo
           if (any_simple_OBC) then 
-            !$omp target teams distribute parallel do collapse(3) &
-            !$omp   map(to: simple_OBC_pt(ish-1:ieh, jsh:jeh), OBC, &
-            !$omp       OBC%segment(:), OBC%segnum_u(ish-1:ieh, jsh:jeh)) &
-            !$omp   map(tofrom: u_cor(ish-1:ieh, :, :))
-            do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh ; if (simple_OBC_pt(I,j)) then
+            do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh, simple_OBC_pt(I,j))
               u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
-            endif ; enddo ; enddo ; enddo
+            enddo
           endif
         endif ! u-corrected
 
         if (present(du_cor)) then
-          !$omp target teams distribute parallel do collapse(2) &
-          !$omp   map(to: du(ish-1:ieh, jsh:jeh)) &
-          !$omp   map(from: du_cor(ish-1:ieh, jsh:jeh))
-          do j=jsh,jeh ; do I=ish-1,ieh ; du_cor(I,j) = du(I,j) ; enddo ; enddo
+          do concurrent (j=jsh:jeh, I=ish-1:ieh) ; du_cor(I,j) = du(I,j) ; enddo
         endif
       endif
       if (set_BT_cont) then
@@ -906,15 +834,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       
         if (any_simple_OBC) then
           ! untested
-          !$omp target teams distribute parallel do collapse(2) &
-          !$omp   private(FAuI) &
-          !$omp   map(to: simple_OBC_pt(ish-1:ieh, jsh:jeh), GV, G, G%dy_Cu(ish-1:ieh, jsh:jeh), &
-          !$omp       OBC, OBC%segment(:), OBC%segnum_u(ish-1:ieh, jsh:jeh), BT_cont) &
-          !$omp   map(tofrom: BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), &
-          !$omp       BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), &
-          !$omp       BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), &
-          !$omp       BT_cont%uBT_EE(ish-1:ieh, jsh:jeh))
-          do j=jsh,jeh ; do I=ish-1,ieh
+          do concurrent (j=jsh:jeh, I=ish-1:ieh)
             ! NOTE: simple_OBC_pt(I, j) should prevent access to segment OBC_NONE
             if (simple_OBC_pt(I,j)) then
               FAuI = GV%H_subroundoff*G%dy_Cu(I,j)
@@ -927,7 +847,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
               BT_cont%FA_u_WW(I,j) = FAuI ; BT_cont%FA_u_EE(I,j) = FAuI
               BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
             endif
-          enddo ; enddo
+          enddo
         endif ! any_simple_OBC
       endif ! set_BT_cont
     endif ! present(uhbt) or set_BT_cont
@@ -939,18 +859,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_E_or_W) then
         I = OBC%segment(n)%HI%IsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-          !$omp target teams distribute parallel do &
-          !$omp   private(FA_u) &
-          !$omp   map(to: OBC, OBC%segment(n), h_in(i, :, :), G, &
-          !$omp       G%dy_Cu(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       por_face_areaU(i, :, :), BT_cont) &
-          !$omp   map(tofrom: BT_cont%FA_u_W0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%FA_u_E0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%FA_u_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%FA_u_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%uBT_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%uBT_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed))
-          do j = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
+          do concurrent (j = OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed)
             FA_u = 0.0
             do k=1,nz ; FA_u = FA_u + h_in(i,j,k)*(G%dy_Cu(I,j)*por_face_areaU(I,j,k)) ; enddo
             BT_cont%FA_u_W0(I,j) = FA_u ; BT_cont%FA_u_E0(I,j) = FA_u
@@ -958,18 +867,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           enddo
         else
-          !$omp target teams distribute parallel do &
-          !$omp   private(FA_u) &
-          !$omp   map(to: OBC, OBC%segment(n), h_in(i+1, :, :), G, &
-          !$omp       G%dy_Cu(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       por_face_areaU(i, :, :), BT_cont) &
-          !$omp   map(tofrom: BT_cont%FA_u_W0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%FA_u_E0(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%FA_u_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%FA_u_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%uBT_WW(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed), &
-          !$omp       BT_cont%uBT_EE(i, OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed))
-          do j = OBC%segment(n)%HI%Jsd, OBC%segment(n)%HI%Jed
+          do concurrent (j = OBC%segment(n)%HI%Jsd:OBC%segment(n)%HI%Jed)
             FA_u = 0.0
             do k=1,nz ; FA_u = FA_u + h_in(i+1,j,k)*(G%dy_Cu(I,j)*por_face_areaU(I,j,k)) ; enddo
             BT_cont%FA_u_W0(I,j) = FA_u ; BT_cont%FA_u_E0(I,j) = FA_u
@@ -992,22 +890,12 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   endif ; endif
 
   !$omp target exit data &
-  !$omp   map(from: uh(ish-1:ieh, :, :), u_cor(ish-1:ieh, :, :), BT_cont%FA_u_E0(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%FA_u_W0(ish-1:ieh, jsh:jeh), BT_cont%FA_u_EE(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%FA_u_WW(ish-1:ieh, jsh:jeh), BT_cont%uBT_EE(ish-1:ieh, jsh:jeh), &
-  !$omp       BT_cont%uBT_WW(ish-1:ieh, jsh:jeh), BT_cont%h_u(ish-1:ieh, :, :), &
-  !$omp       du_cor(ish-1:ieh, jsh:jeh)) &
-  !$omp   map(release: visc_rem_u_tmp(ish-1:ieh, :, :), do_I(ish-1:ieh, jsh:jeh), G, &
-  !$omp       G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), G%areaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%dxT(ish-1:ieh+1, jsh:jeh), G%mask2dCu(ish-1:ieh, jsh:jeh), &
-  !$omp       G%dxCu(ish-1:ieh, jsh:jeh), u(ish-2:ieh+1, :, :), h_in(ish-1:ieh+1, :, :), &
-  !$omp       h_W(ish-1:ieh+1, :, :), h_E(ish-1:ieh+1, :, :), CS, por_face_areaU(ish-1:ieh, :, :), &
-  !$omp       uhbt(ish-1:ieh, jsh:jeh), BT_cont, duhdu(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh), &
-  !$omp       du_min_CFL(ish-1:ieh, jsh:jeh), du_max_CFL(ish-1:ieh, jsh:jeh), &
-  !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), uh_tot_0(ish-1:ieh, jsh:jeh), &
-  !$omp       visc_rem_max(ish-1:ieh, jsh:jeh))
-  !$omp target exit data if (use_visc_rem) map(release: visc_rem_u(ish-1:ieh, :, :))
+  !$omp   map(from: uh, u_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
+  !$omp       BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%h_u, du_cor) &
+  !$omp   map(release: visc_rem_u_tmp, do_I, G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, &
+  !$Omp       G%mask2dCu, G%dxCu, u, h_in, h_W, h_E, CS, por_face_areaU, uhbt, BT_cont, duhdu, du, &
+  !$omp       du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
+  !$omp target exit data if (use_visc_rem) map(release: visc_rem_u)
 
   call cpu_clock_end(id_clock_correct)
 
@@ -3468,7 +3356,7 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, GV, iis, iie, jis, jie, nz)
 end subroutine PPM_limit_CW84
 
 !> Return the maximum ratio of a/b or maxrat.
-function ratio_max(a, b, maxrat) result(ratio)
+pure function ratio_max(a, b, maxrat) result(ratio)
   real, intent(in) :: a       !< Numerator, in arbitrary units [A]
   real, intent(in) :: b       !< Denominator, in arbitrary units [B]
   real, intent(in) :: maxrat  !< Maximum value of ratio [A B-1]
