@@ -5233,7 +5233,6 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   type(barotropic_CS),                intent(inout) :: CS    !< Barotropic control structure
 
   ! Local variables
-  !real :: h_tot(SZI_(G),SZJ_(G))      ! The sum of the layer thicknesses [H ~> m or kg m-2].
   real :: eta_h(SZI_(G),SZJ_(G))      ! The free surface height determined from
                               ! the sum of the layer thicknesses [H ~> m or kg m-2].
   real :: d_eta               ! The difference between estimates of the total
@@ -5249,10 +5248,6 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
 
   !$omp target enter data map(alloc: eta_h)
 
-  ! do concurrent (j=js:je , i=is:ie)
-  !   h_tot(i,j) = h(i,j,1)
-  ! enddo
-
   if (GV%Boussinesq) then
     do concurrent (j=js:je, i=is:ie)
       eta_h(i,j) = h(i,j,1) - G%bathyT(i,j)*GV%Z_to_H
@@ -5265,7 +5260,6 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
   do k=2,nz
     do concurrent (j=js:je, i=is:ie)
       eta_h(i,j) = eta_h(i,j) + h(i,j,k)
-      !h_tot(i,j) = h_tot(i,j) + h(i,j,k)
     enddo
   enddo
   if (set_cor) then
