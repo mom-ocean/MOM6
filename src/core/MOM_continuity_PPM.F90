@@ -2557,27 +2557,14 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
   !$omp target enter data &
-  !$omp   map(to: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%dyCv(ish:ieh, jsh-1:jeh), &
-  !$omp       G%IdyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
-  !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), BT_cont, vh_tot_0(ish:ieh, jsh-1:jeh), &
-  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
-  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), CS, visc_rem(ish:ieh, :, :), &
-  !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), &
-  !$omp       por_face_areaV(ish:ieh, :, :)) &
-  !$omp   map(alloc: BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), BT_cont%vBT_NN(ish:ieh, jsh-1:jeh), &
-  !$omp       dv0(ish:ieh, jsh-1:jeh), dvL(ish:ieh, jsh-1:jeh), dvR(ish:ieh, jsh-1:jeh), &
-  !$omp       dv_CFL(ish:ieh, jsh-1:jeh), zeros(ish:ieh, jsh-1:jeh), FAmt_L(ish:ieh, jsh-1:jeh), &
-  !$omp       FAmt_R(ish:ieh, jsh-1:jeh), FAmt_0(ish:ieh, jsh-1:jeh), vhtot_L(ish:ieh, jsh-1:jeh), &
-  !$omp       vhtot_R(ish:ieh, jsh-1:jeh), v_L(ish:ieh, :, :), v_R(ish:ieh, :, :), &
-  !$omp       v_0(ish:ieh, :, :), dvhdv_L(ish:ieh, :, :), dvhdv_R(ish:ieh, :, :), &
-  !$omp       dvhdv_0(ish:ieh, :, :), vh_L(ish:ieh, :, :), vh_R(ish:ieh, :, :), vh_0(ish:ieh, :, :))
+  !$omp   map(to: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
+  !$omp       dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaV) &
+  !$omp   map(alloc: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
+  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, dv0, dvL, dvR, dv_CFL, zeros, FAmt_L, FAmt_R, &
+  !$omp       FAmt_0, vhtot_L, vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
 
  ! Diagnose the zero-transport correction, dv0.
-  !$omp target teams distribute parallel do collapse(2) &
-  !$omp   map(from: zeros(ish:ieh, jsh-1:jeh))
-  do j=jsh-1,jeh ; do i=ish,ieh ; zeros(i,j) = 0.0 ; enddo ; enddo
+  do concurrent (j=jsh-1:jeh, i=ish:ieh) ; zeros(i,j) = 0.0 ; enddo
   call meridional_flux_adjust(v, h_in, h_S, h_N, zeros, vh_tot_0, dvhdv_tot_0, dv0, &
                          dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                          ish, ieh, jsh, jeh, do_I, por_face_areaV)
@@ -2586,43 +2573,35 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   ! negative velocity correction for the northerly-flux, and a sufficiently
   ! positive correction for the southerly-flux.
   domore = .false.
-  !$omp target teams distribute parallel do collapse(2) &
-  !$omp   reduction(.or.:domore) &
-  !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), G, G%dyCv(ish:ieh, jsh-1:jeh), dv0(ish:ieh, jsh-1:jeh)) &
-  !$omp   map(tofrom: dv_CFL(ish:ieh, jsh-1:jeh), dvR(ish:ieh, jsh-1:jeh), dvL(ish:ieh, jsh-1:jeh), &
-  !$omp       FAmt_L(ish:ieh, jsh-1:jeh), FAmt_R(ish:ieh, jsh-1:jeh), FAmt_0(ish:ieh, jsh-1:jeh), &
-  !$omp       vhtot_L(ish:ieh, jsh-1:jeh), vhtot_R(ish:ieh, jsh-1:jeh))
-  do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
-    domore = .true.
+  do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) reduce(.or.:domore)
+    domore = .true. ! might be better to do reduction on cpu to avoid reduce
     dv_CFL(i,j) = (CFL_min * Idt) * G%dyCv(i,J)
     dvR(i,j) = min(0.0,dv0(i,j) - dv_CFL(i,j))
     dvL(i,j) = max(0.0,dv0(i,j) + dv_CFL(i,j))
     FAmt_L(i,j) = 0.0 ; FAmt_R(i,j) = 0.0 ; FAmt_0(i,j) = 0.0
     vhtot_L(i,j) = 0.0 ; vhtot_R(i,j) = 0.0
-  endif ; enddo ; enddo
+  enddo
 
   if (.not.domore) then
-    !$omp target teams distribute parallel do collapse(2) &
-    !$omp   map(to: BT_cont) &
-    !$omp   map(from: BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), &
-    !$omp       BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), &
-    !$omp       BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), BT_cont%vBT_NN(ish:ieh, jsh-1:jeh))
-    do j=jsh-1,jeh ; do i=ish,ieh
+    do concurrent (j=jsh-1:jeh, i=ish:ieh)
       BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
       BT_cont%vBT_SS(i,J) = 0.0
       BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
       BT_cont%vBT_NN(i,J) = 0.0
-    enddo ; enddo
+    enddo
+    !$omp target exit data &
+    !$omp   map(from: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
+    !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN) &
+    !$omp   map(release: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, &
+    !$omp       dvhdv_tot_0, dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, &
+    !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, zeros, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
+    !$omp       vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
     return
   endif
 
   ! not parallelized on k because of dvR/L are calculated per column
-  !$omp target teams distribute parallel do collapse(2) &
-  !$omp   private(visc_rem_lim) &
-  !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), visc_rem(ish:ieh, :, :), &
-  !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), dv_CFL(ish:ieh, jsh-1:jeh)) &
-  !$omp   map(tofrom: dvL(ish:ieh, jsh-1:jeh), dvR(ish:ieh, jsh-1:jeh))
-  do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then ; do k=1,nz
+  ! nvfortran do concurrent poor performance when k is inside
+  do k=1,nz ; do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
     visc_rem_lim = max(visc_rem(i,j,k), min_visc_rem*visc_rem_max(i,j))
     if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
       if (v(i,J,k) + dvR(i,j)*visc_rem_lim > -dv_CFL(i,j)*visc_rem(i,j,k)) &
@@ -2630,46 +2609,28 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
       if (v(i,J,k) + dvL(i,j)*visc_rem_lim < dv_CFL(i,j)*visc_rem(i,j,k)) &
         dvL(i,j) = -(v(i,J,k) - dv_CFL(i,j)*visc_rem(i,j,k)) / visc_rem_lim
     endif
-  enddo ; endif ; enddo ; enddo
+  enddo ; enddo
 
-  !$omp target teams distribute parallel do collapse(3) &
-  !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), dvL(ish:ieh, jsh-1:jeh), &
-  !$omp       dvR(ish:ieh, jsh-1:jeh), dv0(ish:ieh, jsh-1:jeh), visc_rem(ish:ieh, :, :)) &
-  !$Omp   map(tofrom: v_L(ish:ieh, :, :), v_R(ish:ieh, :, :), v_0(ish:ieh, :, :))
-  do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
+  do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
     v_L(i,j,k) = v(I,j,k) + dvL(i,j) * visc_rem(i,j,k)
     v_R(i,j,k) = v(I,j,k) + dvR(i,j) * visc_rem(i,j,k)
     v_0(i,j,k) = v(I,j,k) + dv0(i,j) * visc_rem(i,j,k)
-  endif ; enddo ; enddo ; enddo
+  enddo
   call merid_flux_layer(v_0, h_in, h_S, h_N, vh_0, dvhdv_0, &
                         visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
   call merid_flux_layer(v_L, h_in, h_S, h_N, vh_L, dvhdv_L, &
                         visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
   call merid_flux_layer(v_R, h_in, h_S, h_N, vh_R, dvhdv_R, &
                         visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
-  !$omp target teams distribute parallel do collapse(2) &
-  !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), dvhdv_0(ish:ieh, :, :), dvhdv_L(ish:ieh, :, :), &
-  !$omp       dvhdv_R(ish:ieh, :, :), vh_L(ish:ieh, :, :), vh_R(ish:ieh, :, :)) &
-  !$omp   map(tofrom: FAmt_0(ish:ieh, jsh-1:jeh), FAmt_L(ish:ieh, jsh-1:jeh), &
-  !$omp       FAmt_R(ish:ieh, jsh-1:jeh), vhtot_L(ish:ieh, jsh-1:jeh), vhtot_R(ish:ieh, jsh-1:jeh))
-  do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then ; do k=1,nz
+  do k=1,nz ; do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
     FAmt_0(i,j) = FAmt_0(i,j) + dvhdv_0(i,j,k)
     FAmt_L(i,j) = FAmt_L(i,j) + dvhdv_L(i,j,k)
     FAmt_R(i,j) = FAmt_R(i,j) + dvhdv_R(i,j,k)
     vhtot_L(i,j) = vhtot_L(i,j) + vh_L(i,j,k)
     vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i,j,k)
-  enddo; endif ; enddo ; enddo
+  enddo ; enddo
 
-  !$omp target teams distribute parallel do collapse(2) &
-  !$omp   private(FA_0, FA_avg) &
-  !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), FAmt_L(ish:ieh, jsh-1:jeh), FAmt_R(ish:ieh, jsh-1:jeh), &
-  !$omp       FAmt_0(ish:ieh, jsh-1:jeh), dvL(ish:ieh, jsh-1:jeh), dvR(ish:ieh, jsh-1:jeh), &
-  !$omp       dv0(ish:ieh, jsh-1:jeh), vhtot_L(ish:ieh, jsh-1:jeh), vhtot_R(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont) &
-  !$omp   map(from: BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), BT_cont%vBT_NN(ish:ieh, jsh-1:jeh))
-  do j = jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
+  do concurrent (j=jsh-1:jeh, i=ish:ieh) ; if (do_I(i,j)) then
     FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
     if ((dvL(i,j) - dv0(i,j)) /= 0.0) &
       FA_avg = vhtot_L(i,j) / (dvL(i,j) - dv0(i,j))
@@ -2695,24 +2656,15 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
     BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
     BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
-  endif ; enddo ; enddo
+  endif ; enddo
 
   !$omp target exit data &
-  !$omp   map(from: BT_cont%FA_v_S0(ish:ieh, jsh-1:jeh), BT_cont%FA_v_SS(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%vBT_SS(ish:ieh, jsh-1:jeh), BT_cont%FA_v_N0(ish:ieh, jsh-1:jeh), &
-  !$omp       BT_cont%FA_v_NN(ish:ieh, jsh-1:jeh), BT_cont%vBT_NN(ish:ieh, jsh-1:jeh)) &
-  !$omp   map(release: G, G%dx_Cv(ish:ieh, jsh-1:jeh), G%dyCv(ish:ieh, jsh-1:jeh), &
-  !$omp       G%IdyT(ish:ieh, jsh-1:jeh+1), v(ish:ieh, :, :), h_in(ish:ieh, :, :), &
-  !$omp       h_S(ish:ieh, :, :), h_N(ish:ieh, :, :), BT_cont, vh_tot_0(ish:ieh, jsh-1:jeh), &
-  !$omp       dvhdv_tot_0(ish:ieh, jsh-1:jeh), dv_max_CFL(ish:ieh, jsh-1:jeh), &
-  !$omp       dv_min_CFL(ish:ieh, jsh-1:jeh), CS, visc_rem(ish:ieh, :, :), &
-  !$omp       visc_rem_max(ish:ieh, jsh-1:jeh), do_I(ish:ieh, jsh-1:jeh), &
-  !$omp       por_face_areaV(ish:ieh, :, :), dv0(ish:ieh, jsh-1:jeh), dvL(ish:ieh, jsh-1:jeh), &
-  !$omp       dvR(ish:ieh, jsh-1:jeh), dv_CFL(ish:ieh, jsh-1:jeh), zeros(ish:ieh, jsh-1:jeh), &
-  !$omp       FAmt_L(ish:ieh, jsh-1:jeh), FAmt_R(ish:ieh, jsh-1:jeh), FAmt_0(ish:ieh, jsh-1:jeh), &
-  !$omp       vhtot_L(ish:ieh, jsh-1:jeh), vhtot_R(ish:ieh, jsh-1:jeh), v_L(ish:ieh, :, :), &
-  !$omp       v_R(ish:ieh, :, :), v_0(ish:ieh, :, :), dvhdv_L(ish:ieh, :, :), dvhdv_R(ish:ieh, :, :), &
-  !$omp       dvhdv_0(ish:ieh, :, :), vh_L(ish:ieh, :, :), vh_R(ish:ieh, :, :), vh_0(ish:ieh, :, :))
+  !$omp   map(from: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
+  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN) &
+  !$omp   map(release: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, &
+  !$omp       dvhdv_tot_0, dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, &
+  !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, zeros, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
+  !$omp       vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
 
 end subroutine set_merid_BT_cont
 
