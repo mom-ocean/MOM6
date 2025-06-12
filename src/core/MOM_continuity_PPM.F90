@@ -1305,45 +1305,27 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   nz = GV%ke
 
   !$omp target enter data &
-  !$omp   map(to: uh_3d(ish-1:ieh, :, :), do_I_in(ish-1:ieh, jsh:jeh), &
-  !$omp       du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh), &
-  !$omp       uh_tot_0(ish-1:ieh, jsh:jeh), uhbt(ish-1:ieh, jsh:jeh), &
-  !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), G, G%IareaT(ish-1:ieh+1, jsh:jeh), CS, &
-  !$omp       u(ish-1:ieh, :, :), visc_rem(ish-1:ieh, :, :), h_W(ish-1:ieh+1, :, :), &
-  !$omp       h_E(ish-1:ieh+1, :, :), h_in(ish-1:ieh+1, :, :), G%dy_Cu(ish-1:ieh, jsh:jeh), &
-  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), por_face_areaU(ish-1:ieh, :, :)) &
-  !$omp   map(alloc: uh_aux(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh), &
-  !$omp       do_I(ish-1:ieh, jsh:jeh), du_max(ish-1:ieh, jsh:jeh), du_min(ish-1:ieh, jsh:jeh), &
-  !$omp       duhdu_tot(ish-1:ieh, jsh:jeh), uh_err(ish-1:ieh, jsh:jeh), &
-  !$omp       uh_err_best(ish-1:ieh, jsh:jeh), u_new(ish-1:ieh, :, :))
+  !$omp   map(to: uh_3d, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
+  !$omp       duhdu_tot_0, G, G%IareaT, CS, u, visc_rem, h_W, h_E, h_in, G%dy_Cu, &
+  !$omp       G%IdxT, por_face_areaU) &
+  !$omp   map(alloc: uh_aux, duhdu, du, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, u_new)
 
-  !$omp target teams distribute parallel do collapse(3) &
-  !$omp   map(from: uh_aux(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :))
-  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+  do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
     uh_aux(I,j,k) = 0.0 ; duhdu(I,j,k) = 0.0
-  enddo ; enddo ; enddo
+  enddo
 
   if (present(uh_3d)) then
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: uh_3d(ish-1:ieh, :, :), uh_aux(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
       uh_aux(i,j,k) = uh_3d(I,j,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
 
-  !$omp target teams distribute parallel do collapse(2) &
-  !$omp   map(to: do_I_in(ish-1:ieh, jsh:jeh), du_max_CFL(ish-1:ieh, jsh:jeh), &
-  !$omp       du_min_CFL(ish-1:ieh, jsh:jeh), uh_tot_0(ish-1:ieh, jsh:jeh), &
-  !$omp       uhbt(ish-1:ieh, jsh:jeh), duhdu_tot_0(ish-1:ieh, jsh:jeh)) &
-  !$omp   map(from: du(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh), du_max(ish-1:ieh, jsh:jeh), &
-  !$omp       du_min(ish-1:ieh, jsh:jeh), uh_err(ish-1:ieh, jsh:jeh), duhdu_tot(ish-1:ieh, jsh:jeh), &
-  !$omp       uh_err_best(ish-1:ieh, jsh:jeh))
-  do j=jsh,jeh ; do I=ish-1,ieh
+  do concurrent (j=jsh:jeh, I=ish-1:ieh)
     du(I,j) = 0.0 ; do_I(I,j) = do_I_in(I,j)
     du_max(I,j) = du_max_CFL(I,j) ; du_min(I,j) = du_min_CFL(I,j)
     uh_err(I,j) = uh_tot_0(I,j) - uhbt(I,j) ; duhdu_tot(I,j) = duhdu_tot_0(I,j)
     uh_err_best(I,j) = abs(uh_err(I,j))
-  enddo ; enddo
+  enddo
 
   do itt=1,max_itts
     select case (itt)
@@ -1354,25 +1336,13 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
     end select
     tol_vel = CS%tol_vel
 
-    !$omp target teams distribute parallel do collapse(2) &
-    !$omp   map(to: uh_err(ish-1:ieh, jsh:jeh), du(ish-1:ieh, jsh:jeh)) &
-    !$omp   map(tofrom: du_max(ish-1:ieh, jsh:jeh), du_min(ish-1:ieh, jsh:jeh), &
-    !$omp       do_I(ish-1:ieh, jsh:jeh))
-    do j=jsh, jeh ; do I=ish-1,ieh
+    do concurrent (j=jsh:jeh, I=ish-1:ieh)
       if (uh_err(I,j) > 0.0) then ; du_max(I,j) = du(I,j)
       elseif (uh_err(I,j) < 0.0) then ; du_min(I,j) = du(I,j)
       else ; do_I(I,j) = .false. ; endif
-    enddo ; enddo
+    enddo
     domore = .false.
-    !$omp target teams distribute parallel do collapse(2) &
-    !$omp   private(ddu, du_prev) &
-    !$omp   reduction(.or.:domore) &
-    !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), G, G%IareaT(ish-1:ieh+1, jsh:jeh), CS, &
-    !$omp       uh_err(ish-1:ieh, jsh:jeh), duhdu_tot(ish-1:ieh, jsh:jeh), &
-    !$omp       uh_err_best(ish-1:ieh, jsh:jeh), du_max(ish-1:ieh, jsh:jeh), &
-    !$omp       du_min(ish-1:ieh, jsh:jeh)) &
-    !$omp   map(tofrom: du(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh), domore)
-    do j=jsh,jeh ; do I=ish-1,ieh ; if (do_I(I,j)) then
+    do concurrent (j=jsh:jeh, I=ish-1:ieh, do_I(I,j)) reduce(.or.:domore) ! might prefer reduction on CPU
       if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I,j)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(uh_err(I,j)) > tol_vel * duhdu_tot(I,j)) .or. &
                                  (abs(uh_err(I,j)) > uh_err_best(I,j))) )) then
@@ -1398,34 +1368,27 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
       else
         do_I(I,j) = .false.
       endif
-    endif ; enddo ; enddo
+    enddo
     if (.not.domore) exit
 
     if ((itt < max_itts) .or. present(uh_3d)) then
-      !$omp target teams distribute parallel do collapse(3) &
-      !$omp   map(to: u(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh), visc_rem(ish-1:ieh, :, :)) &
-      !$omp   map(from: u_new(ish-1:ieh, :, :))
-      do k=1,nz ; do j = jsh,jeh ; do I=ish-1,ieh
+      do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
         u_new(I,j,k) = u(I,j,k) + du(I,j) * visc_rem(I,j,k)
-      enddo ; enddo ; enddo
+      enddo
       call zonal_flux_layer(u_new, h_in, h_W, h_E, &
                             uh_aux, duhdu, visc_rem, &
                             dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC)
     endif
 
     if (itt < max_itts) then
-      !$omp target teams distribute parallel do collapse(2) &
-      !$omp   map(to: uhbt(ish-1:ieh, jsh:jeh), uh_aux(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :)) &
-      !$omp   map(from: duhdu_tot(ish-1:ieh, jsh:jeh), uh_err(ish-1:ieh, jsh:jeh)) &
-      !$omp   map(tofrom: uh_err_best(ish-1:ieh, jsh:jeh))
-      do j=jsh,jeh ; do I=ish-1,ieh
+      do concurrent (j=jsh:jeh, I=ish-1:ieh)
         uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(i,j) = 0.0
         do k=1,nz
           uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
           duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
         enddo
         uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
-      enddo; enddo
+      enddo
     endif
   enddo ! itt-loop
   ! If there are any faces which have not converged to within the tolerance,
@@ -1433,26 +1396,16 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   ! This never seems to happen with 20 iterations as max_itt.
 
   if (present(uh_3d)) then
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: uh_aux(ish-1:ieh, :, :)) &
-    !$omp   map(from: uh_3d(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
       uh_3d(I,j,k) = uh_aux(I,j,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   !$omp target exit data &
-  !$omp   map(from: uh_3d(ish-1:ieh, :, :), du(ish-1:ieh, jsh:jeh)) &
-  !$omp   map(release: uh_aux(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :), do_I_in(ish-1:ieh, jsh:jeh), &
-  !$omp       du_max_CFL(ish-1:ieh, jsh:jeh), du_min_CFL(ish-1:ieh, jsh:jeh), &
-  !$omp       uh_tot_0(ish-1:ieh, jsh:jeh), uhbt(ish-1:ieh, jsh:jeh), &
-  !$omp       duhdu_tot_0(ish-1:ieh, jsh:jeh), do_I(ish-1:ieh, jsh:jeh), du_max(ish-1:ieh, jsh:jeh), &
-  !$omp       du_min(ish-1:ieh, jsh:jeh), duhdu_tot(ish-1:ieh, jsh:jeh), uh_err(ish-1:ieh, jsh:jeh), &
-  !$omp       uh_err_best(ish-1:ieh, jsh:jeh), G, G%IareaT(ish-1:ieh+1, jsh:jeh), CS, &
-  !$omp       u(ish-1:ieh, :, :), visc_rem(ish-1:ieh, :, :), u_new(ish-1:ieh, :, :), &
-  !$omp       h_W(ish-1:ieh+1, :, :), h_E(ish-1:ieh+1, :, :), h_in(ish-1:ieh+1, :, :), &
-  !$omp       G%dy_Cu(ish-1:ieh, jsh:jeh), G%IdxT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       por_face_areaU(ish-1:ieh, :, :))
+  !$omp   map(from: uh_3d, du) &
+  !$omp   map(release: uh_aux, duhdu, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
+  !$omp       duhdu_tot_0, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, G, G%IareaT, CS, &
+  !$omp       u, visc_rem, u_new, h_W, h_E, h_in, G%dy_Cu, G%IdxT, por_face_areaU)
 
 end subroutine zonal_flux_adjust
 
