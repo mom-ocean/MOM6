@@ -1653,21 +1653,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   !$omp target enter data &
-  !$omp   map(to: G, G%dx_Cv, G%IdyT, &
-  !$omp       G%dyT, G%dyCv, &
-  !$omp       G%mask2dCv, G%areaT, &
-  !$omp       G%IareaT, v, h_in, &
-  !$omp       h_S, h_N, CS, por_face_areaV, &
-  !$omp       vhbt, visc_rem_v, BT_cont) &
-  !$omp   map(alloc: vh, v_cor, BT_cont%FA_v_S0, &
-  !$omp       BT_cont%FA_v_SS, BT_cont%vBT_SS, &
-  !$omp       BT_cont%FA_v_N0, BT_cont%FA_v_NN, &
-  !$omp       BT_cont%vBT_NN, BT_cont%h_v, &
-  !$omp       dv_cor, dvhdv, dv, &
-  !$omp       dv_min_CFL, dv_max_CFL, &
-  !$omp       dvhdv_tot_0, vh_tot_0, &
-  !$omp       visc_rem_max, do_I, FAvi, &
-  !$omp       visc_rem_v_tmp, simple_OBC_pt)
+  !$omp   map(to: G, G%dx_Cv, G%IdyT, G%dyT, G%dyCv, G%mask2dCv, G%areaT, G%IareaT, v, h_in, h_S, &
+  !$omp       h_N, CS, por_face_areaV, vhbt, visc_rem_v, BT_cont) &
+  !$omp   map(alloc: vh, v_cor, BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
+  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, BT_cont%h_v, dv_cor, dvhdv, dv, dv_min_CFL, &
+  !$omp       dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, do_I, FAvi, visc_rem_v_tmp, &
+  !$omp       simple_OBC_pt)
 
   ! a better solution is needed
   if (.not.use_visc_rem) then
@@ -2947,7 +2938,6 @@ pure function ratio_max(a, b, maxrat) result(ratio)
   real, intent(in) :: b       !< Denominator, in arbitrary units [B]
   real, intent(in) :: maxrat  !< Maximum value of ratio [A B-1]
   real :: ratio               !< Return value [A B-1]
-  !$omp declare target
 
   if (abs(a) > abs(maxrat*b)) then
     ratio = maxrat
