@@ -3694,6 +3694,8 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   integer :: isd, ied, jsd, jed
   integer :: mstar_mode, LT_enhance, wT_mode
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: use_omega
   logical :: no_BBL  ! If true, EPBL_BBL_EFFIC < 0 and EPBL_BBL_TIDAL_EFFIC < 0, so
                      ! bottom boundary layer mixing is not enabled.
@@ -3901,10 +3903,12 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "mixed layer depth.  Otherwise use the false position after a maximum and minimum "//&
                  "bound have been evaluated and the returned value or bisection before this.", &
                  default=.false., do_not_log=.not.CS%Use_MLD_iteration)
-  call get_param(param_file, mdl, "EPBL_MLD_ITER_BUG", CS%MLD_iter_bug, &
+   call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
+   call get_param(param_file, mdl, "EPBL_MLD_ITER_BUG", CS%MLD_iter_bug, &
                  "If true, use buggy logic that gives the wrong bounds for the next iteration "//&
                  "when successive guesses increase by exactly EPBL_MLD_TOLERANCE.", &
-                 default=.true., do_not_log=.not.CS%Use_MLD_iteration)  ! The default should be changed to .false.
+                 default=enable_bugs, do_not_log=.not.CS%Use_MLD_iteration)
   call get_param(param_file, mdl, "EPBL_MLD_MAX_ITS", CS%max_MLD_its, &
                  "The maximum number of iterations that can be used to find a self-consistent "//&
                  "mixed layer depth.  If EPBL_MLD_BISECTION is true, the maximum number "//&

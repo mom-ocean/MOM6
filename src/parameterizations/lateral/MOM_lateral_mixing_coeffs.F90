@@ -1418,6 +1418,8 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
                            ! temperature variance [nondim]
   logical :: om4_remap_via_sub_cells ! Use the OM4-era remap_via_sub_cells for calculating the EBT structure
+  logical :: enable_bugs   ! If true, the defaults for recently added bug-fix flags are set to
+                           ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: mixing_coefs_OBC_bug ! If false, use only interior data for thickness weighting in
                            ! lateral mixing coefficient calculations and to calculate stratification
                            ! and other fields at open boundary condition faces.
@@ -1557,11 +1559,13 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   endif
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", number_of_OBC_segments, &
                  default=0, do_not_log=.true.)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "MIXING_COEFS_OBC_BUG", mixing_coefs_OBC_bug, &
                  "If false, use only interior data for thickness weighting in lateral mixing "//&
                  "coefficient calculations and to calculate stratification and other fields at "//&
-                 "open boundary condition faces.", default=.true., do_not_log=(number_of_OBC_segments<=0))
-                 !### Change the default for MIXING_COEFS_OBC_BUG to false.
+                 "open boundary condition faces.", &
+                 default=enable_bugs, do_not_log=(number_of_OBC_segments<=0))
   CS%OBC_friendly = .not. MIXING_COEFS_OBC_BUG
 
   if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct .or. CS%kdgl90_use_ebt_struct &

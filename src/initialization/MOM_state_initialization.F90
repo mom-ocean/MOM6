@@ -179,6 +179,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                         ! is a run from a restart file; this option
                         ! allows the use of Fatal unused parameters.
   type(EOS_type), pointer :: eos => NULL()
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: debug      ! If true, write debugging output.
   logical :: debug_obc  ! If true, do additional calls resetting values to help debug the correctness
                         ! of the open boundary condition code.
@@ -441,13 +443,14 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     endif
   endif  ! not from_Z_file.
 
+  call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   if (use_temperature .and. use_OBC) then
     ! Log this parameter later with the other OBC parameters.
     call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
-                 "specified for the reservoir concentrations.", default=.true., do_not_log=.true.)
-                 !### Change the default of OBC_RESERVOIR_INIT_BUG to false.
+                 "specified for the reservoir concentrations.", default=enable_bugs, do_not_log=.true.)
     if (OBC_reservoir_init_bug) then
       ! These calls should be moved down to join the OBC code, but doing so changes answers because
       ! the temperatures and salinities can change due to the remapping and reading from the restarts.
@@ -644,8 +647,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
-                 "specified for the reservoir concentrations.", default=.true.)
-                 !### Change the default of OBC_RESERVOIR_INIT_BUG to false.
+                 "specified for the reservoir concentrations.", default=enable_bugs)
     if (use_temperature) then
       if (OBC_reservoir_init_bug) then
         if (new_sim) then

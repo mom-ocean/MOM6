@@ -2087,6 +2087,8 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
   logical :: merge_mixedlayer
   integer :: number_of_OBC_segments
   logical :: debug_shear
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: just_read ! If true, this module is not used, so only read the parameters.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -2121,10 +2123,12 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, do the calculations of the shear-driven mixing "//&
                  "at the cell vertices (i.e., the vorticity points).", &
                  default=.false., do_not_log=just_read)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "VERTEX_SHEAR_VISCOSITY_BUG", CS%VS_viscosity_bug, &
                  "If true, use a bug in vertex shear that zeros out viscosities at "//&
                  "vertices on coastlines.", &
-                 default=.true., do_not_log=just_read.or.(.not.CS%KS_at_vertex))
+                 default=enable_bugs, do_not_log=just_read.or.(.not.CS%KS_at_vertex))
   call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", number_of_OBC_segments, &
                  default=0, do_not_log=.true.)
   call get_param(param_file, mdl, "VERTEX_SHEAR_OBC_BUG", CS%vertex_shear_OBC_bug, &
@@ -2132,9 +2136,9 @@ function kappa_shear_init(Time, G, GV, US, param_file, diag, CS)
                  "points for setting up the shear velocities at vertices to avoid using "//&
                  "external thicknesses at open boundaries.  When OBCs are not in use, "//&
                  "this parameter does not change answers, but true is more efficient.", &
-                 default=.true., &
+                 default=enable_bugs, &
                  do_not_log=just_read.or.(.not.CS%KS_at_vertex).or.(number_of_OBC_segments<=0))
-                 !### Use OBC settings to set the default for VERTEX_SHEAR_OBC_BUG?
+                 ! Use OBC settings to set the default for VERTEX_SHEAR_OBC_BUG?
   call get_param(param_file, mdl, "VERTEX_SHEAR_GEOMETRIC_MEAN", CS%VS_GeometricMean, &
                  "If true, use a geometric mean for moving diffusivity from "//&
                  "vertices to tracer points.  False uses algebraic mean.", &

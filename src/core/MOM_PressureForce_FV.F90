@@ -2039,6 +2039,8 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
   logical :: MassWghtInterpTop ! If true, use near-surface mass weighting for T and S under ice shelves
   logical :: MassWghtInterp_NonBous_bug ! If true, use a buggy mass weighting when non-Boussinesq
   logical :: MassWghtInterpVanOnly ! If true, turn of mass weighting unless one side is vanished
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
@@ -2065,11 +2067,13 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
                  "gradient forces.  Its inverse is subtracted off of specific volumes when "//&
                  "in non-Boussinesq mode.  The default is RHO_0.", &
                  units="kg m-3", default=GV%Rho0*US%R_to_kg_m3, scale=US%kg_m3_to_R)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "RHO_PGF_REF_BUG", CS%rho_ref_bug, &
                  "If true, recover a bug that RHO_0 (the mean seawater density in Boussinesq mode) "//&
                  "and RHO_PGF_REF (the subtracted reference density in finite volume pressure "//&
                  "gradient forces) are incorrectly interchanged in several instances in Boussinesq mode.", &
-                 default=.true.)
+                 default=enable_bugs)
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   call get_param(param_file, '', "DEFAULT_ANSWER_DATE", default_answer_date, default=99991231)

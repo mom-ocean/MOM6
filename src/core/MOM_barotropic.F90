@@ -5346,6 +5346,8 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: use_BT_cont_type
   logical :: use_tides
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: visc_rem_bug ! Stores the value of runtime paramter VISC_REM_BUG.
   character(len=48) :: thickness_units, flux_units
   character*(40) :: hvel_str
@@ -5495,7 +5497,9 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
-  call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, default=.true., do_not_log=.true.)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
+  call get_param(param_file, mdl, "VISC_REM_BUG", visc_rem_bug, default=enable_bugs, do_not_log=.true.)
   call get_param(param_file, mdl, "VISC_REM_BT_WEIGHT_BUG", CS%wt_uv_bug, &
                  "If true, recover a bug in barotropic solver that uses an unnormalized weight "//&
                  "function for vertical averages of baroclinic velocity and forcing. Default "//&
@@ -5503,7 +5507,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   call get_param(param_file, mdl, "EXTERIOR_OBC_BUG", CS%exterior_OBC_bug, &
                  "If true, recover a bug in barotropic solver and other routines when "//&
                  "boundary contitions interior to the domain are used.", &
-                 default=.true., do_not_log=.true.)
+                 default=enable_bugs, do_not_log=.true.)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   if (use_tides .and. present(HA_CSp)) CS%HA_CSp => HA_CSp

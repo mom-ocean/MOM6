@@ -293,6 +293,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   character*(7), parameter  :: COUPLER_STRING   = "COUPLER"
   character*(5), parameter  :: INPUT_STRING     = "INPUT"
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: use_waves
   logical :: StatisticalWaves
 
@@ -536,11 +538,12 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", CS%LA_Misalignment, &
          "Flag (logical) if using misalignment between shear and waves in LA", &
          default=.false.)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "LA_MISALIGNMENT_BUG", CS%LA_misalign_bug, &
          "If true, use a code with a sign error when calculating the misalignment between "//&
          "the shear and waves when LA_MISALIGNMENT is true.", &
-         default=CS%LA_Misalignment, do_not_log=.not.CS%LA_Misalignment)
-         !### Change the default for LA_MISALIGNMENT_BUG to .false.
+         default=CS%LA_Misalignment.and.enable_bugs, do_not_log=.not.CS%LA_Misalignment)
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
          "A minimum value for all Langmuir numbers that is not physical, "//&
          "but is likely only encountered when the wind is very small and "//&

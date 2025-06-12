@@ -2318,6 +2318,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   integer :: first_direction   ! An integer that indicates which direction is to be
                                ! updated first in directionally split parts of the
                                ! calculation.
+  logical :: enable_bugs       ! If true, the defaults for certain recently added bug-fix flags are
+                               ! set to recreate the bugs so that the code can be moved forward
+                               ! without changing answers for existing configurations.  When this is
+                               ! false, bugs are only used if they are actively selected.
   logical :: non_Bous          ! If true, this run is fully non-Boussinesq
   logical :: Boussinesq        ! If true, this run is fully Boussinesq
   logical :: semi_Boussinesq   ! If true, this run is partially non-Boussinesq
@@ -2509,6 +2513,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, "MOM", "DEBUG_OBCS", CS%debug_OBCs, &
                  "If true, write out verbose debugging data about OBCs.", &
                  default=.false., debuggingParam=.true., do_not_log=(number_of_OBC_segments<=0))
+  call get_param(param_file, "MOM", "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 "If true, the defaults for certain recently added bug-fix flags are set to "//&
+                 "recreate the bugs so that the code can be moved forward without changing "//&
+                 "answers for existing configurations.  The defaults for groups of bug-fix "//&
+                 "flags are periodcially changed to correct the bugs, at which point this "//&
+                 "parameter will no longer be used to set their default.  Setting this to false "//&
+                 "means that bugs are only used if they are actively selected, but it also "//&
+                 "means that answers may change when code is updated due to newly found bugs.", &
+                 default=.true.)
 
   call get_param(param_file, "MOM", "DT", CS%dt, &
                  "The (baroclinic) dynamics time step.  The time-step that "//&

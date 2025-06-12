@@ -42,13 +42,15 @@ integer :: ntr = 0 !< Number of dye tracers
 contains
 
 !> Add dyed channel to OBC registry.
-function register_dyed_channel_OBC(param_file, CS, US, OBC_Reg)
+logical function register_dyed_channel_OBC(param_file, CS, US, OBC_Reg)
   type(param_file_type),     intent(in) :: param_file !< parameter file.
   type(dyed_channel_OBC_CS), pointer    :: CS         !< Dyed channel control structure.
   type(unit_scale_type),     intent(in) :: US         !< A dimensional unit scaling type
   type(OBC_registry_type),   pointer    :: OBC_Reg    !< OBC registry.
+
   ! Local variables
-  logical                               :: register_dyed_channel_OBC
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   character(len=32)  :: casename = "dyed channel"     ! This case's name.
   character(len=40)  :: mdl = "register_dyed_channel_OBC" ! This subroutine's name.
 
@@ -68,10 +70,12 @@ function register_dyed_channel_OBC(param_file, CS, US, OBC_Reg)
   call get_param(param_file, mdl, "CHANNEL_FLOW_FREQUENCY", CS%frequency, &
                  "Frequency of oscillating zonal flow.", &
                  units="s-1", default=0.0, scale=US%T_to_s)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "CHANNEL_FLOW_OBC_TRANSPORT_BUG", CS%OBC_transport_bug, &
                  "If true and specified open boundary conditions are being used, use a 1 m "//&
                  "(if Boussienesq) or 1 kg m-2 layer thickness instead of the actual thickness.", &
-                 default=.true.)  !### Change the default to False.
+                 default=enable_bugs)
 
   ! Register the open boundaries.
   call register_OBC(casename, param_file, OBC_Reg)

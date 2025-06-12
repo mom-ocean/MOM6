@@ -462,6 +462,8 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   real               :: Lscale_in, Lscale_out ! parameters controlling tracer values at the boundaries [L ~> m]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: check_remapping, force_bounds_in_subcell
+  logical :: enable_bugs     ! If true, the defaults for recently added bug-fix flags are set to
+                             ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: debugging_tests ! If true, do additional calls resetting values to help debug the performance
                              ! of the open boundary condition code.
   logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm
@@ -583,18 +585,19 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                  "A silly value of velocities used outside of open boundary "//&
                  "conditions for debugging.", units="m/s", default=0.0, scale=US%m_s_to_L_T, &
                  do_not_log=.not.debugging_tests, debuggingParam=.true.)
+    call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
     call get_param(param_file, mdl, "EXTERIOR_OBC_BUG", OBC%exterior_OBC_bug, &
                  "If true, recover a bug in barotropic solver and other routines when "//&
                  "boundary contitions interior to the domain are used.", &
-                 default=.true.)
+                 default=enable_bugs)
     call get_param(param_file, mdl, "OBC_HOR_INDEXING_BUG", OBC%hor_index_bug, &
                  "If true, recover set of a horizontal indexing bugs in the OBC code.", &
-                 default=.true.)
+                 default=enable_bugs)
     call get_param(param_file, mdl, "OBC_RESERVOIR_INIT_BUG", OBC%reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
-                 "specified for the reservoir concentrations.", default=.true., do_not_log=.true.)
-                 !### Change the default of OBC_RESERVOIR_INIT_BUG to false.
+                 "specified for the reservoir concentrations.", default=enable_bugs, do_not_log=.true.)
     reentrant_x = .false.
     call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, default=.true.)
     reentrant_y = .false.

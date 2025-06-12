@@ -2370,6 +2370,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: use_MEKE      ! If true, the MEKE parameterization is in use.
+  logical :: enable_bugs   ! If true, the defaults for recently added bug-fix flags are set to
+                           ! recreate the bugs, or if false bugs are only used if actively selected.
   real    :: backscatter_Ro_c ! Coefficient in Rossby number function for backscatter [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   character(len=200) :: inputdir, filename ! Input file names and paths
@@ -2664,10 +2666,12 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If true, retain an answer-changing horizontal indexing bug in setting "//&
                  "the corner-point viscosities when USE_KH_BG_2D=True.  This is "//&
                  "not recommended.", default=.false., do_not_log=.not.CS%use_Kh_bg_2d)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "FRICTWORK_BUG", CS%FrictWork_bug, &
-                 "If true, retain an answer-changing bug in calculating "//&
-                 "the FrictWork, which cancels the h in thickness flux and the h at velocity point. This is"//&
-                 "not recommended.", default=.true.)
+                 "If true, retain an answer-changing bug in calculating the FrictWork, "//&
+                 "which cancels the h in thickness flux and the h at velocity point. This is"//&
+                 "not recommended.", default=enable_bugs)
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
