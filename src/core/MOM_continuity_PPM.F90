@@ -2028,19 +2028,10 @@ subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, GV, US, 
   endif ; endif
 
   !$omp target enter data &
-  !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), G, G%dx_Cv(ish:ieh, jsh-1:jeh), &
-  !$omp       G%IareaT(ish:ieh, jsh-1:jeh+1), G%IdyT(ish:ieh, jsh-1:jeh+1), h_S(ish:ieh, :, :), &
-  !$omp       h_N(ish:ieh, :, :), h(ish:ieh, :, :), por_face_areaV(ish:ieh, :, :), &
-  !$omp       visc_rem(ish:ieh, :, :), vh(ish:ieh, :, :), dvhdv(ish:ieh, :, :))
+  !$omp   map(to: do_I, v, G, G%dx_Cv, G%IareaT, G%IdyT, h_S, h_N, h, por_face_areaV, visc_rem, &
+  !$omp       vh, dvhdv)
 
-  !$omp target teams distribute parallel do collapse(3) &
-  !$omp   private(CFL, curv_3, h_marg) &
-  !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), G, G%dx_Cv(ish:ieh, jsh-1:jeh), &
-  !$omp       G%IareaT(ish:ieh, jsh-1:jeh+1), G%IdyT(ish:ieh, jsh-1:jeh+1), h_S(ish:ieh, :, :), &
-  !$omp       h_N(ish:ieh, :, :), h(ish:ieh, :, :), por_face_areaV(ish:ieh, :, :), &
-  !$omp       visc_rem(ish:ieh, :, :)) &
-  !$omp   map(tofrom: vh(ish:ieh, :, :), dvhdv(ish:ieh, :, :))
-  do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
+  do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
     if (v(i,j,k) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i,j,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
       else ; CFL = v(i,j,k) * dt * G%IdyT(i,j) ; endif
@@ -2062,15 +2053,10 @@ subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, GV, US, 
       h_marg = 0.5 * (h_S(i,j+1,k) + h_N(i,j,k))
     endif
     dvhdv(i,j,k) = (G%dx_Cv(i,J)*por_face_areaV(i,J,k)) * h_marg * visc_rem(i,j,k)
-  endif ; enddo ; enddo; enddo
+  enddo
 
   if (local_open_BC) then
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: do_I(ish:ieh, jsh-1:jeh), OBC, OBC%segnum_v(ish:ieh, jsh-1:jeh), &
-    !$omp       OBC%segment(:), G, G%dx_Cv(ish:ieh, jsh-1:jeh), por_face_areaV(ish:ieh, :, :), &
-    !$omp       v(ish:ieh, :, :), h(ish:ieh, :, :), visc_rem(ish:ieh, :, :)) &
-    !$omp   map(tofrom: vh(ish:ieh, :, :), dvhdv(ish:ieh, :, :))
-    do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh ; if (do_I(i,j)) then
+    do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
       if (OBC%segnum_v(i,J) /= 0) then
         if (OBC%segment(abs(OBC%segnum_v(i,J)))%open) then
           if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
@@ -2082,14 +2068,11 @@ subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, GV, US, 
           endif
         endif
       endif
-    endif ; enddo ; enddo ; enddo
+    enddo
   endif
   !$omp target exit data &
-  !$omp   map(from: vh(ish:ieh, :, :), dvhdv(ish:ieh, :, :)) &
-  !$omp   map(release: do_I(ish:ieh, jsh-1:jeh), v(ish:ieh, :, :), G, G%dx_Cv(ish:ieh, jsh-1:jeh), &
-  !$omp       G%IareaT(ish:ieh, jsh-1:jeh+1), G%IdyT(ish:ieh, jsh-1:jeh+1), h_S(ish:ieh, :, :), &
-  !$omp       h_N(ish:ieh, :, :), h(ish:ieh, :, :), por_face_areaV(ish:ieh, :, :), &
-  !$omp       visc_rem(ish:ieh, :, :))
+  !$omp   map(from: vh, dvhdv) &
+  !$omp   map(release: do_I, v, G, G%dx_Cv, G%IareaT, G%IdyT, h_S, h_N, h, por_face_areaV, visc_rem)
 end subroutine merid_flux_layer
 
 
