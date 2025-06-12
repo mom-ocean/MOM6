@@ -1123,18 +1123,10 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   !$omp target enter data &
-  !$omp   map(to: u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), h(ish-1:ieh+1, :, :), h_W(ish-1:ieh+1, :, :), &
-  !$omp       h_E(ish-1:ieh+1, :, :), por_face_areaU(ish-1:ieh, :, :)) &
-  !$omp   map(alloc: h_u(ish-1:ieh, :, :))
+  !$omp   map(to: u, G, G%dy_Cu, G%IareaT, G%IdxT, h, h_W, h_E, por_face_areaU) &
+  !$omp   map(alloc: h_u)
 
-  !$omp target teams distribute parallel do collapse(3) &
-  !$omp   private(CFL, curv_3, h_avg, h_marg) &
-  !$omp   map(to: u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), h(ish-1:ieh+1, :, :), h_W(ish-1:ieh+1, :, :), &
-  !$omp       h_E(ish-1:ieh+1, :, :)) &
-  !$omp   map(from: h_u(ish-1:ieh, :, :))
-  do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+  do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
     if (u(I,j,k) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
       else ; CFL = u(I,j,k) * dt * G%IdxT(i,j) ; endif
@@ -1159,24 +1151,18 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
 
     if (marginal) then ; h_u(I,j,k) = h_marg
     else ; h_u(I,j,k) = h_avg ; endif
-  enddo ; enddo ; enddo
+  enddo
   if (present(visc_rem_u)) then
     ! Scale back the thickness to account for the effects of viscosity and the fractional open
     ! thickness to give an appropriate non-normalized weight for each layer in determining the
     ! barotropic acceleration.
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: visc_rem_u(ish-1:ieh, :, :), por_face_areaU(ish-1:ieh, :, :)) &
-    !$omp   map(tofrom: h_u(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
       h_u(I,j,k) = h_u(I,j,k) * (visc_rem_u(I,j,k) * por_face_areaU(I,j,k))
-    enddo ; enddo ; enddo
+    enddo
   else
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: por_face_areaU(ish-1:ieh, :, :)) &
-    !$omp   map(tofrom: h_u(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh
+    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
       h_u(I,j,k) = h_u(I,j,k) * por_face_areaU(I,j,k)
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   local_open_BC = .false.
@@ -1188,37 +1174,23 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
         I = OBC%segment(n)%HI%IsdB
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
           if (present(visc_rem_u)) then
-            !$omp target teams distribute parallel do collapse(2) &
-            !$omp   map(to: OBC, OBC%segment(n), visc_rem_u(i, :, :), por_face_areaU(i, :, :), &
-            !$omp       h(i, :, :)) &
-            !$omp   map(tofrom: h_u(i, :, :))
-            do k=1,nz ; do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+            do concurrent (k=1:nz, j = OBC%segment(n)%HI%jsd:OBC%segment(n)%HI%jed)
               h_u(I,j,k) = h(i,j,k) * (visc_rem_u(I,j,k) * por_face_areaU(I,j,k))
-            enddo ; enddo
+            enddo
           else
-            !$omp target teams distribute parallel do collapse(2) &
-            !$omp   map(to: OBC, OBC%segment(n), por_face_areaU(i, :, :), h(i, :, :)) &
-            !$omp   map(tofrom: h_u(i, :, :))
-            do k=1,nz ; do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+            do concurrent (k=1:nz, j = OBC%segment(n)%HI%jsd:OBC%segment(n)%HI%jed)
               h_u(I,j,k) = h(i,j,k) * por_face_areaU(I,j,k)
-            enddo ; enddo
+            enddo
           endif
         else
           if (present(visc_rem_u)) then 
-            !$omp target teams distribute parallel do collapse(2) &
-            !$omp   map(to: OBC, OBC%segment(n), visc_rem_u(i, :, :), por_face_areaU(i, :, :), &
-            !$omp       h(i+1, :, :)) &
-            !$omp   map(tofrom: h_u(i, :, :))
-            do k=1,nz ; do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+            do concurrent (k=1:nz, j = OBC%segment(n)%HI%jsd:OBC%segment(n)%HI%jed)
               h_u(I,j,k) = h(i+1,j,k) * (visc_rem_u(I,j,k) * por_face_areaU(I,j,k))
-            enddo ; enddo
+            enddo
           else
-            !$omp target teams distribute parallel do collapse(2) &
-            !$omp   map(to: OBC, OBC%segment(n), por_face_areaU(i, :, :), h(i+1, :, :)) &
-            !$omp   map(tofrom: h_u(i, :, :))
-            do k=1,nz ; do j = OBC%segment(n)%HI%jsd, OBC%segment(n)%HI%jed
+            do concurrent (k=1:nz, j = OBC%segment(n)%HI%jsd:OBC%segment(n)%HI%jed)
               h_u(I,j,k) = h(i+1,j,k) * por_face_areaU(I,j,k)
-            enddo ; enddo
+            enddo
           endif
         endif
       endif
@@ -1226,10 +1198,8 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
   endif
 
   !$omp target exit data &
-  !$omp   map(from: h_u(ish-1:ieh, :, :)) &
-  !$omp   map(release: u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), G%IareaT(ish-1:ieh+1, jsh:jeh), &
-  !$omp       G%IdxT(ish-1:ieh+1, jsh:jeh), h(ish-1:ieh+1, :, :), h_W(ish-1:ieh+1, :, :), &
-  !$omp       h_E(ish-1:ieh+1, :, :), por_face_areaU(ish-1:ieh, :, :))
+  !$omp   map(from: h_u) &
+  !$omp   map(release: u, G, G%dy_Cu, G%IareaT, G%IdxT, h, h_W, h_E, por_face_areaU)
 
 end subroutine zonal_flux_thickness
 
