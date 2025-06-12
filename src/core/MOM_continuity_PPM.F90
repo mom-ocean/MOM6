@@ -1335,10 +1335,12 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
     if (itt < max_itts) then
       do concurrent (j=jsh:jeh, I=ish-1:ieh)
         uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(i,j) = 0.0
-        do k=1,nz
-          uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
-          duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
-        enddo
+      enddo
+      do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
+        uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
+        duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
+      enddo ; enddo
+      do concurrent (j=jsh:jeh, I=ish-1:ieh)
         uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
       enddo
     endif
@@ -2334,10 +2336,12 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
     if (itt < max_itts) then
       do concurrent (j=jsh-1:jeh, i=ish:ieh)
         vh_err(i,j) = -vhbt(i,j) ; dvhdv_tot(i,j) = 0.0
-        do k=1,nz
-          vh_err(i,j) = vh_err(i,j) + vh_aux(i,j,k)
-          dvhdv_tot(i,j) = dvhdv_tot(i,j) + dvhdv(i,j,k)
-        enddo
+      enddo
+      do k = 1,nz ; do concurrent (j=jsh-1:jeh, i=ish:ieh)
+        vh_err(i,j) = vh_err(i,j) + vh_aux(i,j,k)
+        dvhdv_tot(i,j) = dvhdv_tot(i,j) + dvhdv(i,j,k)
+      enddo ; enddo
+      do concurrent (j=jsh-1:jeh, i=ish:ieh)
         vh_err_best(i,j) = min(vh_err_best(i,j), abs(vh_err(i,j)))
       enddo
     endif
