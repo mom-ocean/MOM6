@@ -1030,14 +1030,11 @@ subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, GV, US, 
     local_open_BC = OBC%open_u_BCs_exist_globally
   endif ; endif
 
-  !$omp target teams distribute parallel do collapse(3) &
-  !$omp   private(CFL, curv_3, h_marg) &
-  !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), u(ish-1:ieh, :, :), G, G%dy_Cu(ish-1:ieh, jsh:jeh), &
-  !$omp       G%IareaT(ish-1:ieh+1, jsh:jeh), G%IdxT(ish-1:ieh+1, jsh:jeh), h_W(ish-1:ieh+1, :, :), &
-  !$omp       h_E(ish-1:ieh+1, :, :), h(ish-1:ieh+1, :, :), por_face_areaU(ish-1:ieh, :, :), &
-  !$omp       visc_rem(ish-1:ieh, :, :)) &
-  !$omp   map(tofrom: uh(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :)) ! tofrom so non-updated elems so we don't accidentally zero old values
-  do k = 1, nz; do j = jsh, jeh; do I=ish-1,ieh ; if (do_I(I, j)) then
+  !$omp target enter data &
+  !$omp   map(to: do_I, u, G, G%dy_Cu, G%IareaT, G%IdxT, h_W, h_E, h, por_face_areaU, visc_rem, &
+  !$omp       uh, duhdu)
+
+  do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh, do_I(I, j))
     ! Set new values of uh and duhdu.
     if (u(I, j, k) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I, j, k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
@@ -1058,16 +1055,11 @@ subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, GV, US, 
       h_marg = 0.5 * (h_W(i+1, j, k) + h_E(i, j, k))
     endif
     duhdu(I, j, k) = (G%dy_Cu(I,j) * por_face_areaU(I, j, k)) * h_marg * visc_rem(I, j, k)
-  endif ; enddo; enddo; enddo
+  enddo
 
   if (local_open_BC) then
     ! untested
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: do_I(ish-1:ieh, jsh:jeh), OBC, OBC%segnum_u(ish-1:ieh, jsh:jeh), &
-    !$omp       OBC%segment(:), G, G%dy_Cu(ish-1:ieh, jsh:jeh), por_face_areaU(ish-1:ieh, :, :), &
-    !$omp       u(ish-1:ieh, :, :), h(ish-1:ieh+1, :, :), visc_rem(ish-1:ieh, :, :)) &
-    !$Omp   map(tofrom: uh(ish-1:ieh, :, :), duhdu(ish-1:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do I=ish-1,ieh 
+    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh )
       if (do_I(I, j)) then ; if (OBC%segnum_u(I,j) /= 0) then
         if (OBC%segment(abs(OBC%segnum_u(I,j)))%open) then
           if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
@@ -1079,9 +1071,11 @@ subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, GV, US, 
           endif
         endif
       endif ; endif
-    enddo ; enddo ; enddo
+    enddo
   endif
-
+  !$omp target exit data &
+  !$omp   map(from: uh, duhdu) &
+  !$omp   map(release: do_I, u, G, G%dy_Cu, G%IareaT, G%IdxT, h_W, h_E, h, por_face_areaU, visc_rem)
 end subroutine zonal_flux_layer
 
 
