@@ -399,20 +399,14 @@ subroutine continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin, hmin)
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   if (present(hin)) then
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: hin(ish:ieh, :, :), G, G%IareaT(ish:ieh, jsh:jeh), uh(ish-1:ieh, :, :)) &
-    !$omp   map(from: h(ish:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do i=ish, ieh
+    do concurrent (k=1:nz, j=jsh:jeh, i=ish:ieh)
       h(i,j,k) = max( hin(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
-    enddo ; enddo ; enddo
+    enddo
   else
     ! untested
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: G, G%IareaT(ish:ieh, jsh:jeh), uh(ish-1:ieh, :, :)) &
-    !$omp   map(tofrom: h(ish:ieh, :, :))
-    do k=1,nz ; do j=jsh,jeh ; do i=ish, ieh
+    do concurrent (k=1:nz, j=jsh:jeh, i=ish:ieh)
       h(i,j,k) = max( h(i,j,k) - dt * G%IareaT(i,j) * (uh(I,j,k) - uh(I-1,j,k)), h_min )
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   call cpu_clock_end(id_clock_update)
