@@ -437,20 +437,13 @@ subroutine continuity_merdional_convergence(h, vh, dt, G, GV, LB, hin, hmin)
 
   if (present(hin)) then
     ! untested
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: LB, hin(LB%ish:LB%ieh, :, :), G, G%IareaT(LB%ish:LB%ieh, LB%jsh:LB%jeh), &
-    !$omp       vh(LB%ish:LB%ieh, :, :)) &
-    !$omp   map(from: h(LB%ish:LB%ieh, :, :))
-    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+    do concurrent (k=1:GV%ke, j=LB%jsh:LB%jeh, i=LB%ish:LB%ieh)
       h(i,j,k) = max( hin(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k)), h_min )
-    enddo ; enddo ; enddo
+    enddo
   else
-    !$omp target teams distribute parallel do collapse(3) &
-    !$omp   map(to: LB, G, G%IareaT(LB%ish:LB%ieh, LB%jsh:LB%jeh), vh(LB%ish:LB%ieh, :, :)) &
-    !$omp   map(tofrom: h(LB%ish:LB%ieh, :, :))
-    do k=1,GV%ke ; do j=LB%jsh,LB%jeh ; do i=LB%ish,LB%ieh
+    do concurrent (k=1:GV%ke, j=LB%jsh:LB%jeh, i=LB%ish:LB%ieh)
       h(i,j,k) = max( h(i,j,k) - dt * G%IareaT(i,j) * (vh(i,J,k) - vh(i,J-1,k)), h_min )
-    enddo ; enddo ; enddo
+    enddo
   endif
 
   call cpu_clock_end(id_clock_update)
