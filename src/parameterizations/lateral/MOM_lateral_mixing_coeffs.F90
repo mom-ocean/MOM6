@@ -1096,22 +1096,22 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
     if (CS%use_gradient_model) then
     ! Calculate the gradient slopes Ux_Hx, Vx_Hx, Uy_Hy, Vy_Hy on u- and v-points respectively
       do j=js-1,je+1 ; do I=is-1,ie
-        Ux_Hx(I,j) = 1.0 * (G%IdxCu(I+1,j) * G%IdyCu(I+1,j) * uh(I+1,j,K) - G%IdxCu(I,j) * G%IdyCu(I,j) * uh(I,j,k)) * ( &
-                   G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyT(I,j) * (1.0 * (h(I+1,j,K) - h(I,j,K))/( &
+        Ux_Hx(I,j) = (G%IdxCu(I+1,j)*G%IdyCu(I+1,j)*uh(I+1,j,K) - G%IdxCu(I,j)*G%IdyCu(I,j)*uh(I,j,k)) * ( &
+                   G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyT(I,j) * ((h(I+1,j,K) - h(I,j,K))/( &
                    h(I+1,j,K) + h(I,j,K) + h_neglect))
-        Vx_Hx(I,j) = 1.0 * (G%IdxCv(I+1,j) * G%IdxCv(I+1,j) * vh(I+1,j,K) - G%IdxCv(I,j) * G%IdxCv(I,j) * vh(I,j,k)) * ( &
-                   G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyT(I,j) * (1.0*(h(I+1,j,K) - h(I,j,K))/( &
+        Vx_Hx(I,j) = (G%IdxCv(I+1,j)*G%IdxCv(I+1,j)*vh(I+1,j,K) - G%IdxCv(I,j)*G%IdxCv(I,j)*vh(I,j,k)) * ( &
+                   G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyT(I,j) * ((h(I+1,j,K) - h(I,j,K))/( &
                    h(I+1,j,K) + h(I,j,K) + h_neglect))
     ! Mask slopes where interface intersects topography
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) Ux_Hx(I,j) = 0.
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) Vx_Hx(I,j) = 0.
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        Uy_Hy(i,J) = 1.0 * (G%IdyCu(i,J+1) * G%IdyCu(i,J+1) * uh(i,J+1,K) - G%IdyCu(i,J) * G%IdyCu(i,J) * uh(i,J,k)) * ( &
-                   G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxT(i,J) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
+        Uy_Hy(i,J) = (G%IdyCu(i,J+1)*G%IdyCu(i,J+1)*uh(i,J+1,K) - G%IdyCu(i,J)*G%IdyCu(i,J)*uh(i,J,k)) * ( &
+                   G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxT(i,J) * ((h(i,J+1,K) - h(i,J,K))/( &
                    h(i,J+1,K) + h(i,J,K) + h_neglect))
-        Vy_Hy(i,J) = 1.0 * (G%IdyCv(i,J+1) * G%IdxCv(i,J+1) * vh(i,J+1,K) - G%IdyCv(i,J) * G%IdxCv(i,J) * vh(i,J,k)) * ( &
-                   G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxT(I,j) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
+        Vy_Hy(i,J) = (G%IdyCv(i,J+1)*G%IdxCv(i,J+1)*vh(i,J+1,K) - G%IdyCv(i,J)*G%IdxCv(i,J)*vh(i,J,k)) * ( &
+                   G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxT(I,j) * ((h(i,J+1,K) - h(i,J,K))/( &
                    h(i,J+1,K) + h(i,J,K) + h_neglect))
     ! Mask slopes where interface intersects topography
         if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) Uy_Hy(I,j) = 0.
