@@ -93,9 +93,6 @@ type, private :: BT_OBC_type
   integer, allocatable :: v_OBC_type(:,:) !< An integer encoding the type and direction of v-point OBCs
   logical :: u_OBCs_on_PE !< True if this PE has an open boundary at any u-points.
   logical :: v_OBCs_on_PE !< True if this PE has an open boundary at any v-points.
-  logical :: wide_stencil !< If true, a wider stencil must be used in the barotropic iteration because
-                          !! of the presence of OBCs in the opposite halo (e.g., southern OBCs in a
-                          !! northern halo) on any processors anywhere in the domain.  This is uncommon.
   !>@{ Index ranges on the local PE for the open boundary conditions in various directions
   integer :: Is_u_W_obc, Ie_u_W_obc, js_u_W_obc, je_u_W_obc
   integer :: Is_u_E_obc, Ie_u_E_obc, js_u_E_obc, je_u_E_obc
@@ -269,12 +266,18 @@ type, public :: barotropic_CS ; private
                              !! velocities. The streaming band-pass filter must be turned on.
   logical :: use_wide_halos  !< If true, use wide halos and march in during the
                              !! barotropic time stepping for efficiency.
+  integer :: min_stencil     !< The minimum stencil width to use with the wide halo iterations.
+                             !! A nonzero value may reflect the distribution of OBC faces or it
+                             !! may be useful for debugging purposes.
   logical :: clip_velocity   !< If true, limit any velocity components that are
                              !! are large enough for a CFL number to exceed
                              !! CFL_trunc.  This should only be used as a
                              !! desperate debugging measure.
   logical :: debug           !< If true, write verbose checksums for debugging purposes.
-  logical :: debug_bt        !< If true, write verbose checksums for debugging purposes.
+  logical :: debug_bt        !< If true, write verbose checksums from within the barotropic
+                             !! time-stepping loop for debugging purposes.
+  logical :: debug_wide_halos !< If true, write the checksums on the full wide halos.   Otherwise
+                             !! only the output for the final computational domain is written.
   real    :: vel_underflow   !< Velocity components smaller than vel_underflow
                              !! are set to 0 [L T-1 ~> m s-1].
   real    :: maxvel          !< Velocity components greater than maxvel are
@@ -760,9 +763,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   interp_eta_PF = associated(eta_PF_start)
 
   ! Figure out the fullest arrays that could be updated.
-  stencil = 1
+  stencil = max(1, CS%min_stencil)
   if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. &
-      (CS%Nonlin_cont_update_period > 0)) stencil = 2
+      (CS%Nonlin_cont_update_period > 0)) stencil = max(2, CS%min_stencil)
 
   find_etaav = present(etaav)
 
@@ -2399,6 +2402,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   integer :: stencil  ! The stencil size of the algorithm, often 1 or 2.
   integer :: err_count ! A counter to limit the volume of error messages written to stdout.
   integer :: i, j, n, is, ie, js, je
+  integer :: debug_halo ! The halo size to use for debugging checksums
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
@@ -2407,10 +2411,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   err_count = 0
 
   ! Figure out the fullest arrays that could be updated.
-  stencil = 1
+  stencil = max(1, CS%min_stencil)
   if ((.not.use_BT_cont) .and. CS%Nonlinear_continuity .and. (CS%Nonlin_cont_update_period > 0)) &
-    stencil = 2
-  if (CS%BT_OBC%wide_stencil) stencil = 2
+    stencil = max(2, CS%min_stencil)
 
   num_cycles = 1
   if (CS%use_wide_halos) &
@@ -2646,23 +2649,24 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     ! This might need to be moved outside of the OMP do loop directives.
     if (CS%debug_bt) then
       write(mesg,'("BT vel update ",I4)') n
-      call uvchksum(trim(mesg)//" PF[uv]", PFu, PFv, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%L_T_to_m_s*US%s_to_T)
-      call uvchksum(trim(mesg)//" Cor_[uv]", Cor_u, Cor_v, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%L_T_to_m_s*US%s_to_T)
-      call uvchksum(trim(mesg)//" BT_force_[uv]", BT_force_u, BT_force_v, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%L_T_to_m_s*US%s_to_T)
-      call uvchksum(trim(mesg)//" BT_rem_[uv]", BT_rem_u, BT_rem_v, CS%debug_BT_HI, &
-                    haloshift=iev-ie, scalar_pair=.true.)
-      call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%L_T_to_m_s)
-      call uvchksum(trim(mesg)//" [uv]bt_trans", ubt_trans, vbt_trans, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%L_T_to_m_s)
-      call uvchksum(trim(mesg)//" [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
+      debug_halo = 0 ; if  (CS%debug_wide_halos) debug_halo = iev - ie
+      call uvchksum(trim(mesg)//" PF[uv]", PFu, PFv, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%L_T_to_m_s*US%s_to_T)
+      call uvchksum(trim(mesg)//" Cor_[uv]", Cor_u, Cor_v, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%L_T_to_m_s*US%s_to_T)
+      call uvchksum(trim(mesg)//" BT_force_[uv]", BT_force_u, BT_force_v, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%L_T_to_m_s*US%s_to_T)
+      call uvchksum(trim(mesg)//" BT_rem_[uv]", BT_rem_u, BT_rem_v, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., scalar_pair=.true.)
+      call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%L_T_to_m_s)
+      call uvchksum(trim(mesg)//" [uv]bt_trans", ubt_trans, vbt_trans, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%L_T_to_m_s)
+      call uvchksum(trim(mesg)//" [uv]hbt", uhbt, vhbt, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
       if (integral_BT_cont) &
-        call uvchksum(trim(mesg)//" [uv]hbt_int", uhbt_int, vhbt_int, CS%debug_BT_HI, haloshift=iev-ie, &
-                      unscale=US%L_to_m**2*GV%H_to_m)
+        call uvchksum(trim(mesg)//" [uv]hbt_int", uhbt_int, vhbt_int, CS%debug_BT_HI, haloshift=debug_halo, &
+                      symmetric=.true., unscale=US%L_to_m**2*GV%H_to_m)
     endif
 
     ! Apply open boundary condition considerations to revise the updated velocities and transports.
@@ -2699,11 +2703,11 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     !$OMP end do nowait
 
     if (CS%debug_bt) then
-      call uvchksum("BT [uv]hbt just after OBC", uhbt, vhbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
+      call uvchksum("BT [uv]hbt just after OBC", uhbt, vhbt, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%s_to_T*US%L_to_m**2*GV%H_to_m)
       if (integral_BT_cont) &
         call uvchksum("BT [uv]hbt_int just after OBC", uhbt_int, vhbt_int, CS%debug_BT_HI, &
-                      haloshift=iev-ie, unscale=US%L_to_m**2*GV%H_to_m)
+                      haloshift=debug_halo, symmetric=.true., unscale=US%L_to_m**2*GV%H_to_m)
     endif
 
     ! Update eta in a corrector step using the barotropic continuity equation.
@@ -2725,9 +2729,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     if (CS%debug_bt) then
       write(mesg,'("BT step ",I4)') n
-      call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=iev-ie, &
-                    unscale=US%L_T_to_m_s)
-      call hchksum(eta, trim(mesg)//" eta", CS%debug_BT_HI, haloshift=iev-ie, unscale=GV%H_to_MKS)
+      call uvchksum(trim(mesg)//" [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=debug_halo, &
+                    symmetric=.true., unscale=US%L_T_to_m_s)
+      call hchksum(eta, trim(mesg)//" eta", CS%debug_BT_HI, haloshift=debug_halo, unscale=GV%H_to_MKS)
     endif
 
     ! Issue warnings if there are unphysical values of the sea surface height or total water column mass.
@@ -4032,6 +4036,7 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
   real :: OBC_type  ! A real copy of the integer encoding the type of OBC being used at a point [nondim]
   logical :: reversed_OBCs  ! True of there any OBCs in the opposite halo on this PE, e.g. points
                             ! with a southern OBC in a northern halo.
+  logical :: any_reversed_OBCs
   integer :: i, j, isdw, iedw, jsdw, jedw
   integer :: l_seg, Flather_OBC_in_halo
 
@@ -4136,8 +4141,9 @@ subroutine initialize_BT_OBC(OBC, BT_OBC, G, CS)
   ! points with OBC_DIRECTION_S in a northern halo.
   reversed_OBCs = (BT_OBC%u_OBCs_on_PE .and. ((BT_OBC%Is_u_E_obc <= G%isc-1) .or. (BT_OBC%Ie_u_W_obc >= G%iec))) .or. &
                   (BT_OBC%v_OBCs_on_PE .and. ((BT_OBC%Js_v_N_obc <= G%jsc-1) .or. (BT_OBC%Je_v_S_obc >= G%jec)))
-  BT_OBC%wide_stencil = any_across_PEs(reversed_OBCs)
-  if (BT_OBC%wide_stencil) call MOM_mesg("OBCs in an opposite halo require the use of a wider stencil.", 3)
+  any_reversed_OBCs = any_across_PEs(reversed_OBCs)
+  if (any_reversed_OBCs) call MOM_mesg("OBCs in an opposite halo require the use of a wider stencil.", 5)
+  if (any_reversed_OBCs) CS%min_stencil = max(CS%min_stencil, 2)
 
   ! Allocate time-varying arrays that will be used for open boundary conditions.
 
@@ -5446,6 +5452,11 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   call get_param(param_file, mdl, "BTHALO", bt_halo_sz, &
                  "The minimum halo size for the barotropic solver.", default=0, &
                  layoutParam=.true.)
+  call get_param(param_file, mdl, "BT_WIDE_HALO_MIN_STENCIL", CS%min_stencil, &
+                 "The minimum stencil width to use with the wide halo iterations. "//&
+                 "A nonzero value may be useful for debugging purposes, but at the "//&
+                 "cost of reducing the efficiency gain from BT_USE_WIDE_HALOS.", &
+                 default=0, layoutParam=.true., do_not_log=.not.CS%use_wide_halos)
 #ifdef STATIC_MEMORY_
   if ((bt_halo_sz > 0) .and. (bt_halo_sz /= BTHALO_)) call MOM_error(FATAL, &
       "barotropic_init: Run-time values of BTHALO must agree with the "//&
@@ -5664,6 +5675,12 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "barotropic time-stepping loop. The data volume can be "//&
                  "quite large if this is true.", default=CS%debug, &
                  debuggingParam=.true.)
+  call get_param(param_file, mdl, "DEBUG_BT_WIDE_HALOS", CS%debug_wide_halos, &
+                 "If true, write the checksums on the full wide halos.   Otherwise only the "//&
+                 "output for the final computational domain is written.  This can be valuable "//&
+                 "for debugging certain cases where the stencil used in the wide halo "//&
+                 "iterations depends on which opoen boundary conditions are in the halos.", &
+                 default=.true., do_not_log=.not.(CS%debug_bt.and.CS%use_wide_halos), debuggingParam=.true.)
 
   call get_param(param_file, mdl, "LINEARIZED_BT_CORIOLIS", CS%linearized_BT_PV, &
                  "If true use the bottom depth instead of the total water column thickness "//&
@@ -5822,7 +5839,6 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   else ! There are no OBC points anywhere.
     CS%BT_OBC%u_OBCs_on_PE = .false.
     CS%BT_OBC%v_OBCs_on_PE = .false.
-    CS%BT_OBC%wide_stencil = .false.
     CS%integral_OBCs = .false.
   endif
 
