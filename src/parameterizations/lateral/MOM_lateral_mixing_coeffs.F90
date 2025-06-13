@@ -29,7 +29,7 @@ implicit none ; private
 type, public :: VarMix_CS
   logical :: initialized = .false. !< True if this control structure has been initialized.
   logical :: use_variable_mixing  !< If true, use the variable mixing.
-  logical :: use_gradient_model   !< If true, use the gradient (Khani) model (Khani & Dawson, JAMES 2023).
+  logical :: use_gradient_model   !< If true, use the gradient  model (Khani & Dawson, JAMES 2023).
   logical :: Resoln_scaling_used  !< If true, a resolution function is used somewhere to scale
                                   !! away one of the viscosities or diffusivities when the
                                   !! deformation radius is well resolved.
@@ -980,7 +980,7 @@ end subroutine calc_Eady_growth_rate_2D
 
 !> The original calc_slope_function() that calculated slopes using
 !! interface positions only, not accounting for density variations.
-!! Computes UH_grad and VH_grad for gradient (Khani) model (Khani & Dawson, JAMES 2023)
+!! Computes UH_grad and VH_grad for gradient model (Khani & Dawson, JAMES 2023)
 subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
   type(ocean_grid_type),                       intent(inout) :: G  !< Ocean grid structure
   type(verticalGrid_type),                     intent(in)    :: GV !< Vertical grid structure
@@ -1006,8 +1006,8 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: S2            ! Interface slope squared [Z2 L-2 ~> nondim]
   real :: N2            ! Brunt-Vaisala frequency squared [L2 Z-2 T-2 ~> s-2]
-  real :: gradUH        ! Gradient model frequency, zonal transport [T-1 ~> s-1]
-  real :: gradVH        ! Gradient model frequency, merid transport [T-1 ~> s-1]
+  real :: graduh        ! Gradient model frequency, zonal transport [T-1 ~> s-1]
+  real :: gradvh        ! Gradient model frequency, merid transport [T-1 ~> s-1]
   real :: Hup, Hdn      ! Thickness from above, below [H ~> m or kg m-2]
   real :: H_geom        ! The geometric mean of Hup*Hdn [H ~> m or kg m-2].
   real :: S2N2_u_local(SZIB_(G),SZJ_(G),SZK_(GV)) ! The depth integral of the slope times
@@ -1034,9 +1034,9 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
 
   if (.not. CS%use_gradient_model) return
   if (.not. allocated(CS%UH_grad)) call MOM_error(FATAL, "calc_slope_function:"// &
-         "%UH_grad is not associated with use_gradient_model.")
+         "UH_grad is not associated with use_gradient_model.")
   if (.not. allocated(CS%VH_grad)) call MOM_error(FATAL, "calc_slope_function:"// &
-         "%VH_grad is not associated with use_gradient_model.")
+         "VH_grad is not associated with use_gradient_model.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -1062,7 +1062,6 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
     ! enddo
   endif
 
-  ! To set length scale for gradient (Khani) model (Khani & Dawson, JAMES 2023)
   ! To set the length scale based on the deformation radius, use wave_speed to
   ! calculate the first-mode gravity wave speed and then blend the equatorial
   ! and midlatitude deformation radii, using calc_resoln_function as a template.
@@ -1070,19 +1069,15 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
   !$OMP parallel do default(shared) private(E_x,E_y,S2,Hdn,Hup,H_geom,N2)
 
   ! Set the length scale at u-points for the gradient model
-  !! if (CS%use_gradient_model) then
-    do j=js,je ; do I=is-1,ie
-      Lgrid = sqrt(G%dxCu(I,j)**2 + G%dyCu(I,j)**2)
-      CS%L2grad_u(I,j) = 1.0 * Lgrid**2
-    enddo ; enddo
-  !! endif
+  do j=js,je ; do I=is-1,ie
+    Lgrid = sqrt(G%dxCu(I,j)**2 + G%dyCu(I,j)**2)
+    CS%L2grad_u(I,j) = 1.0 * Lgrid**2
+  enddo ; enddo
   ! Set length scale at v-points for the gradient model
-  !! if (CS%use_gradient_model) then
-    do J=js-1,je ; do i=is,ie
-      Lgrid = sqrt(G%dxCv(i,J)**2 + G%dyCv(i,J)**2)
-      CS%L2grad_v(i,J) = 1.0 * Lgrid**2
-    enddo ; enddo
-  !! endif
+  do J=js-1,je ; do i=is,ie
+    Lgrid = sqrt(G%dxCv(i,J)**2 + G%dyCv(i,J)**2)
+    CS%L2grad_v(i,J) = 1.0 * Lgrid**2
+  enddo ; enddo
 
   do k=nz,CS%VarMix_Ktop,-1
 
@@ -1098,13 +1093,13 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
       if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
     enddo ; enddo
 
-    if (CS%use_gradient_model) then
+    if (CS%use_gradient_model) then 
     ! Calculate the gradient slopes Ux_Hx, Vx_Hx, Uy_Hy, Vy_Hy on u- and v-points respectively
       do j=js-1,je+1 ; do I=is-1,ie
-        Ux_Hx(I,j) =1.0*(G%IdxCu(I+1,j)*G%IdyCu(I+1,j)*uh(I+1,j,K) - G%IdxCu(I,j)*G%IdyCu(I,j)*uh(I,j,k))*( &
-                   G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyT(I,j) * (1.0*(h(I+1,j,K) - h(I,j,K))/( &
+        Ux_Hx(I,j) = 1.0 * (G%IdxCu(I+1,j) * G%IdyCu(I+1,j) * uh(I+1,j,K) - G%IdxCu(I,j) * G%IdyCu(I,j) * uh(I,j,k)) * ( &
+                   G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyT(I,j) * (1.0 * (h(I+1,j,K) - h(I,j,K))/( &
                    h(I+1,j,K) + h(I,j,K) + h_neglect))
-        Vx_Hx(I,j) =1.0*(G%IdxCv(I+1,j)*G%IdxCv(I+1,j)*vh(I+1,j,K) - G%IdxCv(I,j)*G%IdxCv(I,j)*vh(I,j,k))*( &
+        Vx_Hx(I,j) = 1.0 * (G%IdxCv(I+1,j) * G%IdxCv(I+1,j) * vh(I+1,j,K) - G%IdxCv(I,j) * G%IdxCv(I,j) * vh(I,j,k)) * ( &
                    G%IareaT(I+1,j) + G%IareaT(I,j)) * G%dyT(I,j) * (1.0*(h(I+1,j,K) - h(I,j,K))/( &
                    h(I+1,j,K) + h(I,j,K) + h_neglect))
     ! Mask slopes where interface intersects topography
@@ -1112,10 +1107,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
         if (min(h(I,j,k),h(I+1,j,k)) < H_cutoff) Vx_Hx(I,j) = 0.
       enddo ; enddo
       do J=js-1,je ; do i=is-1,ie+1
-        Uy_Hy(i,J) =1.0*(G%IdyCu(i,J+1)*G%IdyCu(i,J+1)*uh(i,J+1,K) - G%IdyCu(i,J)*G%IdyCu(i,J)*uh(i,J,k))*( &
+        Uy_Hy(i,J) = 1.0 * (G%IdyCu(i,J+1) * G%IdyCu(i,J+1) * uh(i,J+1,K) - G%IdyCu(i,J) * G%IdyCu(i,J) * uh(i,J,k)) * ( &
                    G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxT(i,J) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
                    h(i,J+1,K) + h(i,J,K) + h_neglect))
-        Vy_Hy(i,J) =1.0*(G%IdyCv(i,J+1)*G%IdxCv(i,J+1)*vh(i,J,K) - G%IdyCv(i,J)*G%IdxCv(i,J)*vh(i,J,k))*( &
+        Vy_Hy(i,J) = 1.0 * (G%IdyCv(i,J+1) * G%IdxCv(i,J+1) * vh(i,J+1,K) - G%IdyCv(i,J) * G%IdxCv(i,J) * vh(i,J,k)) * ( &
                    G%IareaT(i,J+1) + G%IareaT(i,J)) * G%dxT(I,j) * (1.0*(h(i,J+1,K) - h(i,J,K))/( &
                    h(i,J+1,K) + h(i,J,K) + h_neglect))
     ! Mask slopes where interface intersects topography
@@ -1135,14 +1130,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
       H_geom = sqrt(Hdn*Hup)
       ! N2 = GV%g_prime(k) / (GV%H_to_Z * max(Hdn, Hup, CS%h_min_N2))
       S2N2_u_local(I,j,k) = (H_geom * S2) * (GV%g_prime(k) / max(Hdn, Hup, CS%h_min_N2) )
-      ! gradUH = Ux_Hx(I,j) + 0.25*(Uy_Hy(I,j)+Uy_Hy(I,j-1)+Uy_Hy(I+1,j)+Uy_Hy(I+1,j-1))
-      ! UH_grad_local(I,j,k) = gradUH
     enddo ; enddo
 
     if (CS%use_gradient_model) then
       do j=js,je ; do I=is-1,ie
-        gradUH = Ux_Hx(I,j) + 0.25*(Uy_Hy(I,j)+Uy_Hy(I,j-1)+Uy_Hy(I+1,j)+Uy_Hy(I+1,j-1))
-        UH_grad_local(I,j,k) = gradUH
+        graduh = Ux_Hx(I,j) + 0.25 * ( (Uy_Hy(I,j) + Uy_Hy(I+1,j-1)) + (Uy_Hy(I,j-1) + Uy_Hy(I+1,j)) )
+        UH_grad_local(I,j,k) = graduh
       enddo ; enddo
     endif
 
@@ -1156,14 +1149,12 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
       H_geom = sqrt(Hdn*Hup)
       ! N2 = GV%g_prime(k) / (GV%H_to_Z * max(Hdn, Hup, CS%h_min_N2))
       S2N2_v_local(i,J,k) = (H_geom * S2) * (GV%g_prime(k) / (max(Hdn, Hup, CS%h_min_N2)))
-      ! gradVH = 0.25*(Vx_Hx(i,J)+Vx_Hx(i-1,J)+Vx_Hx(i,J+1)+Vx_Hx(i-1,J+1))+Vy_Hy(i,J)
-      ! VH_grad_local(i,J,k) = gradVH
     enddo ; enddo
 
     if (CS%use_gradient_model) then
       do J=js-1,je ; do i=is,ie
-        gradVH = 0.25*(Vx_Hx(i,J)+Vx_Hx(i-1,J)+Vx_Hx(i,J+1)+Vx_Hx(i-1,J+1))+Vy_Hy(i,J)
-        VH_grad_local(i,J,k) = gradVH
+        gradvh = 0.25 * ( (Vx_Hx(i,J) + Vx_Hx(i-1,J+1)) + (Vx_Hx(i-1,J) + Vx_Hx(i,J+1)) ) + Vy_Hy(i,J)
+        VH_grad_local(i,J,k) = gradvh
       enddo ; enddo
     endif
 
@@ -1174,12 +1165,15 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
     do I=is-1,ie ; CS%SN_u(I,j) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
       CS%SN_u(I,j) = CS%SN_u(I,j) + S2N2_u_local(I,j,k)
-      if (CS%use_gradient_model) then
-        CS%UH_grad(I,j,k) = UH_grad_local(I,j,k)
-        !! print*, "UH_grad=  ", CS%UH_grad(I,j,k)
-      endif
     enddo ; enddo
     ! SN above contains S^2*N^2*H, convert to vertical average of S*N
+
+    if (CS%use_gradient_model) then
+      do k=nz,CS%VarMix_Ktop,-1 ; do I=is-1,ie
+        CS%UH_grad(I,j,k) = UH_grad_local(I,j,k)
+        !! print*, "UH_grad =  ", CS%UH_grad(I,j,k)
+      enddo ; enddo
+    endif
 
     if (use_dztot) then
       do I=is-1,ie
@@ -1202,11 +1196,15 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
     do i=is,ie ; CS%SN_v(i,J) = 0.0 ; enddo
     do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
       CS%SN_v(i,J) = CS%SN_v(i,J) + S2N2_v_local(i,J,k)
-      if (CS%use_gradient_model) then
-        CS%VH_grad(i,J,k) = VH_grad_local(i,J,k)
-        !! print*, "VH_grad=  ", CS%VH_grad(I,j,k)
-      endif
     enddo ; enddo
+
+    if (CS%use_gradient_model) then
+      do k=nz,CS%VarMix_Ktop,-1 ; do i=is,ie
+        CS%VH_grad(i,J,k) = VH_grad_local(i,J,k)
+        !! print*, "VH_grad =  ", CS%VH_grad(I,j,k)
+      enddo ; enddo
+    endif
+
     if (use_dztot) then
       do i=is,ie
         CS%SN_v(i,J) = G%OBCmaskCv(i,J) * sqrt( CS%SN_v(i,J) / &
@@ -1729,7 +1727,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
 
   if (CS%use_gradient_model) then
     in_use = .true.
-    call get_param(param_file, mdl, "GRAD_KHANI_SCALE", CS%GRAD_KHANI_SCALE, &
+    call get_param(param_file, mdl, "GRAD_KHANI_SCALE", CS%grad_Khani_scale, &
                  "The fixed length scale in the gradient formula.", units="nondim", &
                  default=1.0)
     allocate(CS%UH_grad(IsdB:IedB,jsd:jed,GV%ke), source=0.0)
@@ -1737,13 +1735,13 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     allocate(CS%L2grad_u(IsdB:IedB,jsd:jed), source=0.0)
     allocate(CS%L2grad_v(isd:ied,JsdB:JedB), source=0.0)
     CS%id_UH_grad = register_diag_field('ocean_model', 'UH_grad', diag%axesCu1, Time, &
-     'Inverse gradient eddy time-scale, Ux_Hx+Uy_Hy, at u-points', 's^-1')
+     'Inverse gradient eddy time-scale, Ux_Hx+Uy_Hy, at u-points', 's-1')
     CS%id_VH_grad = register_diag_field('ocean_model', 'VH_grad', diag%axesCv1, Time, &
-     'Inverse gradient eddy time-scale, Vx_Hx+Vy_Hy, at v-points', 's^-1')
+     'Inverse gradient eddy time-scale, Vx_Hx+Vy_Hy, at v-points', 's-1')
     CS%id_L2grad_u = register_diag_field('ocean_model', 'L2grad_u', diag%axesCu1, Time, &
-     'Length scale squared for gradient coefficient, at u-points', 'm^2')
+     'Length scale squared for gradient coefficient, at u-points', 'm2')
     CS%id_L2grad_v = register_diag_field('ocean_model', 'L2grad_v', diag%axesCv1, Time, &
-     'Length scale squared for gradient coefficient, at v-points', 'm^2')
+     'Length scale squared for gradient coefficient, at v-points', 'm2')
   endif
 
   CS%id_sqg_struct = register_diag_field('ocean_model', 'sqg_struct', diag%axesTl, Time, &
