@@ -1093,7 +1093,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e, uh, vh)
       if (min(h(i,J,k),h(i,J+1,k)) < H_cutoff) E_y(I,j) = 0.
     enddo ; enddo
 
-    if (CS%use_gradient_model) then 
+    if (CS%use_gradient_model) then
     ! Calculate the gradient slopes Ux_Hx, Vx_Hx, Uy_Hy, Vy_Hy on u- and v-points respectively
       do j=js-1,je+1 ; do I=is-1,ie
         Ux_Hx(I,j) = 1.0 * (G%IdxCu(I+1,j) * G%IdyCu(I+1,j) * uh(I+1,j,K) - G%IdxCu(I,j) * G%IdyCu(I,j) * uh(I,j,k)) * ( &
