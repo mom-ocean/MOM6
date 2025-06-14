@@ -5364,6 +5364,9 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   type(group_pass_type) :: pass_bt_hbt_btav, pass_a_polarity
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags.
   logical :: use_BT_cont_type
+  logical :: mask_coastal_pressure_force  ! If true, apply masks to some stored inverse grid spacings
+                          ! so that diagnosed barotropic pressure gradient forces are zero at
+                          ! land, coastal or OBC points.
   logical :: use_tides
   logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
                           ! recreate the bugs, or if false bugs are only used if actively selected.
@@ -5699,11 +5702,16 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "The value of DTBT that will actually be used is an "//&
                  "integer fraction of DT, rounding down.", &
                  units="s or nondim", default=-0.98)
-  call get_param(param_file, mdl, "BT_USE_OLD_CORIOLIS_BRACKET_BUG", &
-                 CS%use_old_coriolis_bracket_bug , &
+  call get_param(param_file, mdl, "BT_USE_OLD_CORIOLIS_BRACKET_BUG", CS%use_old_coriolis_bracket_bug, &
                  "If True, use an order of operations that is not bitwise "//&
                  "rotationally symmetric in the meridional Coriolis term of "//&
                  "the barotropic solver.", default=.false.)
+  call get_param(param_file, mdl, "MASK_COASTAL_PRESSURE_FORCE", mask_coastal_pressure_force, &
+                 "If true, use the land masks to zero out the diagnosed barotropic pressure "//&
+                 "gradient accelerations at coastal or land points.  This changes diagnostics "//&
+                 "and improves the reproducibility of certain debugging checksums, but it "//&
+                 "does not alter the solutions themselves.", default=.false.)
+                 !### Change the default for MASK_COASTAL_PRESSURE_FORCE to true?
 
   ! Initialize a version of the MOM domain that is specific to the barotropic solver.
   call clone_MOM_domain(G%Domain, CS%BT_Domain, min_halo=wd_halos, symmetric=.true.)
@@ -5796,6 +5804,16 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
     CS%IdyCv(i,J) = G%IdyCv(i,J) ; CS%dx_Cv(i,J) = G%dx_Cv(i,J)
   enddo ; enddo
+
+  ! This sets pressure force diagnostics on land, at coastlines and at OBC points to zero.
+  if (mask_coastal_pressure_force) then
+    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+      CS%IdxCu(I,j) = G%OBCmaskCu(I,j) * G%IdxCu(I,j)
+    enddo ; enddo
+    do J=G%JsdB,G%JedB ; do i=G%isd,G%ied
+      CS%IdyCv(i,J) = G%OBCmaskCv(i,J) * G%IdyCv(i,J)
+    enddo ; enddo
+  endif
 
   if (associated(OBC)) then
     ! Set up information about the location and nature of the open boundary condition points.
