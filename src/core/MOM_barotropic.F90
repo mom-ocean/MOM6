@@ -138,7 +138,7 @@ type, public :: barotropic_CS ; private
           !< The difference between the free surface height from the barotropic calculation and the sum
           !! of the layer thicknesses. This difference is imposed as a forcing term in the barotropic
           !! calculation over a baroclinic timestep [H ~> m or kg m-2].
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: eta_cor_bound
+  real, allocatable, dimension(:,:) :: eta_cor_bound
           !< A limit on the rate at which eta_cor can be applied while avoiding instability
           !! [H T-1 ~> m s-1 or kg m-2 s-1]. This is only used if CS%bound_BT_corr is true.
   real ALLOCABLE_, dimension(NIMEMW_,NJMEMW_) :: &
@@ -5733,9 +5733,8 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
 
   ALLOC_(CS%frhatu(IsdB:IedB,jsd:jed,nz)) ; ALLOC_(CS%frhatv(isd:ied,JsdB:JedB,nz))
   ALLOC_(CS%eta_cor(isd:ied,jsd:jed))
-  if (CS%bound_BT_corr) then
-    ALLOC_(CS%eta_cor_bound(isd:ied,jsd:jed)) ; CS%eta_cor_bound(:,:) = 0.0
-  endif
+  if (CS%bound_BT_corr) &
+    allocate(CS%eta_cor_bound(isd:ied,jsd:jed), source=0.0)
   ALLOC_(CS%IDatu(IsdB:IedB,jsd:jed)) ; ALLOC_(CS%IDatv(isd:ied,JsdB:JedB))
 
   ALLOC_(CS%ua_polarity(isdw:iedw,jsdw:jedw))
@@ -6204,9 +6203,7 @@ subroutine barotropic_end(CS)
   ! Allocated in barotropic_init, called in timestep initialization
   DEALLOC_(CS%ua_polarity) ; DEALLOC_(CS%va_polarity)
   DEALLOC_(CS%IDatu)    ; DEALLOC_(CS%IDatv)
-  if (CS%bound_BT_corr) then
-    DEALLOC_(CS%eta_cor_bound)
-  endif
+  if (allocated(CS%eta_cor_bound)) deallocate(CS%eta_cor_bound)
   DEALLOC_(CS%eta_cor)
   DEALLOC_(CS%bathyT) ; DEALLOC_(CS%IareaT)
   DEALLOC_(CS%frhatu) ; DEALLOC_(CS%frhatv)
