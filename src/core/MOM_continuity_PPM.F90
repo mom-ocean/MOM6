@@ -1324,7 +1324,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
     if (.not.domore) exit
 
     if ((itt < max_itts) .or. present(uh_3d)) then
-      do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
+      do concurrent (j=jsh:jeh, k=1:nz, I=ish-1:ieh)
         u_new(I,j,k) = u(I,j,k) + du(I,j) * visc_rem(I,j,k)
       enddo
       call zonal_flux_layer(u_new, h_in, h_W, h_E, &
@@ -1333,15 +1333,17 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
     endif
 
     if (itt < max_itts) then
-      do concurrent (j=jsh:jeh, I=ish-1:ieh)
-        uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(i,j) = 0.0
-      enddo
-      do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
-        uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
-        duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
-      enddo ; enddo
-      do concurrent (j=jsh:jeh, I=ish-1:ieh)
-        uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
+      do concurrent (j=jsh:jeh)
+        do I=ish-1,ieh
+          uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(i,j) = 0.0
+        enddo
+        do k=1,nz ; do I=ish-1,ieh
+          uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
+          duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
+        enddo ; enddo
+        do I=ish-1,ieh
+          uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
+        enddo
       enddo
     endif
   enddo ! itt-loop
