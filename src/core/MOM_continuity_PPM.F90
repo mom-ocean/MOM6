@@ -1494,20 +1494,22 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   endif
 
   ! nvfortran do concurrent bad performance if k is inside
-  do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh, do_I(I,j))
-    visc_rem_lim = max(visc_rem(I,j,k), min_visc_rem*visc_rem_max(I,j))
-    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
-      if (u(I,j,k) + duR(I,j)*visc_rem_lim > -du_CFL(I,j)*visc_rem(I,j,k)) &
-        duR(I,j) = -(u(I,j,k) + du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
-      if (u(I,j,k) + duL(I,j)*visc_rem_lim < du_CFL(I,j)*visc_rem(I,j,k)) &
-        duL(I,j) = -(u(I,j,k) - du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
-    endif
-  enddo ; enddo
+  do concurrent (j=jsh:jeh)
+    do k=1,nz ; do concurrent (I=ish-1:ieh, do_I(I,j))
+      visc_rem_lim = max(visc_rem(I,j,k), min_visc_rem*visc_rem_max(I,j))
+      if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+        if (u(I,j,k) + duR(I,j)*visc_rem_lim > -du_CFL(I,j)*visc_rem(I,j,k)) &
+          duR(I,j) = -(u(I,j,k) + du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
+        if (u(I,j,k) + duL(I,j)*visc_rem_lim < du_CFL(I,j)*visc_rem(I,j,k)) &
+          duL(I,j) = -(u(I,j,k) - du_CFL(I,j)*visc_rem(I,j,k)) / visc_rem_lim
+      endif
+    enddo ; enddo
 
-  do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh, do_I(I,j))
-    u_L(I,j,k) = u(I,j,k) + duL(I,j) * visc_rem(I,j,k)
-    u_R(I,j,k) = u(I,j,k) + duR(I,j) * visc_rem(I,j,k)
-    u_0(I,j,k) = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
+    do concurrent (k=1:nz, I=ish-1:ieh, do_I(I,j))
+      u_L(I,j,k) = u(I,j,k) + duL(I,j) * visc_rem(I,j,k)
+      u_R(I,j,k) = u(I,j,k) + duR(I,j) * visc_rem(I,j,k)
+      u_0(I,j,k) = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
+    enddo
   enddo
 
   call zonal_flux_layer(u_0, h_in, h_W, h_E, uh_0, duhdu_0, &
@@ -1517,13 +1519,14 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   call zonal_flux_layer(u_R, h_in, h_W, h_E, uh_R, duhdu_R, &
                         visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU)
 
-  do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh, do_I(I,j))
-    FAmt_0(I,j) = FAmt_0(I,j) + duhdu_0(I,j,k)
-    FAmt_L(I,j) = FAmt_L(I,j) + duhdu_L(I,j,k)
-    FAmt_R(I,j) = FAmt_R(I,j) + duhdu_R(I,j,k)
-    uhtot_L(I,j) = uhtot_L(I,j) + uh_L(I,j,k)
-    uhtot_R(I,j) = uhtot_R(I,j) + uh_R(I,j,k)
-  enddo ; enddo
+  do concurrent (j=jsh:jeh)
+    do k=1,nz ; do concurrent (I=ish-1:ieh, do_I(I,j))
+      FAmt_0(I,j) = FAmt_0(I,j) + duhdu_0(I,j,k)
+      FAmt_L(I,j) = FAmt_L(I,j) + duhdu_L(I,j,k)
+      FAmt_R(I,j) = FAmt_R(I,j) + duhdu_R(I,j,k)
+      uhtot_L(I,j) = uhtot_L(I,j) + uh_L(I,j,k)
+      uhtot_R(I,j) = uhtot_R(I,j) + uh_R(I,j,k)
+  enddo ; enddo ; enddo
 
   do concurrent (j=jsh:jeh, I=ish-1:ieh) ; if (do_I(I,j)) then
     FA_0 = FAmt_0(I,j) ; FA_avg = FAmt_0(I,j)
