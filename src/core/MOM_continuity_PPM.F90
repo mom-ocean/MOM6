@@ -695,23 +695,23 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     endif
     !   Set limits on du that will keep the CFL number between -1 and 1.
     ! This should be adequate to keep the root bracketed in all cases.
-    do concurrent (j=jsh:jeh, I=ish-1:ieh)
-      I_vrm = 0.0
-      if (visc_rem_max(I,j) > 0.0) I_vrm = 1.0 / visc_rem_max(I,j)
-      if (CS%vol_CFL) then
-        dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
-        dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
-      else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
-      du_max_CFL(I,j) = 2.0* (CFL_dt * dx_W) * I_vrm
-      du_min_CFL(I,j) = -2.0 * (CFL_dt * dx_E) * I_vrm
-      uh_tot_0(I,j) = 0.0 ; duhdu_tot_0(I,j) = 0.0
-    enddo
-    ! poor performance for nvfortran + do concurrent if k is inside loop
-    do k=1,nz
-      do concurrent (j=jsh:jeh, I=ish-1:ieh)
+    do concurrent (j=jsh:jeh)
+      do concurrent (I=ish-1:ieh)
+        I_vrm = 0.0
+        if (visc_rem_max(I,j) > 0.0) I_vrm = 1.0 / visc_rem_max(I,j)
+        if (CS%vol_CFL) then
+          dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+          dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
+        else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
+        du_max_CFL(I,j) = 2.0* (CFL_dt * dx_W) * I_vrm
+        du_min_CFL(I,j) = -2.0 * (CFL_dt * dx_E) * I_vrm
+        uh_tot_0(I,j) = 0.0 ; duhdu_tot_0(I,j) = 0.0
+      enddo
+      ! poor performance for nvfortran + do concurrent if k is inside loop
+      do k=1,nz ; do concurrent (I=ish-1:ieh)
         duhdu_tot_0(I,j) = duhdu_tot_0(I,j) + duhdu(I, j, k)
         uh_tot_0(I,j) = uh_tot_0(I,j) + uh(I,j,k)
-      enddo
+      enddo ; enddo
     enddo
 
     if (use_visc_rem) then
@@ -732,7 +732,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             du_min_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
         enddo ; enddo
       else
-        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
+        do concurrent (j=jsh:jeh) ; do k=1,nz ; do concurrent (I=ish-1:ieh)
           if (CS%vol_CFL) then
             dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
             dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
@@ -742,7 +742,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem_u_tmp(I,j,k)
           if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
             du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem_u_tmp(I,j,k)
-        enddo ; enddo
+        enddo ; enddo ; enddo
       endif
     else
       ! untested!
@@ -801,7 +801,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                               ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
 
         if (present(u_cor)) then
-          do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
+          do concurrent (j=jsh:jeh, k=1:nz, I=ish-1:ieh)
             u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
           enddo
           if (any_simple_OBC) then 
