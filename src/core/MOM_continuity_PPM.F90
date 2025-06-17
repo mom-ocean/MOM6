@@ -982,9 +982,9 @@ pure subroutine zonal_flux_layere(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, GV
                             intent(in)    :: h_W      !< West edge thickness [H ~> m or kg m-2].
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  &
                             intent(in)    :: h_E      !< East edge thickness [H ~> m or kg m-2].
-  real,                     intent(inout) :: uh       !< Zonal mass or volume
+  real,                     intent(out) :: uh       !< Zonal mass or volume
                                                       !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real,                     intent(inout) :: duhdu    !< Partial derivative of uh
+  real,                     intent(out) :: duhdu    !< Partial derivative of uh
                                                       !! with u [H L ~> m2 or kg m-1].
   real,                     intent(in)    :: dt       !< Time increment [T ~> s]
   type(unit_scale_type),    intent(in)    :: US       !< A dimensional unit scaling type.
@@ -1318,9 +1318,10 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
                        !! faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1].
   type(ocean_OBC_type),             optional, pointer       :: OBC !< Open boundaries control structure.
   ! Local variables
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
-    uh_aux, &      ! An auxiliary zonal volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real :: &
     duhdu          ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+    uh_aux      ! An auxiliary zonal volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
     uh_err, &      ! Difference between uhbt and the summed uh [H L2 T-1 ~> m3 s-1 or kg s-1].
     uh_err_best, & ! The smallest value of uh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -1332,8 +1333,9 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   real :: ddu      ! The change in du from the previous iteration [L T-1 ~> m s-1].
   real :: tol_eta  ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel  ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
-  integer :: i, j, k, nz, itt, max_itts = 20
+  integer :: i, j, k, nz, itt, tmpi, tmpj, tmpk
   logical :: domore, do_I(SZIB_(G),SZJ_(G))
+  integer, parameter:: max_itts = 20
 
   nz = GV%ke
 
@@ -1341,7 +1343,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   !$omp   map(to: uh_3d, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
   !$omp       duhdu_tot_0, G, G%IareaT, CS, u, visc_rem, h_W, h_E, h_in, G%dy_Cu, &
   !$omp       G%IdxT, por_face_areaU) &
-  !$omp   map(alloc: uh_aux, duhdu, du, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, u_new)
+  !$omp   map(alloc: uh_aux, du, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, u_new)
 
   if (present(uh_3d)) then
     do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
@@ -1402,19 +1404,17 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
 
     if ((itt < max_itts) .or. present(uh_3d)) then
       do concurrent (j=jsh:jeh)
-        ! can't join these loops due to compiler bug?
-        do concurrent (k=1:nz, I=ish-1:ieh, do_I(I,j))
-          u_new = u(I,j,k) + du(I,j) * visc_rem(I,j,k)
-          call zonal_flux_layere(u_new, h_in, h_W, h_E, &
-                                uh_aux(I,j,k), duhdu(I,j,k), visc_rem(I,j,k), &
-                                dt, G, GV, US, I, j, k, CS%vol_CFL, por_face_areaU(I,j,k), OBC)
-        enddo
         do concurrent (I=ish-1:ieh)
           uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(I,j) = 0.0
         enddo
-        do k=1,nz ; do concurrent (I=ish-1:ieh)
+        do k=1,nz ; do concurrent (I=ish-1:ieh, do_I(I,j))
+          u_new = u(I,j,k) + du(I,j) * visc_rem(I,j,k)
+          tmpi = i ; tmpj = j ; tmpk = k ! needed to get around an nvfortran bug
+          call zonal_flux_layere(u_new, h_in, h_W, h_E, &
+                                uh_aux(I,j,k), duhdu, visc_rem(I,j,k), &
+                                dt, G, GV, US, tmpi, tmpj, tmpk, CS%vol_CFL, por_face_areaU(I,j,k), OBC)
           uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
-          duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu(I,j,k)
+          duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu
         enddo ; enddo
         do concurrent (I=ish-1:ieh)
           uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
@@ -1434,7 +1434,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
 
   !$omp target exit data &
   !$omp   map(from: uh_3d, du) &
-  !$omp   map(release: uh_aux, duhdu, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
+  !$omp   map(release: uh_aux, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
   !$omp       duhdu_tot_0, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, G, G%IareaT, CS, &
   !$omp       u, visc_rem, u_new, h_W, h_E, h_in, G%dy_Cu, G%IdxT, por_face_areaU)
 
