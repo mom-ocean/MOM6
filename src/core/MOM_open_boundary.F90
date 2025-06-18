@@ -358,6 +358,16 @@ type, public :: ocean_OBC_type
   logical :: OBC_pe !< Is there an open boundary on this tile?
   logical :: u_OBCs_on_PE   !< True if there are any u-point OBCs on this PE, including in its halos.
   logical :: v_OBCs_on_PE   !< True if there are any v-point OBCs on this PE, including in its halos.
+  logical :: v_N_OBCs_on_PE !< True if there are any northern v-point OBCs on this PE, including in its halos.
+  logical :: v_S_OBCs_on_PE !< True if there are any southern v-point OBCs on this PE, including in its halos.
+  logical :: u_E_OBCs_on_PE !< True if there are any eastern u-point OBCs on this PE, including in its halos.
+  logical :: u_W_OBCs_on_PE !< True if there are any western u-point OBCs on this PE, including in its halos.
+  !>@{ Index ranges on the local PE for the open boundary conditions in various directions
+  integer :: Is_u_W_obc, Ie_u_W_obc, js_u_W_obc, je_u_W_obc
+  integer :: Is_u_E_obc, Ie_u_E_obc, js_u_E_obc, je_u_E_obc
+  integer :: is_v_S_obc, ie_v_S_obc, Js_v_S_obc, Je_v_S_obc
+  integer :: is_v_N_obc, ie_v_N_obc, Js_v_N_obc, Je_v_N_obc
+  !>@}
   type(remapping_CS), pointer :: remap_z_CS => NULL() !< ALE remapping control structure for
                                                       !! z-space data on segments
   type(remapping_CS), pointer :: remap_h_CS => NULL() !< ALE remapping control structure for
@@ -670,6 +680,9 @@ subroutine open_boundary_config(G, US, param_file, OBC)
              "Unable to interpret "//segment_param_str//" = "//trim(segment_str))
       endif
     enddo
+    ! Set arrays indicating the segment number and segment direction, and also store the
+    ! range of indices within which various orientations of OBCs can be found on this PE.
+    call set_segnum_signs(OBC, G)
 
     ! Moved this earlier because time_interp_external_init needs to be called
     ! before anything that uses time_interp_external (such as initialize_segment_data)
@@ -1092,7 +1105,9 @@ end function field_is_tidal
 
 !> This subroutine sets the sign of the OBC%segnum_u and OBC%segnum_v arrays to indicate the
 !! direction of the faces - positive for logically eastern or northern OBCs and neagative
-!! for logically western or southern OBCs, or zero on non-OBC points.
+!! for logically western or southern OBCs, or zero on non-OBC points.  Also store information
+!! about which orientations of OBCs ar on this PE and the range of indices within which the
+!! various orientations of OBCs can be found on this PE.
 subroutine set_segnum_signs(OBC, G)
   type(ocean_OBC_type),   intent(inout) :: OBC !< Open boundary control structure, perhaps on a rotated grid.
   type(dyn_horgrid_type), intent(in)    :: G   !< Ocean grid structure used by OBC
@@ -1114,6 +1129,48 @@ subroutine set_segnum_signs(OBC, G)
       OBC%v_OBCs_on_PE = .true.
       if (OBC%segment(abs(OBC%segnum_v(i,J)))%direction == OBC_DIRECTION_S) &
         OBC%segnum_v(i,J) = -abs(OBC%segnum_v(i,J))
+    endif
+  enddo ; enddo
+
+  ! Determine the maximum and minimum index range for various directions of OBC points on this PE
+  ! by first setting these one point outside of the wrong side of the domain.
+  OBC%Is_u_W_obc = G%IedB + 1 ; OBC%Ie_u_W_obc = G%IsdB - 1
+  OBC%js_u_W_obc = G%jed + 1 ; OBC%je_u_W_obc = G%jsd - 1
+  OBC%Is_u_E_obc = G%IedB + 1 ; OBC%Ie_u_E_obc = G%IsdB - 1
+  OBC%js_u_E_obc = G%jed + 1 ; OBC%je_u_E_obc = G%jsd - 1
+  OBC%is_v_S_obc = G%ied + 1 ; OBC%ie_v_S_obc = G%isd - 1
+  OBC%Js_v_S_obc = G%JedB + 1 ; OBC%Je_v_S_obc = G%JsdB - 1
+  OBC%is_v_N_obc = G%ied + 1 ; OBC%ie_v_N_obc = G%isd - 1
+  OBC%Js_v_N_obc = G%JedB + 1 ; OBC%Je_v_N_obc = G%JsdB - 1
+  OBC%v_N_OBCs_on_PE = .false. ; OBC%v_S_OBCs_on_PE = .false.
+  OBC%u_E_OBCs_on_PE = .false. ; OBC%u_W_OBCs_on_PE = .false.
+  ! Note that the loop ranges are reduced because outward facing OBCs can not be applied at edge points.
+  do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB-1
+    if (OBC%segnum_u(I,j) < 0) then ! This point has OBC_DIRECTION_W.
+      OBC%Is_u_W_obc = min(I, OBC%Is_u_W_obc) ; OBC%Ie_u_W_obc = max(I, OBC%Ie_u_W_obc)
+      OBC%js_u_W_obc = min(j, OBC%js_u_W_obc) ; OBC%je_u_W_obc = max(j, OBC%je_u_W_obc)
+      OBC%u_W_OBCs_on_PE = .true.
+    endif
+  enddo ; enddo
+  do j=G%jsd,G%jed ; do I=G%IsdB+1,G%IedB
+    if (OBC%segnum_u(I,j) > 0) then ! This point has OBC_DIRECTION_E.
+      OBC%Is_u_E_obc = min(I, OBC%Is_u_E_obc) ; OBC%Ie_u_E_obc = max(I, OBC%Ie_u_E_obc)
+      OBC%js_u_E_obc = min(j, OBC%js_u_E_obc) ; OBC%je_u_E_obc = max(j, OBC%je_u_E_obc)
+      OBC%u_E_OBCs_on_PE = .true.
+    endif
+  enddo ; enddo
+  do J=G%JsdB,G%JedB-1 ; do i=G%isd,G%ied
+    if (OBC%segnum_v(i,J) < 0)  then ! This point has OBC_DIRECTION_S.
+      OBC%is_v_S_obc = min(i, OBC%is_v_S_obc) ; OBC%ie_v_S_obc = max(i, OBC%ie_v_S_obc)
+      OBC%Js_v_S_obc = min(J, OBC%Js_v_S_obc) ; OBC%Je_v_S_obc = max(J, OBC%Je_v_S_obc)
+      OBC%v_S_OBCs_on_PE = .true.
+    endif
+  enddo ; enddo
+  do J=G%JsdB+1,G%JedB ; do i=G%isd,G%ied
+    if (OBC%segnum_v(i,J) > 0) then ! This point has OBC_DIRECTION_N.
+      OBC%is_v_N_obc = min(i, OBC%is_v_N_obc) ; OBC%ie_v_N_obc = max(i, OBC%ie_v_N_obc)
+      OBC%Js_v_N_obc = min(J, OBC%Js_v_N_obc) ; OBC%Je_v_N_obc = max(J, OBC%Je_v_N_obc)
+      OBC%v_N_OBCs_on_PE = .true.
     endif
   enddo ; enddo
 
