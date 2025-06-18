@@ -2327,6 +2327,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   logical :: semi_Boussinesq   ! If true, this run is partially non-Boussinesq
   logical :: use_KPP           ! If true, diabatic is using KPP vertical mixing
   logical :: MLE_use_PBL_MLD   ! If true, use stored boundary layer depths for submesoscale restratification.
+  logical :: OBC_reservoir_init_bug
   integer :: nkml, nkbl, verbosity, write_geom, number_of_OBC_segments
   integer :: dynamics_stencil  ! The computational stencil for the calculations
                                ! in the dynamic core.
@@ -3113,31 +3114,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     ! reservoirs are used.
     call open_boundary_register_restarts(HI, GV, US, CS%OBC, CS%tracer_Reg, &
                           param_file, restart_CSp, use_temperature)
-    ! Is block of code this necessary at all?
-    if (CS%rotate_index .and. associated(OBC_in)) then
-      ! if (mod(turns,2) == 0) then
-        if (CS%OBC%radiation_BCs_exist_globally) then
-          OBC_in%rx_normal => CS%OBC%rx_normal
-          OBC_in%ry_normal => CS%OBC%ry_normal
-        endif
-        if (CS%OBC%oblique_BCs_exist_globally) then
-          OBC_in%rx_oblique_u => CS%OBC%rx_oblique_u
-          OBC_in%ry_oblique_u => CS%OBC%ry_oblique_u
-          OBC_in%rx_oblique_v => CS%OBC%rx_oblique_v
-          OBC_in%ry_oblique_v => CS%OBC%ry_oblique_v
-          OBC_in%cff_normal_u => CS%OBC%cff_normal_u
-          OBC_in%cff_normal_v => CS%OBC%cff_normal_v
-        endif
-        if (associated(CS%OBC%tres_x)) then
-          OBC_in%tres_x => CS%OBC%tres_x
-        endif
-        if (associated(CS%OBC%tres_y)) then
-          OBC_in%tres_y => CS%OBC%tres_y
-        endif
-      ! else
-        ! Do we need to swap around the u- and v-components?
-      ! endif
-    endif
   endif
 
   if (CS%debug_OBCs .and. associated(CS%OBC)) call write_OBC_info(CS%OBC, G, GV, US)
@@ -3222,6 +3198,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
       CS%tv%T => T_in
       CS%tv%S => S_in
+
+      if (associated(OBC_in)) then
+        ! Log this parameter in MOM_initialize_state
+        call get_param(param_file, "MOM", "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
+                   "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
+                   "interior tracer concentrations regardless of properties that may be explicitly "//&
+                   "specified for the reservoir concentrations.", default=enable_bugs, do_not_log=.true.)
+        if (OBC_reservoir_init_bug .and. (allocated(CS%OBC%tres_x) .or. allocated(CS%OBC%tres_y))) &
+          call MOM_error(FATAL, "OBC_RESERVOIR_INIT_BUG can not be set to true with grid rotation.")
+      endif
     endif
 
     if (use_ice_shelf) then
