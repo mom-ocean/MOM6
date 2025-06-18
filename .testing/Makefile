@@ -77,7 +77,7 @@ AC_SRCDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../ac
 -include config.mk
 
 # Set the FMS library
-FMS_COMMIT ?= 2023.03
+FMS_COMMIT ?= 2025.02.01
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
 export FMS_COMMIT
 export FMS_URL
