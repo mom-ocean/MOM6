@@ -1372,65 +1372,64 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   !$omp       G%IdxT, por_face_areaU) &
   !$omp   map(alloc: uh_aux, du, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, u_new)
 
-  if (present(uh_3d)) then
-    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
-      uh_aux(i,j,k) = uh_3d(I,j,k)
+  ! NVIDIA do concurrent doesn't work with private arrays (private scalars OK)
+  do concurrent (j=jsh:jeh)
+    if (present(uh_3d)) then
+      do concurrent (k=1:nz, I=ish-1:ieh)
+        uh_aux(I,j,k) = uh_3d(I,j,k)
+      enddo
+    endif
+    do concurrent (I=ish-1:ieh)
+      du(I,j) = 0.0 ; do_I(I,j) = do_I_in(I,j)
+      du_max(I,j) = du_max_CFL(I,j) ; du_min(I,j) = du_min_CFL(I,j)
+      uh_err(I,j) = uh_tot_0(I,j) - uhbt(I,j) ; duhdu_tot(I,j) = duhdu_tot_0(I,j)
+      uh_err_best(I,j) = abs(uh_err(I,j))
     enddo
-  endif
+    do itt=1,max_itts
+      select case (itt)
+        case (:1) ; tol_eta = 1e-6 * CS%tol_eta
+        case (2)  ; tol_eta = 1e-4 * CS%tol_eta
+        case (3)  ; tol_eta = 1e-2 * CS%tol_eta
+        case default ; tol_eta = CS%tol_eta
+      end select
+      tol_vel = CS%tol_vel
 
-  do concurrent (j=jsh:jeh, I=ish-1:ieh)
-    du(I,j) = 0.0 ; do_I(I,j) = do_I_in(I,j)
-    du_max(I,j) = du_max_CFL(I,j) ; du_min(I,j) = du_min_CFL(I,j)
-    uh_err(I,j) = uh_tot_0(I,j) - uhbt(I,j) ; duhdu_tot(I,j) = duhdu_tot_0(I,j)
-    uh_err_best(I,j) = abs(uh_err(I,j))
-  enddo
-
-  do itt=1,max_itts
-    select case (itt)
-      case (:1) ; tol_eta = 1e-6 * CS%tol_eta
-      case (2)  ; tol_eta = 1e-4 * CS%tol_eta
-      case (3)  ; tol_eta = 1e-2 * CS%tol_eta
-      case default ; tol_eta = CS%tol_eta
-    end select
-    tol_vel = CS%tol_vel
-
-    do concurrent (j=jsh:jeh, I=ish-1:ieh)
-      if (uh_err(I,j) > 0.0) then ; du_max(I,j) = du(I,j)
-      elseif (uh_err(I,j) < 0.0) then ; du_min(I,j) = du(I,j)
-      else ; do_I(I,j) = .false. ; endif
-    enddo
-    domore = .false.
-    do concurrent (j=jsh:jeh, I=ish-1:ieh, do_I(I,j)) reduce(.or.:domore) ! might prefer reduction on CPU
-      if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I,j)) > tol_eta) .or. &
-          (CS%better_iter .and. ((abs(uh_err(I,j)) > tol_vel * duhdu_tot(I,j)) .or. &
-                                 (abs(uh_err(I,j)) > uh_err_best(I,j))) )) then
-      !   Use Newton's method, provided it stays bounded.  Otherwise bisect
-      ! the value with the appropriate bound.
-        ddu = -uh_err(I,j) / duhdu_tot(I,j)
-        du_prev = du(I,j)
-        du(I,j) = du(I,j) + ddu
-        if (abs(ddu) < 1.0e-15*abs(du(I,j))) then
-          do_I(I,j) = .false. ! ddu is small enough to quit.
-        elseif (ddu > 0.0) then
-          if (du(I,j) >= du_max(I,j)) then
-            du(I,j) = 0.5*(du_prev + du_max(I,j))
-            if (du_max(I,j) - du_prev < 1.0e-15*abs(du(I,j))) do_I(I,j) = .false.
+      domore = .false.
+      do concurrent (I=ish-1:ieh, do_I(I,j))
+        if (uh_err(I,j) > 0.0) then ; du_max(I,j) = du(I,j)
+        elseif (uh_err(I,j) < 0.0) then ; du_min(I,j) = du(I,j)
+        else ; do_I(I,j) = .false. ; endif
+        if ((dt * min(G%IareaT(i,j),G%IareaT(i+1,j))*abs(uh_err(I,j)) > tol_eta) .or. &
+            (CS%better_iter .and. ((abs(uh_err(I,j)) > tol_vel * duhdu_tot(I,j)) .or. &
+                                  (abs(uh_err(I,j)) > uh_err_best(I,j))) )) then
+        !   Use Newton's method, provided it stays bounded.  Otherwise bisect
+        ! the value with the appropriate bound.
+          ddu = -uh_err(I,j) / duhdu_tot(I,j)
+          du_prev = du(I,j)
+          du(I,j) = du(I,j) + ddu
+          if (abs(ddu) < 1.0e-15*abs(du(I,j))) then
+            do_I(I,j) = .false. ! ddu is small enough to quit.
+          elseif (ddu > 0.0) then
+            if (du(I,j) >= du_max(I,j)) then
+              du(I,j) = 0.5*(du_prev + du_max(I,j))
+              if (du_max(I,j) - du_prev < 1.0e-15*abs(du(I,j))) do_I(I,j) = .false.
+            endif
+          else ! ddu < 0.0
+            if (du(I,j) <= du_min(I,j)) then
+              du(I,j) = 0.5*(du_prev + du_min(I,j))
+              if (du_prev - du_min(I,j) < 1.0e-15*abs(du(I,j))) do_I(I,j) = .false.
+            endif
           endif
-        else ! ddu < 0.0
-          if (du(I,j) <= du_min(I,j)) then
-            du(I,j) = 0.5*(du_prev + du_min(I,j))
-            if (du_prev - du_min(I,j) < 1.0e-15*abs(du(I,j))) do_I(I,j) = .false.
-          endif
+          if (do_I(I,j)) domore = .true.
+        else
+          do_I(I,j) = .false.
         endif
-        if (do_I(I,j)) domore = .true.
-      else
-        do_I(I,j) = .false.
-      endif
-    enddo
-    if (.not.domore) exit
+      enddo
 
-    if ((itt < max_itts) .or. present(uh_3d)) then
-      do concurrent (j=jsh:jeh)
+      ! saves time on CPU, but destroys GPU performance
+      if (.not.domore) exit
+
+      if ((itt < max_itts) .or. present(uh_3d)) then
         do concurrent (I=ish-1:ieh)
           uh_err(I,j) = -uhbt(I,j) ; duhdu_tot(I,j) = 0.0
         enddo
@@ -1439,26 +1438,27 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
           call zonal_flux_layere(u_new, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
                                 uh_aux(I,j,k), duhdu, visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
                                 dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+          ! I think the if statement is a little exy
           if (local_OBC) call zonal_flux_layere_OBC(u_new, h_in, uh_aux(I,j,k), duhdu, visc_rem(I,j,k), &
-                                 G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
+                                G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
           uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
           duhdu_tot(I,j) = duhdu_tot(I,j) + duhdu
         enddo ; enddo
         do concurrent (I=ish-1:ieh)
           uh_err_best(I,j) = min(uh_err_best(I,j), abs(uh_err(I,j)))
         enddo
+      endif
+
+    enddo ! itt-loop
+    if (present(uh_3d)) then
+      do concurrent (k=1:nz, I=ish-1:ieh)
+        uh_3d(I,j,k) = uh_aux(I,j,k)
       enddo
     endif
-  enddo ! itt-loop
+  enddo ! j-loop
   ! If there are any faces which have not converged to within the tolerance,
   ! so-be-it, or else use a final upwind correction?
   ! This never seems to happen with 20 iterations as max_itt.
-
-  if (present(uh_3d)) then
-    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
-      uh_3d(I,j,k) = uh_aux(I,j,k)
-    enddo
-  endif
 
   !$omp target exit data &
   !$omp   map(from: uh_3d, du) &
