@@ -1038,30 +1038,46 @@ subroutine ALE_remap_set_h_vel_OBC(G, GV, h_new, h_u, h_v, OBC)
   type(ocean_OBC_type),                      pointer       :: OBC          !< Open boundary structure
 
   ! Local variables
-  integer :: i, j, k, nz
+  integer :: i, j, k, nz, is_OBC, ie_OBC, js_OBC, je_OBC
 
   if (.not.associated(OBC)) return
 
   nz = GV%ke
 
-    ! Take open boundary conditions into account.
+  ! Take open boundary conditions into account.
+  if (OBC%u_E_OBCs_on_PE) then
+    js_OBC = max(G%jsc,  OBC%js_u_E_obc) ; je_OBC = min(G%jec,  OBC%je_u_E_obc)
+    Is_OBC = max(G%IscB, OBC%Is_u_E_obc) ; Ie_OBC = min(G%IecB, OBC%Ie_u_E_obc)
     !$OMP parallel do default(shared)
-    do j=G%jsc,G%jec ; do I=G%IscB,G%IecB ; if (OBC%segnum_u(I,j) /= 0) then
-      if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
-        do k=1,nz ; h_u(I,j,k) = h_new(i,j,k) ; enddo
-      else !  if (OBC%segnum_u(I,j) < 0) OBC_DIRECTION_W
-        do k=1,nz ; h_u(I,j,k) = h_new(i+1,j,k) ; enddo
-      endif
+    do j=js_OBC,je_OBC ; do I=Is_OBC,Ie_OBC ; if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
+      do k=1,nz ; h_u(I,j,k) = h_new(i,j,k) ; enddo
     endif ; enddo ; enddo
+  endif
+  if (OBC%u_W_OBCs_on_PE) then
+    js_OBC = max(G%jsc,  OBC%js_u_W_obc) ; je_OBC = min(G%jec,  OBC%je_u_W_obc)
+    Is_OBC = max(G%IscB, OBC%Is_u_W_obc) ; Ie_OBC = min(G%IecB, OBC%Ie_u_W_obc)
+    !$OMP parallel do default(shared)
+    do j=js_OBC,je_OBC ; do I=Is_OBC,Ie_OBC ; if (OBC%segnum_u(I,j) < 0) then !  OBC_DIRECTION_W
+      do k=1,nz ; h_u(I,j,k) = h_new(i+1,j,k) ; enddo
+    endif ; enddo ; enddo
+  endif
 
+  if (OBC%v_N_OBCs_on_PE) then
+    Js_OBC = max(G%JscB, OBC%Js_v_N_obc) ; Je_OBC = min(G%JecB, OBC%Je_v_N_obc)
+    is_OBC = max(G%isc,  OBC%is_v_N_obc) ; ie_OBC = min(G%iec,  OBC%ie_v_N_obc)
     !$OMP parallel do default(shared)
-    do J=G%JscB,G%JecB ; do i=G%isc,G%iec ; if (OBC%segnum_v(i,J) /= 0) then
-      if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
-        do k=1,nz ; h_v(i,J,k) = h_new(i,j,k) ; enddo
-      else !  if (OBC%segnum_v(i,J)) < 0)  !  OBC_DIRECTION_S
-        do k=1,nz ; h_v(i,J,k) = h_new(i,j+1,k) ; enddo
-      endif
+    do J=Js_OBC,Je_OBC ; do i=is_OBC,ie_OBC ; if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
+      do k=1,nz ; h_v(i,J,k) = h_new(i,j,k) ; enddo
     endif ; enddo ; enddo
+  endif
+  if (OBC%v_S_OBCs_on_PE) then
+    Js_OBC = max(G%JscB, OBC%Js_v_S_obc) ; Je_OBC = min(G%JecB, OBC%Je_v_S_obc)
+    is_OBC = max(G%isc,  OBC%is_v_S_obc) ; ie_OBC = min(G%iec,  OBC%ie_v_S_obc)
+    !$OMP parallel do default(shared)
+    do J=Js_OBC,Je_OBC ; do i=is_OBC,ie_OBC ; if (OBC%segnum_v(i,J) < 0) then !  OBC_DIRECTION_S
+      do k=1,nz ; h_v(i,J,k) = h_new(i,j+1,k) ; enddo
+    endif ; enddo ; enddo
+  endif
 
 end subroutine ALE_remap_set_h_vel_OBC
 

@@ -273,19 +273,24 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
         S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
       enddo
       if (OBC_friendly) then
-        do I=is-1,ie
-          if (OBC%segnum_u(I,j) /= 0) then
+        if (OBC%u_E_OBCs_on_PE .and. (j>=OBC%js_u_E_obc) .and. (j<=OBC%je_u_E_obc)) then
+          do I = max(is-1, OBC%Is_u_E_obc), min(ie, OBC%Ie_u_E_obc)
             if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
               pres_u(I) = pres(i,j,K)
               T_u(I) = 0.5*(T(i,j,k) + T(i,j,k-1))
               S_u(I) = 0.5*(S(i,j,k) + S(i,j,k-1))
-            elseif (OBC%segnum_u(I,j) < 0) then !  OBC_DIRECTION_W
+            endif
+          enddo
+        endif
+        if (OBC%u_W_OBCs_on_PE .and. (j>=OBC%js_u_W_obc) .and. (j<=OBC%je_u_W_obc)) then
+          do I = max(is-1, OBC%Is_u_W_obc), min(ie, OBC%Ie_u_W_obc)
+            if (OBC%segnum_u(I,j) < 0) then !  OBC_DIRECTION_W
               pres_u(I) = pres(i+1,j,K)
               T_u(I) = 0.5*(T(i+1,j,k) + T(i+1,j,k-1))
               S_u(I) = 0.5*(S(i+1,j,k) + S(i+1,j,k-1))
             endif
-          endif
-        enddo
+          enddo
+        endif
       endif
       call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
                                     tv%eqn_of_state, EOSdom_u)
@@ -445,19 +450,24 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
         S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
       enddo
       if (OBC_friendly) then
-        do i=is,ie
-          if (OBC%segnum_v(i,J) /= 0) then
+        if (OBC%v_N_OBCs_on_PE .and. (J>=OBC%Js_v_N_obc) .and. (J<=OBC%Je_v_N_obc)) then
+          do i = max(is, OBC%is_v_N_obc), min(ie, OBC%ie_v_N_obc)
             if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
               pres_v(i) = pres(i,j,K)
               T_v(i) = 0.5*(T(i,j,k) + T(i,j,k-1))
               S_v(i) = 0.5*(S(i,j,k) + S(i,j,k-1))
-            elseif (OBC%segnum_v(i,J) < 0) then !  OBC_DIRECTION_S
+            endif
+          enddo
+        endif
+        if (OBC%v_S_OBCs_on_PE .and. (J>=OBC%Js_v_S_obc) .and. (J<=OBC%Je_v_S_obc)) then
+          do i = max(is, OBC%is_v_S_obc), min(ie, OBC%ie_v_S_obc)
+            if (OBC%segnum_v(i,J) < 0) then !  OBC_DIRECTION_S
               pres_v(i) = pres(i,j+1,K)
               T_v(i) = 0.5*(T(i,j+1,k) + T(i,j+1,k-1))
               S_v(i) = 0.5*(S(i,j+1,k) + S(i,j+1,k-1))
             endif
-          endif
-        enddo
+          enddo
+        endif
       endif
       call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
                                     tv%eqn_of_state, EOSdom_v)

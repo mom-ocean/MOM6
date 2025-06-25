@@ -1437,6 +1437,8 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
     zi_dir   !  A trinary logical array indicating which thicknesses to use for
              !  finding z_clear.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: is_N_OBC, is_S_OBC, Is_E_OBC, Is_W_OBC, ie_N_OBC, ie_S_OBC, Ie_E_OBC, Ie_W_OBC
+
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
@@ -1475,11 +1477,20 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
     allocate(CS%a1_shelf_v(G%isd:G%ied,G%JsdB:G%JedB), source=0.0)
   endif
 
+  if (associated(OBC)) then
+    ! Set the i-ranges that contain various orientations of OBCs on this PE.
+    is_N_OBC = max(is,  OBC%is_v_N_obc) ; ie_N_OBC = min(ie,  OBC%ie_v_N_obc)
+    is_S_OBC = max(is,  OBC%is_v_S_obc) ; ie_S_OBC = min(ie,  OBC%ie_v_S_obc)
+    Is_E_OBC = max(Isq, OBC%Is_u_E_obc) ; Ie_E_OBC = min(Ieq, OBC%Ie_u_E_obc)
+    Is_W_OBC = max(Isq, OBC%Is_u_W_obc) ; Ie_W_OBC = min(Ieq, OBC%Ie_u_W_obc)
+  endif
+
   call find_ustar(forces, tv, Ustar_2d, G, GV, US, halo=1)
 
   !$OMP parallel do default(private) shared(G,GV,US,CS,tv,visc,OBC,Isq,Ieq,nz,u,h,dz,forces, &
   !$OMP                                     Ustar_2d,h_neglect,dz_neglect,dt,I_valBL,hML_u,Kv_u, &
-  !$OMP                                     a_cpl_max,I_Hbbl_gl90,Kv_gl90_u) &
+  !$OMP                                     a_cpl_max,I_Hbbl_gl90,Kv_gl90_u, &
+  !$OMP                                     Is_E_OBC,Ie_E_OBC,Is_W_OBC,Ie_W_OBC) &
   !$OMP                              firstprivate(I_Hbbl)
   do j=G%Jsc,G%Jec
     do I=Isq,Ieq ; do_i(I) = (G%mask2dCu(I,j) > 0.0) ; enddo
@@ -1503,24 +1514,29 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
     enddo
 
     ! Project thickness outward across OBCs using a zero-gradient condition.
-    if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-      do I=Isq,Ieq ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= 0)) then
-        if (OBC%segnum_u(I,j) > 0) then  ! OBC_DIRECTION_E
+    if (associated(OBC)) then ; if (OBC%u_E_OBCs_on_PE) then
+      if ((j >= OBC%js_u_E_obc) .and. (j <= OBC%je_u_E_obc)) then
+        do I=Is_E_OBC,Ie_E_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) > 0)) then  ! OBC_DIRECTION_E
           do k=1,nz
             h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(I,k) = 0.
             dz_harm(I,k) = dz(i,j,k) ; dz_arith(I,k) = dz(i,j,k)
           enddo
           Dmin(I) = G%bathyT(i,j)
           zi_dir(I) = -1
-        elseif (OBC%segnum_u(I,j) < 0) then  ! OBC_DIRECTION_W
+        endif ; enddo
+      endif
+    endif ; endif
+    if (associated(OBC)) then ; if (OBC%u_W_OBCs_on_PE) then
+      if ((j >= OBC%js_u_W_obc) .and. (j <= OBC%je_u_W_obc)) then
+        do I=Is_W_OBC,Ie_W_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) < 0)) then  ! OBC_DIRECTION_W
           do k=1,nz
             h_harm(I,k) = h(i+1,j,k) ; h_arith(I,k) = h(i+1,j,k) ; h_delta(I,k) = 0.
             dz_harm(I,k) = dz(i+1,j,k) ; dz_arith(I,k) = dz(i+1,j,k)
           enddo
           Dmin(I) = G%bathyT(i+1,j)
           zi_dir(I) = 1
-        endif
-      endif ; enddo
+        endif ; enddo
+      endif
     endif ; endif
 
 !    The following block calculates the thicknesses at velocity
@@ -1690,7 +1706,8 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
   ! Now work on v-points.
   !$OMP parallel do default(private) shared(G,GV,US,CS,tv,OBC,visc,is,ie,Jsq,Jeq,nz,v,h,dz,forces, &
   !$OMP                                     Ustar_2d,h_neglect,dz_neglect,dt,I_valBL,hML_v,Kv_v, &
-  !$OMP                                     a_cpl_max,I_Hbbl_gl90,Kv_gl90_v) &
+  !$OMP                                     a_cpl_max,I_Hbbl_gl90,Kv_gl90_v, &
+  !$OMP                                     is_N_OBC,ie_N_OBC,is_S_OBC,ie_S_OBC) &
   !$OMP                              firstprivate(I_Hbbl)
   do J=Jsq,Jeq
     do i=is,ie ; do_i(i) = (G%mask2dCv(i,J) > 0.0) ; enddo
@@ -1714,24 +1731,29 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
     enddo
 
     ! Project thickness outward across OBCs using a zero-gradient condition.
-    if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-      do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= 0)) then
-        if (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
+    if (associated(OBC)) then ; if (OBC%v_N_OBCs_on_PE) then
+      if ((J >= OBC%Js_v_N_obc) .and. (J <= OBC%Je_v_N_obc)) then
+        do i=is_N_OBC,ie_N_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) > 0)) then  ! OBC_DIRECTION_N
           do k=1,nz
             h_harm(I,k) = h(i,j,k) ; h_arith(I,k) = h(i,j,k) ; h_delta(i,k) = 0.
             dz_harm(I,k) = dz(i,j,k) ; dz_arith(I,k) = dz(i,j,k)
           enddo
           Dmin(I) = G%bathyT(i,j)
           zi_dir(I) = -1
-        elseif (OBC%segnum_v(i,J) < 0) then  ! OBC_DIRECTION_S
+        endif ; enddo
+      endif
+    endif ; endif
+    if (associated(OBC)) then ; if (OBC%v_S_OBCs_on_PE) then
+      if ((J >= OBC%Js_v_S_obc) .and. (J <= OBC%Je_v_S_obc)) then
+        do i=is_S_OBC,ie_S_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) < 0)) then !  OBC_DIRECTION_S
           do k=1,nz
             h_harm(i,k) = h(i,j+1,k) ; h_arith(i,k) = h(i,j+1,k) ; h_delta(i,k) = 0.
             dz_harm(i,k) = dz(i,j+1,k) ; dz_arith(i,k) = dz(i,j+1,k)
           enddo
           Dmin(i) = G%bathyT(i,j+1)
           zi_dir(i) = 1
-        endif
-      endif ; enddo
+        endif ; enddo
+      endif
     endif ; endif
 
 !    The following block calculates the thicknesses at velocity
@@ -2010,8 +2032,8 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
   real :: kv_top  ! A viscosity associated with the top boundary layer [H Z T-1 ~> m2 s-1 or Pa s]
   logical :: do_shelf, do_OBCs, can_exit
-  integer :: i, k, is, ie, max_nk
-  integer :: nz
+  integer :: i, k, is, ie, max_nk, nz
+  integer :: is_N_OBC, is_S_OBC, Is_E_OBC, Is_W_OBC, ie_N_OBC, ie_S_OBC, Ie_E_OBC, Ie_W_OBC
 
   a_cpl(:,:) = 0.0
   Kv_tot(:,:) = 0.0
@@ -2032,7 +2054,18 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
   do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
   do_OBCs = .false.
-  if (associated(OBC)) then ; do_OBCS = (OBC%number_of_segments > 0) ; endif
+  if (associated(OBC)) then
+    if (work_on_u) then
+      do_OBCS = OBC%u_E_OBCs_on_PE .or. OBC%u_W_OBCs_on_PE
+      Is_E_OBC = max(G%IscB, OBC%Is_u_E_obc) ; Ie_E_OBC = min(G%IecB, OBC%Ie_u_E_obc)
+      Is_W_OBC = max(G%IscB, OBC%Is_u_W_obc) ; Ie_W_OBC = min(G%IecB, OBC%Ie_u_W_obc)
+    else
+      do_OBCS = OBC%v_N_OBCs_on_PE .or. OBC%v_S_OBCs_on_PE
+      is_N_OBC = max(G%isc, OBC%is_v_N_obc) ; ie_N_OBC = min(G%iec, OBC%ie_v_N_obc)
+      is_S_OBC = max(G%isc, OBC%is_v_S_obc) ; ie_S_OBC = min(G%iec, OBC%ie_v_S_obc)
+    endif
+  endif
+
   h_ml(:) = 0.0
 
   ! This top boundary condition is appropriate when the wind stress is determined
@@ -2067,13 +2100,16 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         Kv_add(i,K) = 0.5*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
-        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= 0)) then
-          if (OBC%segnum_u(I,j) > 0) then  ! OBC_DIRECTION_E
+        if (OBC%u_E_OBCs_on_PE .and. (j >= OBC%js_u_E_obc) .and. (j <= OBC%je_u_E_obc)) then
+          do I=Is_E_OBC,Ie_E_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) > 0)) then  ! OBC_DIRECTION_E
             do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i,j,k) ; enddo
-          elseif (OBC%segnum_u(I,j) < 0) then  ! OBC_DIRECTION_W
+          endif ; enddo
+        endif
+        if (OBC%u_W_OBCs_on_PE .and. (j >= OBC%js_u_W_obc) .and. (j <= OBC%je_u_W_obc)) then
+          do I=Is_W_OBC,Ie_W_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) < 0)) then  ! OBC_DIRECTION_W
             do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i+1,j,k) ; enddo
-          endif
-        endif ; enddo
+          endif ; enddo
+        endif
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         Kv_tot(i,K) = Kv_tot(i,K) + Kv_add(i,K)
@@ -2083,13 +2119,16 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         Kv_add(i,K) = 0.5*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
       endif ; enddo ; enddo
       if (do_OBCs) then
-        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= 0)) then
-          if (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
+        if (OBC%v_N_OBCs_on_PE .and. (J >= OBC%Js_v_N_obc) .and. (J <= OBC%Je_v_N_obc)) then
+          do i=is_N_OBC,ie_N_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) > 0)) then  ! OBC_DIRECTION_N
             do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i,j,k) ; enddo
-          elseif (OBC%segnum_v(i,J) < 0) then  ! OBC_DIRECTION_S
+          endif ; enddo
+        endif
+        if (OBC%v_S_OBCs_on_PE .and. (J >= OBC%Js_v_S_obc) .and. (J <= OBC%Je_v_S_obc)) then
+          do i=is_S_OBC,ie_S_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) < 0)) then  ! OBC_DIRECTION_S
             do K=2,nz ; Kv_add(i,K) = visc%Kv_shear(i,j+1,k) ; enddo
-          endif
-        endif ; enddo
+          endif ; enddo
+        endif
       endif
       do K=2,nz ; do i=is,ie ; if (do_i(i)) then
         Kv_tot(i,K) = Kv_tot(i,K) + Kv_add(i,K)
@@ -2222,30 +2261,40 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
           rho_av1(I) = 2.0 / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i+1,j,1))
           absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
         endif ; enddo
-        if (do_OBCs) then ; do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
-          if (OBC%segnum_u(I,j) > 0) then  ! OBC_DIRECTION_E
-            u_star(I) = Ustar_2d(i,j)
-            rho_av1(I) = 1.0 / tv%SpV_avg(i,j,1)
-          elseif (OBC%segnum_u(I,j) < 0) then  ! OBC_DIRECTION_W
-            u_star(I) = Ustar_2d(i+1,j)
-            rho_av1(I) = 1.0 / tv%SpV_avg(i+1,j,1)
+        if (do_OBCs) then
+          if (OBC%u_E_OBCs_on_PE .and. (j >= OBC%js_u_E_obc) .and. (j <= OBC%je_u_E_obc)) then
+            do I=Is_E_OBC,Ie_E_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) > 0)) then  ! OBC_DIRECTION_E
+              u_star(I) = Ustar_2d(i,j)
+              rho_av1(I) = 1.0 / tv%SpV_avg(i,j,1)
+            endif ; enddo
           endif
-        endif ; enddo ; endif
+          if (OBC%u_W_OBCs_on_PE .and. (j >= OBC%js_u_W_obc) .and. (j <= OBC%je_u_W_obc)) then
+            do I=Is_W_OBC,Ie_W_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) < 0)) then  ! OBC_DIRECTION_W
+              u_star(I) = Ustar_2d(i+1,j)
+              rho_av1(I) = 1.0 / tv%SpV_avg(i+1,j,1)
+            endif ; enddo
+          endif
+        endif
       else ! Work on v-points
         do i=is,ie ; if (do_i(i)) then
           u_star(i) = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i,j+1))
           rho_av1(i) = 2.0 / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i,j+1,1))
           absf(i) = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
         endif ; enddo
-        if (do_OBCs) then ; do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= 0)) then
-          if (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
-            u_star(i) = Ustar_2d(i,j)
-            rho_av1(i) = 1.0 / tv%SpV_avg(i,j,1)
-          elseif (OBC%segnum_v(i,J) < 0) then  ! OBC_DIRECTION_S
-            u_star(i) = Ustar_2d(i,j+1)
-            rho_av1(i) = 1.0 / tv%SpV_avg(i,j+1,1)
+        if (do_OBCs) then
+          if (OBC%v_N_OBCs_on_PE .and. (J >= OBC%Js_v_N_obc) .and. (J <= OBC%Je_v_N_obc)) then
+            do i=is_N_OBC,ie_N_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) > 0)) then  ! OBC_DIRECTION_N
+              u_star(i) = Ustar_2d(i,j)
+              rho_av1(i) = 1.0 / tv%SpV_avg(i,j,1)
+            endif ; enddo
           endif
-        endif ; enddo ; endif
+          if (OBC%v_S_OBCs_on_PE .and. (J >= OBC%Js_v_S_obc) .and. (J <= OBC%Je_v_S_obc)) then
+            do i=is_S_OBC,ie_S_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) < 0)) then  ! OBC_DIRECTION_S
+              u_star(i) = Ustar_2d(i,j+1)
+              rho_av1(i) = 1.0 / tv%SpV_avg(i,j+1,1)
+            endif ; enddo
+          endif
+        endif
       endif
       do I=is,ie
         tau_mag(I) = GV%RZ_to_H*rho_av1(i) * u_star(I)**2
@@ -2256,19 +2305,35 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
           u_star(I) = 0.5*(Ustar_2d(i,j) + Ustar_2d(i+1,j))
           absf(I) = 0.5*(abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
         endif ; enddo
-        if (do_OBCs) then ; do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= 0)) then
-          if (OBC%segnum_u(I,j) > 0) u_star(I) = Ustar_2d(i,j)    ! OBC_DIRECTION_E
-          if (OBC%segnum_u(I,j) < 0) u_star(I) = Ustar_2d(i+1,j)  ! OBC_DIRECTION_W
-        endif ; enddo ; endif
+        if (do_OBCs) then
+          if (OBC%u_E_OBCs_on_PE .and. (j >= OBC%js_u_E_obc) .and. (j <= OBC%je_u_E_obc)) then
+            do I=Is_E_OBC,Ie_E_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) > 0)) then  ! OBC_DIRECTION_E
+              u_star(I) = Ustar_2d(i,j)
+            endif ; enddo
+          endif
+          if (OBC%u_W_OBCs_on_PE .and. (j >= OBC%js_u_W_obc) .and. (j <= OBC%je_u_W_obc)) then
+            do I=Is_W_OBC,Ie_W_OBC ; if (do_i(I) .and. (OBC%segnum_u(I,j) < 0)) then  ! OBC_DIRECTION_W
+              u_star(I) = Ustar_2d(i+1,j)
+            endif ; enddo
+          endif
+        endif
       else
         do i=is,ie ; if (do_i(i)) then
           u_star(i) = 0.5*(Ustar_2d(i,j) + Ustar_2d(i,j+1))
           absf(i) = 0.5*(abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
         endif ; enddo
-        if (do_OBCs) then ; do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= 0)) then
-          if (OBC%segnum_v(i,J) > 0) u_star(i) = Ustar_2d(i,j)    ! OBC_DIRECTION_N
-          if (OBC%segnum_v(i,J) < 0) u_star(i) = Ustar_2d(i,j+1)  ! OBC_DIRECTION_S
-        endif ; enddo ; endif
+        if (do_OBCs) then
+          if (OBC%v_N_OBCs_on_PE .and. (J >= OBC%Js_v_N_obc) .and. (J <= OBC%Je_v_N_obc)) then
+            do i=is_N_OBC,ie_N_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) > 0)) then  ! OBC_DIRECTION_N
+              u_star(i) = Ustar_2d(i,j)
+            endif ; enddo
+          endif
+          if (OBC%v_S_OBCs_on_PE .and. (J >= OBC%Js_v_S_obc) .and. (J <= OBC%Je_v_S_obc)) then
+            do i=is_S_OBC,ie_S_OBC ; if (do_i(i) .and. (OBC%segnum_v(i,J) < 0)) then  ! OBC_DIRECTION_S
+              u_star(i) = Ustar_2d(i,j+1)
+            endif ; enddo
+          endif
+        endif
       endif
       do I=is,ie
         tau_mag(I) = GV%Z_to_H*u_star(I)**2
