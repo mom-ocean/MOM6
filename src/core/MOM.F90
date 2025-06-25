@@ -126,7 +126,7 @@ use MOM_set_visc,              only : set_visc_register_restarts, remap_vertvisc
 use MOM_set_visc,              only : set_visc_init, set_visc_end
 use MOM_shared_initialization, only : write_ocean_geometry_file
 use MOM_sponge,                only : init_sponge_diags, sponge_CS
-use MOM_state_initialization,  only : MOM_initialize_state
+use MOM_state_initialization,  only : MOM_initialize_state, MOM_initialize_OBCs
 use MOM_stoch_eos,             only : MOM_stoch_eos_init, MOM_stoch_eos_run, MOM_stoch_eos_CS
 use MOM_stoch_eos,             only : stoch_EOS_register_restarts, post_stoch_EOS_diags, mom_calc_varT
 use MOM_sum_output,            only : write_energy, accumulate_net_input
@@ -3244,6 +3244,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
           sponge_in_CSp, ALE_sponge_in_CSp, oda_incupd_in_CSp, OBC_in, Time_in)
     endif
 
+    if (associated(OBC_in)) &
+      call MOM_initialize_OBCs(h_in, CS%tv, OBC_in, Time, G_in, GV, US, param_file, restart_CSp, CS%tracer_Reg)
+
     if (use_temperature) then
       CS%tv%T => CS%T
       CS%tv%S => CS%S
@@ -3290,7 +3293,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       deallocate(S_in)
     endif
     if (use_ice_shelf) &
-      deallocate(frac_shelf_in,mass_shelf_in)
+      deallocate(frac_shelf_in, mass_shelf_in)
   else  ! The model is being run without grid rotation.  This is true of all production runs.
     if (use_ice_shelf) then
       call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr, Time_init, &
@@ -3307,6 +3310,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in)
     endif
+
+    if (associated(CS%OBC)) &
+      call MOM_initialize_OBCs(CS%h, CS%tv, CS%OBC, Time, G, GV, US, param_file, restart_CSp, CS%tracer_Reg)
 
     ! Reset the first direction if it was found in a restart file.
     if (CS%first_dir_restart > -1.0) then
