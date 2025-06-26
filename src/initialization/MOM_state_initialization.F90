@@ -20,14 +20,9 @@ use MOM_grid, only : ocean_grid_type, isPointInCell
 use MOM_interface_heights, only : find_eta, dz_to_thickness, dz_to_thickness_simple
 use MOM_interface_heights, only : calc_derived_thermo
 use MOM_io, only : file_exists, field_size, MOM_read_data, MOM_read_vector, slasher
-use MOM_open_boundary, only : ocean_OBC_type, open_boundary_halo_update, set_tracer_data
-use MOM_open_boundary, only : OBC_NONE
-use MOM_open_boundary, only : open_boundary_query
-use MOM_open_boundary, only : set_tracer_data, initialize_segment_data
-use MOM_open_boundary, only : open_boundary_test_extern_h
+use MOM_open_boundary, only : ocean_OBC_type, open_boundary_test_extern_h
 use MOM_open_boundary, only : fill_temp_salt_segments, setup_OBC_tracer_reservoirs
-use MOM_open_boundary, only : update_OBC_segment_data, set_initialized_OBC_tracer_reservoirs
-!use MOM_open_boundary, only : set_3D_OBC_data
+use MOM_open_boundary, only : set_initialized_OBC_tracer_reservoirs
 use MOM_grid_initialize, only : initialize_masks, set_grid_metrics
 use MOM_restart, only : restore_state, is_new_run, copy_restart_var, copy_restart_vector
 use MOM_restart, only : restart_registry_lock, MOM_restart_CS
@@ -675,12 +670,13 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
 
   call callTree_enter('MOM_initialize_OBCs()')
   if (associated(OBC)) then
-
     call get_param(PF, mdl, "DEBUG", debug, default=.false.)
     call get_param(PF, mdl, "OBC_DEBUGGING_TESTS", debug_obc, &
                  "If true, do additional calls resetting values to help verify the correctness "//&
                  "of the open boundary condition code.", default=.false.,  &
                  do_not_log=.true., old_name="DEBUG_OBC", debuggingParam=.true.)
+    call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
     call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
@@ -700,17 +696,6 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
         call fill_temp_salt_segments(G, GV, US, OBC, tv)
       endif
     endif
-
-    ! This does halo updates for OBC-related fields, but it is not needed?
-    ! call open_boundary_halo_update(G, OBC)
-
-    ! This allocates the arrays on the segments for open boundary data
-    call initialize_segment_data(G, GV, US, OBC, PF)
-!     call open_boundary_config(G, US, PF, OBC)
-
-    call calc_derived_thermo(tv, h, G, GV, US)
-    ! Call this during initialization to fill boundary arrays from fixed values
-    call update_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
 
     ! This controls user code for setting open boundary data
     call get_param(PF, mdl, "OBC_USER_CONFIG", config, &
@@ -745,19 +730,10 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
               "OBC_USER_CONFIG = "//trim(config)//" have not been fully implemented.")
     endif
 
-    if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
-      call set_tracer_data(OBC, tv, h, G, GV, PF)
-    endif
-
-  ! if (open_boundary_query(OBC, apply_nudged_OBC=.true.)) then
-  !   call set_3D_OBC_data(OBC, tv, h, G, PF, tracer_Reg)
-  ! endif
-    ! Still need a way to specify the boundary values
-
     if (debug) then
-      call hchksum(G%mask2dT, 'MOM_initialize_state: mask2dT ', G%HI)
-      call uvchksum('MOM_initialize_state: mask2dC[uv]', G%mask2dCu, G%mask2dCv, G%HI)
-      call qchksum(G%mask2dBu, 'MOM_initialize_state: mask2dBu ', G%HI)
+      call hchksum(G%mask2dT, 'MOM_initialize_OBCs: mask2dT ', G%HI)
+      call uvchksum('MOM_initialize_OBCs: mask2dC[uv]', G%mask2dCu, G%mask2dCv, G%HI)
+      call qchksum(G%mask2dBu, 'MOM_initialize_OBCs: mask2dBu ', G%HI)
     endif
     if (debug_OBC) call open_boundary_test_extern_h(G, GV, OBC, h)
   endif

@@ -233,7 +233,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   real    :: normal_sign ! A variable that corrects the sign of normal velocities for rotation [nondim]
   real    :: trans_sign  ! A variable that corrects the sign of transverse velocities for rotation [nondim]
   type(OBC_segment_type), pointer :: segment => NULL()
-  integer :: unrot_dir ! The unrotated direction of the segmetn
+  integer :: unrot_dir ! The unrotated direction of the segment
   integer :: turns    ! Number of index quarter turns
   integer :: i, j, k, n, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB, isq, ieq, jsq, jeq, is_vel, ie_vel, js_vel, je_vel

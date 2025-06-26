@@ -116,9 +116,9 @@ use MOM_open_boundary,         only : ocean_OBC_type, OBC_registry_type
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : setup_OBC_tracer_reservoirs, fill_temp_salt_segments
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
-use MOM_open_boundary,         only : open_boundary_setup_vert, update_OBC_segment_data
-use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_init, open_boundary_halo_update
-use MOM_open_boundary,         only : write_OBC_info, chksum_OBC_segments
+use MOM_open_boundary,         only : open_boundary_setup_vert, initialize_segment_data
+use MOM_open_boundary,         only : update_OBC_segment_data, rotate_OBC_config, rotate_OBC_init
+use MOM_open_boundary,         only : open_boundary_halo_update, write_OBC_info, chksum_OBC_segments
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
 use MOM_set_visc,              only : set_viscous_BBL, set_viscous_ML, set_visc_CS
@@ -2895,7 +2895,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   CS%HFrz = (US%Z_to_m * GV%m_to_H) * HFrz_z
 
   ! Finish OBC configuration that depend on the vertical grid
-  call open_boundary_setup_vert(GV, US, OBC_in)
+  if (associated(OBC_in)) then
+    call open_boundary_setup_vert(GV, US, OBC_in)
+    ! This allocates the arrays on the segments for open boundary data
+    call initialize_segment_data(G_in, GV, US, OBC_in, param_file)
+  endif
 
   !   Shift from using the temporary dynamic grid type to using the final (potentially static)
   ! and properly rotated ocean-specific grid type and horizontal index type.
@@ -3244,8 +3248,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
           sponge_in_CSp, ALE_sponge_in_CSp, oda_incupd_in_CSp, OBC_in, Time_in)
     endif
 
-    if (associated(OBC_in)) &
+    if (associated(OBC_in)) then
       call MOM_initialize_OBCs(h_in, CS%tv, OBC_in, Time, G_in, GV, US, param_file, restart_CSp, CS%tracer_Reg)
+    endif
 
     if (use_temperature) then
       CS%tv%T => CS%T
@@ -3281,8 +3286,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       endif
 
       call rotate_OBC_init(OBC_in, G, CS%OBC)
-      call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
-      call update_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
     endif
 
     deallocate(u_in)
@@ -3311,8 +3314,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in)
     endif
 
-    if (associated(CS%OBC)) &
+    if (associated(CS%OBC)) then
       call MOM_initialize_OBCs(CS%h, CS%tv, CS%OBC, Time, G, GV, US, param_file, restart_CSp, CS%tracer_Reg)
+    endif
 
     ! Reset the first direction if it was found in a restart file.
     if (CS%first_dir_restart > -1.0) then
@@ -3326,6 +3330,16 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   if (.not.(GV%Boussinesq .or. GV%semi_Boussinesq)) then
     allocate(CS%tv%SpV_avg(isd:ied,jsd:jed,nz), source=0.0)
     CS%tv%valid_SpV_halo = -1  ! This array does not yet have any valid data.
+  endif
+
+  if (associated(CS%OBC)) then
+    if (use_temperature) then
+      call pass_var(CS%tv%T, G%Domain)
+      call pass_var(CS%tv%S, G%Domain)
+    endif
+    call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
+    ! Call this during initialization to fill boundary arrays from fixed values
+    call update_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
   endif
 
   if (use_ice_shelf .and. CS%debug) then
