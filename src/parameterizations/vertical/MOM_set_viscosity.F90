@@ -2101,7 +2101,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) mask_u(I,j+1) = 0.0
         if (OBC%segment(n)%direction == OBC_DIRECTION_S) mask_u(I,j) = 0.0
       enddo
-    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= je)) then
+    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
       do J = max(js-1,OBC%segment(n)%HI%JsdB), min(je,OBC%segment(n)%HI%JedB)
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) mask_v(i+1,J) = 0.0
         if (OBC%segment(n)%direction == OBC_DIRECTION_W) mask_v(i,J) = 0.0
