@@ -22,6 +22,7 @@ use MOM_coms,                only : field_chksum
 use MOM_constants,           only : CELSIUS_KELVIN_OFFSET, hlf
 use MOM_diag_mediator,       only : diag_ctrl, enable_averages, disable_averaging
 use MOM_diag_mediator,       only : diag_mediator_close_registration, diag_mediator_end
+use MOM_domains,             only : MOM_domain_type, domain2d, clone_MOM_domain, get_domain_extent
 use MOM_domains,             only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains,             only : TO_ALL, Omit_Corners
 use MOM_error_handler,       only : MOM_error, FATAL, WARNING, is_root_pe
@@ -53,8 +54,6 @@ use MOM_coupler_types,       only : coupler_1d_bc_type, coupler_2d_bc_type
 use MOM_coupler_types,       only : coupler_type_spawn, coupler_type_write_chksums
 use MOM_coupler_types,       only : coupler_type_initialized, coupler_type_copy_data
 use MOM_coupler_types,       only : coupler_type_set_diags, coupler_type_send_data
-use mpp_domains_mod,         only : domain2d, mpp_get_layout, mpp_get_global_domain
-use mpp_domains_mod,         only : mpp_define_domains, mpp_get_compute_domain, mpp_get_data_domain
 use MOM_io,                  only : stdout
 use MOM_EOS,                 only : gsw_sp_from_sr, gsw_pt_from_ct
 use MOM_wave_interface,      only : wave_parameters_CS, MOM_wave_interface_init
@@ -104,7 +103,7 @@ type, public ::  ocean_public_type
                     !! points of the two velocity components. Valid entries
                     !! include AGRID, BGRID_NE, CGRID_NE, BGRID_SW, and CGRID_SW,
                     !! corresponding to the community-standard Arakawa notation.
-                    !! (These are named integers taken from mpp_parameter_mod.)
+                    !! (These are named integers taken from the MOM_domains module.)
                     !! Following MOM5, stagger is BGRID_NE by default when the
                     !! ocean is initialized, but here it is set to -999 so that
                     !! a global max across ocean and non-ocean processors can be
@@ -413,14 +412,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   ! it also initializes statistical waves.
   call MOM_wave_interface_init(OS%Time, OS%grid, OS%GV, OS%US, param_file, OS%Waves, OS%diag)
 
-  if (associated(OS%grid%Domain%maskmap)) then
-    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                      OS%diag, maskmap=OS%grid%Domain%maskmap, &
-                                      gas_fields_ocn=gas_fields_ocn)
-  else
-    call initialize_ocean_public_type(OS%grid%Domain%mpp_domain, Ocean_sfc, &
-                                      OS%diag, gas_fields_ocn=gas_fields_ocn)
-  endif
+  call initialize_ocean_public_type(OS%grid%Domain, Ocean_sfc, OS%diag, gas_fields_ocn=gas_fields_ocn)
 
   ! This call can only occur here if the coupler_bc_type variables have been
   ! initialized already using the information from gas_fields_ocn.
@@ -535,8 +527,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, &
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   ! Translate Ice_ocean_boundary into fluxes.
-  call mpp_get_compute_domain(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), &
-                              index_bnds(3), index_bnds(4))
+  call get_domain_extent(Ocean_sfc%Domain, index_bnds(1), index_bnds(2), index_bnds(3), index_bnds(4))
 
   weight = 1.0
 
@@ -802,7 +793,7 @@ end subroutine ocean_model_end
 subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
   type(ocean_state_type),     pointer    :: OS  !< A pointer to the structure containing the
                                                 !! internal ocean state (in).
-  type(time_type),            intent(in) :: Time !< The model time at this call, needed for mpp_write calls.
+  type(time_type),            intent(in) :: Time !< The model time at this call, needed for writing files.
   character(len=*), optional, intent(in) :: directory  !<  An optional directory into which to
                                                 !! write these restart files.
   character(len=*), optional, intent(in) :: filename_suffix !< An optional suffix (e.g., a time-stamp)
@@ -833,16 +824,12 @@ subroutine ocean_model_save_restart(OS, Time, directory, filename_suffix)
 end subroutine ocean_model_save_restart
 
 !> Initialize the public ocean type
-subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, &
-                                        gas_fields_ocn)
-  type(domain2D),          intent(in)    :: input_domain !< The ocean model domain description
+subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, gas_fields_ocn)
+  type(MOM_domain_type),   intent(in)    :: input_domain !< The ocean model domain description
   type(ocean_public_type), intent(inout) :: Ocean_sfc !< A structure containing various publicly
-                                !! visible ocean surface properties after initialization, whose
-                                !! elements are allocated here.
-  type(diag_ctrl),         intent(in)    :: diag  !< A structure that regulates diagnsotic output
-  logical, dimension(:,:), &
-                 optional, intent(in)    :: maskmap !< A mask indicating which virtual processors
-                                              !! are actually in use.  If missing, all are used.
+                                              !! visible ocean surface properties after
+                                              !! initialization, whose elements are allocated here.
+  type(diag_ctrl),         intent(in)    :: diag  !< A structure that regulates diagnostic output
   type(coupler_1d_bc_type), &
                  optional, intent(in)    :: gas_fields_ocn !< If present, this type describes the
                                               !! ocean and surface-ice fields that will participate
@@ -854,14 +841,9 @@ subroutine initialize_ocean_public_type(input_domain, Ocean_sfc, diag, maskmap, 
   ! and have no halos.
   integer :: isc, iec, jsc, jec
 
-  call mpp_get_layout(input_domain,layout)
-  call mpp_get_global_domain(input_domain, xsize=xsz, ysize=ysz)
-  if (PRESENT(maskmap)) then
-    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain, maskmap=maskmap)
-  else
-    call mpp_define_domains((/1,xsz,1,ysz/),layout,Ocean_sfc%Domain)
-  endif
-  call mpp_get_compute_domain(Ocean_sfc%Domain, isc, iec, jsc, jec)
+  call clone_MOM_domain(input_domain, Ocean_sfc%Domain, halo_size=0, symmetric=.false.)
+
+  call get_domain_extent(Ocean_sfc%Domain, isc, iec, jsc, jec)
 
   allocate(Ocean_sfc%t_surf (isc:iec,jsc:jec),  &  ! time averaged sst (Kelvin) passed to atmosphere/ice model
            Ocean_sfc%s_surf (isc:iec,jsc:jec),  &  ! time averaged sss (psu) passed to atmosphere/ice models
@@ -911,8 +893,7 @@ subroutine convert_state_to_ocean_type(sfc_state, Ocean_sfc, G, US, patm, press_
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   call pass_vector(sfc_state%u, sfc_state%v, G%Domain)
 
-  call mpp_get_compute_domain(Ocean_sfc%Domain, isc_bnd, iec_bnd, &
-                              jsc_bnd, jec_bnd)
+  call get_domain_extent(Ocean_sfc%Domain, isc_bnd, iec_bnd, jsc_bnd, jec_bnd)
   if (present(patm)) then
     ! Check that the inidicies in patm are (isc_bnd:iec_bnd,jsc_bnd:jec_bnd).
     if (.not.present(press_to_z)) call MOM_error(FATAL, &
