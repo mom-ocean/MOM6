@@ -1797,7 +1797,7 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, handles,
       units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T)
 
   handles%id_total_net_massin = register_scalar_field('ocean_model', 'total_net_massin', Time, diag, &
-      long_name='Area integrated mass entering ocean due to predip, runoff, ice melt', &
+      long_name='Area integrated mass entering ocean due to precip, runoff, ice melt', &
       units='kg s-1', conversion=US%RZL2_to_kg*US%s_to_T)
 
   !=========================================================================
