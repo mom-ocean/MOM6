@@ -1220,39 +1220,46 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
       else ; CFL = u(I,j,k) * dt * G%IdxT(i,j) ; endif
       curv_3 = (h_W(i,j,k) + h_E(i,j,k)) - 2.0*h(i,j,k)
-      h_avg = h_E(i,j,k) + CFL * (0.5*(h_W(i,j,k) - h_E(i,j,k)) + curv_3*(CFL - 1.5))
-      h_marg = h_E(i,j,k) + CFL * ((h_W(i,j,k) - h_E(i,j,k)) + 3.0*curv_3*(CFL - 1.0))
+      if (marginal) then
+        h_marg = h_E(i,j,k) + CFL * ((h_W(i,j,k) - h_E(i,j,k)) + 3.0*curv_3*(CFL - 1.0))
+      else
+        h_avg = h_E(i,j,k) + CFL * (0.5*(h_W(i,j,k) - h_E(i,j,k)) + curv_3*(CFL - 1.5))
+      endif
     elseif (u(I,j,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I,j,k)*dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
       else ; CFL = -u(I,j,k) * dt * G%IdxT(i+1,j) ; endif
       curv_3 = (h_W(i+1,j,k) + h_E(i+1,j,k)) - 2.0*h(i+1,j,k)
-      h_avg = h_W(i+1,j,k) + CFL * (0.5*(h_E(i+1,j,k)-h_W(i+1,j,k)) + curv_3*(CFL - 1.5))
-      h_marg = h_W(i+1,j,k) + CFL * ((h_E(i+1,j,k)-h_W(i+1,j,k)) + &
+        
+      if (marginal) then
+        h_marg = h_W(i+1,j,k) + CFL * ((h_E(i+1,j,k)-h_W(i+1,j,k)) + &
                                     3.0*curv_3*(CFL - 1.0))
+      else
+        h_avg = h_W(i+1,j,k) + CFL * (0.5*(h_E(i+1,j,k)-h_W(i+1,j,k)) + curv_3*(CFL - 1.5))
+      endif
     else
-      h_avg = 0.5 * (h_W(i+1,j,k) + h_E(i,j,k))
       !   The choice to use the arithmetic mean here is somewhat arbitrarily, but
       ! it should be noted that h_W(i+1,j,k) and h_E(i,j,k) are usually the same.
-      h_marg = 0.5 * (h_W(i+1,j,k) + h_E(i,j,k))
+      if (marginal) then
+        h_marg = 0.5 * (h_W(i+1,j,k) + h_E(i,j,k))
+      else
+        h_avg = 0.5 * (h_W(i+1,j,k) + h_E(i,j,k))
+      endif
  !    h_marg = (2.0 * h_W(i+1,j,k) * h_E(i,j,k)) / &
  !             (h_W(i+1,j,k) + h_E(i,j,k) + GV%H_subroundoff)
     endif
 
     if (marginal) then ; h_u(I,j,k) = h_marg
     else ; h_u(I,j,k) = h_avg ; endif
-  enddo
-  if (present(visc_rem_u)) then
-    ! Scale back the thickness to account for the effects of viscosity and the fractional open
-    ! thickness to give an appropriate non-normalized weight for each layer in determining the
-    ! barotropic acceleration.
-    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
+    
+    if (present(visc_rem_u)) then
+      ! Scale back the thickness to account for the effects of viscosity and the fractional open
+      ! thickness to give an appropriate non-normalized weight for each layer in determining the
+      ! barotropic acceleration.
       h_u(I,j,k) = h_u(I,j,k) * (visc_rem_u(I,j,k) * por_face_areaU(I,j,k))
-    enddo
-  else
-    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
+    else
       h_u(I,j,k) = h_u(I,j,k) * por_face_areaU(I,j,k)
-    enddo
-  endif
+    endif
+  enddo
 
   local_open_BC = .false.
   if (associated(OBC)) local_open_BC = OBC%open_u_BCs_exist_globally
