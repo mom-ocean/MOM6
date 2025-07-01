@@ -1433,8 +1433,12 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
         endif
       enddo
 
-      ! saves time on CPU, but destroys GPU performance
+      ! Below conditional compilation is to control whether early exit happens when compiled with
+      ! OpenMP - compiling with OpenMP prevents early exit. Without OpenMP, enables early exit.
+      ! Early exit saves time on CPU, but causes other loops to be serialized on GPU.
+      !$ if (.false.) then
       if (.not.domore) exit
+      !$ endif
 
       if ((itt < max_itts) .or. present(uh_3d)) then
         do concurrent (I=ish-1:ieh)
@@ -1445,7 +1449,8 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
           call zonal_flux_layere(u_new, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
                                 uh_aux(I,j,k), duhdu, visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
                                 dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
-          ! I think the if statement is a little exy
+          ! Below if statement looks expensive in profiling results, but I believe it's
+          ! masking the expensive update of uh_err beneath 
           if (local_OBC) call zonal_flux_layere_OBC(u_new, h_in, uh_aux(I,j,k), duhdu, visc_rem(I,j,k), &
                                 G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
           uh_err(I,j) = uh_err(I,j) + uh_aux(I,j,k)
