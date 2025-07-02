@@ -644,66 +644,65 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   !$omp       BT_cont%FA_u_EE, BT_cont%FA_u_WW, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%h_u, &
   !$omp       du_cor, duhdu, du, du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
 
-  if (present(du_cor)) then
-    do concurrent (j=jsh:jeh, i=ish-1:ieh)
-      du_cor(i,j) = 0.0
-    enddo
-  endif
+  do concurrent (j=jsh:jeh)
 
-  if (.not.use_visc_rem) then
-    do concurrent (k=1:nz, j=jsh:jeh, i=ish-1:ieh)
-      visc_rem_u_tmp(i,j,k) = 1.0
-    enddo
-  else
-    do concurrent (k=1:nz, j=jsh:jeh, i=ish-1:ieh)
-      visc_rem_u_tmp(i,j,k) = visc_rem_u(i,j,k)
-    enddo
-  end if
+    if (present(du_cor)) then
+      do concurrent (i=ish-1:ieh)
+        du_cor(i,j) = 0.0
+      enddo
+    endif
 
-  do concurrent (j=jsh:jeh, i=ish-1:ieh)
-    do_I(i, j) = .true.
-  enddo
+    if (.not.use_visc_rem) then
+      do concurrent (k=1:nz, i=ish-1:ieh)
+        visc_rem_u_tmp(i,j,k) = 1.0
+      enddo
+    else
+      do concurrent (k=1:nz, i=ish-1:ieh)
+        visc_rem_u_tmp(i,j,k) = visc_rem_u(i,j,k)
+      enddo
+    end if
+
+    do concurrent (i=ish-1:ieh)
+      do_I(i, j) = .true.
+    enddo
   
-  ! Set uh and duhdu.
-  do concurrent (k=1:nz , j=jsh:jeh, I=ish-1:ieh)
-    call zonal_flux_layere(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
-                          uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
-                          dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
-  enddo
-  if (local_open_BC) then
-    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
-      call zonal_flux_layere_OBC(u(I,j,k), h_in, uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), &
-                                 G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
+    ! Set uh and duhdu.
+    do concurrent (k=1:nz , I=ish-1:ieh)
+      call zonal_flux_layere(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
+                            uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
+                            dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
     enddo
-  endif
+    if (local_open_BC) then
+      do concurrent (k=1:nz, I=ish-1:ieh)
+        call zonal_flux_layere_OBC(u(I,j,k), h_in, uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), &
+                                  G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
+      enddo
+    endif
   
-  ! untested!
-  if (local_specified_BC) then
-    do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh, OBC%segnum_u(I,j) /= 0)
-      l_seg = abs(OBC%segnum_u(I,j))
-      if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
-    enddo
-  endif
+    ! untested!
+    if (local_specified_BC) then
+      do concurrent (k=1:nz, I=ish-1:ieh, OBC%segnum_u(I,j) /= 0)
+        l_seg = abs(OBC%segnum_u(I,j))
+        if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
+      enddo
+    endif
 
-  if (present(uhbt) .or. set_BT_cont) then
-    if (use_visc_rem.and.CS%use_visc_rem_max) then
-      ! poor performance for nvfortran + do concurrent if k is inside loop
-      do concurrent (j=jsh:jeh)
+    if (present(uhbt) .or. set_BT_cont) then
+      if (use_visc_rem.and.CS%use_visc_rem_max) then
+        ! poor performance for nvfortran + do concurrent if k is inside loop
         do concurrent (I=ish-1:ieh)
           visc_rem_max(I,j) = visc_rem_u(I,j,1)
         enddo
         do k=2,nz ; do concurrent (I=ish-1:ieh)
           visc_rem_max(I,j) = max(visc_rem_max(I,j), visc_rem_u(I,j,k))
         enddo ; enddo
-      enddo
-    else
-      do concurrent (j=jsh:jeh, i=ish-1:ieh)
-        visc_rem_max(i, j) = 1.0
-      enddo
-    endif
-    !   Set limits on du that will keep the CFL number between -1 and 1.
-    ! This should be adequate to keep the root bracketed in all cases.
-    do concurrent (j=jsh:jeh)
+      else
+        do concurrent (i=ish-1:ieh)
+          visc_rem_max(i, j) = 1.0
+        enddo
+      endif
+      !   Set limits on du that will keep the CFL number between -1 and 1.
+      ! This should be adequate to keep the root bracketed in all cases.
       do concurrent (I=ish-1:ieh)
         I_vrm = 0.0
         if (visc_rem_max(I,j) > 0.0) I_vrm = 1.0 / visc_rem_max(I,j)
@@ -720,68 +719,71 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         duhdu_tot_0(I,j) = duhdu_tot_0(I,j) + duhdu(I, j, k)
         uh_tot_0(I,j) = uh_tot_0(I,j) + uh(I,j,k)
       enddo ; enddo
-    enddo
 
-    if (use_visc_rem) then
-      if (CS%aggress_adjust) then
+      if (use_visc_rem) then
+        if (CS%aggress_adjust) then
+          ! untested!
+          do k=1,nz ; do concurrent (I=ish-1:ieh)
+            if (CS%vol_CFL) then
+              dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+              dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
+            else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
+
+            du_lim = 0.499*((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k)))
+            if (du_max_CFL(I,j) * visc_rem_u_tmp(I,j,k) > du_lim) &
+              du_max_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
+
+            du_lim = 0.499*((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k)))
+            if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < du_lim) &
+              du_min_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
+          enddo ; enddo
+        else
+          do k=1,nz ; do concurrent (I=ish-1:ieh)
+            if (CS%vol_CFL) then
+              dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+              dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
+            else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
+
+            if (du_max_CFL(I,j) * visc_rem_u_tmp(I,j,k) > dx_W*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
+              du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem_u_tmp(I,j,k)
+            if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
+              du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem_u_tmp(I,j,k)
+          enddo ; enddo
+        endif
+      else
         ! untested!
-        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
-          if (CS%vol_CFL) then
-            dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
-            dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
-          else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
+        if (CS%aggress_adjust) then
+          do k=1,nz ; do concurrent (I=ish-1:ieh)
+            if (CS%vol_CFL) then
+              dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+              dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
+            else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
 
-          du_lim = 0.499*((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k)))
-          if (du_max_CFL(I,j) * visc_rem_u_tmp(I,j,k) > du_lim) &
-            du_max_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
+            du_max_CFL(I,j) = MIN(du_max_CFL(I,j), 0.499 * &
+                        ((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k))) )
+            du_min_CFL(I,j) = MAX(du_min_CFL(I,j), 0.499 * &
+                        ((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k))) )
+          enddo ; enddo
+        else
+          do k=1,nz ; do concurrent (I=ish-1:ieh)
+            if (CS%vol_CFL) then
+              dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
+              dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
+            else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
 
-          du_lim = 0.499*((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k)))
-          if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < du_lim) &
-            du_min_CFL(I,j) = du_lim / visc_rem_u_tmp(I,j,k)
-        enddo ; enddo
-      else
-        do concurrent (j=jsh:jeh) ; do k=1,nz ; do concurrent (I=ish-1:ieh)
-          if (CS%vol_CFL) then
-            dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
-            dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
-          else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
-
-          if (du_max_CFL(I,j) * visc_rem_u_tmp(I,j,k) > dx_W*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
-            du_max_CFL(I,j) = (dx_W*CFL_dt - u(I,j,k)) / visc_rem_u_tmp(I,j,k)
-          if (du_min_CFL(I,j) * visc_rem_u_tmp(I,j,k) < -dx_E*CFL_dt - u(I,j,k)*G%mask2dCu(I,j)) &
-            du_min_CFL(I,j) = -(dx_E*CFL_dt + u(I,j,k)) / visc_rem_u_tmp(I,j,k)
-        enddo ; enddo ; enddo
+            du_max_CFL(I,j) = MIN(du_max_CFL(I,j), dx_W*CFL_dt - u(I,j,k))
+            du_min_CFL(I,j) = MAX(du_min_CFL(I,j), -(dx_E*CFL_dt + u(I,j,k)))
+          enddo ; enddo
+        endif
       endif
-    else
-      ! untested!
-      if (CS%aggress_adjust) then
-        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
-          if (CS%vol_CFL) then
-            dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
-            dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
-          else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
-
-          du_max_CFL(I,j) = MIN(du_max_CFL(I,j), 0.499 * &
-                      ((dx_W*I_dt - u(I,j,k)) + MIN(0.0,u(I-1,j,k))) )
-          du_min_CFL(I,j) = MAX(du_min_CFL(I,j), 0.499 * &
-                      ((-dx_E*I_dt - u(I,j,k)) + MAX(0.0,u(I+1,j,k))) )
-        enddo ; enddo
-      else
-        do k=1,nz ; do concurrent (j=jsh:jeh, I=ish-1:ieh)
-          if (CS%vol_CFL) then
-            dx_W = ratio_max(G%areaT(i,j), G%dy_Cu(I,j), 1000.0*G%dxT(i,j))
-            dx_E = ratio_max(G%areaT(i+1,j), G%dy_Cu(I,j), 1000.0*G%dxT(i+1,j))
-          else ; dx_W = G%dxT(i,j) ; dx_E = G%dxT(i+1,j) ; endif
-
-          du_max_CFL(I,j) = MIN(du_max_CFL(I,j), dx_W*CFL_dt - u(I,j,k))
-          du_min_CFL(I,j) = MAX(du_min_CFL(I,j), -(dx_E*CFL_dt + u(I,j,k)))
-        enddo ; enddo
-      endif
+      do concurrent (I=ish-1:ieh)
+        du_max_CFL(I,j) = max(du_max_CFL(I,j),0.0)
+        du_min_CFL(I,j) = min(du_min_CFL(I,j),0.0)
+      enddo
     endif
-    do concurrent (j=jsh:jeh, I=ish-1:ieh)
-      du_max_CFL(I,j) = max(du_max_CFL(I,j),0.0)
-      du_min_CFL(I,j) = min(du_min_CFL(I,j),0.0)
-    enddo
+  enddo
+
+  if (present(uhbt) .or. set_BT_cont) then
 
     any_simple_OBC = .false.
     if (present(uhbt) .or. set_BT_cont) then
@@ -808,20 +810,22 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
                               ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
 
-        if (present(u_cor)) then
-          do concurrent (j=jsh:jeh, k=1:nz, I=ish-1:ieh)
-            u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
-          enddo
-          if (any_simple_OBC) then 
-            do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh, simple_OBC_pt(I,j))
-              u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
+        do concurrent (j=jsh:jeh)
+          if (present(u_cor)) then
+            do concurrent (k=1:nz, I=ish-1:ieh)
+              u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
             enddo
-          endif
-        endif ! u-corrected
+            if (any_simple_OBC) then 
+              do concurrent (k=1:nz, I=ish-1:ieh, simple_OBC_pt(I,j))
+                u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
+              enddo
+            endif
+          endif ! u-corrected
 
-        if (present(du_cor)) then
-          do concurrent (j=jsh:jeh, I=ish-1:ieh) ; du_cor(I,j) = du(I,j) ; enddo
-        endif
+          if (present(du_cor)) then
+            do concurrent (I=ish-1:ieh) ; du_cor(I,j) = du(I,j) ; enddo
+          endif
+        enddo
       endif
       if (set_BT_cont) then
         call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0,&
