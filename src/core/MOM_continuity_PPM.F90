@@ -661,10 +661,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         visc_rem_u_tmp(i,j,k) = visc_rem_u(i,j,k)
       enddo
     end if
-
-    do concurrent (i=ish-1:ieh)
-      do_I(i, j) = .true.
-    enddo
   
     ! Set uh and duhdu.
     do concurrent (k=1:nz , I=ish-1:ieh)
