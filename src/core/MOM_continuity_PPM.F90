@@ -1002,7 +1002,7 @@ elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh,
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length [H ~> m or kg m-2]
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
-  real :: tmp
+  real :: tmp, dh
 
   ! Set new values of uh and duhdu.
   tmp = G_dy_Cu * por_face_areaU ! precalculate things
@@ -1010,16 +1010,18 @@ elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh,
     if (vol_CFL) then ; CFL = (u * dt) * (G_dy_Cu * G_IareaT)
     else ; CFL = u * dt * G_IdxT ; endif
     curv_3 = (h_W + h_E) - 2.0*h
+    dh = h_W - h_E
     uh = tmp * u * &
-        (h_E + CFL * (0.5*(h_W - h_E) + curv_3*(CFL - 1.5)))
-    h_marg = h_E + CFL * ((h_W - h_E) + 3.0*curv_3*(CFL - 1.0))
+        (h_E + CFL * (0.5*dh + curv_3*(CFL - 1.5)))
+    h_marg = h_E + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
   elseif (u < 0.0) then
     if (vol_CFL) then ; CFL = (-u * dt) * (G_dy_Cu * G_IareaT_p1)
     else ; CFL = -u * dt * G_IdxT_p1 ; endif
     curv_3 = (h_W_p1 + h_E_p1) - 2.0*h_p1
+    dh = h_E_p1-h_W_p1
     uh = tmp * u * &
-        (h_W_p1 + CFL * (0.5*(h_E_p1-h_W_p1) + curv_3*(CFL - 1.5)))
-    h_marg = h_W_p1 + CFL * ((h_E_p1-h_W_p1) + 3.0*curv_3*(CFL - 1.0))
+        (h_W_p1 + CFL * (0.5*dh + curv_3*(CFL - 1.5)))
+    h_marg = h_W_p1 + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
   else
     uh = 0.0
     h_marg = 0.5 * (h_W_p1 + h_E)
