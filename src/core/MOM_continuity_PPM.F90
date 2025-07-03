@@ -1213,6 +1213,7 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   logical :: local_open_BC
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, n
+  real :: dh
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   !$omp target enter data &
@@ -1224,21 +1225,22 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
       else ; CFL = u(I,j,k) * dt * G%IdxT(i,j) ; endif
       curv_3 = (h_W(i,j,k) + h_E(i,j,k)) - 2.0*h(i,j,k)
+      dh = h_W(i,j,k) - h_E(i,j,k)
       if (marginal) then
-        h_marg = h_E(i,j,k) + CFL * ((h_W(i,j,k) - h_E(i,j,k)) + 3.0*curv_3*(CFL - 1.0))
+        h_marg = h_E(i,j,k) + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
       else
-        h_avg = h_E(i,j,k) + CFL * (0.5*(h_W(i,j,k) - h_E(i,j,k)) + curv_3*(CFL - 1.5))
+        h_avg = h_E(i,j,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
       endif
     elseif (u(I,j,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I,j,k)*dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
       else ; CFL = -u(I,j,k) * dt * G%IdxT(i+1,j) ; endif
       curv_3 = (h_W(i+1,j,k) + h_E(i+1,j,k)) - 2.0*h(i+1,j,k)
-        
+      dh = h_E(i+1,j,k)-h_W(i+1,j,k)
       if (marginal) then
-        h_marg = h_W(i+1,j,k) + CFL * ((h_E(i+1,j,k)-h_W(i+1,j,k)) + &
+        h_marg = h_W(i+1,j,k) + CFL * (dh + &
                                     3.0*curv_3*(CFL - 1.0))
       else
-        h_avg = h_W(i+1,j,k) + CFL * (0.5*(h_E(i+1,j,k)-h_W(i+1,j,k)) + curv_3*(CFL - 1.5))
+        h_avg = h_W(i+1,j,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
       endif
     else
       !   The choice to use the arithmetic mean here is somewhat arbitrarily, but
