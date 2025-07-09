@@ -824,7 +824,11 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         enddo
       endif
       if (set_BT_cont) then
-        call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0,&
+        ! Diagnose the zero-transport correction, du0.
+        call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, &
+                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
+                              ish, ieh, jsh, jeh, do_I, por_face_areaU)
+        call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du, uh_tot_0, duhdu_tot_0,&
                                du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
                                visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaU)
       
@@ -1485,7 +1489,7 @@ end subroutine zonal_flux_adjust
 
 !> Sets a structure that describes the zonal barotropic volume or mass fluxes as a
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
-subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, &
+subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du0, uh_tot_0, duhdu_tot_0, &
                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaU)
   type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
@@ -1500,6 +1504,8 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
                            intent(in)    :: h_E  !< East edge thickness in the reconstruction [H ~> m or kg m-2].
   type(BT_cont_type),      intent(inout) :: BT_cont !< A structure with elements
                        !! that describe the effective open face areas as a function of barotropic flow.
+  real, dimension(SZIB_(G),SZJ_(G)), &
+                           intent(in)    :: du0  !< The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
   real, dimension(SZIB_(G),SZJ_(G)), &
                            intent(in)    :: uh_tot_0    !< The summed transport with 0 adjustment 
                                                         !! [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -1538,8 +1544,6 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     FAmt_0, &         ! test velocities [H L ~> m2 or kg m-1].
     uhtot_L, &        ! The summed transport with the westerly (uhtot_L) and
     uhtot_R           ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZIB_(G),SZJ_(G)) :: &
-    du0               ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
   real :: &
     u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
     u_0, &        ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
@@ -1569,15 +1573,10 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
 
   !$omp target enter data &
   !$omp   map(to: u, h_W, h_E, h_in, uh_tot_0, duhdu_tot_0, G, G%IareaT, G%dy_Cu, G%IdxT, G%dxCu, &
-  !$omp       BT_cont, du_max_CFL, du_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaU) &
-  !$omp   map(alloc: du0, duL, duR, du_CFL, FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R, &
+  !$omp       BT_cont, du_max_CFL, du_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaU, du0) &
+  !$omp   map(alloc: duL, duR, du_CFL, FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R, &
   !$omp       BT_cont%FA_u_W0, &
   !$omp       BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, BT_cont%uBT_WW, BT_cont%uBT_EE)
-
-  ! Diagnose the zero-transport correction, du0.
-  call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du0, &
-                         du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                         ish, ieh, jsh, jeh, do_I, por_face_areaU)
 
   !$omp target loop private(I, k, duL, duR, du_CFL, FAmt_L, FAmt_R, FAmt_0, uhtot_L, uhtot_R)
   do j=jsh,jeh
