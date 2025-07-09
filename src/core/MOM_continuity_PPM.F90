@@ -802,9 +802,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
       if (present(uhbt)) then
         ! Find du and uh.
-        call zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, du, &
+        call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, &
                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
-                              ish, ieh, jsh, jeh, do_I, por_face_areaU, uh, OBC=OBC)
+                              ish, ieh, jsh, jeh, do_I, por_face_areaU, uhbt, uh, OBC=OBC)
 
         do concurrent (j=jsh:jeh)
           if (present(u_cor)) then
@@ -1307,9 +1307,9 @@ end subroutine zonal_flux_thickness
 
 !> Returns the barotropic velocity adjustment that gives the
 !! desired barotropic (layer-summed) transport.
-subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
+subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
                              du, du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             ish, ieh, jsh, jeh, do_I_in, por_face_areaU, uh_3d, OBC)
+                             ish, ieh, jsh, jeh, do_I_in, por_face_areaU, uhbt, uh_3d, OBC)
 
   type(ocean_grid_type),                      intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type),                    intent(in)    :: GV   !< Ocean's vertical grid structure.
@@ -1325,7 +1325,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
                        !! the fraction of a time-step's worth of a barotropic acceleration that a layer
                        !! experiences after viscosity is applied [nondim].
                        !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZIB_(G),SZJ_(G)),          intent(in)    :: uhbt !< The summed volume flux
+  real, dimension(SZIB_(G),SZJ_(G)), optional, intent(in)    :: uhbt !< The summed volume flux
                        !! through zonal faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G)),          intent(in)    :: du_max_CFL  !< Maximum acceptable
                        !! value of du [L T-1 ~> m s-1].
@@ -1367,7 +1367,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   real :: tol_eta  ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel  ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, j, k, nz, itt
-  logical :: domore, do_I(SZIB_(G)), local_OBC
+  logical :: domore, do_I(SZIB_(G)), local_OBC, use_uhbt
   integer, parameter:: max_itts = 20
 
   local_OBC = .false.
@@ -1376,6 +1376,8 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
       local_OBC = OBC%open_u_BCs_exist_globally
     endif
   endif
+
+  use_uhbt = present(uhbt)
 
   nz = GV%ke
 
@@ -1396,7 +1398,9 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
     do concurrent (I=ish-1:ieh)
       du(I,j) = 0.0 ; do_I(I) = do_I_in(I,j)
       du_max(I) = du_max_CFL(I,j) ; du_min(I) = du_min_CFL(I,j)
-      uh_err(I) = uh_tot_0(I,j) - uhbt(I,j) ; duhdu_tot(I) = duhdu_tot_0(I,j)
+      uh_err(I) = uh_tot_0(I,j)
+      if (use_uhbt) uh_err(I) = uh_err(I) - uhbt(I,j)
+      duhdu_tot(I) = duhdu_tot_0(I,j)
       uh_err_best(I) = abs(uh_err(I))
     enddo
     do itt=1,max_itts
@@ -1449,7 +1453,8 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
 
       if ((itt < max_itts) .or. present(uh_3d)) then
         do concurrent (I=ish-1:ieh)
-          uh_err(I) = -uhbt(I,j) ; duhdu_tot(I) = 0.0
+          uh_err(I) = 0.0 ; duhdu_tot(I) = 0.0
+          if (use_uhbt) uh_err(I) = -uhbt(I,j)
         enddo
         do k=1,nz ; do concurrent (I=ish-1:ieh, do_I(I))
           u_new = u(I,j,k) + du(I,j) * visc_rem(I,j,k)
@@ -1544,8 +1549,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     uhtot_L, &        ! The summed transport with the westerly (uhtot_L) and
     uhtot_R           ! and easterly (uhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZIB_(G),SZJ_(G)) :: &
-    du0, &            ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
-    zeros             ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
+    du0               ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
   real :: &
     u_L, u_R, &   ! The westerly (u_L), easterly (u_R), and zero-barotropic
     u_0, &        ! transport (u_0) layer test velocities [L T-1 ~> m s-1].
@@ -1576,13 +1580,12 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   !$omp target enter data &
   !$omp   map(to: u, h_W, h_E, h_in, uh_tot_0, duhdu_tot_0, G, G%IareaT, G%dy_Cu, G%IdxT, G%dxCu, &
   !$omp       BT_cont, du_max_CFL, du_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaU) &
-  !$omp   map(alloc: zeros, du0, duL, duR, du_CFL, FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R, &
+  !$omp   map(alloc: du0, duL, duR, du_CFL, FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R, &
   !$omp       BT_cont%FA_u_W0, &
   !$omp       BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, BT_cont%uBT_WW, BT_cont%uBT_EE)
 
   ! Diagnose the zero-transport correction, du0.
-  do concurrent (j=jsh:jeh, I=ish-1:ieh) ; zeros(I, j) = 0.0 ; enddo
-  call zonal_flux_adjust(u, h_in, h_W, h_E, zeros, uh_tot_0, duhdu_tot_0, du0, &
+  call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du0, &
                          du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                          ish, ieh, jsh, jeh, do_I, por_face_areaU)
 
@@ -1660,7 +1663,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   !$omp target exit data &
   !$omp   map(from: BT_cont%FA_u_W0, BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, &
   !$omp       BT_cont%uBT_WW, BT_cont%uBT_EE) &
-  !$omp   map(release: zeros, u, h_W, h_E, h_in, uh_tot_0, duhdu_tot_0, du0, duL, duR, du_CFL, &
+  !$omp   map(release: u, h_W, h_E, h_in, uh_tot_0, duhdu_tot_0, du0, duL, duR, du_CFL, &
   !$omp       FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R, &
   !$omp       G, G%IareaT, G%dy_Cu, G%IdxT, G%dxCu, BT_cont, &
   !$omp       du_max_CFL, du_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaU)
