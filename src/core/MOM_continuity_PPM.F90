@@ -1209,8 +1209,6 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
   ! Local variables
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length [H ~> m or kg m-2]
-  real :: h_avg  ! The average thickness of a flux [H ~> m or kg m-2].
-  real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   logical :: local_open_BC
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, n
   real :: dh
@@ -1227,9 +1225,9 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
       curv_3 = (h_W(i,j,k) + h_E(i,j,k)) - 2.0*h(i,j,k)
       dh = h_W(i,j,k) - h_E(i,j,k)
       if (marginal) then
-        h_marg = h_E(i,j,k) + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
+        h_u(I,j,k) = h_E(i,j,k) + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
       else
-        h_avg = h_E(i,j,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
+        h_u(I,j,k) = h_E(i,j,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
       endif
     elseif (u(I,j,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-u(I,j,k)*dt) * (G%dy_Cu(I,j) * G%IareaT(i+1,j))
@@ -1237,25 +1235,17 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
       curv_3 = (h_W(i+1,j,k) + h_E(i+1,j,k)) - 2.0*h(i+1,j,k)
       dh = h_E(i+1,j,k)-h_W(i+1,j,k)
       if (marginal) then
-        h_marg = h_W(i+1,j,k) + CFL * (dh + &
-                                    3.0*curv_3*(CFL - 1.0))
+        h_u(I,j,k) = h_W(i+1,j,k) + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
       else
-        h_avg = h_W(i+1,j,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
+        h_u(I,j,k) = h_W(i+1,j,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
       endif
     else
       !   The choice to use the arithmetic mean here is somewhat arbitrarily, but
       ! it should be noted that h_W(i+1,j,k) and h_E(i,j,k) are usually the same.
-      if (marginal) then
-        h_marg = 0.5 * (h_W(i+1,j,k) + h_E(i,j,k))
-      else
-        h_avg = 0.5 * (h_W(i+1,j,k) + h_E(i,j,k))
-      endif
+      h_u(I,j,k) = 0.5 * (h_W(i+1,j,k) + h_E(i,j,k))
  !    h_marg = (2.0 * h_W(i+1,j,k) * h_E(i,j,k)) / &
  !             (h_W(i+1,j,k) + h_E(i,j,k) + GV%H_subroundoff)
     endif
-
-    if (marginal) then ; h_u(I,j,k) = h_marg
-    else ; h_u(I,j,k) = h_avg ; endif
     
     if (present(visc_rem_u)) then
       ! Scale back the thickness to account for the effects of viscosity and the fractional open
