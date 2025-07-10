@@ -3248,10 +3248,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
           sponge_in_CSp, ALE_sponge_in_CSp, oda_incupd_in_CSp, OBC_in, Time_in)
     endif
 
-    if (associated(OBC_in)) then
-      call MOM_initialize_OBCs(h_in, CS%tv, OBC_in, Time, G_in, GV, US, param_file, restart_CSp, CS%tracer_Reg)
-    endif
-
     if (use_temperature) then
       CS%tv%T => CS%T
       CS%tv%S => CS%S
@@ -3276,16 +3272,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       call rotate_ALE_sponge(ALE_sponge_in_CSp, G_in, CS%ALE_sponge_CSp, G, GV, US, turns, param_file)
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, T_in, G, GV, CS%T)
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, G, GV, CS%S)
-    endif
-
-    if (associated(OBC_in)) then
-      if (use_temperature) then
-        call pass_var(CS%tv%T, G%Domain)
-        call pass_var(CS%tv%S, G%Domain)
-        call fill_temp_salt_segments(G, GV, US, CS%OBC, CS%tv)
-      endif
-
-      call rotate_OBC_init(OBC_in, G, CS%OBC)
     endif
 
     deallocate(u_in)
@@ -3314,16 +3300,19 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in)
     endif
 
-    if (associated(CS%OBC)) then
-      call MOM_initialize_OBCs(CS%h, CS%tv, CS%OBC, Time, G, GV, US, param_file, restart_CSp, CS%tracer_Reg)
-    endif
-
     ! Reset the first direction if it was found in a restart file.
     if (CS%first_dir_restart > -1.0) then
       call set_first_direction(G, NINT(CS%first_dir_restart))
     else
       CS%first_dir_restart = real(modulo(first_direction, 2))
     endif
+  endif
+
+  if (associated(CS%OBC)) then
+    if (CS%rotate_index) then
+      call rotate_OBC_init(OBC_in, G, CS%OBC)
+    endif
+    call MOM_initialize_OBCs(CS%h, CS%tv, CS%OBC, Time, G, GV, US, param_file, restart_CSp, CS%tracer_Reg)
   endif
 
   ! Allocate any derived densities or other equation of state derived fields.
