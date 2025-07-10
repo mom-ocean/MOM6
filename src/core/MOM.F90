@@ -103,6 +103,7 @@ use MOM_interface_heights,     only : find_eta, calc_derived_thermo, thickness_t
 use MOM_interface_filter,      only : interface_filter, interface_filter_init, interface_filter_end
 use MOM_interface_filter,      only : interface_filter_CS
 use MOM_internal_tides,        only : int_tide_CS
+use MOM_kappa_shear,           only : kappa_shear_at_vertex
 use MOM_lateral_mixing_coeffs, only : calc_slope_functions, VarMix_init, VarMix_end
 use MOM_lateral_mixing_coeffs, only : calc_resoln_function, calc_depth_function, VarMix_CS
 use MOM_MEKE,                  only : MEKE_alloc_register_restart, step_forward_MEKE
@@ -229,6 +230,7 @@ type, public :: MOM_control_struct ; private
   logical :: rotate_index = .false.   !< True if index map is rotated
   logical :: homogenize_forcings = .false. !< True if all inputs are homogenized
   logical :: update_ustar = .false.   !< True to update ustar from homogenized tau
+  logical :: vertex_shear = .false. !< True if vertex shear is on
 
   type(verticalGrid_type), pointer :: &
     GV => NULL()    !< structure containing vertical grid info
@@ -767,7 +769,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   if (therm_reset) then
     CS%time_in_thermo_cycle = 0.0
-    if (associated(CS%tv%frazil))        CS%tv%frazil(:,:)        = 0.0
+    if (associated(CS%tv%frazil)) then
+      CS%tv%frazil(:,:) = 0.0
+      CS%tv%frazil_was_reset = .true.
+    endif
     if (associated(CS%tv%salt_deficit))  CS%tv%salt_deficit(:,:)  = 0.0
     if (associated(CS%tv%TempxPmE))      CS%tv%TempxPmE(:,:)      = 0.0
     if (associated(CS%tv%internal_heat)) CS%tv%internal_heat(:,:) = 0.0
@@ -1964,6 +1969,8 @@ subroutine post_diabatic_halo_updates(CS, G, GV, US, u, v, h, tv)
   call create_group_pass(pass_uv_T_S_h, h, G%Domain, halo=dynamics_stencil)
   call do_group_pass(pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
 
+  if ((.not.tv%frazil_was_reset) .and. CS%vertex_shear) call pass_var(tv%frazil, G%Domain, halo=1)
+
   ! Update derived thermodynamic quantities.
   if (allocated(tv%SpV_avg)) then
     call calc_derived_thermo(tv, h, G, GV, US, halo=dynamics_stencil, debug=CS%debug)
@@ -2985,7 +2992,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
 
   if (use_p_surf_in_EOS) allocate(CS%tv%p_surf(isd:ied,jsd:jed), source=0.0)
-  if (use_frazil) allocate(CS%tv%frazil(isd:ied,jsd:jed), source=0.0)
+  if (use_frazil) then
+    allocate(CS%tv%frazil(isd:ied,jsd:jed), source=0.0)
+    CS%tv%frazil_was_reset = .true.
+  endif
   if (bound_salinity) allocate(CS%tv%salt_deficit(isd:ied,jsd:jed), source=0.0)
 
   allocate(CS%Hml(isd:ied,jsd:jed), source=0.0)
@@ -3600,6 +3610,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                               CS%ADp, CS%CDp, CS%diabatic_CSp, CS%tracer_flow_CSp, &
                               CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%int_tide_CSp)
   endif
+
+  CS%vertex_shear = kappa_shear_at_vertex(param_file)
 
   ! GMM, the following is needed to get BLDs into the dynamics module
   if (CS%split .and. fpmix) then
