@@ -24,7 +24,7 @@ use MOM_shared_initialization, only : set_rotation_planetary, set_rotation_beta_
 use MOM_shared_initialization, only : reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_list
 use MOM_shared_initialization, only : read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 use MOM_shared_initialization, only : set_subgrid_topo_at_vel_from_file
-use MOM_shared_initialization, only : compute_global_grid_integrals, write_ocean_geometry_file
+use MOM_shared_initialization, only : compute_global_grid_integrals
 use MOM_unit_scaling, only : unit_scale_type
 
 use user_initialization, only : user_initialize_topography
@@ -51,14 +51,12 @@ contains
 ! -----------------------------------------------------------------------------
 !> MOM_initialize_fixed sets up time-invariant quantities related to MOM6's
 !!   horizontal grid, bathymetry, and the Coriolis parameter.
-subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
+subroutine MOM_initialize_fixed(G, US, OBC, PF)
   type(dyn_horgrid_type),  intent(inout) :: G    !< The ocean's grid structure.
   type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(ocean_OBC_type),    pointer       :: OBC  !< Open boundary structure.
   type(param_file_type),   intent(in)    :: PF   !< A structure indicating the open file
                                                  !! to parse for model parameter values.
-  logical,                 intent(in)    :: write_geom !< If true, write grid geometry files.
-  character(len=*),        intent(in)    :: output_dir !< The directory into which to write files.
 
   ! Local variables
   character(len=200) :: inputdir   ! The directory where NetCDF input files are.
@@ -174,9 +172,6 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF, write_geom, output_dir)
 
 ! Compute global integrals of grid values for later use in scalar diagnostics !
   call compute_global_grid_integrals(G, US=US)
-
-! Write out all of the grid data used by this run.
-  if (write_geom) call write_ocean_geometry_file(G, PF, output_dir, US=US)
 
   call callTree_leave('MOM_initialize_fixed()')
 

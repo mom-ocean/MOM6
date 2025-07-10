@@ -43,6 +43,7 @@ program Shelf_main
   use MOM_io,              only : APPEND_FILE, READONLY_FILE, SINGLE_FILE
   use MOM_open_boundary,   only : ocean_OBC_type
   use MOM_restart,         only : save_restart
+  use MOM_shared_initialization, only : write_ocean_geometry_file
   use MOM_string_functions,only : uppercase
   use MOM_time_manager,    only : time_type, set_date, get_date
   use MOM_time_manager,    only : real_to_time, time_type_to_real
@@ -268,7 +269,10 @@ program Shelf_main
   call clone_MOM_domain(ocn_grid%Domain, dG%Domain)
 
   ! Initialize the ocean grid and topography.
-  call MOM_initialize_fixed(dG, US, OBC, param_file, .true., dirs%output_directory)
+  call MOM_initialize_fixed(dG, US, OBC, param_file)
+  ! Write out all of the grid data used by this run.
+  call write_ocean_geometry_file(dG, param_file, dirs%output_directory, US=US)
+
   call MOM_grid_init(ocn_grid, param_file, US, HI)
   call copy_dyngrid_to_MOM_grid(dG, ocn_grid, US)
   call destroy_dyn_horgrid(dG)

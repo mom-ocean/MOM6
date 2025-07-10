@@ -47,7 +47,7 @@ use MOM_grid_initialize, only : set_grid_metrics
 use MOM_hor_index, only : hor_index_type, hor_index_init
 use MOM_dyn_horgrid, only : dyn_horgrid_type, create_dyn_horgrid, destroy_dyn_horgrid
 use MOM_transcribe_grid, only : copy_dyngrid_to_MOM_grid, copy_MOM_grid_to_dyngrid
-use MOM_fixed_initialization, only : MOM_initialize_fixed, MOM_initialize_topography
+use MOM_fixed_initialization, only : MOM_initialize_topography
 use MOM_coord_initialization, only : MOM_initialize_coord
 use MOM_file_parser, only : read_param, get_param, param_file_type
 use MOM_string_functions, only : lowercase

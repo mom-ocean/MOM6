@@ -2875,7 +2875,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call MOM_grid_init(G_in, param_file, US, HI_in, bathymetry_at_vel=bathy_at_vel)
 
   ! Allocate initialize time-invariant MOM variables.
-  call MOM_initialize_fixed(dG_in, US, OBC_in, param_file, .false., dirs%output_directory)
+  call MOM_initialize_fixed(dG_in, US, OBC_in, param_file)
 
   ! Copy the grid metrics and bathymetry to the ocean_grid_type
   call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
@@ -3152,7 +3152,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                           local_indexing=.not.global_indexing)
       call create_dyn_horgrid(dG_unmasked_in, HI_in_unmasked, bathymetry_at_vel=bathy_at_vel)
       call clone_MOM_domain(MOM_dom_unmasked, dG_unmasked_in%Domain)
-      call MOM_initialize_fixed(dG_unmasked_in, US, OBC_in, param_file, .false., dirs%output_directory)
+      call MOM_initialize_fixed(dG_unmasked_in, US, OBC_in, param_file)
       call write_ocean_geometry_file(dG_unmasked_in, param_file, dirs%output_directory, US=US, geom_file=geom_file)
       call deallocate_MOM_domain(MOM_dom_unmasked)
       call destroy_dyn_horgrid(dG_unmasked_in)
