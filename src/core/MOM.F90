@@ -118,7 +118,7 @@ use MOM_open_boundary,         only : setup_OBC_tracer_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
 use MOM_open_boundary,         only : open_boundary_setup_vert, initialize_segment_data
 use MOM_open_boundary,         only : update_OBC_segment_data, open_boundary_halo_update
-use MOM_open_boundary,         only : rotate_OBC_config, rotate_OBC_segment_fields
+use MOM_open_boundary,         only : rotate_OBC_config
 use MOM_open_boundary,         only : write_OBC_info, chksum_OBC_segments
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
@@ -2919,7 +2919,6 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     if (associated(OBC_in)) then
       allocate(CS%OBC)
       call rotate_OBC_config(OBC_in, dG_in, CS%OBC, dG, turns)
-      call rotate_OBC_segment_fields(OBC_in, G, CS%OBC)
     endif
 
     call destroy_dyn_horgrid(dG)

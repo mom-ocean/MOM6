@@ -71,7 +71,6 @@ public set_initialized_OBC_tracer_reservoirs
 public update_OBC_ramp
 public remap_OBC_fields
 public rotate_OBC_config
-public rotate_OBC_segment_fields
 public rotate_OBC_segment_direction
 public write_OBC_info, chksum_OBC_segments
 public initialize_segment_data
@@ -5888,8 +5887,10 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
   allocate(OBC%segment(0:OBC%number_of_segments))
   do l_seg = 1, OBC%number_of_segments
     call rotate_OBC_segment_config(OBC_in%segment(l_seg), G_in, OBC%segment(l_seg), G, turns)
-    ! Data up to setup_[uv]_point_obc is needed for allocate_obc_segment_data!
+    ! Data stored in setup_[uv]_point_obc is needed for allocate_obc_segment_data
     call allocate_OBC_segment_data(OBC, OBC%segment(l_seg))
+    ! Initialize the field-related data of a rotated segment.
+    call rotate_OBC_segment_data(OBC_in%segment(l_seg), OBC%segment(l_seg), turns)
   enddo
 
   ! The horizontal segment map
@@ -6001,12 +6002,6 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
     OBC%remap_h_CS = OBC_in%remap_h_CS
   endif
 
-  ! TODO: The OBC registry is a list of "registered" OBC types that is set up
-  !   on the rotated grid after rotate_OBC_config is called.
-  !   It does not appear to be used, so for now we skip this record.
-  ! OBC%OBC_Reg => OBC_in%OBC_Reg
-  ! OBC%num_obgc_tracers = OBC_in%num_obgc_tracers
-  ! if (associated(OBC_in%OBC_Reg) .and. (.not.associated(OBC%OBC_Reg))) allocate(OBC%OBC_Reg)
 end subroutine rotate_OBC_config
 
 !> Rotate the OBC segment configuration data from the input to model index map.
@@ -6204,24 +6199,6 @@ function rotate_OBC_segment_direction(direction, turns) result(rotated_dir)
   endif
 
 end function rotate_OBC_segment_direction
-
-
-!> Initialize the segments and field-related data of a rotated OBC.
-subroutine rotate_OBC_segment_fields(OBC_in, G, OBC)
-  type(ocean_OBC_type), intent(in) :: OBC_in            !< OBC on input map
-  type(ocean_grid_type), intent(in) :: G                !< Rotated grid metric
-  type(ocean_OBC_type), pointer, intent(inout) :: OBC   !< Rotated OBC
-
-  integer :: l_seg
-
-  ! update_OBC may have been updated during initialization.
-  OBC%update_OBC = OBC_in%update_OBC
-
-  do l_seg = 1, OBC%number_of_segments
-    call rotate_OBC_segment_data(OBC_in%segment(l_seg), OBC%segment(l_seg), G%HI%turns)
-  enddo
-
-end subroutine rotate_OBC_segment_fields
 
 
 !> Rotate an OBC segment's fields from the input to the model index map.
