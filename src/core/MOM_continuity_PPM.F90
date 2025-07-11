@@ -657,18 +657,21 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         visc_rem_u_tmp(i,j,k) = 1.0
       enddo
     else
+      ! this is expensive
       do concurrent (k=1:nz, i=ish-1:ieh)
         visc_rem_u_tmp(i,j,k) = visc_rem_u(i,j,k)
       enddo
     end if
   
     ! Set uh and duhdu.
+    !DIR$ FORCEINLINE
     do concurrent (k=1:nz , I=ish-1:ieh)
       call zonal_flux_layere(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
                             uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
                             dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
     enddo
     if (local_open_BC) then
+      !DIR$ FORCEINLINE
       do concurrent (k=1:nz, I=ish-1:ieh)
         call zonal_flux_layere_OBC(u(I,j,k), h_in, uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), &
                                   G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
