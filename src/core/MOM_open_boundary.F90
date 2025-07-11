@@ -71,7 +71,7 @@ public set_initialized_OBC_tracer_reservoirs
 public update_OBC_ramp
 public remap_OBC_fields
 public rotate_OBC_config
-public rotate_OBC_init
+public rotate_OBC_segment_fields, rotate_OBC_segment_tracer_registry
 public rotate_OBC_segment_direction
 public write_OBC_info, chksum_OBC_segments
 public initialize_segment_data
@@ -6207,7 +6207,7 @@ end function rotate_OBC_segment_direction
 
 
 !> Initialize the segments and field-related data of a rotated OBC.
-subroutine rotate_OBC_init(OBC_in, G, OBC)
+subroutine rotate_OBC_segment_fields(OBC_in, G, OBC)
   type(ocean_OBC_type), intent(in) :: OBC_in            !< OBC on input map
   type(ocean_grid_type), intent(in) :: G                !< Rotated grid metric
   type(ocean_OBC_type), pointer, intent(inout) :: OBC   !< Rotated OBC
@@ -6221,7 +6221,22 @@ subroutine rotate_OBC_init(OBC_in, G, OBC)
     call rotate_OBC_segment_data(OBC_in%segment(l_seg), OBC%segment(l_seg), G%HI%turns)
   enddo
 
-end subroutine rotate_OBC_init
+end subroutine rotate_OBC_segment_fields
+
+
+!> Initialize the segment tracer registry of a rotated OBC.
+subroutine rotate_OBC_segment_tracer_registry(OBC_in, G, OBC)
+  type(ocean_OBC_type), intent(in) :: OBC_in            !< OBC on input map
+  type(ocean_grid_type), intent(in) :: G                !< Rotated grid metric
+  type(ocean_OBC_type), pointer, intent(inout) :: OBC   !< Rotated OBC
+
+  integer :: l_seg
+
+  do l_seg = 1, OBC%number_of_segments
+    call rotate_OBC_segment_tracer_data(OBC_in%segment(l_seg), OBC%segment(l_seg), G%HI%turns)
+  enddo
+
+end subroutine rotate_OBC_segment_tracer_registry
 
 
 !> Rotate an OBC segment's fields from the input to the model index map.
@@ -6369,6 +6384,57 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
       call rotate_array(segment_in%nudged_tangential_vel, turns, segment%nudged_tangential_vel)
   if (allocated(segment_in%nudged_tangential_grad)) &
       call rotate_array(segment_in%nudged_tangential_grad, turns, segment%nudged_tangential_grad)
+
+  ! Change the sign of the normal or tangential velocities or transports that have been read in from
+  ! a file, depending on the orientation of the face and the number of quarter turns of the grid.
+  flip_normal_vel_sign = .false. ; flip_tang_vel_sign = .false.
+  do n = 1, num_fields
+    if (((segment%field(n)%name == 'U') .or. (segment%field(n)%name == 'Uamp')) .and. &
+        ((modulo(turns, 4) == 1) .or. (modulo(turns, 4) == 2)) ) then
+      if (allocated(segment%field(n)%buffer_dst)) &
+        segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
+      segment%field(n)%value = -segment%field(n)%value
+      if (segment%is_E_or_W) flip_normal_vel_sign = .true.
+      if (segment%is_N_or_S) flip_tang_vel_sign = .true.
+    elseif (((segment%field(n)%name == 'V') .or. (segment%field(n)%name == 'Vamp')) .and. &
+            ((modulo(turns, 4) == 3) .or. (modulo(turns, 4) == 2)) ) then
+      if (allocated(segment%field(n)%buffer_dst)) &
+        segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
+      segment%field(n)%value = -segment%field(n)%value
+      if (segment%is_N_or_S) flip_normal_vel_sign = .true.
+      if (segment%is_E_or_W) flip_tang_vel_sign = .true.
+    endif
+  enddo
+
+  if (flip_normal_vel_sign) then
+    segment%normal_trans(:,:,:) = -segment%normal_trans(:,:,:)
+    segment%normal_vel(:,:,:) = -segment%normal_vel(:,:,:)
+    segment%normal_vel_bt(:,:) = -segment%normal_vel_bt(:,:)
+    if (allocated(segment%nudged_normal_vel)) &
+      segment%nudged_normal_vel(:,:,:) = -segment%nudged_normal_vel(:,:,:)
+  endif
+
+  if (flip_tang_vel_sign) then
+    if (allocated(segment%tangential_vel)) &
+      segment%tangential_vel(:,:,:) = -segment%tangential_vel(:,:,:)
+    if (allocated(segment%nudged_tangential_vel)) &
+      segment%nudged_tangential_vel(:,:,:) = -segment%nudged_tangential_vel(:,:,:)
+  endif
+
+  segment%temp_segment_data_exists = segment_in%temp_segment_data_exists
+  segment%salt_segment_data_exists = segment_in%salt_segment_data_exists
+end subroutine rotate_OBC_segment_data
+
+!> Rotate an OBC segment's tracer registry fields fields from the input to the model index map.
+subroutine rotate_OBC_segment_tracer_data(segment_in, segment, turns)
+  type(OBC_segment_type), intent(in) :: segment_in  !< The unrotated segment to use as a source
+  type(OBC_segment_type), intent(inout) :: segment  !< The rotated segment to initialize
+  integer, intent(in) :: turns  !< The number of quarter turns of the grid to apply
+
+  ! Local variables
+  integer :: n
+  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, ke
+
   if (associated(segment_in%tr_Reg)) then
     isd = segment%HI%isd ; ied = segment%HI%ied ; IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
     jsd = segment%HI%jsd ; jed = segment%HI%jed ; JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
@@ -6413,45 +6479,7 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
     enddo
   endif
 
-  ! Change the sign of the normal or tangential velocities or transports that have been read in from
-  ! a file, depending on the orientation of the face and the number of quarter turns of the grid.
-  flip_normal_vel_sign = .false. ; flip_tang_vel_sign = .false.
-  do n = 1, num_fields
-    if (((segment%field(n)%name == 'U') .or. (segment%field(n)%name == 'Uamp')) .and. &
-        ((modulo(turns, 4) == 1) .or. (modulo(turns, 4) == 2)) ) then
-      if (allocated(segment%field(n)%buffer_dst)) &
-        segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
-      segment%field(n)%value = -segment%field(n)%value
-      if (segment%is_E_or_W) flip_normal_vel_sign = .true.
-      if (segment%is_N_or_S) flip_tang_vel_sign = .true.
-    elseif (((segment%field(n)%name == 'V') .or. (segment%field(n)%name == 'Vamp')) .and. &
-            ((modulo(turns, 4) == 3) .or. (modulo(turns, 4) == 2)) ) then
-      if (allocated(segment%field(n)%buffer_dst)) &
-        segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
-      segment%field(n)%value = -segment%field(n)%value
-      if (segment%is_N_or_S) flip_normal_vel_sign = .true.
-      if (segment%is_E_or_W) flip_tang_vel_sign = .true.
-    endif
-  enddo
-
-  if (flip_normal_vel_sign) then
-    segment%normal_trans(:,:,:) = -segment%normal_trans(:,:,:)
-    segment%normal_vel(:,:,:) = -segment%normal_vel(:,:,:)
-    segment%normal_vel_bt(:,:) = -segment%normal_vel_bt(:,:)
-    if (allocated(segment%nudged_normal_vel)) &
-      segment%nudged_normal_vel(:,:,:) = -segment%nudged_normal_vel(:,:,:)
-  endif
-
-  if (flip_tang_vel_sign) then
-    if (allocated(segment%tangential_vel)) &
-      segment%tangential_vel(:,:,:) = -segment%tangential_vel(:,:,:)
-    if (allocated(segment%nudged_tangential_vel)) &
-      segment%nudged_tangential_vel(:,:,:) = -segment%nudged_tangential_vel(:,:,:)
-  endif
-
-  segment%temp_segment_data_exists = segment_in%temp_segment_data_exists
-  segment%salt_segment_data_exists = segment_in%salt_segment_data_exists
-end subroutine rotate_OBC_segment_data
+end subroutine rotate_OBC_segment_tracer_data
 
 
 !> Allocate an array of data for a field on a segment based on the size of a potentially rotated source array
