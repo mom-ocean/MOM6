@@ -112,7 +112,7 @@ use MOM_MEKE_types,            only : MEKE_type
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat, mixedlayer_restrat_init, mixedlayer_restrat_CS
 use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
-use MOM_open_boundary,         only : ocean_OBC_type
+use MOM_open_boundary,         only : ocean_OBC_type, open_boundary_end
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : setup_OBC_tracer_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
@@ -3263,6 +3263,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       call update_ALE_sponge_field(CS%ALE_sponge_CSp, S_in, G, GV, CS%S)
     endif
 
+   ! Deallocate the unrotated arrays and types that are no longer needed.
     deallocate(u_in)
     deallocate(v_in)
     deallocate(h_in)
@@ -3270,8 +3271,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       deallocate(T_in)
       deallocate(S_in)
     endif
-    if (use_ice_shelf) &
-      deallocate(frac_shelf_in, mass_shelf_in)
+    if (use_ice_shelf) deallocate(frac_shelf_in, mass_shelf_in)
+    if (associated(OBC_in)) call open_boundary_end(OBC_in)
+
   else  ! The model is being run without grid rotation.  This is true of all production runs.
     if (use_ice_shelf) then
       call initialize_ice_shelf(param_file, G, Time, ice_shelf_CSp, diag_ptr, Time_init, &
@@ -4545,6 +4547,7 @@ subroutine MOM_end(CS)
   DEALLOC_(CS%uh) ; DEALLOC_(CS%vh)
 
   if (associated(CS%update_OBC_CSp)) call OBC_register_end(CS%update_OBC_CSp)
+  if (associated(CS%OBC)) call open_boundary_end(CS%OBC)
 
   call verticalGridEnd(CS%GV)
   call MOM_grid_end(CS%G)
