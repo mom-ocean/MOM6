@@ -687,10 +687,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       if (use_visc_rem.and.CS%use_visc_rem_max) then
         ! poor performance for nvfortran + do concurrent if k is inside loop
         do concurrent (I=ish-1:ieh)
-          visc_rem_max(I,j) = visc_rem_u(I,j,1)
+          visc_rem_max(I,j) = visc_rem_u_tmp(I,j,1)
         enddo
         do k=2,nz ; do concurrent (I=ish-1:ieh)
-          visc_rem_max(I,j) = max(visc_rem_max(I,j), visc_rem_u(I,j,k))
+          visc_rem_max(I,j) = max(visc_rem_max(I,j), visc_rem_u_tmp(I,j,k))
         enddo ; enddo
       else
         do concurrent (i=ish-1:ieh)
@@ -882,10 +882,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   if  (set_BT_cont) then ; if (allocated(BT_cont%h_u)) then
     if (present(u_cor)) then
       call zonal_flux_thickness(u_cor, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u_tmp)
     else
       call zonal_flux_thickness(u, h_in, h_W, h_E, BT_cont%h_u, dt, G, GV, US, LB, &
-                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u)
+                                CS%vol_CFL, CS%marginal_faces, OBC, por_face_areaU, visc_rem_u_tmp)
     endif
   endif ; endif
 
