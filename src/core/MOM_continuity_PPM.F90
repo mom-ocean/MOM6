@@ -780,79 +780,75 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   enddo
 
   if (present(uhbt) .or. set_BT_cont) then
-
+    ! untested!
     any_simple_OBC = .false.
-    if (present(uhbt) .or. set_BT_cont) then
-      ! untested!
-      if (local_specified_BC .or. local_Flather_OBC) then 
-        do concurrent (j=jsh:jeh, I=ish-1:ieh)
-          l_seg = abs(OBC%segnum_u(I,j))
+    if (local_specified_BC .or. local_Flather_OBC) then 
+      do concurrent (j=jsh:jeh, I=ish-1:ieh)
+        l_seg = abs(OBC%segnum_u(I,j))
 
-          ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          simple_OBC_pt(I,j) = .false.
-          if (l_seg /= OBC_NONE) simple_OBC_pt(I,j) = OBC%segment(l_seg)%specified
-          do_I(I, j) = .not.simple_OBC_pt(I,j)
-          any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I,j)
-        enddo
-      else
-        do concurrent (j=jsh:jeh, I=ish-1:ieh)
-          do_I(I, j) = .true.
-        enddo
-      endif
+        ! Avoid reconciling barotropic/baroclinic transports if transport is specified
+        simple_OBC_pt(I,j) = .false.
+        if (l_seg /= OBC_NONE) simple_OBC_pt(I,j) = OBC%segment(l_seg)%specified
+        do_I(I, j) = .not.simple_OBC_pt(I,j)
+        any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(I,j)
+      enddo
+    else
+      do concurrent (j=jsh:jeh, I=ish-1:ieh)
+        do_I(I, j) = .true.
+      enddo
+    endif
 
-      if (present(uhbt)) then
-        ! Find du and uh.
-        call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, &
-                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
-                              ish, ieh, jsh, jeh, do_I, por_face_areaU, uhbt, uh, OBC=OBC)
+    if (present(uhbt)) then
+      ! Find du and uh.
+      call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, &
+                            du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
+                            ish, ieh, jsh, jeh, do_I, por_face_areaU, uhbt, uh, OBC=OBC)
 
-        do concurrent (j=jsh:jeh)
-          if (present(u_cor)) then
-            do concurrent (k=1:nz, I=ish-1:ieh)
-              u_cor(i,j,k) = u(i,j,k) + du(i,j) * visc_rem_u_tmp(i,j,k)
+      do concurrent (j=jsh:jeh)
+        if (present(u_cor)) then
+          do concurrent (k=1:nz, I=ish-1:ieh)
+            u_cor(I,j,k) = u(I,j,k) + du(I,j) * visc_rem_u_tmp(I,j,k)
+          enddo
+          if (any_simple_OBC) then 
+            do concurrent (k=1:nz, I=ish-1:ieh, simple_OBC_pt(I,j))
+              u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
             enddo
-            if (any_simple_OBC) then 
-              do concurrent (k=1:nz, I=ish-1:ieh, simple_OBC_pt(I,j))
-                u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
-              enddo
-            endif
-          endif ! u-corrected
+          endif
+        endif ! u-corrected
 
-          if (present(du_cor)) then
-            do concurrent (I=ish-1:ieh) ; du_cor(I,j) = du(I,j) ; enddo
+        if (present(du_cor)) then
+          do concurrent (I=ish-1:ieh) ; du_cor(I,j) = du(I,j) ; enddo
+        endif
+      enddo
+    endif
+    if (set_BT_cont) then
+      ! Diagnose the zero-transport correction, du0.
+      call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, &
+                            du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
+                            ish, ieh, jsh, jeh, do_I, por_face_areaU)
+      call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du, uh_tot_0, duhdu_tot_0,&
+                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
+                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaU)
+    
+      if (any_simple_OBC) then
+        ! untested
+        do concurrent (j=jsh:jeh, I=ish-1:ieh)
+          ! NOTE: simple_OBC_pt(I, j) should prevent access to segment OBC_NONE
+          if (simple_OBC_pt(I,j)) then
+            FAuI = GV%H_subroundoff*G%dy_Cu(I,j)
+            do k=1,nz
+              l_seg = abs(OBC%segnum_u(I,j))
+              if ((abs(OBC%segment(l_seg)%normal_vel(I,j,k)) > 0.0) .and. (OBC%segment(l_seg)%specified)) &
+                FAuI = FAuI + OBC%segment(l_seg)%normal_trans(I,j,k) / OBC%segment(l_seg)%normal_vel(I,j,k)
+            enddo
+            BT_cont%FA_u_W0(I,j) = FAuI ; BT_cont%FA_u_E0(I,j) = FAuI
+            BT_cont%FA_u_WW(I,j) = FAuI ; BT_cont%FA_u_EE(I,j) = FAuI
+            BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
           endif
         enddo
-      endif
-      if (set_BT_cont) then
-        ! Diagnose the zero-transport correction, du0.
-        call zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, &
-                              du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
-                              ish, ieh, jsh, jeh, do_I, por_face_areaU)
-        call set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du, uh_tot_0, duhdu_tot_0,&
-                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem_u_tmp, &
-                               visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaU)
-      
-        if (any_simple_OBC) then
-          ! untested
-          do concurrent (j=jsh:jeh, I=ish-1:ieh)
-            ! NOTE: simple_OBC_pt(I, j) should prevent access to segment OBC_NONE
-            if (simple_OBC_pt(I,j)) then
-              FAuI = GV%H_subroundoff*G%dy_Cu(I,j)
-              do k=1,nz
-                l_seg = abs(OBC%segnum_u(I,j))
-                if ((abs(OBC%segment(l_seg)%normal_vel(I,j,k)) > 0.0) .and. (OBC%segment(l_seg)%specified)) &
-                  FAuI = FAuI + OBC%segment(l_seg)%normal_trans(I,j,k) / OBC%segment(l_seg)%normal_vel(I,j,k)
-              enddo
-              BT_cont%FA_u_W0(I,j) = FAuI ; BT_cont%FA_u_E0(I,j) = FAuI
-              BT_cont%FA_u_WW(I,j) = FAuI ; BT_cont%FA_u_EE(I,j) = FAuI
-              BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
-            endif
-          enddo
-        endif ! any_simple_OBC
-      endif ! set_BT_cont
-    endif ! present(uhbt) or set_BT_cont
-
-  endif
+      endif ! any_simple_OBC
+    endif ! set_BT_cont
+  endif ! present(uhbt) or set_BT_cont
 
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
