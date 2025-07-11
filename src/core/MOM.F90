@@ -116,9 +116,8 @@ use MOM_open_boundary,         only : ocean_OBC_type, open_boundary_end
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
 use MOM_open_boundary,         only : setup_OBC_tracer_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
-use MOM_open_boundary,         only : open_boundary_setup_vert, initialize_segment_data
+use MOM_open_boundary,         only : initialize_segment_data, rotate_OBC_config
 use MOM_open_boundary,         only : update_OBC_segment_data, open_boundary_halo_update
-use MOM_open_boundary,         only : rotate_OBC_config
 use MOM_open_boundary,         only : write_OBC_info, chksum_OBC_segments
 use MOM_porous_barriers,       only : porous_widths_layer, porous_widths_interface, porous_barriers_init
 use MOM_porous_barriers,       only : porous_barrier_CS
@@ -2895,10 +2894,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
   CS%HFrz = (US%Z_to_m * GV%m_to_H) * HFrz_z
 
-  ! Finish OBC configuration that depend on the vertical grid
   if (associated(OBC_in)) then
-    call open_boundary_setup_vert(GV, US, OBC_in)
-    ! This allocates the arrays on the segments for open boundary data
+    ! This call allocates the arrays on the segments for open boundary data and initializes the
+    ! relevant vertical remapping structures.   It can only occur after the vertical grid has been
+    ! initialized.
     call initialize_segment_data(G_in, GV, US, OBC_in, param_file)
   endif
 
