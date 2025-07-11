@@ -71,7 +71,7 @@ public set_initialized_OBC_tracer_reservoirs
 public update_OBC_ramp
 public remap_OBC_fields
 public rotate_OBC_config
-public rotate_OBC_segment_fields, rotate_OBC_segment_tracer_registry
+public rotate_OBC_segment_fields
 public rotate_OBC_segment_direction
 public write_OBC_info, chksum_OBC_segments
 public initialize_segment_data
@@ -6224,21 +6224,6 @@ subroutine rotate_OBC_segment_fields(OBC_in, G, OBC)
 end subroutine rotate_OBC_segment_fields
 
 
-!> Initialize the segment tracer registry of a rotated OBC.
-subroutine rotate_OBC_segment_tracer_registry(OBC_in, G, OBC)
-  type(ocean_OBC_type), intent(in) :: OBC_in            !< OBC on input map
-  type(ocean_grid_type), intent(in) :: G                !< Rotated grid metric
-  type(ocean_OBC_type), pointer, intent(inout) :: OBC   !< Rotated OBC
-
-  integer :: l_seg
-
-  do l_seg = 1, OBC%number_of_segments
-    call rotate_OBC_segment_tracer_data(OBC_in%segment(l_seg), OBC%segment(l_seg), G%HI%turns)
-  enddo
-
-end subroutine rotate_OBC_segment_tracer_registry
-
-
 !> Rotate an OBC segment's fields from the input to the model index map.
 subroutine rotate_OBC_segment_data(segment_in, segment, turns)
   type(OBC_segment_type), intent(in) :: segment_in  !< The unrotated segment to use as a source
@@ -6424,62 +6409,6 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
   segment%temp_segment_data_exists = segment_in%temp_segment_data_exists
   segment%salt_segment_data_exists = segment_in%salt_segment_data_exists
 end subroutine rotate_OBC_segment_data
-
-!> Rotate an OBC segment's tracer registry fields fields from the input to the model index map.
-subroutine rotate_OBC_segment_tracer_data(segment_in, segment, turns)
-  type(OBC_segment_type), intent(in) :: segment_in  !< The unrotated segment to use as a source
-  type(OBC_segment_type), intent(inout) :: segment  !< The rotated segment to initialize
-  integer, intent(in) :: turns  !< The number of quarter turns of the grid to apply
-
-  ! Local variables
-  integer :: n
-  integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, ke
-
-  if (associated(segment_in%tr_Reg)) then
-    isd = segment%HI%isd ; ied = segment%HI%ied ; IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
-    jsd = segment%HI%jsd ; jed = segment%HI%jed ; JsdB = segment%HI%JsdB ; JedB = segment%HI%JedB
-
-    if (.not.associated(segment%tr_Reg)) allocate(segment%tr_Reg)
-    segment%tr_Reg%ntseg = segment_in%tr_Reg%ntseg
-
-    do n = 1, segment_in%tr_Reg%ntseg
-      ! segment_in already points to the rotated tracer fields in the registry.
-      if (associated(segment_in%tr_Reg%Tr(n)%Tr)) &
-        segment%tr_Reg%Tr(n)%Tr => segment_in%tr_Reg%Tr(n)%Tr
-      segment%tr_Reg%Tr(n)%name = segment_in%tr_Reg%Tr(n)%name
-      segment%tr_Reg%Tr(n)%ntr_index = segment_in%tr_Reg%Tr(n)%ntr_index
-      segment%tr_Reg%Tr(n)%fd_index = segment_in%tr_Reg%Tr(n)%fd_index
-      segment%tr_Reg%Tr(n)%scale = segment_in%tr_Reg%Tr(n)%scale
-      segment%tr_Reg%Tr(n)%OBC_inflow_conc = segment_in%tr_Reg%Tr(n)%OBC_inflow_conc
-
-      if (allocated(segment_in%tr_Reg%tr(n)%t)) then
-        if (.not.allocated(segment%tr_Reg%tr(n)%t)) then
-          ke = size(segment_in%tr_Reg%tr(n)%t, 3)
-          if (segment%is_E_or_W) then
-            allocate(segment%tr_Reg%Tr(n)%t(IsdB:IedB,jsd:jed,1:ke), source=0.0)
-          elseif (segment%is_N_or_S) then
-            allocate(segment%tr_Reg%Tr(n)%t(isd:ied,JsdB:JedB,1:ke), source=0.0)
-          endif
-        endif
-        call rotate_array(segment_in%tr_Reg%tr(n)%t, turns, segment%tr_Reg%tr(n)%t)
-      endif
-
-      if (allocated(segment_in%tr_Reg%tr(n)%tres)) then
-        if (.not.allocated(segment%tr_Reg%tr(n)%tres)) then
-          ke = size(segment_in%tr_Reg%tr(n)%tres, 3)
-          if (segment%is_E_or_W) then
-            allocate(segment%tr_Reg%Tr(n)%tres(IsdB:IedB,jsd:jed,1:ke), source=0.0)
-          elseif (segment%is_N_or_S) then
-            allocate(segment%tr_Reg%Tr(n)%tres(isd:ied,JsdB:JedB,1:ke), source=0.0)
-          endif
-        endif
-        call rotate_array(segment_in%tr_Reg%tr(n)%tres, turns, segment%tr_Reg%tr(n)%tres)
-      endif
-      segment%tr_Reg%Tr(n)%is_initialized = segment_in%tr_Reg%Tr(n)%is_initialized
-    enddo
-  endif
-
-end subroutine rotate_OBC_segment_tracer_data
 
 
 !> Allocate an array of data for a field on a segment based on the size of a potentially rotated source array
