@@ -494,7 +494,7 @@ end subroutine oil_tracer_end
 !!
 !!    This tracer package was central to the simulations used by Adcroft et al.,
 !!  GRL 2010, to prove that the Deepwater Horizon spill was an important regional
-!!  event, with implications for dissolved oxygen levels in the Gulf of Mexico,
-!!  but not one that would directly impact the East Coast of the U.S.
+!!  event, with implications for dissolved oxygen levels in certains regions,
+!!  see above reference for details.
 
 end module oil_tracer
