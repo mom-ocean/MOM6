@@ -6285,6 +6285,7 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
   integer, intent(in) :: turns  !< The number of quarter turns of the grid to apply
 
   ! Local variables
+  logical :: flip_normal_vel_sign, flip_tang_vel_sign
   integer :: n
   integer :: num_fields
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, ke
@@ -6466,39 +6467,41 @@ subroutine rotate_OBC_segment_data(segment_in, segment, turns)
     enddo
   endif
 
+  ! Change the sign of the normal or tangential velocities or transports that have been read in from
+  ! a file, depending on the orientation of the face and the number of quarter turns of the grid.
+  flip_normal_vel_sign = .false. ; flip_tang_vel_sign = .false.
   do n = 1, num_fields
-    if ((segment%field(n)%name == 'U' .or. segment%field(n)%name == 'Uamp') .and. &
-         (modulo(turns, 4) == 1 .or. modulo(turns, 4) == 2)) then
-      segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
-      if (segment%is_E_or_W) then
-        segment%normal_trans(:,:,:) = -segment%normal_trans(:,:,:)
-        segment%normal_vel(:,:,:) = -segment%normal_vel(:,:,:)
-        segment%normal_vel_bt(:,:) = -segment%normal_vel_bt(:,:)
-        if (allocated(segment%nudged_normal_vel)) &
-            segment%nudged_normal_vel(:,:,:) = -segment%nudged_normal_vel(:,:,:)
-      else
-        if (allocated(segment%tangential_vel)) &
-            segment%tangential_vel(:,:,:) = -segment%tangential_vel(:,:,:)
-        if (allocated(segment%nudged_tangential_vel)) &
-            segment%nudged_tangential_vel(:,:,:) = -segment%nudged_tangential_vel(:,:,:)
-      endif
-    elseif ((segment%field(n)%name == 'V' .or. segment%field(n)%name == 'Vamp') .and. &
-         (modulo(turns, 4) == 3 .or. modulo(turns, 4) == 2)) then
-      segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
-      if (segment%is_N_or_S) then
-        segment%normal_trans(:,:,:) = -segment%normal_trans(:,:,:)
-        segment%normal_vel(:,:,:) = -segment%normal_vel(:,:,:)
-        segment%normal_vel_bt(:,:) = -segment%normal_vel_bt(:,:)
-        if (allocated(segment%nudged_normal_vel)) &
-            segment%nudged_normal_vel(:,:,:) = -segment%nudged_normal_vel(:,:,:)
-      else
-        if (allocated(segment%tangential_vel)) &
-            segment%tangential_vel(:,:,:) = -segment%tangential_vel(:,:,:)
-        if (allocated(segment%nudged_tangential_vel)) &
-            segment%nudged_tangential_vel(:,:,:) = -segment%nudged_tangential_vel(:,:,:)
-      endif
+    if (((segment%field(n)%name == 'U') .or. (segment%field(n)%name == 'Uamp')) .and. &
+        ((modulo(turns, 4) == 1) .or. (modulo(turns, 4) == 2)) ) then
+      if (allocated(segment%field(n)%buffer_dst)) &
+        segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
+      segment%field(n)%value = -segment%field(n)%value
+      if (segment%is_E_or_W) flip_normal_vel_sign = .true.
+      if (segment%is_N_or_S) flip_tang_vel_sign = .true.
+    elseif (((segment%field(n)%name == 'V') .or. (segment%field(n)%name == 'Vamp')) .and. &
+            ((modulo(turns, 4) == 3) .or. (modulo(turns, 4) == 2)) ) then
+      if (allocated(segment%field(n)%buffer_dst)) &
+        segment%field(n)%buffer_dst(:,:,:) = -segment%field(n)%buffer_dst(:,:,:)
+      segment%field(n)%value = -segment%field(n)%value
+      if (segment%is_N_or_S) flip_normal_vel_sign = .true.
+      if (segment%is_E_or_W) flip_tang_vel_sign = .true.
     endif
   enddo
+
+  if (flip_normal_vel_sign) then
+    segment%normal_trans(:,:,:) = -segment%normal_trans(:,:,:)
+    segment%normal_vel(:,:,:) = -segment%normal_vel(:,:,:)
+    segment%normal_vel_bt(:,:) = -segment%normal_vel_bt(:,:)
+    if (allocated(segment%nudged_normal_vel)) &
+      segment%nudged_normal_vel(:,:,:) = -segment%nudged_normal_vel(:,:,:)
+  endif
+
+  if (flip_tang_vel_sign) then
+    if (allocated(segment%tangential_vel)) &
+      segment%tangential_vel(:,:,:) = -segment%tangential_vel(:,:,:)
+    if (allocated(segment%nudged_tangential_vel)) &
+      segment%nudged_tangential_vel(:,:,:) = -segment%nudged_tangential_vel(:,:,:)
+  endif
 
   segment%temp_segment_data_exists = segment_in%temp_segment_data_exists
   segment%salt_segment_data_exists = segment_in%salt_segment_data_exists
