@@ -977,8 +977,8 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
 end subroutine zonal_BT_mass_flux
 
 !> Evaluates the zonal mass or volume fluxes in a layer.
-elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh, duhdu, visc_rem, G_dy_Cu, G_IareaT, G_IareaT_p1, G_IdxT, G_IdxT_p1, dt, G, GV, US, &
-                            vol_CFL, por_face_areaU)
+elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh, duhdu, visc_rem, G_dy_Cu, G_IareaT, G_IareaT_p1, &
+                                      G_IdxT, G_IdxT_p1, dt, G, GV, US, vol_CFL, por_face_areaU)
   type(ocean_grid_type),    intent(in)    :: G        !< Ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV       !< Ocean's vertical grid structure.
   real,                     intent(in)    :: u        !< Zonal velocity [L T-1 ~> m s-1].
@@ -1012,6 +1012,9 @@ elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh,
   ! Set new values of uh and duhdu.
   tmp = G_dy_Cu * por_face_areaU ! precalculate things
   CFL = abs(u*dt) ! increases inlining likelihood
+  c1 = 0.5 * (h_W_p1 + h_E)
+  c2 = 0.0
+  c3 = 0.0
   if (u > 0.0) then
     CFL = CFL * merge(G_dy_Cu * G_IareaT, G_IdxT, vol_CFL)
     c1 = h_E
@@ -1022,11 +1025,6 @@ elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh,
     c1 = h_W_p1
     c2 = h_E_p1
     c3 = h_p1
-  else
-    CFL = 0.0
-    c1 = 0.5 * (h_W_p1 + h_E)
-    c2 = 0.0
-    c3 = 0.0
   endif
   curv_3 = (c2 + c1) - 2.0*c3
   dh = (c2 - c1)
@@ -1456,8 +1454,8 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
         do k=1,nz ; do concurrent (I=ish-1:ieh, do_I(I))
           u_new = u(I,j,k) + du(I,j) * visc_rem(I,j,k)
           call zonal_flux_layere(u_new, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
-                                uh_aux(I,k), duhdu, visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
-                                dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                                uh_aux(I,k), duhdu, visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), &
+                                G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
           ! Below if statement looks expensive in profiling results, but I believe it's
           ! masking the expensive update of uh_err beneath 
           if (local_OBC) call zonal_flux_layere_OBC(u_new, h_in, uh_aux(I,k), duhdu, visc_rem(I,j,k), &
@@ -1610,11 +1608,14 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du0, uh_tot_0, duhdu_to
       u_R = u(I,j,k) + duR(I) * visc_rem(I,j,k)
       u_0 = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
       call zonal_flux_layere(u_0, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), uh_0, duhdu_0, &
-                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, &
+                            US, CS%vol_CFL, por_face_areaU(I,j,k))
       call zonal_flux_layere(u_L, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), uh_L, duhdu_L, &
-                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, &
+                            US, CS%vol_CFL, por_face_areaU(I,j,k))
       call zonal_flux_layere(u_R, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), uh_R, duhdu_R, &
-                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, &
+                            US, CS%vol_CFL, por_face_areaU(I,j,k))
       FAmt_0(I) = FAmt_0(I) + duhdu_0
       FAmt_L(I) = FAmt_L(I) + duhdu_L
       FAmt_R(I) = FAmt_R(I) + duhdu_R
@@ -2394,7 +2395,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
       else ; do_I(i,j) = .false. ; endif
     enddo
     domore = .false.
-    do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) reduce(.or.:domore)
+    do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) !$reduce(.or.:domore)
       if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i,j)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(vh_err(i,j)) > tol_vel * dvhdv_tot(i,j)) .or. &
                                  (abs(vh_err(i,j)) > vh_err_best(i,j))) )) then
@@ -2561,7 +2562,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   ! negative velocity correction for the northerly-flux, and a sufficiently
   ! positive correction for the southerly-flux.
   domore = .false.
-  do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) reduce(.or.:domore)
+  do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) !$reduce(.or.:domore)
     domore = .true. ! might be better to do reduction on cpu to avoid reduce
     dv_CFL(i,j) = (CFL_min * Idt) * G%dyCv(i,J)
     dvR(i,j) = min(0.0,dv0(i,j) - dv_CFL(i,j))
