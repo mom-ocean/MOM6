@@ -49,15 +49,11 @@ type, public :: hor_visc_CS ; private
                              !! are not implemented with the biharmonic viscosity.
   logical :: bound_Kh        !< If true, the Laplacian coefficient is locally
                              !! limited to guarantee stability.
-  logical :: better_bound_Kh !< If true, use a more careful bounding of the
-                             !! Laplacian viscosity to guarantee stability.
   logical :: EY24_EBT_BS     !! If true, use an equivalent barotropic backscatter
                              !! with a stabilizing kill switch in MEKE,
                              !< developed by Yankovsky et al. 2024
   logical :: bound_Ah        !< If true, the biharmonic coefficient is locally
                              !! limited to guarantee stability.
-  logical :: better_bound_Ah !< If true, use a more careful bounding of the
-                             !! biharmonic viscosity to guarantee stability.
   real    :: Re_Ah           !! If nonzero, the biharmonic coefficient is scaled
                              !< so that the biharmonic Reynolds number is equal to this [nondim].
   real    :: bound_coef      !< The nondimensional coefficient of the ratio of
@@ -441,7 +437,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   real :: grid_Kh   ! Laplacian viscosity bound by grid [L2 T-1 ~> m2 s-1]
   real :: grid_Ah   ! Biharmonic viscosity bound by grid [L4 T-1 ~> m4 s-1]
 
-  logical :: rescale_Kh, legacy_bound
+  logical :: rescale_Kh
   logical :: find_FrictWork
   logical :: apply_OBC = .false.
   logical :: use_MEKE_Ku
@@ -552,9 +548,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   else
     js_vort = js-2 ; je_vort = Jeq+1 ; is_vort = is-2 ; ie_vort = Ieq+1
   endif
-
-  legacy_bound = (CS%Smagorinsky_Kh .or. CS%Leith_Kh) .and. &
-                 (CS%bound_Kh .and. .not.CS%better_bound_Kh)
 
   if (CS%use_GME) then
 
@@ -672,7 +665,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$OMP   is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, &
   !$OMP   is_vort, ie_vort, js_vort, je_vort, &
   !$OMP   is_Kh, ie_Kh, js_Kh, je_Kh, &
-  !$OMP   apply_OBC, rescale_Kh, legacy_bound, find_FrictWork, use_kh_struct, skeb_use_frict, &
+  !$OMP   apply_OBC, rescale_Kh, find_FrictWork, use_kh_struct, skeb_use_frict, &
   !$OMP   use_MEKE_Ku, use_MEKE_Au, u_smooth, v_smooth, use_cont_huv, slope_x, slope_y, dz, &
   !$OMP   backscat_subround, GME_effic_h, GME_effic_q, &
   !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
@@ -1121,7 +1114,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo ; enddo
     endif
 
-    if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
+    if (CS%bound_Ah .or. CS%bound_Kh) then
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         h_min = min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1))
         hrat_min(i,j) = min(1.0, h_min / (h(i,j,k) + h_neglect))
@@ -1176,13 +1169,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      if (legacy_bound) then
-        ! Older method of bounding for stability
-        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
-          Kh(i,j) = min(Kh(i,j), CS%Kh_Max_xx(i,j))
-        enddo ; enddo
-      endif
-
       ! Place a floor on the viscosity, if desired.
       do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
         Kh(i,j) = max(Kh(i,j), CS%Kh_bg_min)
@@ -1221,7 +1207,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       ! Newer method of bounding for stability
-      if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
+      if ((CS%bound_Kh) .and. (CS%bound_Ah)) then
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           visc_bound_rem(i,j) = 1.0
           Kh_max_here = hrat_min(i,j) * CS%Kh_Max_xx(i,j)
@@ -1232,7 +1218,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             visc_bound_rem(i,j) = 1.0 - Kh(i,j) / Kh_max_here
           endif
         enddo ; enddo
-      elseif (CS%better_bound_Kh) then
+      elseif (CS%bound_Kh) then
         do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
           Kh(i,j) = min(Kh(i,j), hrat_min(i,j) * CS%Kh_Max_xx(i,j))
         enddo ; enddo
@@ -1377,11 +1363,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
         endif
 
-        if (CS%bound_Ah .and. .not. CS%better_bound_Ah) then
-          do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
-            Ah(i,j) = min(Ah(i,j), CS%Ah_Max_xx(i,j))
-          enddo ; enddo
-        endif
       endif ! Smagorinsky_Ah or Leith_Ah or Leith+E
 
       if (use_MEKE_Au) then
@@ -1398,8 +1379,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      if (CS%better_bound_Ah) then
-        if (CS%better_bound_Kh) then
+      if (CS%bound_Ah) then
+        if (CS%bound_Kh) then
           do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
             Ah(i,j) = min(Ah(i,j), visc_bound_rem(i,j) * hrat_min(i,j) * CS%Ah_Max_xx(i,j))
           enddo ; enddo
@@ -1534,7 +1515,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           / (h_neglect3 + (h2uq + h2vq) * ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
     enddo ; enddo
 
-    if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
+    if (CS%bound_Ah .or. CS%bound_Kh) then
       do J=js-1,Jeq ; do I=is-1,Ieq
         h_min = min(h_u(I,j), h_u(I,j+1), h_v(i,J), h_v(i+1,J))
         hrat_min(I,J) = min(1.0, h_min / (hq(I,J) + h_neglect))
@@ -1627,13 +1608,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      if (legacy_bound) then
-        ! Older method of bounding for stability
-        do J=js-1,Jeq ; do I=is-1,Ieq
-          Kh(I,J) = min(Kh(I,J), CS%Kh_Max_xy(I,J))
-        enddo ; enddo
-      endif
-
       do J=js-1,Jeq ; do I=is-1,Ieq
         Kh(I,J) = max(Kh(I,J), CS%Kh_bg_min) ! Place a floor on the viscosity, if desired.
       enddo ; enddo
@@ -1671,7 +1645,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       do J=js-1,Jeq ; do I=is-1,Ieq
         ! Newer method of bounding for stability
-        if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
+        if ((CS%bound_Kh) .and. (CS%bound_Ah)) then
           visc_bound_rem(I,J) = 1.0
           Kh_max_here = hrat_min(I,J) * CS%Kh_Max_xy(I,J)
           if (Kh(I,J) >= Kh_max_here) then
@@ -1680,7 +1654,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           elseif ((Kh(I,J) > 0.0) .or. (CS%backscatter_underbound .and. (Kh_max_here > 0.0))) then
             visc_bound_rem(I,J) = 1.0 - Kh(I,J) / Kh_max_here
           endif
-        elseif (CS%better_bound_Kh) then
+        elseif (CS%bound_Kh) then
           Kh(I,J) = min(Kh(I,J), hrat_min(I,J) * CS%Kh_Max_xy(I,J))
         endif
       enddo ; enddo
@@ -1764,12 +1738,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             Ah(I,J) = max(Ah(I,J), AhLth)
           enddo ; enddo
         endif
-
-        if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-          do J=js-1,Jeq ; do I=is-1,Ieq
-            Ah(I,J) = min(Ah(I,J), CS%Ah_Max_xy(I,J))
-          enddo ; enddo
-        endif
       endif ! Smagorinsky_Ah or Leith_Ah
 
       if (use_MEKE_Au) then
@@ -1787,8 +1755,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      if (CS%better_bound_Ah) then
-        if (CS%better_bound_Kh) then
+      if (CS%bound_Ah) then
+        if (CS%bound_Kh) then
           do J=js-1,Jeq ; do I=is-1,Ieq
             Ah(I,J) = min(Ah(I,J), visc_bound_rem(I,J) * hrat_min(I,J) * CS%Ah_Max_xy(I,J))
           enddo ; enddo
@@ -2484,16 +2452,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "BOUND_KH", CS%bound_Kh, &
                  "If true, the Laplacian coefficient is locally limited "//&
                  "to be stable.", default=.true., do_not_log=.not.CS%Laplacian)
-  call get_param(param_file, mdl, "BETTER_BOUND_KH", CS%better_bound_Kh, &
-                 "If true, the Laplacian coefficient is locally limited "//&
-                 "to be stable with a better bounding than just BOUND_KH.", &
-                 default=CS%bound_Kh, do_not_log=.not.CS%Laplacian)
   call get_param(param_file, mdl, "EY24_EBT_BS", CS%EY24_EBT_BS, &
                  "If true, use the the backscatter scheme (EBT mode with kill switch)"//&
                  "developed by Yankovsky et al. (2024). ", &
                  default=.false., do_not_log=.not.CS%Laplacian)
   if (.not.CS%Laplacian) CS%bound_Kh = .false.
-  if (.not.CS%Laplacian) CS%better_bound_Kh = .false.
   if (.not.(CS%Laplacian.and.use_MEKE)) CS%EY24_EBT_BS = .false.
   call get_param(param_file, mdl, "ANISOTROPIC_VISCOSITY", CS%anisotropic, &
                  "If true, allow anistropic viscosity in the Laplacian "//&
@@ -2566,12 +2529,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "BOUND_AH", CS%bound_Ah, &
                  "If true, the biharmonic coefficient is locally limited "//&
                  "to be stable.", default=.true., do_not_log=.not.CS%biharmonic)
-  call get_param(param_file, mdl, "BETTER_BOUND_AH", CS%better_bound_Ah, &
-                 "If true, the biharmonic coefficient is locally limited "//&
-                 "to be stable with a better bounding than just BOUND_AH.", &
-                 default=CS%bound_Ah, do_not_log=.not.CS%biharmonic)
   if (.not.CS%biharmonic) CS%bound_Ah = .false.
-  if (.not.CS%biharmonic) CS%better_bound_Ah = .false.
   call get_param(param_file, mdl, "RE_AH", CS%Re_Ah, &
                  "If nonzero, the biharmonic coefficient is scaled "//&
                  "so that the biharmonic Reynolds number is equal to this.", &
@@ -2584,7 +2542,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "biharmonic viscosity when no Laplacian viscosity is applied.  The default "//&
                  "is true for historical reasons, but this option probably should not be used "//&
                  "because it can contribute to numerical instabilities.", &
-                 default=.false., do_not_log=.not.((CS%better_bound_Kh).and.(CS%better_bound_Ah)))
+                 default=.false., do_not_log=.not.((CS%bound_Kh).and.(CS%bound_Ah)))
 
   call get_param(param_file, mdl, "SMAG_BI_CONST",Smag_bi_const, &
                  "The nondimensional biharmonic Smagorinsky constant, "//&
@@ -2643,7 +2601,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "The nondimensional coefficient of the ratio of the "//&
                  "viscosity bounds to the theoretical maximum for "//&
                  "stability without considering other terms.", units="nondim", &
-                 default=0.8, do_not_log=.not.(CS%better_bound_Ah .or. CS%better_bound_Kh))
+                 default=0.8, do_not_log=.not.(CS%bound_Ah .or. CS%bound_Kh))
   call get_param(param_file, mdl, "KILL_SWITCH_COEF", CS%KS_coef, &
                  "A nondimensional coefficient on the biharmonic viscosity that "// &
                  "sets the kill switch for backscatter. Default is 1.0.", units="nondim", &
@@ -2743,7 +2701,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     ALLOC_(CS%grid_sp_h2(isd:ied,jsd:jed))   ; CS%grid_sp_h2(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
-    if (CS%bound_Kh .or. CS%better_bound_Kh .or. CS%EY24_EBT_BS) then
+    if (CS%bound_Kh .or. CS%EY24_EBT_BS) then
       allocate(CS%Kh_Max_xx(Isd:Ied,Jsd:Jed), source=0.0)
       allocate(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
@@ -2801,7 +2759,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed))     ; CS%Ah_bg_xx(:,:) = 0.0
     ALLOC_(CS%Ah_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_bg_xy(:,:) = 0.0
     ALLOC_(CS%grid_sp_h3(isd:ied,jsd:jed))   ; CS%grid_sp_h3(:,:) = 0.0
-    if (CS%bound_Ah .or. CS%better_bound_Ah) then
+    if (CS%bound_Ah) then
       allocate(CS%Ah_Max_xx(isd:ied,jsd:jed), source=0.0)
       allocate(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
@@ -2908,11 +2866,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         slat_fn = abs( sin( deg2rad * G%geoLatT(i,j) ) ) ** Kh_pwr_of_sine
         CS%Kh_bg_xx(i,j) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xx(i,j))
       endif
-      if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
-        ! Limit the background viscosity to be numerically stable
-        CS%Kh_Max_xx(i,j) = Kh_Limit * grid_sp_h2
-        CS%Kh_bg_xx(i,j) = MIN(CS%Kh_bg_xx(i,j), CS%Kh_Max_xx(i,j))
-      endif
       min_grid_sp_h2 = min(grid_sp_h2, min_grid_sp_h2)
     enddo ; enddo
     call min_across_PEs(min_grid_sp_h2)
@@ -2943,11 +2896,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         slat_fn = abs( sin( deg2rad * G%geoLatBu(I,J) ) ) ** Kh_pwr_of_sine
         CS%Kh_bg_xy(I,J) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xy(I,J))
       endif
-      if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
-        ! Limit the background viscosity to be numerically stable
-        CS%Kh_Max_xy(I,J) = Kh_Limit * grid_sp_q2
-        CS%Kh_bg_xy(I,J) = MIN(CS%Kh_bg_xy(I,J), CS%Kh_Max_xy(I,J))
-      endif
     enddo ; enddo
   endif
   if (CS%biharmonic) then
@@ -2962,7 +2910,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     CS%Ah_bg_xy(:,:) = 0.0
     ! The 0.3 below was 0.4 in HIM 1.10.  The change in hq requires
     ! this to be less than 1/3, rather than 1/2 as before.
-    if (CS%better_bound_Ah .or. CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
+    if (CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
     if (CS%Smagorinsky_Ah .and. CS%bound_Coriolis) &
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
 
@@ -2992,10 +2940,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xx(i,j) = grid_sp_h3 / CS%Re_Ah
       if (Ah_time_scale > 0.) CS%Ah_bg_xx(i,j) = &
             MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / Ah_time_scale)
-      if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-        CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
-        CS%Ah_bg_xx(i,j) = MIN(CS%Ah_bg_xx(i,j), CS%Ah_Max_xx(i,j))
-      endif
       min_grid_sp_h4 = min(grid_sp_h2**2, min_grid_sp_h4)
     enddo ; enddo
     call min_across_PEs(min_grid_sp_h4)
@@ -3017,14 +2961,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xy(i,j) = grid_sp_q3 / CS%Re_Ah
       if (Ah_time_scale > 0.) CS%Ah_bg_xy(i,j) = &
             MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / Ah_time_scale)
-      if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-        CS%Ah_Max_xy(I,J) = Ah_Limit * (grid_sp_q2 * grid_sp_q2)
-        CS%Ah_bg_xy(I,J) = MIN(CS%Ah_bg_xy(I,J), CS%Ah_Max_xy(I,J))
-      endif
     enddo ; enddo
   endif
   ! The Laplacian bounds should avoid overshoots when CS%bound_coef < 1.
-  if (CS%Laplacian .and. CS%better_bound_Kh) then
+  if (CS%Laplacian .and. CS%bound_Kh) then
     do j=js-1,Jeq+1 ; do i=is-1,Ieq+1
       denom = max( &
          (CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) * &
@@ -3052,7 +2992,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   endif
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
   ! empirically work for CS%bound_coef <~ 1.0
-  if (CS%biharmonic .and. CS%better_bound_Ah) then
+  if (CS%biharmonic .and. CS%bound_Ah) then
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       u0u(I,j) = ((CS%Idxdy2u(I,j)*((CS%dy2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(I+1,j) + G%IdyCu(I,j))) + &
                                    (CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j))) )) + &

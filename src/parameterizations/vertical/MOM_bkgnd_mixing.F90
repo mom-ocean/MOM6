@@ -85,9 +85,6 @@ type, public :: bkgnd_mixing_cs ; private
              !! here is to assume that the in-situ stratification is the same as the reference stratificaiton.
   logical :: physical_OBL_scheme !< If true, a physically-based scheme is used to determine mixing in the
                    !! ocean's surface boundary layer, such as ePBL, KPP, or a refined bulk mixed layer scheme.
-  logical :: Kd_via_Kdml_bug !< If true and KDML /= KD and a number of other higher precedence
-                   !! options are not used, the background diffusivity is set incorrectly using a
-                   !! bug that was introduced in March, 2018.
   logical :: debug !< If true, turn on debugging in this module
   ! Diagnostic handles and pointers
   type(diag_ctrl), pointer :: diag => NULL() !< A structure that regulates diagnostic output
@@ -305,16 +302,6 @@ subroutine bkgnd_mixing_init(Time, G, GV, US, param_file, diag, CS, physical_OBL
   if (CS%Henyey_IGW_background .and. CS%Kd_tanh_lat_fn) call MOM_error(FATAL, &
     "MOM_bkgnd_mixing: KD_TANH_LAT_FN can not be used with HENYEY_IGW_BACKGROUND.")
 
-  CS%Kd_via_Kdml_bug = .false.
-  if ((CS%Kd /= CS%Kd_tot_ml) .and. .not.(CS%Kd_tanh_lat_fn .or. CS%physical_OBL_scheme .or. &
-                                     CS%Henyey_IGW_background .or. &
-                                     CS%horiz_varying_background .or. CS%Bryan_Lewis_diffusivity)) then
-    call get_param(param_file, mdl, "KD_BACKGROUND_VIA_KDML_BUG", CS%Kd_via_Kdml_bug, &
-                 "If true and KDML /= KD and several other conditions apply, the background "//&
-                 "diffusivity is set incorrectly using a bug that was introduced in March, 2018.", &
-                 default=.false.)  ! This parameter should be obsoleted.
-  endif
-
 !  call closeParameterBlock(param_file)
 
 end subroutine bkgnd_mixing_init
@@ -479,20 +466,10 @@ subroutine calculate_bkgnd_mixing(h, tv, N2_lay, Kd_lay, Kd_int, Kv_bkgnd, j, G,
       do i=is,ie ; depth(i) = 0.0 ; enddo
       do k=1,nz ; do i=is,ie
         depth_c = depth(i) + 0.5*h(i,j,k)
-        if (CS%Kd_via_Kdml_bug) then
-          ! These two lines should update Kd_lay, not Kd_int.  They were correctly working on the
-          ! same variables until MOM6 commit 7a818716 (PR#750), which was added on March 26, 2018.
-          if (depth_c <= CS%Hmix) then ; Kd_int(i,K) = CS%Kd_tot_ml
-          elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_int(i,K) = Kd_sfc(i)
-          else
-            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kd_tot_ml) * I_Hmix) * depth_c + (2.0*CS%Kd_tot_ml - Kd_sfc(i))
-          endif
+        if (depth_c <= CS%Hmix) then ; Kd_lay(i,k) = CS%Kd_tot_ml
+        elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_lay(i,k) = Kd_sfc(i)
         else
-          if (depth_c <= CS%Hmix) then ; Kd_lay(i,k) = CS%Kd_tot_ml
-          elseif (depth_c >= 2.0*CS%Hmix) then ; Kd_lay(i,k) = Kd_sfc(i)
-          else
-            Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kd_tot_ml) * I_Hmix) * depth_c + (2.0*CS%Kd_tot_ml - Kd_sfc(i))
-          endif
+          Kd_lay(i,k) = ((Kd_sfc(i) - CS%Kd_tot_ml) * I_Hmix) * depth_c + (2.0*CS%Kd_tot_ml - Kd_sfc(i))
         endif
 
         depth(i) = depth(i) + h(i,j,k)
