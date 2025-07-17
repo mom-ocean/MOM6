@@ -670,8 +670,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     enddo
     if (local_open_BC) then
       do concurrent (k=1:nz, I=ish-1:ieh)
-        call zonal_flux_layere_OBC(u(I,j,k), h_in, uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), &
-                                  G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
+        call zonal_flux_layere_OBC(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), uh(I,j,k), duhdu(I,j,k), &
+                                  visc_rem_u_tmp(I,j,k), G, GV, por_face_areaU(I,j,k), &
+                                  G%dy_Cu(I,j), OBC, OBC%segnum_u(I,j), OBC_DIRECTION_E)
       enddo
     endif
 
@@ -1125,7 +1126,8 @@ elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh,
 
 end subroutine zonal_flux_layere
 
-pure subroutine zonal_flux_layere_OBC(u, h, uh, duhdu, visc_rem, G, GV, i, j, k, por_face_areaU, OBC)
+elemental subroutine zonal_flux_layere_OBC(u, h, h_p1, uh, duhdu, visc_rem, G, GV, por_face_areaU, &
+                                     G_dy_Cu, OBC, l_seg, OBC_DIRECTION)
   type(ocean_grid_type),    intent(in)    :: G        !< Ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV       !< Ocean's vertical grid structure.
   real,                     intent(in)    :: u        !< Zonal velocity [L T-1 ~> m s-1].
@@ -1134,31 +1136,29 @@ pure subroutine zonal_flux_layere_OBC(u, h, uh, duhdu, visc_rem, G, GV, i, j, k,
                         !! of viscosity, and the fraction of a time-step's worth of a barotropic
                         !! acceleration that a layer experiences after viscosity is applied [nondim].
                         !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
-                            intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2].
+  real,                     intent(in)    :: h        !< Layer thickness [H ~> m or kg m-2].
+  real,                     intent(in)    :: h_p1     !< Layer thickness offset by 1 [H ~> m or kg m-2].
   real,                     intent(inout) :: uh       !< Zonal mass or volume
                                                       !! transport [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                     intent(inout) :: duhdu    !< Partial derivative of uh
                                                       !! with u [H L ~> m2 or kg m-1].
-  integer, value,           intent(in)    :: i      !< Start of i index range.
-  integer, value,           intent(in)    :: j      !< Start of j index range.
-  integer, value,           intent(in)    :: k       !< Edn of k index range.
   real,                     intent(in)    :: por_face_areaU !< fractional open area of U-faces
                                                             !! [nondim].
+  real,                     intent(in)    :: G_dy_Cu
           !! ratio of face areas to the cell areas when estimating the CFL number.
   type(ocean_OBC_type),     intent(in)    :: OBC !< Open boundaries control structure.
-  integer :: l_seg
+  integer, intent(in) :: l_seg
+  integer, intent(in) :: OBC_DIRECTION
 
   ! untested
-  if (OBC%segnum_u(I,j) /= OBC_NONE) then
-    l_seg = OBC%segnum_u(I,j)
+  if (l_seg /= OBC_NONE) then
     if (OBC%segment(l_seg)%open) then
-      if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
-        uh = (G%dy_Cu(I,j) * por_face_areaU) * u * h(i, j, k)
-        duhdu = (G%dy_Cu(I,j) * por_face_areaU) * h(i, j, k) * visc_rem
+      if (OBC%segment(l_seg)%direction == OBC_DIRECTION) then
+        uh = (G_dy_Cu * por_face_areaU) * u * h
+        duhdu = (G_dy_Cu * por_face_areaU) * h * visc_rem
       else
-        uh = (G%dy_Cu(I,j) * por_face_areaU) * u * h(i+1, j, k)
-        duhdu = (G%dy_Cu(I,j)* por_face_areaU) * h(i+1, j, k) * visc_rem
+        uh = (G_dy_Cu * por_face_areaU) * u * h_p1
+        duhdu = (G_dy_Cu* por_face_areaU) * h_p1 * visc_rem
       endif
     endif
   endif
@@ -1551,8 +1551,9 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
                                 G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
           ! Below if statement looks expensive in profiling results, but I believe it's
           ! masking the expensive update of uh_err beneath
-          if (local_OBC) call zonal_flux_layere_OBC(u_new, h_in, uh_aux(I,k), duhdu, visc_rem(I,j,k), &
-                                G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
+          if (local_OBC) call zonal_flux_layere_OBC(u_new, h_in(I,j,k), h_in(I+1,j,k), uh_aux(I,k), &
+                                duhdu, visc_rem(I,j,k), G, GV, por_face_areaU(I,j,k), G%dy_Cu(I,j), &
+                                OBC, OBC%segnum_u(I,j), OBC_DIRECTION_E)
           uh_err(I) = uh_err(I) + uh_aux(I,k)
           duhdu_tot(I) = duhdu_tot(I) + duhdu
         enddo ; enddo
