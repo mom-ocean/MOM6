@@ -2399,6 +2399,7 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   logical :: local_open_BC
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
+  real :: dh
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
   !$omp target enter data &
@@ -2410,41 +2411,39 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
       else ; CFL = v(i,J,k) * dt * G%IdyT(i,j) ; endif
       curv_3 = (h_S(i,j,k) + h_N(i,j,k)) - 2.0*h(i,j,k)
-      h_avg = h_N(i,j,k) + CFL * (0.5*(h_S(i,j,k) - h_N(i,j,k)) + curv_3*(CFL - 1.5))
-      h_marg = h_N(i,j,k) + CFL * ((h_S(i,j,k) - h_N(i,j,k)) + &
-                                3.0*curv_3*(CFL - 1.0))
+      dh = h_S(i,J,k) - h_N(i,J,k)
+      if (marginal) then
+        h_v(i,J,k) = h_N(i,j,k) + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
+      else
+        h_v(i,J,k) = h_N(i,j,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
+      endif
     elseif (v(i,J,k) < 0.0) then
       if (vol_CFL) then ; CFL = (-v(i,J,k)*dt) * (G%dx_Cv(i,J) * G%IareaT(i,j+1))
       else ; CFL = -v(i,J,k) * dt * G%IdyT(i,j+1) ; endif
       curv_3 = (h_S(i,j+1,k) + h_N(i,j+1,k)) - 2.0*h(i,j+1,k)
-      h_avg = h_S(i,j+1,k) + CFL * (0.5*(h_N(i,j+1,k)-h_S(i,j+1,k)) + curv_3*(CFL - 1.5))
-      h_marg = h_S(i,j+1,k) + CFL * ((h_N(i,j+1,k)-h_S(i,j+1,k)) + &
-                                    3.0*curv_3*(CFL - 1.0))
+      dh = h_N(i,j+1,k)-h_S(i,j+1,k)
+      if (marginal) then
+        h_v(i,J,k) = h_S(i,j+1,k) + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
+      else
+        h_v(i,J,k) = h_S(i,j+1,k) + CFL * (0.5*dh + curv_3*(CFL - 1.5))
+      endif
     else
-      h_avg = 0.5 * (h_S(i,j+1,k) + h_N(i,j,k))
       !   The choice to use the arithmetic mean here is somewhat arbitrarily, but
       ! it should be noted that h_S(i+1,j,k) and h_N(i,j,k) are usually the same.
-      h_marg = 0.5 * (h_S(i,j+1,k) + h_N(i,j,k))
+      h_v(i,J,k) = 0.5 * (h_S(i,j+1,k) + h_N(i,j,k))
  !    h_marg = (2.0 * h_S(i,j+1,k) * h_N(i,j,k)) / &
  !             (h_S(i,j+1,k) + h_N(i,j,k) + GV%H_subroundoff)
     endif
 
-    if (marginal) then ; h_v(i,J,k) = h_marg
-    else ; h_v(i,J,k) = h_avg ; endif
-  enddo
-
-  if (present(visc_rem_v)) then
-    ! Scale back the thickness to account for the effects of viscosity and the fractional open
-    ! thickness to give an appropriate non-normalized weight for each layer in determining the
-    ! barotropic acceleration.
-    do concurrent (k=1:nz, J=jsh-1:jeh, i=ish:ieh)
+    if (present(visc_rem_v)) then
+      ! Scale back the thickness to account for the effects of viscosity and the fractional open
+      ! thickness to give an appropriate non-normalized weight for each layer in determining the
+      ! barotropic acceleration.
       h_v(i,J,k) = h_v(i,J,k) * (visc_rem_v(i,J,k) * por_face_areaV(i,J,k))
-    enddo
-  else
-    do concurrent (k=1:nz, J=jsh-1:jeh, i=ish:ieh)
+    else
       h_v(i,J,k) = h_v(i,J,k) * por_face_areaV(i,J,k)
-    enddo
-  endif
+    endif
+  enddo
 
   local_open_BC = .false.
   if (associated(OBC)) local_open_BC = OBC%open_v_BCs_exist_globally
