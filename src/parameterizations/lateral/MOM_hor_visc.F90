@@ -693,8 +693,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
   !$omp target enter data map(alloc: visc_bound_rem) &
   !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target enter data map(alloc: Kh_q) &
-  !$omp   if (CS%Laplacian .and. (CS%id_Kh_q > 0 .or. CS%debug))
   !$omp target enter data map(alloc: sh_xy_q) &
   !$omp   if (CS%id_sh_xy_q > 0)
 
@@ -902,7 +900,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
     enddo
     ! TODO: Fix indentation
-    !$omp target update from(dvdx, dudy, h_u, h_v)
+    !$omp target update to(dvdx, dudy, h_u, h_v)
     endif
 
     ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
@@ -1763,9 +1761,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
         ! Newer method of bounding for stability
-        if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
+        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
           visc_bound_rem(I,J) = 1.0
           Kh_max_here = hrat_min(I,J) * CS%Kh_Max_xy(I,J)
           if (Kh(I,J) >= Kh_max_here) then
@@ -1774,13 +1772,14 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           elseif ((Kh(I,J) > 0.0) .or. (CS%backscatter_underbound .and. (Kh_max_here > 0.0))) then
             visc_bound_rem(I,J) = 1.0 - Kh(I,J) / Kh_max_here
           endif
-        elseif (CS%better_bound_Kh) then
+        enddo
+      elseif (CS%better_bound_Kh) then
+        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
           Kh(I,J) = min(Kh(I,J), hrat_min(I,J) * CS%Kh_Max_xy(I,J))
-        endif
-      enddo
+        enddo
+      endif
 
       if (CS%use_Leithy) then
-        !$omp target update from(Kh)
         ! Leith+E doesn't recompute Kh at q points, it just interpolates it from h to q points
         do J=js-1,Jeq ; do I=is-1,Ieq
           Kh(I,J) = 0.25 * ((Kh_h(i,j,k) + Kh_h(i+1,j+1,k)) + (Kh_h(i,j+1,k) + Kh_h(i+1,j,k)))
@@ -1789,9 +1788,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       end if
 
       if (CS%id_Kh_q > 0 .or. CS%debug) then
-        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+        !$omp target update from (Kh)
+        do J=js-1,Jeq; do I=is-1,Ieq
           Kh_q(I,J,k) = Kh(I,J)
-        enddo
+        enddo ; enddo
       endif
 
       if (CS%id_vort_xy_q > 0) then
@@ -2407,8 +2407,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
   endif
 
-  !$omp target exit data map(delete: Kh_q) &
-  !$omp   if (CS%Laplacian .and. (CS%id_Kh_q > 0 .or. CS%debug))
   !$omp target exit data map(delete: sh_xy_q) &
   !$omp   if (CS%id_sh_xy_q > 0)
 
