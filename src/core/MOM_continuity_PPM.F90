@@ -665,8 +665,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     !DIR$ FORCEINLINE
     do concurrent (k=1:nz , I=ish-1:ieh)
       call zonal_flux_layere(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
-                            uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
-                            dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                            uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), &
+                            G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
     enddo
     if (local_open_BC) then
       !DIR$ FORCEINLINE
@@ -797,7 +797,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
 end subroutine zonal_mass_flux
 
-subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, du_max_CFL, du_min_CFL, visc_rem_u, visc_rem_max, por_face_areaU, uhbt, uh, u_cor, du_cor, BT_cont, dt, set_BT_cont, local_specified_BC, local_Flather_OBC, local_open_BC, ish, ieh, jsh, jeh, nz, G, GV, US, CS, OBC, LB)
+subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, du_max_CFL, du_min_CFL, visc_rem_u, &
+                                       visc_rem_max, por_face_areaU, uhbt, uh, u_cor, du_cor, BT_cont, dt, set_BT_cont, &
+                                       local_specified_BC, local_Flather_OBC, local_open_BC, ish, ieh, jsh, jeh, nz, G, GV, US, &
+                                       CS, OBC, LB)
   type(ocean_grid_type), intent(in):: G
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -900,7 +903,9 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
         endif ! u-corrected
 
         if (present(du_cor)) then
-          do concurrent (I=ish-1:ieh) ; du_cor(I,j) = du(I,j) ; enddo
+          do concurrent (I=ish-1:ieh)
+            du_cor(I,j) = du(I,j)
+          enddo
         endif
       enddo
     endif
@@ -1048,8 +1053,8 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
 end subroutine zonal_BT_mass_flux
 
 !> Evaluates the zonal mass or volume fluxes in a layer.
-elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh, duhdu, visc_rem, G_dy_Cu, G_IareaT, G_IareaT_p1, G_IdxT, G_IdxT_p1, dt, G, GV, US, &
-                            vol_CFL, por_face_areaU)
+elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh, duhdu, visc_rem, G_dy_Cu, G_IareaT, G_IareaT_p1, &
+                                       G_IdxT, G_IdxT_p1, dt, G, GV, US, vol_CFL, por_face_areaU)
   type(ocean_grid_type),    intent(in)    :: G        !< Ocean's grid structure.
   type(verticalGrid_type),  intent(in)    :: GV       !< Ocean's vertical grid structure.
   real,                     intent(in)    :: u        !< Zonal velocity [L T-1 ~> m s-1].
@@ -1523,8 +1528,8 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
         do k=1,nz ; do concurrent (I=ish-1:ieh, do_I(I))
           u_new = u(I,j,k) + du(I,j) * visc_rem(I,j,k)
           call zonal_flux_layere(u_new, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
-                                uh_aux(I,k), duhdu, visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
-                                dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                                uh_aux(I,k), duhdu, visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), &
+                                G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
           ! Below if statement looks expensive in profiling results, but I believe it's
           ! masking the expensive update of uh_err beneath 
           if (local_OBC) call zonal_flux_layere_OBC(u_new, h_in, uh_aux(I,k), duhdu, visc_rem(I,j,k), &
@@ -1677,46 +1682,51 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du0, uh_tot_0, duhdu_to
       u_R = u(I,j,k) + duR(I) * visc_rem(I,j,k)
       u_0 = u(I,j,k) + du0(I,j) * visc_rem(I,j,k)
       call zonal_flux_layere(u_0, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), uh_0, duhdu_0, &
-                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, &
+                            US, CS%vol_CFL, por_face_areaU(I,j,k))
       call zonal_flux_layere(u_L, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), uh_L, duhdu_L, &
-                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, &
+                            US, CS%vol_CFL, por_face_areaU(I,j,k))
       call zonal_flux_layere(u_R, h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), uh_R, duhdu_R, &
-                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
+                            visc_rem(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), dt, G, GV, &
+                            US, CS%vol_CFL, por_face_areaU(I,j,k))
       FAmt_0(I) = FAmt_0(I) + duhdu_0
       FAmt_L(I) = FAmt_L(I) + duhdu_L
       FAmt_R(I) = FAmt_R(I) + duhdu_R
       uhtot_L(I) = uhtot_L(I) + uh_L
       uhtot_R(I) = uhtot_R(I) + uh_R
     enddo ; enddo
-    do concurrent (I=ish-1:ieh) ; if (do_I(I,j)) then
-      FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
-      if ((duL(I) - du0(I,j)) /= 0.0) &
-        FA_avg = uhtot_L(I) / (duL(I) - du0(I,j))
-      if (FA_avg > max(FA_0, FAmt_L(I))) then ; FA_avg = max(FA_0, FAmt_L(I))
-      elseif (FA_avg < min(FA_0, FAmt_L(I))) then ; FA_0 = FA_avg ; endif
+    do concurrent (I=ish-1:ieh)
+      if (do_I(I,j)) then
+        FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
+        if ((duL(I) - du0(I,j)) /= 0.0) &
+          FA_avg = uhtot_L(I) / (duL(I) - du0(I,j))
+        if (FA_avg > max(FA_0, FAmt_L(I))) then ; FA_avg = max(FA_0, FAmt_L(I))
+        elseif (FA_avg < min(FA_0, FAmt_L(I))) then ; FA_0 = FA_avg ; endif
 
-      BT_cont%FA_u_W0(I,j) = FA_0 ; BT_cont%FA_u_WW(I,j) = FAmt_L(I)
-      if (abs(FA_0-FAmt_L(I)) <= 1e-12*FA_0) then ; BT_cont%uBT_WW(I,j) = 0.0 ; else
-        BT_cont%uBT_WW(I,j) = (1.5 * (duL(I) - du0(I,j))) * &
-                              ((FAmt_L(I) - FA_avg) / (FAmt_L(I) - FA_0))
+        BT_cont%FA_u_W0(I,j) = FA_0 ; BT_cont%FA_u_WW(I,j) = FAmt_L(I)
+        if (abs(FA_0-FAmt_L(I)) <= 1e-12*FA_0) then ; BT_cont%uBT_WW(I,j) = 0.0 ; else
+          BT_cont%uBT_WW(I,j) = (1.5 * (duL(I) - du0(I,j))) * &
+                                ((FAmt_L(I) - FA_avg) / (FAmt_L(I) - FA_0))
+        endif
+
+        FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
+        if ((duR(I) - du0(I,j)) /= 0.0) &
+          FA_avg = uhtot_R(I) / (duR(I) - du0(I,j))
+        if (FA_avg > max(FA_0, FAmt_R(I))) then ; FA_avg = max(FA_0, FAmt_R(I))
+        elseif (FA_avg < min(FA_0, FAmt_R(I))) then ; FA_0 = FA_avg ; endif
+
+        BT_cont%FA_u_E0(I,j) = FA_0 ; BT_cont%FA_u_EE(I,j) = FAmt_R(I)
+        if (abs(FAmt_R(I) - FA_0) <= 1e-12*FA_0) then ; BT_cont%uBT_EE(I,j) = 0.0 ; else
+          BT_cont%uBT_EE(I,j) = (1.5 * (duR(I) - du0(I,j))) * &
+                                ((FAmt_R(I) - FA_avg) / (FAmt_R(I) - FA_0))
+        endif
+      else
+        BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
+        BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
+        BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
       endif
-
-      FA_0 = FAmt_0(I) ; FA_avg = FAmt_0(I)
-      if ((duR(I) - du0(I,j)) /= 0.0) &
-        FA_avg = uhtot_R(I) / (duR(I) - du0(I,j))
-      if (FA_avg > max(FA_0, FAmt_R(I))) then ; FA_avg = max(FA_0, FAmt_R(I))
-      elseif (FA_avg < min(FA_0, FAmt_R(I))) then ; FA_0 = FA_avg ; endif
-
-      BT_cont%FA_u_E0(I,j) = FA_0 ; BT_cont%FA_u_EE(I,j) = FAmt_R(I)
-      if (abs(FAmt_R(I) - FA_0) <= 1e-12*FA_0) then ; BT_cont%uBT_EE(I,j) = 0.0 ; else
-        BT_cont%uBT_EE(I,j) = (1.5 * (duR(I) - du0(I,j))) * &
-                              ((FAmt_R(I) - FA_avg) / (FAmt_R(I) - FA_0))
-      endif
-    else
-      BT_cont%FA_u_W0(I,j) = 0.0 ; BT_cont%FA_u_WW(I,j) = 0.0
-      BT_cont%FA_u_E0(I,j) = 0.0 ; BT_cont%FA_u_EE(I,j) = 0.0
-      BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
-    endif ; enddo
+    enddo
   enddo
 
   !$omp target exit data &
@@ -1981,7 +1991,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       endif ! v-corrected
 
       if (present(dv_cor)) then
-        do concurrent (j=jsh-1:jeh, i=ish:ieh) ; dv_cor(i,J) = dv(i,j) ; enddo
+        do concurrent (j=jsh-1:jeh, i=ish:ieh)
+          dv_cor(i,J) = dv(i,j)
+        enddo
       endif ! dv-corrected
     endif
     
@@ -1999,9 +2011,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         do concurrent (j=jsh-1:jeh, i=ish:ieh, simple_OBC_pt(i,j))
           segment => OBC%segment(abs(OBC%segnum_v(i,J)))
           do k=1,nz
-          if ((abs(segment%normal_vel(i,J,k)) > 0.0) .and. (segment%specified)) &
-            FAvi(i,j) = FAvi(i,j) + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
-        enddo ; enddo
+            if ((abs(segment%normal_vel(i,J,k)) > 0.0) .and. (segment%specified)) &
+              FAvi(i,j) = FAvi(i,j) + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
+          enddo
+        enddo
         do concurrent (j=jsh-1:jeh, i=ish:ieh, simple_OBC_pt(i,j))
           BT_cont%FA_v_S0(i,J) = FAvi(i,j) ; BT_cont%FA_v_N0(i,J) = FAvi(i,j)
           BT_cont%FA_v_SS(i,J) = FAvi(i,j) ; BT_cont%FA_v_NN(i,J) = FAvi(i,j)
@@ -2461,7 +2474,11 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
       else ; do_I(i,j) = .false. ; endif
     enddo
     domore = .false.
+#ifdef __GNUC__
+    do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
+#else
     do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) reduce(.or.:domore)
+#endif
       if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i,j)) > tol_eta) .or. &
           (CS%better_iter .and. ((abs(vh_err(i,j)) > tol_vel * dvhdv_tot(i,j)) .or. &
                                  (abs(vh_err(i,j)) > vh_err_best(i,j))) )) then
@@ -2619,7 +2636,9 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   !$omp       FAmt_0, vhtot_L, vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
 
  ! Diagnose the zero-transport correction, dv0.
-  do concurrent (j=jsh-1:jeh, i=ish:ieh) ; zeros(i,j) = 0.0 ; enddo
+  do concurrent (j=jsh-1:jeh, i=ish:ieh)
+    zeros(i,j) = 0.0
+  enddo
   call meridional_flux_adjust(v, h_in, h_S, h_N, zeros, vh_tot_0, dvhdv_tot_0, dv0, &
                          dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                          ish, ieh, jsh, jeh, do_I, por_face_areaV)
@@ -2628,7 +2647,11 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   ! negative velocity correction for the northerly-flux, and a sufficiently
   ! positive correction for the southerly-flux.
   domore = .false.
+#ifdef __GNUC__
+  do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
+#else
   do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) reduce(.or.:domore)
+#endif
     domore = .true. ! might be better to do reduction on cpu to avoid reduce
     dv_CFL(i,j) = (CFL_min * Idt) * G%dyCv(i,J)
     dvR(i,j) = min(0.0,dv0(i,j) - dv_CFL(i,j))
@@ -2685,33 +2708,35 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i,j,k)
   enddo ; enddo
 
-  do concurrent (j=jsh-1:jeh, i=ish:ieh) ; if (do_I(i,j)) then
-    FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
-    if ((dvL(i,j) - dv0(i,j)) /= 0.0) &
-      FA_avg = vhtot_L(i,j) / (dvL(i,j) - dv0(i,j))
-    if (FA_avg > max(FA_0, FAmt_L(i,j))) then ; FA_avg = max(FA_0, FAmt_L(i,j))
-    elseif (FA_avg < min(FA_0, FAmt_L(i,j))) then ; FA_0 = FA_avg ; endif
-    BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(i,j)
-    if (abs(FA_0-FAmt_L(i,j)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
-      BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i,j) - dv0(i,j))) * &
-                   ((FAmt_L(i,j) - FA_avg) / (FAmt_L(i,j) - FA_0))
-    endif
+  do concurrent (j=jsh-1:jeh, i=ish:ieh)
+    if (do_I(i,j)) then
+      FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
+      if ((dvL(i,j) - dv0(i,j)) /= 0.0) &
+        FA_avg = vhtot_L(i,j) / (dvL(i,j) - dv0(i,j))
+      if (FA_avg > max(FA_0, FAmt_L(i,j))) then ; FA_avg = max(FA_0, FAmt_L(i,j))
+      elseif (FA_avg < min(FA_0, FAmt_L(i,j))) then ; FA_0 = FA_avg ; endif
+      BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(i,j)
+      if (abs(FA_0-FAmt_L(i,j)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
+        BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i,j) - dv0(i,j))) * &
+                    ((FAmt_L(i,j) - FA_avg) / (FAmt_L(i,j) - FA_0))
+      endif
 
-    FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
-    if ((dvR(i,j) - dv0(i,j)) /= 0.0) &
-      FA_avg = vhtot_R(i,j) / (dvR(i,j) - dv0(i,j))
-    if (FA_avg > max(FA_0, FAmt_R(i,j))) then ; FA_avg = max(FA_0, FAmt_R(i,j))
-    elseif (FA_avg < min(FA_0, FAmt_R(i,j))) then ; FA_0 = FA_avg ; endif
-    BT_cont%FA_v_N0(i,J) = FA_0 ; BT_cont%FA_v_NN(i,J) = FAmt_R(i,j)
-    if (abs(FAmt_R(i,j) - FA_0) <= 1e-12*FA_0) then ; BT_cont%vBT_NN(i,J) = 0.0 ; else
-      BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i,j) - dv0(i,j))) * &
-                   ((FAmt_R(i,j) - FA_avg) / (FAmt_R(i,j) - FA_0))
+      FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
+      if ((dvR(i,j) - dv0(i,j)) /= 0.0) &
+        FA_avg = vhtot_R(i,j) / (dvR(i,j) - dv0(i,j))
+      if (FA_avg > max(FA_0, FAmt_R(i,j))) then ; FA_avg = max(FA_0, FAmt_R(i,j))
+      elseif (FA_avg < min(FA_0, FAmt_R(i,j))) then ; FA_0 = FA_avg ; endif
+      BT_cont%FA_v_N0(i,J) = FA_0 ; BT_cont%FA_v_NN(i,J) = FAmt_R(i,j)
+      if (abs(FAmt_R(i,j) - FA_0) <= 1e-12*FA_0) then ; BT_cont%vBT_NN(i,J) = 0.0 ; else
+        BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i,j) - dv0(i,j))) * &
+                    ((FAmt_R(i,j) - FA_avg) / (FAmt_R(i,j) - FA_0))
+      endif
+    else
+      BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
+      BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
+      BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
     endif
-  else
-    BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
-    BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
-    BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
-  endif ; enddo
+  enddo
 
   !$omp target exit data &
   !$omp   map(from: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
