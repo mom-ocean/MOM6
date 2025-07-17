@@ -1844,8 +1844,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     local_open_BC = OBC%open_v_BCs_exist_globally
   endif ; endif
 
-  if (present(dv_cor)) dv_cor(:,:) = 0.0
-
   if (present(LB_in)) then
     LB = LB_in
   else
@@ -1865,23 +1863,37 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   !$omp       dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, do_I, FAvi, visc_rem_v_tmp, &
   !$omp       simple_OBC_pt)
 
-  ! a better solution is needed
-  if (.not.use_visc_rem) then
-    do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-      visc_rem_v_tmp(i,j,k) = 1.0
+  !$omp target loop private(i, k)
+  do J=jsh-1,jeh
+
+    if (present(dv_cor)) then
+      do concurrent (i=ish:ieh)
+        dv_cor(i,J) = 0.0
+      enddo
+    endif
+
+    ! this is expensive
+    if (.not.use_visc_rem) then
+      do concurrent (k=1:nz, i=ish:ieh)
+        visc_rem_v_tmp(i,J,k) = 1.0
+      enddo
+    else
+      do concurrent (k=1:nz, i=ish:ieh)
+        visc_rem_v_tmp(i,J,k) = visc_rem_v(i,J,k)
+      enddo
+    endif
+
+    do concurrent (k=1:nz, i=ish:ieh)
+      call zonal_flux_layere(v(i,J,k), h_in(i,J,k), h_in(i,J+1,k), h_S(i,J,k), h_S(i,J+1,k), &
+                            h_N(i,J,k), h_N(i,J+1,k), vh(i,J,k), dvhdv(i,J,k), &
+                            visc_rem_v_tmp(i,J,k), G%dx_Cv(i,J), G%IareaT(i,J), G%IareaT(i,J+1), &
+                            G%IdyT(i,J), G%IdyT(i,J+1), dt, G, GV, US, CS%vol_CFL, &
+                            por_face_areaV(i,J,k))
     enddo
-  else
-    do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-      visc_rem_v_tmp(i,j,k) = visc_rem_v(i,j,k)
-    enddo
-  endif
-  do concurrent (j=jsh-1:jeh, i=ish:ieh)
-    do_I(i,j) = .true.
+    ! Todo add merid_flux_layer OBC part
+
   enddo
-  ! This sets vh and dvhdv.
-  call merid_flux_layer(v, h_in, h_S, h_N, &
-                        vh, dvhdv, visc_rem_v_tmp, &
-                        dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
+
   ! untested
   if (local_specified_BC) then
     do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh, OBC%segnum_v(i,J) /= 0)
