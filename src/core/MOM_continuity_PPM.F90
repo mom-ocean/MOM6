@@ -1814,9 +1814,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     dvhdv_tot_0, & ! Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
     vh_tot_0, &   ! Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
     visc_rem_max  ! The column maximum of visc_rem [nondim]
-  logical, dimension(SZI_(G),SZJB_(G)) :: do_I
-  real, dimension(SZI_(G),SZJB_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
-  real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: visc_rem_v_tmp ! A copy of visc_rem_v or an array of 1's [nondim]
   real :: I_vrm   ! 1.0 / visc_rem_max [nondim]
   real :: CFL_dt  ! The maximum CFL ratio of the adjusted velocities divided by
@@ -1829,8 +1826,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   integer :: l_seg ! The OBC segment number
   logical :: use_visc_rem, set_BT_cont
   logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
-  logical :: simple_OBC_pt(SZI_(G),SZJ_(G))  ! Indicates points in a row with specified transport OBCs
-  type(OBC_segment_type), pointer :: segment => NULL()
 
   call cpu_clock_begin(id_clock_correct)
 
@@ -1861,8 +1856,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   !$omp       h_N, CS, por_face_areaV, vhbt, visc_rem_v, BT_cont) &
   !$omp   map(alloc: vh, v_cor, BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
   !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, BT_cont%h_v, dv_cor, dvhdv, dv, dv_min_CFL, &
-  !$omp       dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, do_I, FAvi, visc_rem_v_tmp, &
-  !$omp       simple_OBC_pt)
+  !$omp       dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, visc_rem_v_tmp)
 
   !$omp target loop private(i, k)
   do J=jsh-1,jeh
@@ -1999,36 +1993,115 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
   enddo
 
+  call present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, dv, dv_max_CFL, &
+                                   dv_min_CFL, visc_rem_v_tmp, visc_rem_max, por_face_areaV, vhbt, &
+                                   vh, v_cor, dv_cor, BT_cont, dt, set_BT_cont, local_specified_BC, &
+                                   local_Flather_OBC, local_open_BC, ish, ieh, jsh, jeh, nz, G, GV, &
+                                   US, CS, OBC, LB)
+
+  !$omp target exit data &
+  !$omp   map(from: vh, v_cor, BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
+  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, BT_cont%h_v, dv_cor) &
+  !$omp   map(release: G, G%dx_Cv, G%IdyT, G%dyT, G%dyCv, G%mask2dCv, G%areaT, G%IareaT, v, h_in, &
+  !$omp       h_S, h_N, CS, por_face_areaV, vhbt, visc_rem_v, dvhdv, dv, dv_min_CFL, dv_max_CFL, &
+  !$omp       dvhdv_tot_0, vh_tot_0, visc_rem_max, visc_rem_v_tmp)
+
+  call cpu_clock_end(id_clock_correct)
+
+end subroutine meridional_mass_flux
+
+
+subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, dv, dv_max_CFL, &
+                                       dv_min_CFL, visc_rem_v, visc_rem_max, por_face_areaV, vhbt, vh, v_cor, dv_cor, BT_cont, dt, &
+                                       set_BT_cont, local_specified_BC, local_Flather_OBC, local_open_BC, ish, &
+                                       ieh, jsh, jeh, nz, G, GV, US, CS, OBC, LB)
+
+  type(ocean_grid_type), intent(in) :: G
+  type(verticalGrid_type), intent(in) :: GV
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v    !< Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_in !< Layer thickness used to
+                                                                  !! calculate fluxes [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_S  !< South edge thickness in the
+                                                                  !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_N  !< North edge thickness in the
+                                                                  !! reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: vh_tot_0 !< Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: dvhdv_tot_0 !< Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(out) :: dv ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: dv_max_CFL ! Upper limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: dv_min_CFL ! Lower limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vh   !< Volume flux through meridional
+                                                                  !! faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: visc_rem_v !< Both the fraction of the momentum
+                                   !! originally in a layer that remains after a time-step of viscosity,
+                                   !! and the fraction of a time-step's worth of a barotropic acceleration
+                                   !! that a layer experiences after viscosity is applied [nondim].
+                                   !! Visc_rem_v is between 0 (at the bottom) and 1 (far above the bottom).
+  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: visc_rem_max !< The column maximum of visc_rem [nondim]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: por_face_areaV !< fractional open area of V-faces [nondim]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                                    optional, intent(inout) :: v_cor
+                                   !< The meridional velocities (v with a barotropic correction)
+                                   !! that give vhbt as the depth-integrated transport [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                                    optional, intent(out)   :: dv_cor !< The meridional velocity increments from v
+                                                                  !! that give vhbt as the depth-integrated
+                                                                  !! transports [L T-1 ~> m s-1].
+  type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe the
+                     !! effective open face areas as a function of barotropic flow.
+  real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: vhbt
+  logical,                 intent(in)    :: set_BT_cont !< Whether to update BT_cont member arrays.
+  logical,                 intent(in)    :: local_specified_BC !< Whether specified u BCs exist globally.
+  logical,                 intent(in)    :: local_Flather_OBC !< Whether Flather u BCs exist globally.
+  logical,                 intent(in)    :: local_open_BC !< Whether open u BCs exist globally.
+  integer, intent(in) :: ish
+  integer, intent(in) :: ieh
+  integer, intent(in) :: jsh
+  integer, intent(in) :: jeh
+  integer, intent(in) :: nz
+  real,                    intent(in)    :: dt  !< Time increment [T ~> s].
+  type(unit_scale_type), intent(in) :: US
+  type(continuity_PPM_CS), intent(in) :: CS
+  type(ocean_OBC_type), pointer :: OBC
+  type(cont_loop_bounds_type), intent(in) :: LB !< Loop boundary variable.
+  ! Local variables
+  logical, dimension(SZI_(G),SZJB_(G)) :: do_I
+  logical, dimension(SZI_(G),SZJB_(G)) :: simple_OBC_pt ! Indicates points in a row with specified transport OBCs
+  real, dimension(SZI_(G),SZJB_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
+  type(OBC_segment_type), pointer :: segment => NULL()
+  real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
+  logical :: any_simple_OBC
+  integer :: l_seg, i, j, k, n
+
   if (present(vhbt) .or. set_BT_cont) then
-
-    ! untested
+    !$omp target enter data map(alloc: FAvi, do_I)
     any_simple_OBC = .false.
-    if (present(vhbt) .or. set_BT_cont) then
-      if (local_specified_BC .or. local_Flather_OBC) then
-        do concurrent (j=jsh-1:jeh, i=ish:ieh)
-          l_seg = abs(OBC%segnum_v(i,J))
+    if (local_specified_BC .or. local_Flather_OBC) then
+      !$omp target enter data map(alloc: simple_OBC_pt) 
+      do concurrent (j=jsh-1:jeh, i=ish:ieh)
+        l_seg = abs(OBC%segnum_v(i,J))
 
-          ! Avoid reconciling barotropic/baroclinic transports if transport is specified
-          simple_OBC_pt(i,j) = .false.
-          if (l_seg /= 0) simple_OBC_pt(i,j) = OBC%segment(l_seg)%specified
-          do_I(i,j) = .not.simple_OBC_pt(i,j)
-          any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i,j)
-        enddo
-      else
-        do concurrent (j=jsh-1:jeh, i=ish:ieh)
-          do_I(i,j) = .true.
-        enddo
-      endif ! local_specified_BC .or. local_Flather_OBC
-    endif ! present(vhbt) .or. set_BT_cont (redundant?)
+        ! Avoid reconciling barotropic/baroclinic transports if transport is specified
+        simple_OBC_pt(i,j) = .false.
+        if (l_seg /= 0) simple_OBC_pt(i,j) = OBC%segment(l_seg)%specified
+        do_I(i,j) = .not.simple_OBC_pt(i,j)
+        any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i,j)
+      enddo
+    else
+      do concurrent (j=jsh-1:jeh, i=ish:ieh)
+        do_I(i,j) = .true.
+      enddo
+    endif ! local_specified_BC .or. local_Flather_OBC
+
     if (present(vhbt)) then
       ! Find dv and vh.
       call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
-                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v_tmp, &
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
                              ish, ieh, jsh, jeh, do_I, por_face_areaV, vh, OBC=OBC)
 
       if (present(v_cor)) then
         do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-          v_cor(i,j,k) = v(i,j,k) + dv(i,j) * visc_rem_v_tmp(i,j,k)
+          v_cor(i,j,k) = v(i,j,k) + dv(i,j) * visc_rem_v(i,j,k)
         enddo
         if (any_simple_OBC) then
           ! untested
@@ -2047,7 +2120,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
     if (set_BT_cont) then
       call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
-                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v_tmp, &
+                             dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
 
       if (any_simple_OBC) then
@@ -2070,6 +2143,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         enddo
       endif ! any_simple_OBC
     endif ! set_BT_cont
+    !$omp target exit data map(release: simple_OBC_pt) if(local_specified_BC .or. local_Flather_OBC)
+    !$omp target exit data map(release: FAvi, do_I)
   endif ! present(vhbt) or set_BT_cont
 
   ! untested - probably needs to be refactored to be performant on GPU
@@ -2108,16 +2183,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
     endif
   endif ; endif
 
-  !$omp target exit data &
-  !$omp   map(from: vh, v_cor, BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
-  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, BT_cont%h_v, dv_cor) &
-  !$omp   map(release: G, G%dx_Cv, G%IdyT, G%dyT, G%dyCv, G%mask2dCv, G%areaT, G%IareaT, v, h_in, &
-  !$omp       h_S, h_N, CS, por_face_areaV, vhbt, visc_rem_v, dvhdv, dv, dv_min_CFL, dv_max_CFL, &
-  !$omp       dvhdv_tot_0, vh_tot_0, visc_rem_max, do_I, FAvi, visc_rem_v_tmp, simple_OBC_pt)
-
-  call cpu_clock_end(id_clock_correct)
-
-end subroutine meridional_mass_flux
+end subroutine present_vhbt_or_set_BT_cont
 
 
 !> Calculates the vertically integrated mass or volume fluxes through the meridional faces.
