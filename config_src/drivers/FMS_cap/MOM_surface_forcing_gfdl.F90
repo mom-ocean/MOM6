@@ -1212,6 +1212,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
                      scale=US%kg_m2s_to_RZ_T)
 
   if (overrode_h) then ; do j=jsc,jec ; do i=isc,iec
+    fluxes%salt_flux(i,j) = fluxes%salt_flux(i,j) + temp_at_h(i,j) * G%mask2dT(i,j)
     fluxes%salt_flux_added(i,j) = fluxes%salt_flux_added(i,j) + temp_at_h(i,j) * G%mask2dT(i,j)
   enddo ; enddo ; endif
   ! Not needed? ! if (overrode_h) call pass_var(fluxes%salt_flux_added, G%Domain)
