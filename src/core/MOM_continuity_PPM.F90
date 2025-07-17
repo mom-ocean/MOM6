@@ -1599,7 +1599,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du0, uh_tot_0, duhdu_to
   type(BT_cont_type),   intent(inout) :: BT_cont !< A structure with elements
                        !! that describe the effective open face areas as a function of barotropic flow.
   real, dimension(SZIB_(G),SZJ_(G)), &
-                           intent(in) :: du0  !< The barotropic velocity increment that gives 0 transport 
+                           intent(in) :: du0  !< The barotropic velocity increment that gives 0 transport
                                                  !! [L T-1 ~> m s-1].
   real, dimension(SZIB_(G),SZJ_(G)), &
                            intent(in) :: uh_tot_0    !< The summed transport with 0 adjustment
