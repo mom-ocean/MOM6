@@ -904,6 +904,7 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
             u_cor(I,j,k) = u(I,j,k) + du(I,j) * visc_rem_u(I,j,k)
           enddo
           if (any_simple_OBC) then
+            ! untested
             do concurrent (k=1:nz, I=ish-1:ieh, simple_OBC_pt(I,j))
               u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
             enddo
@@ -914,7 +915,7 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
           do concurrent (I=ish-1:ieh)
             du_cor(I,j) = du(I,j)
           enddo
-        endif
+        endif ! du-corrected
       enddo
     endif
     if (set_BT_cont) then
@@ -947,6 +948,7 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
     !$omp target exit data map(release: do_I)
   endif
 
+  ! untested!
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
       if (OBC%segment(n)%open .and. OBC%segment(n)%is_E_or_W) then
@@ -2067,14 +2069,13 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
   ! Local variables
   logical, dimension(SZI_(G),SZJB_(G)) :: do_I
   logical, dimension(SZI_(G),SZJB_(G)) :: simple_OBC_pt ! Indicates points in a row with specified transport OBCs
-  real, dimension(SZI_(G),SZJB_(G)) :: FAvi  ! A list of sums of meridional face areas [H L ~> m2 or kg m-1].
   type(OBC_segment_type), pointer :: segment => NULL()
-  real :: FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
+  real :: FAvi, FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
   logical :: any_simple_OBC
   integer :: l_seg, i, j, k, n
 
   if (present(vhbt) .or. set_BT_cont) then
-    !$omp target enter data map(alloc: FAvi, do_I)
+    !$omp target enter data map(alloc: do_I)
     any_simple_OBC = .false.
     if (local_specified_BC .or. local_Flather_OBC) then
       !$omp target enter data map(alloc: simple_OBC_pt) 
@@ -2099,23 +2100,25 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
                              ish, ieh, jsh, jeh, do_I, por_face_areaV, vh, OBC=OBC)
 
-      if (present(v_cor)) then
-        do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-          v_cor(i,j,k) = v(i,j,k) + dv(i,j) * visc_rem_v(i,j,k)
-        enddo
-        if (any_simple_OBC) then
-          ! untested
-          do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh, simple_OBC_pt(i,j))
-            v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
+      do concurrent (J=jsh-1:jeh)
+        if (present(v_cor)) then
+          do concurrent (k=1:nz, i=ish:ieh)
+            v_cor(i,J,k) = v(i,J,k) + dv(i,J) * visc_rem_v(i,J,k)
           enddo
-        endif
-      endif ! v-corrected
+          if (any_simple_OBC) then
+            ! untested
+            do concurrent (k=1:nz, i=ish:ieh, simple_OBC_pt(i,J))
+              v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
+            enddo
+          endif
+        endif ! v-corrected
 
-      if (present(dv_cor)) then
-        do concurrent (j=jsh-1:jeh, i=ish:ieh)
-          dv_cor(i,J) = dv(i,j)
-        enddo
-      endif ! dv-corrected
+        if (present(dv_cor)) then
+          do concurrent (i=ish:ieh)
+            dv_cor(i,J) = dv(i,J)
+          enddo
+        endif ! dv-corrected
+      enddo
     endif
 
     if (set_BT_cont) then
@@ -2124,27 +2127,23 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
 
       if (any_simple_OBC) then
-        ! untested - these loops could probably be fused (need a test case to verify correctness)
-        do concurrent (j=jsh-1:jeh, i=ish:ieh, simple_OBC_pt(i,j))
-          FAvi(i,j) = GV%H_subroundoff*G%dx_Cv(i,J)
-        enddo
+        ! untested
         ! NOTE: simple_OBC_pt(i,j) should prevent access to segment OBC_NONE
-        do concurrent (j=jsh-1:jeh, i=ish:ieh, simple_OBC_pt(i,j))
+        do concurrent (J=jsh-1:jeh, i=ish:jeh, simple_OBC_pt(i,J))
           segment => OBC%segment(abs(OBC%segnum_v(i,J)))
+          FAvi = GV%H_subroundoff*G%dx_Cv(i,J)
           do k=1,nz
             if ((abs(segment%normal_vel(i,J,k)) > 0.0) .and. (segment%specified)) &
-              FAvi(i,j) = FAvi(i,j) + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
+              FAvi = FAvi + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
           enddo
-        enddo
-        do concurrent (j=jsh-1:jeh, i=ish:ieh, simple_OBC_pt(i,j))
-          BT_cont%FA_v_S0(i,J) = FAvi(i,j) ; BT_cont%FA_v_N0(i,J) = FAvi(i,j)
-          BT_cont%FA_v_SS(i,J) = FAvi(i,j) ; BT_cont%FA_v_NN(i,J) = FAvi(i,j)
+          BT_cont%FA_v_S0(i,J) = FAvi ; BT_cont%FA_v_N0(i,J) = FAvi
+          BT_cont%FA_v_SS(i,J) = FAvi ; BT_cont%FA_v_NN(i,J) = FAvi
           BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
         enddo
       endif ! any_simple_OBC
     endif ! set_BT_cont
     !$omp target exit data map(release: simple_OBC_pt) if(local_specified_BC .or. local_Flather_OBC)
-    !$omp target exit data map(release: FAvi, do_I)
+    !$omp target exit data map(release: do_I)
   endif ! present(vhbt) or set_BT_cont
 
   ! untested - probably needs to be refactored to be performant on GPU
