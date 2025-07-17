@@ -662,14 +662,14 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     end if
   
     ! Set uh and duhdu.
-    !!DIR$ FORCEINLINE
+    !DIR$ FORCEINLINE
     do concurrent (k=1:nz , I=ish-1:ieh)
       call zonal_flux_layere(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), h_E(I,j,k), h_E(I+1,j,k), &
                             uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), G%dy_Cu(I,j), G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(i+1,j), &
                             dt, G, GV, US, CS%vol_CFL, por_face_areaU(I,j,k))
     enddo
     if (local_open_BC) then
-      !!DIR$ FORCEINLINE
+      !DIR$ FORCEINLINE
       do concurrent (k=1:nz, I=ish-1:ieh)
         call zonal_flux_layere_OBC(u(I,j,k), h_in, uh(I,j,k), duhdu(I,j,k), visc_rem_u_tmp(I,j,k), &
                                   G, GV, I, j, k, por_face_areaU(I,j,k), OBC)
@@ -1076,34 +1076,30 @@ elemental subroutine zonal_flux_layere(u, h, h_p1, h_W, h_W_p1, h_E, h_E_p1, uh,
   real :: CFL  ! The CFL number based on the local velocity and grid spacing [nondim]
   real :: curv_3 ! A measure of the thickness curvature over a grid length [H ~> m or kg m-2]
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
-  real :: tmp, dh, c1, c2, c3
-
-  !DIR$ ATTRIBUTES FORCEINLINE :: zonal_flux_layere
+  real :: tmp, dh
 
   ! Set new values of uh and duhdu.
   tmp = G_dy_Cu * por_face_areaU ! precalculate things
-  CFL = abs(u*dt) ! increases inlining likelihood
   if (u > 0.0) then
-    CFL = CFL * merge(G_dy_Cu * G_IareaT, G_IdxT, vol_CFL)
-    c1 = h_E
-    c2 = h_W
-    c3 = h
+    if (vol_CFL) then ; CFL = (u * dt) * (G_dy_Cu * G_IareaT)
+    else ; CFL = u * dt * G_IdxT ; endif
+    curv_3 = (h_W + h_E) - 2.0*h
+    dh = h_W - h_E
+    uh = tmp * u * &
+        (h_E + CFL * (0.5*dh + curv_3*(CFL - 1.5)))
+    h_marg = h_E + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
   elseif (u < 0.0) then
-    CFL = CFL * merge(G_dy_Cu * G_IareaT_p1, G_IdxT_p1, vol_CFL)
-    c1 = h_W_p1
-    c2 = h_E_p1
-    c3 = h_p1
+    if (vol_CFL) then ; CFL = (-u * dt) * (G_dy_Cu * G_IareaT_p1)
+    else ; CFL = -u * dt * G_IdxT_p1 ; endif
+    curv_3 = (h_W_p1 + h_E_p1) - 2.0*h_p1
+    dh = h_E_p1-h_W_p1
+    uh = tmp * u * &
+        (h_W_p1 + CFL * (0.5*dh + curv_3*(CFL - 1.5)))
+    h_marg = h_W_p1 + CFL * (dh + 3.0*curv_3*(CFL - 1.0))
   else
-    CFL = 0.0
-    c1 = 0.5 * (h_W_p1 + h_E)
-    c2 = 0.0
-    c3 = 0.0
+    uh = 0.0
+    h_marg = 0.5 * (h_W_p1 + h_E)
   endif
-  curv_3 = (c2 + c1) - 2.0*c3
-  dh = (c2 - c1)
-  uh = tmp * u * &
-        (c1 + CFL * (0.5*dh + curv_3*(CFL - 1.5)))
-  h_marg = c1 + CFL * (dh + 3.0*curv_3*(CFL-1.0))
   duhdu = tmp * h_marg * visc_rem
 
 end subroutine zonal_flux_layere
