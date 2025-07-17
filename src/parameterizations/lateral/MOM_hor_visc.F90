@@ -2669,7 +2669,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "FRICTWORK_BUG", CS%FrictWork_bug, &
                  "If true, retain an answer-changing bug in calculating the FrictWork, "//&
                  "which cancels the h in thickness flux and the h at velocity point. This is"//&
-                 "not recommended.", default=enable_bugs)
+                 "not recommended.", default=.false.)
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&

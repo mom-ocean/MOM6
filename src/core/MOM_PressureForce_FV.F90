@@ -2131,7 +2131,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
                  "If true and MASS_WEIGHT_IN_PRESSURE_GRADIENT is true, use mass weighting when "//&
                  "interpolating T/S for integrals near the top of the water column in FV "//&
                  "pressure gradient calculations. ", &
-                 default=.false.) !### Change Default to MASS_WEIGHT_IN_PRESSURE_GRADIENT?
+                 default=useMassWghtInterp)
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PGF_NONBOUS_BUG", MassWghtInterp_NonBous_bug, &
                  "If true, use a masking bug in non-Boussinesq calculations with mass weighting "//&
                  "when interpolating T/S for integrals near the bathymetry in FV pressure "//&

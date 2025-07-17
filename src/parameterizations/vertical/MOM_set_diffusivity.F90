@@ -2473,8 +2473,7 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                "The vintage of the order of arithmetic in the drag diffusivity calculations.  "//&
                "Values above 20250301 use less confusing expressions to set the bottom-drag "//&
                "generated diffusivity when USE_LOTW_BBL_DIFFUSIVITY is false. ", &
-               default=20250101, do_not_log=CS%use_LOTW_BBL_diffusivity.or.(CS%BBL_effic<=0.0))
-               !### Set default as default=default_answer_date, or use SET_DIFF_ANSWER_DATE.
+               default=CS%answer_date, do_not_log=CS%use_LOTW_BBL_diffusivity.or.(CS%BBL_effic<=0.0))
 
   CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_BBL', diag%axesTi, Time, &
                  'Bottom Boundary Layer Diffusivity', 'm2 s-1', conversion=GV%HZ_T_to_m2_s)

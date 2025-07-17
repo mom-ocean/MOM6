@@ -1488,7 +1488,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
                  "If true, visc_rem_[uv] in split mode is incorrectly calculated or accounted "//&
                  "for in two places. This parameter controls the defaults of two individual "//&
                  "flags, VISC_REM_TIMESTEP_BUG in MOM_dynamics_split_RK2(b) and "//&
-                 "VISC_REM_BT_WEIGHT_BUG in MOM_barotropic.", default=enable_bugs)
+                 "VISC_REM_BT_WEIGHT_BUG in MOM_barotropic.", default=.false.)
   call get_param(param_file, mdl, "VISC_REM_TIMESTEP_BUG", CS%visc_rem_dt_bug, &
                  "If true, recover a bug that uses dt_pred rather than dt in "//&
                  "vertvisc_remnant() at the end of predictor stage for the following "//&

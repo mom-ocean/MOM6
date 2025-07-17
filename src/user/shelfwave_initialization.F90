@@ -81,7 +81,7 @@ function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
                  units="nondim", default=1.)
   call get_param(param_file, mdl, "SHELFWAVE_CORRECT_AMPLITUDE", CS%shelfwave_correct_amplitude, &
                  "If true, SHELFWAVE_AMPLITUDE gives the actual inflow velocity, rather than giving "//&
-                 "an overall scaling factor for the flow.", default=.false.)  !### Make the default .true.?
+                 "an overall scaling factor for the flow.", default=.true.)
   default_amp = 1.0 ; if (CS%shelfwave_correct_amplitude) default_amp = 0.1
   call get_param(param_file, mdl, "SHELFWAVE_AMPLITUDE", CS%my_amp, &
                  "Amplitude of the open boundary current inflows in the shelfwave configuration.", &
