@@ -82,6 +82,8 @@ type, public :: set_diffusivity_CS ; private
                              !! and those those used for TKE [Z2 L-2 ~> nondim].
   real    :: ePBL_BBL_effic  !< efficiency with which the energy extracted
                              !! by bottom drag drives BBL diffusion in the ePBL BBL scheme [nondim]
+  logical :: ePBL_BBL_mstar  !< logical if the bottom boundary layer uses an mstar x ustar^3 formulation
+                             !! needed here to know whether or not to populate the bottom ustar
   real    :: cdrag           !< quadratic drag coefficient [nondim]
   real    :: dz_BBL_avg_min  !< A minimal distance over which to average to determine the average
                              !! bottom boundary layer density [Z ~> m]
@@ -2002,7 +2004,8 @@ subroutine set_BBL_TKE(u, v, h, tv, fluxes, visc, G, GV, US, CS, OBC)
   if (.not.CS%initialized) call MOM_error(FATAL,"set_BBL_TKE: "//&
          "Module must be initialized before it is used.")
 
-  if (.not.CS%bottomdraglaw .or. (CS%BBL_effic<=0.0 .and. CS%ePBL_BBL_effic<=0.0)) then
+  if (.not.CS%bottomdraglaw .or. (CS%BBL_effic<=0.0 .and. CS%ePBL_BBL_effic<=0.0 .and. &
+      (.not.CS%ePBL_BBL_mstar))) then
     if (allocated(visc%ustar_BBL)) then
       do j=js,je ; do i=is,ie ; visc%ustar_BBL(i,j) = 0.0 ; enddo ; enddo
     endif
@@ -2426,7 +2429,9 @@ subroutine set_diffusivity_init(Time, G, GV, US, param_file, diag, CS, int_tide_
                  "diffusion.  This is only used if BOTTOMDRAGLAW is true.", &
                  units="nondim", default=0.20, scale=US%L_to_Z**2)
     call get_param(param_file, mdl, "EPBL_BBL_EFFIC", CS%ePBL_BBL_effic, &
-                 units="nondim", default=0.0,do_not_log=.true.)
+                 units="nondim", default=0.0, do_not_log=.true.)
+    call get_param(param_file, mdl, "EPBL_BBL_USE_MSTAR", CS%ePBL_BBL_mstar, &
+                 default=.false., do_not_log=.true.)
     call get_param(param_file, mdl, "BBL_MIXING_MAX_DECAY", decay_length, &
                  "The maximum decay scale for the BBL diffusion, or 0 to allow the mixing "//&
                  "to penetrate as far as stratification and rotation permit.  The default "//&

@@ -246,7 +246,7 @@ end subroutine diagnoseMLDbyDensityDifference
 
 !> Diagnose a mixed layer depth (MLD) determined by the depth a given energy value would mix.
 !> This routine is appropriate in MOM_diabatic_aux due to its position within the time stepping.
-subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr, MLD_out)
+subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, k_bounds, diagPtr, OM4_iteration, MLD_out)
   ! Author: Brandon Reichl
   ! Date: October 2, 2020
   ! //
@@ -278,6 +278,9 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr,
   type(thermo_var_ptrs),   intent(in) :: tv          !< Structure containing pointers to any
                                                      !! available thermodynamic fields.
   type(diag_ctrl),         pointer    :: diagPtr     !< Diagnostics structure
+  integer, dimension(2), intent(in)   :: k_bounds    !< vertical interface bounds to apply calculations
+  logical, optional, intent(in)       :: OM4_iteration !< Uses a legacy version of the MLD iteration
+                                                     !! it is kept to reproduce OM4 output
   real, dimension(SZI_(G),SZJ_(G)), &
               optional, intent(out)   :: MLD_out     !< Send MLD to other routines [Z ~> m]
 
@@ -315,11 +318,16 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr,
   real :: Gpx        ! The derivative of Gx with x  [R Z2 ~> kg m-1]
   real :: Hx         ! The vertical integral depth [Z ~> m]
   real :: iHx        ! The inverse of Hx [Z-1 ~> m-1]
-  real :: Hpx        ! The derivative of Hx with x, hard coded to 1.  Why? [nondim]
+  real :: Hpx        ! The derivative of Hx with x, since H(x) = constant + x, its derivative is 1. [nondim]
   real :: Ix         ! A double integral in depth of density [R Z2 ~> kg m-1]
   real :: Ipx        ! The derivative of Ix with x [R Z ~> kg m-2]
   real :: Fgx        ! The mixing energy difference from the target [R Z2 ~> kg m-1]
   real :: Fpx        ! The derivative of Fgx with x  [R Z ~> kg m-2]
+  real :: Zr         ! An upper (lower) bound for the PE integration in surface (bottom) mixed layer mode [Z ~> m]
+  integer :: k_Zr    ! Sets the index of Zr
+  real :: pe_dir     ! A factor that is used to generalize the iteration for upper and lower mixed layers
+  integer :: k_int   ! Controls the direction of the loop to be forward or backward
+  logical :: use_OM4_iteration ! A logical to use the OM4_iteration if the optional argument is present
 
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: IT, iM
@@ -327,9 +335,16 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr,
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  if (present(OM4_iteration)) then
+    use_OM4_iteration = OM4_iteration
+  endif
+
   pRef_MLD(:) = 0.0
   mld(:,:,:) = 0.0
   PE_Threshold_fraction = 1.e-4 !Fixed threshold of 0.01%, could be runtime.
+
+  ! The derivative of H(x) is always 1., so it is moved outside the loops.
+  Hpx = 1.
 
   do iM=1,3
     PE_threshold(iM) = Mixing_Energy(iM) / GV%g_Earth_Z_T2
@@ -337,20 +352,48 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr,
 
   EOSdom(:) = EOS_domain(G%HI)
 
+  if (k_bounds(1)<k_bounds(2)) then
+    k_int = 1    ! k_interval is forward in k-space
+    pe_dir = -1. ! A "down" factor so calculations forward and backward use the same algorithm
+    k_Zr = k_bounds(1) !top of cell indicated by k_bounds(1)
+  else
+    k_int = -1     ! k_interval is backward in k-space
+    pe_dir = 1.  ! An "up" factor so calculations forward and backward use the same algorithm
+    k_Zr = k_bounds(1)+1 !bottom of cell indicated by k_bounds(1)
+  endif
+
   do j=js,je
     ! Find the vertical distances across layers.
-    call thickness_to_dz(h, tv, dz, j, G, GV)
+    call thickness_to_dz(h, tv, dZ, j, G, GV)
+
+    if (pe_dir>0) then
+      ! We want to reference pressure to bottom for upward calculation
+      pRef_MLD(:) = 0.0
+      do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
+        do k=1,nz
+          pRef_MLD(i) = pRef_MLD(i) + h(i,j,k)*GV%H_to_RZ*GV%g_Earth
+        enddo
+      endif ; enddo
+    endif
 
     do k=1,nz
-      call calculate_density(tv%T(:,j,k), tv%S(:,j,K), pRef_MLD, rho_c(:,k), tv%eqn_of_state, EOSdom)
+      call calculate_density(tv%T(:,j,k), tv%S(:,j,K), pRef_MLD(:), rho_c(:,k), tv%eqn_of_state, EOSdom)
     enddo
 
     do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 
+      !We reference everything to the SSH, so that Z_int(1) is defined where Z=0.
+      ! All presently implemented calculations are not sensitive to this choice.
+      ! If "use_OM4_iteration = .true." setting this non-zero would break the iteration
       Z_int(1) = 0.0
       do k=1,nz
         Z_int(K+1) = Z_int(K) - dZ(i,k)
       enddo
+
+      ! Set the reference for the upper (lower) bound of the mixing integral as the surface
+      ! or the bottom depending on the direction of the calculation (as determined by
+      ! the interface bounds k_bounds)
+      Zr = Z_int(k_Zr)
 
       do iM=1,3
 
@@ -362,10 +405,15 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr,
         H_ML_TST = 0.0
         PE_Mixed = 0.0
 
-        do k=1,nz
+        do k=k_bounds(1),k_bounds(2),k_int
 
-          ! This is the unmixed PE cumulative sum from top down
-          PE = PE + 0.5 * Rho_c(i,k) * (Z_int(K)**2 - Z_int(K+1)**2)
+          ! This is the unmixed PE cumulative sum in the direction k_int
+          ! The first expression preserves OM4 diagnostic answers, the second is more robust
+          if (use_OM4_iteration) then
+            PE = PE + 0.5 * Rho_c(i,k) * (Z_int(K)**2 - Z_int(K+1)**2)
+          else
+            PE = PE + 0.5 * (Rho_c(i,k) * dZ(i,k)) * (Z_int(K) + Z_int(K+1))
+          endif
 
           ! This is the depth and integral of density
           H_ML_TST = H_ML + dZ(i,k)
@@ -375,65 +423,120 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, diagPtr,
           Rho_ML = RhoDZ_ML_TST/H_ML_TST
 
           ! The PE assuming all layers including this were mixed
-          ! Note that 0. could be replaced with "Surface", which doesn't have to be 0
-          ! but 0 is a good reference value.
-          PE_Mixed_TST = 0.5 * Rho_ML * (0.**2 - (0. - H_ML_TST)**2)
+          ! Zr is the upper (lower) bound of the integral when operating in surface (bottom)
+          ! mixed layer calculation mode.
+          !These are mathematically equivalent, the latter is numerically well-behaved, but the
+          ! former is kept as a comment as it may be more intuitive how it is derived.
+          !PE_Mixed_TST = (0.5 * (Rho_ML*pe_dir)) * ( (Zr + pe_dir*H_ML_TST)**2 - Zr**2.)
+          PE_Mixed_TST = (0.5 * (Rho_ML*pe_dir)) * (H_ML_TST * (H_ML_TST + 2.0*pe_dir*Zr))
 
           ! Check if we supplied enough energy to mix to this layer
           if (PE_Mixed_TST - PE <= PE_threshold(iM)) then
             H_ML = H_ML_TST
             RhoDZ_ML = RhoDZ_ML_TST
-
-          else ! If not, we need to solve where the energy ran out
+          else ! If not, we need to solve where the energy ran out within the layer
             ! This will be done with a Newton's method iteration:
-
-            R1 = RhoDZ_ML / H_ML ! The density of the mixed layer (not including this layer)
-            D1 = H_ML ! The thickness of the mixed layer (not including this layer)
-            R2 = Rho_c(i,k) ! The density of this layer
-            D2 = dZ(i,k) ! The thickness of this layer
-
-            ! This block could be used to calculate the function coefficients if
-            ! we don't reference all values to a surface designated as z=0
-            ! S = Surface
-            ! Ca  = -(R2)
-            ! Cb  = -( (R1*D1) + R2*(2.*D1-2.*S) )
-            ! D   = D1**2. - 2.*D1*S
-            ! Cc  = -( R1*D1*(2.*D1-2.*S) + R2*D )
-            ! Cd  = -(R1*D1*D)
-            ! Ca2 = R2
-            ! Cb2 = R2*(2*D1-2*S)
-            ! C   = S**2 + D2**2 + D1**2 - 2*D1*S - 2.*D2*S +2.*D1*D2
-            ! Cc2 = R2*(D+S**2-C)
-            !
-            ! If the surface is S = 0, it simplifies to:
-            Ca  = -R2
-            Cb  = -(R1 * D1 + R2 * (2. * D1))
-            D   = D1**2
-            Cc  = -(R1 * D1 * (2. * D1) + (R2 * D))
-            Cd  = -R1 * (D1 * D)
-            Ca2 = R2
-            Cb2 = R2 * (2. * D1)
-            C   = D2**2 + D1**2 + 2. * (D1 * D2)
-            Cc2 = R2 * (D - C)
 
             ! First guess for an iteration using Newton's method
             X = dZ(i,k) * 0.5
 
+            ! We are trying to solve the function:
+            ! F(x) = G(x)/H(x)+I(x)
+            ! for where F(x) = PE+PE_threshold, or equivalently for where
+            ! F(x) = G(x)/H(x)+I(x) - (PE+PE_threshold) = 0
+            ! We also need the derivative of this function for the Newton's method iteration
+            ! F'(x) = (G'(x)H(x)-G(x)H'(x))/H(x)^2 + I'(x)
+            !
+            !For the Surface Boundary Layer:
+            ! The total function F(x) adds the PE of the top layer with some entrained distance X
+            ! to the PE of the bottom layer below the entrained distance:
+            !      (Rho1*D1+Rho2*x)
+            ! PE = ---------------- (Zr^2 - (Zr-D1-x)^2)  + Rho2 * ((Zr-D1-x)^2 - (Zr-D1-D2)^2)
+            !         (D1 + x)
+            !
+            ! where Rho1 is the mixed density, D1 is the mixed thickness, Rho2 is the unmixed density,
+            ! D2 is the unmixed thickness, Zr is the top surface height, and x is the fraction of the
+            ! unmixed region that becomes mixed.
+            !
+            !//
+            !G(x)  = (Rho1*D1+Rho2*x)*(Zr^2 - (Zr-(D1+x))^2)
+            !
+            !      =  -Rho2 * x^3 + (-Rho1*D1-2*Rho2*D1+2*Rho2*Zr)*x^2
+            !         \-Ca-/         \--------Cb----------------/
+            !
+            !         + (-2*Rho1*D1^2+2*Rho1*D1*Zr-Rho2*D1^2+Rho2*2*D1*Zr)*X + Rho1*(-D1^3+2*D1^2*Zr)
+            !            \----------------------Cc----------------------/      \-------Cd----------/
+            !
+            !//
+            !H(x) = D1 + x
+            !
+            !//
+            !I(x) = Rho2 * ((Zr-(D1+x))^2-(Zr-(D1+D2))^2)
+            !     = Rho2 * x^2 + Rho2*(2*D1-2*Zr) * X + Rho2*(D1^2-2*D1*Zr-D2^2+D1^2-2*D1*Zr-2*D2*Zr+2*D1*D2)
+            !       \Ca2/        \-----Cb2-----/        \-------------------Cc2----------------------------/
+            !
+            !
+            !For the Bottom Boundary Layer:
+            ! The total function is relative to Zr as the bottom interface height, so slightly different:
+            !      (Rho1*D1+Rho2*X)
+            ! PE = ---------------- ((Zr+D1+X)^2 - Zr^2)  + Rho2 * ((Zr+D1+D2)^2 - (Zr+D1+X)^2)
+            !         (D1 + X)
+            ! These differences propagate through and are accounted for via the factor pe_dir
+            !
+            ! Set these coefficients before the iteration
+            R1 = RhoDZ_ML / H_ML ! The density of the mixed layer (not including this layer)
+            D1 = H_ML ! The thickness of the mixed layer (not including this layer)
+            R2 = Rho_c(i,k) ! The density of this layer to be mixed
+            D2 = dZ(i,k) ! The thickness of this layer to be mixed
+
+            ! This sets Zr to "0", which only works for the downward surface mixed layer calculation.
+            !  it should give the same answer at roundoff as the more general expressions below.
+            if (k_int>0 .and. use_OM4_iteration) then
+              Ca  = -(R2)
+              Cb  = -(R1 * D1 + R2 * (2. * D1))
+              D   = D1**2
+              Cc  = -(R1 * D1 * (2. * D1) + (R2 * D))
+              Cd  = -R1 * (D1 * D)
+              Ca2 = R2
+              Cb2 = R2 * (2. * D1)
+              C   = D2**2 + D1**2 + 2. * (D1 * D2)
+              D   = D1**2
+              Cc2 = R2 * (D - C)
+           else
+              ! recall pe_dir = -1 for down, pe_dir = 1 for up.
+              !down Ca  = -R2
+              !up   Ca  =  R2
+              Ca  = pe_dir * R2 ! Density of layer to be mixed
+              !down Cb  = -(R1*D1) - 2.*R2*D1 + 2.*Zr*R2
+              !up   Cb  =  (R1*D1) + 2.*R2*D1 + 2.*Zr*R2
+              Cb = pe_dir * ( (R1 * D1) + (2. * R2) * ( D1 + Zr ) )
+              !down Cc  = -2.*R1*D1**2 - R2*D1**2 + 2.*R2*D1*Zr + 2.*Zr*R1*D1
+              !up   Cc  =  2.*R1*D1**2 + R2*D1**2 + 2.*R2*D1*Zr + 2.*Zr*R1*D1
+              Cc = ( pe_dir * D1**2 ) * ( R2 + 2.*R1 ) + ( 2. * ( Zr * D1 ) ) * ( R2 + R1 )
+              !down Cd = R1*(-D1**3+2.*D1**2*Zr)
+              !up   Cd = R1*( D1**3+2.*D1**2*Zr)
+              Cd = ( R1 * D1**2 ) * ( pe_dir * D1 + 2. * Zr )
+              !down Ca2 =  R2
+              !up   Ca2 = -R2
+              Ca2 = ( -1. * pe_dir ) * R2
+              !down Cb2 = R2*(2*D1-2*Zr)
+              !up   Cb2 = R2*(-2*D1-2*Zr)
+              Cb2 = ( 2. * R2 ) * ( (-1.*pe_dir)*D1 - Zr )
+              !down Cc2 = R2*(2.*Zr*D2-2.*D1*D2-D2**2)
+              !up   Cc2 = R2*(2.*Zr*D2+2.*D1*D2+D2**2)
+              Cc2 = ( R2 * D2 ) * ( 2.* Zr + pe_dir * ( 2. * D1 + D2 ) )
+            endif
+
             IT=0
             do while(IT<10)!We can iterate up to 10 times
-              ! We are trying to solve the function:
-              ! F(x) = G(x)/H(x)+I(x)
-              ! for where F(x) = PE+PE_threshold, or equivalently for where
-              ! F(x) = G(x)/H(x)+I(x) - (PE+PE_threshold) = 0
-              ! We also need the derivative of this function for the Newton's method iteration
-              ! F'(x) = (G'(x)H(x)-G(x)H'(x))/H(x)^2 + I'(x)
+
               ! G and its derivative
               Gx = 0.5 * (Ca * (X*X*X) + Cb * X**2 + Cc * X + Cd)
               Gpx = 0.5 * (3. * (Ca * X**2) + 2. * (Cb * X) + Cc)
               ! H, its inverse, and its derivative
               Hx = D1 + X
               iHx = 1. / Hx
-              Hpx = 1.
+              !Hpx = 1. ! The derivative is always 1 so it was moved outside the loop
               ! I and its derivative
               Ix = 0.5 * (Ca2 * X**2 + Cb2 * X + Cc2)
               Ipx = 0.5 * (2. * Ca2 * X + Cb2)

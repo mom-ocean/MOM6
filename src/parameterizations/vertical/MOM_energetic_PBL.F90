@@ -105,8 +105,8 @@ type, public :: energetic_PBL_CS ; private
 
   !mstar related options
   integer :: mstar_scheme    !< An encoded integer to determine which formula is used to set mstar
-  logical :: MSTAR_FLATCAP=.true. !< Set false to use asymptotic mstar cap.
-  real    :: mstar_cap       !< Since MSTAR is restoring undissipated energy to mixing,
+  integer :: BBL_mstar_scheme !< An encoded integer to determine which formula is used to set mstar
+  real    :: mstar_cap       !< Since mstar is restoring undissipated energy to mixing,
                              !! there must be a cap on how large it can be [nondim].  This
                              !! is definitely a function of latitude (Ekman limit),
                              !! but will be taken as constant for now.
@@ -115,31 +115,32 @@ type, public :: energetic_PBL_CS ; private
   real    :: TKE_decay       !< The ratio of the natural Ekman depth to the TKE decay scale [nondim].
 
   !/ mstar_scheme == 0
-  real    :: fixed_mstar     !< Mstar is the ratio of the friction velocity cubed to the TKE available to
+  real    :: fixed_mstar     !< mstar is the ratio of the friction velocity cubed to the TKE available to
                              !! drive entrainment [nondim]. This quantity is the vertically
                              !! integrated shear production minus the vertically integrated
                              !! dissipation of TKE produced by shear.  This value is used if the option
                              !! for using a fixed mstar is used.
+  real    :: BBL_fixed_mstar !< Similar to fixed_mstar, but for the bottom boundary layer
 
   !/ mstar_scheme == 2
-  real :: C_EK = 0.17        !< MSTAR Coefficient in rotation limit for mstar_scheme=OM4 [nondim]
-  real :: MSTAR_COEF = 0.3   !< MSTAR coefficient in rotation/stabilizing balance for mstar_scheme=OM4 [nondim]
+  real :: C_Ek = 0.17        !< mstar Coefficient in rotation limit for EPBL_MSTAR_SCHEME=OM4 [nondim]
+  real :: mstar_coef = 0.3   !< mstar coefficient in rotation/stabilizing balance for EPBL_MSTAR_SCHEME=OM4 [nondim]
 
   !/ mstar_scheme == 3
-  real    :: RH18_mstar_cN1  !< MSTAR_N coefficient 1 (outer-most coefficient for fit) [nondim].
+  real    :: RH18_mstar_cN1  !< mstar_N coefficient 1 (outer-most coefficient for fit) [nondim].
                              !! Value of 0.275 in RH18.  Increasing this
                              !! coefficient increases mechanical mixing for all values of Hf/ust,
                              !! but is most effective at low values (weakly developed OSBLs).
-  real    :: RH18_mstar_cN2  !< MSTAR_N coefficient 2 (coefficient outside of exponential decay) [nondim].
-                             !! Value of 8.0 in RH18.  Increasing this coefficient increases MSTAR
+  real    :: RH18_mstar_cN2  !< mstar_N coefficient 2 (coefficient outside of exponential decay) [nondim].
+                             !! Value of 8.0 in RH18.  Increasing this coefficient increases mstar
                              !! for all values of HF/ust, with a consistent affect across
                              !! a wide range of Hf/ust.
-  real    :: RH18_mstar_cN3  !< MSTAR_N coefficient 3 (exponential decay coefficient) [nondim]. Value of
+  real    :: RH18_mstar_cN3  !< mstar_N coefficient 3 (exponential decay coefficient) [nondim]. Value of
                              !! -5.0 in RH18.  Increasing this increases how quickly the value
-                             !! of MSTAR decreases as Hf/ust increases.
-  real    :: RH18_mstar_cS1  !< MSTAR_S coefficient for RH18 in stabilizing limit [nondim].
+                             !! of mstar decreases as Hf/ust increases.
+  real    :: RH18_mstar_cS1  !< mstar_S coefficient for RH18 in stabilizing limit [nondim].
                              !! Value of 0.2 in RH18.
-  real    :: RH18_mstar_cS2  !< MSTAR_S exponent for RH18 in stabilizing limit [nondim].
+  real    :: RH18_mstar_cS2  !< mstar_S exponent for RH18 in stabilizing limit [nondim].
                              !! Value of 0.4 in RH18.
 
   !/ Coefficient for shear/convective turbulence interaction
@@ -147,18 +148,18 @@ type, public :: energetic_PBL_CS ; private
 
   !/ Langmuir turbulence related parameters
   logical :: Use_LT = .false. !< Flag for using LT in Energy calculation
-  integer :: LT_ENHANCE_FORM !< Integer for Enhancement functional form (various options)
-  real    :: LT_ENHANCE_COEF !< Coefficient in fit for Langmuir Enhancement [nondim]
-  real    :: LT_ENHANCE_EXP  !< Exponent in fit for Langmuir Enhancement [nondim]
-  real :: LaC_MLDoEK         !< Coefficient for Langmuir number modification based on the ratio of
+  integer :: LT_enhance_form !< Integer for Enhancement functional form (various options)
+  real    :: LT_enhance_coef !< Coefficient in fit for Langmuir Enhancement [nondim]
+  real    :: LT_enhance_exp  !< Exponent in fit for Langmuir Enhancement [nondim]
+  real :: LaC_MLD_Ek         !< Coefficient for Langmuir number modification based on the ratio of
                              !! the mixed layer depth over the Ekman depth [nondim].
-  real :: LaC_MLDoOB_stab    !< Coefficient for Langmuir number modification based on the ratio of
+  real :: LaC_MLD_Ob_stab    !< Coefficient for Langmuir number modification based on the ratio of
                              !! the mixed layer depth over the Obukhov depth with stabilizing forcing [nondim].
-  real :: LaC_EKoOB_stab     !< Coefficient for Langmuir number modification based on the ratio of
+  real :: LaC_Ek_Ob_stab     !< Coefficient for Langmuir number modification based on the ratio of
                              !! the Ekman depth over the Obukhov depth with stabilizing forcing [nondim].
-  real :: LaC_MLDoOB_un      !< Coefficient for Langmuir number modification based on the ratio of
+  real :: LaC_MLD_Ob_un      !< Coefficient for Langmuir number modification based on the ratio of
                              !! the mixed layer depth over the Obukhov depth with destabilizing forcing [nondim].
-  real :: LaC_EKoOB_un       !< Coefficient for Langmuir number modification based on the ratio of
+  real :: LaC_Ek_Ob_un       !< Coefficient for Langmuir number modification based on the ratio of
                              !! the Ekman depth over the Obukhov depth with destabilizing forcing [nondim].
   real :: Max_Enhance_M = 5. !< The maximum allowed LT enhancement to the mixing [nondim].
 
@@ -221,6 +222,9 @@ type, public :: energetic_PBL_CS ; private
   logical :: BBL_effic_bug   !< If true, overestimate the efficiency of the non-tidal ePBL bottom boundary
                              !! layer diffusivity by a factor of 1/sqrt(CDRAG), which is often a factor of
                              !! about 18.3.
+  logical :: ePBL_BBL_use_mstar !< If true, use an mstar*ustar^3 paramaterization to get the TKE available
+                             !! to drive mixing in the bottom boundary layer version of ePBL.  Otherwise,
+                             !! use the meanflow energy loss to bottom drag scaled by a constant efficiency.
 
   !/ Options for documenting differences from parameter choices
   integer :: options_diff    !< If positive, this is a coded integer indicating a pair of
@@ -258,27 +262,28 @@ type, public :: energetic_PBL_CS ; private
 
   !>@{ Diagnostic IDs
   integer :: id_ML_depth = -1, id_hML_depth = -1, id_TKE_wind = -1, id_TKE_mixing = -1
+  integer :: id_ustar_ePBL = -1, id_bflx_ePBL = -1
   integer :: id_TKE_MKE = -1, id_TKE_conv = -1, id_TKE_forcing = -1
   integer :: id_TKE_mech_decay = -1, id_TKE_conv_decay = -1
   integer :: id_Mixing_Length = -1, id_Velocity_Scale = -1
   integer :: id_Kd_BBL = -1, id_BBL_Mix_Length = -1, id_BBL_Vel_Scale = -1
   integer :: id_TKE_BBL = -1, id_TKE_BBL_mixing = -1, id_TKE_BBL_decay = -1
-  integer :: id_ustar_BBL = -1, id_BBL_decay_scale = -1, id_BBL_depth = -1
-  integer :: id_MSTAR_mix = -1, id_LA_mod = -1, id_LA = -1, id_MSTAR_LT = -1
+  integer :: id_ustar_BBL = -1, id_bflx_BBL = -1, id_BBL_decay_scale = -1, id_BBL_depth = -1
+  integer :: id_mstar_sfc = -1, id_mstar_BBL = -1, id_LA_mod = -1, id_LA = -1, id_mstar_LT = -1
   ! The next options are used when passively diagnosing sensitivities from parameter choices
   integer :: id_opt_diff_Kd_ePBL = -1, id_opt_maxdiff_Kd_ePBL = -1, id_opt_diff_hML_depth = -1
   !>@}
 end type energetic_PBL_CS
 
-!>@{ Enumeration values for mstar_Scheme
-integer, parameter :: Use_Fixed_MStar = 0  !< The value of mstar_scheme to use a constant mstar
-integer, parameter :: MStar_from_Ekman = 2 !< The value of mstar_scheme to base mstar on the ratio
+!>@{ Enumeration values for mstar_scheme
+integer, parameter :: Use_Fixed_mstar = 0  !< The value of mstar_scheme to use a constant mstar
+integer, parameter :: mstar_from_Ekman = 2 !< The value of mstar_scheme to base mstar on the ratio
                                            !! of the Ekman layer depth to the Obukhov depth
-integer, parameter :: MStar_from_RH18 = 3  !< The value of mstar_scheme to base mstar of of RH18
-integer, parameter :: No_Langmuir = 0      !< The value of LT_ENHANCE_FORM not use Langmuir turbulence.
-integer, parameter :: Langmuir_rescale = 2 !< The value of LT_ENHANCE_FORM to use a multiplicative
+integer, parameter :: mstar_from_RH18 = 3  !< The value of mstar_scheme to base mstar of of RH18
+integer, parameter :: No_Langmuir = 0      !< The value of LT_enhance_form not use Langmuir turbulence.
+integer, parameter :: Langmuir_rescale = 2 !< The value of LT_enhance_form to use a multiplicative
                                            !! rescaling of mstar to account for Langmuir turbulence.
-integer, parameter :: Langmuir_add = 3     !< The value of LT_ENHANCE_FORM to add a contribution to
+integer, parameter :: Langmuir_add = 3     !< The value of LT_enhance_form to add a contribution to
                                            !! mstar from Langmuir turbulence to other contributions.
 integer, parameter :: wT_from_cRoot_TKE = 0 !< Use a constant times the cube root of remaining TKE
                                            !! to calculate the turbulent velocity.
@@ -306,6 +311,7 @@ type, public :: ePBL_column_diags ; private
   real :: LA        !< The value of the Langmuir number [nondim]
   real :: LAmod     !< The modified Langmuir number by convection [nondim]
   real :: mstar     !< The value of mstar used in ePBL [nondim]
+  real :: mstar_BBL !< The value of mstar used in ePBL BBL [nondim]
   real :: mstar_LT  !< The portion of mstar due to Langmuir turbulence [nondim]
   integer :: OBL_its !< The number of iterations used to find a self-consistent surface boundary layer depth
   integer :: BBL_its !< The number of iterations used to find a self-consistent bottom boundary layer depth
@@ -318,7 +324,7 @@ contains
 !!  have already been applied.  All calculations are done implicitly, and there
 !!  is no stability limit on the time step.
 subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, US, CS, &
-                         stoch_CS, dSV_dT, dSV_dS, TKE_forced, buoy_flux, Waves )
+                         stoch_CS, dSV_dT, dSV_dS, TKE_forced, buoy_flux, BBL_buoy_flux, Waves )
   type(ocean_grid_type),   intent(inout) :: G      !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV     !< The ocean's vertical grid structure.
   type(unit_scale_type),   intent(in)    :: US     !< A dimensional unit scaling type
@@ -356,6 +362,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   type(energetic_PBL_CS),  intent(inout) :: CS     !< Energetic PBL control structure
   real, dimension(SZI_(G),SZJ_(G)), &
                            intent(in)    :: buoy_flux !< The surface buoyancy flux [Z2 T-3 ~> m2 s-3].
+  real, dimension(SZI_(G),SZJ_(G)), &
+                           intent(in)    :: BBL_buoy_flux !< The bottom buoyancy flux [Z2 T-3 ~> m2 s-3].
   type(wave_parameters_CS), pointer      :: Waves  !< Waves control structure for Langmuir turbulence
   type(stochastic_CS),     pointer       :: stoch_CS  !< The control structure returned by a previous
 
@@ -373,7 +381,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
 ! mixing.
 !
 !   The key parameters for the mixed layer are found in the control structure.
-!   To use the classic constant mstar mixed layers choose MSTAR_SCHEME=CONSTANT.
+!   To use the classic constant mstar mixed layers choose EPBL_MSTAR_SCHEME=CONSTANT.
 ! The key parameters then include mstar, nstar, TKE_decay, and conv_decay.
 ! For the Oberhuber (1993) mixed layer,the values of these are:
 !      mstar = 1.25,  nstar = 1, TKE_decay = 2.5, conv_decay = 0.5
@@ -427,6 +435,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   real :: mech_TKE  ! The mechanically generated turbulent kinetic energy available for mixing over a
                     ! timestep before the application of the efficiency in mstar [R Z3 T-2 ~> J m-2]
   real :: u_star_BBL ! The bottom boundary layer friction velocity [H T-1 ~> m s-1 or kg m-2 s-1].
+  real :: u_star_BBL_z_t ! The bottom boundary layer friction velocity converted to Z T-1 [Z T-1 ~> m s-1].
   real :: BBL_TKE   ! The mechanically generated turbulent kinetic energy available for bottom
                     ! boundary layer mixing within a timestep [R Z3 T-2 ~> J m-2]
   real :: I_rho     ! The inverse of the Boussinesq reference density [R-1 ~> m3 kg-1]
@@ -463,11 +472,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
                        ! layer [R Z3 T-3 ~> W m-2].
     diag_ustar_BBL, &  ! The bottom boundary layer friction velocity [H T-1 ~> m s-1 or kg m-2 s-1]
     diag_BBL_decay_scale, & ! The bottom boundary layer TKE decay length scale [H ~> m]
-
-    diag_mStar_MIX, &  ! Mstar used in EPBL [nondim]
-    diag_mStar_LT, &   ! Mstar due to Langmuir turbulence [nondim]
+    diag_mstar_sfc, &  ! mstar used in EPBL [nondim]
+    diag_mstar_BBL, &  ! mstar used in EPBL BBL [nondim]
+    diag_mstar_LT, &   ! mstar due to Langmuir turbulence [nondim]
     diag_LA, &         ! Langmuir number [nondim]
-    diag_LA_MOD        ! Modified Langmuir number [nondim]
+    diag_LA_mod, &     ! Modified Langmuir number [nondim]
+    diag_ustar, &      ! The surface boundary layer friction velocity [Z T-1 ~> m s-1]
+    diag_bflx          ! The surface boundary layer buoyancy flux  [Z2 T-3 ~> m2 s-3]
 
   ! The following variables are only used for diagnosing sensitivities to ePBL settings
   real, dimension(SZK_(GV)+1) :: &
@@ -514,7 +525,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   I_rho = GV%H_to_Z * GV%RZ_to_H ! == 1.0 / GV%Rho0 ! This is not used when fully non-Boussinesq.
   I_dt = 0.0 ; if (dt > 0.0) I_dt = 1.0 / dt
   I_rho0dt = 1.0 / (GV%Rho0 * dt)  ! This is not used when fully non-Boussinesq.
-  BBL_mixing = ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0))
+  BBL_mixing = ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0) .or. CS%ePBL_BBL_use_mstar)
 
   ! Zero out diagnostics before accumulation.
   if (CS%TKE_diagnostics) then
@@ -631,6 +642,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
         mech_TKE = dt * GV%Rho0 * u_star**3
         ! The line above is equivalent to: mech_TKE = dt * u_star * fluxes%tau_mag(i,j)
       endif
+      diag_ustar(i,j) = u_star
 
       if (allocated(tv%SpV_avg) .and. .not.GV%Boussinesq) then
         SpV_dt(1) = tv%SpV_avg(i,j,1) * I_dt
@@ -684,20 +696,30 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
       if (BBL_mixing) then
         if (CS%MLD_iteration_guess .and. (CS%BBL_depth(i,j) > 0.0)) BBLD_io = CS%BBL_depth(i,j)
         BBLD_in = BBLD_io
-        if (CS%BBL_effic_bug) then
-          BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss_sqrtCd(i,j)
+        u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)  ! units are H T-1
+        if (GV%Boussinesq) then
+          u_star_BBL_z_t = u_star_BBL*GV%H_to_Z
         else
-          BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
+          u_star_BBL_z_t = u_star_BBL*GV%H_to_RZ*tv%SpV_avg(i,j,1)
         endif
-        u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)
 
-        ! Add in tidal dissipation energy at the bottom, noting that fluxes%BBL_tidal_dis is
-        ! in [R Z L2 T-3 ~> W m-2], unlike visc%BBL_meanKE_loss.
-        if ((CS%ePBL_tidal_effic > 0.0) .and. associated(fluxes%BBL_tidal_dis)) &
-          BBL_TKE = BBL_TKE + CS%ePBL_tidal_effic * dt * fluxes%BBL_tidal_dis(i,j)
+        if (CS%ePBL_BBL_use_mstar) then
+          BBL_TKE = dt * ((u_star_BBL*GV%H_to_RZ) * u_star_BBL_z_t**2)
+        else
+          if (CS%BBL_effic_bug) then
+            BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss_sqrtCd(i,j)
+          else
+            BBL_TKE = CS%ePBL_BBL_effic * GV%H_to_RZ * dt * visc%BBL_meanKE_loss(i,j)
+          endif
+          ! Add in tidal dissipation energy at the bottom, noting that fluxes%BBL_tidal_dis is
+          ! in [R Z L2 T-3 ~> W m-2], unlike visc%BBL_meanKE_loss.
+          if ((CS%ePBL_tidal_effic > 0.0) .and. associated(fluxes%BBL_tidal_dis)) &
+            BBL_TKE = BBL_TKE + CS%ePBL_tidal_effic * dt * fluxes%BBL_tidal_dis(i,j)
+        endif
 
         call ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, SpV_dt, absf, dt, Kd, BBL_TKE, &
-                             u_star_BBL, Kd_BBL, BBLD_io, mixvel_BBL, mixlen_BBL, GV, US, CS, eCD)
+                             u_star_BBL, u_star_BBL_z_t, BBL_buoy_flux(i,j), Kd_BBL, BBLD_io, mixvel_BBL, mixlen_BBL, &
+                             GV, US, CS, eCD)
 
         do K=1,nz+1 ; Kd(K) = Kd(K) + Kd_BBL(K) ; enddo
         if (CS%id_Kd_BBL > 0) then ; do K=1,nz+1
@@ -742,10 +764,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
         if (CS%id_TKE_BBL>0) &
           diag_TKE_BBL(i,j) = diag_TKE_BBL(i,j) + BBL_TKE
       endif
-      if (CS%id_MSTAR_MIX > 0) diag_mStar_mix(i,j) = eCD%mstar
-      if (CS%id_MSTAR_LT > 0) diag_mStar_lt(i,j) = eCD%mstar_LT
+      if (CS%id_mstar_sfc > 0) diag_mstar_sfc(i,j) = eCD%mstar
+      if (CS%id_mstar_bbl > 0) diag_mstar_BBL(i,j) = eCD%mstar_BBL
+      if (CS%id_mstar_LT > 0) diag_mstar_lt(i,j) = eCD%mstar_LT
       if (CS%id_LA > 0) diag_LA(i,j) = eCD%LA
-      if (CS%id_LA_MOD > 0) diag_LA_mod(i,j) = eCD%LAmod
+      if (CS%id_LA_mod > 0) diag_LA_mod(i,j) = eCD%LAmod
       if (report_avg_its) then
         CS%sum_its(1) = CS%sum_its(1) + real_to_EFP(real(eCD%OBL_its))
         CS%sum_its(2) = CS%sum_its(2) + real_to_EFP(1.0)
@@ -774,10 +797,13 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
           if ((CS%ePBL_tidal_effic > 0.0) .and. associated(fluxes%BBL_tidal_dis)) &
             BBL_TKE = BBL_TKE + CS%ePBL_tidal_effic * dt * fluxes%BBL_tidal_dis(i,j)
           u_star_BBL = max(visc%ustar_BBL(i,j), CS%ustar_min*GV%Z_to_H)
+          u_star_BBL_z_t = u_star_bbl*GV%H_to_Z
           call ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, SpV_dt, absf, dt, Kd, BBL_TKE, &
-                               u_star_BBL, Kd_1, BLD_1, mixvel_BBL, mixlen_BBL, GV, US, CS_tmp1, eCD_tmp)
+                               u_star_BBL, u_star_BBL_z_t, BBL_buoy_flux(i,j), Kd_1, BLD_1, mixvel_BBL, mixlen_BBL, &
+                               GV, US, CS_tmp1, eCD_tmp)
           call ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT_1d, dSV_dS_1d, SpV_dt, absf, dt, Kd, BBL_TKE, &
-                               u_star_BBL, Kd_2, BLD_2, mixvel_BBL, mixlen_BBL, GV, US, CS_tmp2, eCD_tmp)
+                               u_star_BBL, u_star_BBL_z_t, BBL_buoy_flux(i,j), Kd_2, BLD_2, mixvel_BBL, mixlen_BBL, &
+                               GV, US, CS_tmp2, eCD_tmp)
         endif
 
         if (CS%id_opt_diff_Kd_ePBL > 0) then
@@ -813,6 +839,8 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
   endif
 
   if (CS%id_ML_depth > 0) call post_data(CS%id_ML_depth, CS%ML_depth, CS%diag)
+  if (CS%id_ustar_ePBL > 0) call post_data(CS%id_ustar_ePBL, diag_ustar, CS%diag)
+  if (CS%id_bflx_ePBL > 0) call post_data(CS%id_bflx_ePBL, buoy_flux, CS%diag)
   if (CS%id_hML_depth > 0) call post_data(CS%id_hML_depth, CS%ML_depth, CS%diag)
   if (CS%id_TKE_wind > 0) call post_data(CS%id_TKE_wind, diag_TKE_wind, CS%diag)
   if (CS%id_TKE_MKE > 0)  call post_data(CS%id_TKE_MKE, diag_TKE_MKE, CS%diag)
@@ -825,7 +853,7 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
     call post_data(CS%id_TKE_conv_decay, diag_TKE_conv_decay, CS%diag)
   if (CS%id_Mixing_Length > 0) call post_data(CS%id_Mixing_Length, diag_Mixing_Length, CS%diag)
   if (CS%id_Velocity_Scale >0) call post_data(CS%id_Velocity_Scale, diag_Velocity_Scale, CS%diag)
-  if (CS%id_MSTAR_MIX > 0)     call post_data(CS%id_MSTAR_MIX, diag_mStar_MIX, CS%diag)
+  if (CS%id_mstar_sfc > 0)     call post_data(CS%id_mstar_sfc, diag_mstar_sfc, CS%diag)
   if (BBL_mixing) then
     if (CS%id_Kd_BBL > 0) call post_data(CS%id_Kd_BBL, Kd_BBL_3d, CS%diag)
     if (CS%id_BBL_Mix_Length > 0) call post_data(CS%id_BBL_Mix_Length, BBL_Mix_Length, CS%diag)
@@ -836,10 +864,11 @@ subroutine energetic_PBL(h_3d, u_3d, v_3d, tv, fluxes, visc, dt, Kd_int, G, GV, 
     if (CS%id_TKE_BBL_mixing > 0) call post_data(CS%id_TKE_BBL_mixing, diag_TKE_BBL_mixing, CS%diag)
     if (CS%id_TKE_BBL_decay > 0) call post_data(CS%id_TKE_BBL_decay, diag_TKE_BBL_decay, CS%diag)
     if (CS%id_BBL_depth > 0) call post_data(CS%id_BBL_depth, CS%BBL_depth, CS%diag)
+    if (CS%id_mstar_BBL > 0)     call post_data(CS%id_mstar_BBL, diag_mstar_BBL, CS%diag)
   endif
   if (CS%id_LA > 0)       call post_data(CS%id_LA, diag_LA, CS%diag)
-  if (CS%id_LA_MOD > 0)   call post_data(CS%id_LA_MOD, diag_LA_MOD, CS%diag)
-  if (CS%id_MSTAR_LT > 0) call post_data(CS%id_MSTAR_LT, diag_mStar_LT, CS%diag)
+  if (CS%id_LA_mod > 0)   call post_data(CS%id_LA_mod, diag_LA_mod, CS%diag)
+  if (CS%id_mstar_LT > 0) call post_data(CS%id_mstar_LT, diag_mstar_LT, CS%diag)
   if (stoch_CS%pert_epbl) then
     if (stoch_CS%id_epbl1_wts > 0) call post_data(stoch_CS%id_epbl1_wts, stoch_CS%epbl1_wts, CS%diag)
     if (stoch_CS%id_epbl2_wts > 0) call post_data(stoch_CS%id_epbl2_wts, stoch_CS%epbl2_wts, CS%diag)
@@ -1213,19 +1242,19 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
     MLD_output = dz(1)
     sfc_connected = .true.
 
-    !/ Here we get MStar, which is the ratio of convective TKE driven mixing to UStar**3
+    !/ Here we get mstar, which is the ratio of convective TKE driven mixing to UStar**3
     if (CS%Use_LT) then
       call get_Langmuir_Number(LA, G, GV, US, abs(MLD_guess), u_star_mean, i, j, dz, Waves, &
                                U_H=u, V_H=v)
-      call find_mstar(CS, US, B_flux, u_star, MLD_guess, absf, &
+      call find_mstar(CS, US, B_flux, u_star, MLD_guess, absf, .false., &
                       mstar_total, Langmuir_Number=La, Convect_Langmuir_Number=LAmod,&
                       mstar_LT=mstar_LT)
     else
-      call find_mstar(CS, US, B_flux, u_star, MLD_guess, absf, mstar_total)
+      call find_mstar(CS, US, B_flux, u_star, MLD_guess, absf, .false., mstar_total)
     endif
 
-    !/ Apply MStar to get mech_TKE
-    if ((CS%answer_date < 20190101) .and. (CS%mstar_scheme==Use_Fixed_MStar)) then
+    !/ Apply mstar to get mech_TKE
+    if ((CS%answer_date < 20190101) .and. (CS%mstar_scheme==Use_Fixed_mstar)) then
       mech_TKE = (dt*mstar_total*GV%Rho0) * u_star**3
     else
       mech_TKE = mstar_total * mech_TKE_in
@@ -1861,11 +1890,11 @@ subroutine ePBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, TKE_forcing,
     if (OBL_it >= CS%Max_MLD_Its) exit
 
     ! The following lines are used for the iteration.  Note the iteration has been altered
-    ! to use the value predicted by the TKE threshold (ML_DEPTH).  This is because the MSTAR
+    ! to use the value predicted by the TKE threshold (ML_depth).  This is because the mstar
     ! is now dependent on the ML, and therefore the ML needs to be estimated more precisely
     ! than the grid spacing.
 
-    ! New method uses ML_DEPTH as computed in ePBL routine
+    ! New method uses ML_depth as computed in ePBL routine
     MLD_found = MLD_output
 
     ! Find out whether to do another iteration and the new bounds on it.
@@ -1924,7 +1953,8 @@ end subroutine ePBL_column
 !> This subroutine determines the diffusivities from a bottom boundary layer version of
 !! the integrated energetics mixed layer model for a single column of water.
 subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
-                           dt, Kd, BBL_TKE_in, u_star_BBL, Kd_BBL, BBLD_io, mixvel_BBL, mixlen_BBL, GV, US, CS, eCD)
+                           dt, Kd, BBL_TKE_in, u_star_BBL, u_star_BBL_z_t, b_flux_BBL, Kd_BBL, BBLD_io, mixvel_BBL, &
+                           mixlen_BBL, GV, US, CS, eCD)
   type(verticalGrid_type),   intent(in)  :: GV     !< The ocean's vertical grid structure.
   real, dimension(SZK_(GV)), intent(in)  :: h      !< Layer thicknesses [H ~> m or kg m-2].
   real, dimension(SZK_(GV)), intent(in)  :: dz     !< The vertical distance across layers [Z ~> m].
@@ -1954,7 +1984,10 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
                                                    !! kinetic energy available for bottom boundary
                                                    !! layer mixing within a time step [R Z3 T-2 ~> J m-2].
   real,                    intent(in)    :: u_star_BBL !< The bottom boundary layer friction velocity
-                                                   !! in thickuness flux units [H T-1 ~> m s-1 or kg m-2 s-1]
+                                                       !! in thickness flux units [H T-1 ~> m s-1 or kg m-2 s-1]
+  real,                    intent(in)    :: u_star_BBL_z_t !< The bottom boundary layer friction velocity
+                                                       !! converted to length flux units [Z T-1 ~> m s-1]
+  real,                    intent(in)    :: b_flux_BBL !< The bottom boundary layer buoyancy flux
   real, dimension(SZK_(GV)+1), &
                            intent(out)   :: Kd_BBL !< The bottom boundary layer contribution to diffusivities
                                                    !! at interfaces [H Z T-1 ~> m2 s-1 or kg m-1 s-1].
@@ -2129,6 +2162,7 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
   real :: Surface_Scale ! Surface decay scale for vstar [nondim]
   logical :: debug      ! This is used as a hard-coded value for debugging.
   logical :: no_MKE_conversion  ! If true, there is conversion of MKE to TKE in this routine.
+  real :: mstar_BBL !< the value of mstar for the bottom boundary layer [nondim]
 
   !  The following arrays are used only for debugging purposes.
   real :: dPE_debug     ! An estimate of the potential energy change [R Z3 T-2 ~> J m-2]
@@ -2152,7 +2186,8 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
   no_MKE_conversion = ((CS%direct_calc) ) ! .and. (CS%MKE_to_TKE_effic == 0.0))
 
   ! Add bottom boundary layer mixing if there is energy to support it.
-  if (((CS%ePBL_BBL_effic <= 0.0) .and. (CS%ePBL_tidal_effic <= 0.0)) .or. (BBL_TKE_in <= 0.0)) then
+  if (((CS%ePBL_BBL_effic <= 0.0) .and. (CS%ePBL_tidal_effic <= 0.0) .and. (.not.CS%ePBL_BBL_use_mstar)) &
+      .or. (BBL_TKE_in <= 0.0)) then
     ! There is no added bottom boundary layer mixing.
     BBLD_io = 0.0
     Kd_BBL(:) = 0.0
@@ -2269,8 +2304,14 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
       BBLD_output = dz(nz)
       bot_connected = .true.
 
-      mech_BBL_TKE = BBL_TKE_in
-
+      if (CS%ePBL_BBL_use_mstar) then
+        call find_mstar(CS, US, B_flux_BBL, u_star_BBL_z_t, BBLD_guess, absf, .true., mstar_BBL)
+        eCD%mstar_BBL = mstar_BBL
+        mech_BBL_TKE = mstar_BBL * BBL_TKE_in
+      else
+        mech_BBL_TKE = BBL_TKE_in
+        eCD%mstar_BBL = 0.0
+      endif
       if (CS%TKE_diagnostics) then
         ! eCD%dTKE_BBL_MKE = 0.0
         eCD%dTKE_BBL_mixing = 0.0
@@ -2704,7 +2745,6 @@ subroutine ePBL_BBL_column(h, dz, u, v, T0, S0, dSV_dT, dSV_dS, SpV_dt, absf, &
     enddo ! Iteration loop for converged boundary layer thickness.
 
     eCD%BBL_its = min(BBL_it, CS%max_BBLD_its)
-
     BBLD_io = BBLD_output
   endif
 
@@ -3475,103 +3515,115 @@ subroutine find_PE_chg_orig(Kddt_h, h_k, b_den_1, dTe_term, dSe_term, &
 
 end subroutine find_PE_chg_orig
 
-!> This subroutine finds the Mstar value for ePBL
+!> This subroutine finds the mstar value for ePBL
 subroutine find_mstar(CS, US, Buoyancy_Flux, UStar, &
-                      BLD, Abs_Coriolis, MStar, Langmuir_Number,&
-                      MStar_LT, Convect_Langmuir_Number)
+                      BLD, Abs_Coriolis, Is_BBL, mstar, &
+                      Langmuir_Number, mstar_LT, Convect_Langmuir_Number)
   type(energetic_PBL_CS), intent(in) :: CS    !< Energetic PBL control structure
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: UStar !< ustar including gustiness [Z T-1 ~> m s-1]
   real,                  intent(in)  :: Abs_Coriolis !< absolute value of the Coriolis parameter [T-1 ~> s-1]
   real,                  intent(in)  :: Buoyancy_Flux !< Buoyancy flux [Z2 T-3 ~> m2 s-3]
   real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
-  real,                  intent(out) :: Mstar !< Output mstar (Mixing/ustar**3) [nondim]
+  logical,               intent(in)  :: Is_BBL !< Logcal flag to indicate if bottom boundary layer mode
+  real,                  intent(out) :: mstar !< Output mstar (Mixing/ustar**3) [nondim]
   real,        optional, intent(in)  :: Langmuir_Number !< Langmuir number [nondim]
-  real,        optional, intent(out) :: MStar_LT !< Mstar increase due to Langmuir turbulence [nondim]
+  real,        optional, intent(out) :: mstar_LT !< mstar increase due to Langmuir turbulence [nondim]
   real,        optional, intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux [nondim]
 
   !/ Variables used in computing mstar
   real :: MSN_term       ! Temporary terms [nondim]
   real :: MSCR_term1, MSCR_term2 ! Temporary terms [Z3 T-3 ~> m3 s-3]
-  real :: MStar_Conv_Red ! Adjustment made to mstar due to convection reducing mechanical mixing [nondim]
-  real :: MStar_S, MStar_N ! Mstar in (S)tabilizing/(N)ot-stabilizing buoyancy flux [nondim]
+  real :: mstar_Conv_Red ! Adjustment made to mstar due to convection reducing mechanical mixing [nondim]
+  real :: mstar_S, mstar_N ! mstar in (S)tabilizing/(N)ot-stabilizing buoyancy flux [nondim]
+  integer :: mstar_scheme ! Toggles between surface and bottom boundary layer mstar scheme from control structure
 
   !/  Integer options for how to find mstar
 
   !/
 
-  if (CS%mstar_scheme == Use_Fixed_MStar) then
-    MStar = CS%Fixed_MStar
+  if (Is_BBL) then
+    mstar_scheme = CS%BBL_mstar_scheme
+  else
+    mstar_scheme = CS%mstar_scheme
+  endif
+
+  if (mstar_scheme == Use_Fixed_mstar) then
+    if (Is_BBL) then
+      mstar = CS%BBL_Fixed_mstar
+    else
+      mstar = CS%Fixed_mstar
+    endif
   !/ 1. Get mstar
-  elseif (CS%mstar_scheme == MStar_from_Ekman) then
+  elseif (mstar_scheme == mstar_from_Ekman) then
 
     if (CS%answer_date < 20190101) then
       ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
-      MStar_S = CS%MStar_coef*sqrt(max(0.0,Buoyancy_Flux) / UStar**2 / &
+      mstar_S = CS%mstar_coef*sqrt(max(0.0,Buoyancy_Flux) / UStar**2 / &
                     (Abs_Coriolis + 1.e-10*US%T_to_s) )
       ! The limit for rotation (Ekman length) limited mixing
-      MStar_N =  CS%C_Ek * log( max( 1., UStar / (Abs_Coriolis + 1.e-10*US%T_to_s) / BLD ) )
+      mstar_N =  CS%C_Ek * log( max( 1., UStar / (Abs_Coriolis + 1.e-10*US%T_to_s) / BLD ) )
     else
       ! The limit for the balance of rotation and stabilizing is f(L_Ekman,L_Obukhov)
-      MStar_S = CS%MSTAR_COEF*sqrt(max(0.0, Buoyancy_Flux) / (UStar**2 * max(Abs_Coriolis, 1.e-20*US%T_to_s)))
+      mstar_S = CS%mstar_coef*sqrt(max(0.0, Buoyancy_Flux) / (UStar**2 * max(Abs_Coriolis, 1.e-20*US%T_to_s)))
       ! The limit for rotation (Ekman length) limited mixing
-      MStar_N = 0.0
-      if (UStar > Abs_Coriolis * BLD) Mstar_N = CS%C_EK * log(UStar / (Abs_Coriolis * BLD))
+      mstar_N = 0.0
+      if (UStar > Abs_Coriolis * BLD) mstar_N = CS%C_Ek * log(UStar / (Abs_Coriolis * BLD))
     endif
 
     ! Here 1.25 is about .5/von Karman, which gives the Obukhov limit.
-    MStar = max(MStar_S, min(1.25, MStar_N))
-    if (CS%MStar_Cap > 0.0) MStar = min( CS%MStar_Cap,MStar )
-  elseif ( CS%mstar_scheme == MStar_from_RH18 ) then
+    mstar = max(mstar_S, min(1.25, mstar_N))
+    if (CS%mstar_Cap > 0.0) mstar = min( CS%mstar_Cap,mstar )
+  elseif ( mstar_scheme == mstar_from_RH18 ) then
     if (CS%answer_date < 20190101) then
-      MStar_N = CS%RH18_MStar_cn1 * ( 1.0 - 1.0 / ( 1. + CS%RH18_MStar_cn2 * &
+      mstar_N = CS%RH18_mstar_cn1 * ( 1.0 - 1.0 / ( 1. + CS%RH18_mstar_cn2 * &
                 exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar) ) )
     else
-      MSN_term = CS%RH18_MStar_cn2 * exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar)
-      MStar_N = (CS%RH18_MStar_cn1 *  MSN_term) / ( 1. + MSN_term)
+      MSN_term = CS%RH18_mstar_cn2 * exp( CS%RH18_mstar_CN3 * BLD * Abs_Coriolis / UStar)
+      mstar_N = (CS%RH18_mstar_cn1 *  MSN_term) / ( 1. + MSN_term)
     endif
-    MStar_S = CS%RH18_MStar_CS1 * ( max(0.0, Buoyancy_Flux)**2 * BLD / &
+    mstar_S = CS%RH18_mstar_CS1 * ( max(0.0, Buoyancy_Flux)**2 * BLD / &
              ( UStar**5 * max(Abs_Coriolis,1.e-20*US%T_to_s) ) )**CS%RH18_mstar_cs2
-    MStar = MStar_N + MStar_S
+    mstar = mstar_N + mstar_S
   endif
 
   !/ 2. Adjust mstar to account for convective turbulence
   if (CS%answer_date < 20190101) then
-    MStar_Conv_Red = 1. - CS%MStar_Convect_coef * (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) / &
+    mstar_Conv_Red = 1. - CS%mstar_Convect_coef * (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) / &
                          ( (-min(0.0,Buoyancy_Flux) + 1.e-10*US%T_to_s**3*US%m_to_Z**2) + &
-                         2.0 *MStar * UStar**3 / BLD )
+                         2.0 *mstar * UStar**3 / BLD )
   else
     MSCR_term1 = -BLD * min(0.0, Buoyancy_Flux)
-    MSCR_term2 = 2.0*MStar * UStar**3
+    MSCR_term2 = 2.0*mstar * UStar**3
     if ( abs(MSCR_term2) > 0.0) then
-      MStar_Conv_Red = ((1.-CS%mstar_convect_coef) * MSCR_term1 + MSCR_term2) / (MSCR_term1 + MSCR_term2)
+      mstar_Conv_Red = ((1.-CS%mstar_convect_coef) * MSCR_term1 + MSCR_term2) / (MSCR_term1 + MSCR_term2)
     else
-      MStar_Conv_Red = 1.-CS%mstar_convect_coef
+      mstar_Conv_Red = 1.-CS%mstar_convect_coef
     endif
   endif
 
   !/3. Combine various mstar terms to get final value
-  MStar = MStar * MStar_Conv_Red
+  mstar = mstar * mstar_Conv_Red
 
-  if (present(Langmuir_Number)) then
-    call mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, MStar, &
-                        MStar_LT, Convect_Langmuir_Number)
+  if ((.not.Is_BBL) .and. (present(Langmuir_Number))) then
+    call mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, mstar, &
+                        mstar_LT, Convect_Langmuir_Number)
   endif
 
-end subroutine Find_Mstar
+end subroutine Find_mstar
 
-!> This subroutine modifies the Mstar value if the Langmuir number is present
-subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, &
-                          Mstar, MStar_LT, Convect_Langmuir_Number)
+!> This subroutine modifies the mstar value if the Langmuir number is present
+subroutine mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langmuir_Number, &
+                          mstar, mstar_LT, Convect_Langmuir_Number)
   type(energetic_PBL_CS), intent(in) :: CS    !< Energetic PBL control structure
   type(unit_scale_type), intent(in)  :: US    !< A dimensional unit scaling type
   real,                  intent(in)  :: Abs_Coriolis !< Absolute value of the Coriolis parameter [T-1 ~> s-1]
   real,                  intent(in)  :: Buoyancy_Flux !< Buoyancy flux [Z2 T-3 ~> m2 s-3]
   real,                  intent(in)  :: UStar !< Surface friction velocity with? gustiness [Z T-1 ~> m s-1]
   real,                  intent(in)  :: BLD   !< boundary layer depth [Z ~> m]
-  real,                  intent(inout) :: Mstar !< Input/output mstar (Mixing/ustar**3) [nondim]
+  real,                  intent(inout) :: mstar !< Input/output mstar (Mixing/ustar**3) [nondim]
   real,                  intent(in)  :: Langmuir_Number !< Langmuir number [nondim]
-  real,                  intent(out) :: MStar_LT !< Mstar increase due to Langmuir turbulence [nondim]
+  real,                  intent(out) :: mstar_LT !< mstar increase due to Langmuir turbulence [nondim]
   real,                  intent(out) :: Convect_Langmuir_number !< Langmuir number including buoyancy flux [nondim]
 
   !/
@@ -3597,7 +3649,7 @@ subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langm
   ! Set default values for no Langmuir effects.
   enhance_mstar = 1.0 ; mstar_LT_add = 0.0
 
-  if (CS%LT_Enhance_Form /= No_Langmuir) then
+  if (CS%LT_enhance_form /= No_Langmuir) then
     ! a. Get parameters for modified LA
     if (CS%answer_date < 20190101) then
       iL_Ekman   = Abs_Coriolis / Ustar
@@ -3631,24 +3683,24 @@ subroutine Mstar_Langmuir(CS, US, Abs_Coriolis, Buoyancy_Flux, UStar, BLD, Langm
     !    Assumes linear factors based on length scale ratios to adjust LA
     !    Note when these coefficients are set to 0 recovers simple LA.
     Convect_Langmuir_Number = Langmuir_Number * &
-                    ( (1.0 + max(-0.5, CS%LaC_MLDoEK * MLD_Ekman)) + &
-                   ((CS%LaC_EKoOB_stab * Ekman_Obukhov_stab + CS%LaC_EKoOB_un * Ekman_Obukhov_un) + &
-                    (CS%LaC_MLDoOB_stab * MLD_Obukhov_stab  + CS%LaC_MLDoOB_un * MLD_Obukhov_un)) )
+                    ( (1.0 + max(-0.5, CS%LaC_MLD_Ek * MLD_Ekman)) + &
+                   ((CS%LaC_Ek_Ob_stab * Ekman_Obukhov_stab + CS%LaC_Ek_Ob_un * Ekman_Obukhov_un) + &
+                    (CS%LaC_MLD_Ob_stab * MLD_Obukhov_stab  + CS%LaC_MLD_Ob_un * MLD_Obukhov_un)) )
 
-    if (CS%LT_Enhance_Form == Langmuir_rescale) then
+    if (CS%LT_enhance_form == Langmuir_rescale) then
       ! Enhancement is multiplied (added mst_lt set to 0)
       Enhance_mstar = min(CS%Max_Enhance_M, &
-                          (1. + CS%LT_ENHANCE_COEF * Convect_Langmuir_Number**CS%LT_ENHANCE_EXP) )
-    elseif (CS%LT_ENHANCE_Form == Langmuir_add) then
+                          (1. + CS%LT_enhance_coef * Convect_Langmuir_Number**CS%LT_enhance_exp) )
+    elseif (CS%LT_enhance_form == Langmuir_add) then
       ! or Enhancement is additive (multiplied enhance_m set to 1)
-      mstar_LT_add = CS%LT_ENHANCE_COEF * Convect_Langmuir_Number**CS%LT_ENHANCE_EXP
+      mstar_LT_add = CS%LT_enhance_coef * Convect_Langmuir_Number**CS%LT_enhance_exp
     endif
   endif
 
   mstar_LT = (enhance_mstar - 1.0)*mstar + mstar_LT_add  ! Diagnose the full increase in mstar.
   mstar = mstar*enhance_mstar + mstar_LT_add
 
-end subroutine Mstar_Langmuir
+end subroutine mstar_Langmuir
 
 
 !> Copies the ePBL active mixed layer depth into MLD, in units of [Z ~> m] unless other units are specified.
@@ -3688,6 +3740,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_energetic_PBL"  ! This module's name.
   character(len=20)  :: tmpstr  ! A string that is parsed for parameter settings
+  character(len=20)  :: mstar_scheme ! A string that is parsed for mstar parameter settings
   character(len=20)  :: vel_scale_str ! A string that is parsed for velocity scale parameter settings
   character(len=120) :: diff_text ! A clause describing parameter setting that differ.
   real :: omega_frac_dflt  ! The default for omega_frac [nondim]
@@ -3773,8 +3826,9 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  default=.false., do_not_log=(CS%MKE_to_TKE_effic>0.0))
 
 
-!/2. Options related to setting MSTAR
-  call get_param(param_file, mdl, "EPBL_MSTAR_SCHEME", tmpstr, &
+!/2. Options related to setting mstar
+
+  call get_param(param_file, mdl, "EPBL_MSTAR_SCHEME", mstar_scheme, &
                  "EPBL_MSTAR_SCHEME selects the method for setting mstar.  Valid values are: \n"//&
                  "\t CONSTANT   - Use a fixed mstar given by MSTAR \n"//&
                  "\t OM4        - Use L_Ekman/L_Obukhov in the stabilizing limit, as in OM4 \n"//&
@@ -3782,87 +3836,115 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  default=CONSTANT_STRING, do_not_log=.true.)
   call get_param(param_file, mdl, "MSTAR_MODE", mstar_mode, default=-1)
   if (mstar_mode == 0) then
-    tmpstr = CONSTANT_STRING
+    mstar_scheme = CONSTANT_STRING
     call MOM_error(WARNING, "Use EPBL_MSTAR_SCHEME = CONSTANT instead of the archaic MSTAR_MODE = 0.")
   elseif (mstar_mode == 1) then
     call MOM_error(FATAL, "You are using a legacy mstar mode in ePBL that has been phased out. "//&
                           "If you need to use this setting please report this error.  Also use "//&
                           "EPBL_MSTAR_SCHEME to specify the scheme for mstar.")
   elseif (mstar_mode == 2) then
-    tmpstr = OM4_STRING
+    mstar_scheme = OM4_STRING
     call MOM_error(WARNING, "Use EPBL_MSTAR_SCHEME = OM4 instead of the archaic MSTAR_MODE = 2.")
   elseif (mstar_mode == 3) then
-    tmpstr = RH18_STRING
+    mstar_scheme = RH18_STRING
     call MOM_error(WARNING, "Use EPBL_MSTAR_SCHEME = REICHL_H18 instead of the archaic MSTAR_MODE = 3.")
   elseif (mstar_mode > 3) then
     call MOM_error(FATAL, "An unrecognized value of the obsolete parameter MSTAR_MODE was specified.")
   endif
-  call log_param(param_file, mdl, "EPBL_MSTAR_SCHEME", tmpstr, &
+  call log_param(param_file, mdl, "EPBL_MSTAR_SCHEME", mstar_scheme, &
                  "EPBL_MSTAR_SCHEME selects the method for setting mstar.  Valid values are: \n"//&
                  "\t CONSTANT   - Use a fixed mstar given by MSTAR \n"//&
                  "\t OM4        - Use L_Ekman/L_Obukhov in the stabilizing limit, as in OM4 \n"//&
                  "\t REICHL_H18 - Use the scheme documented in Reichl & Hallberg, 2018.", &
                  default=CONSTANT_STRING)
-  tmpstr = uppercase(tmpstr)
-  select case (tmpstr)
+  mstar_scheme = uppercase(mstar_scheme)
+  select case (mstar_scheme)
     case (CONSTANT_STRING)
-      CS%mstar_Scheme = Use_Fixed_MStar
+      CS%mstar_scheme = Use_Fixed_mstar
     case (OM4_STRING)
-      CS%mstar_Scheme = MStar_from_Ekman
+      CS%mstar_scheme = mstar_from_Ekman
     case (RH18_STRING)
-      CS%mstar_Scheme = MStar_from_RH18
+      CS%mstar_scheme = mstar_from_RH18
     case default
-      call MOM_mesg('energetic_PBL_init: EPBL_MSTAR_SCHEME ="'//trim(tmpstr)//'"', 0)
+      call MOM_mesg('energetic_PBL_init: EPBL_MSTAR_SCHEME ="'//trim(mstar_scheme)//'"', 0)
       call MOM_error(FATAL, "energetic_PBL_init: Unrecognized setting "// &
-            "EPBL_MSTAR_SCHEME = "//trim(tmpstr)//" found in input file.")
+            "EPBL_MSTAR_SCHEME = "//trim(mstar_scheme)//" found in input file.")
   end select
-
   call get_param(param_file, mdl, "MSTAR", CS%fixed_mstar, &
                  "The ratio of the friction velocity cubed to the TKE input to the "//&
-                 "mixed layer.  This option is used if EPBL_MSTAR_SCHEME = CONSTANT.", &
-                 units="nondim", default=1.2, do_not_log=(CS%mstar_scheme/=Use_Fixed_MStar))
+                 "surface boundary layer.  This option is used if EPBL_MSTAR_SCHEME = CONSTANT.", &
+                 units="nondim", default=1.2, do_not_log=(CS%mstar_scheme/=Use_Fixed_mstar))
+
   call get_param(param_file, mdl, "MSTAR_CAP", CS%mstar_cap, &
                  "If this value is positive, it sets the maximum value of mstar "//&
-                 "allowed in ePBL.  (This is not used if EPBL_MSTAR_SCHEME = CONSTANT).", &
-                 units="nondim", default=-1.0, do_not_log=(CS%mstar_scheme==Use_Fixed_MStar))
-  ! mstar_scheme==MStar_from_Ekman options
-  call get_param(param_file, mdl, "MSTAR2_COEF1", CS%MSTAR_COEF, &
+                 "allowed in ePBL.  (This is not used if EPBL_mstar_scheme = CONSTANT).", &
+                 units="nondim", default=-1.0, do_not_log=(CS%mstar_scheme==Use_Fixed_mstar))
+  ! mstar_scheme==mstar_from_Ekman options
+  call get_param(param_file, mdl, "MSTAR2_COEF1", CS%mstar_coef, &
                  "Coefficient in computing mstar when rotation and stabilizing "//&
-                 "effects are both important (used if EPBL_MSTAR_SCHEME = OM4).", &
-                 units="nondim", default=0.3, do_not_log=(CS%mstar_scheme/=MStar_from_Ekman))
-  call get_param(param_file, mdl, "MSTAR2_COEF2", CS%C_EK, &
+                 "effects are both important (used if EPBL_mstar_scheme = OM4).", &
+                 units="nondim", default=0.3, do_not_log=(CS%mstar_scheme/=mstar_from_Ekman))
+  call get_param(param_file, mdl, "MSTAR2_COEF2", CS%C_Ek, &
                  "Coefficient in computing mstar when only rotation limits "// &
                  "the total mixing (used if EPBL_MSTAR_SCHEME = OM4)", &
-                 units="nondim", default=0.085, do_not_log=(CS%mstar_scheme/=MStar_from_Ekman))
-  ! mstar_scheme==MStar_from_RH18 options
+                 units="nondim", default=0.085, do_not_log=(CS%mstar_scheme/=mstar_from_Ekman))
+  ! mstar_scheme==mstar_from_RH18 options
   call get_param(param_file, mdl, "RH18_MSTAR_CN1", CS%RH18_mstar_cn1,&
                  "MSTAR_N coefficient 1 (outer-most coefficient for fit). "//&
                  "The value of 0.275 is given in RH18.  Increasing this "//&
-                 "coefficient increases MSTAR for all values of Hf/ust, but more "//&
+                 "coefficient increases mstar for all values of Hf/ust, but more "//&
                  "effectively at low values (weakly developed OSBLs).", &
-                 units="nondim", default=0.275, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
+                 units="nondim", default=0.275, do_not_log=(CS%mstar_scheme/=mstar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CN2", CS%RH18_mstar_cn2,&
                  "MSTAR_N coefficient 2 (coefficient outside of exponential decay). "//&
                  "The value of 8.0 is given in RH18.  Increasing this coefficient "//&
-                 "increases MSTAR for all values of HF/ust, with a much more even "//&
+                 "increases mstar for all values of HF/ust, with a much more even "//&
                  "effect across a wide range of Hf/ust than CN1.", &
-                 units="nondim", default=8.0, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
+                 units="nondim", default=8.0, do_not_log=(CS%mstar_scheme/=mstar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CN3", CS%RH18_mstar_CN3,&
                  "MSTAR_N coefficient 3 (exponential decay coefficient). "//&
                  "The value of -5.0 is given in RH18.  Increasing this increases how "//&
-                 "quickly the value of MSTAR decreases as Hf/ust increases.", &
-                  units="nondim", default=-5.0, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
+                 "quickly the value of mstar decreases as Hf/ust increases.", &
+                  units="nondim", default=-5.0, do_not_log=(CS%mstar_scheme/=mstar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CS1", CS%RH18_mstar_cs1,&
                  "MSTAR_S coefficient for RH18 in stabilizing limit. "//&
                  "The value of 0.2 is given in RH18 and increasing it increases "//&
-                 "MSTAR in the presence of a stabilizing surface buoyancy flux.", &
-                 units="nondim", default=0.2, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
+                 "mstar in the presence of a stabilizing surface buoyancy flux.", &
+                 units="nondim", default=0.2, do_not_log=(CS%mstar_scheme/=mstar_from_RH18))
   call get_param(param_file, mdl, "RH18_MSTAR_CS2", CS%RH18_mstar_cs2,&
                  "MSTAR_S exponent for RH18 in stabilizing limit. "//&
-                 "The value of 0.4 is given in RH18 and increasing it increases MSTAR "//&
+                 "The value of 0.4 is given in RH18 and increasing it increases mstar "//&
                  "exponentially in the presence of a stabilizing surface buoyancy flux.", &
-                 Units="nondim", default=0.4, do_not_log=(CS%mstar_scheme/=MStar_from_RH18))
-
+                 Units="nondim", default=0.4, do_not_log=(CS%mstar_scheme/=mstar_from_RH18))
+!/ BBL mstar related options
+  call get_param(param_file, mdl, "EPBL_BBL_USE_MSTAR", CS%ePBL_BBL_use_mstar, &
+                 "A logical to use mstar in the calculation of TKE in the ePBL BBL scheme", &
+                 units="nondim", default=.false.)
+  if (CS%ePBL_BBL_use_mstar) then
+    call get_param(param_file, mdl, "EPBL_BBL_MSTAR_SCHEME", tmpstr, &
+                   "EPBL_BBL_MSTAR_SCHEME selects the method for setting mstar in the BBL.  Valid values are: \n"//&
+                   "\t CONSTANT   - Use a fixed mstar given by MSTAR_BBL \n"//&
+                   "\t OM4        - Use L_Ekman/L_Obukhov in the stabilizing limit, as in OM4 \n"//&
+                   "\t REICHL_H18 - Use the scheme documented in Reichl & Hallberg, 2018.", &
+                   default=mstar_scheme)
+    tmpstr = uppercase(tmpstr)
+    select case (tmpstr)
+      case (CONSTANT_STRING)
+        CS%BBL_mstar_scheme = Use_Fixed_mstar
+      case (OM4_STRING)
+        CS%BBL_mstar_scheme = mstar_from_Ekman
+      case (RH18_STRING)
+        CS%BBL_mstar_scheme = mstar_from_RH18
+      case default
+        call MOM_mesg('energetic_PBL_init: EPBL_BBL_MSTAR_SCHEME ="'//trim(tmpstr)//'"', 0)
+        call MOM_error(FATAL, "energetic_PBL_init: Unrecognized setting "// &
+              "EPBL_BBL_MSTAR_SCHEME = "//trim(tmpstr)//" found in input file.")
+    end select
+    call get_param(param_file, mdl, "MSTAR_BBL", CS%BBL_fixed_mstar, &
+                   "The ratio of the friction velocity cubed to the TKE input to the "//&
+                   "bottom boundary layer.  This option is used if EPBL_BBL_MSTAR_SCHEME = CONSTANT.", &
+                   units="nondim", default=1.2, do_not_log=(CS%BBL_mstar_scheme/=Use_Fixed_mstar))
+  endif
 
 !/ Convective turbulence related options
   call get_param(param_file, mdl, "NSTAR", CS%nstar, &
@@ -4076,20 +4158,20 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
                  "\t ADDITIVE - Add a Langmuir turbulence contribution to mstar to other contributions", &
                  default=NONE_STRING, do_not_log=.true.)
     call get_param(param_file, mdl, "LT_ENHANCE", LT_enhance, default=-1)
-    if (LT_ENHANCE == 0) then
+    if (LT_enhance == 0) then
       tmpstr = NONE_STRING
       call MOM_error(WARNING, "Use EPBL_LANGMUIR_SCHEME = NONE instead of the archaic LT_ENHANCE = 0.")
-    elseif (LT_ENHANCE == 1) then
+    elseif (LT_enhance == 1) then
       call MOM_error(FATAL, "You are using a legacy LT_ENHANCE mode in ePBL that has been phased out. "//&
                             "If you need to use this setting please report this error.  Also use "//&
                             "EPBL_LANGMUIR_SCHEME to specify the scheme for mstar.")
-    elseif (LT_ENHANCE == 2) then
+    elseif (LT_enhance == 2) then
       tmpstr = RESCALED_STRING
       call MOM_error(WARNING, "Use EPBL_LANGMUIR_SCHEME = RESCALE instead of the archaic LT_ENHANCE = 2.")
-    elseif (LT_ENHANCE == 3) then
+    elseif (LT_enhance == 3) then
       tmpstr = ADDITIVE_STRING
       call MOM_error(WARNING, "Use EPBL_LANGMUIR_SCHEME = ADDITIVE instead of the archaic LT_ENHANCE = 3.")
-    elseif (LT_ENHANCE > 3) then
+    elseif (LT_enhance > 3) then
       call MOM_error(FATAL, "An unrecognized value of the obsolete parameter LT_ENHANCE was specified.")
     endif
     call log_param(param_file, mdl, "EPBL_LANGMUIR_SCHEME", tmpstr, &
@@ -4113,29 +4195,29 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
               "EPBL_LANGMUIR_SCHEME = "//trim(tmpstr)//" found in input file.")
     end select
 
-    call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_ENHANCE_COEF, &
+    call get_param(param_file, mdl, "LT_ENHANCE_COEF", CS%LT_enhance_coef, &
                  "Coefficient for Langmuir enhancement of mstar", &
                  units="nondim", default=0.447, do_not_log=(CS%LT_enhance_form==No_Langmuir))
-    call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_ENHANCE_EXP, &
+    call get_param(param_file, mdl, "LT_ENHANCE_EXP", CS%LT_enhance_exp, &
                  "Exponent for Langmuir enhancement of mstar", &
                  units="nondim", default=-1.33,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
-    call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLDoEK, &
+    call get_param(param_file, mdl, "LT_MOD_LAC1", CS%LaC_MLD_Ek, &
                  "Coefficient for modification of Langmuir number due to "//&
                  "MLD approaching Ekman depth.", &
                  units="nondim", default=-0.87,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
-    call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLDoOB_stab, &
+    call get_param(param_file, mdl, "LT_MOD_LAC2", CS%LaC_MLD_Ob_stab, &
                  "Coefficient for modification of Langmuir number due to "//&
                  "MLD approaching stable Obukhov depth.", &
                  units="nondim", default=0.0,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
-    call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLDoOB_un, &
+    call get_param(param_file, mdl, "LT_MOD_LAC3", CS%LaC_MLD_Ob_un, &
                  "Coefficient for modification of Langmuir number due to "//&
                  "MLD approaching unstable Obukhov depth.", &
                  units="nondim", default=0.0,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
-    call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_EKoOB_stab, &
+    call get_param(param_file, mdl, "LT_MOD_LAC4", CS%Lac_Ek_Ob_stab, &
                  "Coefficient for modification of Langmuir number due to "//&
                  "ratio of Ekman to stable Obukhov depth.", &
                  units="nondim", default=0.95,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
-    call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_EKoOB_un, &
+    call get_param(param_file, mdl, "LT_MOD_LAC5", CS%Lac_Ek_Ob_un, &
                  "Coefficient for modification of Langmuir number due to "//&
                  "ratio of Ekman to unstable Obukhov depth.", &
                  units="nondim", default=0.95,  do_not_log=(CS%LT_enhance_form==No_Langmuir))
@@ -4258,6 +4340,10 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   ! This is an alias for the same variable as ePBL_h_ML
   CS%id_hML_depth = register_diag_field('ocean_model', 'h_ML', diag%axesT1, &
       Time, 'Surface mixed layer depth based on active turbulence', units='m', conversion=US%Z_to_m)
+  CS%id_ustar_ePBL = register_diag_field('ocean_model', 'ePBL_ustar', diag%axesT1, &
+      Time, 'Surface friction in ePBL', units='m s-1', conversion=US%Z_to_m*US%s_to_T)
+  CS%id_bflx_ePBL = register_diag_field('ocean_model', 'ePBL_bflx', diag%axesT1, &
+      Time, 'Surface buoyancy flux in ePBL', units='m2 s-3', conversion=US%Z_to_m**2*US%s_to_T**3)
   CS%id_TKE_wind = register_diag_field('ocean_model', 'ePBL_TKE_wind', diag%axesT1, &
       Time, 'Wind-stirring source of mixed layer TKE', units='W m-2', conversion=US%RZ3_T3_to_W_m2)
   CS%id_TKE_MKE = register_diag_field('ocean_model', 'ePBL_TKE_MKE', diag%axesT1, &
@@ -4277,9 +4363,9 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
       Time, 'Mixing Length that is used', units='m', conversion=US%Z_to_m)
   CS%id_Velocity_Scale = register_diag_field('ocean_model', 'Velocity_Scale', diag%axesTi, &
       Time, 'Velocity Scale that is used.', units='m s-1', conversion=US%Z_to_m*US%s_to_T)
-  CS%id_MSTAR_mix = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
+  CS%id_mstar_sfc = register_diag_field('ocean_model', 'MSTAR', diag%axesT1, &
       Time, 'Total mstar that is used.', 'nondim')
-  if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0)) then
+  if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0) .or. CS%ePBL_BBL_use_mstar) then
     CS%id_Kd_BBL = register_diag_field('ocean_model', 'Kd_ePBL_BBL', diag%axesTi, &
         Time, 'ePBL bottom boundary layer diffusivity', units='m2 s-1', conversion=GV%HZ_T_to_m2_s)
     CS%id_BBL_Mix_Length = register_diag_field('ocean_model', 'BBL_Mixing_Length', diag%axesTi, &
@@ -4300,13 +4386,15 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
     CS%id_TKE_BBL_decay = register_diag_field('ocean_model', 'ePBL_BBL_TKE_decay', diag%axesT1, &
         Time, 'Energy decay sink of mixed layer TKE in the bottom boundary layer', &
         units='W m-2', conversion=US%RZ3_T3_to_W_m2)
+    CS%id_mstar_BBL = register_diag_field('ocean_model', 'MSTAR_BBL', diag%axesT1, &
+        Time, 'Total BBL mstar that is used.', 'nondim')
   endif
   if (CS%use_LT) then
     CS%id_LA = register_diag_field('ocean_model', 'LA', diag%axesT1, &
         Time, 'Langmuir number.', 'nondim')
     CS%id_LA_mod = register_diag_field('ocean_model', 'LA_MOD', diag%axesT1, &
         Time, 'Modified Langmuir number.', 'nondim')
-    CS%id_MSTAR_LT = register_diag_field('ocean_model', 'MSTAR_LT', diag%axesT1, &
+    CS%id_mstar_LT = register_diag_field('ocean_model', 'MSTAR_LT', diag%axesT1, &
         Time, 'Increase in mstar due to Langmuir Turbulence.', 'nondim')
   endif
 
@@ -4330,7 +4418,7 @@ subroutine energetic_PBL_init(Time, G, GV, US, param_file, diag, CS)
   CS%TKE_diagnostics = (max(CS%id_TKE_wind, CS%id_TKE_MKE, CS%id_TKE_conv, &
                             CS%id_TKE_mixing, CS%id_TKE_mech_decay, CS%id_TKE_forcing, &
                             CS%id_TKE_conv_decay) > 0)
-  if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0)) then
+  if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0) .or. CS%ePBL_BBL_use_mstar) then
     CS%TKE_diagnostics = CS%TKE_diagnostics .or. &
         (max(CS%id_TKE_BBL, CS%id_TKE_BBL_mixing, CS%id_TKE_BBL_decay) > 0)
   endif
@@ -4356,7 +4444,7 @@ subroutine energetic_PBL_end(CS)
     write (mesg,*) "Average ePBL iterations = ", avg_its
     call MOM_mesg(mesg)
 
-    if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0)) then
+    if ((CS%ePBL_BBL_effic > 0.0) .or. (CS%ePBL_tidal_effic > 0.0) .or. CS%ePBL_BBL_use_mstar) then
       call EFP_sum_across_PEs(CS%sum_its_BBL, 2)
       avg_its = EFP_to_real(CS%sum_its_BBL(1)) / EFP_to_real(CS%sum_its_BBL(2))
       write (mesg,*) "Average ePBL BBL iterations = ", avg_its
