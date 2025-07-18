@@ -1470,6 +1470,8 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
 
   nz = GV%ke
 
+  tol_vel = CS%tol_vel
+
   !$omp target enter data &
   !$omp   map(to: uh_3d, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
   !$omp       duhdu_tot_0, G, G%IareaT, CS, u, visc_rem, h_W, h_E, h_in, G%dy_Cu, &
@@ -1479,11 +1481,13 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
   ! NVIDIA do concurrent doesn't work with private arrays (private scalars OK)
   !$omp target loop private(i, k, itt, uh_aux, uh_err, uh_err_best, duhdu_tot, du_min, du_max, do_I)
   do j=jsh,jeh
+
     if (present(uh_3d)) then
       do concurrent (k=1:nz, I=ish-1:ieh)
         uh_aux(I,k) = uh_3d(I,j,k)
       enddo
     endif
+
     do concurrent (I=ish-1:ieh)
       du(I,j) = 0.0 ; do_I(I) = do_I_in(I,j)
       du_max(I) = du_max_CFL(I,j) ; du_min(I) = du_min_CFL(I,j)
@@ -1492,6 +1496,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
       duhdu_tot(I) = duhdu_tot_0(I,j)
       uh_err_best(I) = abs(uh_err(I))
     enddo
+
     do itt=1,max_itts
       select case (itt)
         case (:1) ; tol_eta = 1e-6 * CS%tol_eta
@@ -1499,9 +1504,9 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
         case (3)  ; tol_eta = 1e-2 * CS%tol_eta
         case default ; tol_eta = CS%tol_eta
       end select
-      tol_vel = CS%tol_vel
 
       domore = .false.
+      ! *should* need a reduce clause, but nvfortran seems smart enough
       do concurrent (I=ish-1:ieh, do_I(I))
         if (uh_err(I) > 0.0) then ; du_max(I) = du(I,j)
         elseif (uh_err(I) < 0.0) then ; du_min(I) = du(I,j)
@@ -2540,7 +2545,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
     vh_aux, &  ! An auxiliary meridional volume flux [H L2 T-1 ~> m3 s-1 or kg s-1].
     dvhdv, &   ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
     v_new      ! The velocity with the correction added [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJ_(G)) :: &
+  real, dimension(SZI_(G)) :: &
     vh_err, &  ! Difference between vhbt and the summed vh [H L2 T-1 ~> m3 s-1 or kg s-1].
     vh_err_best, & ! The smallest value of vh_err found so far [H L2 T-1 ~> m3 s-1 or kg s-1].
     dvhdv_tot,&! Summed partial derivative of vh with u [H L ~> m2 or kg m-1].
@@ -2550,120 +2555,130 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   real :: ddv     ! The change in dv from the previous iteration [L T-1 ~> m s-1].
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
-  integer :: i, j, k, nz, itt, max_itts = 20
-  logical :: domore, do_I(SZI_(G),SZJB_(G))
+  integer :: i, j, k, nz, itt
+  logical :: domore, do_I(SZI_(G)), local_OBC
+  integer, parameter :: max_itts = 20
+
+  local_OBC = .false.
+  if (present(OBC)) then
+    if (associated(OBC)) then
+      local_OBC = OBC%open_u_BCs_exist_globally
+    endif
+  endif
 
   nz = GV%ke
+
+  tol_vel = CS%tol_vel
 
   !$omp target enter data &
   !$omp   map(to: G, G%IareaT, G%IdyT, G%dx_Cv, G%IdyT, v, h_in, h_S, h_N, visc_rem, vhbt, &
   !$omp       dv_max_CFL, dv_min_CFL, vh_tot_0, dvhdv_tot_0, CS, do_I_in, por_face_areaV, vh_3d) &
-  !$omp   map(alloc: dv, vh_aux, dvhdv, v_new, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, &
-  !$omp       do_I)
+  !$omp   map(alloc: dv, vh_aux, dvhdv, v_new, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I)
 
-  do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-    vh_aux(i,j,k) = 0.0 ; dvhdv(i,j,k) = 0.0
-  enddo
+  !$omp target loop private(i, k, itt, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I)
+  do J=jsh-1,jeh
 
-  if (present(vh_3d)) then
-    do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-      vh_aux(i,j,k) = vh_3d(i,J,k)
+    if (present(vh_3d)) then
+      do concurrent (k=1:nz, i=ish:ieh)
+        vh_aux(i,j,k) = vh_3d(i,J,k)
+      enddo
+    endif
+
+    do concurrent (i=ish:ieh)
+      dv(i,J) = 0.0 ; do_I(i) = do_I_in(i,J)
+      dv_max(i) = dv_max_CFL(i,J) ; dv_min(i) = dv_min_CFL(i,J)
+      vh_err(i) = vh_tot_0(i,J) - vhbt(i,J) ; dvhdv_tot(i) = dvhdv_tot_0(i,J)
+      vh_err_best(i) = abs(vh_err(i))
     enddo
-  endif
 
-  do concurrent (j=jsh-1:jeh, i=ish:ieh)
-    dv(i,j) = 0.0 ; do_I(i,j) = do_I_in(i,j)
-    dv_max(i,j) = dv_max_CFL(i,j) ; dv_min(i,j) = dv_min_CFL(i,j)
-    vh_err(i,j) = vh_tot_0(i,j) - vhbt(i,j) ; dvhdv_tot(i,j) = dvhdv_tot_0(i,j)
-    vh_err_best(i,j) = abs(vh_err(i,j))
-  enddo
+    do itt=1,max_itts
+      select case (itt)
+        case (:1) ; tol_eta = 1e-6 * CS%tol_eta
+        case (2)  ; tol_eta = 1e-4 * CS%tol_eta
+        case (3)  ; tol_eta = 1e-2 * CS%tol_eta
+        case default ; tol_eta = CS%tol_eta
+      end select
 
-  do itt=1,max_itts
-    select case (itt)
-      case (:1) ; tol_eta = 1e-6 * CS%tol_eta
-      case (2)  ; tol_eta = 1e-4 * CS%tol_eta
-      case (3)  ; tol_eta = 1e-2 * CS%tol_eta
-      case default ; tol_eta = CS%tol_eta
-    end select
-    tol_vel = CS%tol_vel
+      do concurrent (i=ish:ieh)
+        if (vh_err(i) > 0.0) then ; dv_max(i) = dv(i,j)
+        elseif (vh_err(i) < 0.0) then ; dv_min(i) = dv(i,j)
+        else ; do_I(i) = .false. ; endif
+      enddo
 
-    do concurrent (j=jsh-1:jeh, i=ish:ieh)
-      if (vh_err(i,j) > 0.0) then ; dv_max(i,j) = dv(i,j)
-      elseif (vh_err(i,j) < 0.0) then ; dv_min(i,j) = dv(i,j)
-      else ; do_I(i,j) = .false. ; endif
-    enddo
-    domore = .false.
-#ifdef __GNUC__
-    do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
-#else
-    do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) reduce(.or.:domore)
-#endif
-      if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i,j)) > tol_eta) .or. &
-          (CS%better_iter .and. ((abs(vh_err(i,j)) > tol_vel * dvhdv_tot(i,j)) .or. &
-                                 (abs(vh_err(i,j)) > vh_err_best(i,j))) )) then
-        !   Use Newton's method, provided it stays bounded.  Otherwise bisect
-        ! the value with the appropriate bound.
-        ddv = -vh_err(i,j) / dvhdv_tot(i,j)
-        dv_prev = dv(i,j)
-        dv(i,j) = dv(i,j) + ddv
-        if (abs(ddv) < 1.0e-15*abs(dv(i,j))) then
-          do_I(i,j) = .false. ! ddv is small enough to quit.
-        elseif (ddv > 0.0) then
-          if (dv(i,j) >= dv_max(i,j)) then
-            dv(i,j) = 0.5*(dv_prev + dv_max(i,j))
-            if (dv_max(i,j) - dv_prev < 1.0e-15*abs(dv(i,j))) do_I(i,j) = .false.
+      domore = .false.
+      ! *should* need a reduce clause, but nvfortran seems smart enough
+      do concurrent (i=ish:ieh, do_I(i))
+        if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(i)) > tol_eta) .or. &
+            (CS%better_iter .and. ((abs(vh_err(i)) > tol_vel * dvhdv_tot(i)) .or. &
+                                  (abs(vh_err(i)) > vh_err_best(i))) )) then
+          !   Use Newton's method, provided it stays bounded.  Otherwise bisect
+          ! the value with the appropriate bound.
+          ddv = -vh_err(i) / dvhdv_tot(i)
+          dv_prev = dv(i,j)
+          dv(i,j) = dv(i,j) + ddv
+          if (abs(ddv) < 1.0e-15*abs(dv(i,j))) then
+            do_I(i) = .false. ! ddv is small enough to quit.
+          elseif (ddv > 0.0) then
+            if (dv(i,j) >= dv_max(i)) then
+              dv(i,j) = 0.5*(dv_prev + dv_max(i))
+              if (dv_max(i) - dv_prev < 1.0e-15*abs(dv(i,j))) do_I(i) = .false.
+            endif
+          else ! ddv(i) < 0.0
+            if (dv(i,j) <= dv_min(i)) then
+              dv(i,j) = 0.5*(dv_prev + dv_min(i))
+              if (dv_prev - dv_min(i) < 1.0e-15*abs(dv(i,j))) do_I(i) = .false.
+            endif
           endif
-        else ! dvv(i) < 0.0
-          if (dv(i,j) <= dv_min(i,j)) then
-            dv(i,j) = 0.5*(dv_prev + dv_min(i,j))
-            if (dv_prev - dv_min(i,j) < 1.0e-15*abs(dv(i,j))) do_I(i,j) = .false.
-          endif
+          if (do_I(i)) domore = .true.
+        else
+          do_I(i) = .false.
         endif
-        if (do_I(i,j)) domore = .true.
-      else
-        do_I(i,j) = .false.
+      enddo
+
+      ! Below conditional compilation is to control whether early exit happens when compiled with
+      ! OpenMP - compiling with OpenMP prevents early exit. Without OpenMP, enables early exit.
+      ! Early exit saves time on CPU, but causes other loops to be serialized on GPU.
+      !$ if (.false.) then
+      if (.not.domore) exit
+      !$ endif
+
+      if ((itt < max_itts) .or. present(vh_3d)) then
+        do concurrent (i=ish:ieh)
+          vh_err(i) = -vhbt(i,j) ; dvhdv_tot(i) = 0.0
+        enddo
+        do k=1,nz ; do concurrent (i=ish:ieh, do_I(i))
+          v_new(i,J,k) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k)
+          call zonal_flux_layere(v_new(i,J,k), h_in(i,J,k), h_in(i,J+1,k), h_S(i,J,k), h_S(i,J+1,k), &
+                                h_N(i,J,k), h_N(i,J+1,k), vh_aux(i,j,k), dvhdv(i,J,k), visc_rem(i,J,k), &
+                                G%dx_Cv(i,J), G%IareaT(i,J), G%IareaT(i,J+1), G%idyT(i,J), &
+                                G%IdyT(i,J+1), dt, G, GV, US, CS%vol_CFL, por_face_areaV(i,J,k))
+          if (local_OBC) call zonal_flux_layere_OBC(v_new(i,J,k), h_in(i,J,k), h_in(i,J+1,k), vh_aux(i,j,k), dvhdv(i,J,k), &
+                                visc_rem(i,J,k), G, GV, por_face_areaV(i,J,k), G%dx_Cv(i,J), OBC, OBC%segnum_v(i,J), OBC_DIRECTION_N)
+          vh_err(i) = vh_err(i) + vh_aux(i,j,k)
+          dvhdv_tot(i) = dvhdv_tot(i) + dvhdv(i,J,k)
+        enddo ; enddo
+        do concurrent (i=ish:jeh)
+          vh_err_best(i) = min(vh_err_best(i), abs(vh_err(i)))
+        enddo
       endif
-    enddo
-    if (.not.domore) exit
+    enddo ! itt-loop
 
-    if ((itt < max_itts) .or. present(vh_3d)) then
-      do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-        v_new(i,j,k) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k)
-      enddo
-      call merid_flux_layer(v_new, h_in, h_S, h_N, &
-                            vh_aux, dvhdv, visc_rem, &
-                            dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
-    endif
+    ! If there are any faces which have not converged to within the tolerance,
+    ! so-be-it, or else use a final upwind correction?
+    ! This never seems to happen with 20 iterations as max_itt.
 
-    if (itt < max_itts) then
-      do concurrent (j=jsh-1:jeh, i=ish:ieh)
-        vh_err(i,j) = -vhbt(i,j) ; dvhdv_tot(i,j) = 0.0
-      enddo
-      do k = 1,nz ; do concurrent (j=jsh-1:jeh, i=ish:ieh)
-        vh_err(i,j) = vh_err(i,j) + vh_aux(i,j,k)
-        dvhdv_tot(i,j) = dvhdv_tot(i,j) + dvhdv(i,j,k)
-      enddo ; enddo
-      do concurrent (j=jsh-1:jeh, i=ish:ieh)
-        vh_err_best(i,j) = min(vh_err_best(i,j), abs(vh_err(i,j)))
+    if (present(vh_3d)) then
+      do concurrent (k=1:nz, i=ish:ieh)
+        vh_3d(i,J,k) = vh_aux(i,j,k)
       enddo
     endif
-  enddo ! itt-loop
-
-  ! If there are any faces which have not converged to within the tolerance,
-  ! so-be-it, or else use a final upwind correction?
-  ! This never seems to happen with 20 iterations as max_itt.
-
-  if (present(vh_3d)) then
-    do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh)
-      vh_3d(i,J,k) = vh_aux(i,j,k)
-    enddo
-  endif
+  enddo ! j-loop
 
   !$omp target exit data &
   !$omp   map(from: dv, vh_3d) &
   !$omp   map(release: G, G%IareaT, G%IdyT, G%dx_Cv, G%IdyT, v, h_in, h_S, h_N, visc_rem, vhbt, &
   !$omp       dv_max_CFL, dv_min_CFL, vh_tot_0, dvhdv_tot_0, CS, do_I_in, por_face_areaV, vh_aux, &
-  !$omp       dvhdv, v_new, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I)
+  !$omp       v_new, dvhdv, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I)
 
 end subroutine meridional_flux_adjust
 
