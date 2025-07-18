@@ -1154,7 +1154,7 @@ elemental subroutine flux_elem_OBC(u, h, h_p1, uh, duhdu, visc_rem, G, GV, por_f
                                                       !! u/v-faces of the h-cell [L ~> m].
           !! ratio of face areas to the cell areas when estimating the CFL number.
   type(ocean_OBC_type),     intent(in)    :: OBC !< Open boundaries control structure.
-  integer, intent(in) :: l_seg
+  integer, intent(in) :: l_seg !< Segment index.
 
   ! untested
   if (l_seg /= 0) then
@@ -1971,7 +1971,8 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
                                                !! vhbt as the depth-integrated transports [L T-1 ~> m s-1].
   type(BT_cont_type), optional, pointer :: BT_cont !< A structure with elements that describe the
                      !! effective open face areas as a function of barotropic flow.
-  real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: vhbt
+  real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: vhbt !< The summed volume flux through meridional
+                                                                  !! faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   logical,                intent(in) :: set_BT_cont !< Whether to update BT_cont member arrays.
   logical,                intent(in) :: local_specified_BC !< Whether specified u BCs exist globally.
   logical,                intent(in) :: local_Flather_OBC !< Whether Flather u BCs exist globally.
