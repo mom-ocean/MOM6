@@ -143,6 +143,7 @@ type, public :: ODA_CS ; private
                             !! remapping invoked by the ODA driver.  Values below 20190101 recover
                             !! the answers from the end of 2018, while higher values use updated
                             !! and more robust forms of the same expressions.
+  logical :: reproduce_2018_nmme !< true if reproducing older NMME answers.
 end type ODA_CS
 
 
@@ -174,6 +175,8 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
   type(param_file_type) :: PF
   integer :: n
   integer :: isd, ied, jsd, jed
+  integer :: is_oda, ie_oda, js_oda, je_oda
+  integer :: isd_oda, ied_oda, jsd_oda, jed_oda
   integer, dimension(4) :: fld_sz
   character(len=32) :: assim_method
   integer :: npes_pm, ens_info(6)
@@ -257,6 +260,12 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
                "values use updated and more robust forms of the same expressions.", &
                default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
+
+  call get_param(PF, mdl, "REPRODUCE_2018_NMME_ANSWERS", CS%reproduce_2018_nmme, &
+               "Logical flag needed to reproduce older NMME forecast answers."//&
+               "True gives old answers, the default of false gives different answers.", &
+               default=.false.)
+
   inputdir = slasher(inputdir)
 
   select case(lowercase(trim(assim_method)))
@@ -332,7 +341,7 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
 
   h_neglect = set_h_neglect(GV, CS%answer_date, h_neglect_edge)
   call initialize_remapping(CS%remapCS, remap_scheme, om4_remap_via_sub_cells=om4_remap_via_sub_cells, &
-                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
+                            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge, answer_date=CS%answer_date)
   call set_regrid_params(CS%regridCS, min_thickness=0.)
   isd = G%isd; ied = G%ied; jsd = G%jsd; jed = G%jed
 
@@ -362,7 +371,9 @@ subroutine init_oda(Time, G, GV, US, diag_CS, CS)
     basin_file = trim(inputdir) // trim(basin_file)
     call get_param(PF, 'oda_driver', "BASIN_VAR", basin_var, &
           "The basin mask variable in BASIN_FILE.", default="basin")
-    allocate(CS%oda_grid%basin_mask(isd:ied,jsd:jed), source=0.0)
+    ! Need different data domain indices for the ODA ensemble basin mask.
+    call get_domain_extent(CS%Grid%Domain, is_oda, ie_oda, js_oda, je_oda, isd_oda, ied_oda, jsd_oda, jed_oda)
+    allocate(CS%oda_grid%basin_mask(isd_oda:ied_oda,jsd_oda:jed_oda), source=0.0)
     call MOM_read_data(basin_file, basin_var, CS%oda_grid%basin_mask, CS%Grid%domain, timelevel=1)
   endif
 
@@ -492,17 +503,16 @@ subroutine get_posterior_tracer(Time, CS, increment)
   if (present(increment)) get_inc = increment
 
   if (get_inc) then
-    allocate(Ocean_increment)
-    Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
-    Ocean_increment%S = CS%Ocean_posterior%S - CS%Ocean_prior%S
+    CS%Ocean_increment%T = CS%Ocean_posterior%T - CS%Ocean_prior%T
+    CS%Ocean_increment%S = CS%Ocean_posterior%S - CS%Ocean_prior%S
   endif
   ! It may be necessary to check whether the increment and ocean state have the
   ! same dimensionally rescaled units.
   do m=1,CS%ensemble_size
     if (get_inc) then
-      call redistribute_array(CS%mpp_domain, Ocean_increment%T(:,:,:,m),&
+      call redistribute_array(CS%mpp_domain, CS%Ocean_increment%T(:,:,:,m),&
            CS%domains(m)%mpp_domain, CS%T_tend, complete=.true.)
-      call redistribute_array(CS%mpp_domain, Ocean_increment%S(:,:,:,m),&
+      call redistribute_array(CS%mpp_domain, CS%Ocean_increment%S(:,:,:,m),&
            CS%domains(m)%mpp_domain, CS%S_tend, complete=.true.)
     else
       call redistribute_array(CS%mpp_domain, CS%Ocean_posterior%T(:,:,:,m),&
@@ -568,25 +578,38 @@ subroutine get_bias_correction_tracer(Time, US, CS)
 
   call cpu_clock_begin(id_clock_bias_adjustment)
   call horiz_interp_and_extrap_tracer(CS%INC_CS%T, Time, CS%G, T_bias, &
-            valid_flag, z_in, z_edges_in, missing_value, scale=US%degC_to_C*US%s_to_T, spongeOngrid=.true.)
+            valid_flag, z_in, z_edges_in, missing_value, scale=US%degC_to_C*US%s_to_T, spongeOngrid=.true., &
+            answer_date=CS%answer_date)
   call horiz_interp_and_extrap_tracer(CS%INC_CS%S, Time, CS%G, S_bias, &
-            valid_flag, z_in, z_edges_in, missing_value, scale=US%ppt_to_S*US%s_to_T, spongeOngrid=.true.)
+            valid_flag, z_in, z_edges_in, missing_value, scale=US%ppt_to_S*US%s_to_T, spongeOngrid=.true., &
+            answer_date=CS%answer_date)
 
   ! This should be replaced to use mask_z instead of the following lines
   ! which are intended to zero land values using an arbitrary limit.
   fld_sz=shape(T_bias)
-  do i=1,fld_sz(1)
-    do j=1,fld_sz(2)
-      do k=1,fld_sz(3)
-!        if (T_bias(i,j,k) > 1.0E-3*US%degC_to_C) T_bias(i,j,k) = 0.0
-!        if (S_bias(i,j,k) > 1.0E-3*US%ppt_to_S) S_bias(i,j,k) = 0.0
-        if (valid_flag(i,j,k)==0.) then
-          T_bias(i,j,k)=0.0
-          S_bias(i,j,k)=0.0
-        endif
+  if (CS%reproduce_2018_nmme) then
+    do i=1,fld_sz(1)
+      do j=1,fld_sz(2)
+        do k=1,fld_sz(3)
+          ! The following two lines are needed for backward compatibility for NMME answers (2018 vintage)
+          ! These were implemented to catch missing values, so large values are excluded.
+          if (T_bias(i,j,k) > 1.0E-3*US%degC_to_C) T_bias(i,j,k) = 0.0
+          if (S_bias(i,j,k) > 1.0E-3*US%ppt_to_S) S_bias(i,j,k) = 0.0
+        enddo
       enddo
     enddo
-  enddo
+  else
+    do i=1,fld_sz(1)
+      do j=1,fld_sz(2)
+        do k=1,fld_sz(3)
+          if (valid_flag(i,j,k)==0.) then
+            T_bias(i,j,k)=0.0
+            S_bias(i,j,k)=0.0
+          endif
+        enddo
+      enddo
+    enddo
+  endif
 
   CS%T_bc_tend = T_bias * CS%bias_adjustment_multiplier
   CS%S_bc_tend = S_bias * CS%bias_adjustment_multiplier
