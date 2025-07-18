@@ -2489,7 +2489,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, &
           vh_err(i) = vh_err(i) + vh_aux(i,J,k)
           dvhdv_tot(i) = dvhdv_tot(i) + dvhdv(i,J,k)
         enddo ; enddo
-        do concurrent (i=ish:jeh)
+        do concurrent (i=ish:ieh, do_I(i))
           vh_err_best(i) = min(vh_err_best(i), abs(vh_err(i)))
         enddo
       endif
