@@ -1719,6 +1719,7 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   ! Local variables
   character(len=24) :: word1, word2, m_word, n_word !< Words delineated by commas in a string in form of
                                                     !! "I=%,J=%:%,string"
+  character(len=3) :: max_words !< maximum number of OBC types per segment
   integer :: l_max !< Either ni_global or nj_global, depending on whether segment_str begins with "I=" or "J="
   integer :: mn_max !< Either nj_global or ni_global, depending on whether segment_str begins with "I=" or "J="
   integer :: j
@@ -1782,6 +1783,14 @@ subroutine parse_segment_str(ni_global, nj_global, segment_str, l, m, n, action_
   if (abs(n-m)==0) then
     call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "//&
                    "Range in string '"//trim(segment_str)//"' must span one cell.")
+  endif
+
+  ! checking if the number of provided OBC types is less than or equal to 8
+  if (extract_word(segment_str,',',3+size(action_str))/="") then
+    write(max_words, '(I3)') size(action_str)
+    call MOM_error(FATAL, "MOM_open_boundary.F90, parse_segment_str: "// &
+                   "Number of OBC descriptor words in '" // trim(segment_str) // "' is too large. " // &
+                   "There can be at most " // trim(adjustl(max_words)) // " descriptor words.")
   endif
 
   ! Type of open boundary condition
