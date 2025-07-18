@@ -2735,7 +2735,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
   real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)    :: por_face_areaV !< fractional open area of V-faces
                                                                               !! [nondim]
   ! Local variables
-  real, dimension(SZI_(G),SZJB_(G)) :: &
+  real, dimension(SZI_(G)) :: &
     dvL, dvR, &        ! The barotropic velocity increments that give the southerly
                        ! (dvL) and northerly (dvR) test velocities [L T-1 ~> m s-1].
     dv_CFL, &          ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
@@ -2743,7 +2743,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
     FAmt_0, &          ! test velocities [H L ~> m2 or kg m-1].
     vhtot_L, &         ! The summed transport with the southerly (vhtot_L) and
     vhtot_R            ! and northerly (vhtot_R) test velocities [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+  real :: &
     v_L, v_R, &        ! The southerly (v_L), northerly (v_R), and zero-barotropic
     v_0, &             ! transport (v_0) layer test velocities [L T-1 ~> m s-1].
     dvhdv_L, &         ! The effective layer marginal face areas with the southerly
@@ -2764,7 +2764,6 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
   real :: CFL_min      ! A minimal increment in the CFL to try to ensure that the
                        ! flow is truly upwind [nondim]
   real :: Idt          ! The inverse of the time step [T-1 ~> s-1].
-  logical :: domore
   integer :: i, j, k, nz
 
   nz = GV%ke ; Idt = 1.0 / dt
@@ -2775,101 +2774,85 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
   !$omp       dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaV, dv0) &
   !$omp   map(alloc: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
   !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, &
-  !$omp       FAmt_0, vhtot_L, vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
+  !$omp       FAmt_0, vhtot_L, vhtot_R)
 
-  ! Determine the southerly- and northerly- fluxes. Choose a sufficiently
-  ! negative velocity correction for the northerly-flux, and a sufficiently
-  ! positive correction for the southerly-flux.
-  domore = .false.
-#ifdef __GNUC__
-  do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
-#else
-  do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j)) reduce(.or.:domore)
-#endif
-    domore = .true. ! might be better to do reduction on cpu to avoid reduce
-    dv_CFL(i,j) = (CFL_min * Idt) * G%dyCv(i,J)
-    dvR(i,j) = min(0.0,dv0(i,j) - dv_CFL(i,j))
-    dvL(i,j) = max(0.0,dv0(i,j) + dv_CFL(i,j))
-    FAmt_L(i,j) = 0.0 ; FAmt_R(i,j) = 0.0 ; FAmt_0(i,j) = 0.0
-    vhtot_L(i,j) = 0.0 ; vhtot_R(i,j) = 0.0
-  enddo
-
-  if (.not.domore) then
-    do concurrent (j=jsh-1:jeh, i=ish:ieh)
-      BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
-      BT_cont%vBT_SS(i,J) = 0.0
-      BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
-      BT_cont%vBT_NN(i,J) = 0.0
+  !$omp target loop private(i, k, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, vhtot_R)
+  do J=jsh-1,jeh
+    ! Determine the southerly- and northerly- fluxes. Choose a sufficiently
+    ! negative velocity correction for the northerly-flux, and a sufficiently
+    ! positive correction for the southerly-flux.
+    do concurrent (i=ish:ieh)
+      dv_CFL(i) = (CFL_min * Idt) * G%dyCv(i,J)
+      dvR(i) = min(0.0,dv0(i,J) - dv_CFL(i))
+      dvL(i) = max(0.0,dv0(i,J) + dv_CFL(i))
+      FAmt_L(i) = 0.0 ; FAmt_R(i) = 0.0 ; FAmt_0(i) = 0.0
+      vhtot_L(i) = 0.0 ; vhtot_R(i) = 0.0
     enddo
-    !$omp target exit data &
-    !$omp   map(from: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
-    !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN) &
-    !$omp   map(release: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, &
-    !$omp       dvhdv_tot_0, dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, &
-    !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
-    !$omp       vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
-    return
-  endif
 
-  ! not parallelized on k because of dvR/L are calculated per column
-  ! nvfortran do concurrent poor performance when k is inside
-  do k=1,nz ; do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
-    visc_rem_lim = max(visc_rem(i,j,k), min_visc_rem*visc_rem_max(i,j))
-    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
-      if (v(i,J,k) + dvR(i,j)*visc_rem_lim > -dv_CFL(i,j)*visc_rem(i,j,k)) &
-        dvR(i,j) = -(v(i,J,k) + dv_CFL(i,j)*visc_rem(i,j,k)) / visc_rem_lim
-      if (v(i,J,k) + dvL(i,j)*visc_rem_lim < dv_CFL(i,j)*visc_rem(i,j,k)) &
-        dvL(i,j) = -(v(i,J,k) - dv_CFL(i,j)*visc_rem(i,j,k)) / visc_rem_lim
-    endif
-  enddo ; enddo
-
-  do concurrent (k=1:nz, j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
-    v_L(i,j,k) = v(I,j,k) + dvL(i,j) * visc_rem(i,j,k)
-    v_R(i,j,k) = v(I,j,k) + dvR(i,j) * visc_rem(i,j,k)
-    v_0(i,j,k) = v(I,j,k) + dv0(i,j) * visc_rem(i,j,k)
-  enddo
-  call merid_flux_layer(v_0, h_in, h_S, h_N, vh_0, dvhdv_0, &
-                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
-  call merid_flux_layer(v_L, h_in, h_S, h_N, vh_L, dvhdv_L, &
-                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
-  call merid_flux_layer(v_R, h_in, h_S, h_N, vh_R, dvhdv_R, &
-                        visc_rem, dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV)
-  do k=1,nz ; do concurrent (j=jsh-1:jeh, i=ish:ieh, do_I(i,j))
-    FAmt_0(i,j) = FAmt_0(i,j) + dvhdv_0(i,j,k)
-    FAmt_L(i,j) = FAmt_L(i,j) + dvhdv_L(i,j,k)
-    FAmt_R(i,j) = FAmt_R(i,j) + dvhdv_R(i,j,k)
-    vhtot_L(i,j) = vhtot_L(i,j) + vh_L(i,j,k)
-    vhtot_R(i,j) = vhtot_R(i,j) + vh_R(i,j,k)
-  enddo ; enddo
-
-  do concurrent (j=jsh-1:jeh, i=ish:ieh)
-    if (do_I(i,j)) then
-      FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
-      if ((dvL(i,j) - dv0(i,j)) /= 0.0) &
-        FA_avg = vhtot_L(i,j) / (dvL(i,j) - dv0(i,j))
-      if (FA_avg > max(FA_0, FAmt_L(i,j))) then ; FA_avg = max(FA_0, FAmt_L(i,j))
-      elseif (FA_avg < min(FA_0, FAmt_L(i,j))) then ; FA_0 = FA_avg ; endif
-      BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(i,j)
-      if (abs(FA_0-FAmt_L(i,j)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
-        BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i,j) - dv0(i,j))) * &
-                    ((FAmt_L(i,j) - FA_avg) / (FAmt_L(i,j) - FA_0))
+    ! not parallelized on k because of dvR/L are calculated per column
+    ! nvfortran do concurrent poor performance when k is inside
+    do k=1,nz ; do concurrent (i=ish:ieh, do_I(i,J))
+      visc_rem_lim = max(visc_rem(i,J,k), min_visc_rem*visc_rem_max(i,J))
+      if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+        if (v(i,J,k) + dvR(i)*visc_rem_lim > -dv_CFL(i)*visc_rem(i,J,k)) &
+          dvR(i) = -(v(i,J,k) + dv_CFL(i)*visc_rem(i,J,k)) / visc_rem_lim
+        if (v(i,J,k) + dvL(i)*visc_rem_lim < dv_CFL(i)*visc_rem(i,J,k)) &
+          dvL(i) = -(v(i,J,k) - dv_CFL(i)*visc_rem(i,J,k)) / visc_rem_lim
       endif
+    enddo ; enddo
 
-      FA_0 = FAmt_0(i,j) ; FA_avg = FAmt_0(i,j)
-      if ((dvR(i,j) - dv0(i,j)) /= 0.0) &
-        FA_avg = vhtot_R(i,j) / (dvR(i,j) - dv0(i,j))
-      if (FA_avg > max(FA_0, FAmt_R(i,j))) then ; FA_avg = max(FA_0, FAmt_R(i,j))
-      elseif (FA_avg < min(FA_0, FAmt_R(i,j))) then ; FA_0 = FA_avg ; endif
-      BT_cont%FA_v_N0(i,J) = FA_0 ; BT_cont%FA_v_NN(i,J) = FAmt_R(i,j)
-      if (abs(FAmt_R(i,j) - FA_0) <= 1e-12*FA_0) then ; BT_cont%vBT_NN(i,J) = 0.0 ; else
-        BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i,j) - dv0(i,j))) * &
-                    ((FAmt_R(i,j) - FA_avg) / (FAmt_R(i,j) - FA_0))
+    do k=1,nz ; do concurrent (i=ish:ieh, do_I(i,j))
+      v_L = v(I,J,k) + dvL(i) * visc_rem(i,J,k)
+      v_R = v(I,J,k) + dvR(i) * visc_rem(i,J,k)
+      v_0 = v(I,J,k) + dv0(i,J) * visc_rem(i,J,k)
+      call zonal_flux_layere(v_0, h_in(i,J,k), h_in(i,J+1,k), h_S(i,J,k), h_S(i,J+1,k), &
+                            h_N(i,J,k), h_N(i,J+1,k), vh_0, dvhdv_0, visc_rem(i,J,k), &
+                            G%dx_Cv(i,J), G%IareaT(i,J), G%IareaT(i,J+1), G%IdyT(i,J), &
+                            G%IdyT(i,J+1), dt, G, GV, US, CS%vol_CFL, por_face_areaV(i,J,k))
+      call zonal_flux_layere(v_L, h_in(i,J,k), h_in(i,J+1,k), h_S(i,J,k), h_S(i,J+1,k), &
+                            h_N(i,J,k), h_N(i,J+1,k), vh_L, dvhdv_L, visc_rem(i,J,k), &
+                            G%dx_Cv(i,J), G%IareaT(i,J), G%IareaT(i,J+1), G%IdyT(i,J), &
+                            G%IdyT(i,J+1), dt, G, GV, US, CS%vol_CFL, por_face_areaV(i,J,k))
+      call zonal_flux_layere(v_R, h_in(i,J,k), h_in(i,J+1,k), h_S(i,J,k), h_S(i,J+1,k), &
+                            h_N(i,J,k), h_N(i,J+1,k), vh_R, dvhdv_R, visc_rem(i,J,k), &
+                            G%dx_Cv(i,J), G%IareaT(i,J), G%IareaT(i,J+1), G%IdyT(i,J), &
+                            G%IdyT(i,J+1), dt, G, GV, US, CS%vol_CFL, por_face_areaV(i,J,k))
+      FAmt_0(i) = FAmt_0(i) + dvhdv_0
+      FAmt_L(i) = FAmt_L(i) + dvhdv_L
+      FAmt_R(i) = FAmt_R(i) + dvhdv_R
+      vhtot_L(i) = vhtot_L(i) + vh_L
+      vhtot_R(i) = vhtot_R(i) + vh_R
+    enddo ; enddo
+
+    do concurrent (i=ish:ieh)
+      if (do_I(i,j)) then
+        FA_0 = FAmt_0(i) ; FA_avg = FAmt_0(i)
+        if ((dvL(i) - dv0(i,J)) /= 0.0) &
+          FA_avg = vhtot_L(i) / (dvL(i) - dv0(i,J))
+        if (FA_avg > max(FA_0, FAmt_L(i))) then ; FA_avg = max(FA_0, FAmt_L(i))
+        elseif (FA_avg < min(FA_0, FAmt_L(i))) then ; FA_0 = FA_avg ; endif
+        BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(i)
+        if (abs(FA_0-FAmt_L(i)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
+          BT_cont%vBT_SS(i,J) = (1.5 * (dvL(i) - dv0(i,J))) * &
+                      ((FAmt_L(i) - FA_avg) / (FAmt_L(i) - FA_0))
+        endif
+
+        FA_0 = FAmt_0(i) ; FA_avg = FAmt_0(i)
+        if ((dvR(i) - dv0(i,j)) /= 0.0) &
+          FA_avg = vhtot_R(i) / (dvR(i) - dv0(i,j))
+        if (FA_avg > max(FA_0, FAmt_R(i))) then ; FA_avg = max(FA_0, FAmt_R(i))
+        elseif (FA_avg < min(FA_0, FAmt_R(i))) then ; FA_0 = FA_avg ; endif
+        BT_cont%FA_v_N0(i,J) = FA_0 ; BT_cont%FA_v_NN(i,J) = FAmt_R(i)
+        if (abs(FAmt_R(i) - FA_0) <= 1e-12*FA_0) then ; BT_cont%vBT_NN(i,J) = 0.0 ; else
+          BT_cont%vBT_NN(i,J) = (1.5 * (dvR(i) - dv0(i,j))) * &
+                      ((FAmt_R(i) - FA_avg) / (FAmt_R(i) - FA_0))
+        endif
+      else
+        BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
+        BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
+        BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
       endif
-    else
-      BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
-      BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
-      BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
-    endif
+    enddo
   enddo
 
   !$omp target exit data &
@@ -2878,7 +2861,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
   !$omp   map(release: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, &
   !$omp       dvhdv_tot_0, dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, &
   !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
-  !$omp       vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
+  !$omp       vhtot_R)
 
 end subroutine set_merid_BT_cont
 
