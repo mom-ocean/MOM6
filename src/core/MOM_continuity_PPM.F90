@@ -1012,8 +1012,6 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   ! Local variables
   real :: uh(SZIB_(G),SZJ_(G),SZK_(GV))      ! Volume flux through zonal faces = u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
   real :: duhdu(SZIB_(G),SZJ_(G),SZK_(GV))   ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
-  logical, dimension(SZIB_(G),SZJ_(G)) :: do_I
-  real :: ones(SZIB_(G),SZJ_(G),SZK_(GV))    ! An array of 1's [nondim]
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, l_seg
   logical :: local_specified_BC
   logical, dimension(SZJ_(G)) :: OBC_in_row
@@ -1031,7 +1029,7 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
     ish = G%isc ; ieh = G%iec ; jsh = G%jsc ; jeh = G%jec ; nz = GV%ke
   endif
 
-  ones(:,:,:) = 1.0 ; do_I(:,:) = .true. ; OBC_in_row(:) = .false.
+  OBC_in_row(:) = .false.
 
   uhbt(:,:) = 0.0
 
@@ -1043,8 +1041,15 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   endif
 
   ! This sets uh and duhdu.
-  call zonal_flux_layer(u, h_in, h_W, h_E, uh, duhdu, ones, &
-                        dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaU, OBC)
+  do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
+    call zonal_flux_layere(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), h_W(I,j,k), h_W(I+1,j,k), &
+                          h_E(I,j,k), h_E(I+1,j,k), uh(I,j,k), duhdu(I,j,k), 1.0, G%dy_Cu(I,j), &
+                          G%IareaT(I,j), G%IareaT(I+1,j), G%IdxT(I,j), G%IdxT(I+1,j), dt, G, GV, &
+                          US, CS%vol_CFL, por_face_areaU(I,j,k))
+    if (local_specified_BC) call zonal_flux_layere_OBC(u(I,j,k), h_in(I,j,k), h_in(I+1,j,k), &
+                          uh(I,j,k), duhdu(I,j,k), 1.0, G, GV, por_face_areaU(I,j,k), G%dy_Cu(I,j), &
+                          OBC, OBC%segnum_u(I,j), OBC_DIRECTION_E)
+  enddo
 
   do k=1,nz ; do j=jsh,jeh ; do i=ish-1,ieh
     if (OBC_in_row(j) .and. OBC%segnum_u(I,j) /= 0) then
@@ -2219,8 +2224,6 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   ! Local variables
   real :: vh(SZI_(G),SZJB_(G),SZK_(GV)) ! Volume flux through meridional faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
   real ::  dvhdv(SZI_(G),SZJB_(G),SZK_(GV))  ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
-  logical, dimension(SZI_(G),SZJB_(G)) :: do_I
-  real :: ones(SZI_(G),SZJB_(G),SZK_(GV))    ! An array of 1's [nondim]
   integer :: i, j, k, ish, ieh, jsh, jeh, nz, l_seg
   logical :: local_specified_BC, OBC_in_row(SZJB_(G))
 
@@ -2237,8 +2240,6 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
     ish = G%isc ; ieh = G%iec ; jsh = G%jsc ; jeh = G%jec ; nz = GV%ke
   endif
 
-  ones(:,:,:) = 1.0 ; do_I(:,:) = .true.
-
   vhbt(:,:) = 0.0
 
   ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
@@ -2250,8 +2251,15 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   endif
 
   ! This sets vh and dvhdv.
-  call merid_flux_layer(v, h_in, h_S, h_N, vh, dvhdv, ones, &
-                        dt, G, GV, US, ish, ieh, jsh, jeh, nz, do_I, CS%vol_CFL, por_face_areaV, OBC)
+  do concurrent (k=1:nz, J=jsh-1:jeh, i=ish:ieh)
+    call zonal_flux_layere(v(i,J,k), h_in(i,J,k), h_in(i,J+1,k), h_S(i,J,k), h_S(i,J+1,k), &
+                          h_N(i,J,k), h_N(i,J+1,k), vh(i,J,k), dvhdv(i,J,k), 1.0, G%dx_Cv, &
+                          G%IareaT(i,J), G%IareaT(i,J+1), G%IdyT(i,J), G%IdyT(i,J+1), dt, G, GV, &
+                          US, CS%vol_CFL, por_face_areaV(i,J,k))
+    if (local_specified_BC) call zonal_flux_layere_OBC(v(i,J,k), h_in(i,J,k), h_in(i,J+1,k), &
+                          vh(i,J,k), dvhdv(i,J,k), 1.0, G, GV, por_face_areaV(i,J,k), G%dx_Cv(i,J), &
+                          OBC, OBC%segnum_v(i,J), OBC_DIRECTION_N)
+  enddo
 
   do k=1,nz ; do j=jsh-1,jeh ; do i=ish,ieh
     if (OBC_in_row(j) .and. OBC%segnum_v(i,J) /= 0) then
