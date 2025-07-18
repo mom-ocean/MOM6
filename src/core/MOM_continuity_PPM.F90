@@ -165,7 +165,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   ! problems with hin
   !$omp target enter data &
   !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
-  !$omp       G%mask2dT, G%dx_Cv, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h, CS, pbv, &
+  !$omp       G%mask2dT, G%dx_Cv, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h, CS, US, OBC, pbv, &
   !$omp       pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, BT_cont) &
   !$omp   map(alloc: h_W, h_E, h_S, h_N, uh, vh, u_cor, v_cor, du_cor, dv_cor, BT_cont%FA_u_E0, &
   !$omp       BT_cont%FA_u_W0, BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
@@ -222,8 +222,9 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   !$omp       BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, BT_cont%vBT_SS, &
   !$omp       BT_cont%h_u, BT_cont%h_V) &
   !$omp   map(release: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
-  !$omp       G%mask2dT, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h_W, h_E, h_S, h_N, CS, pbv, &
-  !$omp       pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, LB)
+  !$omp       G%mask2dT, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h_W, h_E, h_S, h_N, CS, US, &
+  !$omp       OBC, pbv, pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, &
+  !$omp       LB)
 
 end subroutine continuity_PPM
 
@@ -874,8 +875,7 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
   real :: FAuI, FA_u
 
   if (present(uhbt) .or. set_BT_cont) then
-    !$omp target enter data map(alloc: do_I)
-    !$omp target enter data map(alloc: simple_OBC_pt) if(local_specified_BC .or. local_Flather_OBC)
+    !$omp target enter data map(alloc: do_I, simple_OBC_pt)
     any_simple_OBC = .false.
     if (local_specified_BC .or. local_Flather_OBC) then
       do concurrent (j=jsh:jeh, I=ish-1:ieh)
@@ -944,8 +944,7 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
         enddo
       endif
     endif
-    !$omp target exit data map(release: simple_OBC_pt) if(local_specified_BC .or. local_Flather_OBC)
-    !$omp target exit data map(release: do_I)
+    !$omp target exit data map(release: do_I, simple_OBC_pt)
   endif
 
   ! untested!
@@ -1983,10 +1982,9 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
   integer :: l_seg, i, j, k, n
 
   if (present(vhbt) .or. set_BT_cont) then
-    !$omp target enter data map(alloc: do_I)
+    !$omp target enter data map(alloc: do_I, simple_OBC_pt)
     any_simple_OBC = .false.
     if (local_specified_BC .or. local_Flather_OBC) then
-      !$omp target enter data map(alloc: simple_OBC_pt) 
       do concurrent (j=jsh-1:jeh, i=ish:ieh)
         l_seg = abs(OBC%segnum_v(i,J))
 
@@ -2054,8 +2052,7 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
         enddo
       endif ! any_simple_OBC
     endif ! set_BT_cont
-    !$omp target exit data map(release: simple_OBC_pt) if(local_specified_BC .or. local_Flather_OBC)
-    !$omp target exit data map(release: do_I)
+    !$omp target exit data map(release: do_I, simple_OBC_pt)
   endif ! present(vhbt) or set_BT_cont
 
   ! untested - probably needs to be refactored to be performant on GPU
