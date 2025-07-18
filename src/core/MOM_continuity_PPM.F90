@@ -1150,7 +1150,8 @@ elemental subroutine flux_elem_OBC(u, h, h_p1, uh, duhdu, visc_rem, G, GV, por_f
                                                       !! with u [H L ~> m2 or kg m-1].
   real,                     intent(in)    :: por_face_area !< fractional open area of U/V-faces
                                                             !! [nondim].
-  real,                     intent(in)    :: G_dy_Cu
+  real,                     intent(in)    :: G_dy_Cu  !< The grid cell's unblocked lengths of the
+                                                      !! u/v-faces of the h-cell [L ~> m].
           !! ratio of face areas to the cell areas when estimating the CFL number.
   type(ocean_OBC_type),     intent(in)    :: OBC !< Open boundaries control structure.
   integer, intent(in) :: l_seg
@@ -1921,12 +1922,13 @@ end subroutine meridional_mass_flux
 
 
 subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, dv, dv_max_CFL, &
-                                       dv_min_CFL, visc_rem_v, visc_rem_max, por_face_areaV, vhbt, vh, v_cor, dv_cor, BT_cont, dt, &
-                                       set_BT_cont, local_specified_BC, local_Flather_OBC, local_open_BC, ish, &
+                                       dv_min_CFL, visc_rem_v, visc_rem_max, por_face_areaV, vhbt, &
+                                       vh, v_cor, dv_cor, BT_cont, dt, set_BT_cont, &
+                                       local_specified_BC, local_Flather_OBC, local_open_BC, ish, &
                                        ieh, jsh, jeh, nz, G, GV, US, CS, OBC, LB)
 
-  type(ocean_grid_type),   intent(in) :: G
-  type(verticalGrid_type), intent(in) :: GV
+  type(ocean_grid_type),   intent(in) :: G    !< Ocean's grid structure.
+  type(verticalGrid_type), intent(in) :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
                            intent(in) :: v    !< Meridional velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
@@ -1939,19 +1941,19 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
                            intent(in) :: vh_tot_0 !< Summed transport with no barotropic correction
                                                   !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
-                           intent(in) :: dvhdv_tot_0 !< Summed partial derivative of vh with v 
+                           intent(in) :: dvhdv_tot_0 !< Summed partial derivative of vh with v
                                                      !! [H L ~> m2 or kg m-1].
   real, dimension(SZI_(G),SZJB_(G)), &
-                          intent(out) :: dv !< Corrective barotropic change in the velocity to give vhbt 
+                          intent(out) :: dv !< Corrective barotropic change in the velocity to give vhbt
                                             !! [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
-                          intent(in) :: dv_max_CFL !< Upper limit on dv correction to avoid CFL violations 
+                          intent(in) :: dv_max_CFL !< Upper limit on dv correction to avoid CFL violations
                                                    !! [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G)), &
-                          intent(in) :: dv_min_CFL !< Lower limit on dv correction to avoid CFL violations 
+                          intent(in) :: dv_min_CFL !< Lower limit on dv correction to avoid CFL violations
                                                    !! [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                       intent(inout) :: vh !< Volume flux through meridional faces = v*h*dx 
+                       intent(inout) :: vh !< Volume flux through meridional faces = v*h*dx
                                            !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: visc_rem_v !< Both the fraction of the momentum
                                    !! originally in a layer that remains after a time-step of viscosity,
@@ -2120,7 +2122,7 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
                                                                   !! faces [H L2 T-1 ~> m3 s-1 or kg s-1].
   real,                                       intent(in)  :: dt   !< Time increment [T ~> s].
   type(unit_scale_type),                      intent(in)  :: US   !< A dimensional unit scaling type
-  type(continuity_PPM_CS),                    intent(in)  :: CS   !< This module's control structure.G
+  type(continuity_PPM_CS),                    intent(in)  :: CS   !< This module's control structure.
   type(ocean_OBC_type),                       pointer     :: OBC  !< Open boundary condition type
                                                                   !! specifies whether, where, and what
                                                                   !! open boundary conditions are used.
@@ -2528,7 +2530,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
                                                                     !! [H ~> m or kg m-2].
   type(BT_cont_type),                         intent(inout) :: BT_cont !< A structure with elements
                        !! that describe the effective open face areas as a function of barotropic flow.
-  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dv0  !< The barotropic velocity increment that 
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dv0  !< The barotropic velocity increment that
                                                                     !! gives 0 transport [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: vh_tot_0 !< The summed transport
                        !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
