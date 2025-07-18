@@ -1780,11 +1780,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
     ! this is expensive
     if (.not.use_visc_rem) then
-      do concurrent (k=1:nz, i=ish:ieh)
+      do concurrent (k=1:nz, i=G%isd:G%ied)
         visc_rem_v_tmp(i,J,k) = 1.0
       enddo
     else
-      do concurrent (k=1:nz, i=ish:ieh)
+      do concurrent (k=1:nz, i=G%isd:G%ied)
         visc_rem_v_tmp(i,J,k) = visc_rem_v(i,J,k)
       enddo
     endif
