@@ -1925,53 +1925,64 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
                                        set_BT_cont, local_specified_BC, local_Flather_OBC, local_open_BC, ish, &
                                        ieh, jsh, jeh, nz, G, GV, US, CS, OBC, LB)
 
-  type(ocean_grid_type), intent(in) :: G
+  type(ocean_grid_type),   intent(in) :: G
   type(verticalGrid_type), intent(in) :: GV
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v    !< Meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_in !< Layer thickness used to
-                                                                  !! calculate fluxes [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_S  !< South edge thickness in the
-                                                                  !! reconstruction [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h_N  !< North edge thickness in the
-                                                                  !! reconstruction [H ~> m or kg m-2].
-  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: vh_tot_0 !< Summed transport with no barotropic correction [H L2 T-1 ~> m3 s-1 or kg s-1].
-  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: dvhdv_tot_0 !< Summed partial derivative of vh with v [H L ~> m2 or kg m-1].
-  real, dimension(SZI_(G),SZJB_(G)), intent(out) :: dv ! Corrective barotropic change in the velocity to give vhbt [L T-1 ~> m s-1].
-  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: dv_max_CFL ! Upper limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G)), intent(in) :: dv_min_CFL ! Lower limit on dv correction to avoid CFL violations [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(inout) :: vh   !< Volume flux through meridional
-                                                                  !! faces = v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                           intent(in) :: v    !< Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h_in !< Layer thickness used to calculate fluxes [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h_S  !< South edge thickness in the reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h_N  !< North edge thickness in the reconstruction [H ~> m or kg m-2].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                           intent(in) :: vh_tot_0 !< Summed transport with no barotropic correction
+                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                           intent(in) :: dvhdv_tot_0 !< Summed partial derivative of vh with v 
+                                                     !! [H L ~> m2 or kg m-1].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                          intent(out) :: dv !< Corrective barotropic change in the velocity to give vhbt 
+                                            !! [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)), &
+                          intent(in) :: dv_max_CFL !< Upper limit on dv correction to avoid CFL violations 
+                                                   !! [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G)), &
+                          intent(in) :: dv_min_CFL !< Lower limit on dv correction to avoid CFL violations 
+                                                   !! [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
+                       intent(inout) :: vh !< Volume flux through meridional faces = v*h*dx 
+                                           !! [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: visc_rem_v !< Both the fraction of the momentum
                                    !! originally in a layer that remains after a time-step of viscosity,
                                    !! and the fraction of a time-step's worth of a barotropic acceleration
                                    !! that a layer experiences after viscosity is applied [nondim].
                                    !! Visc_rem_v is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)), intent(in) :: visc_rem_max !< The column maximum of visc_rem [nondim]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)),  intent(in)  :: por_face_areaV !< fractional open area of V-faces [nondim]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(G)), &
+                          intent(in) :: por_face_areaV !< fractional open area of V-faces [nondim]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
-                                    optional, intent(inout) :: v_cor
-                                   !< The meridional velocities (v with a barotropic correction)
+             optional, intent(inout) :: v_cor !< The meridional velocities (v with a barotropic correction)
                                    !! that give vhbt as the depth-integrated transport [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
-                                    optional, intent(out)   :: dv_cor !< The meridional velocity increments from v
-                                                                  !! that give vhbt as the depth-integrated
-                                                                  !! transports [L T-1 ~> m s-1].
-  type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe the
+               optional, intent(out) :: dv_cor !< The meridional velocity increments from v that give
+                                               !! vhbt as the depth-integrated transports [L T-1 ~> m s-1].
+  type(BT_cont_type), optional, pointer :: BT_cont !< A structure with elements that describe the
                      !! effective open face areas as a function of barotropic flow.
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: vhbt
-  logical,                 intent(in)    :: set_BT_cont !< Whether to update BT_cont member arrays.
-  logical,                 intent(in)    :: local_specified_BC !< Whether specified u BCs exist globally.
-  logical,                 intent(in)    :: local_Flather_OBC !< Whether Flather u BCs exist globally.
-  logical,                 intent(in)    :: local_open_BC !< Whether open u BCs exist globally.
-  integer, intent(in) :: ish
-  integer, intent(in) :: ieh
-  integer, intent(in) :: jsh
-  integer, intent(in) :: jeh
-  integer, intent(in) :: nz
+  logical,                intent(in) :: set_BT_cont !< Whether to update BT_cont member arrays.
+  logical,                intent(in) :: local_specified_BC !< Whether specified u BCs exist globally.
+  logical,                intent(in) :: local_Flather_OBC !< Whether Flather u BCs exist globally.
+  logical,                intent(in) :: local_open_BC !< Whether open u BCs exist globally.
+  integer,                intent(in) :: ish  !< Start of i index range.
+  integer,                intent(in) :: ieh !< End of i index range.
+  integer,                intent(in) :: jsh !< Start of j index range.
+  integer,                intent(in) :: jeh !< End of j index range.
+  integer,                intent(in) :: nz !< Extent of k index range.
   real,                    intent(in)    :: dt  !< Time increment [T ~> s].
-  type(unit_scale_type), intent(in) :: US
-  type(continuity_PPM_CS), intent(in) :: CS
-  type(ocean_OBC_type), pointer :: OBC
+  type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
+  type(continuity_PPM_CS), intent(in) :: CS !< This module's control structure.
+  type(ocean_OBC_type), pointer :: OBC !< Open boundaries control structure.
   type(cont_loop_bounds_type), intent(in) :: LB !< Loop boundary variable.
   ! Local variables
   logical, dimension(SZI_(G),SZJB_(G)) :: do_I
@@ -2517,7 +2528,8 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
                                                                     !! [H ~> m or kg m-2].
   type(BT_cont_type),                         intent(inout) :: BT_cont !< A structure with elements
                        !! that describe the effective open face areas as a function of barotropic flow.
-  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dv0  !< The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dv0  !< The barotropic velocity increment that 
+                                                                    !! gives 0 transport [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: vh_tot_0 !< The summed transport
                        !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dvhdv_tot_0 !< The partial derivative
