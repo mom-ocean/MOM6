@@ -609,7 +609,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   integer :: l_seg ! The OBC segment number
   logical :: use_visc_rem, set_BT_cont
-  logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
+  logical :: local_specified_BC, local_open_BC, any_simple_OBC  ! OBC-related logicals
 
   call cpu_clock_begin(id_clock_correct)
 
@@ -617,10 +617,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
   set_BT_cont = .false. ; if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
 
-  local_specified_BC = .false. ; local_Flather_OBC = .false. ; local_open_BC = .false.
+  local_specified_BC = .false. ; local_open_BC = .false.
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_u_BCs_exist_globally
-    local_Flather_OBC = OBC%Flather_u_BCs_exist_globally
     local_open_BC = OBC%open_u_BCs_exist_globally
   endif ; endif
 
@@ -783,9 +782,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
   call present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, du_max_CFL, &
                                    du_min_CFL, visc_rem_u_tmp, visc_rem_max, por_face_areaU, uhbt, &
-                                   uh, u_cor, du_cor, BT_cont, dt, set_BT_cont, local_specified_BC, &
-                                   local_Flather_OBC, local_open_BC, ish, ieh, jsh, jeh, nz, G, GV, &
-                                   US, CS, OBC, LB)
+                                   uh, u_cor, du_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
 
   !$omp target exit data &
   !$omp   map(from: uh, u_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
@@ -801,9 +798,7 @@ end subroutine zonal_mass_flux
 
 subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, du, du_max_CFL, &
                                        du_min_CFL, visc_rem_u, visc_rem_max, por_face_areaU, uhbt, &
-                                       uh, u_cor, du_cor, BT_cont, dt, set_BT_cont, &
-                                       local_specified_BC, local_Flather_OBC, local_open_BC, ish, &
-                                       ieh, jsh, jeh, nz, G, GV, US, CS, OBC, LB)
+                                       uh, u_cor, du_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
   type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), &
@@ -850,18 +845,9 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
                                                  !! as the depth-integrated transports [L T-1 ~> m s-1].
   type(BT_cont_type), optional, pointer  :: BT_cont !< A structure with elements that describe the
                      !! effective open face areas as a function of barotropic flow.
-  logical,                 intent(in)    :: set_BT_cont !< Whether to update BT_cont member arrays.
-  logical,                 intent(in)    :: local_specified_BC !< Whether specified u BCs exist globally.
-  logical,                 intent(in)    :: local_Flather_OBC !< Whether Flather u BCs exist globally.
-  logical,                 intent(in)    :: local_open_BC !< Whether open u BCs exist globally.
   real, dimension(SZIB_(G),SZJ_(G)), &
                  optional, intent(in)    :: uhbt !< The summed volume flux through zonal faces
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
-  integer,                 intent(in)    :: ish !< Start of i index range.
-  integer,                 intent(in)    :: ieh !< End of i index range.
-  integer,                 intent(in)    :: jsh !< Start of j index range.
-  integer,                 intent(in)    :: jeh !< End of j index range.
-  integer,                 intent(in)    :: nz  !< Extent of k index range.
   real,                    intent(in)    :: dt  !< Time increment [T ~> s].
   type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(continuity_PPM_CS), intent(in)    :: CS  !< This module's control structure.
@@ -870,9 +856,21 @@ subroutine present_uhbt_or_set_BT_cont(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0,
   ! Local variables
   logical, dimension(SZIB_(G), SZJ_(G)) :: do_I
   logical, dimension(SZIB_(G), SZJ_(G)) :: simple_OBC_pt  ! Indicates points in a row with specified transport OBCs
-  logical:: any_simple_OBC
-  integer:: l_seg, i, j, k, n
+  logical:: set_BT_cont
+  logical:: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
+  integer:: l_seg, i, j, k, n, ish, ieh, jsh, jeh, nz
   real :: FAuI, FA_u
+
+  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
+
+  set_BT_cont = .false. ; if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
+
+  local_specified_BC = .false. ; local_Flather_OBC = .false. ; local_open_BC = .false.
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    local_specified_BC = OBC%specified_u_BCs_exist_globally
+    local_Flather_OBC = OBC%Flather_u_BCs_exist_globally
+    local_open_BC = OBC%open_u_BCs_exist_globally
+  endif ; endif
 
   if (present(uhbt) .or. set_BT_cont) then
     !$omp target enter data map(alloc: do_I, simple_OBC_pt)
@@ -1736,7 +1734,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   integer :: i, j, k, ish, ieh, jsh, jeh, n, nz
   integer :: l_seg ! The OBC segment number
   logical :: use_visc_rem, set_BT_cont
-  logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
+  logical :: local_specified_BC, local_open_BC, any_simple_OBC  ! OBC-related logicals
 
   call cpu_clock_begin(id_clock_correct)
 
@@ -1744,10 +1742,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
   set_BT_cont = .false. ; if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
 
-  local_specified_BC = .false. ; local_Flather_OBC = .false. ; local_open_BC = .false.
+  local_specified_BC = .false. ; local_open_BC = .false.
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
     local_specified_BC = OBC%specified_v_BCs_exist_globally
-    local_Flather_OBC = OBC%Flather_v_BCs_exist_globally
     local_open_BC = OBC%open_v_BCs_exist_globally
   endif ; endif
 
@@ -1905,9 +1902,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
   call present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, dv, dv_max_CFL, &
                                    dv_min_CFL, visc_rem_v_tmp, visc_rem_max, por_face_areaV, vhbt, &
-                                   vh, v_cor, dv_cor, BT_cont, dt, set_BT_cont, local_specified_BC, &
-                                   local_Flather_OBC, local_open_BC, ish, ieh, jsh, jeh, nz, G, GV, &
-                                   US, CS, OBC, LB)
+                                   vh, v_cor, dv_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
 
   !$omp target exit data &
   !$omp   map(from: vh, v_cor, BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
@@ -1923,9 +1918,7 @@ end subroutine meridional_mass_flux
 
 subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, dv, dv_max_CFL, &
                                        dv_min_CFL, visc_rem_v, visc_rem_max, por_face_areaV, vhbt, &
-                                       vh, v_cor, dv_cor, BT_cont, dt, set_BT_cont, &
-                                       local_specified_BC, local_Flather_OBC, local_open_BC, ish, &
-                                       ieh, jsh, jeh, nz, G, GV, US, CS, OBC, LB)
+                                       vh, v_cor, dv_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
 
   type(ocean_grid_type),   intent(in) :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< Ocean's vertical grid structure.
@@ -1973,15 +1966,6 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
                      !! effective open face areas as a function of barotropic flow.
   real, dimension(SZI_(G),SZJB_(G)), optional, intent(in) :: vhbt !< The summed volume flux through meridional
                                                                   !! faces [H L2 T-1 ~> m3 s-1 or kg s-1].
-  logical,                intent(in) :: set_BT_cont !< Whether to update BT_cont member arrays.
-  logical,                intent(in) :: local_specified_BC !< Whether specified u BCs exist globally.
-  logical,                intent(in) :: local_Flather_OBC !< Whether Flather u BCs exist globally.
-  logical,                intent(in) :: local_open_BC !< Whether open u BCs exist globally.
-  integer,                intent(in) :: ish  !< Start of i index range.
-  integer,                intent(in) :: ieh !< End of i index range.
-  integer,                intent(in) :: jsh !< Start of j index range.
-  integer,                intent(in) :: jeh !< End of j index range.
-  integer,                intent(in) :: nz !< Extent of k index range.
   real,                    intent(in)    :: dt  !< Time increment [T ~> s].
   type(unit_scale_type), intent(in) :: US !< A dimensional unit scaling type
   type(continuity_PPM_CS), intent(in) :: CS !< This module's control structure.
@@ -1992,8 +1976,20 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
   logical, dimension(SZI_(G),SZJB_(G)) :: simple_OBC_pt ! Indicates points in a row with specified transport OBCs
   type(OBC_segment_type), pointer :: segment => NULL()
   real :: FAvi, FA_v    ! A sum of meridional face areas [H L ~> m2 or kg m-1].
-  logical :: any_simple_OBC
-  integer :: l_seg, i, j, k, n
+  logical :: set_BT_cont
+  logical :: any_simple_OBC, local_specified_BC, local_Flather_OBC, local_open_BC  ! OBC-related logicals
+  integer :: l_seg, i, j, k, n, ish, ieh, jsh, jeh, nz
+
+  ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
+
+  set_BT_cont = .false. ; if (present(BT_cont)) set_BT_cont = (associated(BT_cont))
+
+  local_specified_BC = .false. ; local_Flather_OBC = .false. ; local_open_BC = .false.
+  if (associated(OBC)) then ; if (OBC%OBC_pe) then
+    local_specified_BC = OBC%specified_u_BCs_exist_globally
+    local_Flather_OBC = OBC%Flather_u_BCs_exist_globally
+    local_open_BC = OBC%open_u_BCs_exist_globally
+  endif ; endif
 
   if (present(vhbt) .or. set_BT_cont) then
     !$omp target enter data map(alloc: do_I, simple_OBC_pt)
