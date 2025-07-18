@@ -2101,9 +2101,9 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
 
     if (present(vhbt)) then
       ! Find dv and vh.
-      call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, dv, &
+      call meridional_flux_adjust(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, dv, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
-                             ish, ieh, jsh, jeh, do_I, por_face_areaV, vh, OBC=OBC)
+                             ish, ieh, jsh, jeh, do_I, por_face_areaV, vhbt, vh, OBC=OBC)
 
       do concurrent (J=jsh-1:jeh)
         if (present(v_cor)) then
@@ -2127,7 +2127,11 @@ subroutine present_vhbt_or_set_BT_cont(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0,
     endif
 
     if (set_BT_cont) then
-      call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
+    ! Diagnose the zero-transport correction, dv0.
+      call meridional_flux_adjust(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, dv, &
+                            dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
+                            ish, ieh, jsh, jeh, do_I, por_face_areaV)
+      call set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem_v, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
 
@@ -2490,9 +2494,9 @@ end subroutine meridional_flux_thickness
 
 
 !> Returns the barotropic velocity adjustment that gives the desired barotropic (layer-summed) transport.
-subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0, &
+subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, &
                              dv, dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                             ish, ieh, jsh, jeh, do_I_in, por_face_areaV, vh_3d, OBC)
+                             ish, ieh, jsh, jeh, do_I_in, por_face_areaV, vhbt, vh_3d, OBC)
   type(ocean_grid_type),   intent(in)    :: G    !< Ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), &
@@ -2511,7 +2515,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
                              !! a layer experiences after viscosity is applied [nondim].
                              !! Visc_rem is between 0 (at the bottom) and 1 (far above the bottom).
   real, dimension(SZI_(G),SZJB_(G)), &
-                           intent(in)    :: vhbt !< The summed volume flux through meridional faces
+                 optional, intent(in)    :: vhbt !< The summed volume flux through meridional faces
                                                  !! [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)), &
                            intent(in)    :: dv_max_CFL !< Maximum acceptable value of dv [L T-1 ~> m s-1].
@@ -2556,7 +2560,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   real :: tol_eta ! The tolerance for the current iteration [H ~> m or kg m-2].
   real :: tol_vel ! The tolerance for velocity in the current iteration [L T-1 ~> m s-1].
   integer :: i, j, k, nz, itt
-  logical :: domore, do_I(SZI_(G)), local_OBC
+  logical :: domore, do_I(SZI_(G)), local_OBC, use_vhbt
   integer, parameter :: max_itts = 20
 
   local_OBC = .false.
@@ -2565,6 +2569,8 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
       local_OBC = OBC%open_u_BCs_exist_globally
     endif
   endif
+
+  use_vhbt = present(vhbt)
 
   nz = GV%ke
 
@@ -2587,7 +2593,9 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
     do concurrent (i=ish:ieh)
       dv(i,J) = 0.0 ; do_I(i) = do_I_in(i,J)
       dv_max(i) = dv_max_CFL(i,J) ; dv_min(i) = dv_min_CFL(i,J)
-      vh_err(i) = vh_tot_0(i,J) - vhbt(i,J) ; dvhdv_tot(i) = dvhdv_tot_0(i,J)
+      vh_err(i) = vh_tot_0(i,J)
+      if (use_vhbt) vh_err(i) = vh_err(i) - vhbt(i,J)
+      dvhdv_tot(i) = dvhdv_tot_0(i,J)
       vh_err_best(i) = abs(vh_err(i))
     enddo
 
@@ -2644,7 +2652,8 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
 
       if ((itt < max_itts) .or. present(vh_3d)) then
         do concurrent (i=ish:ieh)
-          vh_err(i) = -vhbt(i,j) ; dvhdv_tot(i) = 0.0
+          vh_err(i) = 0.0 ; dvhdv_tot(i) = 0.0
+          if (use_vhbt) vh_err(i) = -vhbt(i,J)
         enddo
         do k=1,nz ; do concurrent (i=ish:ieh, do_I(i))
           v_new(i,J,k) = v(i,J,k) + dv(i,j) * visc_rem(i,j,k)
@@ -2685,7 +2694,7 @@ end subroutine meridional_flux_adjust
 
 !> Sets of a structure that describes the meridional barotropic volume or mass fluxes as a
 !! function of barotropic flow to agree closely with the sum of the layer's transports.
-subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
+subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_tot_0, &
                              dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                              visc_rem_max, ish, ieh, jsh, jeh, do_I, por_face_areaV)
   type(ocean_grid_type),                      intent(in)    :: G    !< Ocean's grid structure.
@@ -2699,6 +2708,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
                                                                     !! [H ~> m or kg m-2].
   type(BT_cont_type),                         intent(inout) :: BT_cont !< A structure with elements
                        !! that describe the effective open face areas as a function of barotropic flow.
+  real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dv0  !< The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
   real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: vh_tot_0 !< The summed transport
                        !! with 0 adjustment [H L2 T-1 ~> m3 s-1 or kg s-1].
   real, dimension(SZI_(G),SZJB_(G)),          intent(in)    :: dvhdv_tot_0 !< The partial derivative
@@ -2726,11 +2736,9 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
                                                                               !! [nondim]
   ! Local variables
   real, dimension(SZI_(G),SZJB_(G)) :: &
-    dv0, &             ! The barotropic velocity increment that gives 0 transport [L T-1 ~> m s-1].
     dvL, dvR, &        ! The barotropic velocity increments that give the southerly
                        ! (dvL) and northerly (dvR) test velocities [L T-1 ~> m s-1].
     dv_CFL, &          ! The velocity increment that corresponds to CFL_min [L T-1 ~> m s-1].
-    zeros, &           ! An array of full of 0 transports [H L2 T-1 ~> m3 s-1 or kg s-1]
     FAmt_L, FAmt_R, &  ! The summed effective marginal face areas for the 3
     FAmt_0, &          ! test velocities [H L ~> m2 or kg m-1].
     vhtot_L, &         ! The summed transport with the southerly (vhtot_L) and
@@ -2764,18 +2772,10 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
 
   !$omp target enter data &
   !$omp   map(to: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
-  !$omp       dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaV) &
+  !$omp       dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaV, dv0) &
   !$omp   map(alloc: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
-  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, dv0, dvL, dvR, dv_CFL, zeros, FAmt_L, FAmt_R, &
+  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, &
   !$omp       FAmt_0, vhtot_L, vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
-
- ! Diagnose the zero-transport correction, dv0.
-  do concurrent (j=jsh-1:jeh, i=ish:ieh)
-    zeros(i,j) = 0.0
-  enddo
-  call meridional_flux_adjust(v, h_in, h_S, h_N, zeros, vh_tot_0, dvhdv_tot_0, dv0, &
-                         dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
-                         ish, ieh, jsh, jeh, do_I, por_face_areaV)
 
   ! Determine the southerly- and northerly- fluxes. Choose a sufficiently
   ! negative velocity correction for the northerly-flux, and a sufficiently
@@ -2806,7 +2806,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN) &
     !$omp   map(release: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, &
     !$omp       dvhdv_tot_0, dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, &
-    !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, zeros, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
+    !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
     !$omp       vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
     return
   endif
@@ -2877,7 +2877,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN) &
   !$omp   map(release: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, &
   !$omp       dvhdv_tot_0, dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, &
-  !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, zeros, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
+  !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
   !$omp       vhtot_R, v_L, v_R, v_0, dvhdv_L, dvhdv_R, dvhdv_0, vh_L, vh_R, vh_0)
 
 end subroutine set_merid_BT_cont
