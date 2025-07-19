@@ -1556,6 +1556,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       CS%eta_cor(i,j) = sign(dt*CS%eta_cor_bound(i,j), CS%eta_cor(i,j))
     enddo
   endif ; endif
+
   do concurrent (j=js:je, i=is:ie)
     eta_src(i,j) = G%mask2dT(i,j) * (Instep * CS%eta_cor(i,j))
   enddo
@@ -1669,6 +1670,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     call uvchksum("BT Initial [uv]bt", ubt, vbt, CS%debug_BT_HI, haloshift=0, unscale=US%L_T_to_m_s)
     !$omp target update from(eta)
     call hchksum(eta, "BT Initial eta", CS%debug_BT_HI, haloshift=0, unscale=GV%H_to_MKS)
+    !$omp target update from(BT_force_u, BT_force_v)
     call uvchksum("BT BT_force_[uv]", BT_force_u, BT_force_v, &
                   CS%debug_BT_HI, haloshift=0, unscale=US%L_T2_to_m_s2)
     if (interp_eta_PF) then
@@ -4408,8 +4410,7 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   h_neglect = GV%H_subroundoff
 
-  !$omp target enter data map(alloc: hatutot, hatvtot, Ihatutot, Ihatvtot, CS, CS%frhatu, CS%frhatv) &
-  !$omp   map(to: h_u, h_v)
+  !$omp target enter data map(alloc: hatutot, hatvtot, Ihatutot, Ihatvtot)
 
   do concurrent (j=js:je, I=is-1:ie) ; hatutot(I,j) = 0.0 ; enddo
 
@@ -4591,10 +4592,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     CS%frhatv(i,J,k) = CS%frhatv(i,J,k) * Ihatvtot(i,J)
   enddo
 
-  !$omp target exit data map(release: hatutot, hatvtot, Ihatutot, Ihatvtot, h_u, h_v, CS) &
-  !$omp   map(from: CS%frhatu, CS%frhatv)
+  !$omp target exit data map(delete: hatutot, hatvtot, Ihatutot, Ihatvtot)
 
   if (CS%debug) then
+    !$omp target update from(CS%frhatu, CS%frhatv)
     call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, &
                   haloshift=0, symmetric=.true., omit_corners=.true., &
                   scalar_pair=.true.)
@@ -4604,7 +4605,6 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
                     scalar_pair=.true.)
     call hchksum(h, "btcalc h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
   endif
-
 end subroutine btcalc
 
 !> The function find_uhbt determines the zonal transport for a given velocity, or with
@@ -5262,7 +5262,7 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  !$omp target enter data map(alloc: eta_h)
+  !$omp target data map(alloc: eta_h)
 
   if (GV%Boussinesq) then
     do concurrent (j=js:je, i=is:ie)
@@ -5290,7 +5290,7 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
     enddo
   endif
 
-  !$omp target exit data map(release: eta_h)
+  !$omp end target data
 
 end subroutine bt_mass_source
 
@@ -5750,6 +5750,8 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   CS%frhatu(:,:,:) = 0.0 ; CS%frhatv(:,:,:) = 0.0
   CS%eta_cor(:,:) = 0.0
   CS%IDatu(:,:) = 0.0 ; CS%IDatv(:,:) = 0.0
+  !$omp target enter data map(to: CS%frhatu, CS%frhatv)
+  !$omp target enter data map(to: CS%eta_cor)
 
   CS%ua_polarity(:,:) = 1.0 ; CS%va_polarity(:,:) = 1.0
   call create_group_pass(pass_a_polarity, CS%ua_polarity, CS%va_polarity, CS%BT_domain, To_All, AGRID)
@@ -6123,6 +6125,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
 
   if (.NOT.query_initialized(CS%ubtav,"ubtav",restart_CS) .or. &
       .NOT.query_initialized(CS%vbtav,"vbtav",restart_CS)) then
+    !$omp target update to(CS, h)
     call btcalc(h, G, GV, CS, may_use_default=.true.)
     CS%ubtav(:,:) = 0.0 ; CS%vbtav(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
@@ -6170,6 +6173,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
          ((Datu(I-1,j) + Datu(I,j)) + (Datv(i,J) + Datv(i,J-1)))
     enddo ; enddo
   endif
+  !$omp target enter data map(to: CS%eta_cor_bound)
 
   if (CS%gradual_BT_ICs) &
     call create_group_pass(pass_bt_hbt_btav, CS%ubt_IC, CS%vbt_IC, G%Domain)
@@ -6187,12 +6191,9 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     id_clock_sync = cpu_clock_id('(Ocean BT global synch)', grain=CLOCK_ROUTINE)
 
   ! send initialized data to GPU
-  !$omp target enter data map(to: CS)
   !$omp target enter data map(to: CS%bathyT)
   !$omp target enter data map(to: CS%D_u_Cor, CS%D_v_Cor)
   !$omp target enter data map(to: CS%dx_Cv, CS%dy_Cu)
-  !$omp target enter data map(to: CS%eta_cor)
-  !$omp target enter data map(to: CS%frhatu, CS%frhatv)
   !$omp target enter data map(to: CS%IareaT, CS%IareaT_OBCmask)
   !$omp target enter data map(to: CS%IDatu, CS%IDatv)
   !$omp target enter data map(to: CS%IdxCu, CS%IdyCv)

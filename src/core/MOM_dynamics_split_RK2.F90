@@ -638,8 +638,10 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   call cpu_clock_begin(id_clock_btcalc)
   ! Calculate the relative layer weights for determining barotropic quantities.
-  if (.not.BT_cont_BT_thick) &
+  if (.not.BT_cont_BT_thick) then
+    !$omp target update to(h)
     call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
+  endif
   call bt_mass_source(h, eta, .true., G, GV, CS%barotropic_CSp)
 
   SpV_avg(:,:) = 0.0
@@ -662,6 +664,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     !$omp target update to(CS%BT_cont%h_u, CS%BT_cont%h_v)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
+      !$omp target update to(h, CS%BT_cont%h_u, CS%BT_cont%h_v)
       call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
                   OBC=CS%OBC)
     endif
@@ -894,6 +897,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
 
   if (BT_cont_BT_thick) then
+    !$omp target update to(h, CS%BT_cont%h_u, CS%BT_cont%h_v)
     call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
                 OBC=CS%OBC)
     if (showCallTree) call callTree_wayPoint("done with btcalc[BT_cont_BT_thick] (step_MOM_dyn_split_RK2)")
@@ -1655,6 +1659,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
+  !$omp target enter data map(alloc: CS%barotropic_CSp)
   call barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
                        CS%OBC, CS%SAL_CSp, HA_CSp)
@@ -1953,6 +1958,7 @@ end subroutine initialize_dyn_split_RK2
 subroutine end_dyn_split_RK2(CS)
   type(MOM_dyn_split_RK2_CS), pointer :: CS  !< module control structure
 
+  !$omp target exit data map(delete: CS%barotropic_CSp)
   call barotropic_end(CS%barotropic_CSp)
 
   call vertvisc_end(CS%vertvisc_CSp)

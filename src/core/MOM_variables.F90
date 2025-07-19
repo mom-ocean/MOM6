@@ -577,13 +577,13 @@ subroutine alloc_BT_cont_type(BT_cont, G, GV, alloc_faces)
     "alloc_BT_cont_type called with an associated BT_cont_type pointer.")
 
   allocate(BT_cont)
+  !$omp target enter data map(to: BT_cont)
   allocate(BT_cont%FA_u_WW(IsdB:IedB,jsd:jed), source=0.0)
   allocate(BT_cont%FA_u_W0(IsdB:IedB,jsd:jed), source=0.0)
   allocate(BT_cont%FA_u_E0(IsdB:IedB,jsd:jed), source=0.0)
   allocate(BT_cont%FA_u_EE(IsdB:IedB,jsd:jed), source=0.0)
   allocate(BT_cont%uBT_WW(IsdB:IedB,jsd:jed), source=0.0)
   allocate(BT_cont%uBT_EE(IsdB:IedB,jsd:jed), source=0.0)
-  !$omp target enter data map(alloc: BT_cont) ! map(to: BT_cont) results in cuda memory access errors elsewhere...
   !$omp target enter data map(to: BT_cont%FA_u_WW, BT_cont%FA_u_W0, BT_cont%FA_u_E0, &
   !$omp   BT_cont%FA_u_EE, BT_cont%uBT_WW, BT_cont%uBT_EE)
 
@@ -622,10 +622,13 @@ subroutine dealloc_BT_cont_type(BT_cont)
   deallocate(BT_cont%FA_v_N0) ; deallocate(BT_cont%FA_v_NN)
   deallocate(BT_cont%vBT_SS)  ; deallocate(BT_cont%vBT_NN)
 
-  !$omp target exit data map(release: BT_cont%h_u, BT_cont%h_v)
-  if (allocated(BT_cont%h_u)) deallocate(BT_cont%h_u)
-  if (allocated(BT_cont%h_v)) deallocate(BT_cont%h_v)
+  ! These are always allocated in pairs.
+  if (allocated(BT_cont%h_u) .and. allocated(BT_cont%h_v)) then
+    !$omp target exit data map(release: BT_cont%h_u, BT_cont%h_v)
+    deallocate(BT_cont%h_u, BT_cont%h_v)
+  endif
 
+  !$omp target exit data map(delete: BT_cont)
   deallocate(BT_cont)
 
 end subroutine dealloc_BT_cont_type
