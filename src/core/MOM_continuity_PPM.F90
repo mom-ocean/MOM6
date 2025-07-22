@@ -165,12 +165,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   ! problems with hin
   !$omp target enter data &
   !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
-  !$omp       G%mask2dT, G%dx_Cv, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h, CS, US, OBC, pbv, &
-  !$omp       pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, BT_cont) &
+  !$omp     G%mask2dT, G%dx_Cv, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h, CS, US, OBC, pbv, &
+  !$omp     pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, BT_cont, &
+  !$omp     hin) &
   !$omp   map(alloc: h_W, h_E, h_S, h_N, uh, vh, u_cor, v_cor, du_cor, dv_cor, BT_cont%FA_u_E0, &
-  !$omp       BT_cont%FA_u_W0, BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
-  !$omp       BT_cont%FA_v_NN, BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, &
-  !$omp       BT_cont%vBT_SS, BT_cont%h_u, BT_cont%h_V, LB)
+  !$omp     BT_cont%FA_u_W0, BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
+  !$omp     BT_cont%FA_v_NN, BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, &
+  !$omp     BT_cont%vBT_SS, BT_cont%h_u, BT_cont%h_V, LB)
 
   if (x_first) then
     !  First advect zonally, with loop bounds that accomodate the subsequent meridional advection.
@@ -218,13 +219,13 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
 
   !$omp target exit data &
   !$omp   map(from: uh, h, vh, u_cor, v_cor, du_cor, dv_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, &
-  !$omp       BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, BT_cont%FA_v_NN, &
-  !$omp       BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, BT_cont%vBT_SS, &
-  !$omp       BT_cont%h_u, BT_cont%h_V) &
+  !$omp     BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, BT_cont%FA_v_NN, &
+  !$omp     BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, BT_cont%vBT_SS, &
+  !$omp     BT_cont%h_u, BT_cont%h_V) &
   !$omp   map(release: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
-  !$omp       G%mask2dT, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h_W, h_E, h_S, h_N, CS, US, &
-  !$omp       OBC, pbv, pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, &
-  !$omp       LB)
+  !$omp     G%mask2dT, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h_W, h_E, h_S, h_N, CS, US, &
+  !$omp     OBC, pbv, pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, &
+  !$omp     LB, hin)
 
 end subroutine continuity_PPM
 
@@ -635,7 +636,6 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   !$omp target enter data &
-  !$omp   map(to: h_in) &
   !$omp   map(alloc: visc_rem_u_tmp, &
   !$omp       duhdu, du, du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
 
@@ -782,7 +782,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                                    uh, u_cor, du_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
 
   !$omp target exit data &
-  !$omp   map(release: visc_rem_u_tmp, h_in, duhdu, du, &
+  !$omp   map(release: visc_rem_u_tmp, duhdu, du, &
   !$omp       du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
 
   call cpu_clock_end(id_clock_correct)
@@ -1727,7 +1727,6 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   !$omp target enter data &
-  !$omp   map(to: h_in) &
   !$omp   map(alloc: dvhdv, dv, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, &
   !$omp     visc_rem_v_tmp)
 
@@ -1875,7 +1874,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                    vh, v_cor, dv_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
 
   !$omp target exit data &
-  !$omp   map(release: h_in, dvhdv, dv, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, &
+  !$omp   map(release: dvhdv, dv, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, &
   !$omp     visc_rem_max, visc_rem_v_tmp)
 
   call cpu_clock_end(id_clock_correct)
@@ -2682,9 +2681,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
     call MOM_error(FATAL,mesg)
   endif
 
-  !$omp target enter data &
-  !$omp   map(to: h_in) &
-  !$omp   map(alloc: slp)
+  !$omp target enter data map(alloc: slp)
 
   if (simple_2nd) then
     ! untested
@@ -2769,8 +2766,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
     call PPM_limit_pos(h_in, h_W, h_E, h_min, G, GV, isl, iel, jsl, jel, nz)
   endif
 
-  !$omp target exit data &
-  !$omp   map(release: h_in, slp)
+  !$omp target exit data map(release: slp)
 
 end subroutine PPM_reconstruction_x
 
@@ -2828,9 +2824,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
     call MOM_error(FATAL,mesg)
   endif
 
-  !$omp target enter data &
-  !$omp   map(to: h_in) &
-  !$omp   map(alloc: slp)
+  !$omp target enter data map(alloc: slp)
 
   if (simple_2nd) then
     ! untested
@@ -2913,8 +2907,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
     call PPM_limit_pos(h_in, h_S, h_N, h_min, G, GV, isl, iel, jsl, jel, nz)
   endif
 
-  !$omp target exit data &
-  !$omp   map(release: h_in, slp)
+  !$omp target exit data map(release: slp)
 
 end subroutine PPM_reconstruction_y
 
