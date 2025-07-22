@@ -4435,20 +4435,22 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       e_u(I,j,nz+1) = -0.5 * Z_to_H * (G%bathyT(i+1,j) + G%bathyT(i,j))
       D_shallow_u(I,j) = -Z_to_H * min(G%bathyT(i+1,j), G%bathyT(i,j))
     enddo
-    do concurrent (k=1:nz, j=js:je, I=is-1:ie)
-      e_u(I,j,K) = e_u(I,j,K+1) + 0.5 * (h(i+1,j,k) + h(i,j,k))
-      h_arith = 0.5 * (h(i+1,j,k) + h(i,j,k))
-      if (e_u(I,j,K+1) >= D_shallow_u(I,j)) then
-        CS%frhatu(I,j,k) = h_arith
-      else
-        h_harm = (h(i+1,j,k) * h(i,j,k)) / (h_arith + h_neglect)
-        if (e_u(I,j,K) <= D_shallow_u(I,j)) then
-          CS%frhatu(I,j,k) = h_harm
+    do k=nz,1,-1
+      do concurrent (j=js:je, I=is-1:ie)
+        e_u(I,j,K) = e_u(I,j,K+1) + 0.5 * (h(i+1,j,k) + h(i,j,k))
+        h_arith = 0.5 * (h(i+1,j,k) + h(i,j,k))
+        if (e_u(I,j,K+1) >= D_shallow_u(I,j)) then
+          CS%frhatu(I,j,k) = h_arith
         else
-          wt_arith = (e_u(I,j,K) - D_shallow_u(I,j)) / (h_arith + h_neglect)
-          CS%frhatu(I,j,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
+          h_harm = (h(i+1,j,k) * h(i,j,k)) / (h_arith + h_neglect)
+          if (e_u(I,j,K) <= D_shallow_u(I,j)) then
+            CS%frhatu(I,j,k) = h_harm
+          else
+            wt_arith = (e_u(I,j,K) - D_shallow_u(I,j)) / (h_arith + h_neglect)
+            CS%frhatu(I,j,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
+          endif
         endif
-      endif
+      enddo
     enddo
     !$omp end target data
     do concurrent (j=js:je, I=is-1:ie) ; do k=1,nz
@@ -4526,20 +4528,22 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       e_v(i,J,nz+1) = -0.5 * Z_to_H * (G%bathyT(i,j+1) + G%bathyT(i,j))
       D_shallow_v(i,J) = -Z_to_H * min(G%bathyT(i,j+1), G%bathyT(i,j))
     enddo
-    do concurrent (k=1:nz, J=js-1:je, i=is:ie)
-      e_v(i,J,K) = e_v(i,J,K+1) + 0.5 * (h(i,j+1,k) + h(i,j,k))
-      h_arith = 0.5 * (h(i,j+1,k) + h(i,j,k))
-      if (e_v(i,J,K+1) >= D_shallow_v(i,J)) then
-        CS%frhatv(i,J,k) = h_arith
-      else
-        h_harm = (h(i,j+1,k) * h(i,j,k)) / (h_arith + h_neglect)
-        if (e_v(i,J,K) <= D_shallow_v(i,J)) then
-          CS%frhatv(i,J,k) = h_harm
+    do k=nz,1,-1
+      do concurrent (J=js-1:je, i=is:ie)
+        e_v(i,J,K) = e_v(i,J,K+1) + 0.5 * (h(i,j+1,k) + h(i,j,k))
+        h_arith = 0.5 * (h(i,j+1,k) + h(i,j,k))
+        if (e_v(i,J,K+1) >= D_shallow_v(i,J)) then
+          CS%frhatv(i,J,k) = h_arith
         else
-          wt_arith = (e_v(i,J,K) - D_shallow_v(i,J)) / (h_arith + h_neglect)
-          CS%frhatv(i,J,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
+          h_harm = (h(i,j+1,k) * h(i,j,k)) / (h_arith + h_neglect)
+          if (e_v(i,J,K) <= D_shallow_v(i,J)) then
+            CS%frhatv(i,J,k) = h_harm
+          else
+            wt_arith = (e_v(i,J,K) - D_shallow_v(i,J)) / (h_arith + h_neglect)
+            CS%frhatv(i,J,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
+          endif
         endif
-      endif
+      enddo
     enddo
     !$omp end target data
     do concurrent (J=js-1:je, i=is:ie) ; do k=1,nz
