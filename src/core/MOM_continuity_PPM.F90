@@ -634,13 +634,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   I_dt = 1.0 / dt
   if (CS%aggress_adjust) CFL_dt = I_dt
 
-  !$omp target enter data if (use_visc_rem) map(to: visc_rem_u)
   !$omp target enter data &
-  !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, u, h_in, &
-  !$omp       h_W, h_E, CS, por_face_areaU, uhbt, BT_cont) &
-  !$omp   map(alloc: visc_rem_u_tmp, uh, u_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, &
-  !$omp       BT_cont%FA_u_EE, BT_cont%FA_u_WW, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%h_u, &
-  !$omp       du_cor, duhdu, du, du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
+  !$omp   map(to: h_in) &
+  !$omp   map(alloc: visc_rem_u_tmp, &
+  !$omp       duhdu, du, du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
 
   do concurrent (j=jsh:jeh)
 
@@ -785,12 +782,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                                    uh, u_cor, du_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
 
   !$omp target exit data &
-  !$omp   map(from: uh, u_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
-  !$omp       BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%h_u, du_cor) &
-  !$omp   map(release: visc_rem_u_tmp, G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, &
-  !$Omp       G%mask2dCu, G%dxCu, u, h_in, h_W, h_E, CS, por_face_areaU, uhbt, BT_cont, duhdu, du, &
+  !$omp   map(release: visc_rem_u_tmp, h_in, duhdu, du, &
   !$omp       du_min_CFL, du_max_CFL, duhdu_tot_0, uh_tot_0, visc_rem_max)
-  !$omp target exit data if (use_visc_rem) map(release: visc_rem_u)
 
   call cpu_clock_end(id_clock_correct)
 
@@ -1212,10 +1205,6 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
   real :: dh
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
-  !$omp target enter data &
-  !$omp   map(to: u, G, G%dy_Cu, G%IareaT, G%IdxT, h, h_W, h_E, por_face_areaU) &
-  !$omp   map(alloc: h_u)
-
   do concurrent (k=1:nz, j=jsh:jeh, I=ish-1:ieh)
     if (u(I,j,k) > 0.0) then
       if (vol_CFL) then ; CFL = (u(I,j,k) * dt) * (G%dy_Cu(I,j) * G%IareaT(i,j))
@@ -1286,10 +1275,6 @@ subroutine zonal_flux_thickness(u, h, h_W, h_E, h_u, dt, G, GV, US, LB, vol_CFL,
       endif
     enddo
   endif
-
-  !$omp target exit data &
-  !$omp   map(from: h_u) &
-  !$omp   map(release: u, G, G%dy_Cu, G%IareaT, G%IdxT, h, h_W, h_E, por_face_areaU)
 
 end subroutine zonal_flux_thickness
 
@@ -1373,14 +1358,12 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
 
   tol_vel = CS%tol_vel
 
-  !$omp target enter data &
-  !$omp   map(to: uh_3d, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
-  !$omp       duhdu_tot_0, G, G%IareaT, CS, u, visc_rem, h_W, h_E, h_in, G%dy_Cu, &
-  !$omp       G%IdxT, por_face_areaU) &
-  !$omp   map(alloc: uh_aux, du, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, u_new)
-
   ! NVIDIA do concurrent doesn't work with private arrays (private scalars OK)
-  !$omp target loop private(i, k, itt, uh_aux, uh_err, uh_err_best, duhdu_tot, du_min, du_max, do_I)
+  !$omp target loop private(i, k, itt, uh_aux, uh_err, uh_err_best, duhdu_tot, du_min, du_max, do_I) &
+  !$omp   map(to: do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, duhdu_tot_0, G, G%IareaT, &
+  !$omp     CS, u, visc_rem, h_W, h_E, h_in, G%dy_Cu, G%IdxT, por_face_areaU) &
+  !$omp   map(alloc: uh_aux, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, u_new) &
+  !$omp   map(tofrom: uh_3d, du)
   do j=jsh,jeh
 
     if (present(uh_3d)) then
@@ -1482,12 +1465,6 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uh_tot_0, duhdu_tot_0, &
   ! so-be-it, or else use a final upwind correction?
   ! This never seems to happen with 20 iterations as max_itt.
 
-  !$omp target exit data &
-  !$omp   map(from: uh_3d, du) &
-  !$omp   map(release: uh_aux, do_I_in, du_max_CFL, du_min_CFL, uh_tot_0, uhbt, &
-  !$omp       duhdu_tot_0, do_I, du_max, du_min, duhdu_tot, uh_err, uh_err_best, G, G%IareaT, CS, &
-  !$omp       u, visc_rem, u_new, h_W, h_E, h_in, G%dy_Cu, G%IdxT, por_face_areaU)
-
 end subroutine zonal_flux_adjust
 
 
@@ -1576,14 +1553,12 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du0, uh_tot_0, duhdu_to
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
-  !$omp target enter data &
+  !$omp target loop private(I, k, duL, duR, du_CFL, FAmt_L, FAmt_R, FAmt_0, uhtot_L, uhtot_R) &
   !$omp   map(to: u, h_W, h_E, h_in, uh_tot_0, duhdu_tot_0, G, G%IareaT, G%dy_Cu, G%IdxT, G%dxCu, &
-  !$omp       BT_cont, du_max_CFL, du_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaU, du0) &
-  !$omp   map(alloc: duL, duR, du_CFL, FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R, &
-  !$omp       BT_cont%FA_u_W0, &
-  !$omp       BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, BT_cont%uBT_WW, BT_cont%uBT_EE)
-
-  !$omp target loop private(I, k, duL, duR, du_CFL, FAmt_L, FAmt_R, FAmt_0, uhtot_L, uhtot_R)
+  !$omp     BT_cont, du_max_CFL, du_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaU, du0) &
+  !$omp   map(alloc: duL, duR, du_CFL, FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R) &
+  !$omp   map(tofrom: BT_cont%FA_u_W0, BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, &
+  !$omp     BT_cont%uBT_WW, BT_cont%uBT_EE)
   do j=jsh,jeh
     ! Determine the westerly- and easterly- fluxes.  Choose a sufficiently
     ! negative velocity correction for the easterly-flux, and a sufficiently
@@ -1661,14 +1636,6 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, du0, uh_tot_0, duhdu_to
       endif
     enddo
   enddo
-
-  !$omp target exit data &
-  !$omp   map(from: BT_cont%FA_u_W0, BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, &
-  !$omp       BT_cont%uBT_WW, BT_cont%uBT_EE) &
-  !$omp   map(release: u, h_W, h_E, h_in, uh_tot_0, duhdu_tot_0, du0, duL, duR, du_CFL, &
-  !$omp       FAmt_L, FAmT_R, FAmt_0, uhtot_L, uhtot_R, &
-  !$omp       G, G%IareaT, G%dy_Cu, G%IdxT, G%dxCu, BT_cont, &
-  !$omp       du_max_CFL, du_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaU)
 
 end subroutine set_zonal_BT_cont
 
@@ -1760,13 +1727,16 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   !$omp target enter data &
-  !$omp   map(to: G, G%dx_Cv, G%IdyT, G%dyT, G%dyCv, G%mask2dCv, G%areaT, G%IareaT, v, h_in, h_S, &
-  !$omp       h_N, CS, por_face_areaV, vhbt, visc_rem_v, BT_cont) &
-  !$omp   map(alloc: vh, v_cor, BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
-  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, BT_cont%h_v, dv_cor, dvhdv, dv, dv_min_CFL, &
-  !$omp       dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, visc_rem_v_tmp)
+  !$omp   map(to: h_in) &
+  !$omp   map(alloc: dvhdv, dv, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, &
+  !$omp     visc_rem_v_tmp)
 
-  !$omp target loop private(i, k)
+  !$omp target loop private(i, k) &
+  !$omp   map(to: G, G%dx_Cv, G%IdyT, G%dyT, G%mask2dCv, G%areaT, G%IareaT, v, h_in, h_S, &
+  !$omp     h_N, CS, por_face_areaV, vhbt, visc_rem_v) &
+  !$omp   map(from: vh, dv_cor, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, &
+  !$omp     visc_rem_v_tmp) &
+  !$omp   map(alloc: dvhdv)
   do J=jsh-1,jeh
 
     if (present(dv_cor)) then
@@ -1905,11 +1875,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                    vh, v_cor, dv_cor, BT_cont, dt, G, GV, US, CS, OBC, LB)
 
   !$omp target exit data &
-  !$omp   map(from: vh, v_cor, BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
-  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, BT_cont%h_v, dv_cor) &
-  !$omp   map(release: G, G%dx_Cv, G%IdyT, G%dyT, G%dyCv, G%mask2dCv, G%areaT, G%IareaT, v, h_in, &
-  !$omp       h_S, h_N, CS, por_face_areaV, vhbt, visc_rem_v, dvhdv, dv, dv_min_CFL, dv_max_CFL, &
-  !$omp       dvhdv_tot_0, vh_tot_0, visc_rem_max, visc_rem_v_tmp)
+  !$omp   map(release: h_in, dvhdv, dv, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, &
+  !$omp     visc_rem_max, visc_rem_v_tmp)
 
   call cpu_clock_end(id_clock_correct)
 
@@ -2228,10 +2195,6 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
   real :: dh
   ish = LB%ish ; ieh = LB%ieh ; jsh = LB%jsh ; jeh = LB%jeh ; nz = GV%ke
 
-  !$omp target enter data &
-  !$omp   map(to: v, G, G%dx_Cv, G%IareaT, G%IdyT, h_S, h_N, h, visc_rem_v, por_face_areaV) &
-  !$omp   map(alloc: h_v)
-
   do concurrent (k=1:nz, J=jsh-1:jeh, i=ish:ieh)
     if (v(i,J,k) > 0.0) then
       if (vol_CFL) then ; CFL = (v(i,J,k) * dt) * (G%dx_Cv(i,J) * G%IareaT(i,j))
@@ -2302,10 +2265,6 @@ subroutine meridional_flux_thickness(v, h, h_S, h_N, h_v, dt, G, GV, US, LB, vol
       endif
     enddo
   endif
-
-  !$omp target exit data &
-  !$omp   map(from: h_v) &
-  !$omp   map(release: v, G, G%dx_Cv, G%IareaT, G%IdyT, h_S, h_N, h, visc_rem_v, por_face_areaV)
 
 end subroutine meridional_flux_thickness
 
@@ -2393,12 +2352,12 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, &
 
   tol_vel = CS%tol_vel
 
-  !$omp target enter data &
+  !$omp target loop private(i, k, itt, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I) &
   !$omp   map(to: G, G%IareaT, G%IdyT, G%dx_Cv, G%IdyT, v, h_in, h_S, h_N, visc_rem, vhbt, &
-  !$omp       dv_max_CFL, dv_min_CFL, vh_tot_0, dvhdv_tot_0, CS, do_I_in, por_face_areaV, vh_3d) &
-  !$omp   map(alloc: dv, vh_aux, dvhdv, v_new, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I)
-
-  !$omp target loop private(i, k, itt, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I)
+  !$omp     dv_max_CFL, dv_min_CFL, vh_tot_0, dvhdv_tot_0, CS, do_I_in, por_face_areaV) &
+  !$omp   map(alloc: vh_aux, dvhdv, v_new, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I) &
+  !$omp   map(tofrom: vh_3d) &
+  !$omp   map(from: dv)
   do J=jsh-1,jeh
 
     if (present(vh_3d)) then
@@ -2502,12 +2461,6 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vh_tot_0, dvhdv_tot_0, &
     endif
   enddo ! j-loop
 
-  !$omp target exit data &
-  !$omp   map(from: dv, vh_3d) &
-  !$omp   map(release: G, G%IareaT, G%IdyT, G%dx_Cv, G%IdyT, v, h_in, h_S, h_N, visc_rem, vhbt, &
-  !$omp       dv_max_CFL, dv_min_CFL, vh_tot_0, dvhdv_tot_0, CS, do_I_in, por_face_areaV, vh_aux, &
-  !$omp       v_new, dvhdv, vh_err, vh_err_best, dvhdv_tot, dv_min, dv_max, do_I)
-
 end subroutine meridional_flux_adjust
 
 
@@ -2589,14 +2542,12 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
-  !$omp target enter data &
+  !$omp target loop private(i, k, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, vhtot_R) &
   !$omp   map(to: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, &
-  !$omp       dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaV, dv0) &
-  !$omp   map(alloc: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
-  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, &
-  !$omp       FAmt_0, vhtot_L, vhtot_R)
-
-  !$omp target loop private(i, k, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, vhtot_R)
+  !$omp     dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, por_face_areaV, dv0) &
+  !$omp   map(alloc: dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, vhtot_R) &
+  !$omp   map(from: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
+  !$omp     BT_cont%FA_v_NN, BT_cont%vBT_NN)
   do J=jsh-1,jeh
     ! Determine the southerly- and northerly- fluxes. Choose a sufficiently
     ! negative velocity correction for the northerly-flux, and a sufficiently
@@ -2675,14 +2626,6 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, dv0, vh_tot_0, dvhdv_to
     enddo
   enddo
 
-  !$omp target exit data &
-  !$omp   map(from: BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%vBT_SS, BT_cont%FA_v_N0, &
-  !$omp       BT_cont%FA_v_NN, BT_cont%vBT_NN) &
-  !$omp   map(release: G, G%dx_Cv, G%dyCv, G%IdyT, v, h_in, h_S, h_N, BT_cont, vh_tot_0, &
-  !$omp       dvhdv_tot_0, dv_max_CFL, dv_min_CFL, CS, visc_rem, visc_rem_max, do_I, &
-  !$omp       por_face_areaV, dv0, dvL, dvR, dv_CFL, FAmt_L, FAmt_R, FAmt_0, vhtot_L, &
-  !$omp       vhtot_R)
-
 end subroutine set_merid_BT_cont
 
 !> Calculates left/right edge values for PPM reconstruction.
@@ -2740,8 +2683,8 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target enter data &
-  !$omp   map(to: G, G%mask2dT, h_in) &
-  !$omp   map(alloc: h_W, h_E, slp)
+  !$omp   map(to: h_in) &
+  !$omp   map(alloc: slp)
 
   if (simple_2nd) then
     ! untested
@@ -2827,10 +2770,8 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target exit data &
-  !$omp   map(from: h_W, h_E) &
-  !$omp   map(release: G, G%mask2dT, h_in, slp)
+  !$omp   map(release: h_in, slp)
 
-  return
 end subroutine PPM_reconstruction_x
 
 !> Calculates left/right edge values for PPM reconstruction.
@@ -2888,8 +2829,8 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target enter data &
-  !$omp   map(to: G, G%mask2dT, h_in) &
-  !$omp   map(alloc: slp, h_S, h_N)
+  !$omp   map(to: h_in) &
+  !$omp   map(alloc: slp)
 
   if (simple_2nd) then
     ! untested
@@ -2973,10 +2914,8 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
   endif
 
   !$omp target exit data &
-  !$omp   map(release: G, G%mask2dT, h_in, slp) &
-  !$omp   map(from: h_S, h_N)
+  !$omp   map(release: h_in, slp)
 
-  return
 end subroutine PPM_reconstruction_y
 
 !> This subroutine limits the left/right edge values of the PPM reconstruction
