@@ -167,7 +167,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
   !$omp     G%mask2dT, G%dx_Cv, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h, CS, US, OBC, pbv, &
   !$omp     pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, BT_cont, &
-  !$omp     hin) &
+  !$omp     hin, dt) &
   !$omp   map(alloc: h_W, h_E, h_S, h_N, uh, vh, u_cor, v_cor, du_cor, dv_cor, BT_cont%FA_u_E0, &
   !$omp     BT_cont%FA_u_W0, BT_cont%FA_v_N0, BT_cont%FA_v_S0, BT_cont%FA_u_EE, BT_cont%FA_u_WW, &
   !$omp     BT_cont%FA_v_NN, BT_cont%FA_v_SS, BT_cont%uBT_EE, BT_cont%uBT_WW, BT_cont%vBT_NN, &
@@ -225,7 +225,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   !$omp   map(release: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
   !$omp     G%mask2dT, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h_W, h_E, h_S, h_N, CS, US, &
   !$omp     OBC, pbv, pbv%por_face_areaU, pbv%por_face_areaV, uhbt, vhbt, visc_rem_u, visc_rem_v, &
-  !$omp     LB, hin)
+  !$omp     LB, hin, dt)
 
 end subroutine continuity_PPM
 
@@ -1730,13 +1730,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   !$omp   map(alloc: dvhdv, dv, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, &
   !$omp     visc_rem_v_tmp)
 
-  !$omp target loop private(i, k) &
-  !$omp   map(to: G, G%dx_Cv, G%IdyT, G%dyT, G%mask2dCv, G%areaT, G%IareaT, v, h_in, h_S, &
-  !$omp     h_N, CS, por_face_areaV, vhbt, visc_rem_v) &
-  !$omp   map(from: vh, dv_cor, dv_min_CFL, dv_max_CFL, dvhdv_tot_0, vh_tot_0, visc_rem_max, &
-  !$omp     visc_rem_v_tmp) &
-  !$omp   map(alloc: dvhdv)
-  do J=jsh-1,jeh
+  do concurrent (J=jsh-1:jeh)
 
     if (present(dv_cor)) then
       do concurrent (i=ish:ieh)
