@@ -1521,7 +1521,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Set the mass source, after first initializing the halos to 0.
   do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1) ; eta_src(i,j) = 0.0 ; enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
-    do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0)
+    do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0) local(u_max_cor, v_max_cor)
       if (CS%eta_cor(i,j) > 0.0) then
         !   Limit the source (outward) correction to be a fraction the mass that
         ! can be transported out of the cell by velocities with a CFL number of CFL_cor.
@@ -4908,6 +4908,7 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
   real :: dt ! The baroclinic timestep [T ~> s] or 1.0 [nondim]
   real, parameter :: C1_3 = 1.0/3.0  ! [nondim]
   integer :: i, j, is, ie, js, je, hs
+  real :: tmp
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   hs = max(halo,0)
@@ -4968,9 +4969,17 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
     BTCL_u(I,j)%uBT_EE = dt*uBT_EE(I,j)   ; BTCL_u(I,j)%uBT_WW = dt*uBT_WW(I,j)
     ! Check for reversed polarity in the tripolar halo regions.
     if (u_polarity(I,j) < 0.0) then
-      call swap(BTCL_u(I,j)%FA_u_EE, BTCL_u(I,j)%FA_u_WW)
-      call swap(BTCL_u(I,j)%FA_u_E0, BTCL_u(I,j)%FA_u_W0)
-      call swap(BTCL_u(I,j)%uBT_EE,  BTCL_u(I,j)%uBT_WW)
+      tmp = BTCL_u(I,j)%FA_u_EE
+      BTCL_u(I,j)%FA_u_EE = BTCL_u(I,j)%FA_u_WW
+      BTCL_u(I,j)%FA_u_WW = tmp
+
+      tmp = BTCL_u(I,j)%FA_u_E0
+      BTCL_u(I,j)%FA_u_E0 = BTCL_u(I,j)%FA_u_W0
+      BTCL_u(I,j)%FA_u_W0 = tmp
+
+      tmp = BTCL_u(I,j)%uBT_EE
+      BTCL_u(I,j)%uBT_EE = BTCL_u(I,j)%uBT_WW
+      BTCL_u(I,j)%uBT_WW = tmp
     endif
 
     BTCL_u(I,j)%uh_EE = BTCL_u(I,j)%uBT_EE * &
@@ -4984,15 +4993,24 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
     if (abs(BTCL_u(I,j)%uBT_EE) > 0.0) BTCL_u(I,j)%uh_crvE = &
       (C1_3 * (BTCL_u(I,j)%FA_u_EE - BTCL_u(I,j)%FA_u_E0)) / BTCL_u(I,j)%uBT_EE**2
   enddo
+
   do concurrent (J=js-hs-1:je+hs, i=is-hs:ie+hs)
     BTCL_v(i,J)%FA_v_NN = FA_v_NN(i,J) ; BTCL_v(i,J)%FA_v_N0 = FA_v_N0(i,J)
     BTCL_v(i,J)%FA_v_S0 = FA_v_S0(i,J) ; BTCL_v(i,J)%FA_v_SS = FA_v_SS(i,J)
     BTCL_v(i,J)%vBT_NN = dt*vBT_NN(i,J)   ; BTCL_v(i,J)%vBT_SS = dt*vBT_SS(i,J)
     ! Check for reversed polarity in the tripolar halo regions.
     if (v_polarity(i,J) < 0.0) then
-      call swap(BTCL_v(i,J)%FA_v_NN, BTCL_v(i,J)%FA_v_SS)
-      call swap(BTCL_v(i,J)%FA_v_N0, BTCL_v(i,J)%FA_v_S0)
-      call swap(BTCL_v(i,J)%vBT_NN,  BTCL_v(i,J)%vBT_SS)
+      tmp = BTCL_v(i,J)%FA_v_NN
+      BTCL_v(i,J)%FA_v_NN = BTCL_v(i,J)%FA_v_SS
+      BTCL_v(i,J)%FA_v_SS = tmp
+
+      tmp = BTCL_v(i,J)%FA_v_N0
+      BTCL_v(i,J)%FA_v_N0 = BTCL_v(i,J)%FA_v_S0
+      BTCL_v(i,J)%FA_v_S0 = tmp
+
+      tmp = BTCL_v(i,J)%vBT_NN
+      BTCL_v(i,J)%vBT_NN = BTCL_v(i,J)%vBT_SS
+      BTCL_v(i,J)%vBT_SS = tmp
     endif
 
     BTCL_v(i,J)%vh_NN = BTCL_v(i,J)%vBT_NN * &
