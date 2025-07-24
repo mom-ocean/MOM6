@@ -424,6 +424,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! allocate internal variables on GPU
   !$omp target enter data map(alloc: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
+  !$omp target enter data map(alloc: hp)
   !$omp target update to(eta)
 
   !$OMP parallel do default(shared)
@@ -638,8 +639,8 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   call cpu_clock_begin(id_clock_btcalc)
   ! Calculate the relative layer weights for determining barotropic quantities.
+  !$omp target update to(h)
   if (.not.BT_cont_BT_thick) then
-    !$omp target update to(h)
     call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
   endif
   call bt_mass_source(h, eta, .true., G, GV, CS%barotropic_CSp)
@@ -851,6 +852,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   ! hp can be changed if CS%begw /= 0.
   ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
+  !$omp target update to(hp)
   call bt_mass_source(hp, eta_pred, .false., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
@@ -1148,6 +1150,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! release internal variables
   !$omp target exit data map(release: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
+  !$omp target exit data map(delete: hp)
 
   if (CS%store_CAu) then
     ! Calculate a predictor-step estimate of the Coriolis and momentum advection terms
