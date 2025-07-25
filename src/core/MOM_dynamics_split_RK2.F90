@@ -1676,7 +1676,6 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
-  !$omp target enter data map(alloc: CS%barotropic_CSp)
   call barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
                        CS%OBC, CS%SAL_CSp, HA_CSp)

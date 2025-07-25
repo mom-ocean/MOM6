@@ -3572,6 +3572,7 @@ subroutine set_dtbt(G, GV, US, CS, pbce, gtot_est, BT_cont, eta, SSH_add)
       gtot_E(i,j) = 0.0 ; gtot_W(i,j) = 0.0
       gtot_N(i,j) = 0.0 ; gtot_S(i,j) = 0.0
     enddo ; enddo
+    !$omp target update from(CS%frhatu, CS%frhatv)
     do k=1,nz ; do j=js,je ; do i=is,ie
       gtot_E(i,j) = gtot_E(i,j) + pbce(i,j,k) * CS%frhatu(I,j,k)
       gtot_W(i,j) = gtot_W(i,j) + pbce(i,j,k) * CS%frhatu(I-1,j,k)
@@ -5772,8 +5773,6 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   CS%frhatu(:,:,:) = 0.0 ; CS%frhatv(:,:,:) = 0.0
   CS%eta_cor(:,:) = 0.0
   CS%IDatu(:,:) = 0.0 ; CS%IDatv(:,:) = 0.0
-  !$omp target enter data map(to: CS%frhatu, CS%frhatv)
-  !$omp target enter data map(to: CS%eta_cor)
 
   CS%ua_polarity(:,:) = 1.0 ; CS%va_polarity(:,:) = 1.0
   call create_group_pass(pass_a_polarity, CS%ua_polarity, CS%va_polarity, CS%BT_domain, To_All, AGRID)
@@ -6142,12 +6141,16 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     endif
   endif
 
+  !$omp target enter data map(to: CS)
+  !$omp target enter data map(to: CS%frhatu, CS%frhatv)
+  !$omp target enter data map(to: CS%eta_cor)
+
   if (CS%id_frhatu1 > 0) allocate(CS%frhatu1(IsdB:IedB,jsd:jed,nz), source=0.)
   if (CS%id_frhatv1 > 0) allocate(CS%frhatv1(isd:ied,JsdB:JedB,nz), source=0.)
 
   if (.NOT.query_initialized(CS%ubtav,"ubtav",restart_CS) .or. &
       .NOT.query_initialized(CS%vbtav,"vbtav",restart_CS)) then
-    !$omp target update to(CS, h)
+    !$omp target update to(h)
     call btcalc(h, G, GV, CS, may_use_default=.true.)
     CS%ubtav(:,:) = 0.0 ; CS%vbtav(:,:) = 0.0
     do k=1,nz ; do j=js,je ; do I=is-1,ie
