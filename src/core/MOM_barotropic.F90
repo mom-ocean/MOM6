@@ -2555,12 +2555,13 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     endif
 
     ! Store the previous velocities for time-filtered transports and OBCs.
-    do j=jsv,jev ; do I=isv-2,iev+1
+    do concurrent (j=jsv:jev, I=isv-2:iev+1)
       ubt_prev(I,j) = ubt(I,j)
-    enddo ; enddo
-    do J=jsv-2,jev+1 ; do i=isv,iev
+    enddo
+
+    do concurrent (J=jsv-2:jev+1, i=isv:iev)
       vbt_prev(i,J) = vbt(i,J)
-    enddo ; enddo
+    enddo
 
     if (integral_BT_cont) then
       do concurrent (j=jsv-1:jev+1, I=isv-2:iev+1)
