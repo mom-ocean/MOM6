@@ -160,9 +160,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
       "MOM_continuity_PPM: Either both visc_rem_u and visc_rem_v or neither"// &
       " one must be present in call to continuity_PPM.")
 
-  ! update device visc_rem_u for zonal_mass_flux
-  !$omp target update to(visc_rem_u, u, visc_rem_v, v)
-  ! problems with hin
   !$omp target enter data &
   !$omp   map(to: G, G%dy_Cu, G%IareaT, G%IdxT, G%areaT, G%dxT, G%mask2dCu, G%dxCu, G%IareaT, &
   !$omp     G%mask2dT, G%dx_Cv, G%dyCv, G%dyT, G%IdyT, G%mask2dCv, GV, u, v, h, CS, US, OBC, pbv, &
@@ -209,13 +206,6 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
                          LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hmin=h_min)
   endif
-
-  !$omp target update from(uh, u_cor, du_cor, vh, v_cor, dv_cor)
-  !$omp target update from(BT_cont%FA_u_W0, BT_cont%FA_u_WW, BT_cont%FA_u_E0, BT_cont%FA_u_EE, &
-  !$omp       BT_cont%uBT_WW, BT_cont%uBT_EE, BT_cont%h_u)
-  !$omp target update from(BT_cont%FA_v_S0, BT_cont%FA_v_SS, BT_cont%FA_v_N0, BT_cont%FA_v_NN, &
-  !$omp       BT_cont%vBT_SS, BT_cont%vBT_NN, BT_cont%h_v)
-  !$omp target update from(h)
 
   !$omp target exit data &
   !$omp   map(from: uh, h, vh, u_cor, v_cor, du_cor, dv_cor, BT_cont%FA_u_E0, BT_cont%FA_u_W0, &
