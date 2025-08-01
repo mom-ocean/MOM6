@@ -627,8 +627,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                             uh(:,j,k), duhdu(:,k), visc_rem(:,k), &
                             dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k), OBC)
       if (local_specified_BC) then
-        do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-          l_seg = OBC%segnum_u(I,j)
+        do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
+          l_seg = abs(OBC%segnum_u(I,j))
           if (OBC%segment(l_seg)%specified) uh(I,j,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
         endif ; enddo
       endif
@@ -722,7 +722,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       any_simple_OBC = .false.
       if (present(uhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do I=ish-1,ieh
-          l_seg = OBC%segnum_u(I,j)
+          l_seg = abs(OBC%segnum_u(I,j))
 
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           simple_OBC_pt(I) = .false.
@@ -743,7 +743,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         if (present(u_cor)) then ; do k=1,nz
           do I=ish-1,ieh ; u_cor(I,j,k) = u(I,j,k) + du(I) * visc_rem(I,k) ; enddo
           if (any_simple_OBC) then ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
-            u_cor(I,j,k) = OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+            u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
           endif ; enddo ; endif
         enddo ; endif ! u-corrected
 
@@ -763,10 +763,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           enddo
           ! NOTE: simple_OBC_pt(I) should prevent access to segment OBC_NONE
           do k=1,nz ; do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
-            if ((abs(OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)) > 0.0) .and. &
-                (OBC%segment(OBC%segnum_u(I,j))%specified)) &
-              FAuI(I) = FAuI(I) + OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k) / &
-                                  OBC%segment(OBC%segnum_u(I,j))%normal_vel(I,j,k)
+            l_seg = abs(OBC%segnum_u(I,j))
+            if ((abs(OBC%segment(l_seg)%normal_vel(I,j,k)) > 0.0) .and. (OBC%segment(l_seg)%specified)) &
+              FAuI(I) = FAuI(I) + OBC%segment(l_seg)%normal_trans(I,j,k) / OBC%segment(l_seg)%normal_vel(I,j,k)
           endif ; enddo ; enddo
           do I=ish-1,ieh ; if (simple_OBC_pt(I)) then
             BT_cont%FA_u_W0(I,j) = FAuI(I) ; BT_cont%FA_u_E0(I,j) = FAuI(I)
@@ -847,7 +846,7 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   real :: duhdu(SZIB_(G))   ! Partial derivative of uh with u [H L ~> m2 or kg m-1].
   logical, dimension(SZIB_(G)) :: do_I
   real :: ones(SZIB_(G))    ! An array of 1's [nondim]
-  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  integer :: i, j, k, ish, ieh, jsh, jeh, nz, l_seg
   logical :: local_specified_BC, OBC_in_row
 
   call cpu_clock_begin(id_clock_correct)
@@ -870,15 +869,16 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
   do j=jsh,jeh
     ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
     OBC_in_row = .false.
-    if (local_specified_BC) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-      if (OBC%segment(OBC%segnum_u(I,j))%specified) OBC_in_row = .true.
+    if (local_specified_BC) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
+      if (OBC%segment(abs(OBC%segnum_u(I,j)))%specified) OBC_in_row = .true.
     endif ; enddo ; endif
     do k=1,nz
       ! This sets uh and duhdu.
       call zonal_flux_layer(u(:,j,k), h_in(:,j,k), h_W(:,j,k), h_E(:,j,k), uh, duhdu, ones, &
                             dt, G, US, j, ish, ieh, do_I, CS%vol_CFL, por_face_areaU(:,j,k), OBC)
-      if (OBC_in_row) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-        if (OBC%segment(OBC%segnum_u(I,j))%specified) uh(I) = OBC%segment(OBC%segnum_u(I,j))%normal_trans(I,j,k)
+      if (OBC_in_row) then ; do I=ish-1,ieh ; if (OBC%segnum_u(I,j) /= 0) then
+        l_seg = abs(OBC%segnum_u(I,j))
+        if (OBC%segment(l_seg)%specified) uh(I) = OBC%segment(l_seg)%normal_trans(I,j,k)
       endif ; enddo ; endif
 
       ! Accumulate the barotropic transport.
@@ -956,13 +956,12 @@ subroutine zonal_flux_layer(u, h, h_W, h_E, uh, duhdu, visc_rem, dt, G, US, j, &
   endif ; enddo
 
   if (local_open_BC) then
-    do I=ish-1,ieh ; if (do_I(I)) then ; if (OBC%segnum_u(I,j) /= OBC_NONE) then
-      l_seg = OBC%segnum_u(I,j)
-      if (OBC%segment(l_seg)%open) then
-        if (OBC%segment(l_seg)%direction == OBC_DIRECTION_E) then
+    do I=ish-1,ieh ; if (do_I(I)) then ; if (OBC%segnum_u(I,j) /= 0) then
+      if (OBC%segment(abs(OBC%segnum_u(I,j)))%open) then
+        if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
           uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * h(i)
           duhdu(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * h(i) * visc_rem(I)
-        else
+        else !  OBC_DIRECTION_W
           uh(I) = (G%dy_Cu(I,j) * por_face_areaU(I)) * u(I) * h(i+1)
           duhdu(I) = (G%dy_Cu(I,j)* por_face_areaU(I)) * h(i+1) * visc_rem(I)
         endif
@@ -1477,6 +1476,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   logical :: use_visc_rem, set_BT_cont
   logical :: local_specified_BC, local_Flather_OBC, local_open_BC, any_simple_OBC  ! OBC-related logicals
   logical :: simple_OBC_pt(SZI_(G))  ! Indicates points in a row with specified transport OBCs
+  type(OBC_segment_type), pointer :: segment => NULL()
 
   call cpu_clock_begin(id_clock_correct)
 
@@ -1520,8 +1520,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                             vh(:,J,k), dvhdv(:,k), visc_rem(:,k), &
                             dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
       if (local_specified_BC) then
-        do i=ish,ieh ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
-          l_seg = OBC%segnum_v(i,J)
+        do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
+          l_seg = abs(OBC%segnum_v(i,J))
           if (OBC%segment(l_seg)%specified) vh(i,J,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
         endif ; enddo
       endif
@@ -1612,11 +1612,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       any_simple_OBC = .false.
       if (present(vhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then ; do i=ish,ieh
-          l_seg = OBC%segnum_v(i,J)
+          l_seg = abs(OBC%segnum_v(i,J))
 
           ! Avoid reconciling barotropic/baroclinic transports if transport is specified
           simple_OBC_pt(i) = .false.
-          if (l_seg /= OBC_NONE) simple_OBC_pt(i) = OBC%segment(l_seg)%specified
+          if (l_seg /= 0) simple_OBC_pt(i) = OBC%segment(l_seg)%specified
           do_I(i) = .not.simple_OBC_pt(i)
           any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(i)
         enddo ; else ; do i=ish,ieh
@@ -1633,7 +1633,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         if (present(v_cor)) then ; do k=1,nz
           do i=ish,ieh ; v_cor(i,J,k) = v(i,J,k) + dv(i) * visc_rem(i,k) ; enddo
           if (any_simple_OBC) then ; do i=ish,ieh ; if (simple_OBC_pt(i)) then
-            v_cor(i,J,k) = OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
+            v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
           endif ; enddo ; endif
         enddo ; endif ! v-corrected
 
@@ -1653,10 +1653,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
           enddo
           ! NOTE: simple_OBC_pt(i) should prevent access to segment OBC_NONE
           do k=1,nz ; do i=ish,ieh ; if (simple_OBC_pt(i)) then
-            if ((abs(OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)) > 0.0) .and. &
-                (OBC%segment(OBC%segnum_v(i,J))%specified)) &
-              FAvi(i) = FAvi(i) + OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k) / &
-                                  OBC%segment(OBC%segnum_v(i,J))%normal_vel(i,J,k)
+            segment => OBC%segment(abs(OBC%segnum_v(i,J)))
+            if ((abs(segment%normal_vel(i,J,k)) > 0.0) .and. (segment%specified)) &
+              FAvi(i) = FAvi(i) + segment%normal_trans(i,J,k) / segment%normal_vel(i,J,k)
           endif ; enddo ; enddo
           do i=ish,ieh ; if (simple_OBC_pt(i)) then
             BT_cont%FA_v_S0(i,J) = FAvi(i) ; BT_cont%FA_v_N0(i,J) = FAvi(i)
@@ -1737,7 +1736,7 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   real ::  dvhdv(SZI_(G))  ! Partial derivative of vh with v [H L ~> m2 or kg m-1].
   logical, dimension(SZI_(G)) :: do_I
   real :: ones(SZI_(G))    ! An array of 1's [nondim]
-  integer :: i, j, k, ish, ieh, jsh, jeh, nz
+  integer :: i, j, k, ish, ieh, jsh, jeh, nz, l_seg
   logical :: local_specified_BC, OBC_in_row
 
   call cpu_clock_begin(id_clock_correct)
@@ -1760,15 +1759,16 @@ subroutine meridional_BT_mass_flux(v, h_in, h_S, h_N, vhbt, dt, G, GV, US, CS, O
   do J=jsh-1,jeh
     ! Determining whether there are any OBC points outside of the k-loop should be more efficient.
     OBC_in_row = .false.
-    if (local_specified_BC) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
-      if (OBC%segment(OBC%segnum_v(i,J))%specified) OBC_in_row = .true.
+    if (local_specified_BC) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
+      if (OBC%segment(abs(OBC%segnum_v(i,J)))%specified) OBC_in_row = .true.
     endif ; enddo ; endif
     do k=1,nz
       ! This sets vh and dvhdv.
       call merid_flux_layer(v(:,J,k), h_in(:,:,k), h_S(:,:,k), h_N(:,:,k), vh, dvhdv, ones, &
                             dt, G, US, J, ish, ieh, do_I, CS%vol_CFL, por_face_areaV(:,:,k), OBC)
-      if (OBC_in_row) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= OBC_NONE) then
-        if (OBC%segment(OBC%segnum_v(i,J))%specified) vh(i) = OBC%segment(OBC%segnum_v(i,J))%normal_trans(i,J,k)
+      if (OBC_in_row) then ; do i=ish,ieh ; if (OBC%segnum_v(i,J) /= 0) then
+        l_seg = abs(OBC%segnum_v(i,J))
+        if (OBC%segment(l_seg)%specified) vh(i) = OBC%segment(l_seg)%normal_trans(i,J,k)
       endif ; enddo ; endif
 
       ! Accumulate the barotropic transport.
@@ -1820,7 +1820,6 @@ subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, US, J, &
                  ! with the same units as h, i.e. [H ~> m or kg m-2].
   real :: h_marg ! The marginal thickness of a flux [H ~> m or kg m-2].
   integer :: i
-  integer :: l_seg
   logical :: local_open_BC
 
   local_open_BC = .false.
@@ -1854,11 +1853,9 @@ subroutine merid_flux_layer(v, h, h_S, h_N, vh, dvhdv, visc_rem, dt, G, US, J, &
 
   if (local_open_BC) then
     do i=ish,ieh ; if (do_I(i)) then
-      l_seg = OBC%segnum_v(i,J)
-
-      if (l_seg /= OBC_NONE) then
-        if (OBC%segment(l_seg)%open) then
-          if (OBC%segment(l_seg)%direction == OBC_DIRECTION_N) then
+      if (OBC%segnum_v(i,J) /= 0) then
+        if (OBC%segment(abs(OBC%segnum_v(i,J)))%open) then
+          if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
             vh(i) = (G%dx_Cv(i,J)*por_face_areaV(i,J)) * v(i) * h(i,j)
             dvhdv(i) = (G%dx_Cv(i,J)*por_face_areaV(i,J)) * h(i,j) * visc_rem(i)
           else
@@ -2385,8 +2382,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, LB, h_min, monotonic, simple_
       do n=1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (.not. segment%on_pe) cycle
-        if (segment%direction == OBC_DIRECTION_E .or. &
-            segment%direction == OBC_DIRECTION_W) then
+        if (segment%is_E_or_W) then
           I=segment%HI%IsdB
           do j=segment%HI%jsd,segment%HI%jed
             slp(i+1,j) = 0.0
@@ -2521,8 +2517,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, LB, h_min, monotonic, simple_
       do n=1, OBC%number_of_segments
         segment => OBC%segment(n)
         if (.not. segment%on_pe) cycle
-        if (segment%direction == OBC_DIRECTION_S .or. &
-            segment%direction == OBC_DIRECTION_N) then
+        if (segment%is_N_or_S) then
           J=segment%HI%JsdB
           do i=segment%HI%isd,segment%HI%ied
             slp(i,j+1) = 0.0

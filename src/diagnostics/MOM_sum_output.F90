@@ -115,6 +115,7 @@ type, public :: sum_output_CS ; private
                                 !! including ENERGYSAVEDAYS [s].
 
   logical :: date_stamped_output !< If true, use dates (not times) in messages to stdout.
+  logical :: ISO_date_stamped_output !< If true, use ISO formatted dates in messages to stdout.
   type(time_type) :: Start_time !< The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
   integer, pointer :: ntrunc => NULL() !< The number of times the velocity has been
@@ -238,6 +239,9 @@ subroutine MOM_sum_output_init(G, GV, US, param_file, directory, ntrnc, &
   call get_param(param_file, mdl, "DATE_STAMPED_STDOUT", CS%date_stamped_output, &
                  "If true, use dates (not times) in messages to stdout", &
                  default=.true.)
+  call get_param(param_file, mdl, "ISO_DATE_STAMPED_STDOUT", CS%ISO_date_stamped_output, &
+                 "If true, use ISO formatted dates in messages to stdout", &
+                 default=.false.)
   ! Note that the units of CS%Timeunit are the MKS units of [s].
   call get_param(param_file, mdl, "TIMEUNIT", CS%Timeunit, &
                  "The time unit in seconds a number of input fields", &
@@ -419,8 +423,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   real    :: reday  ! Time in units given by CS%Timeunit, but often [days]
   character(len=240) :: energypath_nc
   character(len=200) :: mesg
-  character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
-  logical :: date_stamped
+  character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str, ISO_date_str
+  logical :: date_stamped, ISO_date_stamped
   type(time_type) :: dt_force ! A time_type version of the forcing timestep.
 
   real :: S_min   ! The global minimum unmasked value of the salinity [ppt]
@@ -834,7 +838,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
 
   call get_time(day, start_of_day, num_days)
   date_stamped = (CS%date_stamped_output .and. (get_calendar_type() /= NO_CALENDAR))
-  if (date_stamped) &
+  ISO_date_stamped = (CS%ISO_date_stamped_output .and. (get_calendar_type() /= NO_CALENDAR))
+  if (date_stamped .or. ISO_date_stamped) &
     call get_date(day, iyear, imonth, iday, ihour, iminute, isecond, itick)
   if (abs(CS%timeunit - 86400.0) < 1.0) then
     reday = REAL(num_days)+ (REAL(start_of_day)/86400.0)
@@ -853,12 +858,13 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   elseif (n < 100000000) then ; write(n_str, '(I8)')  n
   else                        ; write(n_str, '(I10)') n ; endif
 
-  if (date_stamped) then
+  date_str = trim(mesg_intro)//trim(day_str)
+  if (date_stamped) &
     write(date_str,'("MOM Date",i7,2("/",i2.2)," ",i2.2,2(":",i2.2))') &
           iyear, imonth, iday, ihour, iminute, isecond
-  else
-    date_str = trim(mesg_intro)//trim(day_str)
-  endif
+  if (ISO_date_stamped) &
+    write(ISO_date_str,'(i7.4,2(i2.2),"T",i2.2,2(i2.2))') &
+          iyear, imonth, iday, ihour, iminute, isecond
 
   if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (CS%use_temperature) then
@@ -872,17 +878,33 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     endif
 
     if (CS%use_temperature) then
-      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
-                               &es11.4,", M ",ES11.5,", S",f8.4,", T",f8.4,&
-                               &", Me ",ES9.2,", Se ",ES9.2,", Te ",ES9.2)') &
-            trim(n_str), trim(day_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
-            -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, salin, US%C_to_degC*temp, mass_anom/mass_tot, &
-            salin_anom, US%C_to_degC*temp_anom
+      if (ISO_date_stamped) then
+        write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
+                                 &es11.4,", M ",ES11.5,", S",f8.4,", T",f8.4,&
+                                 &", Me ",ES9.2,", Se ",ES9.2,", Te ",ES9.2)') &
+              trim(n_str), trim(ISO_date_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
+              -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, salin, US%C_to_degC*temp, mass_anom/mass_tot, &
+              salin_anom, US%C_to_degC*temp_anom
+      else
+        write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
+                                 &es11.4,", M ",ES11.5,", S",f8.4,", T",f8.4,&
+                                 &", Me ",ES9.2,", Se ",ES9.2,", Te ",ES9.2)') &
+              trim(n_str), trim(day_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
+              -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, salin, US%C_to_degC*temp, mass_anom/mass_tot, &
+              salin_anom, US%C_to_degC*temp_anom
+      endif
     else
-      write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
-                                  &ES11.4,", Mass ",ES11.5,", Me ",ES9.2)') &
-            trim(n_str), trim(day_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
-            -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, mass_anom/mass_tot
+      if (ISO_date_stamped) then
+        write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
+                                    &ES11.4,", Mass ",ES11.5,", Me ",ES9.2)') &
+              trim(n_str), trim(ISO_date_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
+              -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, mass_anom/mass_tot
+      else
+        write(CS%fileenergy_ascii,'(A,",",A,",", I6,", En ",ES22.16, ", CFL ", F8.5, ", SL ",&
+                                    &ES11.4,", Mass ",ES11.5,", Me ",ES9.2)') &
+              trim(n_str), trim(day_str), CS%ntrunc, US%L_T_to_m_s**2*En_mass, max_CFL(1), &
+              -US%Z_to_m*Z_0APE(1), US%RZL2_to_kg*mass_tot, mass_anom/mass_tot
+      endif
     endif
 
     if (CS%ntrunc > 0) then

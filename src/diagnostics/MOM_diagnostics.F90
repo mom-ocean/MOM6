@@ -24,7 +24,7 @@ use MOM_EOS,               only : cons_temp_to_pot_temp, abs_saln_to_prac_saln
 use MOM_error_handler,     only : MOM_error, FATAL, WARNING
 use MOM_file_parser,       only : get_param, log_version, param_file_type
 use MOM_grid,              only : ocean_grid_type
-use MOM_interface_heights, only : find_eta
+use MOM_interface_heights, only : find_eta, find_col_mass
 use MOM_spatial_means,     only : global_area_mean, global_layer_mean
 use MOM_spatial_means,     only : global_volume_mean, global_area_integral
 use MOM_tracer_registry,   only : tracer_registry_type, post_tracer_transport_diagnostics
@@ -39,7 +39,6 @@ implicit none ; private
 #include <MOM_memory.h>
 
 public calculate_diagnostic_fields, register_time_deriv, write_static_fields
-public find_eta
 public register_surface_diags, post_surface_dyn_diags, post_surface_thermo_diags
 public register_transport_diags, post_transport_diagnostics
 public MOM_diagnostics_init, MOM_diagnostics_end
@@ -903,7 +902,6 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     btm_pres,&! The pressure at the ocean bottom, or CMIP variable 'pbo'.
               ! This is the column mass multiplied by gravity plus the pressure
               ! at the ocean surface [R L2 T-2 ~> Pa].
-    dpress, & ! Change in hydrostatic pressure across a layer [R L2 T-2 ~> Pa].
     tr_int    ! vertical integral of a tracer times density,
               ! (Rho_0 in a Boussinesq model) [Conc R Z ~> Conc kg m-2].
   real    :: IG_Earth  ! Inverse of gravitational acceleration [T2 Z L-2 ~> s2 m-1].
@@ -943,52 +941,14 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
     call post_data(CS%id_col_ht, z_bot, CS%diag)
   endif
 
-  ! NOTE: int_density_z expects z_top and z_btm values from [ij]sq to [ij]eq+1
   if (CS%id_col_mass > 0 .or. CS%id_pbo > 0) then
-    do j=js,je ; do i=is,ie ; mass(i,j) = 0.0 ; enddo ; enddo
-    if (GV%Boussinesq) then
-      if (associated(tv%eqn_of_state)) then
-        IG_Earth = 1.0 / GV%g_Earth
-        do j=G%jscB,G%jecB+1 ; do i=G%iscB,G%iecB+1
-          z_bot(i,j) = 0.0
-        enddo ; enddo
-        do k=1,nz
-          do j=G%jscB,G%jecB+1 ; do i=G%iscB,G%iecB+1
-            z_top(i,j) = z_bot(i,j)
-            z_bot(i,j) = z_top(i,j) - GV%H_to_Z*h(i,j,k)
-          enddo ; enddo
-          call int_density_dz(tv%T(:,:,k), tv%S(:,:,k), z_top, z_bot, 0.0, GV%Rho0, GV%g_Earth, &
-                              G%HI, tv%eqn_of_state, US, dpress)
-          do j=js,je ; do i=is,ie
-            mass(i,j) = mass(i,j) + dpress(i,j) * IG_Earth
-          enddo ; enddo
-        enddo
-      else
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          mass(i,j) = mass(i,j) + (GV%H_to_Z*GV%Rlay(k))*h(i,j,k)
-        enddo ; enddo ; enddo
-      endif
-    else
-      do k=1,nz ; do j=js,je ; do i=is,ie
-        mass(i,j) = mass(i,j) + GV%H_to_RZ*h(i,j,k)
-      enddo ; enddo ; enddo
-    endif
-    if (CS%id_col_mass > 0) then
-      call post_data(CS%id_col_mass, mass, CS%diag)
-    endif
     if (CS%id_pbo > 0) then
-      do j=js,je ; do i=is,ie ; btm_pres(i,j) = 0.0 ; enddo ; enddo
-      ! 'pbo' is defined as the sea water pressure at the sea floor
-      !     pbo = (mass * g) + p_surf
-      ! where p_surf is the sea water pressure at sea water surface.
-      do j=js,je ; do i=is,ie
-        btm_pres(i,j) = GV%g_Earth * mass(i,j)
-        if (associated(p_surf)) then
-          btm_pres(i,j) = btm_pres(i,j) + p_surf(i,j)
-        endif
-      enddo ; enddo
+      call find_col_mass(h, tv, G, GV, US, mass, btm_pres, p_surf)
       call post_data(CS%id_pbo, btm_pres, CS%diag)
+    else
+      call find_col_mass(h, tv, G, GV, US, mass)
     endif
+    if (CS%id_col_mass > 0) call post_data(CS%id_col_mass, mass, CS%diag)
   endif
 
 end subroutine calculate_vertical_integrals

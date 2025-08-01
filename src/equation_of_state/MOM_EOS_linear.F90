@@ -16,9 +16,10 @@ public avg_spec_vol_linear
 !> The EOS_base implementation of a linear equation of state
 type, extends (EOS_base) :: linear_EOS
 
-  real :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3].
+  real :: Rho_T0_S0 !< The density at T=0, S=0 and p=0 [kg m-3].
   real :: dRho_dT   !< The derivative of density with temperature [kg m-3 degC-1].
   real :: dRho_dS   !< The derivative of density with salinity [kg m-3 ppt-1].
+  real :: dRho_dp   !< The derivative of density with pressure [s2 m-2].
 
 contains
   !> Implementation of the in-situ density as an elemental function [kg m-3]
@@ -62,7 +63,7 @@ real elemental function density_elem_linear(this, T, S, pressure)
   real, intent(in) :: S        !< Salinity [ppt]
   real, intent(in) :: pressure !< Pressure [Pa]
 
-  density_elem_linear = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S
+  density_elem_linear = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S + this%dRho_dp*pressure
 
 end function density_elem_linear
 
@@ -77,7 +78,8 @@ real elemental function density_anomaly_elem_linear(this, T, S, pressure, rho_re
   real, intent(in) :: pressure !< Pressure [Pa]
   real, intent(in) :: rho_ref  !< A reference density [kg m-3]
 
-  density_anomaly_elem_linear = (this%Rho_T0_S0 - rho_ref) + (this%dRho_dT*T + this%dRho_dS*S)
+  density_anomaly_elem_linear = &
+      (this%Rho_T0_S0 - rho_ref) + ((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure)
 
 end function density_anomaly_elem_linear
 
@@ -91,7 +93,8 @@ real elemental function spec_vol_elem_linear(this, T, S, pressure)
   real,              intent(in) :: S        !< Salinity [ppt].
   real,              intent(in) :: pressure !< Pressure [Pa].
 
-  spec_vol_elem_linear = 1.0 / ( this%Rho_T0_S0 + (this%dRho_dT*T + this%dRho_dS*S))
+  spec_vol_elem_linear = &
+      1.0 / ( this%Rho_T0_S0 + ((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure) )
 
 end function spec_vol_elem_linear
 
@@ -106,15 +109,16 @@ real elemental function spec_vol_anomaly_elem_linear(this, T, S, pressure, spv_r
   real,              intent(in) :: pressure !< Pressure [Pa].
   real,              intent(in) :: spv_ref  !< A reference specific volume [m3 kg-1].
 
-  spec_vol_anomaly_elem_linear = ((1.0 - this%Rho_T0_S0*spv_ref) - &
-                                   spv_ref*(this%dRho_dT*T + this%dRho_dS*S)) / &
-                                 ( this%Rho_T0_S0 + (this%dRho_dT*T + this%dRho_dS*S))
+  spec_vol_anomaly_elem_linear = &
+      ((1.0 - this%Rho_T0_S0*spv_ref) - &
+        spv_ref*((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure)) / &
+      ( this%Rho_T0_S0 + ((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure) )
 
 end function spec_vol_anomaly_elem_linear
 
 !> This subroutine calculates the partial derivatives of density
 !! with potential temperature and salinity.
-elemental subroutine calculate_density_derivs_elem_linear(this,T, S, pressure, dRho_dT, dRho_dS)
+elemental subroutine calculate_density_derivs_elem_linear(this, T, S, pressure, dRho_dT, dRho_dS)
   class(linear_EOS),    intent(in)   :: this     !< This EOS
   real,    intent(in)  :: T        !< Potential temperature relative to the surface [degC].
   real,    intent(in)  :: S        !< Salinity [ppt].
@@ -170,7 +174,7 @@ elemental subroutine calculate_specvol_derivs_elem_linear(this, T, S, pressure, 
   real :: I_rho2  ! The inverse of density squared [m6 kg-2]
 
   ! Sv = 1.0 / (Rho_T0_S0 + dRho_dT*T + dRho_dS*S)
-  I_rho2 = 1.0 / (this%Rho_T0_S0 + (this%dRho_dT*T + this%dRho_dS*S))**2
+  I_rho2 = 1.0 / (this%Rho_T0_S0 + ((this%dRho_dT*T + this%dRho_dS*S) + this%dRho_dp*pressure))**2
   dSV_dT = -this%dRho_dT * I_rho2
   dSV_dS = -this%dRho_dS * I_rho2
 
@@ -189,13 +193,15 @@ elemental subroutine calculate_compress_elem_linear(this, T, S, pressure, rho, d
                                               !! (also the inverse of the square of sound speed)
                                               !! [s2 m-2].
 
-  rho = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S
-  drho_dp = 0.0
+  rho = this%Rho_T0_S0 + this%dRho_dT*T + this%dRho_dS*S + this%dRho_dp*pressure
+  drho_dp = this%dRho_dp
 
 end subroutine calculate_compress_elem_linear
 
-!> Calculates the layer average specific volumes.
-subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, dRho_dT, dRho_dS)
+!> Calculates the layer average specific volumes. The analytical solution is
+!! SpV_avg = 1 / (drho_dp*dp) * ln[(1+eps)/(1-eps)] and the expression here is the first five terms of its
+!! Taylor series with a trunction error of O(eps**10). |eps|<0.02 for real ocean parameters.
+subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp)
   real, dimension(:), intent(in)    :: T         !< Potential temperature [degC]
   real, dimension(:), intent(in)    :: S         !< Salinity [ppt]
   real, dimension(:), intent(in)    :: p_t       !< Pressure at the top of the layer [Pa]
@@ -209,17 +215,24 @@ subroutine avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, start, npts, Rho_T0_S0, d
                                                  !! [kg m-3 degC-1]
   real,               intent(in)    :: dRho_dS   !< The derivative of density with salinity
                                                  !! [kg m-3 ppt-1]
+  real,               intent(in)    :: dRho_dp   !< The derivative of density with pressure
+                                                 !! [s2 m-2]
   ! Local variables
+  real :: eps2        ! The square of a nondimensional ratio [nondim]
+  real :: alpha_p_ave ! The specific volume at pressure mid-point [R-1 ~> m3 kg-1]
+  real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0, C1_9 = 1.0/9.0 ! Rational constants [nondim]
   integer :: j
 
   do j=start,start+npts-1
-    SpV_avg(j) = 1.0 / (Rho_T0_S0 + (dRho_dT*T(j) + dRho_dS*S(j)))
+    alpha_p_ave = &
+      1.0 / (Rho_T0_S0 + ((dRho_dT*T(j) + dRho_dS*S(j)) + dRho_dp*(p_t(j) + 0.5 * dp(j))))
+    eps2 = (0.5 * (dRho_dp * dp(j)) * alpha_p_ave)**2
+    SpV_avg(j) = alpha_p_ave * (1.0 + eps2 * (C1_3 + eps2 * (0.2 + eps2 * (C1_7 + C1_9 * eps2))))
   enddo
 end subroutine avg_spec_vol_linear
 
-!> Return the range of temperatures, salinities and pressures for which the reduced-range equation
-!! of state from Wright (1997) has been fitted to observations.  Care should be taken when applying
-!! this equation of state outside of its fit range.
+!> Return the range of temperatures, salinities and pressures permitted for linear equation of state.
+!! Care should be taken when applying this equation of state outside of its fit range.
 subroutine EoS_fit_range_linear(this, T_min, T_max, S_min, S_max, p_min, p_max)
   class(linear_EOS), intent(in) :: this !< This EOS
   real, optional, intent(out) :: T_min !< The minimum potential temperature over which this EoS is fitted [degC]
@@ -239,26 +252,29 @@ subroutine EoS_fit_range_linear(this, T_min, T_max, S_min, S_max, p_min, p_max)
 end subroutine EoS_fit_range_linear
 
 !> Set coefficients for the linear equation of state
-subroutine set_params_linear(this, Rho_T0_S0, dRho_dT, dRho_dS)
+subroutine set_params_linear(this, Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp)
   class(linear_EOS), intent(inout) :: this !< This EOS
   real, optional,    intent(in)    :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3]
   real, optional,    intent(in)    :: dRho_dT   !< The derivative of density with temperature,
                                                 !! [kg m-3 degC-1]
   real, optional,    intent(in)    :: dRho_dS   !< The derivative of density with salinity,
                                                 !! in [kg m-3 ppt-1]
+  real, optional,    intent(in)    :: dRho_dp   !< The derivative of density with pressure,
+                                                !! in [s2 m-2]
 
   if (present(Rho_T0_S0)) this%Rho_T0_S0 = Rho_T0_S0
   if (present(dRho_dT)) this%dRho_dT = dRho_dT
   if (present(dRho_dS)) this%dRho_dS = dRho_dS
+  if (present(dRho_dp)) this%dRho_dp = dRho_dp
 
 end subroutine set_params_linear
 
 !>   This subroutine calculates analytical and nearly-analytical integrals of
 !! pressure anomalies across layers, which are required for calculating the
 !! finite-volume form pressure accelerations in a Boussinesq model.
-subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
-                 Rho_T0_S0, dRho_dT, dRho_dS, dpa, intz_dpa, intx_dpa, inty_dpa, &
-                 bathyT, SSH, dz_neglect, MassWghtInterp)
+subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
+                        Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp, dpa, intz_dpa, intx_dpa, inty_dpa, &
+                        bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p)
   type(hor_index_type), intent(in)  :: HI        !< The horizontal index type for the arrays.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(in)  :: T         !< Potential temperature relative to the surface
@@ -272,9 +288,9 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   real,                 intent(in)  :: rho_ref   !< A mean density [R ~> kg m-3], that
                                                  !! is subtracted out to reduce the magnitude of
                                                  !! each of the integrals.
-  real,                 intent(in)  :: rho_0_pres !< A density [R ~> kg m-3], used to calculate
-                                                 !! the pressure (as p~=-z*rho_0_pres*G_e) used in
-                                                 !! the equation of state. rho_0_pres is not used.
+  real,                 intent(in)  :: rho_0     !< A density [R ~> kg m-3], used to calculate
+                                                 !! the pressure (as p~=-z*rho_0*G_e) used in
+                                                 !! the equation of state.
   real,                 intent(in)  :: G_e       !< The Earth's gravitational acceleration
                                                  !! [L2 Z-1 T-2 ~> m s-2]
   real,                 intent(in)  :: Rho_T0_S0 !< The density at T=0, S=0 [R ~> kg m-3]
@@ -282,6 +298,8 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
                                                  !! [R C-1 ~> kg m-3 degC-1]
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
                                                  !! in [R S-1 ~> kg m-3 ppt-1]
+  real,                 intent(in)  :: dRho_dp   !< The derivative of density with pressure,
+                                                 !! in [L-2 T2 ~> m-2 s2]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dpa       !< The change in the pressure anomaly across the
                                                  !! layer [R L2 T-2 ~> Pa]
@@ -304,11 +322,16 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   real,       optional, intent(in)  :: dz_neglect !< A miniscule thickness change [Z ~> m].
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                                  !! mass weighting to interpolate T/S in integrals
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
+              optional, intent(in)  :: Z_0p      !< The height at which the pressure is 0 [Z ~> m]
 
   ! Local variables
+  real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed) :: z0pres ! The height at which the pressure is zero [Z ~> m]
   real :: rho_anom      ! The density anomaly from rho_ref [R ~> kg m-3].
   real :: raL, raR      ! rho_anom to the left and right [R ~> kg m-3].
   real :: dz, dzL, dzR  ! Layer thicknesses [Z ~> m].
+  real :: GxRho      ! The gravitational acceleration times mean ocean density [R L2 Z-1 T-2 ~> Pa m-1]
+  real :: p_ave      ! The layer averaged pressure [R L2 T-2 ~> Pa]
   real :: hWght      ! A pressure-thickness below topography [Z ~> m].
   real :: hL, hR     ! Pressure-thicknesses of the columns to the left and right [Z ~> m].
   real :: iDenom     ! The inverse of the denominator in the weights [Z-2 ~> m-2].
@@ -330,6 +353,16 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
   is = HI%isc ; ie = HI%iec
   js = HI%jsc ; je = HI%jec
 
+  GxRho = G_e * rho_0
+
+  if (present(Z_0p)) then
+    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      z0pres(i,j) = Z_0p(i,j)
+    enddo ; enddo
+  else
+    z0pres(:,:) = 0.0
+  endif
+
   do_massWeight = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then
     do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
@@ -338,9 +371,11 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     dz = z_t(i,j) - z_b(i,j)
-    rho_anom = (Rho_T0_S0 - rho_ref) + dRho_dT*T(i,j) + dRho_dS*S(i,j)
-    dpa(i,j) = G_e*rho_anom*dz
-    if (present(intz_dpa)) intz_dpa(i,j) = 0.5*G_e*rho_anom*dz**2
+    p_ave = -GxRho * (0.5 * (z_t(i,j) + z_b(i,j)) - z0pres(i,j))
+    rho_anom = (Rho_T0_S0 - rho_ref) + dRho_dT * T(i,j) + dRho_dS * S(i,j) + dRho_dp * p_ave
+    dpa(i,j) = G_e * rho_anom * dz
+    if (present(intz_dpa)) &
+      intz_dpa(i,j) = 0.5 * G_e * (rho_anom - C1_6 * dRho_dp * (GxRho * dz)) * dz**2
   enddo ; enddo
 
   if (present(intx_dpa)) then ; do j=js,je ; do I=Isq,Ieq
@@ -355,8 +390,12 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
 
     if (hWght <= 0.0) then
       dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i+1,j) - z_b(i+1,j)
-      raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
-      raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j))
+
+      p_ave = -GxRho * (0.5 * (z_t(i,j) + z_b(i,j)) - z0pres(i,j))
+      raL = (Rho_T0_S0 - rho_ref) + ((dRho_dT*T(i,j) + dRho_dS*S(i,j)) + dRho_dp*p_ave)
+
+      p_ave = -GxRho * (0.5 * (z_t(i+1,j) + z_b(i+1,j)) - z0pres(i+1,j))
+      raR = (Rho_T0_S0 - rho_ref) + ((dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j)) + dRho_dp*p_ave)
 
       intx_dpa(i,j) = G_e*C1_6 * ((dzL*(2.0*raL + raR)) + (dzR*(2.0*raR + raL)))
     else
@@ -373,9 +412,11 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
         wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
         dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i+1,j) - z_b(i+1,j)))
+        p_ave = -GxRho * ((wt_L * (0.5 * (z_t(i,j) + z_b(i,j)) - z0pres(i,j))) + &
+                          (wt_R * (0.5 * (z_t(i+1,j) + z_b(i+1,j)) - z0pres(i+1,j))))
         rho_anom = (Rho_T0_S0 - rho_ref) + &
-                   (dRho_dT * ((wtT_L*T(i,j)) + (wtT_R*T(i+1,j))) + &
-                    dRho_dS * ((wtT_L*S(i,j)) + (wtT_R*S(i+1,j))))
+                   ((dRho_dT * ((wtT_L*T(i,j)) + (wtT_R*T(i+1,j))) + &
+                     dRho_dS * ((wtT_L*S(i,j)) + (wtT_R*S(i+1,j)))) + dRho_dp * p_ave)
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Boole's rule to integrate the values.
@@ -396,8 +437,12 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
 
     if (hWght <= 0.0) then
       dzL = z_t(i,j) - z_b(i,j) ; dzR = z_t(i,j+1) - z_b(i,j+1)
-      raL = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j) + dRho_dS*S(i,j))
-      raR = (Rho_T0_S0 - rho_ref) + (dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1))
+
+      p_ave = -GxRho * (0.5 * (z_t(i,j) + z_b(i,j)) - z0pres(i,j))
+      raL = (Rho_T0_S0 - rho_ref) + ((dRho_dT*T(i,j) + dRho_dS*S(i,j)) + dRho_dp*p_ave)
+
+      p_ave = -GxRho * (0.5 * (z_t(i,j+1) + z_b(i,j+1)) - z0pres(i,j+1))
+      raR = (Rho_T0_S0 - rho_ref) + ((dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1)) + dRho_dp*p_ave)
 
       inty_dpa(i,j) = G_e*C1_6 * ((dzL*(2.0*raL + raR)) + (dzR*(2.0*raR + raL)))
     else
@@ -414,9 +459,11 @@ subroutine int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0_pres, G_e, HI, &
         wtT_L = (wt_L*hWt_LL) + (wt_R*hWt_RL) ; wtT_R = (wt_L*hWt_LR) + (wt_R*hWt_RR)
 
         dz = (wt_L*(z_t(i,j) - z_b(i,j))) + (wt_R*(z_t(i,j+1) - z_b(i,j+1)))
+        p_ave = -GxRho * ((wt_L * (0.5 * (z_t(i,j) + z_b(i,j)) - z0pres(i,j))) + &
+                          (wt_R * (0.5 * (z_t(i,j+1) + z_b(i,j+1)) - z0pres(i,j+1))))
         rho_anom = (Rho_T0_S0 - rho_ref) + &
-                   (dRho_dT * ((wtT_L*T(i,j)) + (wtT_R*T(i,j+1))) + &
-                    dRho_dS * ((wtT_L*S(i,j)) + (wtT_R*S(i,j+1))))
+                   ((dRho_dT * ((wtT_L*T(i,j)) + (wtT_R*T(i,j+1))) + &
+                     dRho_dS * ((wtT_L*S(i,j)) + (wtT_R*S(i,j+1)))) + dRho_dp * p_ave)
         intz(m) = G_e*rho_anom*dz
       enddo
       ! Use Boole's rule to integrate the values.
@@ -432,7 +479,7 @@ end subroutine int_density_dz_linear
 !! calculating the finite-volume form pressure accelerations in a non-Boussinesq
 !! model.  Specific volume is assumed to vary linearly between adjacent points.
 subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
-               dRho_dT, dRho_dS, dza, intp_dza, intx_dza, inty_dza, halo_size, &
+               dRho_dT, dRho_dS, dRho_dp, dza, intp_dza, intx_dza, inty_dza, halo_size, &
                bathyP, P_surf, dP_neglect, MassWghtInterp)
   type(hor_index_type), intent(in)  :: HI        !< The ocean's horizontal index type.
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed),  &
@@ -453,6 +500,8 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
                                                  !! [R C-1 ~> kg m-3 degC-1]
   real,                 intent(in)  :: dRho_dS   !< The derivative of density with salinity,
                                                  !! in [R S-1 ~> kg m-3 ppt-1]
+  real,                 intent(in)  :: dRho_dp   !< The derivative of density with pressure,
+                                                 !! in [L-2 T2 ~> m-2 s2]
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), &
                         intent(out) :: dza       !< The change in the geopotential anomaly across
                                                  !! the layer [L2 T-2 ~> m2 s-2]
@@ -480,7 +529,12 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   integer,    optional, intent(in)  :: MassWghtInterp !< A flag indicating whether and how to use
                                                  !! mass weighting to interpolate T/S in integrals
   ! Local variables
-  real :: dRho_TS       ! The density anomaly due to T and S [R ~> kg m-3]
+  real :: dRho          ! The density anomaly due to T, S and p [R ~> kg m-3]
+  real :: lambda        ! The sound speed squared [L2 T-2 ~> m2 s-2]
+  real :: eps, eps2     ! A nondimensional ratio and its square [nondim]
+  real :: rem           ! [L2 T-2 ~> m2 s-2]
+  real :: p_ave         ! The layer averaged pressure [R L2 T-2 ~> Pa]
+  real :: alpha_p_ave   ! The specific volume at p_ave [R-1 ~> m3 kg-1]
   real :: alpha_anom    ! The specific volume anomaly from 1/rho_ref [R-1 ~> m3 kg-1]
   real :: aaL, aaR      ! The specific volume anomaly to the left and right [R-1 ~> m3 kg-1]
   real :: dp, dpL, dpR  ! Layer pressure thicknesses [R L2 T-2 ~> Pa]
@@ -496,6 +550,7 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
   logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
+  real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0, C1_9 = 1.0/9.0  ! Rational constants [nondim]
   real, parameter :: C1_6 = 1.0/6.0, C1_90 = 1.0/90.0  ! Rational constants [nondim].
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
 
@@ -512,13 +567,28 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
     massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
   endif
 
+  lambda = 0.0 ; if (dRho_dp/=0.0) lambda = 1.0 / dRho_dp
   do j=jsh,jeh ; do i=ish,ieh
     dp = p_b(i,j) - p_t(i,j)
-    dRho_TS = dRho_dT*T(i,j) + dRho_dS*S(i,j)
-    ! alpha_anom = 1.0/(Rho_T0_S0  + dRho_TS)) - alpha_ref
-    alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
-    dza(i,j) = alpha_anom*dp
-    if (present(intp_dza)) intp_dza(i,j) = 0.5*alpha_anom*dp**2
+    p_ave = 0.5 * (p_t(i,j) + p_b(i,j))
+
+    drho = (dRho_dT * T(i,j) + dRho_dS * S(i,j)) + dRho_dp * p_ave
+    alpha_p_ave = 1.0 / (Rho_T0_S0 + drho)
+
+    ! A realistic upbound of eps is ~0.02, using dRho_dp ~ (1500 m/s)**(-2), alpha_p_ave ~ 1/(1030 kg/m3)
+    ! and dp ~ 1e8 Pa [~dz=10000m]. And if we use dp ~ 1e6 [~dz=100m], eps ~ 2e-4.
+    ! Analytically dza = 1/dRho_dp * ln[(1+eps)/(1-eps)] - alpha_ref * dp, and the expression here gives the first
+    ! five terms from its Taylor series with a truncation error of O(eps**11), which is beyond double floating
+    ! point precision.
+    eps = 0.5 * (dRho_dp * dp) * alpha_p_ave ; eps2 = eps * eps
+    ! alpha_anom = 1.0/(Rho_T0_S0 + dRho) - alpha_ref
+    alpha_anom = ((1.0 - Rho_T0_S0 * alpha_ref) - drho * alpha_ref) / (Rho_T0_S0 + drho)
+    ! The following expression would be more efficient but I suspect it changes answer.
+    ! alpha_anom = ((1.0 - Rho_T0_S0 * alpha_ref) - drho * alpha_ref) * alpha_p_ave
+    rem = (lambda * eps2) * (C1_3 + eps2 * (0.2 + eps2 * (C1_7 + C1_9 * eps2)))
+    dza(i,j) = alpha_anom * dp + 2.0 * eps * rem
+    if (present(intp_dza)) &
+      intp_dza(i,j) = 0.5 * alpha_anom * dp**2 - dp * ((1.0 - eps) * rem)
   enddo ; enddo
 
   if (present(intx_dza)) then ; do j=HI%jsc,HI%jec ; do I=Isq,Ieq
@@ -536,10 +606,14 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
 
     if (hWght <= 0.0) then
       dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i+1,j) - p_t(i+1,j)
-      dRho_TS = dRho_dT*T(i,j) + dRho_dS*S(i,j)
-      aaL = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
-      dRho_TS = dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j)
-      aaR = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
+
+      p_ave = 0.5 * (p_b(i,j) + p_t(i,j))
+      drho = (dRho_dT*T(i,j) + dRho_dS*S(i,j)) + dRho_dp * p_ave
+      aaL = ((1.0 - Rho_T0_S0*alpha_ref) - drho*alpha_ref) / (Rho_T0_S0 + drho)
+
+      p_ave = 0.5 * (p_b(i+1,j) + p_t(i+1,j))
+      drho = (dRho_dT*T(i+1,j) + dRho_dS*S(i+1,j)) + dRho_dp * p_ave
+      aaR = ((1.0 - Rho_T0_S0*alpha_ref) - drho*alpha_ref) / (Rho_T0_S0 + drho)
 
       intx_dza(i,j) = C1_6 * (2.0*((dpL*aaL) + (dpR*aaR)) + ((dpL*aaR) + (dpR*aaL)))
     else
@@ -558,11 +632,12 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
         dp = (wt_L*(p_b(i,j) - p_t(i,j))) + (wt_R*(p_b(i+1,j) - p_t(i+1,j)))
+        p_ave = 0.5*((wt_L*(p_t(i,j)+p_b(i,j))) + (wt_R*(p_t(i+1,j)+p_b(i+1,j))))
 
-        dRho_TS = dRho_dT*((wtT_L*T(i,j)) + (wtT_R*T(i+1,j))) + &
-                  dRho_dS*((wtT_L*S(i,j)) + (wtT_R*S(i+1,j)))
-        ! alpha_anom = 1.0/(Rho_T0_S0  + dRho_TS)) - alpha_ref
-        alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
+        drho = (dRho_dT*((wtT_L*T(i,j)) + (wtT_R*T(i+1,j))) + &
+                dRho_dS*((wtT_L*S(i,j)) + (wtT_R*S(i+1,j)))) + dRho_dp * p_ave
+        ! alpha_anom = 1.0/(Rho_T0_S0  + drho)) - alpha_ref
+        alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - drho*alpha_ref) / (Rho_T0_S0 + drho)
         intp(m) = alpha_anom*dp
       enddo
       ! Use Boole's rule to integrate the interface height anomaly values in y.
@@ -586,10 +661,14 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
 
     if (hWght <= 0.0) then
       dpL = p_b(i,j) - p_t(i,j) ; dpR = p_b(i,j+1) - p_t(i,j+1)
-      dRho_TS = dRho_dT*T(i,j) + dRho_dS*S(i,j)
-      aaL = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
-      dRho_TS = dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1)
-      aaR = ((1.0 - Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
+
+      p_ave = 0.5 * (p_b(i,j) + p_t(i,j)) + dRho_dp * p_ave
+      drho = (dRho_dT*T(i,j) + dRho_dS*S(i,j)) + dRho_dp * p_ave
+      aaL = ((1.0 - Rho_T0_S0*alpha_ref) - drho*alpha_ref) / (Rho_T0_S0 + drho)
+
+      p_ave = 0.5 * (p_b(i,j+1) + p_t(i,j+1)) + dRho_dp * p_ave
+      drho = (dRho_dT*T(i,j+1) + dRho_dS*S(i,j+1)) + dRho_dp * p_ave
+      aaR = ((1.0 - Rho_T0_S0*alpha_ref) - drho*alpha_ref) / (Rho_T0_S0 + drho)
 
       inty_dza(i,j) = C1_6 * (2.0*((dpL*aaL) + (dpR*aaR)) + ((dpL*aaR) + (dpR*aaL)))
     else
@@ -608,11 +687,12 @@ subroutine int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, Rho_T0_S0, &
         ! T, S, and p are interpolated in the horizontal.  The p interpolation
         ! is linear, but for T and S it may be thickness weighted.
         dp = (wt_L*(p_b(i,j) - p_t(i,j))) + (wt_R*(p_b(i,j+1) - p_t(i,j+1)))
+        p_ave = 0.5*((wt_L*(p_t(i,j)+p_b(i,j))) + (wt_R*(p_t(i,j+1)+p_b(i,j+1))))
 
-        dRho_TS = dRho_dT*((wtT_L*T(i,j)) + (wtT_R*T(i,j+1))) + &
-                  dRho_dS*((wtT_L*S(i,j)) + (wtT_R*S(i,j+1)))
-        ! alpha_anom = 1.0/(Rho_T0_S0  + dRho_TS)) - alpha_ref
-        alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - dRho_TS*alpha_ref) / (Rho_T0_S0 + dRho_TS)
+        drho = (dRho_dT*((wtT_L*T(i,j)) + (wtT_R*T(i,j+1))) + &
+                dRho_dS*((wtT_L*S(i,j)) + (wtT_R*S(i,j+1)))) + dRho_dp * p_ave
+        ! alpha_anom = 1.0/(Rho_T0_S0  + drho)) - alpha_ref
+        alpha_anom = ((1.0-Rho_T0_S0*alpha_ref) - drho*alpha_ref) / (Rho_T0_S0 + drho)
         intp(m) = alpha_anom*dp
       enddo
       ! Use Boole's rule to integrate the interface height anomaly values in y.
@@ -624,7 +704,7 @@ end subroutine int_spec_vol_dp_linear
 
 !> Calculate the in-situ density for 1D arraya inputs and outputs.
 subroutine calculate_density_array_linear(this, T, S, pressure, rho, start, npts, rho_ref)
-  class(linear_EOS),  intent(in) :: this      !< This EOS
+  class(linear_EOS),  intent(in)  :: this     !< This EOS
   real, dimension(:), intent(in)  :: T        !< Potential temperature relative to the surface [degC]
   real, dimension(:), intent(in)  :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)  :: pressure !< Pressure [Pa]

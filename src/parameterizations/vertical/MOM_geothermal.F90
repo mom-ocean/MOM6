@@ -13,7 +13,8 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type, get_thickness_units
-use MOM_EOS,           only : calculate_density, calculate_density_derivs
+use MOM_EOS,           only : calculate_density, calculate_density_derivs, EOS_domain
+use MOM_EOS,           only : calculate_specific_vol_derivs
 
 implicit none ; private
 
@@ -39,7 +40,7 @@ type, public :: geothermal_CS ; private
   integer :: id_internal_heat_heat_tendency = -1  !< ID for diagnostic of heat tendency
   integer :: id_internal_heat_temp_tendency = -1  !< ID for diagnostic of temperature tendency
   integer :: id_internal_heat_h_tendency = -1     !< ID for diagnostic of thickness tendency
-
+  integer :: id_geothermal_buoyancy_flux = -1     !< ID for diagnostic of bottom buoyancy flux
 end type geothermal_CS
 
 contains
@@ -360,7 +361,7 @@ end subroutine geothermal_entraining
 !> Applies geothermal heating to the bottommost layers that occur within GEOTHERMAL_THICKNESS of
 !! the bottom, by simply heating the water in place.  Any heat that can not be applied to the ocean
 !! is returned (WHERE)?
-subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
+subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, BFlx_geothermal, halo)
   type(ocean_grid_type),                     intent(inout) :: G  !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV !< The ocean's vertical grid structure.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in)    :: h  !< Layer thicknesses [H ~> m or kg m-2]
@@ -369,12 +370,19 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
   real,                                      intent(in)    :: dt !< Time increment [T ~> s].
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
   type(geothermal_CS),                       intent(in)    :: CS !< Geothermal heating control struct
+  real, dimension(SZI_(G), SZJ_(G)),         intent(out)   :: BFlx_geothermal !< Geothermal Buoyancy Flux [m2 s-3]
   integer,                         optional, intent(in)    :: halo !< Halo width over which to work
+
 
   ! Local variables
   real, dimension(SZI_(G)) :: &
     heat_rem,  & ! remaining heat [H C ~> m degC or kg degC m-2]
-    h_geo_rem    ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
+    h_geo_rem, & ! remaining thickness to apply geothermal heating [H ~> m or kg m-2]
+    bottom_pressure, & ! Hydrostatic pressure in bottom layer [R L2 T-2 ~> Pa]
+    dRhodT, &    ! Partial derivative of density with temperature [R C-1 ~> kg m-3 degC-1]
+    dRhodS, &    ! Partial derivative of density with salinity [R S-1 ~> kg m-3 ppt-1]
+    dSpVdT, &    ! Partial derivative of specific volume with temperature [R-1 C-1 ~> m3 kg-1 degC-1]
+    dSpVdS       ! Partial derivative of specific volume with salinity [R-1 S-1 ~> m3 kg-1 ppt-1]
 
   real :: Angstrom, H_neglect  ! small thicknesses [H ~> m or kg m-2]
   real :: heat_here     ! heating applied to the present layer [C H ~> degC m or degC kg m-2]
@@ -386,8 +394,13 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
     dTdt_diag           ! Diagnostic of temperature tendency [C T-1 ~> degC s-1] which might be
                         ! converted into a layer-integrated heat tendency [Q R Z T-1 ~> W m-2]
   real :: Idt           ! inverse of the timestep [T-1 ~> s-1]
+  real :: H_to_Pres     ! A conversion factor from thicknesses to pressure [R L2 T-2 H-1 ~> Pa m-1 or Pa m2 kg-1]
+  real :: I_Cp          ! 1.0 / C_p [C Q-1 ~> kg degC J-1]
+  real :: I_Rho0Squared ! 1.0 / rho_0^2 (Boussinesq only) [ R-2 ~> kg2 m-6]
   logical :: do_any     ! True if there is more to be done on the current j-row.
   logical :: calc_diags ! True if diagnostic tendencies are needed.
+  logical :: nonBous    ! If true, do not make the Boussinesq approximation.
+  integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, isj, iej
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -399,10 +412,15 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
          "Module must be initialized before it is used.")
   if (.not.CS%apply_geothermal) return
 
+  nonBous =  .not.(GV%Boussinesq .or. GV%semi_Boussinesq)
   Irho_cp   = 1.0 / (GV%H_to_RZ * tv%C_p)
   Angstrom  = GV%Angstrom_H
   H_neglect = GV%H_subroundoff
   Idt       = 1.0 / dt
+  H_to_pres = GV%H_to_RZ * GV%g_Earth
+  I_Cp = 1. /tv%C_p
+  if (.not.nonBous) I_Rho0squared = 1. / (GV%Rho0**2)
+  EOSdom(:) = EOS_domain(G%HI)
 
   if (.not.associated(tv%T)) call MOM_error(FATAL, "MOM geothermal_in_place: "//&
       "Geothermal heating can only be applied if T & S are state variables.")
@@ -413,11 +431,37 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
 
   ! Conditionals for tracking diagnostic depdendencies
   calc_diags = (CS%id_internal_heat_heat_tendency > 0) .or. (CS%id_internal_heat_temp_tendency > 0)
+  BFlx_geothermal(:,:) = 0.0
 
   if (calc_diags) dTdt_diag(:,:,:) = 0.0
 
   !$OMP parallel do default(shared) private(heat_rem,do_any,h_geo_rem,isj,iej,heat_here,dTemp)
   do j=js,je
+    bottom_pressure(:) = 0.0
+    do k=1,nz ; do i=is,ie
+      bottom_pressure(i) = bottom_pressure(i) + H_to_pres * h(i,j,k)
+    enddo; enddo
+    if (nonBous) then
+      dSpVdT(:) = 0.0
+      dSpVdS(:) = 0.0
+      call calculate_specific_vol_derivs(tv%T(:,j,nz), tv%S(:,j,nz), bottom_pressure, dSpVdT, dSpVdS, &
+                                         tv%eqn_of_state, EOSdom)
+      do i=is,ie
+        BFlx_geothermal(i,j) = ( (GV%g_Earth_Z_T2 * dSpVdT(i)) * (CS%geo_heat(i,j)*I_Cp) ) * G%mask2dT(i,j)
+      enddo
+    else
+      dRhodT(:) = 0.0
+      dRhodS(:) = 0.0
+      call calculate_density_derivs(tv%T(:,j,nz), tv%S(:,j,nz), bottom_pressure, dRhodT, dRhodS, &
+                                    tv%eqn_of_state, EOSdom)
+      do i=is,ie
+        BFlx_geothermal(i,j) = - ( (GV%g_Earth_Z_T2*I_Rho0squared) * ((I_Cp*dRhodT(i))*CS%geo_heat(i,j)) ) &
+                                 * G%mask2dT(i,j)
+      enddo
+    endif
+
+
+
     ! Only work on columns that are being heated, and heat the near-bottom water.
 
     ! If there is not enough mass in the ocean, pass some of the heat up
@@ -480,7 +524,9 @@ subroutine geothermal_in_place(h, tv, dt, G, GV, US, CS, halo)
     enddo ; enddo ; enddo
     call post_data(CS%id_internal_heat_heat_tendency, dTdt_diag, CS%diag, alt_h=h)
   endif
-
+  if (CS%id_geothermal_buoyancy_flux > 0) then
+    call post_data(CS%id_geothermal_buoyancy_flux, BFlx_geothermal, CS%diag)
+  endif
 !  do j=js,je ; do i=is,ie
 !    resid(i,j) = tv%internal_heat(i,j) - resid(i,j) - GV%H_to_RZ * &
 !           (G%mask2dT(i,j) * (CS%geo_heat(i,j) * (dt*Irho_cp)))
@@ -571,6 +617,10 @@ subroutine geothermal_init(Time, G, GV, US, param_file, diag, CS, useALEalgorith
         cmor_long_name='Upward geothermal heat flux at sea floor', &
         x_cell_method='mean', y_cell_method='mean', area_cell_method='mean')
   if (id > 0) call post_data(id, CS%geo_heat, diag, .true.)
+
+  CS%id_geothermal_buoyancy_flux = register_diag_field('ocean_model', &
+        'geo_bflx', diag%axesT1, Time, 'Geothermal buoyancy flux into ocean', &
+        'm2 s-3', conversion=US%Z_to_m**2*US%s_to_T**3)
 
   ! Diagnostic for tendencies due to internal heat (in 3d)
   CS%id_internal_heat_heat_tendency = register_diag_field('ocean_model', &

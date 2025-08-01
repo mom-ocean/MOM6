@@ -120,7 +120,6 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
   real, dimension(SZI_(G),SZJ_(G)), &
                  optional, intent(in)    :: p_surf !< The pressure at the ocean surface [R L2 T-2 ~> Pa].
   integer,       optional, intent(in)    :: halo !< Halo width over which to calculate frazil
-
   ! Local variables
   real, dimension(SZI_(G)) :: &
     fraz_col, & ! The accumulated heat requirement due to frazil [Q R Z ~> J m-2].
@@ -223,6 +222,9 @@ subroutine make_frazil(h, tv, G, GV, US, CS, p_surf, halo)
       tv%frazil(i,j) = tv%frazil(i,j) + fraz_col(i)
     enddo
   enddo
+
+  tv%frazil_was_reset = .false.
+
   call cpu_clock_end(id_clock_frazil)
 
 end subroutine make_frazil

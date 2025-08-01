@@ -7,7 +7,8 @@ use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
-use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_segment_type
+use MOM_open_boundary,  only : ocean_OBC_type, OBC_segment_type, rotate_OBC_segment_direction
+use MOM_open_boundary,  only : OBC_DIRECTION_E, OBC_DIRECTION_W
 use MOM_time_manager,   only : time_type, time_type_to_real
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -32,6 +33,8 @@ subroutine supercritical_set_OBC_data(OBC, G, GV, US, param_file)
   ! Local variables
   character(len=40)  :: mdl = "supercritical_set_OBC_data" ! This subroutine's name.
   real :: zonal_flow ! Inflow speed [L T-1 ~> m s-1]
+  integer :: unrot_dir ! The unrotated direction of the segment
+  integer :: turns    ! Number of index quarter turns
   integer :: i, j, k, l
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   type(OBC_segment_type), pointer :: segment => NULL() ! pointer to segment type list
@@ -43,13 +46,18 @@ subroutine supercritical_set_OBC_data(OBC, G, GV, US, param_file)
                  "Constant zonal flow imposed at upstream open boundary.", &
                  units="m/s", default=8.57, scale=US%m_s_to_L_T)
 
+  turns = modulo(G%HI%turns, 4)
+
   do l=1, OBC%number_of_segments
     segment => OBC%segment(l)
     if (.not. segment%on_pe) cycle
     if (segment%gradient) cycle
     if (segment%oblique .and. .not. segment%nudged .and. .not. segment%Flather) cycle
 
-    if (segment%is_E_or_W) then
+   unrot_dir = segment%direction
+   if (turns /= 0) unrot_dir = rotate_OBC_segment_direction(segment%direction, -turns)
+
+    if ((unrot_dir == OBC_DIRECTION_E) .or. (unrot_dir == OBC_DIRECTION_W)) then
       jsd = segment%HI%jsd ; jed = segment%HI%jed
       IsdB = segment%HI%IsdB ; IedB = segment%HI%IedB
       do k=1,GV%ke

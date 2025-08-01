@@ -77,7 +77,7 @@ AC_SRCDIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))../ac
 -include config.mk
 
 # Set the FMS library
-FMS_COMMIT ?= 2023.03
+FMS_COMMIT ?= 2025.02.01
 FMS_URL ?= https://github.com/NOAA-GFDL/FMS.git
 export FMS_COMMIT
 export FMS_URL
@@ -213,10 +213,8 @@ endif
 
 ## Rules
 
-.PHONY: all build.regressions build.prof
+.PHONY: all
 all: $(foreach b,$(EXECS),$(BUILD)/$(b))
-build.regressions: $(foreach b,symmetric target,$(BUILD)/$(b)/MOM6)
-build.prof: $(foreach b,opt opt_target,$(BUILD)/$(b)/MOM6)
 
 # Executable
 .PRECIOUS: $(foreach b,$(EXECS),$(BUILD)/$(b))
@@ -230,7 +228,7 @@ LDFLAGS_DEPS = -L$(abspath $(DEPS)/lib)
 PATH_DEPS = PATH="${PATH}:$(abspath $(DEPS)/bin)"
 
 
-# Define the build targets in terms of the traditional DEBUG/REPRO/etc labels
+# Compiler flags
 SYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_DEPS)"
 ASYMMETRIC_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_DEPS)"
 REPRO_FCFLAGS := FCFLAGS="$(FCFLAGS_REPRO) $(FCFLAGS_DEPS)"
@@ -239,9 +237,9 @@ OPENMP_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_DEPS)"
 TARGET_FCFLAGS := FCFLAGS="$(FCFLAGS_DEBUG) $(FCFLAGS_INIT) $(FCFLAGS_DEPS)"
 COV_FCFLAGS := FCFLAGS="$(FCFLAGS_COVERAGE) $(FCFLAGS_DEPS)"
 
+# Linker flags
 MOM_LDFLAGS := LDFLAGS="$(LDFLAGS_DEPS) $(LDFLAGS_USER)"
 COV_LDFLAGS := LDFLAGS="$(LDFLAGS_COVERAGE) $(LDFLAGS_DEPS) $(LDFLAGS_USER)"
-
 
 # Environment variable configuration
 MOM_ENV := $(PATH_FMS)
@@ -271,12 +269,16 @@ $(BUILD)/timing/Makefile: MOM_ACFLAGS += --with-driver=timing_tests
 .NOTPARALLEL:$(foreach e,$(UNIT_EXECS),$(BUILD)/unit/$(e))
 $(BUILD)/unit/test_%: $(BUILD)/unit/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F)
-$(BUILD)/unit/Makefile: $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
+
+$(BUILD)/unit/Makefile: \
+  $(foreach e,$(UNIT_EXECS),../config_src/drivers/unit_tests/$(e).F90)
 
 .NOTPARALLEL:$(foreach e,$(TIMING_EXECS),$(BUILD)/timing/$(e))
 $(BUILD)/timing/time_%: $(BUILD)/timing/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F)
-$(BUILD)/timing/Makefile: $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
+
+$(BUILD)/timing/Makefile: \
+  $(foreach e,$(TIMING_EXECS),../config_src/drivers/timing_tests/$(e).F90)
 
 $(BUILD)/%/MOM6: $(BUILD)/%/Makefile FORCE
 	cd $(@D) && $(TIME) $(MAKE) $(@F)
@@ -294,7 +296,7 @@ $(BUILD)/opt_target/MOM6: $(BUILD)/opt_target FORCE | $(TARGET_CODEBASE)
 $(BUILD)/opt_target: | $(TARGET_CODEBASE)
 	ln -s $(abspath $(TARGET_CODEBASE))/.testing/build/opt $@
 
-FORCE:
+.PHONY: FORCE
 
 
 ## Use autoconf to construct the Makefile for each target
@@ -330,10 +332,12 @@ ALL_EXECS = symmetric asymmetric repro openmp opt opt_target coupled nuopc \
 $(foreach b,$(ALL_EXECS),$(BUILD)/$(b)/):
 	mkdir -p $@
 
+ifdef DO_REGRESSION_TESTS
 # Fetch the regression target codebase
 $(TARGET_CODEBASE):
 	git clone --recursive $(MOM_TARGET_URL) $@
 	cd $@ && git checkout --recurse-submodules $(MOM_TARGET_BRANCH)
+endif
 
 
 ## FMS
@@ -361,6 +365,7 @@ $(DEPS)/m4: ../ac/deps/m4 | $(DEPS)
 
 $(DEPS):
 	mkdir -p $(DEPS)
+
 
 #---
 # Verify that the coupled model drivers can be compiled.  This does not verify
@@ -608,7 +613,6 @@ $(eval $(call STAT_RULE,dim.h,symmetric,,H_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.z,symmetric,,Z_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.q,symmetric,,Q_RESCALE_POWER=11,,1))
 $(eval $(call STAT_RULE,dim.r,symmetric,,R_RESCALE_POWER=11,,1))
-
 $(eval $(call STAT_RULE,cov,cov,true,,,1))
 
 # Generate the half-period input namelist as follows:
@@ -667,33 +671,50 @@ test.summary:
 run.cov.unit: $(foreach t,$(UNIT_EXECS),$(BUILD)/unit/$(t).F90.gcov)
 
 .PHONY: build.unit
+.NOTPARALLEL: build.unit
 build.unit: $(foreach f, $(UNIT_EXECS), $(BUILD)/unit/$(f))
+
 .PHONY: run.unit
 run.unit: $(foreach f, $(UNIT_EXECS), work/unit/$(f).out)
+
 .PHONY: build.timing
+.NOTPARALLEL: build.timing
 build.timing: $(foreach f, $(TIMING_EXECS), $(BUILD)/timing/$(f))
+
 .PHONY: run.timing
 run.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).out)
+
 .PHONY: show.timing
 show.timing: $(foreach f, $(TIMING_EXECS), work/timing/$(f).show)
+
 $(WORK)/timing/%.show:
 	./tools/disp_timing.py $(@:.show=.out)
 
 
-# Invoke the above unit/timing rules for a "target" code
-# Invoke with appropriate macros defines, i.e.
-#   make build.timing_target MOM_TARGET_URL=... MOM_TARGET_BRANCH=... TARGET_CODEBASE=$(BUILD)/target_codebase
-#   make run.timing_target TARGET_CODEBASE=$(BUILD)/target_codebase
+# Invoke the above unit/timing rules for a "target" code, e.g.
+#   make \
+#     MOM_TARGET_URL=... \
+#     MOM_TARGET_BRANCH=... \
+#     TARGET_CODEBASE=$(BUILD)/target_codebase \
+#     build.timing_target
+#   make TARGET_CODEBASE=$(BUILD)/target_codebase run.timing_target
 
-TIMING_TARGET_EXECS ?= $(basename $(notdir $(wildcard $(TARGET_CODEBASE)/config_src/drivers/timing_tests/*.F90) ) )
+TIMING_TARGET_EXECS ?= \
+  $(basename $(notdir $(wildcard $(TARGET_CODEBASE)/config_src/drivers/timing_tests/*.F90)))
 
 .PHONY: build.timing_target
-build.timing_target: $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/$(BUILD)/timing/$(f))
+build.timing_target: \
+  $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/$(BUILD)/timing/$(f))
+
 .PHONY: run.timing_target
-run.timing_target: $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/work/timing/$(f).out)
+run.timing_target: \
+  $(foreach f, $(TIMING_TARGET_EXECS), $(TARGET_CODEBASE)/.testing/work/timing/$(f).out)
+
 .PHONY: compare.timing
-compare.timing: $(foreach f, $(filter $(TIMING_EXECS),$(TIMING_TARGET_EXECS)), work/timing/$(f).compare)
-$(WORK)/timing/%.compare: $(TARGET_CODEBASE)
+compare.timing: \
+  $(foreach f, $(filter $(TIMING_EXECS),$(TIMING_TARGET_EXECS)), work/timing/$(f).compare)
+$(WORK)/timing/%.compare: \
+  $(TARGET_CODEBASE)
 	./tools/disp_timing.py -r $(TARGET_CODEBASE)/.testing/$(@:.compare=.out) $(@:.compare=.out)
 $(TARGET_CODEBASE)/.testing/%: | $(TARGET_CODEBASE)
 	cd $(TARGET_CODEBASE)/.testing && make $*

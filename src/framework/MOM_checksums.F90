@@ -2191,15 +2191,16 @@ end subroutine chksum_v_3d
 ! into account.
 
 !> chksum1d does a checksum of a 1-dimensional array.
-subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
+subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs, logunit)
   real, dimension(:), intent(in) :: array   !< The array to be summed (index starts at 1) [abitrary].
   character(len=*),   intent(in) :: mesg    !< An identifying message.
   integer, optional,  intent(in) :: start_i !< The starting index for the sum (default 1)
   integer, optional,  intent(in) :: end_i   !< The ending index for the sum (default all)
   logical, optional,  intent(in) :: compare_PEs !< If true, compare across PEs instead of summing
                                                 !! and list the root_PE value (default true)
+  integer, optional,  intent(in) :: logunit !< IO unit for checksum logging
 
-  integer :: is, ie, i, bc, sum1, sum_bc
+  integer :: is, ie, i, bc, sum1, sum_bc, ioUnit
   real :: sum  ! The global sum of the array [arbitrary]
   real, allocatable :: sum_here(:) ! The sum on each PE [arbitrary]
   logical :: compare
@@ -2210,6 +2211,7 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
   if (present(start_i)) is = start_i
   if (present(end_i)) ie = end_i
   compare = .true. ; if (present(compare_PEs)) compare = compare_PEs
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   sum = 0.0 ; sum_bc = 0
   do i=is,ie
@@ -2231,17 +2233,17 @@ subroutine chksum1d(array, mesg, start_i, end_i, compare_PEs)
     sum_bc = sum1
   elseif (is_root_pe()) then
     if (sum1 /= nPEs*sum_bc) &
-      write(0, '(A40," bitcounts do not match across PEs: ",I12,1X,I12)') &
+      write(iounit, '(A40," bitcounts do not match across PEs: ",I12,1X,I12)') &
             mesg, sum1, nPEs*sum_bc
     do i=1,nPEs ; if (sum /= sum_here(i)) then
-      write(0, '(A40," PE ",i4," sum mismatches root_PE: ",3(ES22.13,1X))') &
+      write(iounit, '(A40," PE ",i4," sum mismatches root_PE: ",3(ES22.13,1X))') &
             mesg, i, sum_here(i), sum, sum_here(i)-sum
     endif ; enddo
   endif
   deallocate(sum_here)
 
   if (is_root_pe()) &
-    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum_bc
+    write(iounit,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum_bc
 
 end subroutine chksum1d
 
@@ -2249,13 +2251,16 @@ end subroutine chksum1d
 ! into account.
 
 !> chksum2d does a checksum of all data in a 2-d array.
-subroutine chksum2d(array, mesg)
+subroutine chksum2d(array, mesg, logunit)
 
   real, dimension(:,:), intent(in) :: array !< The array to be checksummed [arbitrary]
   character(len=*),     intent(in) :: mesg  !< An identifying message
+  integer,    optional, intent(in) :: logunit !< IO unit for checksum logging
 
-  integer :: xs,xe,ys,ye,i,j,sum1,bc
+  integer :: xs, xe, ys, ye, i, j, sum1, bc, iounit
   real :: sum  ! The global sum of the array [arbitrary]
+
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -2270,20 +2275,23 @@ subroutine chksum2d(array, mesg)
   sum = reproducing_sum(array(:,:))
 
   if (is_root_pe()) &
-    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
-!    write(0,'(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
+    write(iounit,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
+!    write(iounit,'(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
 !      mesg, sum, sum1, sum, sum1
 
 end subroutine chksum2d
 
 !> chksum3d does a checksum of all data in a 2-d array.
-subroutine chksum3d(array, mesg)
+subroutine chksum3d(array, mesg, logunit)
 
   real, dimension(:,:,:), intent(in) :: array !< The array to be checksummed [arbitrary]
   character(len=*),       intent(in) :: mesg  !< An identifying message
+  integer,      optional, intent(in) :: logunit !< IO unit for checksum logging
 
-  integer :: xs,xe,ys,ye,zs,ze,i,j,k, bc,sum1
+  integer :: xs, xe, ys, ye, zs, ze, i, j, k, bc, sum1, iounit
   real :: sum  ! The global sum of the array [arbitrary]
+
+  iounit = error_unit ; if (present(logunit)) iounit = logunit
 
   xs = LBOUND(array,1) ; xe = UBOUND(array,1)
   ys = LBOUND(array,2) ; ye = UBOUND(array,2)
@@ -2299,8 +2307,8 @@ subroutine chksum3d(array, mesg)
   sum = reproducing_sum(array(:,:,:))
 
   if (is_root_pe()) &
-    write(0,'(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
-!    write(0,'(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
+    write(iounit, '(A50,1X,ES25.16,1X,I12)') mesg, sum, sum1
+!    write(iounit, '(A40,1X,Z16.16,1X,Z16.16,1X,ES25.16,1X,I12)') &
 !      mesg, sum, sum1, sum, sum1
 
 end subroutine chksum3d

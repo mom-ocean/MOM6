@@ -306,6 +306,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
   logical :: use_BBL_EOS, do_i(SZIB_(G))
   integer, dimension(2) :: EOSdom ! The computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, m, n, K2, nkmb, nkml
+  integer :: is_OBC, ie_OBC, js_OBC, je_OBC
   type(ocean_OBC_type), pointer :: OBC => NULL()
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -374,22 +375,42 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     mask_u(I,j) = G%mask2dCu(I,j)
   enddo ; enddo
 
-  if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-    if (.not. OBC%segment(n)%on_pe) cycle
+  if (associated(OBC)) then
     ! Use a one-sided projection of bottom depths at OBC points.
-    I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-    if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= je)) then
-      do i = max(is-1,OBC%segment(n)%HI%isd), min(ie+1,OBC%segment(n)%HI%ied)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_N) D_v(i,J) = G%bathyT(i,j) + G%Z_ref
-        if (OBC%segment(n)%direction == OBC_DIRECTION_S) D_v(i,J) = G%bathyT(i,j+1) + G%Z_ref
-      enddo
-    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
-      do j = max(js-1,OBC%segment(n)%HI%jsd), min(je+1,OBC%segment(n)%HI%jed)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_E) D_u(I,j) = G%bathyT(i,j) + G%Z_ref
-        if (OBC%segment(n)%direction == OBC_DIRECTION_W) D_u(I,j) = G%bathyT(i+1,j) + G%Z_ref
-      enddo
+    if (OBC%v_N_OBCs_on_PE) then
+      Js_OBC = max(js-1, OBC%Js_v_N_obc) ; Je_OBC = min(je, OBC%Je_v_N_obc)
+      is_OBC = max(is-1, OBC%is_v_N_obc) ; ie_OBC = min(ie+1, OBC%ie_v_N_obc)
+      !$OMP parallel do default(shared)
+      do J=Js_OBC,Je_OBC ; do i=is_OBC,ie_OBC
+        if (OBC%segnum_v(i,J) > 0) D_v(i,J) = G%bathyT(i,j) + G%Z_ref !  OBC_DIRECTION_N
+      enddo ; enddo
     endif
-  enddo ; endif
+    if (OBC%v_S_OBCs_on_PE) then
+      Js_OBC = max(js-1, OBC%Js_v_S_obc) ; Je_OBC = min(je, OBC%Je_v_S_obc)
+      is_OBC = max(is-1, OBC%is_v_S_obc) ; ie_OBC = min(ie+1, OBC%ie_v_S_obc)
+      !$OMP parallel do default(shared)
+      do J=Js_OBC,Je_OBC ; do i=is_OBC,ie_OBC
+        if (OBC%segnum_v(i,J) < 0) D_v(i,J) = G%bathyT(i,j+1) + G%Z_ref !  OBC_DIRECTION_S
+      enddo ; enddo
+    endif
+    if (OBC%u_E_OBCs_on_PE) then
+      js_OBC = max(js-1, OBC%js_u_E_obc) ; je_OBC = min(je+1, OBC%je_u_E_obc)
+      Is_OBC = max(is-1, OBC%Is_u_E_obc) ; Ie_OBC = min(ie, OBC%Ie_u_E_obc)
+      !$OMP parallel do default(shared)
+      do j=js_OBC,je_OBC ; do I=Is_OBC,Ie_OBC
+        if (OBC%segnum_u(I,j) > 0) D_u(I,j) = G%bathyT(i,j) + G%Z_ref !  OBC_DIRECTION_E
+      enddo ; enddo
+    endif
+    if (OBC%u_W_OBCs_on_PE) then
+      js_OBC = max(js-1, OBC%js_u_W_obc) ; je_OBC = min(je+1, OBC%je_u_W_obc)
+      Is_OBC = max(is-1, OBC%Is_u_W_obc) ; Ie_OBC = min(ie, OBC%Ie_u_W_obc)
+      !$OMP parallel do default(shared)
+      do j=js_OBC,je_OBC ; do I=Is_OBC,Ie_OBC
+        if (OBC%segnum_u(I,j) < 0) D_u(I,j) = G%bathyT(i+1,j) + G%Z_ref !  OBC_DIRECTION_W
+      enddo ; enddo
+    endif
+  endif
+
   if (associated(OBC)) then ; do n=1,OBC%number_of_segments
     ! Now project bottom depths across cell-corner points in the OBCs.  The two
     ! projections have to occur in sequence and can not be combined easily.
@@ -506,8 +527,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
       ! Apply a zero gradient projection of thickness across OBC points.
       if (m==1) then
-        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= OBC_NONE)) then
-          if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+        do I=is,ie ; if (do_i(I) .and. (OBC%segnum_u(I,j) /= 0)) then
+          if (OBC%segnum_u(I,j) > 0) then  ! OBC_DIRECTION_E
             do k=1,nz
               h_at_vel(I,k) = h(i,j,k) ; h_vel(I,k) = h(i,j,k)
               dz_at_vel(I,k) = dz(i,j,k) ; dz_vel(I,k) = dz(i,j,k)
@@ -524,7 +545,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
             if (allocated(tv%SpV_avg)) then ; do k=1,nz
               SpV_vel(I,k) = tv%SpV_avg(i,j,k)
             enddo ; endif
-          elseif (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_W) then
+          elseif (OBC%segnum_u(I,j) < 0) then  ! OBC_DIRECTION_W
             do k=1,nz
               h_at_vel(I,k) = h(i+1,j,k) ; h_vel(I,k) = h(i+1,j,k)
               dz_at_vel(I,k) = dz(i+1,j,k) ; dz_vel(I,k) = dz(i+1,j,k)
@@ -544,8 +565,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           endif
         endif ; enddo
       else
-        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= OBC_NONE)) then
-          if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+        do i=is,ie ; if (do_i(i) .and. (OBC%segnum_v(i,J) /= 0)) then
+          if (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
             do k=1,nz
               h_at_vel(i,k) = h(i,j,k) ; h_vel(i,k) = h(i,j,k)
               dz_at_vel(i,k) = dz(i,j,k) ; dz_vel(i,k) = dz(i,j,k)
@@ -562,7 +583,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
             if (allocated(tv%SpV_avg)) then ; do k=1,nz
               SpV_vel(i,k) = tv%SpV_avg(i,j,k)
             enddo ;  endif
-          elseif (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_S) then
+          elseif (OBC%segnum_v(i,J) < 0) then  ! OBC_DIRECTION_S
             do k=1,nz
               h_at_vel(i,k) = h(i,j+1,k) ; h_vel(i,k) = h(i,j+1,k)
               dz_at_vel(i,k) = dz(i,j+1,k) ; dz_vel(i,k) = dz(i,j+1,k)
@@ -1821,11 +1842,11 @@ function set_v_at_u(v, h, G, GV, i, j, k, mask2dCv, OBC)
   enddo ; enddo
 
   if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-    do j0 = -1,0 ; do i0 = 0,1 ; if ((OBC%segnum_v(i+i0,J+j0) /= OBC_NONE)) then
+    do j0 = -1,0 ; do i0 = 0,1 ; if (OBC%segnum_v(i+i0,J+j0) /= 0) then
       i1 = i+i0 ; J1 = J+j0
-      if (OBC%segment(OBC%segnum_v(i1,j1))%direction == OBC_DIRECTION_N) then
+      if (OBC%segnum_v(i1,j1) > 0) then ! OBC_DIRECTION_N
         hwt(i0,j0) = 2.0 * h(i1,j1,k) * mask2dCv(i1,J1)
-      elseif (OBC%segment(OBC%segnum_v(i1,J1))%direction == OBC_DIRECTION_S) then
+      elseif (OBC%segnum_v(i1,J1) < 0) then !  OBC_DIRECTION_S
         hwt(i0,j0) = 2.0 * h(i1,J1+1,k) * mask2dCv(i1,J1)
       endif
     endif ; enddo ; enddo
@@ -1866,11 +1887,11 @@ function set_u_at_v(u, h, G, GV, i, j, k, mask2dCu, OBC)
   enddo ; enddo
 
   if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
-    do j0 = 0,1 ; do i0 = -1,0 ; if ((OBC%segnum_u(I+i0,j+j0) /= OBC_NONE)) then
+    do j0 = 0,1 ; do i0 = -1,0 ; if ((OBC%segnum_u(I+i0,j+j0) /= 0)) then
       I1 = I+i0 ; j1 = j+j0
-      if (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_E) then
+      if (OBC%segnum_u(I1,j1) > 0) then ! OBC_DIRECTION_E
         hwt(i0,j0) = 2.0 * h(I1,j1,k) * mask2dCu(I1,j1)
-      elseif (OBC%segment(OBC%segnum_u(I1,j1))%direction == OBC_DIRECTION_W) then
+      elseif (OBC%segnum_u(I1,j1) < 0) then ! OBC_DIRECTION_W
         hwt(i0,j0) = 2.0 * h(I1+1,j1,k) * mask2dCu(I1,j1)
       endif
     endif ; enddo ; enddo
@@ -2091,8 +2112,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   enddo ; enddo
 
   if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-    ! Now project bottom depths across cell-corner points in the OBCs.  The two
-    ! projections have to occur in sequence and can not be combined easily.
+    ! Project bottom depths across cell-corner points in the OBCs.
     if (.not. OBC%segment(n)%on_pe) cycle
     ! Use a one-sided projection of bottom depths at OBC points.
     I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
@@ -2101,7 +2121,7 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
         if (OBC%segment(n)%direction == OBC_DIRECTION_N) mask_u(I,j+1) = 0.0
         if (OBC%segment(n)%direction == OBC_DIRECTION_S) mask_u(I,j) = 0.0
       enddo
-    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= je)) then
+    elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= ie)) then
       do J = max(js-1,OBC%segment(n)%HI%JsdB), min(je,OBC%segment(n)%HI%JedB)
         if (OBC%segment(n)%direction == OBC_DIRECTION_E) mask_v(i+1,J) = 0.0
         if (OBC%segment(n)%direction == OBC_DIRECTION_W) mask_v(i,J) = 0.0

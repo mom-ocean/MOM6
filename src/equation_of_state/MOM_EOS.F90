@@ -17,7 +17,7 @@ use MOM_EOS_UNESCO, only : UNESCO_EOS
 use MOM_EOS_Roquet_rho, only : Roquet_rho_EOS
 use MOM_EOS_Roquet_SpV, only : Roquet_SpV_EOS
 use MOM_EOS_TEOS10, only : TEOS10_EOS
-use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct, gsw_sr_from_sp
+use MOM_EOS_TEOS10, only : gsw_sp_from_sr, gsw_pt_from_ct, gsw_sr_from_sp, gsw_ct_from_pt
 use MOM_temperature_convert, only : poTemp_to_consTemp, consTemp_to_poTemp
 use MOM_TFreeze,    only : calculate_TFreeze_linear, calculate_TFreeze_Millero
 use MOM_TFreeze,    only : calculate_TFreeze_teos10, calculate_TFreeze_TEOS_poly
@@ -34,7 +34,7 @@ public EOS_domain
 public EOS_init
 public EOS_manual_init
 public EOS_quadrature
-public EOS_use_linear
+! public EOS_use_linear
 public EOS_fit_range
 public EOS_unit_tests
 public analytic_int_density_dz
@@ -115,11 +115,19 @@ type, public :: EOS_type ; private
   real :: Rho_T0_S0 !< The density at T=0, S=0 [kg m-3]
   real :: dRho_dT   !< The partial derivative of density with temperature [kg m-3 degC-1]
   real :: dRho_dS   !< The partial derivative of density with salinity [kg m-3 ppt-1]
+  real :: dRho_dp   !< The partial derivative of density with pressure [s2 m-2]
 ! The following parameters are use with the linear expression for the freezing
 ! point only.
   real :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
   real :: dTFr_dS   !< The derivative of freezing point with salinity [degC ppt-1]
   real :: dTFr_dp   !< The derivative of freezing point with pressure [degC Pa-1]
+! The following are logicals pertaining to definitions of the thermodynamic state variables
+  logical :: use_conT_absS =.false. !< True if the model internal temperature is the conservative temperature and
+                           !! the salinity is absolute salinity.  These could be separated into two flags,
+                           !! but right now it is controlled by one input parameter and there is no known
+                           !! need to have one True and one False.
+  logical :: TFreeze_S_is_pracS =.true. !< True if the freezing point expression is formulated from practical salinity
+  logical :: TFreeze_T_is_potT = .true. !< True if the freezing point expression yields a potential temperature
 
   logical :: use_Wright_2nd_deriv_bug = .false.  !< If true, use a separate subroutine that
                            !! retains a buggy version of the calculations of the second
@@ -529,27 +537,49 @@ subroutine calculate_TFreeze_scalar(S, pressure, T_fr, EOS, pres_scale, scale_fr
   ! Local variables
   real :: p_scale ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
   real :: S_scale ! A factor to convert salinity to units of ppt [ppt S-1 ~> 1]
+  real :: iS_scale! A factor to convert salinity to units of S [S ppt-1 ~> 1]
+  real :: absS    ! A salinity converted to absolute salinity, only used in specific scenarios [ppt]
+  real :: TFreeze_S ! The salinity for the freezing equation in model units [S ~> PSU or ppt]
 
-  p_scale = 1.0 ; S_scale = 1.0
+  p_scale = 1.0 ; S_scale = 1.0 ; iS_scale = 1.0
   if (present(pres_scale)) p_scale = pres_scale
   if (present(scale_from_EOS)) then ; if (scale_from_EOS) then
     p_scale = EOS%RL2_T2_to_Pa
     S_scale = EOS%S_to_ppt
+    iS_scale = EOS%ppt_to_S
   endif ; endif
+
+  if (EOS%use_conT_absS) then
+    ! Otherwise absS is unneeded and therefore unset
+    absS = S*S_scale
+    if (EOS%TFreeze_S_is_pracS) then
+      TFreeze_S = gsw_sp_from_sr(absS)*iS_scale
+    else
+      TFreeze_S = S
+    endif
+  else
+    TFreeze_S = S
+  endif
 
   select case (EOS%form_of_TFreeze)
     case (TFREEZE_LINEAR)
-      call calculate_TFreeze_linear(S_scale*S, p_scale*pressure, T_fr, EOS%TFr_S0_P0, &
+      call calculate_TFreeze_linear(S_scale*TFreeze_S, p_scale*pressure, T_fr, EOS%TFr_S0_P0, &
                                     EOS%dTFr_dS, EOS%dTFr_dp)
     case (TFREEZE_MILLERO)
-      call calculate_TFreeze_Millero(S_scale*S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_Millero(S_scale*TFreeze_S, p_scale*pressure, T_fr)
     case (TFREEZE_TEOSPOLY)
-      call calculate_TFreeze_TEOS_poly(S_scale*S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_TEOS_poly(S_scale*TFreeze_S, p_scale*pressure, T_fr)
     case (TFREEZE_TEOS10)
-      call calculate_TFreeze_teos10(S_scale*S, p_scale*pressure, T_fr)
+      call calculate_TFreeze_teos10(S_scale*TFreeze_S, p_scale*pressure, T_fr)
     case default
       call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
   end select
+
+  if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
+    ! absS is set only if EOS%use_conT_absS is True
+    ! absS and T_fr have physical units here and don't need converted
+    T_fr = gsw_ct_from_pt(absS,T_fr)
+  endif
 
   if (present(scale_from_EOS)) then ; if (scale_from_EOS) then
     T_fr = EOS%degC_to_C * T_fr
@@ -561,8 +591,8 @@ end subroutine calculate_TFreeze_scalar
 subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_scale)
   real, dimension(:), intent(in)    :: S        !< Salinity [ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure, in [Pa] or [R L2 T-2 ~> Pa] depending on pres_scale
-  real, dimension(:), intent(inout) :: T_fr     !< Freezing point potential temperature referenced
-                                                !! to the surface [degC]
+  real, dimension(:), intent(inout) :: T_fr     !< Freezing point, either potential temperature referenced to the
+                                                !! surface or conservative temperature depending on settings [degC]
   integer,            intent(in)    :: start    !< Starting index within the array
   integer,            intent(in)    :: npts     !< The number of values to calculate
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
@@ -572,21 +602,35 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
   ! Local variables
   real, dimension(size(pressure)) :: pres  ! Pressure converted to [Pa]
   real :: p_scale  ! A factor to convert pressure to units of Pa [Pa T2 R-1 L-2 ~> 1]
+  real, dimension(size(S)) :: absS ! A salinity converted to absolute salinity, only used in specific scenarios [ppt]
+  real, dimension(size(S)) :: TFreeze_S ! The salinity for the freezing equation in model units [S ~> PSU or ppt]
   integer :: j
 
   p_scale = 1.0 ; if (present(pres_scale)) p_scale = pres_scale
 
+  if (EOS%use_conT_absS) then
+    ! Otherwise absS is unneeded and therefore unset
+    absS(:) = S(:)
+    if (EOS%TFreeze_S_is_pracS) then
+      TFreeze_S(:) = gsw_sp_from_sr(absS(:))
+    else
+      TFreeze_S(:) = S(:)
+    endif
+  else
+    TFreeze_S(:) = S(:)
+  endif
+
   if (p_scale == 1.0) then
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
-        call calculate_TFreeze_linear(S, pressure, T_fr, start, npts, &
+        call calculate_TFreeze_linear(TFreeze_S, pressure, T_fr, start, npts, &
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
-        call calculate_TFreeze_Millero(S, pressure, T_fr, start, npts)
+        call calculate_TFreeze_Millero(TFreeze_S, pressure, T_fr, start, npts)
       case (TFREEZE_TEOSPOLY)
-        call calculate_TFreeze_TEOS_poly(S, pressure, T_fr, start, npts)
+        call calculate_TFreeze_TEOS_poly(TFreeze_S, pressure, T_fr, start, npts)
       case (TFREEZE_TEOS10)
-        call calculate_TFreeze_teos10(S, pressure, T_fr, start, npts)
+        call calculate_TFreeze_teos10(TFreeze_S, pressure, T_fr, start, npts)
       case default
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
@@ -594,18 +638,24 @@ subroutine calculate_TFreeze_array(S, pressure, T_fr, start, npts, EOS, pres_sca
     do j=start,start+npts-1 ; pres(j) = p_scale * pressure(j) ; enddo
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
-        call calculate_TFreeze_linear(S, pres, T_fr, start, npts, &
+        call calculate_TFreeze_linear(TFreeze_S, pres, T_fr, start, npts, &
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
-        call calculate_TFreeze_Millero(S, pres, T_fr, start, npts)
+        call calculate_TFreeze_Millero(TFreeze_S, pres, T_fr, start, npts)
       case (TFREEZE_TEOS10)
-        call calculate_TFreeze_teos10(S, pres, T_fr, start, npts)
+        call calculate_TFreeze_teos10(TFreeze_S, pres, T_fr, start, npts)
       case (TFREEZE_TEOSPOLY)
-        call calculate_TFreeze_TEOS_poly(S, pres, T_fr, start, npts)
+        call calculate_TFreeze_TEOS_poly(TFreeze_S, pres, T_fr, start, npts)
       case default
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
   endif
+
+  if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
+    ! absS is set only if EOS%use_conT_absS is True!
+    T_fr(:) = gsw_ct_from_pt(absS(:),T_fr(:))
+  endif
+
 
 end subroutine calculate_TFreeze_array
 
@@ -614,8 +664,9 @@ end subroutine calculate_TFreeze_array
 subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
   real, dimension(:), intent(in)    :: S        !< Salinity [S ~> ppt]
   real, dimension(:), intent(in)    :: pressure !< Pressure [R L2 T-2 ~> Pa]
-  real, dimension(:), intent(inout) :: T_fr     !< Freezing point potential temperature referenced
-                                                !! to the surface [C ~> degC]
+  real, dimension(:), intent(inout) :: T_fr     !< Freezing point, either potential temperature referenced to the
+                                                !! surface or conservative temperature depending on settings
+                                                !! [C ~> degC]
   type(EOS_type),     intent(in)    :: EOS      !< Equation of state structure
   integer, dimension(2), optional, intent(in) :: dom   !< The domain of indices to work on, taking
                                                        !! into account that arrays start at 1.
@@ -623,6 +674,8 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
   ! Local variables
   real, dimension(size(T_fr)) :: pres  ! Pressure converted to [Pa]
   real, dimension(size(T_fr)) :: Sa    ! Salinity converted to [ppt]
+  real, dimension(size(T_fr)) :: absS  ! Salinity converted to absoluate salinity [ppt]
+  real, dimension(size(T_fr)) :: TFreeze_S ! The salinity for the freezing equation in model units [S ~> PSU or ppt]
   integer :: i, is, ie, npts
 
   if (present(dom)) then
@@ -631,24 +684,36 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
     is = 1 ; ie = size(T_Fr) ; npts = 1 + ie - is
   endif
 
+  if (EOS%use_conT_absS) then
+    ! Otherwise absS is unneeded and therefore unset
+    absS(:) = S(:)*EOS%S_to_ppt
+    if (EOS%TFreeze_S_is_pracS) then
+      TFreeze_S(:) = gsw_sp_from_sr(absS(:))*EOS%ppt_to_S
+    else
+      TFreeze_S(:) = S(:)
+    endif
+  else
+    TFreeze_S(:) = S(:)
+  endif
+
   if ((EOS%RL2_T2_to_Pa == 1.0) .and. (EOS%S_to_ppt == 1.0)) then
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
-        call calculate_TFreeze_linear(S, pressure, T_fr, is, npts, &
+        call calculate_TFreeze_linear(TFreeze_S, pressure, T_fr, is, npts, &
                                       EOS%TFr_S0_P0, EOS%dTFr_dS, EOS%dTFr_dp)
       case (TFREEZE_MILLERO)
-        call calculate_TFreeze_Millero(S, pressure, T_fr, is, npts)
+        call calculate_TFreeze_Millero(TFreeze_S, pressure, T_fr, is, npts)
       case (TFREEZE_TEOSPOLY)
-        call calculate_TFreeze_TEOS_poly(S, pressure, T_fr, is, npts)
+        call calculate_TFreeze_TEOS_poly(TFreeze_S, pressure, T_fr, is, npts)
       case (TFREEZE_TEOS10)
-        call calculate_TFreeze_teos10(S, pressure, T_fr, is, npts)
+        call calculate_TFreeze_teos10(TFreeze_S, pressure, T_fr, is, npts)
       case default
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
   else
     do i=is,ie
       pres(i) = EOS%RL2_T2_to_Pa * pressure(i)
-      Sa(i) = EOS%S_to_ppt * S(i)
+      Sa(i) = EOS%S_to_ppt * TFreeze_S(i)
     enddo
     select case (EOS%form_of_TFreeze)
       case (TFREEZE_LINEAR)
@@ -664,6 +729,13 @@ subroutine calculate_TFreeze_1d(S, pressure, T_fr, EOS, dom)
         call MOM_error(FATAL, "calculate_TFreeze_scalar: form_of_TFreeze is not valid.")
     end select
   endif
+
+  if (EOS%use_conT_absS .and. EOS%TFreeze_T_is_potT) then
+    ! absS is set only if EOS%use_conT_absS is True!
+    ! absS is in ppt and T_fr is in degC at this point.
+    T_fr(:) = gsw_ct_from_pt(absS(:),T_fr(:))
+  endif
+
 
   if (EOS%degC_to_C /= 1.0) then
     do i=is,ie ; T_fr(i) = EOS%degC_to_C * T_fr(i) ; enddo
@@ -1140,7 +1212,7 @@ subroutine average_specific_vol(T, S, p_t, dp, SpV_avg, EOS, dom, scale)
     select case (EOS%form_of_EOS)
       case (EOS_LINEAR)
         call avg_spec_vol_linear(T, S, p_t, dp, SpV_avg, is, npts, EOS%Rho_T0_S0, &
-                                 EOS%dRho_dT, EOS%dRho_dS)
+                                 EOS%dRho_dT, EOS%dRho_dS, EOS%dRho_dp)
       case (EOS_WRIGHT)
         call avg_spec_vol_buggy_wright(T, S, p_t, dp, SpV_avg, is, npts)
       case (EOS_WRIGHT_FULL)
@@ -1160,7 +1232,7 @@ subroutine average_specific_vol(T, S, p_t, dp, SpV_avg, EOS, dom, scale)
     select case (EOS%form_of_EOS)
       case (EOS_LINEAR)
         call avg_spec_vol_linear(Ta, Sa, pres, dpres, SpV_avg, is, npts, EOS%Rho_T0_S0, &
-                                 EOS%dRho_dT, EOS%dRho_dS)
+                                 EOS%dRho_dT, EOS%dRho_dS, EOS%dRho_dp)
       case (EOS_WRIGHT)
         call avg_spec_vol_buggy_wright(Ta, Sa, pres, dpres, SpV_avg, is, npts)
       case (EOS_WRIGHT_FULL)
@@ -1270,7 +1342,7 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
   ! Local variables
   real :: dRdT_scale ! A factor to convert drho_dT to the desired units [R degC m3 C-1 kg-1 ~> 1]
   real :: dRdS_scale ! A factor to convert drho_dS to the desired units [R ppt m3 S-1 kg-1 ~> 1]
-
+  real :: dRdp_scale ! A factor to convert drho_dp to the desired units [T-2 L2 s2 m-2 ~> 1]
 
   ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
   ! integration be used instead of analytic. This is a safety check.
@@ -1280,10 +1352,11 @@ subroutine analytic_int_specific_vol_dp(T, S, p_t, p_b, alpha_ref, HI, EOS, &
     case (EOS_LINEAR)
       dRdT_scale = EOS%kg_m3_to_R * EOS%C_to_degC
       dRdS_scale = EOS%kg_m3_to_R * EOS%S_to_ppt
+      dRdp_scale = EOS%kg_m3_to_R * EOS%RL2_T2_to_Pa
       call int_spec_vol_dp_linear(T, S, p_t, p_b, alpha_ref, HI, EOS%kg_m3_to_R*EOS%Rho_T0_S0, &
-                                dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, dza, &
-                                intp_dza, intx_dza, inty_dza, halo_size, &
-                                bathyP, P_surf, dP_tiny, MassWghtInterp)
+                          dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, dRdp_scale*EOS%dRho_dp, &
+                          dza, intp_dza, intx_dza, inty_dza, halo_size, &
+                          bathyP, P_surf, dP_tiny, MassWghtInterp)
     case (EOS_WRIGHT)
       call int_spec_vol_dp_wright(T, S, p_t, p_b, alpha_ref, HI, dza, intp_dza, intx_dza, &
                                   inty_dza, halo_size, bathyP, P_surf, dP_tiny, MassWghtInterp, &
@@ -1358,6 +1431,7 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
                      ! desired units [R m3 kg-1 ~> 1]
   real :: dRdT_scale ! A factor to convert drho_dT to the desired units [R degC m3 C-1 kg-1 ~> 1]
   real :: dRdS_scale ! A factor to convert drho_dS to the desired units [R ppt m3 S-1 kg-1 ~> 1]
+  real :: dRdp_scale ! A factor to convert drho_dp to the desired units [T-2 L2 s2 m-2 ~> 1]
   real :: pres_scale ! A multiplicative factor to convert pressure into Pa [Pa T2 R-1 L-2 ~> 1]
 
   ! We should never reach this point with quadrature. EOS_quadrature indicates that numerical
@@ -1369,14 +1443,15 @@ subroutine analytic_int_density_dz(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, EOS,
       rho_scale = EOS%kg_m3_to_R
       dRdT_scale = EOS%kg_m3_to_R * EOS%C_to_degC
       dRdS_scale = EOS%kg_m3_to_R * EOS%S_to_ppt
-      if ((rho_scale /= 1.0) .or. (dRdT_scale /= 1.0) .or. (dRdS_scale /= 1.0)) then
-        call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                         rho_scale*EOS%Rho_T0_S0, dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, &
-                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp)
+      dRdp_scale = EOS%kg_m3_to_R * EOS%RL2_T2_to_Pa
+      if ((rho_scale /= 1.0) .or. (dRdT_scale /= 1.0) .or. (dRdS_scale /= 1.0) .or. (dRdp_scale /= 1.0)) then
+        call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, rho_scale*EOS%Rho_T0_S0, &
+                         dRdT_scale*EOS%dRho_dT, dRdS_scale*EOS%dRho_dS, dRdp_scale*EOS%dRho_dp, &
+                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p=Z_0p)
       else
         call int_density_dz_linear(T, S, z_t, z_b, rho_ref, rho_0, G_e, HI, &
-                         EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, &
-                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp)
+                         EOS%Rho_T0_S0, EOS%dRho_dT, EOS%dRho_dS, EOS%dRho_dp, &
+                         dpa, intz_dpa, intx_dpa, inty_dpa, bathyT, SSH, dz_neglect, MassWghtInterp, Z_0p=Z_0p)
       endif
     case (EOS_WRIGHT)
       rho_scale = EOS%kg_m3_to_R
@@ -1462,20 +1537,24 @@ end function get_EOS_name
 
 !> Initializes EOS_type by allocating and reading parameters.  The scaling factors in
 !! US are stored in EOS for later use.
-subroutine EOS_init(param_file, EOS, US)
+subroutine EOS_init(param_file, EOS, US, use_conT_absS)
   type(param_file_type), intent(in) :: param_file !< Parameter file structure
   type(EOS_type), intent(inout)     :: EOS !< Equation of state structure
   type(unit_scale_type), intent(in) :: US  !< A dimensional unit scaling type
+  logical, intent(in), optional     :: use_conT_absS !< True if the model is formulated for
+                                                     !! conservative temp and absolute salinity
   optional :: US
   ! Local variables
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_EOS" ! This module's name.
   character(len=12)  :: TFREEZE_DEFAULT ! The default freezing point expression
   character(len=40)  :: tmpstr
-  logical :: EOS_quad_default
+  logical :: EOS_quad_default, EOS_TS_default
   real :: Rho_Tref_Sref ! Density at Tref degC and Sref ppt [kg m-3]
   real :: Tref          ! Reference temperature [degC]
   real :: Sref          ! Reference salinity [psu]
+  real :: pref          ! Reference pressure [Pa]
+  real :: rho0          ! Density at T=0, S=0 and p=0 [kg m-3]
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -1516,32 +1595,43 @@ subroutine EOS_init(param_file, EOS, US)
                 trim(tmpstr)//'"', 5)
 
   if (EOS%form_of_EOS == EOS_LINEAR) then
-    ! RHO(T,S) = RHO_TREF_SREF + DRHO_DT*(T-TREF) + DRHO_DS*(S-SREF)
-    !          = RHO_TREF_SREF - DRHO_DT*TREF - DRHO_DS*SREF + DRHO_DT*T + DRHO_DS*S
-    !          = RHO_T0_S0 + DRHO_DT*T + DRHO_DS*S
-    EOS%Compressible = .false.
-    call get_param(param_file, mdl, "RHO_TREF_SREF", Rho_Tref_Sref, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the density at T=TREF, S=SREF.", units="kg m-3", default=1000.0)
-    call get_param(param_file, mdl, "TREF", Tref, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the reference temperature.", units="degC", default=0.0)
-    call get_param(param_file, mdl, "SREF", Sref, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the reference salinity.", units="psu", default=0.0)
+    ! RHO(T,S) = RHO_REF + DRHO_DT*(T-T_REF) + DRHO_DS*(S-S_REF) + DRHO_DP*(P-P_REF)
+    !          = RHO_REF - (DRHO_DT*T_REF + DRHO_DS*SREF + DRHO_DP*PREF) + (DRHO_DT*T + DRHO_DS*S + DRHO_DP*P)
+    !          = RHO_T0_S0 + (DRHO_DT*T + DRHO_DS*S + DRHO_DP*P)
+    call get_param(param_file, mdl, "RHO_REF_LINEAR_EOS", Rho_Tref_Sref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the density "//&
+                   "at T=T_REF_LINEAR_EOS, S=S_REF_LINEAR_EOS and p=P_REF_LINEAR_EOS", &
+                   units="kg m-3", default=1000.0, old_name="RHO_TREF_SREF")
+    call get_param(param_file, mdl, "T_REF_LINEAR_EOS", Tref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the reference "//&
+                   "temperature.", units="degC", default=0.0, old_name="TREF")
+    call get_param(param_file, mdl, "S_REF_LINEAR_EOS", Sref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the reference "//&
+                   "salinity.", units="psu", default=0.0, old_name="SREF")
+    call get_param(param_file, mdl, "P_REF_LINEAR_EOS", pref, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the reference "//&
+                   "pressure.", units="Pa", default=0.0)
     call get_param(param_file, mdl, "DRHO_DT", EOS%dRho_dT, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the partial derivative of density with "//&
-                 "temperature.", units="kg m-3 K-1", default=-0.2)
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is "//&
+                   "the partial derivative of density with temperature.", &
+                   units="kg m-3 K-1", default=-0.2)
     call get_param(param_file, mdl, "DRHO_DS", EOS%dRho_dS, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the partial derivative of density with salinity.", &
-                 units="kg m-3 ppt-1", default=0.8)
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is "//&
+                   "the partial derivative of density with salinity.", &
+                   units="kg m-3 ppt-1", default=0.8)
+    call get_param(param_file, mdl, "DRHO_DP", EOS%dRho_dp, &
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is "//&
+                   "the partial derivative of density with pressure (the inverse of "//&
+                   "sound speed squared).", units="s2 m-2", default=0.0)
+    rho0 = Rho_Tref_Sref - ((EOS%dRho_dT * Tref + EOS%dRho_dS * Sref) + EOS%dRho_dp * pref)
     call get_param(param_file, mdl, "RHO_T0_S0", EOS%Rho_T0_S0, &
-                 "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", "//&
-                 "this is the density at T=0, S=0.", units="kg m-3", &
-                 default=Rho_Tref_Sref - EOS%dRho_dT *  Tref - EOS%dRho_dS * Sref)
-    call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=EOS%Rho_T0_S0, dRho_dT=EOS%dRho_dT, dRho_dS=EOS%dRho_dS)
+                   "When EQN_OF_STATE="//trim(EOS_LINEAR_STRING)//", this is the density "//&
+                   "at T=0, S=0 and p=0.  If RHO_TO_SO is specified, RHO_REF_LINEAR_EOS, "//&
+                   "T_REF_LINEAR_EOS, S_REF_LINEAR_EOS and P_REF_LINEAR_EOS are not used.", &
+                   units="kg m-3", default=rho0)
+    EOS%Compressible = (EOS%dRho_dp/=0.0)
+    call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=EOS%Rho_T0_S0, &
+                         dRho_dT=EOS%dRho_dT, dRho_dS=EOS%dRho_dS, dRho_dp=EOS%dRho_dp)
   endif
   if (EOS%form_of_EOS == EOS_WRIGHT) then
     call get_param(param_file, mdl, "USE_WRIGHT_2ND_DERIV_BUG", EOS%use_Wright_2nd_deriv_bug, &
@@ -1549,6 +1639,12 @@ subroutine EOS_init(param_file, EOS, US)
                  "with temperature and with temperature and pressure that causes some terms "//&
                  "to be only 2/3 of what they should be.", default=.false.)
     call EOS_manual_init(EOS, form_of_EOS=EOS_WRIGHT, use_Wright_2nd_deriv_bug=EOS%use_Wright_2nd_deriv_bug)
+  endif
+
+  if (present(use_conT_absS)) then
+    EOS%use_conT_absS = use_conT_absS
+  else
+    EOS%use_conT_absS = .false. ! Assuming it is not needed, it is set to false
   endif
 
   EOS_quad_default = .not.((EOS%form_of_EOS == EOS_LINEAR) .or. &
@@ -1599,10 +1695,25 @@ subroutine EOS_init(param_file, EOS, US)
                  units="degC Pa-1", default=0.0)
   endif
 
+  if ((EOS%form_of_TFreeze==TFREEZE_TEOSPOLY) .or. (EOS%form_of_TFreeze==TFREEZE_TEOS10)) then
+     ! Which default is appropriate for Millero?
+     EOS_TS_default = .false.
+  else
+     EOS_TS_default = .true.
+  endif
+  call get_param(param_file, mdl, "TFREEZE_S_IS_PRACS", EOS%TFreeze_S_is_pracS, &
+               "When True, the model will check if the model internal salinity is "//&
+               "practical salinity.  If the model uses absolute salinity, a "//&
+               "conversion will be applied.", default=EOS_TS_default)
+  call get_param(param_file, mdl, "TFREEZE_T_IS_POTT", EOS%TFreeze_T_is_potT, &
+               "When True, the model will check if the model internal temperature is "//&
+               "potential temperature.  If the model uses conservative temperature, a "//&
+               "conversion will be applied.", default=EOS_TS_default)
+
   if ((EOS%form_of_EOS == EOS_TEOS10 .or. EOS%form_of_EOS == EOS_ROQUET_RHO .or. &
        EOS%form_of_EOS == EOS_ROQUET_SPV) .and. &
       .not.((EOS%form_of_TFreeze == TFREEZE_TEOS10) .or. (EOS%form_of_TFreeze == TFREEZE_TEOSPOLY)) ) then
-    call MOM_error(FATAL, "interpret_eos_selection:  EOS_TEOS10 or EOS_ROQUET_RHO or EOS_ROQUET_SPV "//&
+    call MOM_error(WARNING, "interpret_eos_selection:  EOS_TEOS10 or EOS_ROQUET_RHO or EOS_ROQUET_SPV "//&
                    "should only be used along with TFREEZE_FORM = TFREEZE_TEOS10 or TFREEZE_TEOSPOLY.")
   endif
 
@@ -1621,7 +1732,7 @@ end subroutine EOS_init
 
 !> Manually initialized an EOS type (intended for unit testing of routines which need a specific EOS)
 subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Compressible, &
-                           Rho_T0_S0, drho_dT, dRho_dS, TFr_S0_P0, dTFr_dS, dTFr_dp, &
+                           Rho_T0_S0, drho_dT, dRho_dS, dRho_dp, TFr_S0_P0, dTFr_dS, dTFr_dp, &
                            use_Wright_2nd_deriv_bug)
   type(EOS_type),    intent(inout) :: EOS !< Equation of state structure
   integer, optional, intent(in) :: form_of_EOS !< A coded integer indicating the equation of state to use.
@@ -1635,6 +1746,8 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
                                              !! in [kg m-3 degC-1]
   real   , optional, intent(in) :: dRho_dS   !< Partial derivative of density with salinity
                                              !! in [kg m-3 ppt-1]
+  real   , optional, intent(in) :: dRho_dp   !< Partial derivative of density with pressure
+                                             !! in [s2 m-2]
   real   , optional, intent(in) :: TFr_S0_P0 !< The freezing potential temperature at S=0, P=0 [degC]
   real   , optional, intent(in) :: dTFr_dS   !< The derivative of freezing point with salinity
                                              !! in [degC ppt-1]
@@ -1667,7 +1780,7 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
     end select
     select type (t => EOS%type)
       type is (linear_EOS)
-        call t%set_params_linear(Rho_T0_S0, dRho_dT, dRho_dS)
+        call t%set_params_linear(Rho_T0_S0, dRho_dT, dRho_dS, dRho_dp)
       type is (buggy_Wright_EOS)
         call t%set_params_buggy_Wright(use_Wright_2nd_deriv_bug)
     end select
@@ -1678,6 +1791,7 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
   if (present(Rho_T0_S0      ))  EOS%Rho_T0_S0       = Rho_T0_S0
   if (present(drho_dT        ))  EOS%drho_dT         = drho_dT
   if (present(dRho_dS        ))  EOS%dRho_dS         = dRho_dS
+  if (present(dRho_dp        ))  EOS%dRho_dp         = dRho_dp
   if (present(TFr_S0_P0      ))  EOS%TFr_S0_P0       = TFr_S0_P0
   if (present(dTFr_dS        ))  EOS%dTFr_dS         = dTFr_dS
   if (present(dTFr_dp        ))  EOS%dTFr_dp         = dTFr_dp
@@ -1685,26 +1799,25 @@ subroutine EOS_manual_init(EOS, form_of_EOS, form_of_TFreeze, EOS_quadrature, Co
 
 end subroutine EOS_manual_init
 
-!> Set equation of state structure (EOS) to linear with given coefficients
-!!
-!! \note This routine is primarily for testing and allows a local copy of the
-!! EOS_type (EOS argument) to be set to use the linear equation of state
-!! independent from the rest of the model.
-subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
-  real,              intent(in) :: Rho_T0_S0 !< Density at T=0 degC and S=0 ppt [kg m-3]
-  real,              intent(in) :: dRho_dT   !< Partial derivative of density with temperature [kg m-3 degC-1]
-  real,              intent(in) :: dRho_dS   !< Partial derivative of density with salinity [kg m-3 ppt-1]
-  logical, optional, intent(in) :: use_quadrature !< If true, always use the generic (quadrature)
-                                             !! code for the integrals of density.
-  type(EOS_type),    intent(inout) :: EOS    !< Equation of state structure
+! !> Set equation of state structure (EOS) to linear with given coefficients
+! !!
+! !! \note This routine is primarily for testing and allows a local copy of the
+! !! EOS_type (EOS argument) to be set to use the linear equation of state
+! !! independent from the rest of the model.
+! subroutine EOS_use_linear(Rho_T0_S0, dRho_dT, dRho_dS, EOS, use_quadrature)
+!   real,              intent(in) :: Rho_T0_S0 !< Density at T=0 degC and S=0 ppt [kg m-3]
+!   real,              intent(in) :: dRho_dT   !< Partial derivative of density with temperature [kg m-3 degC-1]
+!   real,              intent(in) :: dRho_dS   !< Partial derivative of density with salinity [kg m-3 ppt-1]
+!   logical, optional, intent(in) :: use_quadrature !< If true, always use the generic (quadrature)
+!                                              !! code for the integrals of density.
+!   type(EOS_type),    intent(inout) :: EOS    !< Equation of state structure
 
-  call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=Rho_T0_S0, dRho_dT=dRho_dT, dRho_dS=dRho_dS)
-  EOS%Compressible = .false.
-  EOS%EOS_quadrature = .false.
-  if (present(use_quadrature)) EOS%EOS_quadrature = use_quadrature
+!   call EOS_manual_init(EOS, form_of_EOS=EOS_LINEAR, Rho_T0_S0=Rho_T0_S0, dRho_dT=dRho_dT, dRho_dS=dRho_dS)
+!   EOS%Compressible = .false.
+!   EOS%EOS_quadrature = .false.
+!   if (present(use_quadrature)) EOS%EOS_quadrature = use_quadrature
 
-end subroutine EOS_use_linear
-
+! end subroutine EOS_use_linear
 
 !> Convert T&S to Absolute Salinity and Conservative Temperature if using TEOS10
 subroutine convert_temp_salt_for_TEOS10(T, S, HI, kd, mask_z, EOS)
@@ -2013,9 +2126,9 @@ logical function EOS_unit_tests(verbose)
   if (verbose .and. fail) call MOM_error(WARNING, "ROQUET_SPV EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 
-  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8)
+  call EOS_manual_init(EOS_tmp, form_of_EOS=EOS_LINEAR, Rho_T0_S0=1000.0, drho_dT=-0.2, dRho_dS=0.8, dRho_dp=5.0e-7)
   fail = test_EOS_consistency(25.0, 35.0, 1.0e7, EOS_tmp, verbose, "LINEAR", &
-                              rho_check=1023.0*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
+                              rho_check=1028.0*EOS_tmp%kg_m3_to_R, avg_Sv_check=.true.)
   if (verbose .and. fail) call MOM_error(WARNING, "LINEAR EOS has failed some self-consistency tests.")
   EOS_unit_tests = EOS_unit_tests .or. fail
 

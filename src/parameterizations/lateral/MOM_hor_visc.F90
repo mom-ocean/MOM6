@@ -138,7 +138,7 @@ type, public :: hor_visc_CS ; private
                       !< The background Laplacian viscosity at h points [L2 T-1 ~> m2 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_2d
+  real, allocatable :: Kh_bg_2d(:,:)
                       !< The background Laplacian viscosity at h points [L2 T-1 ~> m2 s-1].
                       !! The actual viscosity may be the larger of this
                       !! viscosity and the Smagorinsky and Leith viscosities.
@@ -149,12 +149,13 @@ type, public :: hor_visc_CS ; private
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: reduction_xx
                       !< The amount by which stresses through h points are reduced
                       !! due to partial barriers [nondim].
+  real, allocatable :: Kh_Max_xx(:,:)     !< The maximum permitted Laplacian viscosity [L2 T-1 ~> m2 s-1].
+  real, allocatable :: Ah_Max_xx(:,:)     !< The maximum permitted biharmonic viscosity [L4 T-1 ~> m4 s-1].
+  real, allocatable :: Ah_Max_xx_KS(:,:)  !< The maximum permitted biharmonic viscosity for
+                                          !! the kill switch [L4 T-1 ~> m4 s-1].
+  real, allocatable :: n1n2_h(:,:)        !< Factor n1*n2 in the anisotropic direction tensor at h-points [nondim]
+  real, allocatable :: n1n1_m_n2n2_h(:,:) !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points [nondim]
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Kh_Max_xx,      & !< The maximum permitted Laplacian viscosity [L2 T-1 ~> m2 s-1].
-    Ah_Max_xx,      & !< The maximum permitted biharmonic viscosity [L4 T-1 ~> m4 s-1].
-    Ah_Max_xx_KS,   & !< The maximum permitted biharmonic viscosity for kill switch [L4 T-1 ~> m4 s-1].
-    n1n2_h,         & !< Factor n1*n2 in the anisotropic direction tensor at h-points [nondim]
-    n1n1_m_n2n2_h,  & !< Factor n1**2-n2**2 in the anisotropic direction tensor at h-points [nondim]
     grid_sp_h2,     & !< Harmonic mean of the squares of the grid [L2 ~> m2]
     grid_sp_h3        !< Harmonic mean of the squares of the grid^(3/2) [L3 ~> m3]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: Kh_bg_xy
@@ -168,20 +169,20 @@ type, public :: hor_visc_CS ; private
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: reduction_xy
                       !< The amount by which stresses through q points are reduced
                       !! due to partial barriers [nondim].
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Kh_Max_xy,      & !< The maximum permitted Laplacian viscosity [L2 T-1 ~> m2 s-1].
-    Ah_Max_xy,      & !< The maximum permitted biharmonic viscosity [L4 T-1 ~> m4 s-1].
-    Ah_Max_xy_KS,   & !< The maximum permitted biharmonic viscosity for kill switch [L4 T-1 ~> m4 s-1].
-    n1n2_q,         & !< Factor n1*n2 in the anisotropic direction tensor at q-points [nondim]
-    n1n1_m_n2n2_q     !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points [nondim]
+  real, allocatable :: Kh_Max_xy(:,:)  !< The maximum permitted Laplacian viscosity [L2 T-1 ~> m2 s-1].
+  real, allocatable :: Ah_Max_xy(:,:)     !< The maximum permitted biharmonic viscosity [L4 T-1 ~> m4 s-1].
+  real, allocatable :: Ah_Max_xy_KS(:,:)  !< The maximum permitted biharmonic viscosity for
+                                          !! the  kill switch [L4 T-1 ~> m4 s-1].
+  real, allocatable :: n1n2_q(:,:)        !< Factor n1*n2 in the anisotropic direction tensor at q-points [nondim]
+  real, allocatable :: n1n1_m_n2n2_q(:,:) !< Factor n1**2-n2**2 in the anisotropic direction tensor at q-points [nondim]
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
     dx2h,           & !< Pre-calculated dx^2 at h points [L2 ~> m2]
     dy2h,           & !< Pre-calculated dy^2 at h points [L2 ~> m2]
     dx_dyT,         & !< Pre-calculated dx/dy at h points [nondim]
-    dy_dxT,         & !< Pre-calculated dy/dx at h points [nondim]
-    m_const_leithy, & !< Pre-calculated .5*sqrt(c_K)*max{dx,dy} [L ~> m]
-    m_leithy_max      !< Pre-calculated 4./max(dx,dy)^2 at h points [L-2 ~> m-2]
+    dy_dxT            !< Pre-calculated dy/dx at h points [nondim]
+  real, allocatable :: m_const_leithy(:,:) !< Pre-calculated .5*sqrt(c_K)*max{dx,dy} [L ~> m]
+  real, allocatable :: m_leithy_max(:,:)   !< Pre-calculated 4./max(dx,dy)^2 at h points [L-2 ~> m-2]
   real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
     dx2q,    & !< Pre-calculated dx^2 at q points [L2 ~> m2]
     dy2q,    & !< Pre-calculated dy^2 at q points [L2 ~> m2]
@@ -196,21 +197,19 @@ type, public :: hor_visc_CS ; private
 
   ! The following variables are precalculated time-invariant combinations of
   ! parameters and metric terms.
-  real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: &
-    Laplac2_const_xx, & !< Laplacian  metric-dependent constants [L2 ~> m2]
-    Biharm6_const_xx, & !< Biharmonic metric-dependent constants [L6 ~> m6]
-    Laplac3_const_xx, & !< Laplacian  metric-dependent constants [L3 ~> m3]
-    Biharm_const_xx,  & !< Biharmonic metric-dependent constants [L4 ~> m4]
-    Biharm_const2_xx, & !< Biharmonic metric-dependent constants [T L4 ~> s m4]
-    Re_Ah_const_xx      !< Biharmonic metric-dependent constants [L3 ~> m3]
+  real, allocatable :: Laplac2_const_xx(:,:) !< Laplacian metric-dependent constants [L2 ~> m2]
+  real, allocatable :: Biharm6_const_xx(:,:) !< Biharmonic metric-dependent constants [L6 ~> m6]
+  real, allocatable :: Laplac3_const_xx(:,:) !< Laplacian metric-dependent constants [L3 ~> m3]
+  real, allocatable :: Biharm_const_xx(:,:)  !< Biharmonic metric-dependent constants [L4 ~> m4]
+  real, allocatable :: Biharm_const2_xx(:,:) !< Biharmonic metric-dependent constants [T L4 ~> s m4]
+  real, allocatable :: Re_Ah_const_xx(:,:)   !< Biharmonic metric-dependent constants [L3 ~> m3]
 
-  real ALLOCABLE_, dimension(NIMEMB_PTR_,NJMEMB_PTR_) :: &
-    Laplac2_const_xy, & !< Laplacian  metric-dependent constants [L2 ~> m2]
-    Biharm6_const_xy, & !< Biharmonic metric-dependent constants [L6 ~> m6]
-    Laplac3_const_xy, & !< Laplacian  metric-dependent constants [L3 ~> m3]
-    Biharm_const_xy,  & !< Biharmonic metric-dependent constants [L4 ~> m4]
-    Biharm_const2_xy, & !< Biharmonic metric-dependent constants [T L4 ~> s m4]
-    Re_Ah_const_xy      !< Biharmonic metric-dependent constants [L3 ~> m3]
+  real, allocatable :: Laplac2_const_xy(:,:) !< Laplacian metric-dependent constants [L2 ~> m2]
+  real, allocatable :: Biharm6_const_xy(:,:) !< Biharmonic metric-dependent constants [L6 ~> m6]
+  real, allocatable :: Laplac3_const_xy(:,:) !< Laplacian metric-dependent constants [L3 ~> m3]
+  real, allocatable :: Biharm_const_xy(:,:)  !< Biharmonic metric-dependent constants [L4 ~> m4]
+  real, allocatable :: Biharm_const2_xy(:,:) !< Biharmonic metric-dependent constants [T L4 ~> s m4]
+  real, allocatable :: Re_Ah_const_xy(:,:)   !< Biharmonic metric-dependent constants [L3 ~> m3]
 
   type(diag_ctrl), pointer :: diag => NULL() !< structure to regulate diagnostics
 
@@ -2370,6 +2369,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   logical :: split         ! If true, use the split time stepping scheme.
                            ! If false and USE_GME = True, issue a FATAL error.
   logical :: use_MEKE      ! If true, the MEKE parameterization is in use.
+  logical :: enable_bugs   ! If true, the defaults for recently added bug-fix flags are set to
+                           ! recreate the bugs, or if false bugs are only used if actively selected.
   real    :: backscatter_Ro_c ! Coefficient in Rossby number function for backscatter [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
   character(len=200) :: inputdir, filename ! Input file names and paths
@@ -2664,10 +2665,12 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If true, retain an answer-changing horizontal indexing bug in setting "//&
                  "the corner-point viscosities when USE_KH_BG_2D=True.  This is "//&
                  "not recommended.", default=.false., do_not_log=.not.CS%use_Kh_bg_2d)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "FRICTWORK_BUG", CS%FrictWork_bug, &
-                 "If true, retain an answer-changing bug in calculating "//&
-                 "the FrictWork, which cancels the h in thickness flux and the h at velocity point. This is"//&
-                 "not recommended.", default=.true.)
+                 "If true, retain an answer-changing bug in calculating the FrictWork, "//&
+                 "which cancels the h in thickness flux and the h at velocity point. This is"//&
+                 "not recommended.", default=enable_bugs)
 
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
@@ -2742,16 +2745,16 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
     if (CS%bound_Kh .or. CS%better_bound_Kh .or. CS%EY24_EBT_BS) then
-      ALLOC_(CS%Kh_Max_xx(Isd:Ied,Jsd:Jed)) ; CS%Kh_Max_xx(:,:) = 0.0
-      ALLOC_(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_Max_xy(:,:) = 0.0
+      allocate(CS%Kh_Max_xx(Isd:Ied,Jsd:Jed), source=0.0)
+      allocate(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
     if (CS%Smagorinsky_Kh .or. CS%EY24_EBT_BS) then
-      ALLOC_(CS%Laplac2_const_xx(isd:ied,jsd:jed))     ; CS%Laplac2_const_xx(:,:) = 0.0
-      ALLOC_(CS%Laplac2_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac2_const_xy(:,:) = 0.0
+      allocate(CS%Laplac2_const_xx(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%Laplac2_const_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
     if (CS%Leith_Kh) then
-      ALLOC_(CS%Laplac3_const_xx(isd:ied,jsd:jed)) ; CS%Laplac3_const_xx(:,:) = 0.0
-      ALLOC_(CS%Laplac3_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Laplac3_const_xy(:,:) = 0.0
+      allocate(CS%Laplac3_const_xx(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%Laplac3_const_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
   endif
   ALLOC_(CS%reduction_xx(isd:ied,jsd:jed))     ; CS%reduction_xx(:,:) = 0.0
@@ -2759,10 +2762,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
 
   CS%dynamic_aniso = .false.
   if (CS%anisotropic) then
-    ALLOC_(CS%n1n2_h(isd:ied,jsd:jed)) ; CS%n1n2_h(:,:) = 0.0
-    ALLOC_(CS%n1n1_m_n2n2_h(isd:ied,jsd:jed)) ; CS%n1n1_m_n2n2_h(:,:) = 0.0
-    ALLOC_(CS%n1n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n2_q(:,:) = 0.0
-    ALLOC_(CS%n1n1_m_n2n2_q(IsdB:IedB,JsdB:JedB)) ; CS%n1n1_m_n2n2_q(:,:) = 0.0
+    allocate(CS%n1n2_h(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%n1n1_m_n2n2_h(isd:ied,jsd:jed), source=0.0)
+    allocate(CS%n1n2_q(IsdB:IedB,JsdB:JedB), source=0.0)
+    allocate(CS%n1n1_m_n2n2_q(IsdB:IedB,JsdB:JedB), source=0.0)
     select case (aniso_mode)
       case (0)
         call align_aniso_tensor_to_grid(CS, aniso_grid_dir(1), aniso_grid_dir(2))
@@ -2786,7 +2789,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   if (CS%use_Kh_bg_2d) then
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
-    ALLOC_(CS%Kh_bg_2d(isd:ied,jsd:jed))     ; CS%Kh_bg_2d(:,:) = 0.0
+    allocate(CS%Kh_bg_2d(isd:ied,jsd:jed), source=0.0)
     call MOM_read_data(trim(inputdir)//trim(filename), Kh_var, CS%Kh_bg_2d, &
                        G%domain, timelevel=1, scale=US%m_to_L**2*US%T_to_s)
     call pass_var(CS%Kh_bg_2d, G%domain)
@@ -2800,32 +2803,32 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     ALLOC_(CS%Ah_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_bg_xy(:,:) = 0.0
     ALLOC_(CS%grid_sp_h3(isd:ied,jsd:jed))   ; CS%grid_sp_h3(:,:) = 0.0
     if (CS%bound_Ah .or. CS%better_bound_Ah) then
-      ALLOC_(CS%Ah_Max_xx(isd:ied,jsd:jed))     ; CS%Ah_Max_xx(:,:) = 0.0
-      ALLOC_(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_Max_xy(:,:) = 0.0
+      allocate(CS%Ah_Max_xx(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
     if (CS%EY24_EBT_BS) then
-      ALLOC_(CS%Ah_Max_xx_KS(isd:ied,jsd:jed))     ; CS%Ah_Max_xx_KS(:,:) = 0.0
-      ALLOC_(CS%Ah_Max_xy_KS(IsdB:IedB,JsdB:JedB)) ; CS%Ah_Max_xy_KS(:,:) = 0.0
+      allocate(CS%Ah_Max_xx_KS(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%Ah_Max_xy_KS(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
     if (CS%Smagorinsky_Ah) then
-      ALLOC_(CS%Biharm_const_xx(isd:ied,jsd:jed))     ; CS%Biharm_const_xx(:,:) = 0.0
-      ALLOC_(CS%Biharm_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_const_xy(:,:) = 0.0
+      allocate(CS%Biharm_const_xx(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%Biharm_const_xy(IsdB:IedB,JsdB:JedB), source=0.0)
       if (CS%bound_Coriolis) then
-        ALLOC_(CS%Biharm_const2_xx(isd:ied,jsd:jed))     ; CS%Biharm_const2_xx(:,:) = 0.0
-        ALLOC_(CS%Biharm_const2_xy(IsdB:IedB,JsdB:JedB)) ; CS%Biharm_const2_xy(:,:) = 0.0
+        allocate(CS%Biharm_const2_xx(isd:ied,jsd:jed), source=0.0)
+        allocate(CS%Biharm_const2_xy(IsdB:IedB,JsdB:JedB), source=0.0)
       endif
     endif
     if ((CS%Leith_Ah) .or. (CS%use_Leithy)) then
-      ALLOC_(CS%biharm6_const_xx(isd:ied,jsd:jed)) ; CS%biharm6_const_xx(:,:) = 0.0
-      ALLOC_(CS%biharm6_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%biharm6_const_xy(:,:) = 0.0
+      allocate(CS%biharm6_const_xx(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%biharm6_const_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
     if (CS%use_Leithy) then
-      ALLOC_(CS%m_const_leithy(isd:ied,jsd:jed)) ; CS%m_const_leithy(:,:) = 0.0
-      ALLOC_(CS%m_leithy_max(isd:ied,jsd:jed)) ; CS%m_leithy_max(:,:) = 0.0
+      allocate(CS%m_const_leithy(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%m_leithy_max(isd:ied,jsd:jed), source=0.0)
     endif
     if (CS%Re_Ah > 0.0) then
-      ALLOC_(CS%Re_Ah_const_xx(isd:ied,jsd:jed)) ; CS%Re_Ah_const_xx(:,:) = 0.0
-      ALLOC_(CS%Re_Ah_const_xy(IsdB:IedB,JsdB:JedB)) ; CS%Re_Ah_const_xy(:,:) = 0.0
+      allocate(CS%Re_Ah_const_xx(isd:ied,jsd:jed), source=0.0)
+      allocate(CS%Re_Ah_const_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
   endif
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
@@ -3519,47 +3522,41 @@ subroutine hor_visc_end(CS)
   if (CS%Laplacian) then
     DEALLOC_(CS%Kh_bg_xx) ; DEALLOC_(CS%Kh_bg_xy)
     DEALLOC_(CS%grid_sp_h2)
-    if (CS%bound_Kh) then
-      DEALLOC_(CS%Kh_Max_xx) ; DEALLOC_(CS%Kh_Max_xy)
-    endif
-    if (CS%Smagorinsky_Kh) then
-      DEALLOC_(CS%Laplac2_const_xx) ; DEALLOC_(CS%Laplac2_const_xy)
-    endif
-    if (CS%Leith_Kh) then
-      DEALLOC_(CS%Laplac3_const_xx) ; DEALLOC_(CS%Laplac3_const_xy)
-    endif
+    if (allocated(CS%Kh_bg_2d)) deallocate(CS%Kh_bg_2d)
+
+    if (allocated(CS%Kh_Max_xx)) deallocate(CS%Kh_Max_xx)
+    if (allocated(CS%Kh_Max_xy)) deallocate(CS%Kh_Max_xy)
+    if (allocated(CS%Laplac2_const_xx)) deallocate(CS%Laplac2_const_xx)
+    if (allocated(CS%Laplac2_const_xy)) deallocate(CS%Laplac2_const_xy)
+    if (allocated(CS%Laplac3_const_xx)) deallocate(CS%Laplac3_const_xx)
+    if (allocated(CS%Laplac3_const_xy)) deallocate(CS%Laplac3_const_xy)
   endif
   if (CS%biharmonic) then
     DEALLOC_(CS%grid_sp_h3)
     DEALLOC_(CS%Idx2dyCu) ; DEALLOC_(CS%Idx2dyCv)
     DEALLOC_(CS%Idxdy2u) ; DEALLOC_(CS%Idxdy2v)
     DEALLOC_(CS%Ah_bg_xx) ; DEALLOC_(CS%Ah_bg_xy)
-    if (CS%bound_Ah) then
-      DEALLOC_(CS%Ah_Max_xx) ; DEALLOC_(CS%Ah_Max_xy)
-    endif
-    if (CS%EY24_EBT_BS) then
-      DEALLOC_(CS%Ah_Max_xx_KS) ; DEALLOC_(CS%Ah_Max_xy_KS)
-    endif
-    if (CS%Smagorinsky_Ah) then
-      DEALLOC_(CS%Biharm_const_xx) ; DEALLOC_(CS%Biharm_const_xy)
-    endif
-    if ((CS%Leith_Ah) .or. (CS%use_Leithy)) then
-      DEALLOC_(CS%Biharm6_const_xx) ; DEALLOC_(CS%Biharm6_const_xy)
-    endif
-    if (CS%use_Leithy) then
-      DEALLOC_(CS%m_const_leithy)
-      DEALLOC_(CS%m_leithy_max)
-    endif
-    if (CS%Re_Ah > 0.0) then
-      DEALLOC_(CS%Re_Ah_const_xx) ; DEALLOC_(CS%Re_Ah_const_xy)
-    endif
+
+    if (allocated(CS%Ah_Max_xx)) deallocate(CS%Ah_Max_xx)
+    if (allocated(CS%Ah_Max_xy)) deallocate(CS%Ah_Max_xy)
+    if (allocated(CS%Ah_Max_xx_KS)) deallocate(CS%Ah_Max_xx_KS)
+    if (allocated(CS%Ah_Max_xy_KS)) deallocate(CS%Ah_Max_xy_KS)
+    if (allocated(CS%Biharm_const_xx)) deallocate(CS%Biharm_const_xx)
+    if (allocated(CS%Biharm_const_xy)) deallocate(CS%Biharm_const_xy)
+    if (allocated(CS%Biharm_const2_xx)) deallocate(CS%Biharm_const2_xx)
+    if (allocated(CS%Biharm_const2_xy)) deallocate(CS%Biharm_const2_xy)
+    if (allocated(CS%Biharm6_const_xx)) deallocate(CS%Biharm6_const_xx)
+    if (allocated(CS%Biharm6_const_xy)) deallocate(CS%Biharm6_const_xy)
+    if (allocated(CS%m_const_leithy)) deallocate(CS%m_const_leithy)
+    if (allocated(CS%m_leithy_max)) deallocate(CS%m_leithy_max)
+    if (allocated(CS%Re_Ah_const_xx)) deallocate(CS%Re_Ah_const_xx)
+    if (allocated(CS%Re_Ah_const_xy)) deallocate(CS%Re_Ah_const_xy)
   endif
-  if (CS%anisotropic) then
-    DEALLOC_(CS%n1n2_h)
-    DEALLOC_(CS%n1n2_q)
-    DEALLOC_(CS%n1n1_m_n2n2_h)
-    DEALLOC_(CS%n1n1_m_n2n2_q)
-  endif
+
+  if (allocated(CS%n1n2_h)) deallocate(CS%n1n2_h)
+  if (allocated(CS%n1n2_q)) deallocate(CS%n1n2_q)
+  if (allocated(CS%n1n1_m_n2n2_h)) deallocate(CS%n1n1_m_n2n2_h)
+  if (allocated(CS%n1n1_m_n2n2_q)) deallocate(CS%n1n1_m_n2n2_q)
 
   if (CS%use_ZB2020) then
     call ZB2020_end(CS%ZB2020)

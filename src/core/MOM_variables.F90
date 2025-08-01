@@ -101,8 +101,9 @@ type, public :: thermo_var_ptrs
   ! These arrays are accumulated fluxes for communication with other components.
   real, dimension(:,:), pointer :: frazil => NULL()
                          !< The energy needed to heat the ocean column to the
-                         !! freezing point since calculate_surface_state was2
+                         !! freezing point since calculate_surface_state was
                          !! last called [Q Z R ~> J m-2].
+  logical :: frazil_was_reset !< If true, frazil has not accumulated since it was last reset.
   real, dimension(:,:), pointer :: salt_deficit => NULL()
                          !<   The salt needed to maintain the ocean column
                          !! at a minimum salinity of MIN_SALINITY since the last time

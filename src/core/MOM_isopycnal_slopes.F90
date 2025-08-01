@@ -28,8 +28,8 @@ contains
 
 !> Calculate isopycnal slopes, and optionally return other stratification dependent functions such as N^2
 !! and dz*S^2*g-prime used, or calculable from factors used, during the calculation.
-subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stanley, &
-                                  slope_x, slope_y, N2_u, N2_v, dzu, dzv, dzSxN, dzSyN, halo, OBC)
+subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stanley, slope_x, slope_y, &
+                                  N2_u, N2_v, dzu, dzv, dzSxN, dzSyN, halo, OBC, OBC_N2)
   type(ocean_grid_type),                       intent(in)    :: G    !< The ocean's grid structure
   type(verticalGrid_type),                     intent(in)    :: GV   !< The ocean's vertical grid structure
   type(unit_scale_type),                       intent(in)    :: US   !< A dimensional unit scaling type
@@ -61,6 +61,9 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
                                                                      !! Eady growth rate at v-points. [Z T-1 ~> m s-1]
   integer,                           optional, intent(in)    :: halo !< Halo width over which to compute
   type(ocean_OBC_type),              optional, pointer       :: OBC  !< Open boundaries control structure.
+  logical,                           optional, intent(in)    :: OBC_N2 !< If present and true, use interior data
+                                                                     !! to calculate stratification at open boundary
+                                                                     !! condition faces.
 
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G), SZK_(GV)) :: &
@@ -127,6 +130,8 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
 
   logical :: present_N2_u, present_N2_v
   logical :: local_open_u_BC, local_open_v_BC ! True if u- or v-face OBCs exist anywhere in the global domain.
+  logical :: OBC_friendly  ! If true, open boundary conditions are in use and only interior data should
+                        ! be used to calculate N2 at OBC faces.
   integer, dimension(2) :: EOSdom_u  ! The shifted I-computational domain to use for equation of
                                      ! state calculations at u-points.
   integer, dimension(2) :: EOSdom_v  ! The shifted i-computational domain to use for equation of
@@ -135,7 +140,6 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
                                      ! state calculations at h points with 1 extra halo point
   integer :: is, ie, js, je, nz, IsdB
   integer :: i, j, k
-  integer :: l_seg
 
   if (present(halo)) then
     is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo
@@ -155,9 +159,11 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
 
   local_open_u_BC = .false.
   local_open_v_BC = .false.
+  OBC_friendly = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
     local_open_u_BC = OBC%open_u_BCs_exist_globally
     local_open_v_BC = OBC%open_v_BCs_exist_globally
+    if (present(OBC_N2)) OBC_friendly = OBC_N2
   endif ; endif
 
   use_EOS = associated(tv%eqn_of_state)
@@ -241,17 +247,17 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   enddo
 
   do I=is-1,ie
-    GxSpV_u(I) = G_Rho0  !This will be changed if both use_EOS and allocated(tv%SpV_avg) are true
+    GxSpV_u(I) = G_Rho0  ! This will be changed if both use_EOS and allocated(tv%SpV_avg) are true
   enddo
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv,h,e, &
   !$OMP                                  h_neglect,dz_neglect,h_neglect2, &
   !$OMP                                  present_N2_u,G_Rho0,N2_u,slope_x,dzSxN,EOSdom_u,EOSdom_h1, &
-  !$OMP                                  local_open_u_BC,dzu,OBC,use_stanley) &
+  !$OMP                                  local_open_u_BC,dzu,OBC,use_stanley,OBC_friendly) &
   !$OMP                          private(drdiA,drdiB,drdkL,drdkR,pres_u,T_u,S_u,      &
   !$OMP                                  drho_dT_u,drho_dS_u,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h, &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdx,mag_grad2,slope,l_seg) &
+  !$OMP                                  drdx,mag_grad2,slope) &
   !$OMP                          firstprivate(GxSpV_u)
   do j=js,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
@@ -266,6 +272,26 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
         T_u(I) = 0.25*((T(i,j,k) + T(i+1,j,k)) + (T(i,j,k-1) + T(i+1,j,k-1)))
         S_u(I) = 0.25*((S(i,j,k) + S(i+1,j,k)) + (S(i,j,k-1) + S(i+1,j,k-1)))
       enddo
+      if (OBC_friendly) then
+        if (OBC%u_E_OBCs_on_PE .and. (j>=OBC%js_u_E_obc) .and. (j<=OBC%je_u_E_obc)) then
+          do I = max(is-1, OBC%Is_u_E_obc), min(ie, OBC%Ie_u_E_obc)
+            if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
+              pres_u(I) = pres(i,j,K)
+              T_u(I) = 0.5*(T(i,j,k) + T(i,j,k-1))
+              S_u(I) = 0.5*(S(i,j,k) + S(i,j,k-1))
+            endif
+          enddo
+        endif
+        if (OBC%u_W_OBCs_on_PE .and. (j>=OBC%js_u_W_obc) .and. (j<=OBC%je_u_W_obc)) then
+          do I = max(is-1, OBC%Is_u_W_obc), min(ie, OBC%Ie_u_W_obc)
+            if (OBC%segnum_u(I,j) < 0) then !  OBC_DIRECTION_W
+              pres_u(I) = pres(i+1,j,K)
+              T_u(I) = 0.5*(T(i+1,j,k) + T(i+1,j,k-1))
+              S_u(I) = 0.5*(S(i+1,j,k) + S(i+1,j,k-1))
+            endif
+          enddo
+        endif
+      endif
       call calculate_density_derivs(T_u, S_u, pres_u, drho_dT_u, drho_dS_u, &
                                     tv%eqn_of_state, EOSdom_u)
       if (present_N2_u .or. (present(dzSxN))) then
@@ -338,8 +364,20 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       ! The expression for drdz above is mathematically equivalent to:
       !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
       !          ((hg2L/haL) + (hg2R/haR))
-      ! This is the gradient of density along geopotentials.
+      ! which is an estimate of the gradient of density across geopotentials.
       if (present_N2_u) then
+        if (OBC_friendly) then ; if (OBC%segnum_u(I,j) /= 0) then
+          if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
+            drdz = drdkL / dzaL  ! Note that drdz is not used for slopes at OBC faces.
+            if (use_EOS .and. allocated(tv%SpV_avg)) &
+              GxSpV_u(I) = GV%g_Earth * 0.5 * (tv%SpV_avg(i,j,k) + tv%SpV_avg(i,j,k-1))
+          elseif (OBC%segnum_u(I,j) < 0) then !  OBC_DIRECTION_W
+            drdz = drdkR / dzaR
+            if (use_EOS .and. allocated(tv%SpV_avg)) &
+              GxSpV_u(I) = GV%g_Earth * 0.5 * (tv%SpV_avg(i+1,j,k) + tv%SpV_avg(i+1,j,k-1))
+          endif
+        endif ; endif
+
         N2_u(I,j,K) = GxSpV_u(I) * drdz * G%mask2dCu(I,j) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
       endif
 
@@ -360,13 +398,12 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       endif
 
       if (local_open_u_BC) then
-        l_seg = OBC%segnum_u(I,j)
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(l_seg)%open) then
+        if (OBC%segnum_u(I,j) /= 0) then
+          if (OBC%segment(abs(OBC%segnum_u(I,j)))%open) then
             slope = 0.
             ! This and/or the masking code below is to make slopes match inside
             ! land mask. Might not be necessary except for DEBUG output.
-!           if (OBC%segment(OBC%segnum_u(I,j))%direction == OBC_DIRECTION_E) then
+!           if (OBC%segnum_u(I,j) > 0) then !  OBC_DIRECTION_E
 !             slope_x(I+1,j,K) = 0.
 !           else
 !             slope_x(I-1,j,K) = 0.
@@ -375,6 +412,7 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
         endif
         slope = slope * max(G%mask2dT(i,j), G%mask2dT(i+1,j))
       endif
+
       slope_x(I,j,K) = slope
       if (present(dzSxN)) &
         dzSxN(I,j,K) = sqrt( GxSpV_u(I) * max(0., (wtL * ( dzaL * drdkL )) &
@@ -391,13 +429,13 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
   !$OMP parallel do default(none) shared(nz,is,ie,js,je,IsdB,use_EOS,G,GV,US,pres,T,S,tv, &
   !$OMP                                  h,h_neglect,e,dz_neglect, &
   !$OMP                                  h_neglect2,present_N2_v,G_Rho0,N2_v,slope_y,dzSyN,EOSdom_v, &
-  !$OMP                                  dzv,local_open_v_BC,OBC,use_stanley) &
+  !$OMP                                  dzv,local_open_v_BC,OBC,use_stanley,OBC_friendly) &
   !$OMP                          private(drdjA,drdjB,drdkL,drdkR,pres_v,T_v,S_v,      &
   !$OMP                                  drho_dT_v,drho_dS_v,hg2A,hg2B,hg2L,hg2R,haA, &
   !$OMP                                  drho_dT_dT_h,scrap,pres_h,T_h,S_h, &
   !$OMP                                  drho_dT_dT_hr,pres_hr,T_hr,S_hr,             &
   !$OMP                                  haB,haL,haR,dzaL,dzaR,wtA,wtB,wtL,wtR,drdz,  &
-  !$OMP                                  drdy,mag_grad2,slope,l_seg) &
+  !$OMP                                  drdy,mag_grad2,slope) &
   !$OMP                          firstprivate(GxSpV_v)
   do J=js-1,je ; do K=nz,2,-1
     if (.not.(use_EOS)) then
@@ -411,6 +449,26 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
         T_v(i) = 0.25*((T(i,j,k) + T(i,j+1,k)) + (T(i,j,k-1) + T(i,j+1,k-1)))
         S_v(i) = 0.25*((S(i,j,k) + S(i,j+1,k)) + (S(i,j,k-1) + S(i,j+1,k-1)))
       enddo
+      if (OBC_friendly) then
+        if (OBC%v_N_OBCs_on_PE .and. (J>=OBC%Js_v_N_obc) .and. (J<=OBC%Je_v_N_obc)) then
+          do i = max(is, OBC%is_v_N_obc), min(ie, OBC%ie_v_N_obc)
+            if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
+              pres_v(i) = pres(i,j,K)
+              T_v(i) = 0.5*(T(i,j,k) + T(i,j,k-1))
+              S_v(i) = 0.5*(S(i,j,k) + S(i,j,k-1))
+            endif
+          enddo
+        endif
+        if (OBC%v_S_OBCs_on_PE .and. (J>=OBC%Js_v_S_obc) .and. (J<=OBC%Je_v_S_obc)) then
+          do i = max(is, OBC%is_v_S_obc), min(ie, OBC%ie_v_S_obc)
+            if (OBC%segnum_v(i,J) < 0) then !  OBC_DIRECTION_S
+              pres_v(i) = pres(i,j+1,K)
+              T_v(i) = 0.5*(T(i,j+1,k) + T(i,j+1,k-1))
+              S_v(i) = 0.5*(S(i,j+1,k) + S(i,j+1,k-1))
+            endif
+          enddo
+        endif
+      endif
       call calculate_density_derivs(T_v, S_v, pres_v, drho_dT_v, drho_dS_v, &
                                     tv%eqn_of_state, EOSdom_v)
 
@@ -490,8 +548,22 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       ! The expression for drdz above is mathematically equivalent to:
       !   drdz = ((hg2L/haL) * drdkL/dzaL + (hg2R/haR) * drdkR/dzaR) / &
       !          ((hg2L/haL) + (hg2R/haR))
-      ! This is the gradient of density along geopotentials.
-      if (present_N2_v) N2_v(i,J,K) = GxSpV_v(i) * drdz * G%mask2dCv(i,J) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
+      ! which is an estimate of the gradient of density across geopotentials.
+      if (present_N2_v) then
+        if (OBC_friendly) then ; if (OBC%segnum_v(i,J) /= 0) then
+          if (OBC%segnum_v(i,J) > 0) then !  OBC_DIRECTION_N
+            drdz = drdkL / dzaL  ! Note that drdz is not used for slopes at OBC faces.
+            if (use_EOS .and. allocated(tv%SpV_avg)) &
+              GxSpV_v(i) = GV%g_Earth * 0.5 * (tv%SpV_avg(i,j,k) + tv%SpV_avg(i,j,k-1))
+          elseif (OBC%segnum_v(i,J) < 0) then !  OBC_DIRECTION_S
+            drdz = drdkL / dzaL
+            if (use_EOS .and. allocated(tv%SpV_avg)) &
+              GxSpV_v(i) = GV%g_Earth * 0.5 * (tv%SpV_avg(i,j+1,k) + tv%SpV_avg(i,j+1,k-1))
+          endif
+        endif ; endif
+
+        N2_v(i,J,K) = GxSpV_v(i) * drdz * G%mask2dCv(i,J) ! Square of buoyancy freq. [L2 Z-2 T-2 ~> s-2]
+      endif
 
       if (use_EOS) then
         drdy = ((wtA * drdjA + wtB * drdjB) / (wtA + wtB) - &
@@ -510,13 +582,12 @@ subroutine calc_isoneutral_slopes(G, GV, US, h, e, tv, dt_kappa_smooth, use_stan
       endif
 
       if (local_open_v_BC) then
-        l_seg = OBC%segnum_v(i,J)
-        if (l_seg /= OBC_NONE) then
-          if (OBC%segment(l_seg)%open) then
+        if (OBC%segnum_v(i,J) /= 0) then
+          if (OBC%segment(abs(OBC%segnum_v(i,J)))%open) then
             slope = 0.
             ! This and/or the masking code below is to make slopes match inside
             ! land mask. Might not be necessary except for DEBUG output.
-!           if (OBC%segment(OBC%segnum_v(i,J))%direction == OBC_DIRECTION_N) then
+!           if (OBC%segnum_v(i,J)) > 0) then ! OBC_DIRECTION_N
 !             slope_y(i,J+1,K) = 0.
 !           else
 !             slope_y(i,J-1,K) = 0.

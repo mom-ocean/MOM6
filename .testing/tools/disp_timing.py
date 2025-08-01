@@ -12,11 +12,15 @@ scale = 1e6  # micro-seconds (should make this dynamic)
 def display_timing_file(file, show_all):
     """Parse a JSON file of timing results and pretty-print the results"""
 
-    with open(file) as json_file:
-        timing_dict = json.load(json_file)
+    try:
+        with open(file, 'r') as json_file:
+            timing_dict = json.load(json_file)
+        print("(Times measured in %5.0e seconds)" % (1./scale))
+        print("  Min time Module & function")
+    except:
+        stream_fms_tail_file(file)
+        timing_dict = {}
 
-    print("(Times measured in %5.0e seconds)" % (1./scale))
-    print("  Min time Module & function")
     for sub in timing_dict.keys():
         tmin = timing_dict[sub]['min'] * scale
         print("%10.4e %s" % (tmin, sub))
@@ -34,18 +38,27 @@ def display_timing_file(file, show_all):
                   "std = %8.2e, " % (tstd) +
                   "# = %d)" % (nsamp))
 
-
 def compare_timing_files(file, ref, show_all, significance_threshold):
     """Read and compare two JSON files of timing results"""
 
-    with open(file) as json_file:
-        timing_dict = json.load(json_file)
+    try:
+        with open(file) as json_file:
+            timing_dict = json.load(json_file)
+    except:
+        print("This timing tail sheet:")
+        stream_fms_tail_file(file)
+        timing_dict = {}
 
-    with open(ref) as json_file:
-        ref_dict = json.load(json_file)
+    try:
+        with open(ref) as json_file:
+            ref_dict = json.load(json_file)
+        print("(Times measured in %5.0e seconds)" % (1./scale))
+        print("  Delta (%)  Module & function")
+    except:
+        print("Reference timing tail sheet:")
+        stream_fms_tail_file(ref)
+        ref_dict = {}
 
-    print("(Times measured in %5.0e seconds)" % (1./scale))
-    print("  Delta (%)  Module & function")
     for sub in {**ref_dict, **timing_dict}.keys():
         T1 = ref_dict.get(sub)
         T2 = timing_dict.get(sub)
@@ -101,6 +114,18 @@ def compare_timing_files(file, ref, show_all, significance_threshold):
                       "std=%8.2e, " % (tstd1) +
                       "# = %d)" % (n1))
 
+# Rudimentatry dump of tail sheet produced by FMS.
+# This should really be handled by the parse_fms_clocks.py script
+def stream_fms_tail_file(file):
+    silent = True
+    with open(file, 'r') as fms_tail_file:
+        for line in fms_tail_file.readlines():
+            if "tfrac grain pemin pemax" in line:
+                silent=False
+            elif "high water mark" in line:
+                silent=True
+            if not silent:
+                print(line)
 
 # Parse arguments
 parser = argparse.ArgumentParser(
