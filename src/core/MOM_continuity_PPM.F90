@@ -3076,6 +3076,7 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
                  "solver for use as the weights in the barotropic solver. "//&
                  "Otherwise use the transport averaged areas.", default=.true.)
   CS%diag => diag
+  !$omp target enter data map(to: CS)
 
   id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)
   id_clock_update = cpu_clock_id('(Ocean continuity update)', grain=CLOCK_ROUTINE)

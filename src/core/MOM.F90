@@ -962,9 +962,11 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       if (associated(CS%HA_CSp)) call HA_accum_FtF(Time_Local, CS%HA_CSp)
 
+      !$omp target enter data map(to: dt)
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_tradv_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
+      !$omp target exit data map(release: dt)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -2371,6 +2373,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! Determining the internal unit scaling factors for this run.
   call unit_scaling_init(param_file, CS%US)
   US => CS%US
+  !$omp target enter data map(to: CS%US)
 
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "", log_to_all=.true., layout=.true., debugging=.true.)

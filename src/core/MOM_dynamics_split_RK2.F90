@@ -426,7 +426,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   ! allocate internal variables on GPU
   !$omp target enter data map(alloc: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
   !$omp target enter data map(alloc: hp)
-  !$omp target update to(eta, pbv, pbv%por_face_areaU, pbv%por_face_areaV)
+  !$omp target update to(eta)
 
   !$OMP parallel do default(shared)
   do k=1,nz
