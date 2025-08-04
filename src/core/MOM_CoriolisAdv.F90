@@ -244,7 +244,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   !$omp target enter data map(alloc: Area_h, Area_q)
 
-  do concurrent (I=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
+  do concurrent (j=Jsq-1:Jeq+2, I=Isq-1:Ieq+2)
     Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo
 
@@ -276,7 +276,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     !$omp target update to(Area_h)
   endif
 
-  do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+  do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
                   (Area_h(i+1,j) + Area_h(i,j+1))
   enddo
@@ -322,7 +322,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! First calculate the contributions to the circulation around the q-point.
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-        do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+        do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
           dvSdx(I,J) = (-Waves%us_y(i+1,J,k)*G%dyCv(i+1,J)) - &
                        (-Waves%us_y(i,J,k)*G%dyCv(i,J))
           duSdy(I,J) = (-Waves%us_x(I,j+1,k)*G%dxCu(I,j+1)) - &
@@ -330,39 +330,39 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         enddo
       endif
       if (.not. Waves%Passive_Stokes_VF) then
-        do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+        do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
           dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J)) - &
                       ((v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
           dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1)) - &
                       ((u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
         enddo
       else
-        do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+        do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
           dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
           dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
         enddo
       endif
     else
-      do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
         dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
         dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
       enddo
     endif
 
-    do concurrent (i=Isq-1:Ieq+2, J=Jsq-1:Jeq+1)
+    do concurrent (J=Jsq-1:Jeq+1, i=Isq-1:Ieq+2)
       hArea_v(i,J) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
     enddo
 
-    do concurrent (I=Isq-1:Ieq+1, j=Jsq-1:Jeq+2)
+    do concurrent (j=Jsq-1:Jeq+2, I=Isq-1:Ieq+1)
       hArea_u(I,j) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
     enddo
 
     if (CS%Coriolis_En_Dis) then
-      do concurrent (I=is-1:ie, J=Jsq:Jeq+1)
+      do concurrent (J=Jsq:Jeq+1, I=is-1:ie)
         uh_center(I,j) = 0.5 * ((G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
       enddo
 
-      do concurrent (i=Isq:Ieq+1, J=js-1:je)
+      do concurrent (J=js-1:je, i=Isq:Ieq+1)
         vh_center(i,J) = 0.5 * ((G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
       enddo
     endif
@@ -504,34 +504,34 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     endif
 
     if (CS%no_slip) then
-      do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
         rel_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-          do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+          do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
             stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
           enddo
         endif
       endif
     else
-      do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
         rel_vort(I,J) = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
       enddo
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-          do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+          do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
             stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
           enddo
         endif
       endif
     endif
 
-    do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+    do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
       abs_vort(I,J) = G%CoriolisBu(I,J) + rel_vort(I,J)
     enddo
 
-    do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+    do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
       hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
       Ih_q(I,J) = Area_q(I,J) / (hArea_q + vol_neglect)
       q(I,J) = abs_vort(I,J) * Ih_q(I,J)
@@ -539,26 +539,26 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-        do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+        do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
           qS(I,J) = stk_vort(I,J) * Ih_q(I,J)
         enddo
       endif
     endif
 
     if (CS%id_rv > 0) then
-      do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
         RV(I,J,k) = rel_vort(I,J)
       enddo
     endif
 
     if (CS%id_PV > 0) then
-      do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
         PV(I,J,k) = q(I,J)
       enddo
     endif
 
     if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) then
-      do concurrent (I=Isq-1:Ieq+1, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, I=Isq-1:Ieq+1)
         q2(I,J) = rel_vort(I,J) * Ih_q(I,J)
       enddo
     endif
@@ -568,17 +568,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! scheme.  All are defined at u grid points.
 
     if (CS%Coriolis_Scheme == ARAKAWA_HSU90) then
-      do concurrent (I=is-1:Ieq, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, I=is-1:Ieq)
         a(I,j) = (q(I,J) + (q(I+1,J) + q(I,J-1))) * C1_12
         d(I,j) = ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) * C1_12
       enddo
 
-      do concurrent (I=Isq:Ieq, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, I=Isq:Ieq)
         b(I,j) = (q(I,J) + (q(I-1,J) + q(I,J-1))) * C1_12
         c(I,j) = ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) * C1_12
       enddo
     elseif (CS%Coriolis_Scheme == ARAKAWA_LAMB81) then
-      do concurrent (I=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, I=Isq:Ieq+1)
         a(I-1,j) = (2.0*(q(I,J) + q(I-1,J-1)) + (q(I-1,J) + q(I,J-1))) * C1_24
         d(I-1,j) = ((q(I,j) + q(I-1,J-1)) + 2.0*(q(I-1,J) + q(I,J-1))) * C1_24
         b(I,j) =   ((q(I,J) + q(I-1,J-1)) + 2.0*(q(I-1,J) + q(I,J-1))) * C1_24
@@ -593,7 +593,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       ! This allows the code to always give Sadourny Energy
       if (CS%F_eff_max_blend <= 2.0) then ; Fe_m2 = -1. ; rat_lin = -1.0 ; endif
 
-      do concurrent (I=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, I=Isq:Ieq+1)
         min_Ihq = MIN(Ih_q(I-1,J-1), Ih_q(I,J-1), Ih_q(I-1,J), Ih_q(I,J))
         max_Ihq = MAX(Ih_q(I-1,J-1), Ih_q(I,J-1), Ih_q(I-1,J), Ih_q(I,J))
         rat_m1 = 1.0e15
@@ -638,7 +638,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     !  c1 = 1.0-1.5*RANGE ; c2 = 1.0-RANGE ; c3 = 2.0 ; slope = 0.5
       c1 = 1.0-1.5*0.5 ; c2 = 1.0-0.5 ; c3 = 2.0 ; slope = 0.5
 
-      do concurrent (I=is-1:ie, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, I=is-1:ie)
         uhc = uh_center(I,j)
         uhm = uh(I,j,k)
         ! This sometimes matters with some types of open boundary conditions.
@@ -660,7 +660,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       enddo
 
-      do concurrent (i=Isq:Ieq+1, J=js-1:je)
+      do concurrent (J=js-1:je, i=Isq:Ieq+1)
         vhc = vh_center(i,J)
         vhm = vh(i,J,k)
         ! This sometimes matters with some types of open boundary conditions.
@@ -693,7 +693,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
-        do concurrent (I=Isq:Ieq, j=js:je)
+        do concurrent (j=js:je, I=Isq:Ieq)
           if (q(I,J)*u(I,j,k) == 0.0) then
             temp1 = q(I,J) * ( (vh_max(i,j)+vh_max(i+1,j)) &
                              + (vh_min(i,j)+vh_min(i+1,j)) )*0.5
@@ -714,14 +714,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         enddo
       else
         ! Energy conserving scheme, Sadourny 1975
-        do concurrent (I=Isq:Ieq, j=js:je)
+        do concurrent (j=js:je, I=Isq:Ieq)
           CAu(I,j,k) = 0.25 * &
             ((q(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
              (q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
         enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         CAu(I,j,k) = 0.125 * (G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
                      ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
       enddo
@@ -729,7 +729,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
             (CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         CAu(I,j,k) = (((a(I,j) * vh(i+1,J,k)) +  (c(I,j) * vh(i,J-1,k)))  + &
                       ((b(I,j) * vh(i,J,k)) +  (d(I,j) * vh(i+1,J-1,k)))) * G%IdxCu(I,j)
       enddo
@@ -737,7 +737,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_v that should be returned by the
       !       continuity solver. AJA
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         Heff1 = abs(vh(i,J,k) * G%IdxCv(i,J)) / (eps_vel+abs(v(i,J,k)))
         Heff1 = max(Heff1, min(h(i,j,k),h(i,j+1,k)))
         Heff1 = min(Heff1, max(h(i,j,k),h(i,j+1,k)))
@@ -766,7 +766,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! Add in the additional terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         CAu(I,j,k) = CAu(I,j,k) + &
               ((ep_u(i,j)*uh(I-1,j,k)) - (ep_u(i+1,j)*uh(I+1,j,k))) * G%IdxCu(I,j)
       enddo
@@ -775,7 +775,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
         ! Computing the diagnostic Stokes contribution to CAu
-        do concurrent (I=Isq:Ieq, j=js:je)
+        do concurrent (j=js:je, I=Isq:Ieq)
           CAuS(I,j,k) = 0.25 * &
                 ((qS(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
                  (qS(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
@@ -784,7 +784,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     endif
 
     if (CS%bound_Coriolis) then
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         fv1 = abs_vort(I,J) * v(i+1,J,k)
         fv2 = abs_vort(I,J) * v(i,J,k)
         fv3 = abs_vort(I,J-1) * v(i+1,J-1,k)
@@ -799,12 +799,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     endif
 
     ! Term - d(KE)/dx.
-    do concurrent (I=Isq:Ieq, j=js:je)
+    do concurrent (j=js:je, I=Isq:Ieq)
       CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
     enddo
 
     if (associated(AD%gradKEu)) then
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         AD%gradKEu(I,j,k) = -KEx(I,j)
       enddo
     endif
@@ -815,7 +815,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
-        do concurrent (i=is:ie, J=Jsq:Jeq)
+        do concurrent (J=Jsq:Jeq, i=is:ie)
           if (q(I-1,J)*v(i,J,k) == 0.0) then
             temp1 = q(I-1,J) * ( (uh_max(i-1,j)+uh_max(i-1,j+1)) &
                                + (uh_min(i-1,j)+uh_min(i-1,j+1)) )*0.5
@@ -836,14 +836,14 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         enddo
       else
         ! Energy conserving scheme, Sadourny 1975
-        do concurrent (i=is:ie, J=Jsq:Jeq)
+        do concurrent (J=Jsq:Jeq, i=is:ie)
           CAv(i,J,k) = - 0.25* &
               ((q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
                (q(I,J)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
         enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         CAv(i,J,k) = -0.125 * (G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
                      ((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
       enddo
@@ -851,7 +851,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
             (CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         CAv(i,J,k) = - (((a(I-1,j)   * uh(I-1,j,k)) + &
                          (c(I,j+1)   * uh(I,j+1,k)))  &
                       + ((b(I,j)     * uh(I,j,k)) +   &
@@ -861,7 +861,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_u that should be returned by the
       !       continuity solver. AJA
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         Heff1 = abs(uh(I,j,k) * G%IdyCu(I,j)) / (eps_vel+abs(u(I,j,k)))
         Heff1 = max(Heff1, min(h(i,j,k),h(i+1,j,k)))
         Heff1 = min(Heff1, max(h(i,j,k),h(i+1,j,k)))
@@ -892,7 +892,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! Add in the additonal terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
         (CS%Coriolis_Scheme == AL_BLEND)) then
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         CAv(i,J,k) = CAv(i,J,k) + &
               ((ep_v(i,j)*vh(i,J-1,k)) - (ep_v(i,j+1)*vh(i,J+1,k))) * G%IdyCv(i,J)
       enddo
@@ -901,7 +901,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
         ! Computing the diagnostic Stokes contribution to CAv
-        do concurrent (i=is:ie, J=Jsq:Jeq)
+        do concurrent (J=Jsq:Jeq, i=is:ie)
           CAvS(I,j,k) = 0.25 * &
                 ((qS(I,J) * (uh(I,j+1,k) + uh(I,j,k))) + &
                  (qS(I,J-1) * (uh(I-1,j,k) + uh(I-1,j+1,k)))) * G%IdyCv(i,J)
@@ -910,7 +910,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     endif
 
     if (CS%bound_Coriolis) then
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         fu1 = -abs_vort(I,J) * u(I,j+1,k)
         fu2 = -abs_vort(I,J) * u(I,j,k)
         fu3 = -abs_vort(I-1,J) * u(I-1,j+1,k)
@@ -925,11 +925,11 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     endif
 
     ! Term - d(KE)/dy.
-    do concurrent (i=is:ie, J=Jsq:Jeq)
+    do concurrent (J=Jsq:Jeq, i=is:ie)
       CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
     enddo
     if (associated(AD%gradKEv)) then
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         AD%gradKEv(i,J,k) = -KEy(i,J)
       enddo
     endif
@@ -938,7 +938,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
       ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
         if (associated(AD%rv_x_u)) then
-          do concurrent (i=is:ie, J=Jsq:Jeq)
+          do concurrent (J=Jsq:Jeq, i=is:ie)
             AD%rv_x_u(i,J,k) = - 0.25* &
               ((q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
                (q2(I,j)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
@@ -946,7 +946,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
         if (associated(AD%rv_x_v)) then
-          do concurrent (I=Isq:Ieq, j=js:je)
+          do concurrent (j=js:je, I=Isq:Ieq)
             AD%rv_x_v(I,j,k) = 0.25 * &
               ((q2(I,j) * (vh(i+1,J,k) + vh(i,J,k))) + &
                (q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
@@ -954,7 +954,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       else
         if (associated(AD%rv_x_u)) then
-          do concurrent (i=is:ie, J=Jsq:Jeq)
+          do concurrent (J=Jsq:Jeq, i=is:ie)
             AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
               (((((q2(I,J) + q2(I-1,J-1)) + q2(I-1,J)) * uh(I-1,j,k)) + &
                 (((q2(I-1,J) + q2(I,J+1)) + q2(I,J)) * uh(I,j+1,k))) + &
@@ -964,7 +964,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
         if (associated(AD%rv_x_v)) then
-          do concurrent (I=Isq:Ieq, j=js:je)
+          do concurrent (j=js:je, I=Isq:Ieq)
             AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
               (((((q2(I+1,J) + q2(I,J-1)) + q2(I,J)) * vh(i+1,J,k)) + &
                 (((q2(I-1,J-1) + q2(I,J)) + q2(I,J-1)) * vh(i,J-1,k))) + &
@@ -1073,7 +1073,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       KE(i,j) = ( ( (G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))) + &
                     (G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k))) ) + &
                   ( (G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))) + &
@@ -1082,7 +1082,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme which does not take into account any geometric factors
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2 = up*up
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2 = um*um
       vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2 = vp*vp
@@ -1092,7 +1092,7 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
       um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
       vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
@@ -1108,12 +1108,12 @@ subroutine gradKE(u, v, h, KE, KEx, KEy, k, OBC, G, GV, US, CS)
   !
 
   ! Term - d(KE)/dx.
-  do concurrent (I=Isq:Ieq, j=js:je)
+  do concurrent (j=js:je, I=Isq:Ieq)
     KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu(I,j)
   enddo
 
   ! Term - d(KE)/dy.
-  do concurrent (i=is:ie, J=Jsq:Jeq)
+  do concurrent (J=Jsq:Jeq, i=is:ie)
     KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv(i,J)
   enddo
 
