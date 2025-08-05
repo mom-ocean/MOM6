@@ -617,8 +617,6 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
   character(len=40)  :: mdl = "determine_temperature" ! This subroutine's name.
   logical :: domore(SZK_(GV)) ! Records which layers need additional iterations
   logical :: adjust_salt, fit_together, convergence_bug, do_any
-  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
-                          ! recreate the bugs, or if false bugs are only used if actively selected.
   integer, dimension(2) :: EOSdom ! The i-computational domain for the equation of state
   integer :: i, j, k, is, ie, js, je, nz, itt
 
@@ -633,14 +631,12 @@ subroutine determine_temperature(temp, salt, R_tgt, EOS, p_ref, niter, k_start, 
                  "based on the ratio of the thermal and haline coefficients.  Otherwise try to "//&
                  "match the density by only adjusting temperatures within a maximum range before "//&
                  "revising estimates of the salinity.", default=.false., do_not_log=just_read)
-  call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(PF, mdl, "DETERMINE_TEMP_CONVERGENCE_BUG", convergence_bug, &
                  "If true, use layout-dependent tests on the changes in temperature and salinity "//&
                  "to determine when the iterations have converged when DETERMINE_TEMP_ADJUST_T_AND_S "//&
                  "is false.  For realistic equations of state and the default values of the "//&
                  "various tolerances, this bug does not impact the solutions.", &
-                 default=enable_bugs, do_not_log=just_read)
+                 default=.false., do_not_log=just_read)
 
   call get_param(PF, mdl, "DETERMINE_TEMP_T_MIN", T_min, &
                  "The minimum temperature that can be found by determine_temperature.", &

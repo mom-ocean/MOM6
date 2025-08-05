@@ -313,7 +313,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "Values below 20190101 result in the use of older, less accurate expressions "//&
                  "that were in use at the end of 2018.  Higher values result in the use of more "//&
                  "robust and accurate forms of mathematically equivalent expressions.", &
-                 default=20181231, do_not_log=.not.GV%Boussinesq) ! ### change to default=default_answer_date)
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
     if (.not.GV%Boussinesq) regrid_answer_date = max(regrid_answer_date, 20230701)
     call set_regrid_params(CS, regrid_answer_date=regrid_answer_date)
   endif

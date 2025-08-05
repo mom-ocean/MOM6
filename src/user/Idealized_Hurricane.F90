@@ -132,8 +132,6 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   logical :: continuous_Cd  ! If true, use a continuous form for the simple drag coefficient as a
                  ! function of wind speed with the idealized hurricane.  When this is false, the
                  ! linear shape for the mid-range wind speeds is specified separately.
-  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
-                          ! recreate the bugs, or if false bugs are only used if actively selected.
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -240,13 +238,11 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "IDL_HURR_SCM", CS%SCM_mode, &
                  "Single Column mode switch used in the SCM idealized hurricane wind profile.", &
                  default=.false.)
-  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "IDL_HURR_SCM_EDGE_TAPER_BUG", CS%edge_taper_bug, &
                  "If true and IDL_HURR_SCM is true, use a bug that does all of the tapering and "//&
                  "inflow angle calculations for radii between RAD_EDGE and RAD_AMBIENT as though "//&
                  "they were at RAD_EDGE.", &
-                 default=CS%SCM_mode.and.enable_bugs, do_not_log=.not.CS%SCM_mode)
+                 default=.false., do_not_log=.not.CS%SCM_mode)
   if (.not.CS%SCM_mode) CS%edge_taper_bug = .false.
   call get_param(param_file, mdl, "IDL_HURR_SCM_LOCY", CS%dy_from_center, &
                  "Y distance of station used in the SCM idealized hurricane wind profile.", &

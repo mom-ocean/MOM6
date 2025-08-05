@@ -595,3 +595,17 @@ BULKML_CONV_MOMENTUM_BUG = True !   [Boolean] default = True
 PEN_SW_ABSORB_MINTHICK = 0.001  !   [m] default = 0.001
 GUST_CONST = 0.02               !   [Pa] default = 0.02
 FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False
+
+
+! Explicitly use the defaults from late 2024
+EQN_OF_STATE = "WRIGHT"     ! default = "WRIGHT_FULL"
+HOR_DIFF_ANSWER_DATE = 20240101
+HOR_DIFF_LIMIT_BUG = True
+
+! Explicitly use the defaults from early 2025
+VISC_REM_BUG = True
+DRAG_DIFFUSIVITY_ANSWER_DATE = 20250101
+FRICTWORK_BUG = True
+HOR_DIFF_ANSWER_DATE = 20240101
+HOR_DIFF_LIMIT_BUG = True
+MASS_WEIGHT_IN_PRESSURE_GRADIENT_TOP = False

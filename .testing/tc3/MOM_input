@@ -480,3 +480,8 @@ KAPPA_SHEAR_ITER_BUG = True     !   [Boolean] default = True
 KAPPA_SHEAR_ALL_LAYER_TKE_BUG = True !   [Boolean] default = True
 GUST_CONST = 0.02               !   [Pa] default = 0.02
 FIX_USTAR_GUSTLESS_BUG = False  !   [Boolean] default = False
+
+! Explicitly use the defaults from early 2025
+VISC_REM_BUG = True
+DRAG_DIFFUSIVITY_ANSWER_DATE = 20250101
+FRICTWORK_BUG = True

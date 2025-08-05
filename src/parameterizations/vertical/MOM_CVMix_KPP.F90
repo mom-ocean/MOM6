@@ -523,7 +523,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
                  "The vintage of the order of arithmetic in the CVMix KPP calculations.  Values "//&
                  "below 20240501 recover the answers from early in 2024, while higher values "//&
                  "use expressions that have been refactored for rotational symmetry.", &
-                 default=20240101) !### Change to: default=default_answer_date)
+                 default=default_answer_date)
 
   call closeParameterBlock(paramFile)
 
