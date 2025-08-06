@@ -702,22 +702,22 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! Griffies and Hallberg (2000).
 
     ! Calculate horizontal tension
-    do concurrent (i=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
+    do concurrent (j=Jsq-1:Jeq+2, i=Isq-1:Ieq+2)
       dudx(i,j) = CS%DY_dxT(i,j)*((G%IdyCu(I,j) * u(I,j,k)) - &
                                   (G%IdyCu(I-1,j) * u(I-1,j,k)))
     enddo
 
-    do concurrent (i=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
+    do concurrent (j=Jsq-1:Jeq+2, i=Isq-1:Ieq+2)
       dvdy(i,j) = CS%DX_dyT(i,j)*((G%IdxCv(i,J) * v(i,J,k)) - &
                                   (G%IdxCv(i,J-1) * v(i,J-1,k)))
     enddo
 
-    do concurrent (i=Isq-1:Ieq+2, j=Jsq-1:Jeq+2)
+    do concurrent (j=Jsq-1:Jeq+2, i=Isq-1:Ieq+2)
       sh_xx(i,j) = dudx(i,j) - dvdy(i,j)
     enddo
 
     ! Components for the shearing strain
-    do concurrent (I=is_vort:ie_vort, J=js_vort:je_vort)
+    do concurrent (J=js_vort:je_vort, I=is_vort:ie_vort)
       dvdx(I,J) = CS%DY_dxBu(I,J)*((v(i+1,J,k)*G%IdyCv(i+1,J)) - (v(i,J,k)*G%IdyCv(i,J)))
       dudy(I,J) = CS%DX_dyBu(I,J)*((u(I,j+1,k)*G%IdxCu(I,j+1)) - (u(I,j,k)*G%IdxCu(I,j)))
     enddo
@@ -754,24 +754,24 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! even with OBCs if the accelerations are zeroed at OBC points, in which
     ! case the j-loop for h_u could collapse to j=js=1,je+1. -RWH
     if (use_cont_huv) then
-      do concurrent (I=Isq-1:Ieq+1, j=js-2:je+2)
+      do concurrent (j=js-2:je+2, I=Isq-1:Ieq+1)
         h_u(I,j) = hu_cont(I,j,k)
       enddo
-      do concurrent (i=is-2:ie+2, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, i=is-2:ie+2)
         h_v(i,J) = hv_cont(i,J,k)
       enddo
     elseif (CS%use_land_mask) then
-      do concurrent (I=is-2:Ieq+1, j=js-2:je+2)
+      do concurrent (j=js-2:je+2, I=is-2:Ieq+1)
         h_u(I,j) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k))
       enddo
-      do concurrent (i=is-2:ie+2, J=js-2:Jeq+1)
+      do concurrent (J=js-2:Jeq+1, i=is-2:ie+2)
         h_v(i,J) = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k))
       enddo
     else
-      do concurrent (I=is-2:Ieq+1, j=js-2:je+2)
+      do concurrent (j=js-2:je+2, I=is-2:Ieq+1)
         h_u(I,j) = 0.5 * (h(i,j,k) + h(i+1,j,k))
       enddo
-      do concurrent (i=is-2:ie+2, J=js-2:Jeq+1)
+      do concurrent (J=js-2:Jeq+1, i=is-2:ie+2)
         h_v(i,J) = 0.5 * (h(i,j,k) + h(i,j+1,k))
       enddo
     endif
@@ -906,17 +906,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     ! Shearing strain (including no-slip boundary conditions at the 2-D land-sea mask).
     ! dudy and dvdx include modifications at OBCs from above.
     if (CS%no_slip) then
-      do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
+      do concurrent (J=js-2:Jeq+1, I=is-2:Ieq+1)
         sh_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) + dudy(I,J) )
       enddo
     else
-      do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
+      do concurrent (J=js-2:Jeq+1, I=is-2:Ieq+1)
         sh_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) + dudy(I,J) )
       enddo
     endif
 
     if (CS%id_shearstress > 0) then
-      do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
+      do concurrent (J=js-2:Jeq+1, I=is-2:Ieq+1)
         ShSt(I,J,k) = sh_xy(I,J)
       enddo
     endif
@@ -937,12 +937,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     !  Evaluate Del2u = x.Div(Grad u) and Del2v = y.Div( Grad u)
     if (CS%biharmonic) then
-      do concurrent (I=Isq-1:Ieq+1, j=js-1:Jeq+1)
+      do concurrent (j=js-1:Jeq+1, I=Isq-1:Ieq+1)
         Del2u(I,j) = CS%Idx2dyCu(I,j) * ((CS%dx2q(I,J)*sh_xy(I,J)) - (CS%dx2q(I,J-1)*sh_xy(I,J-1))) + &
                      CS%Idxdy2u(I,j) * ((CS%dy2h(i+1,j)*sh_xx(i+1,j)) - (CS%dy2h(i,j)*sh_xx(i,j)))
       enddo
 
-      do concurrent (i=is-1:Ieq+1, J=Jsq-1:Jeq+1)
+      do concurrent (J=Jsq-1:Jeq+1, i=is-1:Ieq+1)
         Del2v(i,J) = CS%Idxdy2v(i,J) * ((CS%dy2q(I,J)*sh_xy(I,J)) - (CS%dy2q(I-1,J)*sh_xy(I-1,J))) - &
                      CS%Idx2dyCv(i,J) * ((CS%dx2h(i,j+1)*sh_xx(i,j+1)) - (CS%dx2h(i,j)*sh_xx(i,j)))
       enddo
@@ -1127,7 +1127,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif ! CS%Leith_Kh
 
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
-      do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+      do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
         sh_xx_sq = sh_xx(i,j)**2
         sh_xy_sq = 0.25 * ( ((sh_xy(I-1,J-1)**2) + (sh_xy(I,J)**2)) &
                           + ((sh_xy(I-1,J)**2) + (sh_xy(I,J-1)**2)) )
@@ -1136,7 +1136,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
 
     if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
-      do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+      do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
         h_min = min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1))
         hrat_min(i,j) = min(1.0, h_min / (h(i,j,k) + h_neglect))
       enddo
@@ -1162,32 +1162,32 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       ! Static (pre-computed) background viscosity
-      do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+      do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
         Kh(i,j) = CS%Kh_bg_xx(i,j)
       enddo
 
       if (CS%add_LES_viscosity) then
         if (CS%Smagorinsky_Kh) then
-          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Kh(i,j) = Kh(i,j) + CS%Laplac2_const_xx(i,j) * Shear_mag(i,j)
           enddo
         endif
 
         if (CS%Leith_Kh) then
-          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Kh(i,j) = Kh(i,j) &
                 + CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3
           enddo
         endif
       else
         if (CS%Smagorinsky_Kh) then
-          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Kh(i,j) = max(Kh(i,j), CS%Laplac2_const_xx(i,j) * Shear_mag(i,j))
           enddo
         endif
 
         if (CS%Leith_Kh) then
-          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Kh(i,j) = max(Kh(i,j), &
                 CS%Laplac3_const_xx(i,j) * vert_vort_mag(i,j) * inv_PI3)
           enddo
@@ -1214,7 +1214,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       ! Place a floor on the viscosity, if desired.
-      do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+      do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
         Kh(i,j) = max(Kh(i,j), CS%Kh_bg_min)
       enddo
 
@@ -1259,7 +1259,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       ! Newer method of bounding for stability
       if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
-        do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+        do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
           visc_bound_rem(i,j) = 1.0
           Kh_max_here = hrat_min(i,j) * CS%Kh_Max_xx(i,j)
           if (Kh(i,j) >= Kh_max_here) then
@@ -1270,7 +1270,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
         enddo
       elseif (CS%better_bound_Kh) then
-        do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+        do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
           Kh(i,j) = min(Kh(i,j), hrat_min(i,j) * CS%Kh_Max_xx(i,j))
         enddo
       endif
@@ -1315,11 +1315,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         str_xx(i,j) = -Kh(i,j) * sh_xx(i,j)
       enddo
     else
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         str_xx(i,j) = 0.0
       enddo
     endif ! Get Kh at h points and get Laplacian component of str_xx
@@ -1339,20 +1339,20 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! Determine the biharmonic viscosity at h points, using the
       ! largest value from several parameterizations. Also get the
       ! biharmonic component of str_xx.
-      do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+      do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
         Ah(i,j) = CS%Ah_bg_xx(i,j)
       enddo
 
       if ((CS%Smagorinsky_Ah) .or. (CS%Leith_Ah) .or. (CS%use_Leithy)) then
         if (CS%Smagorinsky_Ah) then
           if (CS%bound_Coriolis) then
-            do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+            do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
               AhSm = Shear_mag(i,j) * (CS%Biharm_const_xx(i,j) &
                   + CS%Biharm_const2_xx(i,j) * Shear_mag(i,j))
               Ah(i,j) = max(Ah(i,j), AhSm)
             enddo
           else
-            do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+            do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
               AhSm = CS%Biharm_const_xx(i,j) * Shear_mag(i,j)
               Ah(i,j) = max(Ah(i,j), AhSm)
             enddo
@@ -1427,7 +1427,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
 
         if (CS%bound_Ah .and. .not. CS%better_bound_Ah) then
-          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Ah(i,j) = min(Ah(i,j), CS%Ah_Max_xx(i,j))
           enddo
         endif
@@ -1453,11 +1453,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       if (CS%better_bound_Ah) then
         if (CS%better_bound_Kh) then
-          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Ah(i,j) = min(Ah(i,j), visc_bound_rem(i,j) * hrat_min(i,j) * CS%Ah_Max_xx(i,j))
           enddo
         else
-          do concurrent (i=is_Kh:ie_Kh, j=js_Kh:je_Kh)
+          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Ah(i,j) = min(Ah(i,j), hrat_min(i,j) * CS%Ah_Max_xx(i,j))
           enddo
         endif
@@ -1502,7 +1502,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         enddo ; enddo
       endif
 
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         d_del2u = (G%IdyCu(I,j) * Del2u(I,j)) - (G%IdyCu(I-1,j) * Del2u(I-1,j))
         d_del2v = (G%IdxCv(i,J) * Del2v(i,J)) - (G%IdxCv(i,J-1) * Del2v(i,J-1))
         d_str = Ah(i,j) * ((CS%DY_dxT(i,j) * d_del2u) - (CS%DX_dyT(i,j) * d_del2v))
@@ -1556,7 +1556,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
     if (CS%biharmonic) then
       ! Gradient of Laplacian, for use in bi-harmonic term
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         dDel2vdx(I,J) = CS%DY_dxBu(I,J)*((Del2v(i+1,J)*G%IdyCv(i+1,J)) - (Del2v(i,J)*G%IdyCv(i,J)))
         dDel2udy(I,J) = CS%DX_dyBu(I,J)*((Del2u(I,j+1)*G%IdxCu(I,j+1)) - (Del2u(I,j)*G%IdxCu(I,j)))
       enddo
@@ -1589,7 +1589,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
 
     if ((CS%Smagorinsky_Kh) .or. (CS%Smagorinsky_Ah)) then
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         sh_xy_sq = sh_xy(I,J)**2
         sh_xx_sq = 0.25 * ( ((sh_xx(i,j)**2) + (sh_xx(i+1,j+1)**2)) &
                           + ((sh_xx(i,j+1)**2) + (sh_xx(i+1,j)**2)) )
@@ -1597,7 +1597,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo
     endif
 
-    do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+    do concurrent (J=js-1:Jeq, I=is-1:Ieq)
       h2uq = 4.0 * (h_u(I,j) * h_u(I,j+1))
       h2vq = 4.0 * (h_v(i,J) * h_v(i+1,J))
       hq(I,J) = (2.0 * (h2uq * h2vq)) &
@@ -1605,7 +1605,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     enddo
 
     if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         h_min = min(h_u(I,j), h_u(I,j+1), h_v(i,J), h_v(i+1,J))
         hrat_min(I,J) = min(1.0, h_min / (hq(I,J) + h_neglect))
       enddo
@@ -1672,17 +1672,17 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       ! Static (pre-computed) background viscosity
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         Kh(I,J) = CS%Kh_bg_xy(I,J)
       enddo
 
       if (CS%Smagorinsky_Kh) then
         if (CS%add_LES_viscosity) then
-          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+          do concurrent (J=js-1:Jeq, I=is-1:Ieq)
             Kh(I,J) = Kh(I,J) + CS%Laplac2_const_xy(I,J) * Shear_mag(I,J)
           enddo
         else
-          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+          do concurrent (J=js-1:Jeq, I=is-1:Ieq)
             Kh(I,J) = max(Kh(I,J), CS%Laplac2_const_xy(I,J) * Shear_mag(I,J) )
           enddo
         endif
@@ -1721,7 +1721,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         ! Place a floor on the viscosity, if desired.
         Kh(I,J) = max(Kh(I,J), CS%Kh_bg_min)
       enddo
@@ -1763,7 +1763,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
         ! Newer method of bounding for stability
-        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+        do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           visc_bound_rem(I,J) = 1.0
           Kh_max_here = hrat_min(I,J) * CS%Kh_Max_xy(I,J)
           if (Kh(I,J) >= Kh_max_here) then
@@ -1774,7 +1774,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           endif
         enddo
       elseif (CS%better_bound_Kh) then
-        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+        do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           Kh(I,J) = min(Kh(I,J), hrat_min(I,J) * CS%Kh_Max_xy(I,J))
         enddo
       endif
@@ -1801,13 +1801,13 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       if (CS%id_sh_xy_q > 0) then
-        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+        do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           sh_xy_q(I,J,k) = sh_xy(I,J)
         enddo
       endif
 
       if (.not. CS%use_Leithy) then
-        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+        do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           str_xy(I,J) = -Kh(I,J) * sh_xy(I,J)
         enddo
       else
@@ -1818,7 +1818,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(str_xy)
       endif
     else
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         str_xy(I,J) = 0.
       enddo
     endif ! get harmonic coefficient Kh at q points and harmonic part of str_xy
@@ -1838,20 +1838,20 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       ! Determine the biharmonic viscosity at q points, using the
       ! largest value from several parameterizations. Also get the
       ! biharmonic component of str_xy.
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         Ah(I,J) = CS%Ah_bg_xy(I,J)
       enddo
 
       if (CS%Smagorinsky_Ah .or. CS%Leith_Ah) then
         if (CS%Smagorinsky_Ah) then
           if (CS%bound_Coriolis) then
-            do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+            do concurrent (J=js-1:Jeq, I=is-1:Ieq)
               AhSm = Shear_mag(I,J) * (CS%Biharm_const_xy(I,J) &
                   + CS%Biharm_const2_xy(I,J) * Shear_mag(I,J))
               Ah(I,J) = max(Ah(I,J), AhSm)
             enddo
           else
-            do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+            do concurrent (J=js-1:Jeq, I=is-1:Ieq)
               AhSm = CS%Biharm_const_xy(I,J) * Shear_mag(I,J)
               Ah(I,J) = max(Ah(I,J), AhSm)
             enddo
@@ -1868,7 +1868,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         endif
 
         if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+          do concurrent (J=js-1:Jeq, I=is-1:Ieq)
             Ah(I,J) = min(Ah(I,J), CS%Ah_Max_xy(I,J))
           enddo
         endif
@@ -1895,11 +1895,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
 
       if (CS%better_bound_Ah) then
         if (CS%better_bound_Kh) then
-          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+          do concurrent (J=js-1:Jeq, I=is-1:Ieq)
             Ah(I,J) = min(Ah(I,J), visc_bound_rem(I,J) * hrat_min(I,J) * CS%Ah_Max_xy(I,J))
           enddo
         else
-          do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+          do concurrent (J=js-1:Jeq, I=is-1:Ieq)
             Ah(I,J) = min(Ah(I,J), hrat_min(I,J) * CS%Ah_Max_xy(I,J))
           enddo
         endif
@@ -1934,7 +1934,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
 
       ! Again, need to initialize str_xy as if its biharmonic
-      do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+      do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         d_str = Ah(I,J) * (dDel2vdx(I,J) + dDel2udy(I,J))
 
         str_xy(I,J) = str_xy(I,J) + d_str
@@ -2026,24 +2026,24 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp target update to(str_xx, str_xy)
     else ! .not. use_GME
       ! This changes the units of str_xx from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         str_xx(i,j) = str_xx(i,j) * (h(i,j,k) * CS%reduction_xx(i,j))
       enddo
 
       ! This changes the units of str_xy from [L2 T-2 ~> m2 s-2] to [H L2 T-2 ~> m3 s-2 or kg s-2].
       if (CS%no_slip) then
-        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+        do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           str_xy(I,J) = str_xy(I,J) * (hq(I,J) * CS%reduction_xy(I,J))
         enddo
       else
-        do concurrent (I=is-1:Ieq, J=js-1:Jeq)
+        do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           str_xy(I,J) = str_xy(I,J) * (hq(I,J) * G%mask2dBu(I,J) * CS%reduction_xy(I,J))
         enddo
       endif
     endif ! use_GME
 
     ! Evaluate 1/h x.Div(h Grad u) or the biharmonic equivalent.
-    do concurrent (I=Isq:Ieq, j=js:je)
+    do concurrent (j=js:je, I=Isq:Ieq)
       diffu(I,j,k) = ((G%IdxCu(I,j)*((CS%dx2q(I,J-1)*str_xy(I,J-1)) - (CS%dx2q(I,J)*str_xy(I,J))) + &
                        G%IdyCu(I,j)*((CS%dy2h(i,j)*str_xx(i,j)) - (CS%dy2h(i+1,j)*str_xx(i+1,j)))) * &
                      G%IareaCu(I,j)) / (h_u(I,j) + h_neglect)
@@ -2065,7 +2065,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     endif
 
     ! Evaluate 1/h y.Div(h Grad u) or the biharmonic equivalent.
-    do concurrent (i=is:ie, J=Jsq:Jeq)
+    do concurrent (J=Jsq:Jeq, i=is:ie)
       diffv(i,J,k) = ((G%IdyCv(i,J)*((CS%dy2q(I-1,J)*str_xy(I-1,J)) - (CS%dy2q(I,J)*str_xy(I,J))) - &
                        G%IdxCv(i,J)*((CS%dx2h(i,j)*str_xx(i,j)) - (CS%dx2h(i,j+1)*str_xx(i,j+1)))) * &
                      G%IareaCv(i,J)) / (h_v(i,J) + h_neglect)
@@ -2980,7 +2980,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     endif
   endif
 
-  do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
+  do concurrent (J=js-2:Jeq+1, I=is-2:Ieq+1)
     CS%dx2q(I,J) = G%dxBu(I,J)*G%dxBu(I,J) ; CS%dy2q(I,J) = G%dyBu(I,J)*G%dyBu(I,J)
   enddo
 
@@ -2988,20 +2988,20 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       ((G%isc-G%isd < 3) .or. (G%isc-G%isd < 3))) call MOM_error(FATAL, &
           "The minimum halo size is 3 when a Leith viscosity is being used.")
   if (CS%use_Leithy) then
-    do concurrent (I=is-3:Ieq+2, J=js-3:Jeq+2)
+    do concurrent (J=js-3:Jeq+2, I=is-3:Ieq+2)
       CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
     enddo
   elseif ((CS%Leith_Kh) .or. (CS%Leith_Ah)) then
-    do concurrent (I=Isq-2:Ieq+2, J=Jsq-2:Jeq+2)
+    do concurrent (J=Jsq-2:Jeq+2, I=Isq-2:Ieq+2)
       CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
     enddo
   else
-    do concurrent (I=is-2:Ieq+1, J=js-2:Jeq+1)
+    do concurrent (J=js-2:Jeq+1, I=is-2:Ieq+1)
       CS%DX_dyBu(I,J) = G%dxBu(I,J)*G%IdyBu(I,J) ; CS%DY_dxBu(I,J) = G%dyBu(I,J)*G%IdxBu(I,J)
     enddo
   endif
 
-  do concurrent (i=is-2:Ieq+2, j=js-2:Jeq+2)
+  do concurrent (j=js-2:Jeq+2, i=is-2:Ieq+2)
     CS%dx2h(i,j) = G%dxT(i,j)*G%dxT(i,j) ; CS%dy2h(i,j) = G%dyT(i,j)*G%dyT(i,j)
     CS%DX_dyT(i,j) = G%dxT(i,j)*G%IdyT(i,j) ; CS%DY_dxT(i,j) = G%dyT(i,j)*G%IdxT(i,j)
   enddo
