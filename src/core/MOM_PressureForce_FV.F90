@@ -1154,7 +1154,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   !$omp target enter data map(alloc: e)
 
-  do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+  do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
     e(i,j,nz+1) = -G%bathyT(i,j)
   enddo
 
@@ -1212,7 +1212,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   endif
 
   do k=nz,1,-1
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       e(i,j,K) = e(i,j,K+1) + h(i,j,k)*GV%H_to_Z
     enddo
   enddo
@@ -1268,11 +1268,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   ! integrals, assuming that the surface pressure anomaly varies linearly
   ! in x and y.
   if (use_p_atm) then
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       pa(i,j,1) = GxRho_ref * (e(i,j,1) - G%Z_ref) + p_atm(i,j)
     enddo
   else
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       pa(i,j,1) = GxRho_ref * (e(i,j,1) - G%Z_ref)
     enddo
   endif
@@ -1280,15 +1280,15 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   if (use_EOS) then
     !$omp target enter data map(alloc: Z_0p) if (use_EOS)
     if (CS%use_SSH_in_Z0p .and. use_p_atm) then
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         Z_0p(i,j) = e(i,j,1) + p_atm(i,j) * I_g_rho
       enddo
     elseif (CS%use_SSH_in_Z0p) then
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         Z_0p(i,j) = e(i,j,1)
       enddo
     else
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         Z_0p(i,j) = G%Z_ref
       enddo
     endif
@@ -1347,15 +1347,15 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   else
     !$omp target data map(alloc: dz_geo)
     do k=1,nz
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         dz_geo(i,j) = GV%g_Earth * GV%H_to_Z*h(i,j,k)
         dpa(i,j,k) = (GV%Rlay(k) - rho_ref) * dz_geo(i,j)
         intz_dpa(i,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * dz_geo(i,j)*h(i,j,k)
       enddo
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         intx_dpa(I,j,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i+1,j))
       enddo
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         inty_dpa(i,J,k) = 0.5*(GV%Rlay(k) - rho_ref) * (dz_geo(i,j) + dz_geo(i,j+1))
       enddo
     enddo
@@ -1364,7 +1364,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
   ! Set the pressure anomalies at the interfaces.
   do k=1,nz
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       pa(i,j,K+1) = pa(i,j,K) + dpa(i,j,k)
     enddo
   enddo
@@ -1869,10 +1869,10 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     ! Calculate SAL geopotential anomaly and add its gradient to pressure
     ! gradient force
     if (CS%calculate_SAL) then
-      do concurrent(I=Isq:Ieq, j=js:je, k=1:nz)
+      do concurrent (k=1:nz, j=js:je, I=Isq:Ieq)
           PFu(I,j,k) = PFu(I,j,k) + (e_sal(i+1,j) - e_sal(i,j)) * GV%g_Earth * G%IdxCu(I,j)
       enddo
-      do concurrent (i=is:ie, J=Jsq:Jeq, k=1:nz)
+      do concurrent (k=1:nz, J=Jsq:Jeq, i=is:ie)
           PFv(i,J,k) = PFv(i,J,k) + (e_sal(i,j+1) - e_sal(i,j)) * GV%g_Earth * G%IdyCv(i,J)
       enddo
     endif
@@ -1880,11 +1880,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     ! Calculate tidal geopotential anomaly and add its gradient to pressure
     ! gradient force
     if (CS%tides) then
-      do concurrent(I=Isq:Ieq, j=js:je, k=1:nz)
+      do concurrent (k=1:nz, j=js:je, I=Isq:Ieq)
           PFu(I,j,k) = PFu(I,j,k) + ((e_tidal_eq(i+1,j) + e_tidal_sal(i+1,j)) &
               - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdxCu(I,j)
       enddo
-      do concurrent(i=is:ie, J=Jsq:Jeq, k=1:nz)
+      do concurrent (k=1:nz, J=Jsq:Jeq, i=is:ie)
           PFv(i,J,k) = PFv(i,J,k) + ((e_tidal_eq(i,j+1) + e_tidal_sal(i,j+1)) &
               - (e_tidal_eq(i,j) + e_tidal_sal(i,j))) * GV%g_Earth * G%IdyCv(i,J)
       enddo
@@ -1925,16 +1925,16 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
 
       !$omp end target data
     else
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         dM(i,j) = (CS%GFS_scale - 1.0) * (G_Rho0 * GV%Rlay(1)) * (e(i,j,1) - G%Z_ref)
       enddo
     endif
 
     do k=1,nz
-      do concurrent (I=Isq:Ieq, j=js:je)
+      do concurrent (j=js:je, I=Isq:Ieq)
         PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
       enddo
-      do concurrent (i=is:ie, J=Jsq:Jeq)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
         PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
       enddo
     enddo
@@ -1958,24 +1958,24 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   if (present(eta)) then
     ! eta is the sea surface height relative to a time-invariant geoid, for comparison with
     ! what is used for eta in btstep.  See how e was calculated about 200 lines above.
-    do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
       eta(i,j) = e(i,j,1)*GV%Z_to_H
     enddo
 
     if (CS%tides .and. (.not.CS%bq_sal_tides)) then
       if (CS%tides_answer_date>20230630) then
-        do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+        do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
           eta(i,j) = eta(i,j) + (e_tidal_eq(i,j)+e_tidal_sal(i,j))*GV%Z_to_H
         enddo
       else
-        do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+        do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
           eta(i,j) = eta(i,j) + e_sal_and_tide(i,j)*GV%Z_to_H
         enddo
       endif
     endif
 
     if (CS%calculate_SAL .and. (CS%tides_answer_date>20230630) .and. (.not.CS%bq_sal_tides)) then
-      do concurrent (i=Isq:Ieq+1, j=Jsq:Jeq+1)
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         eta(i,j) = eta(i,j) + e_sal(i,j)*GV%Z_to_H
       enddo
     endif

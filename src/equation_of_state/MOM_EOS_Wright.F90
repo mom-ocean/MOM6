@@ -962,12 +962,12 @@ subroutine calculate_density_array_2d_buggy_Wright(this, T, S, pressure, rho, &
   !   Possibly because Nvidia cannot associate `this` with `EOS%type`.
 
   if (present(rho_ref)) then
-    do concurrent (i=is:ie, j=js:je)
+    do concurrent (j=js:je, i=is:ie)
       rho(i,j) = density_anomaly_elem_buggy_Wright(this, T(i,j), S(i,j), &
           pressure(i,j), rho_ref)
     enddo
   else
-    do concurrent (i=is:ie, j=js:je)
+    do concurrent (j=js:je, i=is:ie)
       rho(i,j) = density_elem_buggy_Wright(this, T(i,j), S(i,j), pressure(i,j))
     enddo
   endif
@@ -1026,7 +1026,7 @@ subroutine calculate_density_derivs_2d_buggy_Wright(this, T, S, pressure, &
 
   ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
 
-  do concurrent (i=is:ie, j=js:je)
+  do concurrent (j=js:je, i=is:ie)
     call calculate_density_derivs_elem_buggy_Wright(this, T(i,j), S(i,j), &
         pressure(i,j), drho_dT(i,j), drho_dS(i,j))
   enddo
