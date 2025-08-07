@@ -689,22 +689,17 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
   if (use_EOS) then
     if (present(rho_star)) then
-      !$omp target
-
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         Ihtot(i,j) = GV%H_to_Z / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
         pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_Z
-      enddo ; enddo
+      enddo
 
       do k=2,nz
-        !$omp parallel loop collapse(2)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
           pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) &
               * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
-        enddo ; enddo
+        enddo
       enddo
-      !$omp end target
     else
       !$omp target data &
       !$omp   map(alloc: EOSdom, press, T_int, S_int, rho_in_situ) &
@@ -716,46 +711,34 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       EOSdom(1,:) = [Isq - (G%isd-1), G%iec+1 - (G%isd-1)]
       EOSdom(2,:) = [Jsq - (G%jsd-1), G%jec+1 - (G%jsd-1)]
 
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         Ihtot(i,j) = GV%H_to_Z / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
         press(i,j) = -Rho0xG * (e(i,j,1) - G%Z_ref)
-      enddo ; enddo
-      !$omp end target
+      enddo
 
       call calculate_density(tv%T(:,:,1), tv%S(:,:,1), press, rho_in_situ, &
                              tv%eqn_of_state, EOSdom)
 
-      !$omp target
-      !$omp parallel loop collapse(2)
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         pbce(i,j,1) = G_Rho0 * (GFS_scale * rho_in_situ(i,j)) * GV%H_to_Z
-      enddo ; enddo
-      !$omp end target
+      enddo
 
       do k=2,nz
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
           press(i,j) = -Rho0xG * (e(i,j,K) - G%Z_ref)
           T_int(i,j) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
           S_int(i,j) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
-        enddo ; enddo
-        !$omp end target
+        enddo
 
         call calculate_density_derivs(T_int, S_int, press, dR_dT, dR_dS, &
                                       tv%eqn_of_state, EOSdom)
 
-        !$omp target
-        !$omp parallel loop collapse(2)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
           pbce(i,j,k) = pbce(i,j,k-1) + G_Rho0 * &
              ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j)) * &
              (dR_dT(i,j) * (tv%T(i,j,k) - tv%T(i,j,k-1)) + &
               dR_dS(i,j) * (tv%S(i,j,k) - tv%S(i,j,k-1)))
-        enddo ; enddo
-        !$omp end target
+        enddo
       enddo
       !$omp end target data
     endif
