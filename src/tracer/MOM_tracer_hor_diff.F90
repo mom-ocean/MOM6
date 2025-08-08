@@ -1679,7 +1679,8 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
                    default=.false.)
   endif
   call get_param(param_file, mdl, "KHTR_MAX", CS%KhTr_Max, &
-                 "The maximum along-isopycnal tracer diffusivity.", &
+                 "The maximum along-isopycnal tracer diffusivity. "//&
+                 "Set to a positive value to activate.",&
                  units="m2 s-1", default=0.0, scale=US%m_to_L**2*US%T_to_s)
   call get_param(param_file, mdl, "KHTR_PASSIVITY_COEFF", CS%KhTr_passivity_coeff, &
                  "The coefficient that scales deformation radius over "//&
