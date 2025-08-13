@@ -3555,6 +3555,7 @@ subroutine set_dtbt(G, GV, US, CS, pbce, gtot_est, BT_cont, eta, SSH_add)
   use_BT_cont = .false.
   if (present(BT_cont)) use_BT_cont = (associated(BT_cont))
 
+  !$omp target enter data map(alloc: gtot_E, gtot_W, gtot_N, gtot_S, Datu, Datv)
   if (use_BT_cont) then
     call BT_cont_to_face_areas(BT_cont, Datu, Datv, G, US, MS, halo=0)
   elseif (CS%Nonlinear_continuity .and. present(eta)) then
@@ -3571,26 +3572,25 @@ subroutine set_dtbt(G, GV, US, CS, pbce, gtot_est, BT_cont, eta, SSH_add)
     dgeo_de = 1.0 + max(0.0, CS%G_extra - det_de)
   endif
   if (present(pbce)) then
-    do j=js,je ; do i=is,ie
+    do concurrent (j=js:je, i=is:ie)
       gtot_E(i,j) = 0.0 ; gtot_W(i,j) = 0.0
       gtot_N(i,j) = 0.0 ; gtot_S(i,j) = 0.0
-    enddo ; enddo
-    !$omp target update from(CS%frhatu, CS%frhatv)
-    do k=1,nz ; do j=js,je ; do i=is,ie
+    enddo
+    do k=1,nz ; do concurrent (j=js:je, i=is:ie)
       gtot_E(i,j) = gtot_E(i,j) + pbce(i,j,k) * CS%frhatu(I,j,k)
       gtot_W(i,j) = gtot_W(i,j) + pbce(i,j,k) * CS%frhatu(I-1,j,k)
       gtot_N(i,j) = gtot_N(i,j) + pbce(i,j,k) * CS%frhatv(i,J,k)
       gtot_S(i,j) = gtot_S(i,j) + pbce(i,j,k) * CS%frhatv(i,J-1,k)
-    enddo ; enddo ; enddo
+    enddo ; enddo
   else
-    do j=js,je ; do i=is,ie
+    do concurrent (j=js:je, i=is:ie)
       gtot_E(i,j) = gtot_est ; gtot_W(i,j) = gtot_est
       gtot_N(i,j) = gtot_est ; gtot_S(i,j) = gtot_est
-    enddo ; enddo
+    enddo
   endif
 
   min_max_dt2 = 1.0e38*US%s_to_T**2  ! A huge value for the permissible timestep squared.
-  do j=js,je ; do i=is,ie
+  do concurrent (j=js:je, i=is:ie) reduce(min:min_max_dt2)
     !   This is pretty accurate for gravity waves, but it is a conservative
     ! estimate since it ignores the stabilizing effect of the bottom drag.
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &
@@ -3599,7 +3599,8 @@ subroutine set_dtbt(G, GV, US, CS, pbce, gtot_est, BT_cont, eta, SSH_add)
       ((G%Coriolis2Bu(I,J) + G%Coriolis2Bu(I-1,J-1)) + &
        (G%Coriolis2Bu(I-1,J) + G%Coriolis2Bu(I,J-1))) * CS%BT_Coriolis_scale**2 )
     if (Idt_max2 * min_max_dt2 > 1.0) min_max_dt2 = 1.0 / Idt_max2
-  enddo ; enddo
+  enddo
+  !$omp target exit data map(release: gtot_E, gtot_W, gtot_N, gtot_S, Datu, Datv)
   dtbt_max = sqrt(min_max_dt2 / dgeo_de)
   if (id_clock_sync > 0) call cpu_clock_begin(id_clock_sync)
   call min_across_PEs(dtbt_max)
