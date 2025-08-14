@@ -1032,7 +1032,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   enddo
 
   if (.not. CS%wt_uv_bug) then
-    do concurrent (j=js:je, I=is-1:ie) ; Iwt_u_tot(I,j) = wt_u(I,j,1) ; enddo
+    do concurrent (j=js:je, I=is-1:ie)
+      Iwt_u_tot(I,j) = wt_u(I,j,1)
+    enddo
     do k=2,nz ; do concurrent (j=js:je, I=is-1:ie)
       Iwt_u_tot(I,j) = Iwt_u_tot(I,j) + wt_u(I,j,k)
     enddo ; enddo
@@ -1043,7 +1045,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       wt_u(I,j,k) = wt_u(I,j,k) * Iwt_u_tot(I,j)
     enddo
 
-    do concurrent (J=js-1:je, i=is:ie) ; Iwt_v_tot(i,J) = wt_v(i,J,1) ; enddo
+    do concurrent (J=js-1:je, i=is:ie)
+      Iwt_v_tot(i,J) = wt_v(i,J,1)
+    enddo
     do k=2,nz ; do concurrent (J=js-1:je, i=is:ie)
       Iwt_v_tot(i,J) = Iwt_v_tot(i,J) + wt_v(i,J,k)
     enddo ; enddo
@@ -1057,8 +1061,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   !   Use u_Cor and v_Cor as the reference values for the Coriolis terms,
   ! including the viscous remnant.
-  do concurrent (j=js-1:je+1, I=is-1:ie) ; ubt_Cor(I,j) = 0.0 ; enddo
-  do concurrent (J=js-1:je, i=is-1:ie+1) ; vbt_Cor(i,J) = 0.0 ; enddo
+  do concurrent (j=js-1:je+1, I=is-1:ie)
+    ubt_Cor(I,j) = 0.0
+  enddo
+  do concurrent (J=js-1:je, i=is-1:ie+1)
+    vbt_Cor(i,J) = 0.0
+  enddo
   do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
     ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
   enddo ; enddo
@@ -1147,8 +1155,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   ! Determine the difference between the sum of the layer fluxes and the
   ! barotropic fluxes found from the same input velocities.
   if (add_uh0) then
-    do concurrent (j=js:je, I=is-1:ie) ; uhbt(I,j) = 0.0 ; ubt(I,j) = 0.0 ; enddo
-    do concurrent (J=js-1:je, i=is:ie) ; vhbt(i,J) = 0.0 ; vbt(i,J) = 0.0 ; enddo
+    do concurrent (j=js:je, I=is-1:ie)
+      uhbt(I,j) = 0.0 ; ubt(I,j) = 0.0
+    enddo
+    do concurrent (J=js-1:je, i=is:ie)
+      vhbt(i,J) = 0.0 ; vbt(i,J) = 0.0
+    enddo
     if (CS%visc_rem_u_uh0) then
       do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
         uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
@@ -1246,56 +1258,60 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 ! between the accelerations due to the average of the layer equations and the
 ! barotropic calculation.
 
-  do concurrent (j=js:je, I=is-1:ie) ; if (G%mask2dCu(I,j) > 0.0) then
-    if (CS%nonlin_stress) then
-      if (GV%Boussinesq) then
-        Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
-                        max(CS%bathyT(i+1,j)*GV%Z_to_H + eta(i+1,j), 0.0))
-      else
-        Htot_avg = 0.5*(eta(i,j) + eta(i+1,j))
+  do concurrent (j=js:je, I=is-1:ie)
+    if (G%mask2dCu(I,j) > 0.0) then
+      if (CS%nonlin_stress) then
+        if (GV%Boussinesq) then
+          Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
+                          max(CS%bathyT(i+1,j)*GV%Z_to_H + eta(i+1,j), 0.0))
+        else
+          Htot_avg = 0.5*(eta(i,j) + eta(i+1,j))
+        endif
+        if (Htot_avg*CS%dy_Cu(I,j) <= 0.0) then
+          CS%IDatu(I,j) = 0.0
+        elseif (integral_BT_cont) then
+          CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j)*dt, BTCL_u(I,j)), &
+                                              CS%dy_Cu(I,j)*Htot_avg) )
+        elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
+          CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j), BTCL_u(I,j)), &
+                                              CS%dy_Cu(I,j)*Htot_avg) )
+        else
+          CS%IDatu(I,j) = 1.0 / Htot_avg
+        endif
       endif
-      if (Htot_avg*CS%dy_Cu(I,j) <= 0.0) then
-        CS%IDatu(I,j) = 0.0
-      elseif (integral_BT_cont) then
-        CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j)*dt, BTCL_u(I,j)), &
-                                             CS%dy_Cu(I,j)*Htot_avg) )
-      elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
-        CS%IDatu(I,j) = CS%dy_Cu(I,j) / (max(find_duhbt_du(ubt(I,j), BTCL_u(I,j)), &
-                                             CS%dy_Cu(I,j)*Htot_avg) )
-      else
-        CS%IDatu(I,j) = 1.0 / Htot_avg
-      endif
-    endif
 
-    BT_force_u(I,j) = forces%taux(I,j) * GV%RZ_to_H * CS%IDatu(I,j)*visc_rem_u(I,j,1)
-  else
-    BT_force_u(I,j) = 0.0
-  endif ; enddo
-  do concurrent (J=js-1:je, i=is:ie) ; if (G%mask2dCv(i,J) > 0.0) then
-    if (CS%nonlin_stress) then
-      if (GV%Boussinesq) then
-        Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
-                        max(CS%bathyT(i,j+1)*GV%Z_to_H + eta(i,j+1), 0.0))
-      else
-        Htot_avg = 0.5*(eta(i,j) + eta(i,j+1))
-      endif
-      if (Htot_avg*CS%dx_Cv(i,J) <= 0.0) then
-        CS%IDatv(i,J) = 0.0
-      elseif (integral_BT_cont) then
-        CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J)*dt, BTCL_v(i,J)), &
-                                             CS%dx_Cv(i,J)*Htot_avg) )
-      elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
-        CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J), BTCL_v(i,J)), &
-                                             CS%dx_Cv(i,J)*Htot_avg) )
-      else
-        CS%IDatv(i,J) = 1.0 / Htot_avg
-      endif
+      BT_force_u(I,j) = forces%taux(I,j) * GV%RZ_to_H * CS%IDatu(I,j)*visc_rem_u(I,j,1)
+    else
+      BT_force_u(I,j) = 0.0
     endif
+  enddo
+  do concurrent (J=js-1:je, i=is:ie)
+    if (G%mask2dCv(i,J) > 0.0) then
+      if (CS%nonlin_stress) then
+        if (GV%Boussinesq) then
+          Htot_avg = 0.5*(max(CS%bathyT(i,j)*GV%Z_to_H + eta(i,j), 0.0) + &
+                          max(CS%bathyT(i,j+1)*GV%Z_to_H + eta(i,j+1), 0.0))
+        else
+          Htot_avg = 0.5*(eta(i,j) + eta(i,j+1))
+        endif
+        if (Htot_avg*CS%dx_Cv(i,J) <= 0.0) then
+          CS%IDatv(i,J) = 0.0
+        elseif (integral_BT_cont) then
+          CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J)*dt, BTCL_v(i,J)), &
+                                              CS%dx_Cv(i,J)*Htot_avg) )
+        elseif (use_BT_cont) then ! Reconsider the max and whether there should be some scaling.
+          CS%IDatv(i,J) = CS%dx_Cv(i,J) / (max(find_dvhbt_dv(vbt(i,J), BTCL_v(i,J)), &
+                                              CS%dx_Cv(i,J)*Htot_avg) )
+        else
+          CS%IDatv(i,J) = 1.0 / Htot_avg
+        endif
+      endif
 
-    BT_force_v(i,J) = forces%tauy(i,J) * GV%RZ_to_H * CS%IDatv(i,J)*visc_rem_v(i,J,1)
-  else
-    BT_force_v(i,J) = 0.0
-  endif ; enddo
+      BT_force_v(i,J) = forces%tauy(i,J) * GV%RZ_to_H * CS%IDatv(i,J)*visc_rem_v(i,J,1)
+    else
+      BT_force_v(i,J) = 0.0
+    endif
+  enddo
   if (associated(taux_bot) .and. associated(tauy_bot)) then
     do concurrent (j=js:je, I=is-1:ie, G%mask2dCu(I,j) > 0.0)
       BT_force_u(I,j) = BT_force_u(I,j) - taux_bot(I,j) * GV%RZ_to_H * CS%IDatu(I,j)
@@ -1460,8 +1476,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
-  do concurrent (j=js-1:je+1, I=is-1:ie) ; av_rem_u(I,j) = 0.0 ; enddo
-  do concurrent (J=js-1:je, i=is-1:ie+1) ; av_rem_v(i,J) = 0.0 ; enddo
+  do concurrent (j=js-1:je+1, I=is-1:ie)
+    av_rem_u(I,j) = 0.0
+  enddo
+  do concurrent (J=js-1:je, i=is-1:ie+1)
+    av_rem_v(i,J) = 0.0
+  enddo
   do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
     av_rem_u(I,j) = av_rem_u(I,j) + CS%frhatu(I,j,k) * visc_rem_u(I,j,k)
   enddo ; enddo
@@ -1521,7 +1541,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   endif
 
   ! Set the mass source, after first initializing the halos to 0.
-  do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1) ; eta_src(i,j) = 0.0 ; enddo
+  do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1)
+    eta_src(i,j) = 0.0
+  enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
     do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0) local(u_max_cor, v_max_cor)
       if (CS%eta_cor(i,j) > 0.0) then
@@ -1826,7 +1848,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (find_etaav) then ; do concurrent (j=js:je, i=is:ie)
     etaav(i,j) = eta_sum(i,j) * I_sum_wt_accel
   enddo ; endif
-  do concurrent (j=js-1:je+1, i=is-1:ie+1) ; e_anom(i,j) = 0.0 ; enddo
+  do concurrent (j=js-1:je+1, i=is-1:ie+1)
+    e_anom(i,j) = 0.0
+  enddo
   if (interp_eta_PF) then
     do j=js,je ; do i=is,ie
       e_anom(i,j) = dgeo_de * (0.5 * (eta(i,j) + eta_in(i,j)) - &
@@ -1955,8 +1979,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   if (query_averaging_enabled(CS%diag)) then
 
     if (CS%gradual_BT_ICs) then
-      do concurrent (j=js:je, I=is-1:ie) ; CS%ubt_IC(I,j) = ubt_wtd(I,j) ; enddo
-      do concurrent (J=js-1:je, i=is:ie) ; CS%vbt_IC(i,J) = vbt_wtd(i,J) ; enddo
+      do concurrent (j=js:je, I=is-1:ie)
+        CS%ubt_IC(I,j) = ubt_wtd(I,j)
+      enddo
+      do concurrent (J=js-1:je, i=is:ie)
+        CS%vbt_IC(i,J) = vbt_wtd(i,J)
+      enddo
     endif
 
     ! Calculate various time-averaged barotropic diagnostics.
@@ -2525,7 +2553,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     vbt_int(:,:) = 0.0 ; vhbt_int(:,:) = 0.0
   endif
 
-  do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw:CS%iedw) ; p_surf_dyn(i,j) = 0.0 ; enddo
+  do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw:CS%iedw)
+    p_surf_dyn(i,j) = 0.0
+  enddo
 
   ! Set up the group pass used for halo updates within the barotropic time stepping loops.
   call create_group_pass(CS%pass_eta_ubt, eta, CS%BT_Domain)
@@ -3393,8 +3423,12 @@ subroutine btstep_ubt_from_layer(U_in, V_in, wt_u, wt_v, ubt, vbt,  G, GV, CS)
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw-1:CS%iedw) ; ubt(i,j) = 0.0 ; enddo
-  do concurrent (j=CS%jsdw-1:CS%jedw, i=CS%isdw:CS%iedw) ; vbt(i,j) = 0.0 ; enddo
+  do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw-1:CS%iedw)
+    ubt(i,j) = 0.0
+  enddo
+  do concurrent (j=CS%jsdw-1:CS%jedw, i=CS%isdw:CS%iedw)
+    vbt(i,j) = 0.0
+  enddo
 
   do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
     ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
@@ -4417,22 +4451,28 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
 
   !$omp target enter data map(alloc: hatutot, hatvtot, Ihatutot, Ihatvtot)
 
-  do concurrent (j=js:je, I=is-1:ie) ; hatutot(I,j) = 0.0 ; enddo
+  do concurrent (j=js:je, I=is-1:ie)
+    hatutot(I,j) = 0.0
+  enddo
 
   if (present(h_u)) then
     do concurrent (k=1:nz, j=js:je, I=is-1:ie)
       CS%frhatu(I,j,k) = h_u(I,j,k)
     enddo
-    do concurrent (j=js:je, I=is-1:ie) ; do k=1,nz
-      hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
-    enddo ; enddo
+    do concurrent (j=js:je, I=is-1:ie)
+      do k=1,nz
+        hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
+      enddo
+    enddo
   elseif (CS%hvel_scheme == ARITHMETIC) then
     do concurrent (k=1:nz, j=js:je, I=is-1:ie)
       CS%frhatu(I,j,k) = 0.5 * (h(i+1,j,k) + h(i,j,k))
     enddo
-    do concurrent (j=js:je, I=is-1:ie) ; do k=1,nz
-      hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
-    enddo ; enddo
+    do concurrent (j=js:je, I=is-1:ie)
+      do k=1,nz
+        hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
+      enddo
+    enddo
   elseif (CS%hvel_scheme == HYBRID .or. use_default) then
     Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
     !$omp target data map(alloc: e_u, D_shallow_u)
@@ -4458,9 +4498,11 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       enddo
     enddo
     !$omp end target data
-    do concurrent (j=js:je, I=is-1:ie) ; do k=1,nz
-      hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
-    enddo ; enddo
+    do concurrent (j=js:je, I=is-1:ie)
+      do k=1,nz
+        hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
+      enddo
+    enddo
   elseif (CS%hvel_scheme == HARMONIC) then
     !   Interpolates thicknesses onto u grid points with the
     ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
@@ -4468,9 +4510,11 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       CS%frhatu(I,j,k) = 2.0*(h(i+1,j,k) * h(i,j,k)) / &
                       ((h(i+1,j,k) + h(i,j,k)) + h_neglect)
     enddo
-    do concurrent (j=js:je, I=is-1:ie) ; do k=1,nz
-      hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
-    enddo ; enddo
+    do concurrent (j=js:je, I=is-1:ie)
+      do k=1,nz
+        hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
+      enddo
+    enddo
   endif
 
   if (CS%BT_OBC%u_OBCs_on_PE) then
@@ -4505,27 +4549,35 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   endif
 
   ! Determine the fractional thickness of each layer at the velocity points.
-  do concurrent (j=js:je, I=is-1:ie) ; Ihatutot(I,j) = G%mask2dCu(I,j) / (hatutot(I,j) + h_neglect) ; enddo
+  do concurrent (j=js:je, I=is-1:ie)
+    Ihatutot(I,j) = G%mask2dCu(I,j) / (hatutot(I,j) + h_neglect)
+  enddo
   do concurrent (k=1:nz, j=js:je, I=is-1:ie)
     CS%frhatu(I,j,k) = CS%frhatu(I,j,k) * Ihatutot(I,j)
   enddo
 
-  do concurrent (J=js-1:je, i=is:ie) ; hatvtot(i,J) = 0.0 ; enddo
+  do concurrent (J=js-1:je, i=is:ie)
+    hatvtot(i,J) = 0.0
+  enddo
 
   if (present(h_v)) then
     do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       CS%frhatv(i,J,k) = h_v(i,J,k)
     enddo
-    do concurrent (J=js-1:je, i=is:ie) ; do k=1,nz
-      hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
-    enddo ; enddo
+    do concurrent (J=js-1:je, i=is:ie)
+      do k=1,nz
+        hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
+      enddo
+    enddo
   elseif (CS%hvel_scheme == ARITHMETIC) then
     do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       CS%frhatv(i,J,k) = 0.5 * (h(i,j+1,k) + h(i,j,k))
     enddo
-    do concurrent (J=js-1:je, i=is:ie) ; do k=1,nz
-      hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
-    enddo ; enddo
+    do concurrent (J=js-1:je, i=is:ie)
+      do k=1,nz
+        hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
+      enddo
+    enddo
   elseif (CS%hvel_scheme == HYBRID .or. use_default) then
     Z_to_H = GV%Z_to_H ; if (.not.GV%Boussinesq) Z_to_H = GV%RZ_to_H * CS%Rho_BT_lin
     !$omp target data map(alloc: e_v, D_shallow_v)
@@ -4551,17 +4603,21 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
       enddo
     enddo
     !$omp end target data
-    do concurrent (J=js-1:je, i=is:ie) ; do k=1,nz
-      hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
-    enddo ; enddo
+    do concurrent (J=js-1:je, i=is:ie)
+      do k=1,nz
+        hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
+      enddo
+    enddo
   elseif (CS%hvel_scheme == HARMONIC) then
     do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       CS%frhatv(i,J,k) = 2.0*(h(i,j+1,k) * h(i,j,k)) / &
                       ((h(i,j+1,k) + h(i,j,k)) + h_neglect)
     enddo
-    do concurrent (J=js-1:je, i=is:ie) ; do k=1,nz
-      hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
-    enddo ; enddo
+    do concurrent (J=js-1:je, i=is:ie)
+      do k=1,nz
+        hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
+      enddo
+    enddo
   endif
 
   if (CS%BT_OBC%v_OBCs_on_PE) then
@@ -4596,7 +4652,9 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
   endif
 
   ! Determine the fractional thickness of each layer at the velocity points.
-  do concurrent (J=js-1:je, i=is:ie) ; Ihatvtot(i,J) = G%mask2dCv(i,J) / (hatvtot(i,J) + h_neglect) ; enddo
+  do concurrent (J=js-1:je, i=is:ie)
+    Ihatvtot(i,J) = G%mask2dCv(i,J) / (hatvtot(i,J) + h_neglect)
+  enddo
   do concurrent (k=1:nz, J=js-1:je, i=is:ie)
     CS%frhatv(i,J,k) = CS%frhatv(i,J,k) * Ihatvtot(i,J)
   enddo
