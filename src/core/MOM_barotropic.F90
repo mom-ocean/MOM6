@@ -1,3 +1,5 @@
+#include "do_concurrent_compat.h"
+
 !> Barotropic solver
 module MOM_barotropic
 
@@ -1545,7 +1547,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     eta_src(i,j) = 0.0
   enddo
   if (CS%bound_BT_corr) then ; if ((use_BT_Cont.or.integral_BT_cont) .and. CS%BT_cont_bounds) then
-    do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0) local(u_max_cor, v_max_cor)
+    do concurrent (j=js:je, i=is:ie, G%mask2dT(i,j) > 0.0) DO_LOCALITY(local(u_max_cor, v_max_cor))
       if (CS%eta_cor(i,j) > 0.0) then
         !   Limit the source (outward) correction to be a fraction the mass that
         ! can be transported out of the cell by velocities with a CFL number of CFL_cor.
@@ -3624,7 +3626,7 @@ subroutine set_dtbt(G, GV, US, CS, pbce, gtot_est, BT_cont, eta, SSH_add)
   endif
 
   min_max_dt2 = 1.0e38*US%s_to_T**2  ! A huge value for the permissible timestep squared.
-  do concurrent (j=js:je, i=is:ie) reduce(min:min_max_dt2)
+  do concurrent (j=js:je, i=is:ie) DO_LOCALITY(reduce(min:min_max_dt2))
     !   This is pretty accurate for gravity waves, but it is a conservative
     ! estimate since it ignores the stabilizing effect of the bottom drag.
     Idt_max2 = 0.5 * (1.0 + 2.0*CS%bebt) * (G%IareaT(i,j) * &

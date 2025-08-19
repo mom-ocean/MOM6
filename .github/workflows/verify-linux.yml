@@ -121,6 +121,9 @@ jobs:
           retention-days: 1
 
   build-openmp:
+    # temporarily disable until we get GCC to accept OpenMP target directives
+    if: false
+
     runs-on: ubuntu-latest
 
     steps:
@@ -480,6 +483,7 @@ jobs:
           test.dim.${{ matrix.dim.id }}
 
   test-openmp:
+    if: false
     runs-on: ubuntu-latest
     needs:
       - build-symmetric
@@ -747,7 +751,7 @@ jobs:
       id-token: write
     needs:
       - test-grid
-      - test-openmp
+      #- test-openmp
       - test-repro
       - run-coverage
 
@@ -756,7 +760,7 @@ jobs:
         with:
           name: |
             mom6-asymmetric-artifact
-            mom6-openmp-artifact
+            #mom6-openmp-artifact
             mom6-repro-artifact
             mom6-coverage-artifact
 
@@ -775,7 +779,7 @@ jobs:
       - test-nan
       - test-dim
       - test-grid
-      - test-openmp
+      #- test-openmp
       - test-repro
       - run-timings
 
@@ -798,7 +802,7 @@ jobs:
       - test-nan
       - test-dim
       - test-grid
-      - test-openmp
+      #- test-openmp
       - test-repro
       - test-regression
       - compare-timings

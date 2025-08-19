@@ -454,13 +454,14 @@ def scan_fortran_file(src_file, defines=None):
             # Activate a new macro (ignoring the value)
             match = re_cpp_define.match(line)
             if match:
+                # TODO: Tokenize this, don't hunt for `(` in `macro`.
                 tokens = line.strip()[1:].split(maxsplit=2)
                 macro = tokens[1]
                 value = tokens[2] if tokens[2:] else None
                 if '(' in macro:
                     # TODO: Actual handling of function macros
                     macro, arg = macro.split('(', maxsplit=1)
-                    value = '(' + arg + value
+                    value = '(' + arg + value if value else '(' + arg
                 cpp_macros[macro] = value
 
             # Deactivate a macro

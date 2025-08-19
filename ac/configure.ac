@@ -165,6 +165,10 @@ AS_IF(
   [FCFLAGS="$FCFLAGS $REAL8_FCFLAGS"])
 
 
+# Do concurrent configuration
+MOM6_FC_DO_CONCURRENT_LOCAL
+
+
 # OpenMP configuration
 
 # NOTE: AC_OPENMP fails on `Fortran` for Autoconf <2.69 due to a m4 bug.
