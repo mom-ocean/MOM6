@@ -1138,7 +1138,7 @@ subroutine create_vector_group_pass_3d(group, u_cmpt, v_cmpt, MOM_dom, direction
 end subroutine create_vector_group_pass_3d
 
 !> do_group_pass carries out a group halo update.
-subroutine do_group_pass(group, MOM_dom, clock)
+subroutine do_group_pass(group, MOM_dom, clock, omp_offload)
   type(group_pass_type), intent(inout) :: group     !< The data type that store information for
                                                     !! group update. This data will be used in
                                                     !! do_group_pass.
@@ -1147,11 +1147,13 @@ subroutine do_group_pass(group, MOM_dom, clock)
                                                     !! sent.
   integer,     optional, intent(in)    :: clock     !< The handle for a cpu time clock that should be
                                                     !! started then stopped to time this routine.
+  logical,     optional, intent(in)    :: omp_offload !< Whether the data to be transferred is
+                                                    !! offloaded to the GPU with OpenMP.
   real :: d_type
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_begin(clock) ; endif
 
-  call mpp_do_group_update(group, MOM_dom%mpp_domain, d_type)
+  call mpp_do_group_update(group, MOM_dom%mpp_domain, d_type, omp_offload)
 
   if (present(clock)) then ; if (clock>0) call cpu_clock_end(clock) ; endif
 

@@ -929,12 +929,11 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     ! These calculations can be done almost immediately, but the halo updates
     ! must be done before the [abcd]mer and [abcd]zon are calculated.
     if (id_clock_calc_pre > 0) call cpu_clock_end(id_clock_calc_pre)
-    !$omp target update from(q, DCor_u, DCor_v)
     if (nonblock_setup) then
+      !$omp target update from(q, DCor_u, DCor_v)
       call start_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
     else
-      call do_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre)
-      !$omp target update to(q, DCor_u, DCor_v)
+      call do_group_pass(CS%pass_q_DCor, CS%BT_Domain, clock=id_clock_pass_pre, omp_offload=.true.)
     endif
     if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
   endif
@@ -1439,13 +1438,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     endif
     call complete_group_pass(CS%pass_gtot, CS%BT_Domain)
     call complete_group_pass(CS%pass_ubt_Cor, G%Domain)
+    !$omp target update to(Ubt_Cor, vbt_Cor, gtot_E, gtot_W, gtot_N, gtot_S)
   else
-    !$omp target update from(ubt_Cor, vbt_Cor, gtot_E, gtot_W, gtot_N, gtot_S)
-    call do_group_pass(CS%pass_gtot, CS%BT_Domain)
-    call do_group_pass(CS%pass_ubt_Cor, G%Domain)
+    call do_group_pass(CS%pass_gtot, CS%BT_Domain, omp_offload=.true.)
+    call do_group_pass(CS%pass_ubt_Cor, G%Domain, omp_offload=.true.)
   endif
   ! Update MPI-updated values are on GPU
-  !$omp target update to(Ubt_Cor, vbt_Cor, gtot_E, gtot_W, gtot_N, gtot_S)
   ! The various elements of gtot are positive definite but directional, so use
   ! the polarity arrays to sort out when the directions have shifted.
   do concurrent (j=jsvf-1:jevf+1, i=isvf-1:ievf+1)
@@ -1641,27 +1639,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
     call start_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
     ! The following halo update is not needed without wide halos.  RWH
   else
-    !$omp target update from(bt_rem_u, bt_rem_v, eta_src)
-    !$omp target update if(integral_BT_cont) from(eta_IC)
-    !$omp target update if(.not.interp_eta_PF) from(eta_PF)
-    !$omp target update if(interp_eta_PF) from(eta_PF_1, d_eta_PF)
-    !$omp target update if(CS%dynamic_psurf) from(dyn_coef_eta)
-    call do_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain)
-    !$omp target update to(bt_rem_u, bt_rem_v, eta_src)
-    !$omp target update if(integral_BT_cont) to(eta_IC)
-    !$omp target update if(.not.interp_eta_PF) to(eta_PF)
-    !$omp target update if(interp_eta_PF) to(eta_PF_1, d_eta_PF)
-    !$omp target update if(CS%dynamic_psurf) to(dyn_coef_eta)
-    if (.not.use_BT_cont) then
-      !$omp target update from(Datu, Datv)
-      call do_group_pass(CS%pass_Dat_uv, CS%BT_Domain)
-      !$omp target update to(Datu, Datv)
-    endif
-    !$omp target update from(BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v)
-    !$omp target update if(add_uh0) from(uhbt0, vhbt0)
-    call do_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain)
-    !$omp target update to(BT_force_u, BT_force_v, Cor_ref_u, Cor_ref_v)
-    !$omp target update if(add_uh0) to(uhbt0, vhbt0)
+    call do_group_pass(CS%pass_eta_bt_rem, CS%BT_Domain, omp_offload=.true.)
+    if (.not.use_BT_cont) call do_group_pass(CS%pass_Dat_uv, CS%BT_Domain, omp_offload=.true.)
+    call do_group_pass(CS%pass_force_hbt0_Cor_ref, CS%BT_Domain, omp_offload=.true.)
   endif
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
@@ -1896,13 +1876,12 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   if (id_clock_calc_post > 0) call cpu_clock_end(id_clock_calc_post)
   if (id_clock_pass_post > 0) call cpu_clock_begin(id_clock_pass_post)
-  !$omp target update from(e_anom)
   if (G%nonblocking_updates) then
+    !$omp target update from(e_anom)
     call start_group_pass(CS%pass_e_anom, G%Domain)
   else
     if (find_etaav) call do_group_pass(CS%pass_etaav, G%Domain)
-    call do_group_pass(CS%pass_e_anom, G%Domain)
-    !$omp target update to(e_anom)
+    call do_group_pass(CS%pass_e_anom, G%Domain, omp_offload=.true.)
   endif
   if (id_clock_pass_post > 0) call cpu_clock_end(id_clock_pass_post)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
@@ -2578,10 +2557,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
     ! Update the range of valid points, either by doing a halo update or by marching inward.
     if ((iev - stencil < ie) .or. (jev - stencil < je)) then
       if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
-      ! TODO: direct GPU-to-GPU transfer
-      !$omp target update from(ubt, vbt, eta)
-      call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain, clock=id_clock_pass_step)
-      !$omp target update to(ubt, vbt, eta)
+      call do_group_pass(CS%pass_eta_ubt, CS%BT_Domain, clock=id_clock_pass_step, omp_offload=.true.)
       isv = isvf ; iev = ievf ; jsv = jsvf ; jev = jevf
       if (id_clock_calc > 0) call cpu_clock_begin(id_clock_calc)
     else
@@ -5023,12 +4999,8 @@ subroutine set_local_BT_cont_types(BT_cont, BTCL_u, BTCL_v, G, US, MS, BT_Domain
 !--- end setup for group halo update
   ! Do halo updates on BT_cont.
   ! data update directives for MPI transfers (via CPU) needed even for serial
-  !$omp target update from(u_polarity, v_polarity, uBT_EE, vBT_NN, uBT_WW, vBT_SS)
-  call do_group_pass(BT_cont%pass_polarity_BT, BT_Domain)
-  !$omp target update to(u_polarity, v_polarity, uBT_EE, vBT_NN, uBT_WW, vBT_SS)
-  !$omp target update from(FA_u_EE, FA_v_NN, FA_u_E0, FA_v_N0, FA_u_W0, FA_v_S0, FA_u_WW, FA_v_SS)
-  call do_group_pass(BT_cont%pass_FA_uv, BT_Domain)
-  !$omp target update to(FA_u_EE, FA_v_NN, FA_u_E0, FA_v_N0, FA_u_W0, FA_v_S0, FA_u_WW, FA_v_SS)
+  call do_group_pass(BT_cont%pass_polarity_BT, BT_Domain, omp_offload=.true.)
+  call do_group_pass(BT_cont%pass_FA_uv, BT_Domain, omp_offload=.true.)
   if (id_clock_pass_pre > 0) call cpu_clock_end(id_clock_pass_pre)
   if (id_clock_calc_pre > 0) call cpu_clock_begin(id_clock_calc_pre)
 
