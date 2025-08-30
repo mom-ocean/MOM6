@@ -596,16 +596,11 @@ subroutine allocate_metrics(G)
   allocate(G%gridLonB(G%IsgB:G%IegB), source=0.0)
   allocate(G%gridLatT(jsg:jeg), source=0.0)
   allocate(G%gridLatB(G%JsgB:G%JegB), source=0.0)
-
-  !$omp target enter data map(to: G, G%Coriolis2Bu)
-
 end subroutine allocate_metrics
 
 !> Release memory used by the ocean_grid_type and related structures.
 subroutine MOM_grid_end(G)
   type(ocean_grid_type), intent(inout) :: G !< The horizontal grid type
-
-  !$omp target exit data map(release: G, G%Coriolis2Bu)
 
   deallocate(G%Block)
 
