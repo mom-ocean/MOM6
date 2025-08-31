@@ -106,12 +106,14 @@ subroutine PressureForce_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL_CS
                  "described in Adcroft et al., O. Mod. (2008).", default=.true.)
 
   if (CS%Analytic_FV_PGF) then
+    !$omp target enter data map(alloc: CS%PressureForce_FV)
     call PressureForce_FV_init(Time, G, GV, US, param_file, diag, &
              CS%PressureForce_FV, ADp, SAL_CSp, tides_CSp)
   else
     call PressureForce_Mont_init(Time, G, GV, US, param_file, diag, &
              CS%PressureForce_Mont, SAL_CSp, tides_CSp)
   endif
+  !$omp target update to(CS)
 end subroutine PressureForce_init
 
 !> \namespace mom_pressureforce

@@ -3649,7 +3649,6 @@ subroutine set_dtbt(G, GV, US, CS, pbce, gtot_est, BT_cont, eta, SSH_add)
     call chksum0(CS%dtbt, "End set_dtbt dtbt", unscale=US%T_to_s)
     call chksum0(CS%dtbt_max, "End set_dtbt dtbt_max", unscale=US%T_to_s)
   endif
-
 end subroutine set_dtbt
 
 ! The following 5 subroutines apply the open boundary conditions.
@@ -6044,20 +6043,6 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     do k=1,GV%ke ; gtot_estimate = gtot_estimate + H_to_Z*GV%g_prime(K) ; enddo
   endif
 
-  ! CS%dtbt calculated here by set_dtbt is only used when dtbt is not reset during the run, i.e. DTBT_RESET_PERIOD<0.
-  call set_dtbt(G, GV, US, CS, gtot_est=gtot_estimate, SSH_add=SSH_extra)
-
-  if (dtbt_input > 0.0) then
-    CS%dtbt = US%s_to_T * dtbt_input
-  elseif (dtbt_restart > 0.0) then
-    CS%dtbt = dtbt_restart
-  endif
-
-  calc_dtbt = .true. ; if ((dtbt_restart > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
-
-  call log_param(param_file, mdl, "DTBT as used", CS%dtbt, units="s", unscale=US%T_to_s)
-  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max, units="s", unscale=US%T_to_s)
-
   ! ubtav and vbtav, and perhaps ubt_IC and vbt_IC, are allocated and
   ! initialized in register_barotropic_restarts.
 
@@ -6205,9 +6190,24 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     endif
   endif
 
-  !$omp target enter data map(to: CS)
-  !$omp target enter data map(to: CS%frhatu, CS%frhatv)
-  !$omp target enter data map(to: CS%eta_cor)
+  !$omp target update to (CS)
+
+  ! CS%dtbt calculated here by set_dtbt is only used when dtbt is not reset during the run, i.e. DTBT_RESET_PERIOD<0.
+  !$omp target enter data map (to: CS%frhatu, CS%frhatv)
+  !$omp target enter data map (to: CS%eta_cor)
+  call set_dtbt(G, GV, US, CS, gtot_est=gtot_estimate, SSH_add=SSH_extra)
+
+  if (dtbt_input > 0.0) then
+    CS%dtbt = US%s_to_T * dtbt_input
+  elseif (dtbt_restart > 0.0) then
+    CS%dtbt = dtbt_restart
+  endif
+  !$omp target update to (CS%dtbt)
+
+  calc_dtbt = .true. ; if ((dtbt_restart > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
+
+  call log_param(param_file, mdl, "DTBT as used", CS%dtbt, units="s", unscale=US%T_to_s)
+  call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max, units="s", unscale=US%T_to_s)
 
   if (CS%id_frhatu1 > 0) allocate(CS%frhatu1(IsdB:IedB,jsd:jed,nz), source=0.)
   if (CS%id_frhatv1 > 0) allocate(CS%frhatv1(isd:ied,JsdB:JedB,nz), source=0.)

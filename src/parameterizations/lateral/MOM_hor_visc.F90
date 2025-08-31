@@ -2876,6 +2876,9 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       "LAPLACIAN or BIHARMONIC viscosity.")
     return ! We are not using either Laplacian or Bi-harmonic lateral viscosity
   endif
+
+  !$omp target update to(CS)
+
   deg2rad = atan(1.0) / 45.
   ALLOC_(CS%dx2h(isd:ied,jsd:jed))        ; CS%dx2h(:,:)    = 0.0
   ALLOC_(CS%dy2h(isd:ied,jsd:jed))        ; CS%dy2h(:,:)    = 0.0

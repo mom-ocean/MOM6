@@ -1640,12 +1640,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   else
     HA_CSp => NULL()
   endif
+
+  !$omp target enter data map(alloc: CS%PressureForce_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &
                           CS%SAL_CSp, CS%tides_CSp)
-  !$omp target enter data map(to: CS%PressureForce_CSp)
 
-  !$omp target enter data map(to: CS%hor_visc)
+  !$omp target enter data map(alloc: CS%hor_visc)
   call hor_visc_init(Time, G, GV, US, param_file, diag, CS%hor_visc, ADp=CS%ADp)
+
   call vertvisc_init(MIS, Time, G, GV, US, param_file, diag, CS%ADp, dirs, &
                      ntrunc, CS%vertvisc_CSp, CS%fpmix)
   CS%set_visc_CSp => set_visc
@@ -1676,6 +1678,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   ! Copy eta into an output array.
   do j=js,je ; do i=is,ie ; eta(i,j) = CS%eta(i,j) ; enddo ; enddo
 
+  !$omp target enter data map (alloc: CS%barotropic_CSp)
   call barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, &
                        CS%barotropic_CSp, restart_CS, calc_dtbt, CS%BT_cont, &
                        CS%OBC, CS%SAL_CSp, HA_CSp)
