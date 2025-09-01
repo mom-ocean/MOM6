@@ -3094,6 +3094,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     call register_restarts_dyn_split_RK2b(HI, GV, US, param_file, &
              CS%dyn_split_RK2b_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%split) then
+    allocate(CS%dyn_split_RK2_CSp)
+    !$omp target enter data map(alloc: CS%dyn_split_RK2_CSp)
     call register_restarts_dyn_split_RK2(HI, GV, US, param_file, &
              CS%dyn_split_RK2_CSp, restart_CSp, CS%uh, CS%vh)
   elseif (CS%use_RK2) then

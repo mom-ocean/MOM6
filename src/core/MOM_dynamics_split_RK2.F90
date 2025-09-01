@@ -1284,7 +1284,7 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
   type(verticalGrid_type),       intent(in)    :: GV         !< ocean vertical grid structure
   type(unit_scale_type),         intent(in)    :: US         !< A dimensional unit scaling type
   type(param_file_type),         intent(in)    :: param_file !< parameter file
-  type(MOM_dyn_split_RK2_CS),    pointer       :: CS         !< module control structure
+  type(MOM_dyn_split_RK2_CS),    intent(inout) :: CS         !< module control structure
   type(MOM_restart_CS),          intent(inout) :: restart_CS !< MOM restart control structure
   real, dimension(SZIB_(HI),SZJ_(HI),SZK_(GV)), &
                          target, intent(inout) :: uh !< zonal volume or mass transport [H L2 T-1 ~> m3 s-1 or kg s-1]
@@ -1299,14 +1299,6 @@ subroutine register_restarts_dyn_split_RK2(HI, GV, US, param_file, CS, restart_C
 
   isd  = HI%isd  ; ied  = HI%ied  ; jsd  = HI%jsd  ; jed  = HI%jed ; nz = GV%ke
   IsdB = HI%IsdB ; IedB = HI%IedB ; JsdB = HI%JsdB ; JedB = HI%JedB
-
-  ! This is where a control structure specific to this module would be allocated.
-  if (associated(CS)) then
-    call MOM_error(WARNING, "register_restarts_dyn_split_RK2 called with an associated "// &
-                             "control structure.")
-    return
-  endif
-  allocate(CS)
 
   ! TODO: Are these initializations necessary?  If not, then we can do
   !   map(alloc:) rather than map(to:)
