@@ -576,15 +576,18 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
 ! u_bc_accel = CAu + PFu + diffu(u[n-1])
   call cpu_clock_begin(id_clock_btforce)
-  !$OMP parallel do default(shared)
+
   do k=1,nz
-    do j=js,je ; do I=Isq,Ieq
+    do concurrent (j=js:je, I=Isq:Ieq)
       u_bc_accel(I,j,k) = (CS%CAu_pred(I,j,k) + CS%PFu(I,j,k)) + CS%diffu(I,j,k)
-    enddo ; enddo
-    do J=Jsq,Jeq ; do i=is,ie
+    enddo
+    do concurrent (J=Jsq:Jeq, i=is:ie)
       v_bc_accel(i,J,k) = (CS%CAv_pred(i,J,k) + CS%PFv(i,J,k)) + CS%diffv(i,J,k)
-    enddo ; enddo
+    enddo
   enddo
+  ! TODO: Keep on GPU, don't copy back
+  !$omp target update from (u_bc_accel, v_bc_accel)
+
   if (associated(CS%OBC)) then
     call open_boundary_zero_normal_flow(CS%OBC, G, GV, u_bc_accel, v_bc_accel)
   endif
