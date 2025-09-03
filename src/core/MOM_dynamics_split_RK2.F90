@@ -424,7 +424,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! allocate internal variables on GPU
   !$omp target enter data map(alloc: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
-  !$omp target enter data map(alloc: hp)
+  !$omp target enter data map(alloc: hp, dz)
   !$omp target update to(eta)
 
   !$OMP parallel do default(shared)
@@ -1155,7 +1155,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! release internal variables
   !$omp target exit data map(release: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
-  !$omp target exit data map(delete: hp)
+  !$omp target exit data map(delete: hp, dz)
 
   if (CS%store_CAu) then
     ! Calculate a predictor-step estimate of the Coriolis and momentum advection terms
