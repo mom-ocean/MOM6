@@ -852,7 +852,7 @@ end subroutine dz_to_thickness_simple
 !> Converts layer thicknesses in thickness units to the vertical distance between edges in height
 !! units, perhaps by multiplication by the precomputed layer-mean specific volume stored in an
 !! array in the thermo_var_ptrs type when in non-Boussinesq mode.
-subroutine thickness_to_dz_3d(h, tv, dz, G, GV, US, halo_size)
+subroutine thickness_to_dz_3d(h, tv, dz, G, GV, US, halo_size, do_offload)
   type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid structure
   type(verticalGrid_type), intent(in)    :: GV !< The ocean's vertical grid structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
@@ -866,9 +866,16 @@ subroutine thickness_to_dz_3d(h, tv, dz, G, GV, US, halo_size)
                                                !! inout to preserve any initialized values in halo points.
   integer,       optional, intent(in)    :: halo_size !< Width of halo within which to
                                                !! calculate thicknesses
+  logical,       optional, intent(in)    :: do_offload !< If .true., only uses data calculates dz
+                                               !! on GPU (default .false.)
   ! Local variables
   character(len=128) :: mesg    ! A string for error messages
   integer :: i, j, k, is, ie, js, je, halo, nz
+  logical :: use_doconcurrent
+
+  ! guard to allow turning off/on do concurrent
+  use_doconcurrent = .false.
+  if (present(do_offload)) use_doconcurrent = do_offload
 
   halo = 0 ; if (present(halo_size)) halo = max(0,halo_size)
   is = G%isc-halo ; ie = G%iec+halo ; js = G%jsc-halo ; je = G%jec+halo ; nz = GV%ke
@@ -883,14 +890,25 @@ subroutine thickness_to_dz_3d(h, tv, dz, G, GV, US, halo_size)
       endif
       call MOM_error(FATAL, "thickness_to_dz called in fully non-Boussinesq mode with "//trim(mesg))
     endif
-
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      dz(i,j,k) = GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
-    enddo ; enddo ; enddo
+    if (use_doconcurrent) then
+      do concurrent (k=1:nz, j=js:je, i=is:ie)
+        dz(i,j,k) = GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
+      enddo
+    else
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        dz(i,j,k) = GV%H_to_RZ * h(i,j,k) * tv%SpV_avg(i,j,k)
+      enddo ; enddo ; enddo
+    endif
   else
-    do k=1,nz ; do j=js,je ; do i=is,ie
-      dz(i,j,k) = GV%H_to_Z * h(i,j,k)
-    enddo ; enddo ; enddo
+    if (use_doconcurrent) then
+      do concurrent (k=1:nz, j=js:je, i=is:ie)
+        dz(i,j,k) = GV%H_to_Z * h(i,j,k)
+      enddo
+    else
+      do k=1,nz ; do j=js,je ; do i=is,ie
+        dz(i,j,k) = GV%H_to_Z * h(i,j,k)
+      enddo ; enddo ; enddo
+    endif
   endif
 
 end subroutine thickness_to_dz_3d
