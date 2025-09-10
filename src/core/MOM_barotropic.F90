@@ -1703,6 +1703,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
       call hchksum(eta_PF_1, "BT eta_PF_1",CS%debug_BT_HI,haloshift=0, unscale=GV%H_to_MKS)
       call hchksum(d_eta_PF, "BT d_eta_PF",CS%debug_BT_HI,haloshift=0, unscale=GV%H_to_MKS)
     else
+      !$omp target update from(eta_PF, eta_PF_in)
       call hchksum(eta_PF, "BT eta_PF",CS%debug_BT_HI,haloshift=0, unscale=GV%H_to_MKS)
       call hchksum(eta_PF_in, "BT eta_PF_in",G%HI,haloshift=0, unscale=GV%H_to_MKS)
     endif
@@ -4667,10 +4668,14 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
     call uvchksum("btcalc frhat[uv]", CS%frhatu, CS%frhatv, G%HI, &
                   haloshift=0, symmetric=.true., omit_corners=.true., &
                   scalar_pair=.true.)
-    if (present(h_u) .and. present(h_v)) &
+
+    if (present(h_u) .and. present(h_v)) then
+      !$omp target update from(h_u, h_v)
       call uvchksum("btcalc h_[uv]", h_u, h_v, G%HI, haloshift=0, &
                     symmetric=.true., omit_corners=.true., unscale=GV%H_to_MKS, &
                     scalar_pair=.true.)
+    endif
+
     call hchksum(h, "btcalc h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
   endif
 end subroutine btcalc

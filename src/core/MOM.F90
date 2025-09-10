@@ -962,9 +962,11 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       if (associated(CS%HA_CSp)) call HA_accum_FtF(Time_Local, CS%HA_CSp)
 
+      !$omp target enter data map(to: dt)
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_tradv_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
+      !$omp target exit data map(release: dt)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -1264,6 +1266,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     call disable_averaging(CS%diag)
     call pass_vector(CS%pbv%por_face_areaU, CS%pbv%por_face_areaV, &
                      G%Domain, direction=To_All+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
+    !$omp target update to(CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
   endif
 
   ! The bottom boundary layer properties need to be recalculated.
@@ -2370,6 +2373,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! Determining the internal unit scaling factors for this run.
   call unit_scaling_init(param_file, CS%US)
   US => CS%US
+  !$omp target enter data map(to: CS%US)
 
   ! Read relevant parameters and write them to the model log.
   call log_version(param_file, "MOM", version, "", log_to_all=.true., layout=.true., debugging=.true.)
@@ -3068,6 +3072,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   allocate(CS%pbv%por_face_areaV(isd:ied,JsdB:JedB,nz), source=1.0)
   allocate(CS%pbv%por_layer_widthU(IsdB:IedB,jsd:jed,nz+1), source=1.0)
   allocate(CS%pbv%por_layer_widthV(isd:ied,JsdB:JedB,nz+1), source=1.0)
+  !$omp target enter data map(to: CS%pbv)
+  !$omp target enter data map(to: CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
@@ -4504,6 +4510,7 @@ subroutine MOM_end(CS)
   if (CS%use_ALE_algorithm) call ALE_end(CS%ALE_CSp)
 
   !deallocate porous topography variables
+  !$omp target exit data map(release: CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
   deallocate(CS%pbv%por_face_areaU) ; deallocate(CS%pbv%por_face_areaV)
   deallocate(CS%pbv%por_layer_widthU) ; deallocate(CS%pbv%por_layer_widthV)
 

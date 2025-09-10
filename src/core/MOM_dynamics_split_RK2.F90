@@ -410,6 +410,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
                             ! in the  corrector step (not the predict)
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: cont_stencil, obc_stencil, vel_stencil
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: h_tmp ! temporary copy of Layer thickness [H ~> m or kg m-2]
 
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -424,8 +425,8 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! allocate internal variables on GPU
   !$omp target enter data map(alloc: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
-  !$omp target enter data map(alloc: hp, dz)
-  !$omp target update to(eta)
+  !$omp target enter data map(alloc: up, vp, hp, dz, h_tmp)
+  !$omp target update to(eta, pbv, pbv%por_face_areaU, pbv%por_face_areaV)
 
   !$OMP parallel do default(shared)
   do k=1,nz
@@ -433,6 +434,9 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     do j=G%jsdB,G%jedB ; do i=G%isd,G%ied   ;  vp(i,j,k) = 0.0 ; enddo ; enddo
     do j=G%jsd,G%jed   ; do i=G%isd,G%ied   ;  hp(i,j,k) = h(i,j,k) ; enddo ; enddo
   enddo
+  ! TODO: hp needs accurate +/-2 halos.
+  ! For now we need to update the GPU halo here, but this can be phased out.
+  !$omp target update to(hp)
 
   ! Update CFL truncation value as function of time
   call updateCFLtruncationValue(Time_local, CS%vertvisc_CSp, US)
@@ -513,9 +517,10 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   !$omp target update to(h)
   call PressureForce(h, tv, CS%PFu, CS%PFv, G, GV, US, CS%PressureForce_CSp, &
                      CS%ALE_CSp, CS%ADp, p_surf, CS%pbce, CS%eta_PF)
-  !$omp target update from(CS%PFu, CS%PFv, CS%pbce, CS%eta_PF)
+  !$omp target update from(CS%PFu, CS%PFv, CS%pbce)
 
   if (dyn_p_surf) then
+    !$omp target update from(CS%eta_PF)
     pres_to_eta = 1.0 / (GV%g_Earth * GV%H_to_RZ)
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
@@ -643,7 +648,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   call cpu_clock_begin(id_clock_btcalc)
   ! Calculate the relative layer weights for determining barotropic quantities.
-  !$omp target update to(h)
   if (.not.BT_cont_BT_thick) then
     call btcalc(h, G, GV, CS%barotropic_CSp, OBC=CS%OBC)
   endif
@@ -662,13 +666,15 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call complete_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
 
 ! u_accel_bt = layer accelerations due to barotropic solver
+  !$omp target update to(u_inst, v_inst)
   if (associated(CS%BT_cont) .or. CS%BT_use_layer_fluxes) then
     call cpu_clock_begin(id_clock_continuity)
+
+    !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
     call continuity(u_inst, v_inst, h, hp, uh_in, vh_in, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv, &
                     visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, BT_cont=CS%BT_cont)
     call cpu_clock_end(id_clock_continuity)
     if (BT_cont_BT_thick) then
-      !$omp target update to(h, CS%BT_cont%h_u, CS%BT_cont%h_v)
       call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
                   OBC=CS%OBC)
     endif
@@ -677,7 +683,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   if (CS%BT_use_layer_fluxes) then
     uh_ptr => uh_in ; vh_ptr => vh_in; u_ptr => u_inst ; v_ptr => v_inst
-    !$omp target update to(uh_in, vh_in)
   endif
 
   call cpu_clock_begin(id_clock_btstep)
@@ -693,25 +698,12 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the predictor step call to btstep.
   ! The CS%ADp argument here stores the weights for certain integrated diagnostics.
-  !$omp target update to(uh_ptr, vh_ptr, u_ptr, v_ptr, u_bc_accel, v_bc_accel)
-  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
-  !$omp target update to(CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_E0)
-  !$omp target update to(CS%BT_cont%FA_u_W0, CS%BT_cont%FA_u_WW)
-  !$omp target update to(CS%BT_cont%uBT_WW, CS%BT_cont%uBT_EE)
-  !$omp target update to(CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_N0)
-  !$omp target update to(CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS)
-  !$omp target update to(CS%BT_cont%vBT_SS, CS%BT_cont%vBT_NN)
+  !$omp target update to(u_bc_accel, v_bc_accel)
   call btstep(u_inst, v_inst, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, u_av, v_av, &
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, SpV_avg, CS%ADp, CS%OBC, CS%BT_cont, &
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr)
-  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt, CS%uhbt, CS%vhbt)
-  !$omp target update from(CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_E0)
-  !$omp target update from(CS%BT_cont%FA_u_W0, CS%BT_cont%FA_u_WW)
-  !$omp target update from(CS%BT_cont%uBT_WW, CS%BT_cont%uBT_EE)
-  !$omp target update from(CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_N0)
-  !$omp target update from(CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS)
-  !$omp target update from(CS%BT_cont%vBT_SS, CS%BT_cont%vBT_NN)
+  !$omp target update from(CS%u_accel_bt, CS%v_accel_bt)
   if (showCallTree) call callTree_leave("btstep()")
   call cpu_clock_end(id_clock_btstep)
 
@@ -817,9 +809,11 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   ! uh = u_av * h
   ! hp = h + dt * div . uh
   call cpu_clock_begin(id_clock_continuity)
+  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v, up, vp)
   call continuity(up, vp, h, hp, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv, &
                   uhbt=CS%uhbt, vhbt=CS%vhbt, visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, &
                   u_cor=u_av, v_cor=v_av, BT_cont=CS%BT_cont)
+  !$omp target update from(u_av, v_av, hp, uh, vh)
   call cpu_clock_end(id_clock_continuity)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
@@ -857,7 +851,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   ! hp can be changed if CS%begw /= 0.
   ! eta_cor = ...                 (hidden inside CS%barotropic_CSp)
   call cpu_clock_begin(id_clock_btcalc)
-  !$omp target update to(hp)
   call bt_mass_source(hp, eta_pred, .false., G, GV, CS%barotropic_CSp)
   call cpu_clock_end(id_clock_btcalc)
 
@@ -910,7 +903,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
 
   if (BT_cont_BT_thick) then
-    !$omp target update to(h, CS%BT_cont%h_u, CS%BT_cont%h_v)
     call btcalc(h, G, GV, CS%barotropic_CSp, CS%BT_cont%h_u, CS%BT_cont%h_v, &
                 OBC=CS%OBC)
     if (showCallTree) call callTree_wayPoint("done with btcalc[BT_cont_BT_thick] (step_MOM_dyn_split_RK2)")
@@ -993,25 +985,12 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (showCallTree) call callTree_enter("btstep(), MOM_barotropic.F90")
   ! This is the corrector step call to btstep.
   !$omp target update to(u_bc_accel, v_bc_accel)
-  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
-  !$omp target update to(CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_E0)
-  !$omp target update to(CS%BT_cont%FA_u_W0, CS%BT_cont%FA_u_WW)
-  !$omp target update to(CS%BT_cont%uBT_WW, CS%BT_cont%uBT_EE)
-  !$omp target update to(CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_N0)
-  !$omp target update to(CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS)
-  !$omp target update to(CS%BT_cont%vBT_SS, CS%BT_cont%vBT_NN)
   call btstep(u_inst, v_inst, eta, dt, u_bc_accel, v_bc_accel, forces, CS%pbce, CS%eta_PF, u_av, v_av, &
               CS%u_accel_bt, CS%v_accel_bt, eta_pred, CS%uhbt, CS%vhbt, G, GV, US, &
               CS%barotropic_CSp, CS%visc_rem_u, CS%visc_rem_v, SpV_avg, CS%ADp, CS%OBC, CS%BT_cont, &
               eta_PF_start, taux_bot, tauy_bot, uh_ptr, vh_ptr, u_ptr, v_ptr, etaav=eta_av)
   !$omp target update from(CS%u_accel_bt, CS%v_accel_bt)
-  !$omp target update from(CS%uhbt, CS%vhbt, eta_pred)
-  !$omp target update from(CS%BT_cont%FA_u_EE, CS%BT_cont%FA_u_E0)
-  !$omp target update from(CS%BT_cont%FA_u_W0, CS%BT_cont%FA_u_WW)
-  !$omp target update from(CS%BT_cont%uBT_WW, CS%BT_cont%uBT_EE)
-  !$omp target update from(CS%BT_cont%FA_v_NN, CS%BT_cont%FA_v_N0)
-  !$omp target update from(CS%BT_cont%FA_v_S0, CS%BT_cont%FA_v_SS)
-  !$omp target update from(CS%BT_cont%vBT_SS, CS%BT_cont%vBT_NN)
+  !$omp target update from(eta_pred)
   if (CS%id_deta_dt>0) then
     do j=js,je ; do i=is,ie ; deta_dt(i,j) = (eta_pred(i,j) - eta(i,j))*Idt_bc ; enddo ; enddo
   endif
@@ -1112,9 +1091,14 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   ! h  = h + dt * div . uh
   ! u_av and v_av adjusted so their mass transports match uhbt and vhbt.
   call cpu_clock_begin(id_clock_continuity)
-  call continuity(u_inst, v_inst, h, h, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv, &
+  do concurrent (k=1:nz, j=G%jsd:G%jed, i=G%isd:G%ied)
+    h_tmp(i,j,k) = h(i,j,k)
+  enddo
+  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v, u_inst, v_inst)
+  call continuity(u_inst, v_inst, h_tmp, h, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv, &
                   uhbt=CS%uhbt, vhbt=CS%vhbt, visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, &
                   u_cor=u_av, v_cor=v_av)
+  !$omp target update from(h, u_av, v_av, uh, vh)
   call cpu_clock_end(id_clock_continuity)
   call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
   ! Whenever thickness changes let the diag manager know, target grids
@@ -1155,8 +1139,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   ! release internal variables
   !$omp target exit data map(release: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
-  !$omp target exit data map(delete: hp, dz)
-
+  !$omp target exit data map(delete: hp, up, vp, dz, h_tmp)
   if (CS%store_CAu) then
     ! Calculate a predictor-step estimate of the Coriolis and momentum advection terms
     ! for use in the next time step, possibly after it has been vertically remapped.
@@ -1627,6 +1610,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
 
   id_clock_pass_init = cpu_clock_id('(Ocean init message passing)', grain=CLOCK_ROUTINE)
 
+  !$omp target enter data map(alloc: CS%continuity_CSp)
   call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
