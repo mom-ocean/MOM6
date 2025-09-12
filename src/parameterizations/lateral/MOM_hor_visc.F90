@@ -87,6 +87,9 @@ type, public :: hor_visc_CS ; private
                              !! that gets backscattered in the Leith+E scheme. [nondim]
   logical :: smooth_Ah       !< If true (default), then Ah and m_leithy are smoothed.
                              !! This smoothing requires a lot of blocking communication.
+  logical :: taper_leithy    !< If true, backscatter coeff is tapered to zero with depth
+  real    :: leithy_depth    !< If tapering leith+E, taper is applied below this depth [Z ~> m]
+  real    :: leithy_width    !< If tapering leith+E, backscatter is zero below leithy_depth+leithy_width [Z ~> m]
   logical :: use_QG_Leith_visc    !< If true, use QG Leith nonlinear eddy viscosity.
                              !! KH is the background value.
   logical :: bound_Coriolis  !< If true & SMAGORINSKY_AH is used, the biharmonic
@@ -471,6 +474,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     hrat_min, &     ! h_min divided by the thickness at the stress point (h or q) [nondim]
     visc_bound_rem  ! fraction of overall viscous bounds that remain to be applied (h or q) [nondim]
 
+  ! Layer depth. Used to taper Leith+E backscatter coefficient with depth
+  real, allocatable :: zc(:,:,:)          ! depth at center of h cell [Z ~> m]
+
   is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
@@ -651,6 +657,16 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       call smooth_x9_uv(CS, G, u_smooth(:,:,k), v_smooth(:,:,k), zero_land=.false.)
     enddo
     call pass_vector(u_smooth, v_smooth, G%Domain)
+    ! If tapering the backscatter, calculate depths now
+    if (CS%taper_leithy) then
+      ! allocate zc
+      allocate(zc(SZI_(G),SZJ_(G),SZK_(GV))) ; zc(:,:,:) = 0.0
+      ! Compute zc. Not actual cell centers because it starts at 0 rather than at SSH.
+      zc(:,:,1) = 0.5 * h(:,:,1)
+      do k=2,nz
+        zc(:,:,k) = zc(:,:,k-1) + 0.5 * (h(:,:,k-1) + h(:,:,k))
+      enddo
+    endif
   endif
 
   if (CS%use_QG_Leith_visc .and. ((CS%Leith_Kh) .or. (CS%Leith_Ah))) then
@@ -674,7 +690,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$OMP   h_neglect, h_neglect3, inv_PI3, inv_PI6, &
   !$OMP   diffu, diffv, Kh_h, Kh_q, Ah_h, Ah_q, FrictWork, FrictWork_bh, FrictWork_GME, &
   !$OMP   div_xx_h, sh_xx_h, vort_xy_q, sh_xy_q, GME_coeff_h, GME_coeff_q, &
-  !$OMP   KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, NoSt, ShSt, hu_cont, hv_cont, STOCH &
+  !$OMP   KH_u_GME, KH_v_GME, grid_Re_Kh, grid_Re_Ah, NoSt, ShSt, hu_cont, hv_cont, STOCH, zc &
   !$OMP ) &
   !$OMP private( &
   !$OMP   i, j, k, n, tmp, &
@@ -1319,6 +1335,10 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
               else
                 m_leithy(i,j) = CS%m_leithy_max(i,j)
               endif
+            endif
+            if (CS%taper_leithy) then
+              ! Multiply m_leithy by taper function of depth
+              m_leithy(:,:) = m_leithy(:,:) * leithy_taper_function(CS, zc(:,:,k))
             endif
           enddo ; enddo
 
@@ -2286,6 +2306,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
                                CS%dx2h, CS%dy2h, CS%dx2q, CS%dy2q)
   endif
 
+  if (allocated(zc)) deallocate(zc)
+
 end subroutine horizontal_viscosity
 
 !> Allocates space for and calculates static variables used by horizontal_viscosity.
@@ -2655,6 +2677,19 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If true, Ah and m_leithy are smoothed within Leith+E.  This requires "//&
                  "lots of blocking communications, which can be expensive", &
                  default=.true., do_not_log=.not.CS%use_Leithy)
+  call get_param(param_file, mdl, "TAPER_LEITHY", CS%taper_leithy, &
+                 "If true, Leith+E c_K coefficient is tapered to zero"//&
+                 "below a threshold depth", &
+                 default=.false., do_not_log=.not.CS%use_Leithy)
+  if (CS%taper_leithy) then
+    call get_param(param_file, mdl, "LEITHY_DEPTH", CS%leithy_depth, &
+                   "Leith+E backscatter starts tapering below this depth.", &
+                   units="m", scale=US%m_to_Z, default=800.0)
+    call get_param(param_file, mdl, "LEITHY_WIDTH", CS%leithy_width, &
+                   "Leith+E backscatter is zero below LEITHY_DEPTH+LEITHY_WIDTH.", &
+                   units="m", scale=US%m_to_Z, default=400.0)
+    if (CS%leithy_width <= 0.0) call MOM_error(FATAL,"ERROR: LEITHY_WIDTH must be positive ")
+  endif
 
   if (CS%use_GME .and. .not.split) call MOM_error(FATAL,"ERROR: Currently, USE_GME = True "// &
                                            "cannot be used with SPLIT=False.")
@@ -3264,6 +3299,26 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       'W m-2', conversion=US%RZ3_T3_to_W_m2*US%L_to_Z**2)
 
 end subroutine hor_visc_init
+
+!> leithy_taper_function returns 1 if zc is shallower than leithy_depth; 0 if deeper than
+!! leithy_depth+leithy_width; and an interpolating cubic spline in between.
+function leithy_taper_function(CS, zc)
+  type(hor_visc_CS), intent(in) :: CS      !< Control structure for horizontal viscosity
+  real,              intent(in) :: zc(:,:) !< depth of h-cell centersi [Z ~> m]
+  real :: leithy_taper_function(size(zc,dim=1),size(zc,dim=2)) ! Taper function evaluated at zc [nondim]
+
+  ! Local variables
+  real :: x(size(zc,dim=1),size(zc,dim=2)) ! 0 at top of transition and 1 at bottom [nondim]
+
+  x = (zc - CS%leithy_depth) / CS%leithy_width
+  where (zc <= CS%leithy_depth)
+    leithy_taper_function = 1.0
+  elsewhere (zc >= CS%leithy_depth + CS%leithy_width)
+    leithy_taper_function = 0.0
+  elsewhere
+    leithy_taper_function = (x - 1.0)**2 * (1.0 + 2 * x)
+  end where
+end function leithy_taper_function
 
 !> hor_visc_vel_stencil returns the horizontal viscosity input velocity stencil size
 function hor_visc_vel_stencil(CS) result(stencil)
