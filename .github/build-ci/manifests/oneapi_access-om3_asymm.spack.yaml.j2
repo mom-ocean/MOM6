@@ -1,0 +1,22 @@
+spack:
+  specs:
+  - 'access-om3@latest ^openmpi'
+  packages:
+    cmake:
+      require:
+      - '@3.31.6:'
+    access3:
+      require:
+      - 'configurations=MOM6,MOM6-CICE6,MOM6-CICE6-WW3'
+    access-mom6:
+      require:
+      - '@git.{{ ref }} +asymmetric_mem'
+    gcc-runtime:
+      require:
+      - '%gcc target={{ target }}'
+    all:
+      require:
+      - '%{{ oneapi_compiler }} target={{ target }}'
+  concretizer:
+    unify: false
+  view: false
