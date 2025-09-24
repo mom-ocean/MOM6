@@ -1081,6 +1081,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       endif
     endif ; enddo ! end of i loop
   enddo ; enddo ! end of m & j loops
+  !$omp target update to(visc%bbl_thick_u, visc%bbl_thick_v)
+  !$omp target update to(visc%kv_bbl_u, visc%kv_bbl_v)
 
 ! Offer diagnostics for averaging
   if (CS%id_bbl_thick_u > 0) &
@@ -2518,6 +2520,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
       if (do_any) then ; do i=is,ie ; if (do_i(i)) then
         visc%nkml_visc_v(i,J) = k_massive(i)
       endif ; enddo ; endif
+
+      !$omp target update to(visc%nkml_visc_u, visc%nkml_visc_v)
     endif ! dynamic_viscous_ML
 
     do_any_shelf = .false.
@@ -2757,6 +2761,8 @@ subroutine set_visc_register_restarts(HI, G, GV, US, param_file, visc, restart_C
   if (useKPP .or. useEPBL .or. use_CVMix_shear .or. use_CVMix_conv .or. &
       (use_kappa_shear .and. .not.KS_at_vertex )) then
     call safe_alloc_ptr(visc%Kv_shear, isd, ied, jsd, jed, nz+1)
+    !$omp target enter data map(alloc: visc%Kv_shear)
+
     call register_restart_field(visc%Kv_shear, "Kv_shear", .false., restart_CS, &
                   "Shear-driven turbulent viscosity at interfaces", &
                   units=Kv_units, conversion=GV%HZ_T_to_MKS, z_grid='i')
@@ -3147,8 +3153,10 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   if (CS%bottomdraglaw) then
     allocate(visc%bbl_thick_u(IsdB:IedB,jsd:jed), source=0.0)
     allocate(visc%bbl_thick_v(isd:ied,JsdB:JedB), source=0.0)
+    !$omp target enter data map(to: visc%bbl_thick_u, visc%bbl_thick_v)
     allocate(visc%kv_bbl_u(IsdB:IedB,jsd:jed), source=0.0)
     allocate(visc%kv_bbl_v(isd:ied,JsdB:JedB), source=0.0)
+    !$omp target enter data map(to: visc%kv_bbl_u, visc%kv_bbl_v)
     allocate(visc%ustar_bbl(isd:ied,jsd:jed), source=0.0)
     allocate(visc%BBL_meanKE_loss(isd:ied,jsd:jed), source=0.0)
     allocate(visc%BBL_meanKE_loss_sqrtCd(isd:ied,jsd:jed), source=0.0)
@@ -3192,6 +3200,8 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   if (CS%dynamic_viscous_ML) then
     allocate(visc%nkml_visc_u(IsdB:IedB,jsd:jed), source=0.0)
     allocate(visc%nkml_visc_v(isd:ied,JsdB:JedB), source=0.0)
+    !$omp target enter data map(to: visc%nkml_visc_u, visc%nkml_visc_v)
+
     CS%id_nkml_visc_u = register_diag_field('ocean_model', 'nkml_visc_u', &
        diag%axesCu1, Time, 'Number of layers in viscous mixed layer at u points', 'nondim')
     CS%id_nkml_visc_v = register_diag_field('ocean_model', 'nkml_visc_v', &
