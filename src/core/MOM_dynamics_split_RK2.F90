@@ -1191,7 +1191,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   do concurrent (k=1:nz, J=Jsq-2:Jeq+2, i=is-2:ie+2)
     vhtr(i,J,k) = vhtr(i,J,k) + vh(i,J,k)*dt
   enddo
-  !$omp target update from(uhtr, vhtr)
 
   ! release internal variables
   !$omp target exit data map(release: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
