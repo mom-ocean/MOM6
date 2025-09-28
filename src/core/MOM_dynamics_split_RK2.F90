@@ -1148,19 +1148,24 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   call continuity(u_inst, v_inst, h_tmp, h, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv, &
                   uhbt=CS%uhbt, vhbt=CS%vhbt, visc_rem_u=CS%visc_rem_u, visc_rem_v=CS%visc_rem_v, &
                   u_cor=u_av, v_cor=v_av)
-  !$omp target update from(h, u_av, v_av, uh, vh)
   call cpu_clock_end(id_clock_continuity)
 
+  !$omp target update from(h)
   call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
+  !$omp target update to(h)
+
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
   if (G%nonblocking_updates) then
+    !$omp target update from(u_av, v_av, uh, vh)
     call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   else
+    !$omp target update from(u_av, v_av, uh, vh)
     call do_group_pass(CS%pass_av_uvh, G%domain, clock=id_clock_pass)
+    !$omp target update to(u_av, v_av, uh, vh)
   endif
 
   if (associated(CS%OBC)) then
@@ -1171,23 +1176,22 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
-  !$omp target update to(h)
   do concurrent (k=1:nz, j=js-2:je+2, i=is-2:ie+2)
     h_av(i,j,k) = 0.5*(h_av(i,j,k) + h(i,j,k))
   enddo
-  !$omp target update from(h)
 
-  if (G%nonblocking_updates) &
+  if (G%nonblocking_updates) then
     call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
+    !$omp target update to(u_av, v_av, uh, vh)
+  endif
 
-  !$omp target update to(uhtr, uh, vhtr, vh)
   do concurrent (k=1:nz, j=js-2:je+2, I=Isq-2:Ieq+2)
     uhtr(I,j,k) = uhtr(I,j,k) + uh(I,j,k)*dt
   enddo
   do concurrent (k=1:nz, J=Jsq-2:Jeq+2, i=is-2:ie+2)
     vhtr(i,J,k) = vhtr(i,J,k) + vh(i,J,k)*dt
   enddo
-  !$omp target update from(uhtr, uh, vhtr, vh)
+  !$omp target update from(uhtr, vhtr)
 
   ! release internal variables
   !$omp target exit data map(release: u_bc_accel, v_bc_accel, eta_pred, uh_in, vh_in)
@@ -1198,7 +1202,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call cpu_clock_begin(id_clock_Cor)
     call disable_averaging(CS%diag)  ! These calculations should not be used for diagnostics.
     ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
-    !$omp target update to(u_av, v_av, uh, vh)
     call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu_pred, CS%CAv_pred, CS%OBC, CS%AD_pred, &
                    G, GV, US, CS%CoriolisAdv, pbv, Waves=Waves)
     !$omp target update from(CS%CAu_pred, CS%CAv_pred)
@@ -1310,6 +1313,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   if (CS%debug) then
     call MOM_state_chksum("Corrector ", u_inst, v_inst, h, uh, vh, G, GV, US, symmetric=sym)
+    !$omp target update from(u_av, v_av)
     call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, unscale=US%L_T_to_m_s)
     call hchksum(h_av, "Corrector avg h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
