@@ -1120,11 +1120,9 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (showCallTree) call callTree_wayPoint("done with vertvisc (step_MOM_dyn_split_RK2)")
 
 ! Later, h_av = (h_in + h_out)/2, but for now use h_av to store h_in.
-  !$omp target update to(h_av, h)
   do concurrent (k=1:nz, j=js-2:je+2, i=is-2:ie+2)
     h_av(i,j,k) = h(i,j,k)
   enddo
-  !$omp target update from(h_av,h)
 
   !$omp target update from(CS%visc_rem_u, CS%visc_rem_v)
   call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
@@ -1132,8 +1130,11 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   if (G%nonblocking_updates) then
     call complete_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
+    !$omp target update to(u_inst, v_inst)
   else
+    !$omp target update from(u_inst, v_inst)
     call do_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
+    !$omp target update to(u_inst, v_inst)
   endif
 
   ! uh = u_av * h
@@ -1170,11 +1171,11 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   endif
 
 ! h_av = (h_in + h_out)/2 . Going in to this line, h_av = h_in.
-  !$omp target update to(h_av, h)
+  !$omp target update to(h)
   do concurrent (k=1:nz, j=js-2:je+2, i=is-2:ie+2)
     h_av(i,j,k) = 0.5*(h_av(i,j,k) + h(i,j,k))
   enddo
-  !$omp target update from(h_av, h)
+  !$omp target update from(h)
 
   if (G%nonblocking_updates) &
     call complete_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
@@ -1197,7 +1198,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     call cpu_clock_begin(id_clock_Cor)
     call disable_averaging(CS%diag)  ! These calculations should not be used for diagnostics.
     ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
-    !$omp target update to(u_av, v_av, h_av, uh, vh)
+    !$omp target update to(u_av, v_av, uh, vh)
     call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu_pred, CS%CAv_pred, CS%OBC, CS%AD_pred, &
                    G, GV, US, CS%CoriolisAdv, pbv, Waves=Waves)
     !$omp target update from(CS%CAu_pred, CS%CAv_pred)
