@@ -648,12 +648,8 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     !$omp target update from(CS%visc_rem_u, CS%visc_rem_v)
     call start_group_pass(CS%pass_visc_rem, G%Domain)
   else
-    !$omp target update from(eta)
-    call do_group_pass(CS%pass_eta, G%Domain)
-    !$omp target update to(eta)
-    !$omp target update from(CS%visc_rem_u, CS%visc_rem_v)
-    call do_group_pass(CS%pass_visc_rem, G%Domain)
-    !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
+    call do_group_pass(CS%pass_eta, G%Domain, omp_offload=.true.)
+    call do_group_pass(CS%pass_visc_rem, G%Domain, omp_offload=.true.)
   endif
   call cpu_clock_end(id_clock_pass)
 
@@ -824,17 +820,13 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   call cpu_clock_end(id_clock_vertvisc)
 
-  !$omp target update from(CS%visc_rem_u, CS%visc_rem_v)
-  call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
-  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
+  call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass, omp_offload=.true.)
 
   if (G%nonblocking_updates) then
     call complete_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass)
     !$omp target update to(up, vp)
   else
-    !$omp target update from(up, vp)
-    call do_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass)
-    !$omp target update to(up, vp)
+    call do_group_pass(CS%pass_uvp, G%Domain, clock=id_clock_pass, omp_offload=.true.)
   endif
 
   ! uh = u_av * h
@@ -847,9 +839,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
 
   if (showCallTree) call callTree_wayPoint("done with continuity (step_MOM_dyn_split_RK2)")
 
-  !$omp target update from(u_av, v_av, hp, uh, vh)
-  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass)
-  !$omp target update to(u_av, v_av, hp, uh, vh)
+  call do_group_pass(CS%pass_hp_uv, G%Domain, clock=id_clock_pass, omp_offload=.true.)
 
   if (associated(CS%OBC)) then
     !$omp target update from(u_av, v_av)
@@ -1124,17 +1114,13 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     h_av(i,j,k) = h(i,j,k)
   enddo
 
-  !$omp target update from(CS%visc_rem_u, CS%visc_rem_v)
-  call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass)
-  !$omp target update to(CS%visc_rem_u, CS%visc_rem_v)
+  call do_group_pass(CS%pass_visc_rem, G%Domain, clock=id_clock_pass, omp_offload=.true.)
 
   if (G%nonblocking_updates) then
     call complete_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
     !$omp target update to(u_inst, v_inst)
   else
-    !$omp target update from(u_inst, v_inst)
-    call do_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
-    !$omp target update to(u_inst, v_inst)
+    call do_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass, omp_offload=.true.)
   endif
 
   ! uh = u_av * h
@@ -1150,9 +1136,8 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
                   u_cor=u_av, v_cor=v_av)
   call cpu_clock_end(id_clock_continuity)
 
-  !$omp target update from(h)
-  call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass)
-  !$omp target update to(h)
+  call do_group_pass(CS%pass_h, G%Domain, clock=id_clock_pass, omp_offload=.true.)
+
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
@@ -1163,9 +1148,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     !$omp target update from(u_av, v_av, uh, vh)
     call start_group_pass(CS%pass_av_uvh, G%Domain, clock=id_clock_pass)
   else
-    !$omp target update from(u_av, v_av, uh, vh)
-    call do_group_pass(CS%pass_av_uvh, G%domain, clock=id_clock_pass)
-    !$omp target update to(u_av, v_av, uh, vh)
+    call do_group_pass(CS%pass_av_uvh, G%domain, clock=id_clock_pass, omp_offload=.true.)
   endif
 
   if (associated(CS%OBC)) then
