@@ -2453,6 +2453,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   integer :: i, j, n, is, ie, js, je
   integer :: debug_halo ! The halo size to use for debugging checksums
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
+  logical :: problem_eta(SZIW_(CS),SZJW_(CS)), any_problem_eta
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -2503,7 +2504,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
   !$omp target enter data &
   !$omp   map(alloc: uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, vbt_trans, PFu, PFv, Cor_u, Cor_v, &
-  !$omp       p_surf_dyn)
+  !$omp       p_surf_dyn, problem_eta)
 
   ! Zero out the arrays for various time-averaged quantities.
   if (find_etaav) then
@@ -2779,28 +2780,45 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
     ! Issue warnings if there are unphysical values of the sea surface height or total water column mass.
     ! Leaving this unported for now
-    !$omp target update from(eta)
+    any_problem_eta = .false.
     if (GV%Boussinesq) then
-      do j=js,je ; do i=is,ie
-        if ((eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) .and. (G%mask2dT(i,j) > 0.0)) then
-          write(mesg,'(ES24.16," vs. ",ES24.16, " at ", ES12.4, ES12.4, i7, i7)') GV%H_to_m*eta(i,j), &
-               -US%Z_to_m*G%bathyT(i,j), G%geoLonT(i,j), G%geoLatT(i,j), i + G%HI%idg_offset, j + G%HI%jdg_offset
-          if (err_count < 2) &
-            call MOM_error(WARNING, "btstep: eta has dropped below bathyT: "//trim(mesg), all_print=.true.)
-          err_count = err_count + 1
-        endif
-      enddo ; enddo
+      do concurrent (j=js:je, i=is:ie) DO_LOCALITY(reduce(.or.:any_problem_eta))
+        problem_eta(i,j) = (eta(i,j) < -GV%Z_to_H*G%bathyT(i,j)) .and. (G%mask2dT(i,j) > 0.0)
+        any_problem_eta = problem_eta(i,j)
+      enddo
+
+      if (any_problem_eta) then
+        !$omp target update from(problem_eta)
+        do j=js,je ; do i=is,ie
+          if (problem_eta(i,j)) then
+            write(mesg,'(ES24.16," vs. ",ES24.16, " at ", ES12.4, ES12.4, i7, i7)') GV%H_to_m*eta(i,j), &
+                -US%Z_to_m*G%bathyT(i,j), G%geoLonT(i,j), G%geoLatT(i,j), i + G%HI%idg_offset, j + G%HI%jdg_offset
+            if (err_count < 2) &
+              call MOM_error(WARNING, "btstep: eta has dropped below bathyT: "//trim(mesg), all_print=.true.)
+            err_count = err_count + 1
+          endif
+        enddo ; enddo
+      endif
     else
-      do j=js,je ; do i=is,ie
-        if (eta(i,j) < 0.0) then
-          write(mesg,'(" at ", ES12.4, ES12.4, i7, i7)') &
-              G%geoLonT(i,j), G%geoLatT(i,j), i + G%HI%idg_offset, j + G%HI%jdg_offset
-          if (err_count < 2) &
-            call MOM_error(WARNING, "btstep: negative eta in a non-Boussinesq barotropic solver "//&
-                trim(mesg), all_print=.true.)
-          err_count = err_count + 1
-        endif
-      enddo ; enddo
+      do concurrent (j=js:je, i=is:ie) DO_LOCALITY(reduce(.or.:any_problem_eta))
+        problem_eta(i,j) = eta(i,j) < 0.0
+        any_problem_eta = problem_eta(i,j)
+      enddo
+
+      if (any_problem_eta) then
+        !$omp target update from(problem_eta)
+
+        do j=js,je ; do i=is,ie
+          if (problem_eta(i,j)) then
+            write(mesg,'(" at ", ES12.4, ES12.4, i7, i7)') &
+                G%geoLonT(i,j), G%geoLatT(i,j), i + G%HI%idg_offset, j + G%HI%jdg_offset
+            if (err_count < 2) &
+              call MOM_error(WARNING, "btstep: negative eta in a non-Boussinesq barotropic solver "//&
+                  trim(mesg), all_print=.true.)
+            err_count = err_count + 1
+          endif
+        enddo ; enddo
+      endif
     endif
 
     ! Accumulate some diagnostics of time-averaged barotropic accelerations.
@@ -2861,7 +2879,7 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
 
   !$omp target exit data &
   !$omp   map(release: uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, vbt_trans, PFu, PFv, Cor_u, Cor_v, &
-  !$omp       p_surf_dyn)
+  !$omp       p_surf_dyn, problem_eta)
 
   ! Reset the time information in the diag type.
   if (do_hifreq_output) call enable_averaging(time_int_in, time_end_in, CS%diag)
