@@ -666,7 +666,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call set_derived_forcing_fields(forces, fluxes, G, US, GV%Rho0)
     endif
   endif
-  !$omp target enter data map(to: forces, forces%taux, forces%tauy)
+  !$omp target enter data map(to: forces, forces%taux, forces%tauy, forces%ustar)
 
   ! This will be replaced later with the pressures from forces or fluxes if they are available.
   if (associated(CS%tv%p_surf)) CS%tv%p_surf(:,:) = 0.0
@@ -726,7 +726,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     if (nonblocking_p_surf_update) then
       call start_group_pass(pass_tau_ustar_psurf, G%Domain)
     else
-      call do_group_pass(pass_tau_ustar_psurf, G%Domain)
+      call do_group_pass(pass_tau_ustar_psurf, G%Domain, omp_offload=.true.)
     endif
     call cpu_clock_end(id_clock_pass)
 

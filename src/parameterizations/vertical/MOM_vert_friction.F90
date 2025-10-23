@@ -1552,8 +1552,8 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
     js_W_OBC = max(js, OBC%Js_u_W_obc) ; je_W_OBC = min(je, OBC%je_u_W_obc)
   endif
 
+  !$omp target enter data map(alloc: Ustar_2d)
   call find_ustar(forces, tv, Ustar_2d, G, GV, US, halo=1)
-  !$omp target enter data map(to: Ustar_2d)
 
   ! First do u-points
 

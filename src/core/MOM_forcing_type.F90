@@ -1228,6 +1228,8 @@ subroutine find_ustar_fluxes(fluxes, tv, U_star, G, GV, US, halo, H_T_units)
     enddo ; enddo
   endif
 
+  !$omp target update to(U_star)
+
 end subroutine find_ustar_fluxes
 
 
@@ -1263,13 +1265,13 @@ subroutine find_ustar_mech_forcing(forces, tv, U_star, G, GV, US, halo, H_T_unit
 
   if (associated(forces%ustar) .and. (GV%Boussinesq .or. .not.associated(forces%tau_mag))) then
     if (Z_T_units) then
-      do j=js,je ; do i=is,ie
+      do concurrent (j=js:je, i=is:ie) !do j=js,je ; do i=is,ie
         U_star(i,j) = forces%ustar(i,j)
-      enddo ; enddo
+      enddo
     else
-      do j=js,je ; do i=is,ie
+      do concurrent (j=js:je, i=is:ie) !do j=js,je ; do i=is,ie
         U_star(i,j) = GV%Z_to_H * forces%ustar(i,j)
-      enddo ; enddo
+      enddo
     endif
   elseif (allocated(tv%SpV_avg)) then
     if (tv%valid_SpV_halo < 0) call MOM_error(FATAL, &
@@ -1277,20 +1279,20 @@ subroutine find_ustar_mech_forcing(forces, tv, U_star, G, GV, US, halo, H_T_unit
     if (tv%valid_SpV_halo < hs) call MOM_error(FATAL, &
         "find_ustar_mech called in non-Boussinesq mode with insufficient valid values of SpV_avg.")
     if (Z_T_units) then
-      do j=js,je ; do i=is,ie
+      do concurrent (j=js:je, i=is:ie)
         U_star(i,j) = sqrt(forces%tau_mag(i,j) * tv%SpV_avg(i,j,1))
-      enddo ; enddo
+      enddo
     else
-      do j=js,je ; do i=is,ie
+      do concurrent (j=js:je, i=is:ie)
         U_star(i,j) = GV%RZ_to_H * sqrt(forces%tau_mag(i,j) / tv%SpV_avg(i,j,1))
-      enddo ; enddo
+      enddo
     endif
   else
     I_rho = GV%Z_to_H * GV%RZ_to_H
     if (Z_T_units) I_rho = GV%H_to_Z * GV%RZ_to_H ! == 1.0 / GV%Rho0
-    do j=js,je ; do i=is,ie
+    do concurrent (j=js:je, i=is:ie)
       U_star(i,j) = sqrt(forces%tau_mag(i,j) * I_rho)
-    enddo ; enddo
+    enddo
   endif
 
 end subroutine find_ustar_mech_forcing
