@@ -1815,6 +1815,7 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   else
     I_sum_wt_vel = 1.0 ; I_sum_wt_eta = 1.0 ; I_sum_wt_accel = 1.0 ; I_sum_wt_trans = 1.0
   endif
+  !$omp target enter data map(to: wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2)
 
   ! March the barotropic solver through all of its time steps.
   call btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL_v, eta_IC, &
@@ -1825,6 +1826,8 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
                 eta_sum, eta_wtd, ubt_wtd, vbt_wtd, Coru_avg, PFu_avg, LDu_avg, Corv_avg, PFv_avg, &
                 LDv_avg, use_BT_cont, interp_eta_PF, find_etaav, dt, dtbt, nstep, nfilter, &
                 wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2, ADp, CS%BT_OBC, CS, G, MS, GV, US)
+
+  !$omp target exit data map(release: wt_vel, wt_eta, wt_accel, wt_trans, wt_accel2)
 
   if (id_clock_calc > 0) call cpu_clock_end(id_clock_calc)
   if (id_clock_calc_post > 0) call cpu_clock_begin(id_clock_calc_post)
