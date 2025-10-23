@@ -1511,10 +1511,16 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
+  !$omp target enter data map(alloc: I_Hbbl)
+
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%dZ_subroundoff
   a_cpl_max = 1.0e37 * GV%m_to_H * US%T_to_s
-  I_Hbbl(:,:) = 1. / (CS%Hbbl + dz_neglect)
+  do concurrent (j=SZJB_(G), i=SZIB_(G))
+    I_Hbbl(i,j) = 1. / (CS%Hbbl + dz_neglect)
+  enddo
+
+  ! below allocations and initializations will probably be slow on CPU
   if (CS%use_GL90_in_SSW) then
     I_Hbbl_gl90(:,:) = 1. / (CS%Hbbl_gl90 + dz_neglect)
   endif
