@@ -1577,20 +1577,16 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     !$omp end target
   endif
 
-  !$omp target
   do k=1,nz
-    !$omp parallel loop collapse(2)
-    do j=js,je ; do I=Isq,Ieq
+    do concurrent (j=js:je, I=Isq:Ieq)
       intx_pa(I,j,K+1) = intx_pa(I,j,K) + intx_dpa(I,j,k)
-    enddo ; enddo
+    enddo
   enddo
   do k=1,nz
-    !$omp parallel loop collapse(2)
-    do J=Jsq,Jeq ; do i=is,ie
+    do concurrent (J=Jsq:Jeq, i=is:ie)
       inty_pa(i,J,K+1) = inty_pa(i,J,K) + inty_dpa(i,J,k)
-    enddo ; enddo
+    enddo
   enddo
-  !$omp end target
 
   if (CS%reset_intxpa_integral) then
     ! Having stored the pressure gradient info, we can work out where the first nonvanished layers is
