@@ -1363,9 +1363,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   endif
 
   ! Set the pressure anomalies at the interfaces.
-  do k=1,nz
-    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
-      pa(i,j,K+1) = pa(i,j,K) + dpa(i,j,k)
+  do concurrent (j=Jsq:Jeq+1)
+    do k=1,nz
+      do concurrent (i=Isq:Ieq+1)
+        pa(i,j,K+1) = pa(i,j,K) + dpa(i,j,k)
+      enddo
     enddo
   enddo
 
@@ -1565,16 +1567,12 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
     ! assuming that the surface pressure anomaly varies linearly in x and y.
     ! If there is an ice-shelf or icebergs, this linear variation would need to be applied
     ! to an interior interface.
-    !$omp target
-    !$omp parallel loop collapse(2)
-    do j=js,je ; do I=Isq,Ieq
+    do concurrent (j=js:je, I=Isq:Ieq)
       intx_pa(I,j,1) = 0.5*(pa(i,j,1) + pa(i+1,j,1))
-    enddo ; enddo
-    !$omp parallel loop collapse(2)
-    do J=Jsq,Jeq ; do i=is,ie
+    enddo
+    do concurrent (J=Jsq:Jeq, i=is:ie)
       inty_pa(i,J,1) = 0.5*(pa(i,j,1) + pa(i,j+1,1))
-    enddo ; enddo
-    !$omp end target
+    enddo
   endif
 
   do k=1,nz
@@ -1926,13 +1924,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
       enddo
     endif
 
-    do k=1,nz
-      do concurrent (j=js:je, I=Isq:Ieq)
-        PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
-      enddo
-      do concurrent (J=Jsq:Jeq, i=is:ie)
-        PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
-      enddo
+    do concurrent (k=1:nz, j=js:je, I=Isq:Ieq)
+      PFu(I,j,k) = PFu(I,j,k) - (dM(i+1,j) - dM(i,j)) * G%IdxCu(I,j)
+    enddo
+    do concurrent (k=1:nz, J=Jsq:Jeq, i=is:ie)
+      PFv(i,J,k) = PFv(i,J,k) - (dM(i,j+1) - dM(i,j)) * G%IdyCv(i,J)
     enddo
 
     !$omp end target data

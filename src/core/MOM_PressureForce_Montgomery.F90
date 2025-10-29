@@ -689,17 +689,19 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
   if (use_EOS) then
     if (present(rho_star)) then
-      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
+      do concurrent (j=Jsq:Jeq+1)
+      do concurrent (i=Isq:Ieq+1)
         Ihtot(i,j) = GV%H_to_Z / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
         pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_Z
       enddo
 
       do k=2,nz
-        do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
+        do concurrent (i=Isq:Ieq+1)
           pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) &
               * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
         enddo
       enddo
+    enddo
     else
       !$omp target data &
       !$omp   map(alloc: EOSdom, press, T_int, S_int, rho_in_situ) &
@@ -743,14 +745,16 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
       !$omp end target data
     endif
   else
-    do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
-      Ihtot(i,j) = 1.0 / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
-      pbce(i,j,1) = GV%g_prime(1) * GV%H_to_Z
-    enddo
-    do k=2,nz
-      do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
-        pbce(i,j,k) = pbce(i,j,k-1) + (GV%g_prime(K) * GV%H_to_Z) &
-            * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
+    do concurrent (j=Jsq:Jeq+1)
+      do concurrent (i=Isq:Ieq+1)
+        Ihtot(i,j) = 1.0 / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
+        pbce(i,j,1) = GV%g_prime(1) * GV%H_to_Z
+      enddo
+      do k=2,nz
+        do concurrent (i=Isq:Ieq+1)
+          pbce(i,j,k) = pbce(i,j,k-1) + (GV%g_prime(K) * GV%H_to_Z) &
+              * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
+        enddo
       enddo
     enddo
   endif
