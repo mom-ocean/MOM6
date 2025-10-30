@@ -1186,7 +1186,6 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
     ! CAu = -(f+zeta_av)/h_av vh + d/dx KE_av
     call CorAdCalc(u_av, v_av, h_av, uh, vh, CS%CAu_pred, CS%CAv_pred, CS%OBC, CS%AD_pred, &
                    G, GV, US, CS%CoriolisAdv, pbv, Waves=Waves)
-    !$omp target update from(CS%CAu_pred, CS%CAv_pred)
     CS%CAu_pred_stored = .true.
     call enable_averages(dt, Time_local, CS%diag) ! Reenable the averaging
     call cpu_clock_end(id_clock_Cor)
