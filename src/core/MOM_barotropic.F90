@@ -1068,27 +1068,39 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   do concurrent (J=js-1:je, i=is-1:ie+1)
     vbt_Cor(i,J) = 0.0
   enddo
-  do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
-    ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
-  enddo ; enddo
-  do k=1,nz ; do concurrent (J=js-1:je, i=is:ie)
-    vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
-  enddo ; enddo
+  do concurrent (j=js:je)
+    do k=1,nz
+      do concurrent (I=is-1:ie)
+        ubt_Cor(I,j) = ubt_Cor(I,j) + wt_u(I,j,k) * U_Cor(I,j,k)
+      enddo
+    enddo
+  enddo
+  do concurrent (J=js-1:je)
+    do k=1,nz
+      do concurrent (i=is:ie)
+        vbt_Cor(i,J) = vbt_Cor(i,J) + wt_v(i,J,k) * V_Cor(i,J,k)
+      enddo
+    enddo
+  enddo
 
   ! The gtot arrays are the effective layer-weighted reduced gravities for
   ! accelerations across the various faces, with names for the relative
   ! locations of the faces to the pressure point.  They will have their halos
   ! updated later on.
-  do k=1,nz
-    do concurrent (j=js:je, i=is-1:ie)
-      gtot_E(i,j)   = gtot_E(i,j)   + pbce(i,j,k)   * wt_u(I,j,k)
-      gtot_W(i+1,j) = gtot_W(i+1,j) + pbce(i+1,j,k) * wt_u(I,j,k)
+  do concurrent (j=js:je)
+    do k=1,nz
+      do concurrent (i=is-1:ie)
+        gtot_E(i,j)   = gtot_E(i,j)   + pbce(i,j,k)   * wt_u(I,j,k)
+        gtot_W(i+1,j) = gtot_W(i+1,j) + pbce(i+1,j,k) * wt_u(I,j,k)
+      enddo
     enddo
   enddo
-  do k=1,nz
-    do concurrent (J=js-1:je, i=is:ie)
-      gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
-      gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
+  do concurrent (J=js-1:je)
+    do k=1,nz
+      do concurrent (i=is:ie)
+        gtot_N(i,j)   = gtot_N(i,j)   + pbce(i,j,k)   * wt_v(i,J,k)
+        gtot_S(i,j+1) = gtot_S(i,j+1) + pbce(i,j+1,k) * wt_v(i,J,k)
+      enddo
     enddo
   enddo
 
@@ -1172,14 +1184,22 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
         vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * v_vh0(i,J,k)
       enddo ; enddo
     else
-      do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
-        uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
-        ubt(I,j) = ubt(I,j) + CS%frhatu(I,j,k) * u_uh0(I,j,k)
-      enddo ; enddo
-      do k=1,nz ; do concurrent (J=js-1:je, i=is:ie)
-        vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
-        vbt(i,J) = vbt(i,J) + CS%frhatv(i,J,k) * v_vh0(i,J,k)
-      enddo ; enddo
+      do concurrent (j=js:je)
+        do k=1,nz
+          do concurrent (I=is-1:ie)
+            uhbt(I,j) = uhbt(I,j) + uh0(I,j,k)
+            ubt(I,j) = ubt(I,j) + CS%frhatu(I,j,k) * u_uh0(I,j,k)
+          enddo
+        enddo
+      enddo
+      do concurrent (J=js-1:je)
+        do k=1,nz
+          do concurrent (i=is:ie)
+            vhbt(i,J) = vhbt(i,J) + vh0(i,J,k)
+            vbt(i,J) = vbt(i,J) + CS%frhatv(i,J,k) * v_vh0(i,J,k)
+          enddo
+        enddo
+      enddo
     endif
     if ((use_BT_cont .or. integral_BT_cont) .and. CS%adjust_BT_cont) then
       ! Use the additional input transports to broaden the fits
@@ -1324,12 +1344,20 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
 
   ! bc_accel_u & bc_accel_v are only available on the potentially
   ! non-symmetric computational domain.
-  do k=1,nz ; do concurrent (j=js:je, I=Isq:Ieq)
-    BT_force_u(I,j) = BT_force_u(I,j) + wt_u(I,j,k) * bc_accel_u(I,j,k)
-  enddo ; enddo
-  do k=1,nz ; do concurrent (J=Jsq:Jeq, i=is:ie)
-    BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * bc_accel_v(i,J,k)
-  enddo ; enddo
+  do concurrent (j=js:je)
+    do k=1,nz
+      do concurrent (I=Isq:Ieq)
+        BT_force_u(I,j) = BT_force_u(I,j) + wt_u(I,j,k) * bc_accel_u(I,j,k)
+      enddo
+    enddo
+  enddo
+  do concurrent (J=Jsq:Jeq)
+    do k=1,nz
+      do concurrent (i=is:ie)
+        BT_force_v(i,J) = BT_force_v(i,J) + wt_v(i,J,k) * bc_accel_v(i,J,k)
+      enddo
+    enddo
+  enddo
 
   if (CS%gradual_BT_ICs) then
     do concurrent (j=js:je, I=is-1:ie)
@@ -1479,15 +1507,23 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   do concurrent (j=js-1:je+1, I=is-1:ie)
     av_rem_u(I,j) = 0.0
   enddo
-  do concurrent (J=js-1:je, i=is-1:ie+1)
-    av_rem_v(i,J) = 0.0
+  do concurrent (j=js:je)
+    do k=1,nz
+      do concurrent (I=is-1:ie)
+        av_rem_u(I,j) = av_rem_u(I,j) + CS%frhatu(I,j,k) * visc_rem_u(I,j,k)
+      enddo
+    enddo
   enddo
-  do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
-    av_rem_u(I,j) = av_rem_u(I,j) + CS%frhatu(I,j,k) * visc_rem_u(I,j,k)
-  enddo ; enddo
-  do k=1,nz ; do concurrent (J=js-1:je, i=is:ie)
-    av_rem_v(i,J) = av_rem_v(i,J) + CS%frhatv(i,J,k) * visc_rem_v(i,J,k)
-  enddo ; enddo
+  do concurrent (J=js-1:je)
+    do concurrent(i=is-1:ie+1)
+      av_rem_v(i,J) = 0.0
+    enddo
+    do k=1,nz
+      do concurrent (i=is:ie)
+        av_rem_v(i,J) = av_rem_v(i,J) + CS%frhatv(i,J,k) * visc_rem_v(i,J,k)
+      enddo
+    enddo
+  enddo
   if (CS%strong_drag) then
     do concurrent (j=js:je, I=is-1:ie)
       bt_rem_u(I,j) = G%mask2dCu(I,j) * &
@@ -3431,18 +3467,25 @@ subroutine btstep_ubt_from_layer(U_in, V_in, wt_u, wt_v, ubt, vbt,  G, GV, CS)
     vbt(i,j) = 0.0
   enddo
 
-  do k=1,nz ; do concurrent (j=js:je, I=is-1:ie)
-    ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
-  enddo ; enddo
-  do k=1,nz ; do concurrent (J=js-1:je, i=is:ie)
-    vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
-  enddo ; enddo
-
-  do concurrent (j=js:je, I=is-1:ie)
-    if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
+  do concurrent (j=js:je)
+    do k=1,nz
+      do concurrent (I=is-1:ie)
+        ubt(I,j) = ubt(I,j) + wt_u(I,j,k) * U_in(I,j,k)
+      enddo
+    enddo
+    do concurrent (I=is-1:ie)
+      if (abs(ubt(I,j)) < CS%vel_underflow) ubt(I,j) = 0.0
+    enddo
   enddo
-  do concurrent (J=js-1:je, i=is:ie)
-    if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
+  do concurrent (J=js-1:je)
+    do k=1,nz
+      do concurrent (i=is:ie)
+        vbt(i,J) = vbt(i,J) + wt_v(i,J,k) * V_in(i,J,k)
+      enddo
+    enddo
+    do concurrent (i=is:ie)
+      if (abs(vbt(i,J)) < CS%vel_underflow) vbt(i,J) = 0.0
+    enddo
   enddo
 
 end subroutine btstep_ubt_from_layer
@@ -3607,16 +3650,20 @@ subroutine set_dtbt(G, GV, US, CS, pbce, gtot_est, BT_cont, eta, SSH_add)
     dgeo_de = 1.0 + max(0.0, CS%G_extra - det_de)
   endif
   if (present(pbce)) then
-    do concurrent (j=js:je, i=is:ie)
-      gtot_E(i,j) = 0.0 ; gtot_W(i,j) = 0.0
-      gtot_N(i,j) = 0.0 ; gtot_S(i,j) = 0.0
+    do concurrent (j=js:je)
+      do concurrent (i=is:ie)
+        gtot_E(i,j) = 0.0 ; gtot_W(i,j) = 0.0
+        gtot_N(i,j) = 0.0 ; gtot_S(i,j) = 0.0
+      enddo
+      do k=1,nz
+        do concurrent (i=is:ie)
+          gtot_E(i,j) = gtot_E(i,j) + pbce(i,j,k) * CS%frhatu(I,j,k)
+          gtot_W(i,j) = gtot_W(i,j) + pbce(i,j,k) * CS%frhatu(I-1,j,k)
+          gtot_N(i,j) = gtot_N(i,j) + pbce(i,j,k) * CS%frhatv(i,J,k)
+          gtot_S(i,j) = gtot_S(i,j) + pbce(i,j,k) * CS%frhatv(i,J-1,k)
+        enddo
+      enddo
     enddo
-    do k=1,nz ; do concurrent (j=js:je, i=is:ie)
-      gtot_E(i,j) = gtot_E(i,j) + pbce(i,j,k) * CS%frhatu(I,j,k)
-      gtot_W(i,j) = gtot_W(i,j) + pbce(i,j,k) * CS%frhatu(I-1,j,k)
-      gtot_N(i,j) = gtot_N(i,j) + pbce(i,j,k) * CS%frhatv(i,J,k)
-      gtot_S(i,j) = gtot_S(i,j) + pbce(i,j,k) * CS%frhatv(i,J-1,k)
-    enddo ; enddo
   else
     do concurrent (j=js:je, i=is:ie)
       gtot_E(i,j) = gtot_est ; gtot_W(i,j) = gtot_est
@@ -5349,31 +5396,33 @@ subroutine bt_mass_source(h, eta, set_cor, G, GV, CS)
 
   !$omp target data map(alloc: eta_h)
 
-  if (GV%Boussinesq) then
-    do concurrent (j=js:je, i=is:ie)
-      eta_h(i,j) = h(i,j,1) - G%bathyT(i,j)*GV%Z_to_H
+  do concurrent (j=js:je)
+    if (GV%Boussinesq) then
+      do concurrent (i=is:ie)
+        eta_h(i,j) = h(i,j,1) - G%bathyT(i,j)*GV%Z_to_H
+      enddo
+    else
+      do concurrent (i=is:ie)
+        eta_h(i,j) = h(i,j,1)
+      enddo
+    endif
+    do k=2,nz
+      do concurrent (i=is:ie)
+        eta_h(i,j) = eta_h(i,j) + h(i,j,k)
+      enddo
     enddo
-  else
-    do concurrent (j=js:je, i=is:ie)
-      eta_h(i,j) = h(i,j,1)
-    enddo
-  endif
-  do k=2,nz
-    do concurrent (j=js:je, i=is:ie)
-      eta_h(i,j) = eta_h(i,j) + h(i,j,k)
-    enddo
+    if (set_cor) then
+      do concurrent (i=is:ie)
+        d_eta = eta_h(i,j) - eta(i,j)
+        CS%eta_cor(i,j) = d_eta
+      enddo
+    else
+      do concurrent (i=is:ie)
+        d_eta = eta_h(i,j) - eta(i,j)
+        CS%eta_cor(i,j) = CS%eta_cor(i,j) + d_eta
+      enddo
+    endif
   enddo
-  if (set_cor) then
-    do concurrent (j=js:je, i=is:ie)
-      d_eta = eta_h(i,j) - eta(i,j)
-      CS%eta_cor(i,j) = d_eta
-    enddo
-  else
-    do concurrent (j=js:je, i=is:ie)
-      d_eta = eta_h(i,j) - eta(i,j)
-      CS%eta_cor(i,j) = CS%eta_cor(i,j) + d_eta
-    enddo
-  endif
 
   !$omp end target data
 
