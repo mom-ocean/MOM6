@@ -1,3 +1,5 @@
+#include "do_concurrent_compat.h"
+
 !> Implements vertical viscosity (vertvisc)
 module MOM_vert_friction
 
@@ -781,35 +783,39 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
   endif
 
-  do k=2,nz
-    if (allocated(visc%Ray_u)) then
-      do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
-        Ray(I,j) = visc%Ray_u(I,j,k)
-      enddo
-    endif
+  do concurrent (j=G%jsc:G%jec)
+    do k=2,nz
+      if (allocated(visc%Ray_u)) then
+        do concurrent (I=Isq:Ieq)
+          Ray(I,j) = visc%Ray_u(I,j,k)
+        enddo
+      endif
 
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-      c1(I,j,k) = dt * CS%a_u(I,j,K) * b1(I,j)
-      b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,j) + CS%a_u(I,j,K)*d1(I,j))
-      b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
-      d1(I,j) = b_denom_1 * b1(I,j)
-      u(I,j,k) = (CS%h_u(I,j,k) * u(I,j,k) + &
-                  dt * CS%a_u(I,j,K) * u(I,j,k-1)) * b1(I,j)
+      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
+        c1(I,j,k) = dt * CS%a_u(I,j,K) * b1(I,j)
+        b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,j) + CS%a_u(I,j,K)*d1(I,j))
+        b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
+        d1(I,j) = b_denom_1 * b1(I,j)
+        u(I,j,k) = (CS%h_u(I,j,k) * u(I,j,k) + &
+                    dt * CS%a_u(I,j,K) * u(I,j,k-1)) * b1(I,j)
+      enddo
+
+      if (associated(ADp%du_dt_str)) then
+        do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
+          ADp%du_dt_str(I,j,k) = (CS%h_u(I,j,k) * ADp%du_dt_str(I,j,k) &
+              + dt * CS%a_u(I,j,K) * ADp%du_dt_str(I,j,k-1)) * b1(I,j)
+        enddo
+      endif
     enddo
-
-    if (associated(ADp%du_dt_str)) then
-      do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-        ADp%du_dt_str(I,j,k) = (CS%h_u(I,j,k) * ADp%du_dt_str(I,j,k) &
-            + dt * CS%a_u(I,j,K) * ADp%du_dt_str(I,j,k-1)) * b1(I,j)
-      enddo
-    endif
   enddo
 
   ! back substitute to solve for the new velocities
   ! u_k = d'_k - c'_k x_(k+1)
-  do k=nz-1,1,-1
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(I,j) > 0.0)
-      u(I,j,k) = u(I,j,k) + c1(I,j,k+1) * u(I,j,k+1)
+  do concurrent (j=G%jsc:G%jec)
+    do k=nz-1,1,-1
+      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.0)
+        u(I,j,k) = u(I,j,k) + c1(I,j,k+1) * u(I,j,k+1)
+      enddo
     enddo
   enddo
 
@@ -1021,32 +1027,34 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
   endif
 
-  do k=2,nz
-    if (allocated(visc%Ray_v)) then
-      do concurrent (j=jsq:jeq, i=is:ie)
-        Ray(i,J) = visc%Ray_v(i,J,k)
-      enddo
-    endif
+  do concurrent (j=Jsq:Jeq)
+    do k=2,nz
+      if (allocated(visc%Ray_v)) then
+        do concurrent (i=is:ie)
+          Ray(i,J) = visc%Ray_v(i,J,k)
+        enddo
+      endif
 
-    do concurrent (j=jsq:jeq, i=is:ie, G%mask2dCv(i,j) > 0.0)
-      c1(i,J,k) = dt * CS%a_v(i,J,K) * b1(i,J)
-      b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,J) + CS%a_v(i,J,K)*d1(i,J))
-      b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
-      d1(i,J) = b_denom_1 * b1(i,J)
-      v(i,J,k) = (CS%h_v(i,J,k) * v(i,J,k) + dt * CS%a_v(i,J,K) * v(i,J,k-1)) * b1(i,J)
+      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.0)
+        c1(i,J,k) = dt * CS%a_v(i,J,K) * b1(i,J)
+        b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,J) + CS%a_v(i,J,K)*d1(i,J))
+        b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
+        d1(i,J) = b_denom_1 * b1(i,J)
+        v(i,J,k) = (CS%h_v(i,J,k) * v(i,J,k) + dt * CS%a_v(i,J,K) * v(i,J,k-1)) * b1(i,J)
+      enddo
+
+      if (associated(ADp%dv_dt_str)) then
+        do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.0)
+          ADp%dv_dt_str(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_str(i,J,k) &
+              + dt * CS%a_v(i,J,K) * ADp%dv_dt_str(i,J,k-1)) * b1(i,J)
+        enddo
+      endif
     enddo
 
-    if (associated(ADp%dv_dt_str)) then
-      do concurrent (J=Jsq:Jeq, i=is:ie, G%mask2dCv(i,j) > 0.0)
-        ADp%dv_dt_str(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_str(i,J,k) &
-            + dt * CS%a_v(i,J,K) * ADp%dv_dt_str(i,J,k-1)) * b1(i,J)
+    do k=nz-1,1,-1
+      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.0)
+        v(i,J,k) = v(i,J,k) + c1(i,J,k+1) * v(i,J,k+1)
       enddo
-    endif
-  enddo
-
-  do k=nz-1,1,-1
-    do concurrent (j=jsq:jeq, i=is:ie, G%mask2dCv(i,j) > 0.0)
-      v(i,J,k) = v(i,J,k) + c1(i,J,k+1) * v(i,J,k+1)
     enddo
   enddo
 
@@ -1306,85 +1314,89 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   !$omp target enter data map(alloc: b1, c1, d1, Ray, b_denom_1)
 
-  if (allocated(visc%Ray_u)) then
-    do j=G%jsc,G%jec ; do I=Isq,Ieq
-      Ray(I,j) = visc%Ray_u(I,j,1)
-    enddo ; enddo
-  else
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
-      Ray(I,j) = 0.
-    enddo
-  endif
-
-  do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(i,j) > 0.)
-    b_denom_1 = CS%h_u(I,j,1) + dt * (Ray(I,j) + CS%a_u(I,j,1))
-    b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,2))
-    d1(I,j) = b_denom_1 * b1(I,j)
-    visc_rem_u(I,j,1) = b1(I,j) * CS%h_u(I,j,1)
-  enddo
-
-
-  do k=2,nz
+  do concurrent (j=G%jsc:G%jec)
     if (allocated(visc%Ray_u)) then
-      do j=G%jsc,G%jec ; do I=Isq,Ieq
-        Ray(I,j) = visc%Ray_u(I,j,k)
-      enddo ; enddo
+      do concurrent (I=Isq:Ieq)
+        Ray(I,j) = visc%Ray_u(I,j,1)
+      enddo
+    else
+      do concurrent (I=Isq:Ieq)
+        Ray(I,j) = 0.
+      enddo
     endif
 
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-      c1(I,j,k) = dt * CS%a_u(I,j,K)*b1(I,j)
-      b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,j) + CS%a_u(I,j,K) * d1(I,j))
-      b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
+    do concurrent (I=Isq:Ieq, G%mask2dCu(i,j) > 0.)
+      b_denom_1 = CS%h_u(I,j,1) + dt * (Ray(I,j) + CS%a_u(I,j,1))
+      b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,2))
       d1(I,j) = b_denom_1 * b1(I,j)
-      visc_rem_u(I,j,k) = (CS%h_u(I,j,k) + dt * CS%a_u(I,j,K) * visc_rem_u(I,j,k-1)) * b1(I,j)
+      visc_rem_u(I,j,1) = b1(I,j) * CS%h_u(I,j,1)
     enddo
-  enddo
 
-  do k=nz-1,1,-1
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-      visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(I,j,k+1) * visc_rem_u(I,j,k+1)
+    do k=2,nz
+      if (allocated(visc%Ray_u)) then
+        do concurrent (I=Isq:Ieq)
+          Ray(I,j) = visc%Ray_u(I,j,k)
+        enddo
+      endif
+
+      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
+        c1(I,j,k) = dt * CS%a_u(I,j,K)*b1(I,j)
+        b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,j) + CS%a_u(I,j,K) * d1(I,j))
+        b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
+        d1(I,j) = b_denom_1 * b1(I,j)
+        visc_rem_u(I,j,k) = (CS%h_u(I,j,k) + dt * CS%a_u(I,j,K) * visc_rem_u(I,j,k-1)) * b1(I,j)
+      enddo
+    enddo
+
+    do k=nz-1,1,-1
+      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
+        visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(I,j,k+1) * visc_rem_u(I,j,k+1)
+      enddo
     enddo
   enddo
 
   ! Now find the meridional viscous remnant using the robust tridiagonal solver.
-  if (allocated(visc%Ray_v)) then
-    do J=Jsq,Jeq ; do i=is,ie
-      Ray(i,J) = visc%Ray_v(i,J,1)
-    enddo ; enddo
-  else
-    do concurrent (j=jsq:jeq, i=is:ie)
-      Ray(i,J) = 0.
-    enddo
-  endif
-
-  do concurrent (J=Jsq:Jeq, i=is:ie, G%mask2dCv(i,j) > 0.)
-    b_denom_1 = CS%h_v(i,J,1) + dt * (Ray(i,J) + CS%a_v(i,J,1))
-    b1(i,J) = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
-    d1(i,J) = b_denom_1 * b1(i,J)
-    visc_rem_v(i,J,1) = b1(i,J) * CS%h_v(i,J,1)
-  enddo
-
-  do k=2,nz
+  do concurrent (J=Jsq:Jeq)
     if (allocated(visc%Ray_v)) then
-      do J=Jsq,Jeq ; do i=is,ie
-        Ray(i,J) = visc%Ray_v(i,J,k)
-      enddo ; enddo
+      do concurrent (i=is:ie)
+        Ray(i,J) = visc%Ray_v(i,J,1)
+      enddo
+    else
+      do concurrent (i=is:ie)
+        Ray(i,J) = 0.
+      enddo
     endif
 
-    do concurrent (J=Jsq:Jeq, i=is:ie, G%mask2dCv(i,j) > 0.)
-      c1(i,J,k) = dt * CS%a_v(i,J,K) * b1(i,J)
-      b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,J) + CS%a_v(i,J,K) * d1(i,J))
-      b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
+    do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.)
+      b_denom_1 = CS%h_v(i,J,1) + dt * (Ray(i,J) + CS%a_v(i,J,1))
+      b1(i,J) = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
       d1(i,J) = b_denom_1 * b1(i,J)
-      visc_rem_v(i,J,k) = (CS%h_v(i,J,k) + dt * CS%a_v(i,J,K) * visc_rem_v(i,J,k-1)) * b1(i,J)
+      visc_rem_v(i,J,1) = b1(i,J) * CS%h_v(i,J,1)
+    enddo
+
+    do k=2,nz
+      if (allocated(visc%Ray_v)) then
+        do concurrent (i=is:ie)
+          Ray(i,J) = visc%Ray_v(i,J,k)
+        enddo
+      endif
+
+      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.)
+        c1(i,J,k) = dt * CS%a_v(i,J,K) * b1(i,J)
+        b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,J) + CS%a_v(i,J,K) * d1(i,J))
+        b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
+        d1(i,J) = b_denom_1 * b1(i,J)
+        visc_rem_v(i,J,k) = (CS%h_v(i,J,k) + dt * CS%a_v(i,J,K) * visc_rem_v(i,J,k-1)) * b1(i,J)
+      enddo
+    enddo
+
+    do k=nz-1,1,-1
+      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.)
+        visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(i,J,k+1) * visc_rem_v(i,J,k+1)
+      enddo
     enddo
   enddo
 
-  do k=nz-1,1,-1
-    do concurrent (J=Jsq:Jeq, i=is:ie, G%mask2dCv(i,j) > 0.)
-      visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(i,J,k+1) * visc_rem_v(i,J,k+1)
-    enddo
-  enddo
   !$omp target exit data map(delete: b1, c1, d1, Ray, b_denom_1)
 
   if (CS%debug) then
@@ -1923,15 +1935,17 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
       enddo
     endif
 
-    do K=1,nz+1
-      do concurrent (j=js:je, i=isq:ieq, do_i(i,j))
-        CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,j,K))
+    do concurrent (j=js:je)
+      do K=1,nz+1
+        do concurrent (i=isq:ieq, do_i(i,j))
+          CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,j,K))
+        enddo
       enddo
-    enddo
 
-    do k=1,nz
-      do concurrent (j=js:je, i=isq:ieq, do_i(i,j))
-        CS%h_u(I,j,k) = hvel(I,j,k) + h_neglect
+      do k=1,nz
+        do concurrent (i=isq:ieq, do_i(i,j))
+          CS%h_u(I,j,k) = hvel(I,j,k) + h_neglect
+        enddo
       enddo
     enddo
   endif
@@ -2308,15 +2322,17 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
       enddo
     endif
 
-    do K=1,nz+1
-      do concurrent (J=Jsq:Jeq, i=is:ie, do_i(i,j))
-        CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,J,K))
+    do concurrent (J=Jsq:Jeq)
+      do K=1,nz+1
+        do concurrent (i=is:ie, do_i(i,j))
+          CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,J,K))
+        enddo
       enddo
-    enddo
 
-    do k=1,nz
-      do concurrent (J=Jsq:Jeq, i=is:ie, do_i(i,j))
-        CS%h_v(i,J,k) = hvel(i,J,k) + h_neglect
+      do k=1,nz
+        do concurrent (i=is:ie, do_i(i,j))
+          CS%h_v(i,J,k) = hvel(i,J,k) + h_neglect
+        enddo
       enddo
     enddo
   endif
@@ -2466,7 +2482,6 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   integer :: nz, max_nk
   integer :: is_N_OBC, is_S_OBC, Is_E_OBC, Is_W_OBC, ie_N_OBC, ie_S_OBC, Ie_E_OBC, Ie_W_OBC
   integer :: js_N_OBC, js_S_OBC, Js_E_OBC, Js_W_OBC, je_N_OBC, je_S_OBC, Je_E_OBC, Je_W_OBC
-
   if (work_on_u) then
     Is = G%IscB ; Ie = G%IecB
     js = G%jsc ; je = G%jec
@@ -2871,19 +2886,21 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
       max_nk = 0
       if (work_on_u) then
-        do concurrent (j=js:je, i=is:ie, do_i(i,j))
+        do concurrent (j=js:je, i=is:ie, do_i(i,j)) DO_LOCALITY(reduce(max:max_nk))
           nk_in_ml(I,j) = ceiling(visc%nkml_visc_u(I,j))
           max_nk = max(max_nk, nk_in_ml(I,j))
         enddo
         ! TODO: max_nk is transferred back, try to keep it on the device
 
-        do k=1,max_nk
-          do concurrent (j=js:je, i=is:ie, do_i(i,j))
-            if (k <= visc%nkml_visc_u(I,j)) then ! This layer is all in the ML.
-              h_ml(i,j) = h_ml(i,j) + hvel(i,j,k)
-            elseif (k < visc%nkml_visc_u(I,j) + 1.) then ! Part of this layer is in the ML.
-              h_ml(i,j) = h_ml(i,j) + ((visc%nkml_visc_u(I,j) + 1.) - k) * hvel(i,j,k)
-            endif
+        do concurrent (j=js:je)
+          do k=1,max_nk
+            do concurrent (i=is:ie, do_i(i,j))
+              if (k <= visc%nkml_visc_u(I,j)) then ! This layer is all in the ML.
+                h_ml(i,j) = h_ml(i,j) + hvel(i,j,k)
+              elseif (k < visc%nkml_visc_u(I,j) + 1.) then ! Part of this layer is in the ML.
+                h_ml(i,j) = h_ml(i,j) + ((visc%nkml_visc_u(I,j) + 1.) - k) * hvel(i,j,k)
+              endif
+            enddo
           enddo
         enddo
       else
@@ -3005,26 +3022,28 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
         endif ; enddo ; enddo
       enddo
     else
-      do K=2,max_nk
-        do concurrent (j=js:je, i=is:ie, k <= nk_in_ml(i,j))
-          z_t(i,j) = z_t(i,j) + hvel(i,j,k-1)
+      do concurrent (j=js:je)
+        do K=2,max_nk
+          do concurrent (i=is:ie, k <= nk_in_ml(i,j))
+            z_t(i,j) = z_t(i,j) + hvel(i,j,k-1)
 
-          temp1 = (z_t(i,j) * h_ml(i,j) - z_t(i,j) * z_t(i,j))
-          !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
-          ! and be further limited by rotation to give the natural Ekman length.
-          ! The following expressions are mathematically equivalent.
-          if (GV%Boussinesq .or. (CS%answer_date < 20230601)) then
-            visc_ml = u_star(i,j) * CS%vonKar * (GV%Z_to_H * temp1 * u_star(i,j)) &
-                / (absf(i,j) * temp1 + (h_ml(i,j)+h_neglect) * u_star(i,j))
-          else
-            visc_ml = CS%vonKar * (temp1 * tau_mag(i,j)) &
-                / (absf(i,j) * temp1 + (h_ml(i,j) + h_neglect) * u_star(i,j))
-          endif
-          a_ml = visc_ml / (0.25 * (hvel(i,j,k) + hvel(i,j,k-1) + h_neglect) + 0.5 * I_amax * visc_ml)
+            temp1 = (z_t(i,j) * h_ml(i,j) - z_t(i,j) * z_t(i,j))
+            !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
+            ! and be further limited by rotation to give the natural Ekman length.
+            ! The following expressions are mathematically equivalent.
+            if (GV%Boussinesq .or. (CS%answer_date < 20230601)) then
+              visc_ml = u_star(i,j) * CS%vonKar * (GV%Z_to_H * temp1 * u_star(i,j)) &
+                  / (absf(i,j) * temp1 + (h_ml(i,j)+h_neglect) * u_star(i,j))
+            else
+              visc_ml = CS%vonKar * (temp1 * tau_mag(i,j)) &
+                  / (absf(i,j) * temp1 + (h_ml(i,j) + h_neglect) * u_star(i,j))
+            endif
+            a_ml = visc_ml / (0.25 * (hvel(i,j,k) + hvel(i,j,k-1) + h_neglect) + 0.5 * I_amax * visc_ml)
 
-          ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
-          a_cpl(i,j,K) = max(a_cpl(i,j,K), a_ml)
-          ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
+            ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
+            a_cpl(i,j,K) = max(a_cpl(i,j,K), a_ml)
+            ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
+          enddo
         enddo
       enddo
     endif
