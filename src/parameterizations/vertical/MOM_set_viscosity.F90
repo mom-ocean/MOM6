@@ -2521,7 +2521,6 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
         visc%nkml_visc_v(i,J) = k_massive(i)
       endif ; enddo ; endif
 
-      !$omp target update to(visc%nkml_visc_u, visc%nkml_visc_v)
     endif ! dynamic_viscous_ML
 
     do_any_shelf = .false.
@@ -2689,6 +2688,8 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
     endif ! do_any_shelf
 
   enddo ! J-loop at v-points
+
+  !$omp target update to(visc%nkml_visc_u, visc%nkml_visc_v) if (CS%dynamic_viscous_ML)
 
   if (CS%debug) then
     if (allocated(visc%nkml_visc_u) .and. allocated(visc%nkml_visc_v)) &
