@@ -1830,7 +1830,7 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   ! Eventually, they should be set up *outside* of the function.
 
   !$omp target enter data if(use_EOS) &
-  !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, tv%eqn_of_state, EOSdom2d)
+  !$omp   map(to: tv_tmp, tv_tmp%T, tv_tmp%S, tv, EOSdom2d)
 
   ! NOTE: e_sal condition could be sharpened, but this is close enough.
   !$omp target enter data map(to: e_tidal_eq, e_tidal_sal, e_sal_and_tide) if (CS%tides)
