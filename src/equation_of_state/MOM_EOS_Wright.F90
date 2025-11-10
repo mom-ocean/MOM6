@@ -81,8 +81,7 @@ contains
 !> In situ density of sea water using a buggy implementation of Wright, 1997 [kg m-3]
 !!
 !! This is an elemental function that can be applied to any combination of scalar and array inputs.
-real elemental function density_elem_buggy_Wright(this, T, S, pressure)
-  class(buggy_Wright_EOS), intent(in) :: this !< This EOS
+real elemental function density_elem_buggy_Wright_loc(T, S, pressure)
   real, intent(in) :: T        !< potential temperature relative to the surface [degC].
   real, intent(in) :: S        !< salinity [PSU].
   real, intent(in) :: pressure !< pressure [Pa].
@@ -95,8 +94,20 @@ real elemental function density_elem_buggy_Wright(this, T, S, pressure)
   al0 = (a0 + a1*T) +a2*S
   p0 = (b0 + b4*S) + T * (b1 + T*(b2 + b3*T) + b5*S)
   lambda = (c0 +c4*S) + T * (c1 + T*(c2 + c3*T) + c5*S)
-  density_elem_buggy_Wright = (pressure + p0) / (lambda + al0*(pressure + p0))
+  density_elem_buggy_Wright_loc = (pressure + p0) / (lambda + al0*(pressure + p0))
 
+end function density_elem_buggy_Wright_loc
+
+!> Wrapper for density_elem_buggy_Wright_loc created to preserve API while calling
+!! density_elem_buggy_Wright without "this" variable that causes runtime errors on
+!! gpu runs with nvfortran.
+real elemental function density_elem_buggy_Wright(this, T, S, pressure)
+  class(buggy_Wright_EOS), intent(in) :: this !< This EOS
+  real, intent(in) :: T        !< potential temperature relative to the surface [degC].
+  real, intent(in) :: S        !< salinity [PSU].
+  real, intent(in) :: pressure !< pressure [Pa].
+
+  density_elem_buggy_Wright = density_elem_buggy_Wright_loc(T, S, pressure)
 end function density_elem_buggy_Wright
 
 !> In situ density anomaly of sea water using a buggy implementation of Wright, 1997 [kg m-3]
@@ -179,8 +190,7 @@ end function spec_vol_anomaly_elem_buggy_Wright
 
 !> Calculate the partial derivatives of density with potential temperature and salinity
 !! using the buggy implementation of the equation of state, as fit by Wright, 1997
-elemental subroutine calculate_density_derivs_elem_buggy_Wright(this, T, S, pressure, drho_dT, drho_dS)
-  class(buggy_Wright_EOS), intent(in) :: this !< This EOS
+elemental subroutine calculate_density_derivs_elem_buggy_Wright_loc( T, S, pressure, drho_dT, drho_dS)
   real,               intent(in)  :: T        !< Potential temperature relative to the surface [degC]
   real,               intent(in)  :: S        !< Salinity [PSU]
   real,               intent(in)  :: pressure !< Pressure [Pa]
@@ -206,6 +216,23 @@ elemental subroutine calculate_density_derivs_elem_buggy_Wright(this, T, S, pres
       (c1 + T*(c2*2.0 + c3*3.0*T) + c5*S) ))
   drho_dS = I_denom2 * (lambda* (b4 + b5*T) - &
     (pressure+p0) * ( (pressure+p0)*a2 + (c4 + c5*T) ))
+
+end subroutine calculate_density_derivs_elem_buggy_Wright_loc
+
+!> Wrapper for density_elem_buggy_Wright_loc created to preserve API while calling
+!! density_elem_buggy_Wright without "this" variable that causes runtime errors on
+!! gpu runs with nvfortran.
+elemental subroutine calculate_density_derivs_elem_buggy_Wright(this, T, S, pressure, drho_dT, drho_dS)
+  class(buggy_Wright_EOS), intent(in) :: this !< This EOS
+  real,               intent(in)  :: T        !< Potential temperature relative to the surface [degC]
+  real,               intent(in)  :: S        !< Salinity [PSU]
+  real,               intent(in)  :: pressure !< Pressure [Pa]
+  real,               intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                              !! temperature [kg m-3 degC-1]
+  real,               intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                              !! in [kg m-3 PSU-1]
+
+  call calculate_density_derivs_elem_buggy_Wright_loc(T, S, pressure, drho_dT, drho_dS)
 
 end subroutine calculate_density_derivs_elem_buggy_Wright
 
@@ -929,7 +956,7 @@ subroutine calculate_density_array_buggy_Wright(this, T, S, pressure, rho, start
     enddo
   else
     do j = start, start+npts-1
-      rho(j) = density_elem_buggy_Wright(this, T(j), S(j), pressure(j))
+      rho(j) = density_elem_buggy_Wright_loc(T(j), S(j), pressure(j))
     enddo
   endif
 end subroutine calculate_density_array_buggy_Wright
@@ -968,7 +995,7 @@ subroutine calculate_density_array_2d_buggy_Wright(this, T, S, pressure, rho, &
     enddo
   else
     do concurrent (j=js:je, i=is:ie)
-      rho(i,j) = density_elem_buggy_Wright(this, T(i,j), S(i,j), pressure(i,j))
+      rho(i,j) = density_elem_buggy_Wright_loc( T(i,j), S(i,j), pressure(i,j))
     enddo
   endif
 end subroutine calculate_density_array_2d_buggy_Wright
@@ -1027,7 +1054,7 @@ subroutine calculate_density_derivs_2d_buggy_Wright(this, T, S, pressure, &
   ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
 
   do concurrent (j=js:je, i=is:ie)
-    call calculate_density_derivs_elem_buggy_Wright(this, T(i,j), S(i,j), &
+    call calculate_density_derivs_elem_buggy_Wright_loc( T(i,j), S(i,j), &
         pressure(i,j), drho_dT(i,j), drho_dS(i,j))
   enddo
 end subroutine calculate_density_derivs_2d_buggy_Wright
