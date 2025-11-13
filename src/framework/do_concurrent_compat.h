@@ -6,7 +6,7 @@
 #ifdef HAVE_FC_DO_CONCURRENT_LOCAL
 #define DO_LOCALITY(X) X
 #else
-#define DO_LOCALITY(X)
+#define DO_LOCALITY(X) ;
 #endif
 
 #endif
