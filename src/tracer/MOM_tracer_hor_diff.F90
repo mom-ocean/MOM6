@@ -238,8 +238,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
 
   if (do_online) then
     if (use_VarMix) then
-      !$OMP parallel do default(shared) private(Kh_loc,Rd_dx)
-      do j=js,je ; do I=is-1,ie
+      do concurrent (j=js:je, I=is-1:ie)
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
         if (allocated(MEKE%Kh)) &
@@ -254,9 +253,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
           Kh_u(I,j,1) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
         endif
-      enddo ; enddo
-      !$OMP parallel do default(shared) private(Kh_loc,Rd_dx)
-      do J=js-1,je ;  do i=is,ie
+      enddo
+      do concurrent (J=js-1:je, i=is:ie)
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
         if (allocated(MEKE%Kh)) &
@@ -271,16 +269,14 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max) ! Re-apply max
           Kh_v(i,J,1) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
         endif
-      enddo ; enddo
+      enddo
 
-      !$OMP parallel do default(shared)
-      do j=js,je ; do I=is-1,ie
+      do concurrent (j=js:je, I=is-1:ie)
         khdt_x(I,j) = dt*(Kh_u(I,j,1)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
-      enddo ; enddo
-      !$OMP parallel do default(shared)
-      do J=js-1,je ; do i=is,ie
+      enddo
+      do concurrent (J=js-1:je, i=is:ie)
         khdt_y(i,J) = dt*(Kh_v(i,J,1)*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
-      enddo ; enddo
+      enddo
     elseif (Resoln_scaled) then
       !$OMP parallel do default(shared) private(Res_fn)
       do j=js,je ; do I=is-1,ie
@@ -545,7 +541,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     if (CS%show_call_tree) call callTree_waypoint("Calculating horizontal diffusion (tracer_hordiff)")
     do itt=1,num_itts
       call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
-      !$OMP parallel do default(shared) private(scale,Coef_y,Coef_x,Ihdxdy,dTr)
+      ! loop should probably be reordered
       do k=1,nz
         scale = I_numitts
         if (CS%Diffuse_ML_interior) then
@@ -556,30 +552,30 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           if ((k>GV%nkml) .and. (k<=GV%nk_rho_varies)) cycle
         endif
 
-        do J=js-1,je ; do i=is,ie
+        do concurrent (J=js-1:je, i=is:ie)
           Coef_y(i,J,1) = ((scale * khdt_y(i,J))*2.0*(h(i,j,k)*h(i,j+1,k))) / &
                                                    (h(i,j,k)+h(i,j+1,k)+h_neglect)
-        enddo ; enddo
+        enddo
 
-        do j=js,je
-          do I=is-1,ie
+        do concurrent (j=js:je)
+          do concurrent (I=is-1:ie)
             Coef_x(I,j,1) = ((scale * khdt_x(I,j))*2.0*(h(i,j,k)*h(i+1,j,k))) / &
                                                      (h(i,j,k)+h(i+1,j,k)+h_neglect)
           enddo
 
-          do i=is,ie
+          do concurrent (i=is:ie)
             Ihdxdy(i,j) = G%IareaT(i,j) / (h(i,j,k)+h_neglect)
           enddo
         enddo
 
         do m=1,ntr
-          do j=js,je ; do i=is,ie
+          do concurrent (j=js:je, i=is:ie)
             dTr(i,j) = Ihdxdy(i,j) * &
               ( ((Coef_x(I-1,j,1) * (Reg%Tr(m)%t(i-1,j,k) - Reg%Tr(m)%t(i,j,k))) - &
                  (Coef_x(I,j,1) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k)))) + &
                 ((Coef_y(i,J-1,1) * (Reg%Tr(m)%t(i,j-1,k) - Reg%Tr(m)%t(i,j,k))) - &
                  (Coef_y(i,J,1) * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k)))) )
-          enddo ; enddo
+          enddo
           if (associated(Reg%Tr(m)%df_x)) then ; do j=js,je ; do I=G%IscB,G%IecB
             Reg%Tr(m)%df_x(I,j,k) = Reg%Tr(m)%df_x(I,j,k) + Coef_x(I,j,1) &
                 * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i+1,j,k)) * Idt
@@ -596,19 +592,18 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
             Reg%Tr(m)%df2d_y(i,J) = Reg%Tr(m)%df2d_y(i,J) + Coef_y(i,J,1) &
                 * (Reg%Tr(m)%t(i,j,k) - Reg%Tr(m)%t(i,j+1,k)) * Idt
           enddo ; enddo ; endif
-          do j=js,je ; do i=is,ie
+          do concurrent (j=js:je, i=is:ie)
             Reg%Tr(m)%t(i,j,k) = Reg%Tr(m)%t(i,j,k) + dTr(i,j)
-          enddo ; enddo
+          enddo
         enddo
 
       enddo ! End of k loop.
 
       ! Do user controlled underflow of the tracer concentrations.
       do m=1,ntr ; if (Reg%Tr(m)%conc_underflow > 0.0) then
-        !$OMP parallel do default(shared)
-        do k=1,nz ; do j=js,je ; do i=is,ie
-          if (abs(Reg%Tr(m)%t(i,j,k)) < Reg%Tr(m)%conc_underflow) Reg%Tr(m)%t(i,j,k) = 0.0
-        enddo ; enddo ; enddo
+        do concurrent (k=1:nz, j=js:je, i=is:ie, abs(Reg%Tr(m)%t(i,j,k)) < Reg%Tr(m)%conc_underflow)
+          Reg%Tr(m)%t(i,j,k) = 0.0
+        enddo
       endif ; enddo
 
     enddo ! End of "while" loop.
