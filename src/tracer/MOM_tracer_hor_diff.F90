@@ -833,6 +833,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     max_itt = num_itts ; I_maxitt = 1.0 / (real(max_itt))
   endif
 
+  !$omp target enter data map(alloc: rho_coord, Rml_max, max_kRho, rho_srt, k0_srt, num_srt, h_srt, p_ref_cv, k_end_srt) map(to: khdt_epi_x, khdt_epi_y)
+
   do concurrent (j=jsd:jed, i=isd:ied)
     p_ref_cv(i,j) = tv%P_Ref
   enddo
@@ -844,6 +846,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     call calculate_density(tv%T(:,:,k), tv%S(:,:,k), p_ref_cv, rho_coord(:,:,k), &
                            tv%eqn_of_state)
   enddo
+  !$omp target exit data map(release: p_ref_cv)
 
   do concurrent (j=js-2:je+2, i=is-2:ie+2)
     Rml_max(i,j) = rho_coord(i,j,1)
@@ -900,6 +903,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
       endif
     enddo ; enddo
   enddo
+  !$omp target exit data map(release: rho_coord, Rml_max, k_end_srt)
   ! Sort each column by increasing density.  This should already be close,
   ! and the size of the arrays are small, so straight insertion is used.
   do concurrent (j=js-1:je+1, i=is-1:ie+1)
@@ -920,7 +924,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     enddo
     max_srt(j) = itmp
   enddo
-
+  !$omp target enter data map(alloc: deep_wt_Lu, deep_wt_Ru, hP_Lu, hP_Ru, k0a_Lu, k0a_Ru, k0b_Lu, k0b_Ru)
   do j=js,je
     k_size = max(2*max_srt(j),1)
     allocate(deep_wt_Lu(j)%p(IsdB:IedB,k_size))
@@ -931,8 +935,9 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0a_Ru(j)%p(IsdB:IedB,k_size))
     allocate(k0b_Lu(j)%p(IsdB:IedB,k_size))
     allocate(k0b_Ru(j)%p(IsdB:IedB,k_size))
+    !$omp target enter data map(alloc: deep_wt_Lu(J)%p, deep_wt_Ru(J)%p, hP_Lu(J)%p, hP_Ru(J)%p, k0a_Lu(j)%p, k0a_Ru(j)%p, k0b_Lu(j)%p, k0b_Ru(j)%p)
   enddo
-
+  !$omp target enter data map(alloc: nPu)
 !$OMP target teams loop collapse(2) &
 !$OMP                          private(h_demand_L,h_used_L,h_demand_R,h_used_R,     &
 !$OMP                                  kR,kL,nP,rho_pair,kbs_Lp,kbs_Rp,rho_a,rho_b, &
@@ -1072,6 +1077,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   endif ; enddo ; enddo ! i- & j- loops over zonal faces.
 
+  !$omp target enter data map(alloc: deep_wt_Lv, deep_wt_Rv, hP_Lv, hP_Rv, k0a_Lv, k0a_Rv, k0b_Lv, k0b_Rv)
   do J=js-1,je
     k_size = max(max_srt(j)+max_srt(j+1),1)
     allocate(deep_wt_Lv(J)%p(isd:ied,k_size))
@@ -1082,13 +1088,16 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0a_Rv(J)%p(isd:ied,k_size))
     allocate(k0b_Lv(J)%p(isd:ied,k_size))
     allocate(k0b_Rv(J)%p(isd:ied,k_size))
+    !$omp target enter data map(alloc: deep_wt_Lv(J)%p, deep_wt_Rv(J)%p, hP_Lv(J)%p, hP_Rv(J)%p, k0a_Lv(j)%p, k0a_Rv(j)%p, k0b_Lv(j)%p, k0b_Rv(j)%p)
   enddo
+
+  !$omp target enter data map(alloc: nPv)
 
 !$OMP target teams loop collapse(2) &
 !$OMP                          private(h_demand_L,h_used_L,h_demand_R,h_used_R,     &
 !$OMP                                  kR,kL,nP,rho_pair,kbs_Lp,kbs_Rp,rho_a,rho_b, &
 !$OMP                                  wt_b,left_set,right_set,h_supply_frac_R,     &
-!$OMP                                  h_supply_frac_L,k)
+!$OMP                                  h_supply_frac_L,k) map(to: num_srt)
   do J=js-1,je ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.0) then
     ! Set up the pairings for fluxes through the meridional faces.
 
@@ -1223,8 +1232,13 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
 
   endif ; enddo ; enddo ! i- & j- loops over meridional faces.
-
+  !$omp target exit data map(release: h_srt, k0_srt)
   ! The tracer-specific calculations start here.
+
+  !$omp target enter data map(alloc: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R, tr_flux_N, tr_flux_S, tr_flux_E, tr_flux_W, tr_flux_conv, Tr) map(to: CS)
+  !$ do m = 1, ntr
+    !$omp target enter data map(to: Tr(m)%t, Tr(m)%df2d_y, Tr(m)%df2d_x)
+  !$ enddo
 
   do itt=1,max_itt
 
@@ -1601,28 +1615,39 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
       ! Do user controlled underflow of the tracer concentrations.
       if (Tr(m)%conc_underflow > 0.0) then
+        !$omp target update from(Tr(m)%t)
         !$OMP parallel do default(shared)
         do k=1,nz ; do j=js,je ; do i=is,ie
           if (abs(Tr(m)%t(i,j,k)) < Tr(m)%conc_underflow) Tr(m)%t(i,j,k) = 0.0
         enddo ; enddo ; enddo
+        !$omp target update to(Tr(m)%t)
       endif
 
     enddo ! Loop over tracers
   enddo ! Loop over iterations
 
+  !$ do m = 1, ntr
+    !$omp target exit data map(from: Tr(m)%t, Tr(m)%df2d_y, Tr(m)%df2d_x)
+  !$ enddo
+  !$omp target exit data map(release: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R, tr_flux_N, tr_flux_S, tr_flux_E, tr_flux_W, tr_flux_conv, nPv, nPu, max_kRho, Tr, CS, rho_srt, khdt_epi_x, khdt_epi_y, num_srt)
+
   do j=js,je
+    !$omp target exit data map(release: deep_wt_Lu(J)%p, deep_wt_Ru(J)%p, hP_Lu(J)%p, hP_Ru(J)%p, k0a_Lu(j)%p, k0a_Ru(j)%p, k0b_Lu(j)%p, k0b_Ru(j)%p)
     deallocate(deep_wt_Lu(j)%p) ; deallocate(deep_wt_Ru(j)%p)
     deallocate(Hp_Lu(j)%p)  ; deallocate(Hp_Ru(j)%p)
     deallocate(k0a_Lu(j)%p) ; deallocate(k0a_Ru(j)%p)
     deallocate(k0b_Lu(j)%p) ; deallocate(k0b_Ru(j)%p)
   enddo
+  !$omp target exit data map(release: deep_wt_Lu, deep_wt_Ru, hP_Lu, hP_Ru, k0a_Lu, k0a_Ru, k0b_Lu, k0b_Ru)
 
   do J=js-1,je
+    !$omp target exit data map(release: deep_wt_Lv(J)%p, deep_wt_Rv(J)%p, hP_Lv(J)%p, hP_Rv(J)%p, k0a_Lv(j)%p, k0a_Rv(j)%p, k0b_Lv(j)%p, k0b_Rv(j)%p)
     deallocate(deep_wt_Lv(J)%p) ; deallocate(deep_wt_Rv(J)%p)
     deallocate(Hp_Lv(J)%p)  ; deallocate(Hp_Rv(J)%p)
     deallocate(k0a_Lv(J)%p) ; deallocate(k0a_Rv(J)%p)
     deallocate(k0b_Lv(J)%p) ; deallocate(k0b_Rv(J)%p)
   enddo
+  !$omp target exit data map(release: deep_wt_Lv, deep_wt_Rv, hP_Lv, hP_Rv, k0a_Lv, k0a_Rv, k0b_Lv, k0b_Rv)
 
 end subroutine tracer_epipycnal_ML_diff
 
