@@ -205,6 +205,12 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
 
   call cpu_clock_begin(id_clock_diffuse)
 
+  !$omp target enter data map(to: Reg, Reg%Tr, CS) map(alloc: khdt_x, khdt_y, kh_u, kh_v)
+  !$ do m = 1, Reg%ntr
+    !$omp target enter data map(to: Reg%Tr(m)%t, Reg%Tr(m)%df_x, Reg%Tr(m)%df_y, Reg%Tr(m)%df2d_x, &
+    !$omp   Reg%tr(m)%df2d_y)
+  !$ enddo
+
   ntr = Reg%ntr
   Idt = 1.0 / dt
   h_neglect = GV%H_subroundoff
@@ -239,6 +245,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
 
   if (do_online) then
     if (use_VarMix) then
+      !$omp target enter data map(to: VarMix, VarMix%SN_u, VarMix%L2u, VarMix%Res_fn_h, &
+      !$omp   VarMix%Rd_dx_h, MEKE, MEKE%Kh)
       do concurrent (j=js:je, I=is-1:ie)
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
@@ -271,6 +279,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           Kh_v(i,J,1) = max(Kh_loc, CS%KhTr_min) ! Re-apply min
         endif
       enddo
+      !$omp target exit data map(release: VarMix, VarMix%SN_u, VarMix%L2u, VarMix%SN_v, &
+      !$omp   VarMix%L2v, VarMix%Res_fn_h, VarMix%Rd_dx_h, MEKE, MEKE%Kh)
 
       do concurrent (j=js:je, I=is-1:ie)
         khdt_x(I,j) = dt*(Kh_u(I,j,1)*(G%dy_Cu(I,j)*G%IdxCu(I,j)))
@@ -291,6 +301,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         Kh_v(i,J,1) = max(CS%KhTr * Res_fn, CS%KhTr_min)
         khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J))) * Res_fn
       enddo ; enddo
+      !$omp target update to(khdt_x, khdt_y, Kh_u, Kh_v)
     else  ! Use a simple constant diffusivity.
       if (CS%id_KhTr_u > 0) then
         !$OMP parallel do default(shared)
@@ -316,9 +327,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           khdt_y(i,J) = dt*(CS%KhTr*(G%dx_Cv(i,J)*G%IdyCv(i,J)))
         enddo ; enddo
       endif
+      !$omp target update to(khdt_x, khdt_y, Kh_u, Kh_v)
     endif ! VarMix
 
     if (CS%max_diff_CFL > 0.0) then
+      !$omp target update from(khdt_x, khdt_y, Kh_u, Kh_v)
       if ((CS%id_KhTr_u > 0) .or. (CS%id_KhTr_h > 0)) then
         !$OMP parallel do default(shared) private(khdt_max)
         do j=js,je ; do I=is-1,ie
@@ -353,6 +366,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
           khdt_y(i,J) = min(khdt_y(i,J), khdt_max)
         enddo ; enddo
       endif
+      !$omp target update to(khdt_x, khdt_y, Kh_u, Kh_v)
     endif
 
   else ! .not. do_online
@@ -365,6 +379,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
       khdt_y(i,J) = read_khdt_y(i,J)
     enddo ; enddo
     call pass_vector(khdt_x, khdt_y, G%Domain)
+    !$omp target update to(khdt_x, khdt_y, Kh_u, Kh_v)
   endif ! do_online
 
   if (CS%check_diffusive_CFL) then
@@ -393,24 +408,28 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
       do k=1,nz ; do j=js,je ; do I=is-1,ie
         Reg%Tr(m)%df_x(I,j,k) = 0.0
       enddo ; enddo ; enddo
+      !$omp target update to(Reg%Tr(m)%df_x)
     endif
     if (associated(Reg%Tr(m)%df_y)) then
       do k=1,nz ; do J=js-1,je ; do i=is,ie
         Reg%Tr(m)%df_y(i,J,k) = 0.0
       enddo ; enddo ; enddo
+      !$omp target update to(Reg%Tr(m)%df_y)
     endif
     if (associated(Reg%Tr(m)%df2d_x)) then
       do j=js,je ; do I=is-1,ie ; Reg%Tr(m)%df2d_x(I,j) = 0.0 ; enddo ; enddo
+      !$omp target update to(Reg%Tr(m)%df2d_x)
     endif
     if (associated(Reg%Tr(m)%df2d_y)) then
       do J=js-1,je ; do i=is,ie ; Reg%Tr(m)%df2d_y(i,J) = 0.0 ; enddo ; enddo
+      !$omp target update to(Reg%Tr(m)%df2d_y)
     endif
   enddo
 
   if (CS%use_hor_bnd_diffusion) then
 
     if (CS%show_call_tree) call callTree_waypoint("Calling horizontal boundary diffusion (tracer_hordiff)")
-
+    !$omp target update from(khdt_x, khdt_y)
     call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
 
     do k=1,nz+1
@@ -540,8 +559,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
   else    ! following if not using neutral diffusion, but instead along-surface diffusion
 
     if (CS%show_call_tree) call callTree_waypoint("Calculating horizontal diffusion (tracer_hordiff)")
+    !$omp target enter data map(alloc: dTr, Ihdxdy)
+    !$omp target enter data map(to: Coef_x, Coef_y) if(CS%use_hor_bnd_diffusion) ! copy from non-ported loops above
+    !$omp target enter data map(alloc: Coef_x, Coef_y) if(.not.CS%use_hor_bnd_diffusion)
     do itt=1,num_itts
-      call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
+      call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass, omp_offload=.true.)
       ! loop should probably be reordered
       do k=1,nz
         scale = I_numitts
@@ -608,7 +630,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
       endif ; enddo
 
     enddo ! End of "while" loop.
-
+    !$omp target exit data map(release: dTr, Ihdxdy, Coef_x, Coef_y)
   endif   ! endif for CS%use_neutral_diffusion
   call cpu_clock_end(id_clock_diffuse)
 
@@ -622,11 +644,17 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
                                   CS, tv, num_itts)
     call cpu_clock_end(id_clock_epimix)
   endif
+  !$ do m = 1, Reg%ntr
+    !$omp target exit data map(from: Reg%Tr(m)%t, Reg%Tr(m)%df_x, Reg%Tr(m)%df_y, &
+    !$omp   Reg%Tr(m)%df2d_x, Reg%tr(m)%df2d_y)
+  !$ enddo
+  !$omp target exit data map(release: Reg%Tr, Reg)
 
   if (CS%debug) call MOM_tracer_chksum("After tracer diffusion ", Reg, G)
 
   ! post diagnostics for 2d tracer diffusivity
   if (CS%id_KhTr_u > 0) then
+    !$omp target exit data map(from: Kh_u)
     do j=js,je ; do I=is-1,ie
       Kh_u(I,j,:) = G%mask2dCu(I,j)*Kh_u(I,j,1)
     enddo ; enddo
@@ -642,6 +670,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     call post_data(CS%id_KhTr_u, Kh_u, CS%diag)
   endif
   if (CS%id_KhTr_v > 0) then
+    !$omp target exit data map(from: Kh_v)
     do J=js-1,je ; do i=is,ie
       Kh_v(i,J,:) = G%mask2dCv(i,J)*Kh_v(i,J,1)
     enddo ; enddo
@@ -657,6 +686,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
   endif
   if (CS%id_KhTr_h > 0) then
+    !$omp target exit data map(from: Kh_u, Kh_v)
     Kh_h(:,:,:) = 0.0
     do j=js,je ; do I=is-1,ie
       Kh_u(I,j,1) = G%mask2dCu(I,j)*Kh_u(I,j,1)
@@ -679,6 +709,9 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     enddo ; enddo
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag)
   endif
+
+  !$omp target exit data map(from: khdt_x, khdt_y) if(CS%debug .or. CS%id_khdt_x>0 .or. CS%id_khdt_y>0)
+  !$omp target exit data map(delete: khdt_x, khdt_y, Kh_u, Kh_v) map(release: CS)
 
   if (CS%debug) then
     call uvchksum("After tracer diffusion khdt_[xy]", khdt_x, khdt_y, &
@@ -833,13 +866,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     max_itt = num_itts ; I_maxitt = 1.0 / (real(max_itt))
   endif
 
-  !$omp target enter data map(alloc: rho_coord, Rml_max, max_kRho, rho_srt, k0_srt, num_srt, h_srt, p_ref_cv, k_end_srt) map(to: khdt_epi_x, khdt_epi_y)
+  !$omp target enter data map(alloc: rho_coord, Rml_max, max_kRho, rho_srt, k0_srt, num_srt, &
+  !$omp   h_srt, p_ref_cv, k_end_srt)
 
   do concurrent (j=jsd:jed, i=isd:ied)
     p_ref_cv(i,j) = tv%P_Ref
   enddo
 
-  call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
+  call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass, omp_offload=.true.)
   ! Determine which layers the mixed- and buffer-layers map into...
   !$OMP parallel do default(shared)
   do k=1,nkmb
@@ -919,12 +953,14 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   do concurrent (j=js-1:je+1) DO_LOCALITY(local(itmp))
     ! max_srt(j) = 0
     itmp = 0
-    do concurrent (i=is-1:ie+1) DO_LOCALITY(reduce(max:itmp)) ! nvfortran do concurrent cannot reduce array elements
+    ! nvfortran do concurrent cannot reduce array elements
+    do concurrent (i=is-1:ie+1) DO_LOCALITY(reduce(max:itmp))
       itmp = max(itmp, num_srt(i,j))
     enddo
     max_srt(j) = itmp
   enddo
-  !$omp target enter data map(alloc: deep_wt_Lu, deep_wt_Ru, hP_Lu, hP_Ru, k0a_Lu, k0a_Ru, k0b_Lu, k0b_Ru)
+  !$omp target enter data map(alloc: deep_wt_Lu, deep_wt_Ru, hP_Lu, hP_Ru, k0a_Lu, k0a_Ru, k0b_Lu, &
+  !$omp   k0b_Ru)
   do j=js,je
     k_size = max(2*max_srt(j),1)
     allocate(deep_wt_Lu(j)%p(IsdB:IedB,k_size))
@@ -935,7 +971,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0a_Ru(j)%p(IsdB:IedB,k_size))
     allocate(k0b_Lu(j)%p(IsdB:IedB,k_size))
     allocate(k0b_Ru(j)%p(IsdB:IedB,k_size))
-    !$omp target enter data map(alloc: deep_wt_Lu(J)%p, deep_wt_Ru(J)%p, hP_Lu(J)%p, hP_Ru(J)%p, k0a_Lu(j)%p, k0a_Ru(j)%p, k0b_Lu(j)%p, k0b_Ru(j)%p)
+    !$omp target enter data map(alloc: deep_wt_Lu(J)%p, deep_wt_Ru(J)%p, hP_Lu(J)%p, hP_Ru(J)%p, &
+    !$omp   k0a_Lu(j)%p, k0a_Ru(j)%p, k0b_Lu(j)%p, k0b_Ru(j)%p)
   enddo
   !$omp target enter data map(alloc: nPu)
 !$OMP target teams loop collapse(2) &
@@ -1077,7 +1114,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
 
   endif ; enddo ; enddo ! i- & j- loops over zonal faces.
 
-  !$omp target enter data map(alloc: deep_wt_Lv, deep_wt_Rv, hP_Lv, hP_Rv, k0a_Lv, k0a_Rv, k0b_Lv, k0b_Rv)
+  !$omp target enter data map(alloc: deep_wt_Lv, deep_wt_Rv, hP_Lv, hP_Rv, k0a_Lv, k0a_Rv, k0b_Lv, &
+  !$omp   k0b_Rv)
   do J=js-1,je
     k_size = max(max_srt(j)+max_srt(j+1),1)
     allocate(deep_wt_Lv(J)%p(isd:ied,k_size))
@@ -1088,7 +1126,8 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     allocate(k0a_Rv(J)%p(isd:ied,k_size))
     allocate(k0b_Lv(J)%p(isd:ied,k_size))
     allocate(k0b_Rv(J)%p(isd:ied,k_size))
-    !$omp target enter data map(alloc: deep_wt_Lv(J)%p, deep_wt_Rv(J)%p, hP_Lv(J)%p, hP_Rv(J)%p, k0a_Lv(j)%p, k0a_Rv(j)%p, k0b_Lv(j)%p, k0b_Rv(j)%p)
+    !$omp target enter data map(alloc: deep_wt_Lv(J)%p, deep_wt_Rv(J)%p, hP_Lv(J)%p, hP_Rv(J)%p, &
+    !$omp   k0a_Lv(j)%p, k0a_Rv(j)%p, k0b_Lv(j)%p, k0b_Rv(j)%p)
   enddo
 
   !$omp target enter data map(alloc: nPv)
@@ -1235,15 +1274,13 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
   !$omp target exit data map(release: h_srt, k0_srt)
   ! The tracer-specific calculations start here.
 
-  !$omp target enter data map(alloc: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R, tr_flux_N, tr_flux_S, tr_flux_E, tr_flux_W, tr_flux_conv, Tr) map(to: CS)
-  !$ do m = 1, ntr
-    !$omp target enter data map(to: Tr(m)%t, Tr(m)%df2d_y, Tr(m)%df2d_x)
-  !$ enddo
+  !$omp target enter data map(alloc: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R, tr_flux_N, &
+  !$omp   tr_flux_S, tr_flux_E, tr_flux_W, tr_flux_conv)
 
   do itt=1,max_itt
 
     if (itt > 1) then ! The halos have already been filled if itt==1.
-      call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass)
+      call do_group_pass(CS%pass_t, G%Domain, clock=id_clock_pass, omp_offload=.true.)
     endif
     do m=1,ntr
       ! Zero out tracer tendencies.
@@ -1626,28 +1663,30 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
     enddo ! Loop over tracers
   enddo ! Loop over iterations
 
-  !$ do m = 1, ntr
-    !$omp target exit data map(from: Tr(m)%t, Tr(m)%df2d_y, Tr(m)%df2d_x)
-  !$ enddo
-  !$omp target exit data map(release: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R, tr_flux_N, tr_flux_S, tr_flux_E, tr_flux_W, tr_flux_conv, nPv, nPu, max_kRho, Tr, CS, rho_srt, khdt_epi_x, khdt_epi_y, num_srt)
+  !$omp target exit data map(release: Tr_flux_3d, Tr_adj_vert_L, Tr_adj_vert_R, tr_flux_N, &
+  !$omp   tr_flux_S, tr_flux_E, tr_flux_W, tr_flux_conv, nPv, nPu, max_kRho, rho_srt, num_srt)
 
   do j=js,je
-    !$omp target exit data map(release: deep_wt_Lu(J)%p, deep_wt_Ru(J)%p, hP_Lu(J)%p, hP_Ru(J)%p, k0a_Lu(j)%p, k0a_Ru(j)%p, k0b_Lu(j)%p, k0b_Ru(j)%p)
+    !$omp target exit data map(release: deep_wt_Lu(J)%p, deep_wt_Ru(J)%p, hP_Lu(J)%p, hP_Ru(J)%p, &
+    !$omp   k0a_Lu(j)%p, k0a_Ru(j)%p, k0b_Lu(j)%p, k0b_Ru(j)%p)
     deallocate(deep_wt_Lu(j)%p) ; deallocate(deep_wt_Ru(j)%p)
     deallocate(Hp_Lu(j)%p)  ; deallocate(Hp_Ru(j)%p)
     deallocate(k0a_Lu(j)%p) ; deallocate(k0a_Ru(j)%p)
     deallocate(k0b_Lu(j)%p) ; deallocate(k0b_Ru(j)%p)
   enddo
-  !$omp target exit data map(release: deep_wt_Lu, deep_wt_Ru, hP_Lu, hP_Ru, k0a_Lu, k0a_Ru, k0b_Lu, k0b_Ru)
+  !$omp target exit data map(release: deep_wt_Lu, deep_wt_Ru, hP_Lu, hP_Ru, k0a_Lu, k0a_Ru, &
+  !$omp   k0b_Lu, k0b_Ru)
 
   do J=js-1,je
-    !$omp target exit data map(release: deep_wt_Lv(J)%p, deep_wt_Rv(J)%p, hP_Lv(J)%p, hP_Rv(J)%p, k0a_Lv(j)%p, k0a_Rv(j)%p, k0b_Lv(j)%p, k0b_Rv(j)%p)
+    !$omp target exit data map(release: deep_wt_Lv(J)%p, deep_wt_Rv(J)%p, hP_Lv(J)%p, hP_Rv(J)%p, &
+    !$omp   k0a_Lv(j)%p, k0a_Rv(j)%p, k0b_Lv(j)%p, k0b_Rv(j)%p)
     deallocate(deep_wt_Lv(J)%p) ; deallocate(deep_wt_Rv(J)%p)
     deallocate(Hp_Lv(J)%p)  ; deallocate(Hp_Rv(J)%p)
     deallocate(k0a_Lv(J)%p) ; deallocate(k0a_Rv(J)%p)
     deallocate(k0b_Lv(J)%p) ; deallocate(k0b_Rv(J)%p)
   enddo
-  !$omp target exit data map(release: deep_wt_Lv, deep_wt_Rv, hP_Lv, hP_Rv, k0a_Lv, k0a_Rv, k0b_Lv, k0b_Rv)
+  !$omp target exit data map(release: deep_wt_Lv, deep_wt_Rv, hP_Lv, hP_Rv, k0a_Lv, k0a_Rv, &
+  !$Omp   k0b_Lv, k0b_Rv)
 
 end subroutine tracer_epipycnal_ML_diff
 
