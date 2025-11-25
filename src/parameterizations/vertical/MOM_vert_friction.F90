@@ -2904,7 +2904,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
           enddo
         enddo
       else
-        do concurrent (j=js:je, i=is:ie, do_i(i,j))
+        do concurrent (j=js:je, i=is:ie, do_i(i,j)) DO_LOCALITY(reduce(max:max_nk))
           nk_in_ml(i,j) = ceiling(visc%nkml_visc_v(i,J))
           max_nk = max(max_nk, nk_in_ml(i,j))
         enddo
