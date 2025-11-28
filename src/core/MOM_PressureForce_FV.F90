@@ -1298,7 +1298,11 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
   !$omp target enter data map(alloc: dpa, intx_dpa, inty_dpa, intz_dpa)
 
   if (use_EOS) then
-    !$omp target update from(e)
+    !$omp target update from(e) if( (use_ALE .and. CS%Recon_Scheme > 0) .or. &
+    !$omp                           (CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0))
+    ! transfer tv_tmp%* only if int_density_dz is called
+    !$omp target enter data map(to: tv_tmp, tv_tmp%T, tv_tmp%S) &
+    !$omp   if(.not.(use_ALE .and. CS%Recon_Scheme > 0))
 
     ! The following routine computes the integrals that are needed to
     ! calculate the pressure gradient force. Linear profiles for T and S are
@@ -1323,6 +1327,8 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                     MassWghtInterp=CS%MassWghtInterp, Z_0p=Z_0p, &
                     MassWghtInterpVanOnly=CS%MassWghtInterpVanOnly, h_nv=dz_nonvanished)
         endif
+        ! defensive update - not sure if it works
+        !$omp target update to(dpa, intx_dpa, inty_dpa, intz_dpa)
       else
         call int_density_dz(tv_tmp%T(:,:,k), tv_tmp%S(:,:,k), e(:,:,K), e(:,:,K+1), &
                   rho_ref, rho0_int_density, GV%g_Earth, G%HI, tv%eqn_of_state, US, dpa(:,:,k), &
@@ -1331,17 +1337,17 @@ subroutine PressureForce_FV_Bouss(h, tv, PFu, PFv, G, GV, US, CS, ALE_CSp, ADp, 
                   MassWghtInterpVanOnly=CS%MassWghtInterpVanOnly, h_nv=dz_nonvanished)
       endif
       if (GV%Z_to_H /= 1.0) then
-        !$OMP parallel do default(shared)
-        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+        do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
           intz_dpa(i,j,k) = intz_dpa(i,j,k)*GV%Z_to_H
-        enddo ; enddo
+        enddo
       endif
       if ((CS%id_MassWt_u > 0) .or. (CS%id_MassWt_v > 0)) &
         call diagnose_mass_weight_Z(e(:,:,K), e(:,:,K+1), G%bathyT, e(:,:,1), dz_neglect, CS%MassWghtInterp, &
                                     G%HI, MassWt_u(:,:,k), MassWt_v(:,:,k), &
                                     MassWghtInterpVanOnly=CS%MassWghtInterpVanOnly, h_nv=CS%h_nonvanished)
     enddo
-    !$omp target update to(dpa, intx_dpa, inty_dpa, intz_dpa)
+    !$omp target exit data map(release: tv_tmp, tv_tmp%T, tv_tmp%S) &
+    !$omp   if(.not.(use_ALE .and. CS%Recon_Scheme > 0))
   else
     !$omp target data map(alloc: dz_geo)
     do k=1,nz
