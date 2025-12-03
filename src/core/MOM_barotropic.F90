@@ -4542,14 +4542,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
             CS%frhatu(I,j,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
-      enddo
-    enddo
-    !$omp end target data
-    do concurrent (j=js:je, I=is-1:ie)
-      do k=1,nz
         hatutot(I,j) = hatutot(I,j) + CS%frhatu(I,j,k)
       enddo
     enddo
+    !$omp end target data
   elseif (CS%hvel_scheme == HARMONIC) then
     !   Interpolates thicknesses onto u grid points with the
     ! second order accurate estimate h = 2*(h+ * h-)/(h+ + h-).
@@ -4647,14 +4643,10 @@ subroutine btcalc(h, G, GV, CS, h_u, h_v, may_use_default, OBC)
             CS%frhatv(i,J,k) = wt_arith*h_arith + (1.0-wt_arith)*h_harm
           endif
         endif
-      enddo
-    enddo
-    !$omp end target data
-    do concurrent (J=js-1:je, i=is:ie)
-      do k=1,nz
         hatvtot(i,J) = hatvtot(i,J) + CS%frhatv(i,J,k)
       enddo
     enddo
+    !$omp end target data
   elseif (CS%hvel_scheme == HARMONIC) then
     do concurrent (k=1:nz, J=js-1:je, i=is:ie)
       CS%frhatv(i,J,k) = 2.0*(h(i,j+1,k) * h(i,j,k)) / &
