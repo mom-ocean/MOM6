@@ -13,10 +13,15 @@ spack:
       - '@git.{{ ref }} ~asymmetric_mem'
     gcc-runtime:
       require:
-      - '%gcc target={{ target }}'
+      - '%access_gcc'
+      - 'target={{ target }}'
+    intel-oneapi-compilers:
+      require:
+      - '@{{ oneapi_compiler_version }}'
     all:
       require:
-      - '%{{ oneapi_compiler }} target={{ target }}'
+      - '%access_oneapi'
+      - 'target={{ target }}'
   concretizer:
     unify: false
   view: false

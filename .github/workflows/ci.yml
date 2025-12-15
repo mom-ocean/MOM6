@@ -29,13 +29,12 @@ jobs:
       max-parallel: 5
       matrix:
         file: ${{ fromJson(needs.pre-ci.outputs.matrix) }}
-    uses: access-nri/build-ci/.github/workflows/ci.yml@v2
+    uses: access-nri/build-ci/.github/workflows/ci.yml@v3
     with:
       spack-manifest-path: ${{ matrix.file }}
       allow-ssh-into-spack-install: false  # If true, PR author must ssh into instance to complete job
       spack-manifest-data-path: .github/build-ci/data/standard.json
-      spack-packages-ref: api-v2
-      # FIXME: This is a workaround for having a spack 1.0 runner using a spack 0.22 upstream, and should be removed once we transition to a 1.0 upstream
-      spack-config-ref: 74-perl-buildable
-      spack-ref: releases/v1.0
-      container-image-version: :rocky-v1.0-2025.09.002
+      # builtin-spack-packages-ref: develop
+      # access-spack-packages-ref: api-v2
+      # spack-config-ref: main
+      # spack-ref: releases/v1.1
