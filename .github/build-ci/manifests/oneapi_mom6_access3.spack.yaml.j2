@@ -1,16 +1,10 @@
 spack:
   specs:
-  - 'access-om3@latest ^openmpi'
+  - 'access-mom6@git.{{ ref }}=stable +access3 ~mom6_solo ^openmpi'
   packages:
     cmake:
       require:
       - '@3.31.6:'
-    access3:
-      require:
-      - 'configurations=MOM6,MOM6-CICE6,MOM6-CICE6-WW3'
-    access-mom6:
-      require:
-      - '@git.{{ ref }} ~asymmetric_mem'
     gcc-runtime:
       require:
       - '%access_gcc'

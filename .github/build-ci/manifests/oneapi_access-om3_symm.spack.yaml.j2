@@ -10,7 +10,7 @@ spack:
       - 'configurations=MOM6,MOM6-CICE6,MOM6-CICE6-WW3'
     access-mom6:
       require:
-      - '@git.{{ ref }}=stable +asymmetric_mem +mom6_solo'
+      - '@git.{{ ref }}=stable ~asymmetric_mem +mom6_solo'
     gcc-runtime:
       require:
       - '%access_gcc'
