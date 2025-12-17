@@ -1727,6 +1727,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
     call set_initialized(CS%v_av, "v2", restart_CS)
   endif
 
+  !$omp target enter data map(alloc: h_tmp )
   if (CS%store_CAu) then
     if (query_initialized(CS%CAu_pred, "CAu", restart_CS) .and. &
         query_initialized(CS%CAv_pred, "CAv", restart_CS)) then
@@ -1741,12 +1742,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
       if (read_uv .and. read_h2) then
         call pass_var(CS%h_av, G%Domain, clock=id_clock_pass_init)
       else
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied ; h_tmp(i,j,k) = h(i,j,k) ; enddo ; enddo ; enddo
+        do concurrent (k=1:nz, j=jsd:jed, i=isd:ied)
+          h_tmp(i,j,k) = h(i,j,k)
+        enddo
         call continuity(CS%u_av, CS%v_av, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv)
         call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
-        do k=1,nz ; do j=jsd,jed ; do i=isd,ied
+        do concurrent (k=1:nz, j=jsd:jed, i=isd:ied)
           CS%h_av(i,j,k) = 0.5*(h(i,j,k) + h_tmp(i,j,k))
-        enddo ; enddo ; enddo
+        enddo
       endif
       call pass_vector(CS%u_av, CS%v_av, G%Domain, halo=2, clock=id_clock_pass_init, complete=.false.)
       call pass_vector(uh, vh, G%Domain, halo=2, clock=id_clock_pass_init, complete=.true.)
@@ -1783,6 +1786,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
       endif
     endif
   endif
+  !$omp target exit data map(delete: h_tmp )
   call cpu_clock_begin(id_clock_pass_init)
   call create_group_pass(pass_av_h_uvh, CS%u_av, CS%v_av, G%Domain, halo=2)
   if (CS%CAu_pred_stored) then
