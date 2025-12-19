@@ -414,19 +414,6 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
 end subroutine vertFPmix
 
 
-!> Expose loop indices to IPO for alias analysis and loop transformation.
-function touch_ij(i,j) result(ij)
-  integer, intent(in) :: i
-    !< Inner loop index
-  integer, intent(in) :: j
-    !< Outer loop index
-  integer:: ij
-    !< Trivial operation to prevent removal during optimization
-
-  ij = i * j
-end function touch_ij
-
-
 !> Compute coupling coefficient associated with vertical viscosity parameterization as in Greatbatch and Lamb
 !! (1990), hereafter referred to as the GL90 vertical viscosity parameterization. This vertical viscosity scheme
 !! redistributes momentum in the vertical, and is the equivalent of the Gent & McWilliams (1990) parameterization,
@@ -446,98 +433,90 @@ end function touch_ij
 !! or
 !! a_cpl_gl90 = nu / h = f^2 * alpha / h
 
-subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, do_i, z_i, G, GV, CS, VarMix, work_on_u)
-  type(ocean_grid_type),                        intent(in)    :: G   !< Grid structure.
-  type(verticalGrid_type),                      intent(in)    :: GV  !< Vertical grid structure.
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)),  intent(in)    :: hvel !< Distance between interfaces
-                                                                     !! at velocity points [Z ~> m]
-  logical, dimension(SZIB_(G),SZJB_(G)),        intent(in)    :: do_i !< If true, determine coupling coefficient
-                                                                     !!  for a column
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), intent(in)   :: z_i !< Estimate of interface heights above the
-                                                                     !! bottom, normalized by the GL90 bottom
-                                                                     !! boundary layer thickness [nondim]
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), intent(out) :: a_cpl_gl90 !< Coupling coefficient associated
-                                                                     !! with GL90 across interfaces; is not
-                                                                     !! included in a_cpl [H T-1 ~> m s-1 or Pa s m-1].
-  type(vertvisc_cs),                            intent(in)    :: CS  !< Vertical viscosity control structure
-  type(VarMix_CS),                              intent(in)    :: VarMix !< Variable mixing coefficients
-  logical,                                      intent(in)    :: work_on_u !< If true, u-points are being calculated,
-                                                                     !! otherwise they are v-points.
+subroutine find_coupling_coef_gl90(a_cpl_gl90, hvel, i, j, z_i, G, GV, CS, VarMix, work_on_u)
+  !$omp declare target
+  type(ocean_grid_type), intent(in) :: G        !< Grid structure.
+  type(verticalGrid_type), intent(in) :: GV     !< Vertical grid structure.
+  real, dimension(SZK_(GV)), intent(in) :: hvel !< Distance between interfaces
+                                                !! at velocity points [Z ~> m]
+  integer, intent(in) :: i                      !< Column i-index
+  integer, intent(in) :: j                      !< Column j-index
+  real, dimension(SZK_(GV)+1), intent(in) :: z_i  !< Estimate of interface heights above the
+                                                !! bottom, normalized by the GL90 bottom
+                                                !! boundary layer thickness [nondim]
+  real, dimension(SZK_(GV)+1),intent(out) :: a_cpl_gl90   !< Coupling coefficient associated
+                                                !! with GL90 across interfaces; is not
+                                                !! included in a_cpl [H T-1 ~> m s-1 or Pa s m-1].
+  type(vertvisc_cs), intent(in) :: CS           !< Vertical viscosity control structure
+  type(VarMix_CS), intent(in) :: VarMix         !< Variable mixing coefficients
+  logical, intent(in) :: work_on_u              !< If true, u-points are being calculated,
+                                                !! otherwise they are v-points.
 
   ! local variables
   logical :: kdgl90_use_vert_struct  ! use vertical structure for GL90 coefficient
-  integer :: i, j, k, is, ie, js, je, nz
+  integer :: k, nz
   real    :: f2         !< Squared Coriolis parameter at a velocity grid point [T-2 ~> s-2].
   real    :: h_neglect  ! A vertical distance that is so small it is usually lost in roundoff error
                         ! and can be neglected [Z ~> m].
   real    :: botfn      ! A function that is 1 at the bottom and small far from it [nondim]
   real    :: z2         ! The distance from the bottom, normalized by Hbbl_gl90 [nondim]
 
-  if (work_on_u) then
-    Is = G%iscB ; Ie = G%iecB
-    js = G%jsc ; je = G%jec
-  else
-    is = G%isc ; ie = G%iec
-    Js = G%jscB ; Je = G%jecB
-  endif
-
   nz = GV%ke
-
   h_neglect = GV%dZ_subroundoff
   kdgl90_use_vert_struct = .false.
+
   if (VarMix%use_variable_mixing) then
     kdgl90_use_vert_struct = allocated(VarMix%kdgl90_struct)
   endif
 
-  a_cpl_gl90(:,:,:) = 0.
+  a_cpl_gl90(:) = 0.
 
   do K=2,nz
     if (work_on_u) then
       ! compute coupling coefficient at u-points
-      do j=js,je ; do I=Is,Ie; if (do_i(I,j)) then
-        f2 = 0.25 * (G%CoriolisBu(I,J-1) + G%CoriolisBu(I,J))**2
-        if (CS%use_GL90_N2) then
-          a_cpl_gl90(I,j,K) = 2. * f2 * CS%alpha_gl90 / (hvel(I,j,k) + hvel(I,j,k-1) + h_neglect)
+      f2 = 0.25 * (G%CoriolisBu(I,J-1) + G%CoriolisBu(I,J))**2
+      if (CS%use_GL90_N2) then
+        a_cpl_gl90(K) = 2. * f2 * CS%alpha_gl90 / (hvel(k) + hvel(k-1) + h_neglect)
+      else
+        if (CS%read_kappa_gl90) then
+          a_cpl_gl90(K) = f2 * 0.5 * (CS%kappa_gl90_2d(i,j) + CS%kappa_gl90_2d(i+1,j)) / GV%g_prime(K)
         else
-          if (CS%read_kappa_gl90) then
-            a_cpl_gl90(I,j,K) = f2 * 0.5 * (CS%kappa_gl90_2d(i,j) + CS%kappa_gl90_2d(i+1,j)) / GV%g_prime(K)
-          else
-            a_cpl_gl90(I,j,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
-          endif
-          if (kdgl90_use_vert_struct) then
-            a_cpl_gl90(I,j,K) = a_cpl_gl90(I,j,K) * 0.5 &
-                * (VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i+1,j,k-1))
-          endif
+          a_cpl_gl90(K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
         endif
-        ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
-        ! going from 1 at the bottom to 0 in the interior.
-        z2 = z_i(I,j,k)
-        botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
-        a_cpl_gl90(I,j,K) = a_cpl_gl90(I,j,K) * (1. - botfn)
-      endif ; enddo ; enddo
+        if (kdgl90_use_vert_struct) then
+          a_cpl_gl90(K) = a_cpl_gl90(K) * 0.5 &
+              * (VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i+1,j,k-1))
+        endif
+      endif
+      ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
+      ! going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(k)
+      botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
+
+      a_cpl_gl90(K) = a_cpl_gl90(K) * (1. - botfn)
     else
       ! compute viscosities at v-points
-      do J=Js,Je ; do i=is,ie ; if (do_i(i,J)) then
-        f2 = 0.25 * (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J))**2
-        if (CS%use_GL90_N2) then
-          a_cpl_gl90(i,J,K) = 2. * f2 * CS%alpha_gl90 / (hvel(i,J,k) + hvel(i,J,k-1) + h_neglect)
+      f2 = 0.25 * (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J))**2
+
+      if (CS%use_GL90_N2) then
+        a_cpl_gl90(K) = 2. * f2 * CS%alpha_gl90 / (hvel(k) + hvel(k-1) + h_neglect)
+      else
+        if (CS%read_kappa_gl90) then
+          a_cpl_gl90(K) = f2 * 0.5 * (CS%kappa_gl90_2d(i,j) + CS%kappa_gl90_2d(i,j+1)) / GV%g_prime(K)
         else
-          if (CS%read_kappa_gl90) then
-            a_cpl_gl90(i,J,K) = f2 * 0.5 * (CS%kappa_gl90_2d(i,j) + CS%kappa_gl90_2d(i,j+1)) / GV%g_prime(K)
-          else
-            a_cpl_gl90(i,J,K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
-          endif
-          if (kdgl90_use_vert_struct) then
-            a_cpl_gl90(i,J,K) = a_cpl_gl90(i,J,K) * 0.5 &
-                * (VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i,j+1,k-1))
-          endif
+          a_cpl_gl90(K) = f2 * CS%kappa_gl90 / GV%g_prime(K)
         endif
-        ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
-        ! going from 1 at the bottom to 0 in the interior.
-        z2 = z_i(i,J,k)
-        botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
-        a_cpl_gl90(i,J,K) = a_cpl_gl90(i,J,K) * (1. - botfn)
-      endif ; enddo ; enddo
+        if (kdgl90_use_vert_struct) then
+          a_cpl_gl90(K) = a_cpl_gl90(K) * 0.5 &
+              * (VarMix%kdgl90_struct(i,j,k-1) + VarMix%kdgl90_struct(i,j+1,k-1))
+        endif
+      endif
+      ! botfn determines when a point is within the influence of the GL90 bottom boundary layer,
+      ! going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(k)
+      botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
+
+      a_cpl_gl90(K) = a_cpl_gl90(K) * (1. - botfn)
     endif
   enddo
 end subroutine find_coupling_coef_gl90
@@ -591,15 +570,16 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   ! Local variables
 
-  real :: b1(SZIB_(G), SZJB_(G))
+  real :: b1
     ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: c1(SZIB_(G), SZJB_(G), SZK_(GV))
+  real :: c1(SZK_(GV))
     ! A variable used by the tridiagonal solver [nondim].
-  real :: d1(SZIB_(G), SZJB_(G))
+  real :: d1
     ! d1=1-c1 is used by the tridiagonal solver [nondim].
-  real :: Ray(SZIB_(G), SZJB_(G))
+  real :: Ray
     ! Ray is the Rayleigh-drag velocity [H T-1 ~> m s-1 or Pa s m-1]
-  real :: b_denom_1              ! The first term in the denominator of b1 [H ~> m or kg m-2].
+  real :: b_denom_1
+    ! The first term in the denominator of b1 [H ~> m or kg m-2].
 
   real :: Hmix             ! The mixed layer thickness over which stress
                            ! is applied with direct_stress [H ~> m or kg m-2].
@@ -668,7 +648,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   if ( present(fpmix) ) lfpmix = fpmix
 
   !   Update the zonal velocity component using a modification of a standard
-  ! tridagonal solver.
+  ! tridiagonal solver.
 
   ! WGL: Brandon Reichl says the following is obsolete. u(I,j,k) already
   ! includes Stokes.
@@ -692,7 +672,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   endif
 
   !$omp target enter data map(to: ADp)
-  !!$omp target update to(u, h,v)
   !$omp target enter data map(alloc: surface_stress)
   !$omp target enter data map(alloc: ADp%dv_dt_str)
   !$omp target enter data map(alloc: ADp%du_dt_str)
@@ -756,84 +735,56 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   ! this is done so that d1 = b1 * b_denom_1 = 1 - c'_(k-1)
   ! c1(k) is -c'_(k - 1)
   ! and the right-hand-side is destructively updated to be d'_k
-  !$omp target enter data map(alloc: Ray)
 
-  if (allocated(visc%Ray_u)) then
-    !$omp target enter data map(to: visc%Ray_u)
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
-      Ray(I,j) = visc%Ray_u(I,j,1)
-    enddo
-  else
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
-      Ray(I,j) = 0.
-    enddo
-  endif
+  !$omp target enter data map(alloc: b1, c1, d1, Ray, b_denom_1)
+  !$omp target enter data map(to: visc%Ray_u) if (allocated(visc%Ray_u))
 
-  !$omp target enter data map(alloc: b1, c1, d1)
-  do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-    b_denom_1 = CS%h_u(I,j,1) + dt * (Ray(I,j) + CS%a_u(I,j,1))
-    b1(I,j) = 1.0 / (b_denom_1 + dt*CS%a_u(I,j,2))
-    d1(I,j) = b_denom_1 * b1(I,j)
-    u(I,j,1) = b1(I,j) * (CS%h_u(I,j,1) * u(I,j,1) + surface_stress(I,j))
-  enddo
+  !$omp target teams loop collapse(2) &
+  !$omp   private(b1, c1, d1, Ray, b_denom_1)
+  do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+    Ray = 0.
+    if (allocated(visc%Ray_u)) Ray = visc%Ray_u(I,j,1)
 
-  if (associated(ADp%du_dt_str)) then
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-      ADp%du_dt_str(I,j,1) = b1(I,j) * (CS%h_u(I,j,1) * ADp%du_dt_str(I,j,1) + surface_stress(I,j) * Idt)
-    enddo
-  endif
+    b_denom_1 = CS%h_u(I,j,1) + dt * (Ray + CS%a_u(I,j,1))
+    b1 = 1. / (b_denom_1 + dt * CS%a_u(I,j,2))
+    d1 = b_denom_1 * b1
+    u(I,j,1) = b1 * (CS%h_u(I,j,1) * u(I,j,1) + surface_stress(I,j))
 
-  do concurrent (j=G%jsc:G%jec)
+    if (associated(ADp%du_dt_str)) then
+      ADp%du_dt_str(I,j,1) = b1 * (CS%h_u(I,j,1) * ADp%du_dt_str(I,j,1) + surface_stress(I,j) * Idt)
+    endif
+
     do k=2,nz
-      if (allocated(visc%Ray_u)) then
-        do concurrent (I=Isq:Ieq)
-          Ray(I,j) = visc%Ray_u(I,j,k)
-        enddo
-      endif
+      if (allocated(visc%Ray_u)) Ray = visc%Ray_u(I,j,k)
 
-      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-        c1(I,j,k) = dt * CS%a_u(I,j,K) * b1(I,j)
-        b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,j) + CS%a_u(I,j,K)*d1(I,j))
-        b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
-        d1(I,j) = b_denom_1 * b1(I,j)
-        u(I,j,k) = (CS%h_u(I,j,k) * u(I,j,k) + &
-                    dt * CS%a_u(I,j,K) * u(I,j,k-1)) * b1(I,j)
-      enddo
+      c1(k) = dt * CS%a_u(I,j,K) * b1
+      b_denom_1 = CS%h_u(I,j,k) + dt * (Ray + CS%a_u(I,j,K) * d1)
+      b1 = 1. / (b_denom_1 + dt * CS%a_u(I,j,K+1))
+      d1 = b_denom_1 * b1
+      u(I,j,k) = (CS%h_u(I,j,k) * u(I,j,k) + dt * CS%a_u(I,j,K) * u(I,j,k-1)) * b1
 
       if (associated(ADp%du_dt_str)) then
-        do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-          ADp%du_dt_str(I,j,k) = (CS%h_u(I,j,k) * ADp%du_dt_str(I,j,k) &
-              + dt * CS%a_u(I,j,K) * ADp%du_dt_str(I,j,k-1)) * b1(I,j)
-        enddo
+        ADp%du_dt_str(I,j,k) = (CS%h_u(I,j,k) * ADp%du_dt_str(I,j,k) &
+            + dt * CS%a_u(I,j,K) * ADp%du_dt_str(I,j,k-1)) * b1
       endif
     enddo
-  enddo
 
-  ! back substitute to solve for the new velocities
-  ! u_k = d'_k - c'_k x_(k+1)
-  do concurrent (j=G%jsc:G%jec)
-    do k=nz-1,1,-1
-      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.0)
-        u(I,j,k) = u(I,j,k) + c1(I,j,k+1) * u(I,j,k+1)
-      enddo
-    enddo
-  enddo
-
-  if (associated(ADp%du_dt_str)) then
-    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, abs(ADp%du_dt_str(I,j,nz)) < accel_underflow)
-      ADp%du_dt_str(I,j,nz) = 0.0
-    enddo
+    if (associated(ADp%du_dt_str)) then
+      if (abs(ADp%du_dt_str(I,j,nz)) < accel_underflow) &
+        ADp%du_dt_str(I,j,nz) = 0.
+    endif
 
     do k=nz-1,1,-1
-      do concurrent (j=G%jsc:G%jec, I=Isq:Ieq, G%mask2dCu(i,j) > 0.0)
-        ADp%du_dt_str(I,j,k) = &
-            ADp%du_dt_str(I,j,k) + c1(I,j,k+1) * ADp%du_dt_str(I,j,k+1)
+      u(I,j,k) = u(I,j,k) + c1(k+1) * u(I,j,k+1)
+
+      if (associated(ADp%du_dt_str)) then
+        ADp%du_dt_str(I,j,k) = ADp%du_dt_str(I,j,k) + c1(k+1) * ADp%du_dt_str(I,j,k+1)
 
         if (abs(ADp%du_dt_str(I,j,k)) < accel_underflow) &
           ADp%du_dt_str(I,j,k) = 0.0
-      enddo
+      endif
     enddo
-  endif
+  endif ; enddo ; enddo
 
   ! compute vertical velocity tendency that arises from GL90 viscosity;
   ! follow tridiagonal solve method as above; to avoid corrupting u,
@@ -842,34 +793,28 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     if (associated(ADp%du_dt_visc_gl90)) then
       do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
         b_denom_1 = CS%h_u(I,j,1)  ! CS%a_u_gl90(I,j,1) is zero
-        b1(I,j) = 1.0 / (b_denom_1 + dt*CS%a_u_gl90(I,j,2))
-        d1(I,j) = b_denom_1 * b1(I,j)
+        b1 = 1.0 / (b_denom_1 + dt * CS%a_u_gl90(I,j,2))
+        d1 = b_denom_1 * b1
 
-        ADp%du_dt_visc_gl90(I,j,1) = b1(I,j) * (CS%h_u(I,j,1) * ADp%du_dt_visc_gl90(I,j,1))
-      endif ; enddo ; enddo
+        ADp%du_dt_visc_gl90(I,j,1) = b1 * (CS%h_u(I,j,1) * ADp%du_dt_visc_gl90(I,j,1))
 
-      do k=2,nz
-        do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
-          c1(I,j,k) = dt * CS%a_u_gl90(I,j,K) * b1(I,j)
-          b_denom_1 = CS%h_u(I,j,k) + dt * (CS%a_u_gl90(I,j,K)*d1(I,j))
-          b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u_gl90(I,j,K+1))
-          d1(I,j) = b_denom_1 * b1(I,j)
+        do k=2,nz
+          c1(k) = dt * CS%a_u_gl90(I,j,K) * b1
+          b_denom_1 = CS%h_u(I,j,k) + dt * (CS%a_u_gl90(I,j,K)*d1)
+          b1 = 1.0 / (b_denom_1 + dt * CS%a_u_gl90(I,j,K+1))
+          d1 = b_denom_1 * b1
 
           ADp%du_dt_visc_gl90(I,j,k) = (CS%h_u(I,j,k) * ADp%du_dt_visc_gl90(I,j,k) &
-              + dt * CS%a_u_gl90(I,j,K) * ADp%du_dt_visc_gl90(I,j,k-1)) * b1(I,j)
-        endif ; enddo ; enddo
-      enddo
+              + dt * CS%a_u_gl90(I,j,K) * ADp%du_dt_visc_gl90(I,j,k-1)) * b1
+        enddo
 
-      ! back substitute to solve for new velocities, held by ADp%du_dt_visc_gl90
-      do k=nz-1,1,-1
-        do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
-          ADp%du_dt_visc_gl90(I,j,k) = ADp%du_dt_visc_gl90(I,j,k) &
-              + c1(I,j,k+1) * ADp%du_dt_visc_gl90(I,j,k+1)
-        endif ; enddo ; enddo
-      enddo
+        ! back substitute to solve for new velocities, held by ADp%du_dt_visc_gl90
+        do k=nz-1,1,-1
+          ADp%du_dt_visc_gl90(I,j,k) = &
+              ADp%du_dt_visc_gl90(I,j,k) + c1(k+1) * ADp%du_dt_visc_gl90(I,j,k+1)
+        enddo
 
-      do k=1,nz
-        do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+        do k=1,nz
           ! now fill ADp%du_dt_visc_gl90(I,j,k) with actual velocity tendency due to GL90;
           ! note that on RHS: ADp%du_dt_visc(I,j,k) holds the original velocity value u(I,j,k)
           ! and ADp%du_dt_visc_gl90(I,j,k) the updated velocity due to GL90
@@ -879,24 +824,22 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
           if (abs(ADp%du_dt_visc_gl90(I,j,k)) < accel_underflow) then
             ADp%du_dt_visc_gl90(I,j,k) = 0.0
           endif
-        endif ; enddo ; enddo
-      enddo
-
-      ! to compute energetics, we need to multiply by u*h, where u is original velocity before
-      ! velocity update; note that ADp%du_dt_visc(I,j,k) holds the original velocity value u(I,j,k)
-      if (CS%id_GLwork > 0) then
-        do k=1,nz
-          do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
-            KE_u(I,j,k) = ADp%du_dt_visc(I,j,k) * CS%h_u(I,j,k) * G%areaCu(I,j) * ADp%du_dt_visc_gl90(I,j,k)
-          endif ; enddo ; enddo
         enddo
-      endif
+
+        ! to compute energetics, we need to multiply by u*h, where u is original velocity before
+        ! velocity update; note that ADp%du_dt_visc(I,j,k) holds the original velocity value u(I,j,k)
+        if (CS%id_GLwork > 0) then
+          do k=1,nz
+            KE_u(I,j,k) = ADp%du_dt_visc(I,j,k) * CS%h_u(I,j,k) * G%areaCu(I,j) * ADp%du_dt_visc_gl90(I,j,k)
+          enddo
+        endif
+      endif ; enddo ; enddo
     endif
   endif
 
   if (associated(ADp%du_dt_visc)) then
-    do k=1,nz
-      do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
+    do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
+      do k=1,nz
         ADp%du_dt_visc(I,j,k) = (u(I,j,k) - ADp%du_dt_visc(I,j,k)) * Idt
 
         if (abs(ADp%du_dt_visc(I,j,k)) < accel_underflow) &
@@ -917,8 +860,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
 
     if (allocated(visc%Ray_u)) then
-      do k=1,nz
-        do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
+      do concurrent (j=G%jsc:G%jec, I=Isq:Ieq)
+        do k=1,nz
           taux_bot(I,j) = taux_bot(I,j) + GV%H_to_RZ * (visc%Ray_u(I,j,k) * u(I,j,k))
         enddo
       enddo
@@ -927,38 +870,30 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   ! When mixing down Eulerian current + Stokes drift subtract after calling solver
   if (DoStokesMixing) then
-    do k=1,nz
-      do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
-        u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
-      endif ; enddo ; enddo
-    enddo
+    do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+      u(I,j,k) = u(I,j,k) - Waves%Us_x(I,j,k)
+    endif ; enddo ; enddo ; enddo
   endif
 
   if (lfpmix) then
-    do k=1,nz
-      do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
-        u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
-      endif ; enddo ; enddo
-    enddo
+    do k=1,nz ; do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+      u(I,j,k) = u(I,j,k) + Waves%Us_x(I,j,k)
+    endif ; enddo ; enddo ; enddo
   endif
 
   ! == Now work on the meridional velocity component.
 
   ! When mixing down Eulerian current + Stokes drift add before calling solver
   if (DoStokesMixing) then
-    do k=1,nz
-      do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
-        v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
-      endif ; enddo ; enddo
-    enddo
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+      v(i,j,k) = v(i,j,k) + Waves%Us_y(i,j,k)
+    endif ; enddo ; enddo ; enddo
   endif
 
   if (lfpmix) then
-    do k=1,nz
-      do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
-        v(i,j,k) = v(i,j,k) - Waves%Us_y(i,j,k)
-      endif ; enddo ; enddo
-    enddo
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+      v(i,j,k) = v(i,j,k) - Waves%Us_y(i,j,k)
+    endif ; enddo ; enddo ; enddo
   endif
 
   if (associated(ADp%dv_dt_visc)) then
@@ -968,11 +903,9 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   endif
 
   if (associated(ADp%dv_dt_visc_gl90)) then
-    do k=1,nz
-      do J=Jsq,Jeq ; do i=is,ie
-        ADp%dv_dt_visc_gl90(i,J,k) = v(i,J,k)
-      enddo ; enddo
-    enddo
+    do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
+      ADp%dv_dt_visc_gl90(i,J,k) = v(i,J,k)
+    enddo ; enddo ; enddo
   endif
 
   if (associated(ADp%dv_dt_str)) then
@@ -1003,111 +936,91 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
   endif
 
-  if (allocated(visc%Ray_v)) then
-    !$omp target enter data map(to: visc%Ray_v)
-    do concurrent (J=Jsq:Jeq, i=is:ie)
-      Ray(i,J) = visc%Ray_v(i,J,1)
-    enddo
-  else
-    do concurrent (j=jsq:jeq, i=is:ie)
-      Ray(i,J) = 0.
-    enddo
-  endif
+  !$omp target enter data map(alloc: b1, c1, d1, Ray, b_denom_1)
+  !$omp target enter data map(to: visc%Ray_v) if (allocated(visc%Ray_v))
 
-  do concurrent (J=Jsq:Jeq, i=is:ie, G%mask2dCv(i,j) > 0.0)
-    b_denom_1 = CS%h_v(i,J,1) + dt * (Ray(i,J) + CS%a_v(i,J,1))
-    b1(i,J) = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
-    d1(i,J) = b_denom_1 * b1(i,J)
-    v(i,J,1) = b1(i,J) * (CS%h_v(i,J,1) * v(i,J,1) + surface_stress(i,J))
-  enddo
+  !$omp target teams loop collapse(2) &
+  !$omp   private(b1, c1, d1, Ray, b_denom_1)
+  do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+    Ray = 0.
+    if (allocated(visc%Ray_v)) Ray = visc%Ray_v(i,J,1)
 
-  if (associated(ADp%dv_dt_str)) then
-    do concurrent (J=Jsq:Jeq, i=is:ie, G%mask2dCv(i,j) > 0.0)
-      ADp%dv_dt_str(i,J,1) = b1(i,J) * (CS%h_v(i,J,1) * ADp%dv_dt_str(i,J,1) + surface_stress(i,J) * Idt)
-    enddo
-  endif
+    b_denom_1 = CS%h_v(i,J,1) + dt * (Ray + CS%a_v(i,J,1))
+    b1 = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
+    d1 = b_denom_1 * b1
+    v(i,J,1) = b1 * (CS%h_v(i,J,1) * v(i,J,1) + surface_stress(i,J))
 
-  do concurrent (j=Jsq:Jeq)
+    if (associated(ADp%dv_dt_str)) then
+      ADp%dv_dt_str(i,J,1) = b1 * (CS%h_v(i,J,1) * ADp%dv_dt_str(i,J,1) + surface_stress(i,J) * Idt)
+    endif
+
     do k=2,nz
-      if (allocated(visc%Ray_v)) then
-        do concurrent (i=is:ie)
-          Ray(i,J) = visc%Ray_v(i,J,k)
-        enddo
-      endif
+      if (allocated(visc%Ray_v)) Ray = visc%Ray_v(i,J,k)
 
-      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.0)
-        c1(i,J,k) = dt * CS%a_v(i,J,K) * b1(i,J)
-        b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,J) + CS%a_v(i,J,K)*d1(i,J))
-        b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
-        d1(i,J) = b_denom_1 * b1(i,J)
-        v(i,J,k) = (CS%h_v(i,J,k) * v(i,J,k) + dt * CS%a_v(i,J,K) * v(i,J,k-1)) * b1(i,J)
-      enddo
+      c1(k) = dt * CS%a_v(i,J,K) * b1
+      b_denom_1 = CS%h_v(i,J,k) + dt * (Ray + CS%a_v(i,J,K) * d1)
+      b1 = 1. / (b_denom_1 + dt * CS%a_v(i,J,K+1))
+      d1 = b_denom_1 * b1
+      v(i,J,k) = (CS%h_v(i,J,k) * v(i,J,k) + dt * CS%a_v(i,J,K) * v(i,J,k-1)) * b1
 
       if (associated(ADp%dv_dt_str)) then
-        do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.0)
-          ADp%dv_dt_str(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_str(i,J,k) &
-              + dt * CS%a_v(i,J,K) * ADp%dv_dt_str(i,J,k-1)) * b1(i,J)
-        enddo
+        ADp%dv_dt_str(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_str(i,J,k) &
+            + dt * CS%a_v(i,J,K) * ADp%dv_dt_str(i,J,k-1)) * b1
       endif
     enddo
 
-    do k=nz-1,1,-1
-      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.0)
-        v(i,J,k) = v(i,J,k) + c1(i,J,k+1) * v(i,J,k+1)
-      enddo
-    enddo
-  enddo
-
-  if (associated(ADp%dv_dt_str)) then
-    do concurrent (j=jsq:jeq, i=is:ie)
-      if (abs(ADp%dv_dt_str(i,J,nz)) < accel_underflow) ADp%dv_dt_str(i,J,nz) = 0.0
-    enddo
+    if (associated(ADp%dv_dt_str)) then
+      if (abs(ADp%dv_dt_str(i,J,nz)) < accel_underflow) &
+        ADp%dv_dt_str(i,J,nz) = 0.0
+    endif
 
     do k=nz-1,1,-1
-      do concurrent (j=jsq:jeq, i=is:ie, G%mask2dCv(i,j) > 0.0)
-        ADp%dv_dt_str(i,J,k) = ADp%dv_dt_str(i,J,k) + c1(i,J,k+1) * ADp%dv_dt_str(i,J,k+1)
-        if (abs(ADp%dv_dt_str(i,J,k)) < accel_underflow) ADp%dv_dt_str(i,J,k) = 0.0
-      enddo
+      v(i,J,k) = v(i,J,k) + c1(k+1) * v(i,J,k+1)
+
+      if (associated(ADp%dv_dt_str)) then
+        ADp%dv_dt_str(i,J,k) = ADp%dv_dt_str(i,J,k) + c1(k+1) * ADp%dv_dt_str(i,J,k+1)
+
+        if (abs(ADp%dv_dt_str(i,J,k)) < accel_underflow) &
+          ADp%dv_dt_str(i,J,k) = 0.0
+      endif
     enddo
-  endif
+  endif ; enddo ; enddo
 
   ! compute vertical velocity tendency that arises from GL90 viscosity;
   ! follow tridiagonal solve method as above; to avoid corrupting v,
-  ! use ADp%dv_dt_visc_gl90 as a placeholder for updated u (due to GL90) until last do loop
+  ! use ADp%dv_dt_visc_gl90 as a placeholder for updated v (due to GL90) until last do loop
   if ((CS%id_dv_dt_visc_gl90 > 0) .or. (CS%id_GLwork > 0)) then
     if (associated(ADp%dv_dt_visc_gl90)) then
       do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
         b_denom_1 = CS%h_v(i,J,1)  ! CS%a_v_gl90(i,J,1) is zero
-        b1(i,J) = 1.0 / (b_denom_1 + dt*CS%a_v_gl90(i,J,2))
-        d1(i,J) = b_denom_1 * b1(i,J)
-        ADp%dv_dt_visc_gl90(I,J,1) = b1(i,J) * (CS%h_v(i,J,1) * ADp%dv_dt_visc_gl90(i,J,1))
+        b1 = 1.0 / (b_denom_1 + dt*CS%a_v_gl90(i,J,2))
+        d1 = b_denom_1 * b1
+        ADp%dv_dt_visc_gl90(I,J,1) = b1 * (CS%h_v(i,J,1) * ADp%dv_dt_visc_gl90(i,J,1))
+
+        do k=2,nz
+          c1(k) = dt * CS%a_v_gl90(i,J,K) * b1
+          b_denom_1 = CS%h_v(i,J,k) + dt * (CS%a_v_gl90(i,J,K) * d1)
+          b1 = 1.0 / (b_denom_1 + dt * CS%a_v_gl90(i,J,K+1))
+          d1 = b_denom_1 * b1
+          ADp%dv_dt_visc_gl90(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_visc_gl90(i,J,k) &
+              + dt * CS%a_v_gl90(i,J,K) * ADp%dv_dt_visc_gl90(i,J,k-1)) * b1
+        enddo
+
+        ! back substitute to solve for new velocities, held by ADp%dv_dt_visc_gl90
+        do k=nz-1,1,-1
+          ADp%dv_dt_visc_gl90(i,J,k) = ADp%dv_dt_visc_gl90(i,J,k) + c1(k+1) * ADp%dv_dt_visc_gl90(i,J,k+1)
+        enddo
       endif ; enddo ; enddo
-
-      do k=2,nz
-        do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
-          c1(i,J,k) = dt * CS%a_v_gl90(i,J,K) * b1(i,J)
-          b_denom_1 = CS%h_v(i,J,k) + dt * (CS%a_v_gl90(i,J,K)*d1(i,J))
-          b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v_gl90(i,J,K+1))
-          d1(i,J) = b_denom_1 * b1(i,J)
-          ADp%dv_dt_visc_gl90(i,J,k) = (CS%h_v(i,J,k) * ADp%dv_dt_visc_gl90(i,J,k) + &
-                      dt * CS%a_v_gl90(i,J,K) * ADp%dv_dt_visc_gl90(i,J,k-1)) * b1(i,J)
-        endif ; enddo ; enddo
-      enddo
-
-      ! back substitute to solve for new velocities, held by ADp%dv_dt_visc_gl90
-      do k=nz-1,1,-1
-        do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
-          ADp%dv_dt_visc_gl90(i,J,k) = ADp%dv_dt_visc_gl90(i,J,k) + c1(i,J,k+1) * ADp%dv_dt_visc_gl90(i,J,k+1)
-        endif ; enddo ; enddo
-      enddo
 
       do k=1,nz
         do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
           ! now fill ADp%dv_dt_visc_gl90(i,J,k) with actual velocity tendency due to GL90;
           ! note that on RHS: ADp%dv_dt_visc(i,J,k) holds the original velocity value v(i,J,k)
           ! and ADp%dv_dt_visc_gl90(i,J,k) the updated velocity due to GL90
-          ADp%dv_dt_visc_gl90(i,J,k) = (ADp%dv_dt_visc_gl90(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
-          if (abs(ADp%dv_dt_visc_gl90(i,J,k)) < accel_underflow) ADp%dv_dt_visc_gl90(i,J,k) = 0.0
+          ADp%dv_dt_visc_gl90(i,J,k) = (ADp%dv_dt_visc_gl90(i,J,k) - ADp%dv_dt_visc(i,J,k)) * Idt
+
+          if (abs(ADp%dv_dt_visc_gl90(i,J,k)) < accel_underflow) &
+            ADp%dv_dt_visc_gl90(i,J,k) = 0.0
         endif ; enddo ; enddo
       enddo
 
@@ -1125,8 +1038,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   endif
 
   if (associated(ADp%dv_dt_visc)) then
-    do k=1,nz
-      do concurrent (J=Jsq:Jeq, i=is:ie)
+    do concurrent (J=Jsq:Jeq, i=is:ie)
+      do k=1,nz
         ADp%dv_dt_visc(i,J,k) = (v(i,J,k) - ADp%dv_dt_visc(i,J,k))*Idt
         if (abs(ADp%dv_dt_visc(i,J,k)) < accel_underflow) ADp%dv_dt_visc(i,J,k) = 0.0
       enddo
@@ -1146,8 +1059,8 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
 
     if (allocated(visc%Ray_v)) then
-      do k=1,nz
-        do concurrent (J=Jsq:Jeq, i=is:ie)
+      do concurrent (J=Jsq:Jeq, i=is:ie)
+        do k=1,nz
           tauy_bot(i,J) = tauy_bot(i,J) + GV%H_to_RZ * (visc%Ray_v(i,J,k)*v(i,J,k))
         enddo
       enddo
@@ -1188,7 +1101,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   !$omp target exit data map(delete: b1, c1, d1, Ray)
 
-  !!$omp target update from(u,v)
   !$omp target exit data map(from: ADp%du_dt_str, ADp%dv_dt_str)
   !$omp target exit data map(delete: ADp)
   !$omp target exit data map(delete: surface_stress)
@@ -1233,7 +1145,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     if (CS%id_dv_dt_str > 0) &
       call post_data(CS%id_dv_dt_str, ADp%dv_dt_str, CS%diag)
 
-    if (associated(ADp%du_dt_visc) .and. associated(ADp%du_dt_visc)) then
+    if (associated(ADp%du_dt_visc) .and. associated(ADp%dv_dt_visc)) then
       ! Diagnostics of the fractional thicknesses times momentum budget terms
       ! 3D diagnostics of hf_du(dv)_dt_visc are commented because there is no clarity on proper remapping grid option.
       ! The code is retained for debugging purposes in the future.
@@ -1290,15 +1202,16 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
 
   ! Local variables
 
-  real :: b1(SZIB_(G),SZJB_(G))
+  real :: b1
     ! A variable used by the tridiagonal solver [H-1 ~> m-1 or m2 kg-1].
-  real :: c1(SZIB_(G),SZJB_(G),SZK_(GV))
+  real :: c1(SZK_(GV))
     ! A variable used by the tridiagonal solver [nondim].
-  real :: d1(SZIB_(G),SZJB_(G))
+  real :: d1
     ! d1=1-c1 is used by the tridiagonal solver [nondim].
-  real :: Ray(SZIB_(G),SZJB_(G))
+  real :: Ray
     ! Ray is the Rayleigh-drag velocity [H T-1 ~> m s-1 or Pa s m-1]
-  real :: b_denom_1   ! The first term in the denominator of b1 [H ~> m or kg m-2].
+  real :: b_denom_1
+    ! The first term in the denominator of b1 [H ~> m or kg m-2].
 
   integer :: i, j, k, is, ie, Isq, Ieq, Jsq, Jeq, nz
   is = G%isc ; ie = G%iec
@@ -1307,95 +1220,66 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
 
-  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(remant): "// &
+  if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(remnant): "// &
          "Module must be initialized before it is used.")
 
   ! Find the zonal viscous remnant using a modification of a standard tridagonal solver.
 
   !$omp target enter data map(alloc: b1, c1, d1, Ray, b_denom_1)
 
-  do concurrent (j=G%jsc:G%jec)
-    if (allocated(visc%Ray_u)) then
-      do concurrent (I=Isq:Ieq)
-        Ray(I,j) = visc%Ray_u(I,j,1)
-      enddo
-    else
-      do concurrent (I=Isq:Ieq)
-        Ray(I,j) = 0.
-      enddo
-    endif
+  !$omp target teams loop collapse(2) &
+  !$omp   private(b1, c1, d1, Ray, b_denom_1)
+  do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+    Ray = 0.
+    if (allocated(visc%Ray_u)) Ray = visc%Ray_u(I,j,1)
 
-    do concurrent (I=Isq:Ieq, G%mask2dCu(i,j) > 0.)
-      b_denom_1 = CS%h_u(I,j,1) + dt * (Ray(I,j) + CS%a_u(I,j,1))
-      b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,2))
-      d1(I,j) = b_denom_1 * b1(I,j)
-      visc_rem_u(I,j,1) = b1(I,j) * CS%h_u(I,j,1)
-    enddo
+    b_denom_1 = CS%h_u(I,j,1) + dt * (Ray + CS%a_u(I,j,1))
+    b1 = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,2))
+    d1 = b_denom_1 * b1
+    visc_rem_u(I,j,1) = b1 * CS%h_u(I,j,1)
 
     do k=2,nz
-      if (allocated(visc%Ray_u)) then
-        do concurrent (I=Isq:Ieq)
-          Ray(I,j) = visc%Ray_u(I,j,k)
-        enddo
-      endif
+      if (allocated(visc%Ray_u)) Ray = visc%Ray_u(I,j,k)
 
-      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-        c1(I,j,k) = dt * CS%a_u(I,j,K)*b1(I,j)
-        b_denom_1 = CS%h_u(I,j,k) + dt * (Ray(I,j) + CS%a_u(I,j,K) * d1(I,j))
-        b1(I,j) = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
-        d1(I,j) = b_denom_1 * b1(I,j)
-        visc_rem_u(I,j,k) = (CS%h_u(I,j,k) + dt * CS%a_u(I,j,K) * visc_rem_u(I,j,k-1)) * b1(I,j)
-      enddo
+      c1(k) = dt * CS%a_u(I,j,K) * b1
+      b_denom_1 = CS%h_u(I,j,k) + dt * (Ray + CS%a_u(I,j,K) * d1)
+      b1 = 1.0 / (b_denom_1 + dt * CS%a_u(I,j,K+1))
+      d1 = b_denom_1 * b1
+      visc_rem_u(I,j,k) = (CS%h_u(I,j,k) + dt * CS%a_u(I,j,K) * visc_rem_u(I,j,k-1)) * b1
     enddo
 
     do k=nz-1,1,-1
-      do concurrent (I=Isq:Ieq, G%mask2dCu(I,j) > 0.)
-        visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(I,j,k+1) * visc_rem_u(I,j,k+1)
-      enddo
+      visc_rem_u(I,j,k) = visc_rem_u(I,j,k) + c1(k+1) * visc_rem_u(I,j,k+1)
     enddo
-  enddo
+  endif ; enddo ; enddo
 
   ! Now find the meridional viscous remnant using the robust tridiagonal solver.
-  do concurrent (J=Jsq:Jeq)
-    if (allocated(visc%Ray_v)) then
-      do concurrent (i=is:ie)
-        Ray(i,J) = visc%Ray_v(i,J,1)
-      enddo
-    else
-      do concurrent (i=is:ie)
-        Ray(i,J) = 0.
-      enddo
-    endif
 
-    do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.)
-      b_denom_1 = CS%h_v(i,J,1) + dt * (Ray(i,J) + CS%a_v(i,J,1))
-      b1(i,J) = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
-      d1(i,J) = b_denom_1 * b1(i,J)
-      visc_rem_v(i,J,1) = b1(i,J) * CS%h_v(i,J,1)
-    enddo
+  !$omp target teams loop collapse(2) &
+  !$omp   private(b1, c1, d1, Ray, b_denom_1)
+  do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+    Ray = 0.
+    if (allocated(visc%Ray_v)) Ray = visc%Ray_v(i,J,1)
+
+    b_denom_1 = CS%h_v(i,J,1) + dt * (Ray + CS%a_v(i,J,1))
+    b1 = 1.0 / (b_denom_1 + dt*CS%a_v(i,J,2))
+    d1 = b_denom_1 * b1
+    visc_rem_v(i,J,1) = b1 * CS%h_v(i,J,1)
 
     do k=2,nz
-      if (allocated(visc%Ray_v)) then
-        do concurrent (i=is:ie)
-          Ray(i,J) = visc%Ray_v(i,J,k)
-        enddo
-      endif
+      if (allocated(visc%Ray_v)) Ray = visc%Ray_v(i,J,k)
 
-      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.)
-        c1(i,J,k) = dt * CS%a_v(i,J,K) * b1(i,J)
-        b_denom_1 = CS%h_v(i,J,k) + dt * (Ray(i,J) + CS%a_v(i,J,K) * d1(i,J))
-        b1(i,J) = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
-        d1(i,J) = b_denom_1 * b1(i,J)
-        visc_rem_v(i,J,k) = (CS%h_v(i,J,k) + dt * CS%a_v(i,J,K) * visc_rem_v(i,J,k-1)) * b1(i,J)
-      enddo
+      c1(k) = dt * CS%a_v(i,J,K) * b1
+      b_denom_1 = CS%h_v(i,J,k) + dt * (Ray + CS%a_v(i,J,K) * d1)
+      b1 = 1.0 / (b_denom_1 + dt * CS%a_v(i,J,K+1))
+      d1 = b_denom_1 * b1
+      visc_rem_v(i,J,k) = (CS%h_v(i,J,k) + dt * CS%a_v(i,J,K) * visc_rem_v(i,J,k-1)) * b1
     enddo
 
     do k=nz-1,1,-1
-      do concurrent (i=is:ie, G%mask2dCv(i,j) > 0.)
-        visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(i,J,k+1) * visc_rem_v(i,J,k+1)
-      enddo
+      visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(k+1) * visc_rem_v(i,J,k+1)
     enddo
-  enddo
+  endif ; enddo ; enddo
 
   !$omp target exit data map(delete: b1, c1, d1, Ray, b_denom_1)
 
@@ -1436,20 +1320,20 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
 
   ! Local variables
 
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
+  real, dimension(SZK_(GV)) :: &
     hvel, &     ! hvel is the thickness used at a velocity grid point [H ~> m or kg m-2].
     dz_harm, &  ! Harmonic mean of the vertical distances around a velocity grid point,
                 ! given by 2*(h+ * h-)/(h+ + h-) [Z ~> m].
     dz_vel, &   ! The vertical distance between interfaces used at a velocity grid point [Z ~> m].
     hvel_shelf, & ! The equivalent of hvel under shelves [H ~> m or kg m-2].
     dz_vel_shelf ! The equivalent of dz_vel under shelves [Z ~> m].
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
+  real :: &
     h_harm, &   ! Harmonic mean of the thicknesses around a velocity grid point,
                 ! given by 2*(h+ * h-)/(h+ + h-) [H ~> m or kg m-2].
     h_arith, &  ! The arithmetic mean thickness [H ~> m or kg m-2].
     h_delta, &  ! The lateral difference of thickness [H ~> m or kg m-2].
     dz_arith    ! The arithmetic mean of the vertical distances around a velocity grid point [Z ~> m]
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1) :: &
+  real, dimension(SZK_(GV)+1) :: &
     z_i, &      ! An estimate of each interface's height above the bottom,
                 ! normalized by the bottom boundary layer thickness [nondim]
     z_i_gl90, & ! An estimate of each interface's height above the bottom,
@@ -1461,7 +1345,7 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
                 ! a_cpl_gl90 is part of a_cpl.
     a_shelf     ! The drag coefficients across interfaces in water columns under
                 ! ice shelves [H T-1 ~> m s-1 or Pa s m-1].
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
+  real :: &
     kv_bbl, &     ! The bottom boundary layer viscosity [H Z T-1 ~> m2 s-1 or Pa s].
     bbl_thick, &  ! The bottom boundary layer thickness [Z ~> m].
     I_Hbbl, &     ! The inverse of the bottom boundary layer thickness [Z-1 ~> m-1].
@@ -1486,7 +1370,8 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
                                               ! thickness-based units [H2 T-1 ~> m2 s-1 or kg2 m-4 s-1].
   real, allocatable, dimension(:,:,:) :: Kv_gl90_v ! GL90 vertical viscosity at v-points in
                                               ! thickness-based units [H2 T-1 ~> m2 s-1 or kg2 m-4 s-1].
-  real :: zcol(SZI_(G), SZJ_(G)) ! The height of an interface at h-points [Z ~> m].
+  real :: zcol    ! The height of an interface at h-points [Z ~> m].
+  real :: zcol_p1 ! An adjacent east/north h-point interface height [Z ~> m].
   real :: botfn   ! A function which goes from 1 at the bottom to 0 much more
                   ! than Hbbl into the interior [nondim].
   real :: topfn   ! A function which goes from 1 at the top to 0 much more
@@ -1504,18 +1389,14 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
   real :: I_valBL ! The inverse of a scaling factor determining when water is
                   ! still within the boundary layer, as determined by the sum
                   ! of the harmonic mean thicknesses [nondim].
-  logical :: do_i(SZIB_(G), SZJB_(G))
-    ! Land mask
   logical :: do_i_shelf(SZIB_(G), SZJB_(G))
     ! Land mask with fractional shelf
   logical :: do_any_shelf
-  integer, dimension(SZIB_(G), SZJB_(G)) :: &
-    zi_dir   !  A trinary logical array indicating which thicknesses to use for
-             !  finding z_clear.
+  integer :: zi_dir
+    ! A ternary logical indicating which thickness to use for finding z_clear.
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, ij
   integer :: is_N_OBC, is_S_OBC, Is_E_OBC, Is_W_OBC, ie_N_OBC, ie_S_OBC, Ie_E_OBC, Ie_W_OBC
   integer :: js_N_OBC, js_S_OBC, Js_E_OBC, Js_W_OBC, je_N_OBC, je_S_OBC, Je_E_OBC, Je_W_OBC
-  real :: tmp1, tmp2
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
@@ -1523,19 +1404,9 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(coef): "// &
          "Module must be initialized before it is used.")
 
-  !$omp target enter data map(alloc: I_Hbbl)
-
   h_neglect = GV%H_subroundoff
   dz_neglect = GV%dZ_subroundoff
   a_cpl_max = 1.0e37 * GV%m_to_H * US%T_to_s
-  do concurrent (j=SZJB_(G), i=SZIB_(G))
-    I_Hbbl(i,j) = 1. / (CS%Hbbl + dz_neglect)
-  enddo
-
-  ! below allocations and initializations will probably be slow on CPU
-  if (CS%use_GL90_in_SSW) then
-    I_Hbbl_gl90(:,:) = 1. / (CS%Hbbl_gl90 + dz_neglect)
-  endif
   I_valBL = 0.0 ; if (CS%harm_BL_val > 0.0) I_valBL = 1.0 / CS%harm_BL_val
 
   if (CS%id_Kv_u > 0) allocate(Kv_u(G%IsdB:G%IedB,G%jsd:G%jed,GV%ke), source=0.0)
@@ -1575,800 +1446,636 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
 
   ! First do u-points
 
-  ! Force IPO optimizations (e.g. Intel)
-  ij = touch_ij(i,j)
+  !$omp target enter data map(alloc: z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &
+  !$omp& tv, varmix, hvel_shelf, dz_vel_shelf, a_shelf)
 
-  !$omp target enter data map(alloc: do_i)
-  do concurrent (j=js:je, I=Isq:Ieq)
-    do_i(I,j) = G%mask2dCu(I,j) > 0.
-  enddo
+  ! These are used in diagnostics, so they need to be mapped back and forth
+  !$omp target enter data map(to: hML_u, kv_u, kv_gl90_u )
+  !$omp target enter data map(to: hML_v, kv_v, kv_gl90_v)
 
-  !$omp target enter data map(alloc: a_cpl, h_ml)
-  !$omp target enter data map(alloc: kv_bbl, bbl_thick, I_Hbbl)
-  !$omp target enter data map(alloc: h_harm, h_arith, h_delta, hvel)
-  !$omp target enter data map(alloc: dz_harm, dz_arith, dz_vel)
-  !$omp target enter data map(alloc: Dmin, zi_dir)
-  !$omp target enter data map(alloc: z_i, zh, zcol)
 
-  if (CS%bottomdraglaw) then
-    do concurrent (j=js:je, I=Isq:Ieq, do_i(I,j))
-      kv_bbl(I,j) = visc%Kv_bbl_u(I,j)
-      bbl_thick(I,j) = visc%bbl_thick_u(I,j) + dz_neglect
-      I_Hbbl(I,j) = 1. / bbl_thick(I,j)
-    enddo
-  endif
-
-  do concurrent (j=js:je, I=Isq:Ieq)
-    Dmin(I,j) = min(G%bathyT(i,j), G%bathyT(i+1,j))
-    zi_dir(I,j) = 0
-  enddo
-
-  ! Project thickness outward across OBCs using a zero-gradient condition.
-  if (associated(OBC)) then
-    if (OBC%u_E_OBCs_on_PE) then
-      do j=js_E_OBC,je_E_OBC ; do I=Is_E_OBC,Ie_E_OBC
-        if (do_i(I,j) .and. OBC%segnum_u(I,j) > 0) then
-          Dmin(I,j) = G%bathyT(i,j)
-          zi_dir(I,j) = -1
-        endif
-      enddo ; enddo
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   private(z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &
+  !$omp&     I_Hbbl, I_Hbbl_gl90, kv_bbl, bbl_thick, Dmin, zi_dir, zh, zcol, &
+  !$omp&     zcol_p1, h_harm, h_arith, h_delta, dz_arith, z2, botfn, z_clear, &
+  !$omp&     z2_wt, h_ml)
+  do j=js,je ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+    I_Hbbl = 1. / (CS%Hbbl + dz_neglect)
+    if (CS%use_GL90_in_SSW) then
+      I_Hbbl_gl90 = 1. / (CS%Hbbl_gl90 + dz_neglect)
     endif
 
-    if (OBC%u_W_OBCs_on_PE) then
-      do j=js_W_OBC,je_W_OBC ; do I=Is_W_OBC,Is_W_OBC
-        if (do_i(I,j) .and. OBC%segnum_u(I,j) < 0) then
-          Dmin(I,j) = G%bathyT(i+1,j)
-          zi_dir(I,j) = 1
-        endif
-      enddo ; enddo
+    if (CS%bottomdraglaw) then
+      kv_bbl = visc%Kv_bbl_u(I,j)
+      bbl_thick = visc%bbl_thick_u(I,j) + dz_neglect
+      I_Hbbl = 1. / bbl_thick
     endif
-  endif
 
-  ! The following block calculates the thicknesses at velocity grid points for
-  ! the vertical viscosity (hvel and dz_vel).  Near the bottom an upwind biased
-  ! thickness is used to control the effect of spurious Montgomery potential
-  ! gradients at the bottom where nearly massless layers layers ride over the
-  ! topography.
-
-  do concurrent (j=js:je, i=isq:ieq)
-    z_i(I,j,nz+1) = 0.
-  enddo
-
-  if (.not. CS%harmonic_visc) then
-    do concurrent (j=js:je, I=Isq:Ieq)
-      zh(I,j) = 0.
-    enddo
-
-    do concurrent (j=js:je, I=Isq:Ieq+1)
-      zcol(i,j) = -G%bathyT(i,j)
-    enddo
-  endif
-
-  if (CS%use_GL90_in_SSW) then
-    do j=js,je ; do I=Isq,Ieq
-      z_i_gl90(I,j,nz+1) = 0.
-    enddo ; enddo
-  endif
-
-  do k=nz,1,-1
-    do concurrent (j=js:je, i=isq:ieq, do_i(i,j))
-      h_harm(I,j) = 2. * h(i,j,k) * h(i+1,j,k) / (h(i,j,k) + h(i+1,j,k) + h_neglect)
-      h_arith(I,j) = 0.5 * (h(i+1,j,k) + h(i,j,k))
-      h_delta(I,j) = h(i+1,j,k) - h(i,j,k)
-      dz_harm(I,j,k) = 2. * dz(i,j,k) * dz(i+1,j,k) / (dz(i,j,k) + dz(i+1,j,k) + dz_neglect)
-      dz_arith(I,j) = 0.5 * (dz(i+1,j,k) + dz(i,j,k))
-    enddo
+    Dmin = min(G%bathyT(i,j), G%bathyT(i+1,j))
+    zi_dir = 0
 
     ! Project thickness outward across OBCs using a zero-gradient condition.
     if (associated(OBC)) then
       if (OBC%u_E_OBCs_on_PE) then
-        do j=js_E_OBC,je_E_OBC ; do I=Is_E_OBC,Ie_E_OBC
-          if (do_i(I,j) .and. OBC%segnum_u(I,j) > 0) then
-            h_harm(I,j) = h(i,j,k)
-            h_arith(I,j) = h(i,j,k)
-            h_delta(I,j) = 0.
-            dz_harm(I,j,k) = dz(i,j,k)
-            dz_arith(I,j) = dz(i,j,k)
-          endif
-        enddo ; enddo
+        if (OBC%segnum_u(I,j) > 0) then
+          Dmin = G%bathyT(i,j)
+          zi_dir = -1
+        endif
       endif
 
       if (OBC%u_W_OBCs_on_PE) then
-        do j=js_W_OBC,je_W_OBC ; do I=Is_W_OBC,Ie_W_OBC
-          if (do_i(I,j) .and. OBC%segnum_u(I,j) < 0) then
-            h_harm(I,j) = h(i+1,j,k)
-            h_arith(I,j) = h(i+1,j,k)
-            h_delta(I,j) = 0.
-            dz_harm(I,j,k) = dz(i+1,j,k)
-            dz_arith(I,j) = dz(i+1,j,k)
-          endif
-        enddo ; enddo
+        if (OBC%segnum_u(I,j) < 0) then
+          Dmin = G%bathyT(i+1,j)
+          zi_dir = 1
+        endif
       endif
     endif
 
-    if (CS%harmonic_visc) then
-      ! The following block calculates the thicknesses at velocity grid points
-      ! for the vertical viscosity (hvel and dz_vel).  Near the bottom an
-      ! upwind biased thickness is used to control the effect of spurious
-      ! Montgomery potential gradients at the bottom where nearly massless
-      ! layers ride over the topography.
+    ! The following block calculates the thicknesses at velocity grid points for
+    ! the vertical viscosity (hvel and dz_vel).  Near the bottom an upwind biased
+    ! thickness is used to control the effect of spurious Montgomery potential
+    ! gradients at the bottom where nearly massless layers layers ride over the
+    ! topography.
 
-      do concurrent (j=js:je, i=isq:ieq, do_i(i,j))
-        hvel(I,j,k) = h_harm(I,j)
-        dz_vel(I,j,k) = dz_harm(I,j,k)
+    z_i(nz+1) = 0.
 
-        if (u(I,j,k) * h_delta(I,j) < 0) then
-          z2 = z_i(I,j,k+1)
+    if (.not. CS%harmonic_visc) then
+      zh = 0.
+      zcol = -G%bathyT(i,j)
+      zcol_p1 = -G%bathyT(i+1,j)
+    endif
+
+    if (CS%use_GL90_in_SSW) then
+      z_i_gl90(nz+1) = 0.
+    endif
+
+    do k=nz,1,-1
+      h_harm = 2. * h(i,j,k) * h(i+1,j,k) / (h(i,j,k) + h(i+1,j,k) + h_neglect)
+      h_arith = 0.5 * (h(i+1,j,k) + h(i,j,k))
+      h_delta = h(i+1,j,k) - h(i,j,k)
+      dz_harm(k) = 2. * dz(i,j,k) * dz(i+1,j,k) / (dz(i,j,k) + dz(i+1,j,k) + dz_neglect)
+      dz_arith = 0.5 * (dz(i+1,j,k) + dz(i,j,k))
+
+      ! Project thickness outward across OBCs using a zero-gradient condition.
+      if (associated(OBC)) then
+        if (OBC%u_E_OBCs_on_PE) then
+          if (OBC%segnum_u(I,j) > 0) then
+            h_harm = h(i,j,k)
+            h_arith = h(i,j,k)
+            h_delta = 0.
+            dz_harm(k) = dz(i,j,k)
+            dz_arith = dz(i,j,k)
+          endif
+        endif
+
+        if (OBC%u_W_OBCs_on_PE) then
+          if (OBC%segnum_u(I,j) < 0) then
+            h_harm = h(i+1,j,k)
+            h_arith = h(i+1,j,k)
+            h_delta = 0.
+            dz_harm(k) = dz(i+1,j,k)
+            dz_arith = dz(i+1,j,k)
+          endif
+        endif
+      endif
+
+      if (CS%harmonic_visc) then
+        ! The following block calculates the thicknesses at velocity grid points
+        ! for the vertical viscosity (hvel and dz_vel).  Near the bottom an
+        ! upwind biased thickness is used to control the effect of spurious
+        ! Montgomery potential gradients at the bottom where nearly massless
+        ! layers ride over the topography.
+
+        hvel(k) = h_harm
+        dz_vel(k) = dz_harm(k)
+
+        if (u(I,j,k) * h_delta < 0) then
+          z2 = z_i(k+1)
           botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
 
-          hvel(I,j,k) = (1. - botfn) * h_harm(I,j) + botfn * h_arith(I,j)
-          dz_vel(I,j,k) = (1. - botfn) * dz_harm(I,j,k) + botfn * dz_arith(I,j)
+          hvel(k) = (1. - botfn) * h_harm + botfn * h_arith
+          dz_vel(k) = (1. - botfn) * dz_harm(k) + botfn * dz_arith
         endif
 
-        z_i(I,j,k) =  z_i(I,j,k+1) + dz_harm(I,j,k) * I_Hbbl(I,j)
-      enddo
-    else
-      do concurrent (j=js:je, i=isq:ieq+1)
-        zcol(i,j) = zcol(i,j) + dz(i,j,k)
-      enddo
+        z_i(k) =  z_i(k+1) + dz_harm(k) * I_Hbbl
+      else
+        zcol = zcol + dz(i,j,k)
+        zcol_p1 = zcol_p1 + dz(i+1,j,k)
 
-      do concurrent (j=js:je, i=isq:ieq, do_i(i,j))
-        zh(I,j) = zh(I,j) + dz_harm(I,j,k)
+        zh = zh + dz_harm(k)
 
-        z_clear = max(zcol(i,j),zcol(i+1,j)) + Dmin(I,j)
-        if (zi_dir(I,j) < 0) z_clear = zcol(i,j) + Dmin(I,j)
-        if (zi_dir(I,j) > 0) z_clear = zcol(i+1,j) + Dmin(I,j)
+        z_clear = max(zcol, zcol_p1) + Dmin
+        if (zi_dir < 0) z_clear = zcol + Dmin
+        if (zi_dir > 0) z_clear = zcol_p1 + Dmin
 
-        z_i(I,j,k) = max(zh(I,j), z_clear) * I_Hbbl(I,j)
+        z_i(k) = max(zh, z_clear) * I_Hbbl
 
-        hvel(I,j,k) = h_arith(I,j)
-        dz_vel(I,j,k) = dz_arith(I,j)
+        hvel(k) = h_arith
+        dz_vel(k) = dz_arith
 
-        if (u(I,j,k) * h_delta(I,j) > 0.) then
-          if (zh(I,j) * I_Hbbl(I,j) < CS%harm_BL_val) then
-            hvel(I,j,k) = h_harm(I,j)
-            dz_vel(I,j,k) = dz_harm(I,j,k)
+        if (u(I,j,k) * h_delta > 0.) then
+          if (zh * I_Hbbl < CS%harm_BL_val) then
+            hvel(k) = h_harm
+            dz_vel(k) = dz_harm(k)
           else
             z2_wt = 1.
-            if (zh(I,j) * I_Hbbl(I,j) < 2. * CS%harm_BL_val) &
-              z2_wt = max(0., min(1., zh(I,j) * I_Hbbl(I,j) * I_valBL - 1.))
+            if (zh * I_Hbbl < 2. * CS%harm_BL_val) &
+              z2_wt = max(0., min(1., zh * I_Hbbl * I_valBL - 1.))
 
-            z2 = z2_wt * (max(zh(I,j), z_clear) * I_Hbbl(I,j))
+            z2 = z2_wt * (max(zh, z_clear) * I_Hbbl)
             botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
 
-            hvel(I,j,k) = (1. - botfn) * h_arith(I,j) + botfn * h_harm(I,j)
-            dz_vel(I,j,k) = (1. - botfn) * dz_arith(I,j) + botfn * dz_harm(I,j,k)
+            hvel(k) = (1. - botfn) * h_arith + botfn * h_harm
+            dz_vel(k) = (1. - botfn) * dz_arith + botfn * dz_harm(k)
           endif
         endif
-      enddo
-    endif
+      endif
+
+      if (CS%use_GL90_in_SSW) then
+        ! The following block calculates the normalized height above the GL90 BBL
+        ! (z_i_gl90), using a harmonic mean between layer thicknesses. For the
+        ! GL90 BBL we use simply a constant (Hbbl_gl90). The purpose isthat the
+        ! GL90 coupling coefficient is zeroed out within Hbbl_gl90, to ensure
+        ! that no momentum gets fluxed into vanished layers. The scheme is not
+        ! sensitive to the exact value of Hbbl_gl90, as long as it is in a
+        ! reasonable range (~1-20 m): large enough to capture vanished layers
+        ! over topography, small enough to not contaminate the interior.
+
+        z_i_gl90(k) = z_i_gl90(k+1) + dz_harm(k) * I_Hbbl_gl90
+      endif
+    enddo
+
+    call find_coupling_coef_k(a_cpl, dz_vel, i, j, dz_harm, bbl_thick, kv_bbl, z_i, &
+        h_ml, dt, G, GV, US, CS, visc, Ustar_2d, tv, work_on_u=.true., OBC=OBC)
+
+    if (allocated(hML_u)) hML_u(I,j) = h_ml
 
     if (CS%use_GL90_in_SSW) then
-      ! The following block calculates the normalized height above the GL90 BBL
-      ! (z_i_gl90), using a harmonic mean between layer thicknesses. For the
-      ! GL90 BBL we use simply a constant (Hbbl_gl90). The purpose is that the
-      ! GL90 coupling coefficient is zeroed out within Hbbl_gl90, to ensure
-      ! that no momentum gets fluxed into vanished layers. The scheme is not
-      ! sensitive to the exact value of Hbbl_gl90, as long as it is in a
-      ! reasonable range (~1-20 m): large enough to capture vanished layers
-      ! over topography, small enough to not contaminate the interior.
-
-      do j=js,je ; do I=Isq,Ieq ; if (do_i(I,j)) then
-        z_i_gl90(I,j,k) = z_i_gl90(I,j,k+1) + dz_harm(I,j,k) * I_Hbbl_gl90(I,j)
-      endif ; enddo ; enddo
+      call find_coupling_coef_gl90(a_cpl_gl90, dz_vel, i, j, z_i_gl90, G, GV, &
+          CS, VarMix, work_on_u=.true.)
     endif
-  enddo
 
-  call find_coupling_coef(a_cpl, dz_vel, do_i, dz_harm, bbl_thick, kv_bbl, z_i, &
-      h_ml, dt, G, GV, US, CS, visc, Ustar_2d, tv, work_on_u=.true., OBC=OBC)
-
-  if (allocated(hML_u)) then
-    !$omp target update from(h_ml)
-    do j=js,je ; do I=Isq,Ieq ; if (do_i(I,j)) then
-      hML_u(I,j) = h_ml(I,j)
-    endif ; enddo ; enddo
-  endif
-
-  if (CS%use_GL90_in_SSW) then
-    call find_coupling_coef_gl90(a_cpl_gl90, dz_vel, do_i, z_i_gl90, G, GV, &
-        CS, VarMix, work_on_u=.true.)
-  endif
-
-  do_any_shelf = .false.
-  if (associated(forces%frac_shelf_u)) then
-    do j=js,je ; do I=Isq,Ieq
+    do_any_shelf = .false.
+    if (associated(forces%frac_shelf_u)) then
       CS%a1_shelf_u(I,j) = 0.
-      do_i_shelf(I,j) = do_i(I,j) .and. forces%frac_shelf_u(I,j) > 0.
-    enddo ; enddo
-    do_any_shelf = any(do_i_shelf)
+      do_any_shelf = forces%frac_shelf_u(I,j) > 0.
+
+      if (do_any_shelf) then
+        if (.not. CS%harmonic_visc) then
+          zh = 0.
+          Ztop_min = min(zcol, zcol_p1)
+          I_HTbl = 1. / (visc%tbl_thick_shelf_u(I,j) + dz_neglect)
+        endif
+
+        do k=1,nz
+          if (CS%harmonic_visc) then
+            hvel_shelf(k) = hvel(k)
+            dz_vel_shelf(k) = dz_vel(k)
+          else
+            ! Find upwind-biased thickness near the surface.
+            ! (Perhaps this needs to be done more carefully, via find_eta.)
+
+            h_harm = 2. * h(i,j,k) * h(i+1,j,k) &
+                / (h(i,j,k) + h(i+1,j,k) + h_neglect)
+            h_arith = 0.5 * (h(i+1,j,k) + h(i,j,k))
+            h_delta = h(i+1,j,k) - h(i,j,k)
+            dz_arith = 0.5 * (dz(i+1,j,k) + dz(i,j,k))
+
+            if (associated(OBC)) then
+              if (OBC%u_E_OBCs_on_PE) then
+                if (OBC%segnum_u(I,j) > 0) then
+                  h_harm = h(i,j,k)
+                  h_arith = h(i,j,k)
+                  h_delta = 0.
+                  dz_arith = dz(i,j,k)
+                endif
+              endif
+
+              if (OBC%u_W_OBCs_on_PE) then
+                if (OBC%segnum_u(I,j) < 0) then
+                  h_harm = h(i+1,j,k)
+                  h_arith = h(i+1,j,k)
+                  h_delta = 0.
+                  dz_arith = dz(i+1,j,k)
+                endif
+              endif
+            endif
+
+            zcol = zcol - dz(i,j,k)
+            zcol_p1 = zcol_p1 - dz(i+1,j,k)
+
+            zh = zh + dz_harm(k)
+
+            hvel_shelf(k) = hvel(k)
+            dz_vel_shelf(k) = dz_vel(k)
+
+            if (u(I,j,k) * h_delta > 0.) then
+              if (zh * I_HTbl < CS%harm_BL_val) then
+                hvel_shelf(k) = min(hvel(k), h_harm)
+                dz_vel_shelf(k) = min(dz_vel(k), dz_harm(k))
+              else
+                z2_wt = 1.
+                if (zh * I_HTbl < 2. * CS%harm_BL_val) then
+                  z2_wt = max(0., min(1., zh * I_HTbl * I_valBL - 1.))
+                endif
+
+                z2 = z2_wt * (max(zh, Ztop_min - min(zcol, zcol_p1)) * I_HTbl)
+                ! TODO: replace **6 with multiply
+                topfn = 1. / (1. + 0.09 * z2**6)
+
+                hvel_shelf(k) = min(hvel(k), (1. - topfn) * h_arith + topfn * h_harm)
+                dz_vel_shelf(k) = min(dz_vel(k), (1. - topfn) * dz_arith + topfn * dz_harm(k))
+              endif
+            endif
+          endif
+        enddo
+
+        call find_coupling_coef(a_shelf, dz_vel_shelf, i, j, dz_harm, &
+            bbl_thick, kv_bbl, z_i, h_ml, dt, G, GV, US, CS, visc, Ustar_2d, &
+            tv, work_on_u=.true., OBC=OBC, shelf=.true.)
+
+        CS%a1_shelf_u(I,j) = a_shelf(1)
+      endif
+    endif
 
     if (do_any_shelf) then
-      if (.not. CS%harmonic_visc) then
-        do j=js,je ; do I=Isq,Ieq ; if (do_i_shelf(I,j)) then
-          zh(I,j) = 0.
-          Ztop_min(I,j) = min(zcol(i,j), zcol(i+1,j))
-          I_HTbl(I,j) = 1. / (visc%tbl_thick_shelf_u(I,j) + dz_neglect)
-        endif ; enddo ; enddo
+      if (CS%use_GL90_in_SSW) then
+        do K=1,nz+1
+          CS%a_u(I,j,K) = min(a_cpl_max, (forces%frac_shelf_u(I,j) * a_shelf(K) + &
+                                         (1. - forces%frac_shelf_u(I,j)) * a_cpl(K)) + a_cpl_gl90(K))
+
+          ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
+          ! CS%a_u(I,j,K) = min(a_cpl_max, forces%frac_shelf_u(I,j) * max(a_shelf(K), a_cpl(K)) + &
+          !                                (1. - forces%frac_shelf_u(I,j)) * a_cpl(K))
+
+          CS%a_u_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(K))
+        enddo
+      else
+        do K=1,nz+1
+          CS%a_u(I,j,K) = min(a_cpl_max, (forces%frac_shelf_u(I,j) * a_shelf(K) + &
+                                         (1. - forces%frac_shelf_u(I,j)) * a_cpl(K)))
+
+          ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
+          ! CS%a_u(I,j,K) = min(a_cpl_max, forces%frac_shelf_u(I,j) * max(a_shelf(K), a_cpl(K)) + &
+          !                                (1. - forces%frac_shelf_u(I,j)) * a_cpl(K))
+        enddo
       endif
 
       do k=1,nz
-        if (CS%harmonic_visc) then
-          do j=js,je ; do I=Isq,Ieq
-            hvel_shelf(I,j,k) = hvel(I,j,k)
-            dz_vel_shelf(I,j,k) = dz_vel(I,j,k)
-          enddo ; enddo
-        else
-          ! Find upwind-biased thickness near the surface.
-          ! (Perhaps this needs to be done more carefully, via find_eta.)
-          do j=js,je ; do I=Isq,Ieq ; if (do_i(I,j)) then
-            h_harm(I,j) = 2. * h(i,j,k) * h(i+1,j,k) &
-                / (h(i,j,k) + h(i+1,j,k) + h_neglect)
-            h_arith(I,j) = 0.5 * (h(i+1,j,k) + h(i,j,k))
-            h_delta(I,j) = h(i+1,j,k) - h(i,j,k)
-            dz_arith(I,j) = 0.5 * (dz(i+1,j,k) + dz(i,j,k))
-          endif ; enddo ; enddo
-
-          if (associated(OBC)) then
-            if (OBC%u_E_OBCs_on_PE) then
-              do j=js_E_OBC,je_E_OBC ; do I=Is_E_OBC,Ie_E_OBC
-                if (do_i(I,j) .and. OBC%segnum_u(I,j) > 0) then
-                  h_harm(I,j) = h(i,j,k)
-                  h_arith(I,j) = h(i,j,k)
-                  h_delta(I,j) = 0.
-                  dz_arith(I,j) = dz(i,j,k)
-                endif
-              enddo ; enddo
-            endif
-
-            if (OBC%u_W_OBCs_on_PE) then
-              do j=js_W_OBC,je_W_OBC ; do I=Is_W_OBC,Ie_W_OBC
-                if (do_i(I,j) .and. OBC%segnum_u(I,j) < 0) then
-                  h_harm(I,j) = h(i+1,j,k)
-                  h_arith(I,j) = h(i+1,j,k)
-                  h_delta(I,j) = 0.
-                  dz_arith(I,j) = dz(i+1,j,k)
-                endif
-              enddo ; enddo
-            endif
-          endif
-
-          do j=js,je ; do i=Isq,Ieq+1
-            zcol(i,j) = zcol(i,j) - dz(i,j,k)
-          enddo ; enddo
-
-          do j=js,je ; do I=Isq,Ieq ; if (do_i_shelf(I,j)) then
-            zh(I,j) = zh(I,j) + dz_harm(I,j,k)
-
-            hvel_shelf(I,j,k) = hvel(I,j,k)
-            dz_vel_shelf(I,j,k) = dz_vel(I,j,k)
-
-            if (u(I,j,k) * h_delta(I,j) > 0) then
-              if (zh(I,j) * I_HTbl(I,j) < CS%harm_BL_val) then
-                hvel_shelf(I,j,k) = min(hvel(I,j,k), h_harm(I,j))
-                dz_vel_shelf(I,j,k) = min(dz_vel(I,j,k), dz_harm(I,j,k))
-              else
-                z2_wt = 1.
-                if (zh(I,j) * I_HTbl(I,j) < 2. * CS%harm_BL_val) &
-                  z2_wt = max(0., min(1., zh(I,j) * I_HTbl(I,j) * I_valBL - 1.))
-
-                z2 = z2_wt * (max(zh(I,j), Ztop_min(I,j) - min(zcol(i,j),zcol(i+1,j))) * I_HTbl(I,j))
-                topfn = 1. / (1. + 0.09 * z2**6)
-
-                h_arith(I,j) = 0.5 * (h(i+1,j,k) + h(i,j,k))
-                dz_arith(I,j) = 0.5 * (dz(i+1,j,k) + dz(i,j,k))
-
-                hvel_shelf(I,j,k) = min(hvel(I,j,k), (1. - topfn) * h_arith(I,j) + topfn * h_harm(I,j))
-                dz_vel_shelf(I,j,k) = min(dz_vel(I,j,k), (1. - topfn) * dz_arith(I,j) + topfn * dz_harm(I,j,k))
-              endif
-            endif
-          endif ; enddo ; enddo
-        endif
-      enddo
-      call find_coupling_coef(a_shelf, dz_vel_shelf, do_i_shelf, dz_harm, &
-          bbl_thick, kv_bbl, z_i, h_ml, dt, G, GV, US, CS, visc, Ustar_2d, &
-          tv, work_on_u=.true., OBC=OBC, shelf=.true.)
-
-      do j=js,je ; do I=Isq,Ieq ; if (do_i_shelf(I,j)) then
-        CS%a1_shelf_u(I,j) = a_shelf(I,j,1)
-      endif ; enddo ; enddo
-    endif
-  endif
-
-  if (do_any_shelf) then
-    if (CS%use_GL90_in_SSW) then
-      do K=1,nz+1
-        do j=js,je ; do I=Isq,Ieq
-          if (do_i_shelf(I,j)) then
-            CS%a_u(I,j,K) = min(a_cpl_max, (forces%frac_shelf_u(I,j) * a_shelf(I,j,K) + &
-                                           (1. - forces%frac_shelf_u(I,j)) * a_cpl(I,j,K)) + a_cpl_gl90(I,j,K))
-
-            ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
-            ! CS%a_u(I,j,K) = min(a_cpl_max, forces%frac_shelf_u(I,j) * max(a_shelf(I,j,K), a_cpl(I,j,K)) + &
-            !                                (1. - forces%frac_shelf_u(I,j)) * a_cpl(I,j,K))
-            CS%a_u_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(I,j,K))
-          elseif (do_i(I,j)) then
-            CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,j,K) + a_cpl_gl90(I,j,K))
-            CS%a_u_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(I,j,K))
-          endif
-        enddo ; enddo
+        ! Should we instead take the inverse of the average of the inverses?
+        CS%h_u(I,j,k) = forces%frac_shelf_u(I,j) * hvel_shelf(k) &
+            + (1. - forces%frac_shelf_u(I,j)) * hvel(k) + h_neglect
       enddo
     else
-      do K=1,nz+1
-        do j=js,je ; do I=Isq,Ieq
-          if (do_i_shelf(I,j)) then
-            CS%a_u(I,j,K) = min(a_cpl_max, (forces%frac_shelf_u(I,j) * a_shelf(I,j,K) + &
-                                           (1. - forces%frac_shelf_u(I,j)) * a_cpl(I,j,K)))
-
-            ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
-            ! CS%a_u(I,j,K) = min(a_cpl_max, forces%frac_shelf_u(I,j) * max(a_shelf(I,j,K), a_cpl(I,j,K)) + &
-            !                                (1. - forces%frac_shelf_u(I,j)) * a_cpl(I,j,K))
-          elseif (do_i(I,j)) then
-            CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,j,K))
-          endif
-        enddo ; enddo
-      enddo
-    endif
-
-    do k=1,nz
-      do j=js,je ; do I=Isq,Ieq
-        if (do_i_shelf(I,j)) then
-          ! Should we instead take the inverse of the average of the inverses?
-          CS%h_u(I,j,k) = forces%frac_shelf_u(I,j) * hvel_shelf(I,j,k) &
-              + (1. - forces%frac_shelf_u(I,j)) * hvel(I,j,k) + h_neglect
-        elseif (do_i(I,j)) then
-          CS%h_u(I,j,k) = hvel(I,j,k) + h_neglect
-        endif
-      enddo ; enddo
-    enddo
-  else
-    if (CS%use_GL90_in_SSW) then
-      do K=1,nz+1
-        do j=js,je ; do I=Isq,Ieq ; if (do_i(I,j)) then
-          a_cpl(I,j,K) = a_cpl(I,j,K) + a_cpl_gl90(I,j,K)
-        endif ; enddo ; enddo
-      enddo
-
-      do K=1,nz+1
-        do j=js,je ; do I=Isq,Ieq ; if (do_i(I,j)) then
-          CS%a_u_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(I,j,K))
-        endif ; enddo ; enddo
-      enddo
-    endif
-
-    do concurrent (j=js:je)
-      do K=1,nz+1
-        do concurrent (i=isq:ieq, do_i(i,j))
-          CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(I,j,K))
+      if (CS%use_GL90_in_SSW) then
+        do K=1,nz+1
+          a_cpl(K) = a_cpl(K) + a_cpl_gl90(K)
         enddo
+
+        do K=1,nz+1
+          CS%a_u_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(K))
+        enddo
+      endif
+
+      do K=1,nz+1
+        CS%a_u(I,j,K) = min(a_cpl_max, a_cpl(K))
       enddo
 
       do k=1,nz
-        do concurrent (i=isq:ieq, do_i(i,j))
-          CS%h_u(I,j,k) = hvel(I,j,k) + h_neglect
-        enddo
+        CS%h_u(I,j,k) = hvel(k) + h_neglect
       enddo
-    enddo
-  endif
+    endif
 
-  ! Diagnose total Kv at u-points
-  if (CS%id_Kv_u > 0) then
-    do k=1,nz
-      do j=js,je ; do I=Isq,Ieq ; if (do_i(I,j)) then
+    ! Diagnose total Kv at u-points
+    if (CS%id_Kv_u > 0) then
+      do k=1,nz
         Kv_u(I,j,k) = 0.5 * (CS%a_u(I,j,K) + CS%a_u(I,j,K+1)) * CS%h_u(I,j,k)
-      endif ; enddo ; enddo
-    enddo
-  endif
+      enddo
+    endif
 
-  ! Diagnose GL90 Kv at u-points
-  if (CS%id_Kv_gl90_u > 0) then
-    do k=1,nz
-      do j=js,je ; do I=Isq,Ieq ; if (do_i(I,j)) then
+    ! Diagnose GL90 Kv at u-points
+    if (CS%id_Kv_gl90_u > 0) then
+      do k=1,nz
         Kv_gl90_u(I,j,k) = 0.5 * (CS%a_u_gl90(I,j,K) + CS%a_u_gl90(I,j,K+1)) * CS%h_u(I,j,k)
-      endif ; enddo ; enddo
-    enddo
-  endif
+      enddo
+    endif
+  endif ; enddo ; enddo
 
   ! Now work on v-points.
 
-  ! Force IPO optimizations (e.g. Intel)
-  ij = touch_ij(i,j)
-
-  do concurrent (J=Jsq:Jeq, i=is:ie)
-    do_i(i,J) = G%mask2dCv(i,J) > 0.
-  enddo
-
-
-  if (CS%bottomdraglaw) then
-    do concurrent (J=Jsq:Jeq, i=is:ie, do_i(i,j))
-      kv_bbl(i,J) = visc%Kv_bbl_v(i,J)
-      bbl_thick(i,J) = visc%bbl_thick_v(i,J) + dz_neglect
-      I_Hbbl(i,J) = 1. / bbl_thick(i,J)
-    enddo
-  endif
-
-  do concurrent (J=Jsq:Jeq, i=is:ie)
-    Dmin(i,J) = min(G%bathyT(i,j), G%bathyT(i,j+1))
-    zi_dir(i,J) = 0
-  enddo
-
-
-  ! Project thickness outward across OBCs using a zero-gradient condition.
-  if (associated(OBC)) then
-    if (OBC%v_N_OBCs_on_PE) then
-      do J=Js_N_OBC,Je_N_OBC ; do i=is_N_OBC,ie_N_OBC
-        if (do_i(i,J) .and. OBC%segnum_v(i,J) > 0) then
-          Dmin(I,J) = G%bathyT(i,j)
-          zi_dir(I,J) = -1
-        endif
-      enddo ; enddo
+  !$omp target teams distribute parallel do collapse(2) &
+  !$omp   private(z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &
+  !$omp     I_Hbbl, I_Hbbl_gl90, kv_bbl, bbl_thick, Dmin, zi_dir, zh, zcol, &
+  !$omp     zcol_p1, h_harm, h_arith, h_delta, dz_arith, z2, botfn, z_clear, &
+  !$omp     z2_wt, h_ml)
+  do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+    I_Hbbl = 1. / (CS%Hbbl + dz_neglect)
+    if (CS%use_GL90_in_SSW) then
+      I_Hbbl_gl90 = 1. / (CS%Hbbl_gl90 + dz_neglect)
     endif
 
-    if (OBC%v_S_OBCs_on_PE) then
-      do J=Js_S_OBC,Je_S_OBC ; do i=is_S_OBC,ie_S_OBC
-        if (do_i(i,J) .and. OBC%segnum_v(i,J) < 0) then
-          Dmin(i,J) = G%bathyT(i,j+1)
-          zi_dir(i,J) = 1
-        endif
-      enddo ; enddo
+    if (CS%bottomdraglaw) then
+      kv_bbl = visc%Kv_bbl_v(i,J)
+      bbl_thick = visc%bbl_thick_v(i,J) + dz_neglect
+      I_Hbbl = 1. / bbl_thick
     endif
-  endif
 
-  do concurrent (J=Jsq:Jeq, i=is:ie)
-    z_i(i,J,nz+1) = 0.
-  enddo
-
-  if (.not. CS%harmonic_visc) then
-    do concurrent (J=Jsq:Jeq, i=is:ie)
-      zh(i,J) = 0.
-    enddo
-
-    do concurrent (J=Jsq:Jeq+1, i=is:ie)
-      zcol(i,j) = -G%bathyT(i,j)
-    enddo
-  endif
-
-  if (CS%use_GL90_in_SSW) then
-    do j=Jsq,Jeq ; do i=is,ie
-      z_i_gl90(i,J,nz+1) = 0.
-    enddo ; enddo
-  endif
-
-  do k=nz,1,-1
-    do concurrent (J=Jsq:Jeq, i=is:ie, do_i(i,j))
-      h_harm(i,J) = 2. * h(i,j,k) * h(i,j+1,k) / (h(i,j,k) + h(i,j+1,k) + h_neglect)
-      h_arith(i,J) = 0.5 * (h(i,j+1,k) + h(i,j,k))
-      h_delta(i,J) = h(i,j+1,k) - h(i,j,k)
-      dz_harm(i,J,k) = 2. * dz(i,j,k) * dz(i,j+1,k) / (dz(i,j,k) + dz(i,j+1,k) + dz_neglect)
-      dz_arith(i,J) = 0.5 * (dz(i,j+1,k) + dz(i,j,k))
-    enddo
+    Dmin = min(G%bathyT(i,j), G%bathyT(i,j+1))
+    zi_dir = 0
 
     ! Project thickness outward across OBCs using a zero-gradient condition.
     if (associated(OBC)) then
       if (OBC%v_N_OBCs_on_PE) then
-        do J=Js_N_OBC,Je_N_OBC ; do i=is_N_OBC,ie_N_OBC
-          if (do_i(i,J) .and. OBC%segnum_v(i,J) > 0) then
-            h_harm(i,J) = h(i,j,k)
-            h_arith(i,J) = h(i,j,k)
-            h_delta(i,J) = 0.
-            dz_harm(i,J,k) = dz(i,j,k)
-            dz_arith(i,J) = dz(i,j,k)
-          endif
-        enddo ; enddo
+        if (OBC%segnum_v(i,J) > 0) then
+          Dmin = G%bathyT(i,j)
+          zi_dir = -1
+        endif
       endif
 
       if (OBC%v_S_OBCs_on_PE) then
-        do J=Js_S_OBC,Je_S_OBC ; do i=is_S_OBC,ie_S_OBC
-          if (do_i(i,J) .and. OBC%segnum_v(i,J) < 0) then
-            h_harm(i,J) = h(i,j+1,k)
-            h_arith(i,J) = h(i,j+1,k)
-            h_delta(i,J) = 0.
-            dz_harm(i,J,k) = dz(i,j+1,k)
-            dz_arith(i,J) = dz(i,j+1,k)
-          endif
-        enddo ; enddo
+        if (OBC%segnum_v(i,J) < 0) then
+          Dmin = G%bathyT(i,j+1)
+          zi_dir = 1
+        endif
       endif
     endif
 
-    if (CS%harmonic_visc) then
-      ! The following block calculates the thicknesses at velocity grid points
-      ! for the vertical viscosity (hvel and dz_vel).  Near the bottom an
-      ! upwind biased thickness is used to control the effect of spurious
-      ! Montgomery potential gradients at the bottom where nearly massless
-      ! layers ride over the topography.
+    z_i(nz+1) = 0.
 
-      do concurrent (J=Jsq:Jeq, i=is:ie, do_i(i,j))
-        hvel(i,J,k) = h_harm(i,J)
-        dz_vel(i,J,k) = dz_harm(i,J,k)
+    if (.not. CS%harmonic_visc) then
+      zh = 0.
+      zcol = -G%bathyT(i,j)
+      zcol_p1 = -G%bathyT(i,j+1)
+    endif
 
-        tmp1 = v(i,j,k)
-        tmp2 = h_delta(i,j)
-        if (tmp1*tmp2 < 0.) then
-          z2 = z_i(i,J,k+1)
-          botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
-          hvel(i,J,k) = (1. - botfn) * h_harm(i,J) + botfn * h_arith(i,J)
-          dz_vel(i,J,k) = (1. - botfn) * dz_harm(i,J,k) + botfn * dz_arith(i,J)
+    if (CS%use_GL90_in_SSW) then
+      z_i_gl90(nz+1) = 0.
+    endif
+
+    do k=nz,1,-1
+      h_harm = 2. * h(i,j,k) * h(i,j+1,k) / (h(i,j,k) + h(i,j+1,k) + h_neglect)
+      h_arith = 0.5 * (h(i,j+1,k) + h(i,j,k))
+      h_delta = h(i,j+1,k) - h(i,j,k)
+      dz_harm(k) = 2. * dz(i,j,k) * dz(i,j+1,k) / (dz(i,j,k) + dz(i,j+1,k) + dz_neglect)
+      dz_arith = 0.5 * (dz(i,j+1,k) + dz(i,j,k))
+
+      ! Project thickness outward across OBCs using a zero-gradient condition.
+      if (associated(OBC)) then
+        if (OBC%v_N_OBCs_on_PE) then
+          if (OBC%segnum_v(i,J) > 0) then
+            h_harm = h(i,j,k)
+            h_arith = h(i,j,k)
+            h_delta = 0.
+            dz_harm(k) = dz(i,j,k)
+            dz_arith = dz(i,j,k)
+          endif
         endif
-        z_i(i,J,k) = z_i(i,J,k+1) + dz_harm(i,J,k)*I_Hbbl(i,J)
-      enddo
 
-    else ! Not harmonic_visc
-      do concurrent (j=jsq:jeq+1, i=is:ie)
-        zcol(i,j) = zcol(i,j) + dz(i,j,k)
-      enddo
+        if (OBC%v_S_OBCs_on_PE) then
+          if (OBC%segnum_v(i,J) < 0) then
+            h_harm = h(i,j+1,k)
+            h_arith = h(i,j+1,k)
+            h_delta = 0.
+            dz_harm(k) = dz(i,j+1,k)
+            dz_arith = dz(i,j+1,k)
+          endif
+        endif
+      endif
 
-      do concurrent (j=jsq:jeq, i=is:ie, do_i(i,j))
-        zh(i,J) = zh(i,J) + dz_harm(i,J,k)
+      if (CS%harmonic_visc) then
+        ! The following block calculates the thicknesses at velocity grid points
+        ! for the vertical viscosity (hvel and dz_vel).  Near the bottom an
+        ! upwind biased thickness is used to control the effect of spurious
+        ! Montgomery potential gradients at the bottom where nearly massless
+        ! layers ride over the topography.
 
-        z_clear = max(zcol(i,j), zcol(i,j+1)) + Dmin(i,J)
-        if (zi_dir(i,J) < 0) z_clear = zcol(i,j) + Dmin(i,J)
-        if (zi_dir(i,J) > 0) z_clear = zcol(i,j+1) + Dmin(i,J)
+        hvel(k) = h_harm
+        dz_vel(k) = dz_harm(k)
 
-        z_i(i,J,k) = max(zh(i,J), z_clear) * I_Hbbl(i,J)
+        if (v(i,J,k) * h_delta < 0) then
+          z2 = z_i(k+1)
+          botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
 
-        hvel(i,J,k) = h_arith(i,J)
-        dz_vel(i,J,k) = dz_arith(i,J)
+          hvel(k) = (1. - botfn) * h_harm + botfn * h_arith
+          dz_vel(k) = (1. - botfn) * dz_harm(k) + botfn * dz_arith
+        endif
 
-        if (v(i,J,k) * h_delta(i,J) > 0) then
-          if (zh(i,J) * I_Hbbl(i,J) < CS%harm_BL_val) then
-            hvel(i,J,k) = h_harm(i,J)
-            dz_vel(i,J,k) = dz_harm(i,J,k)
+        z_i(k) = z_i(k+1) + dz_harm(k) * I_Hbbl
+      else
+        zcol = zcol + dz(i,j,k)
+        zcol_p1 = zcol_p1 + dz(i,j+1,k)
+
+        zh = zh + dz_harm(k)
+
+        z_clear = max(zcol, zcol_p1) + Dmin
+        if (zi_dir < 0) z_clear = zcol + Dmin
+        if (zi_dir > 0) z_clear = zcol_p1 + Dmin
+
+        z_i(k) = max(zh, z_clear) * I_Hbbl
+
+        hvel(k) = h_arith
+        dz_vel(k) = dz_arith
+
+        if (v(i,J,k) * h_delta > 0) then
+          if (zh * I_Hbbl < CS%harm_BL_val) then
+            hvel(k) = h_harm
+            dz_vel(k) = dz_harm(k)
           else
             z2_wt = 1.
-            if (zh(i,J) * I_Hbbl(i,J) < 2. * CS%harm_BL_val) &
-              z2_wt = max(0., min(1., zh(i,J) * I_Hbbl(i,J) * I_valBL - 1.))
+            if (zh * I_Hbbl < 2. * CS%harm_BL_val) &
+              z2_wt = max(0., min(1., zh * I_Hbbl * I_valBL - 1.))
 
             ! TODO: should z_clear be used here?
-            z2 = z2_wt * (max(zh(i,J), max(zcol(i,j), zcol(i,j+1)) + Dmin(i,J)) * I_Hbbl(i,J))
+            z2 = z2_wt * (max(zh, max(zcol, zcol_p1) + Dmin) * I_Hbbl)
             botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
 
-            hvel(i,J,k) = (1. - botfn) * h_arith(i,J) + botfn * h_harm(i,J)
-            dz_vel(i,J,k) = (1. - botfn) * dz_arith(i,J) + botfn * dz_harm(i,J,k)
+            hvel(k) = (1. - botfn) * h_arith + botfn * h_harm
+            dz_vel(k) = (1. - botfn) * dz_arith + botfn * dz_harm(k)
           endif
         endif
-      enddo
-    endif
+      endif
+
+      if (CS%use_GL90_in_SSW) then
+        ! The following block calculates the normalized height above the GL90 BBL
+        ! (z_i_gl90), using a harmonic mean between layer thicknesses. For the
+        ! GL90 BBL we use simply a constant (Hbbl_gl90). The purpose is that the
+        ! GL90 coupling coefficient is zeroed out within Hbbl_gl90, to ensure
+        ! that no momentum gets fluxed into vanished layers. The scheme is not
+        ! sensitive to the exact value of Hbbl_gl90, as long as it is in a
+        ! reasonable range (~1-20 m): large enough to capture vanished layers
+        ! over topography, small enough to not contaminate the interior.
+
+        z_i_gl90(k) = z_i_gl90(k+1) + dz_harm(k) * I_Hbbl_gl90
+      endif
+    enddo
+
+    call find_coupling_coef_k(a_cpl, dz_vel, i, j, dz_harm, bbl_thick, kv_bbl, z_i, &
+        h_ml, dt, G, GV, US, CS, visc, Ustar_2d, tv, work_on_u=.false., OBC=OBC)
+
+    if (allocated(hML_v)) hML_v(i,J) = h_ml
 
     if (CS%use_GL90_in_SSW) then
-      ! The following block calculates the normalized height above the GL90 BBL
-      ! (z_i_gl90), using a harmonic mean between layer thicknesses. For the
-      ! GL90 BBL we use simply a constant (Hbbl_gl90). The purpose is that the
-      ! GL90 coupling coefficient is zeroed out within Hbbl_gl90, to ensure
-      ! that no momentum gets fluxed into vanished layers. The scheme is not
-      ! sensitive to the exact value of Hbbl_gl90, as long as it is in a
-      ! reasonable range (~1-20 m): large enough to capture vanished layers
-      ! over topography, small enough to not contaminate the interior.
-
-      do J=Jsq,Jeq ; do i=is,ie ; if (do_i(i,J)) then
-        z_i_gl90(i,J,k) = z_i_gl90(i,J,k+1) + dz_harm(i,J,k) * I_Hbbl_gl90(i,J)
-      endif ; enddo ; enddo
+      call find_coupling_coef_gl90(a_cpl_gl90, dz_vel, i, j, z_i_gl90, G, GV, &
+          CS, VarMix, work_on_u=.false.)
     endif
-  enddo
 
-  call find_coupling_coef(a_cpl, dz_vel, do_i, dz_harm, bbl_thick, kv_bbl, z_i, &
-      h_ml, dt, G, GV, US, CS, visc, Ustar_2d, tv, work_on_u=.false., OBC=OBC)
-
-  if ( allocated(hML_v)) then
-    !$omp target update from(h_ml)
-    do J=Jsq,Jeq ; do i=is,ie ; if (do_i(i,J)) then
-      hML_v(i,J) = h_ml(i,J)
-    endif ; enddo ; enddo
-  endif
-
-  if (CS%use_GL90_in_SSW) then
-    call find_coupling_coef_gl90(a_cpl_gl90, dz_vel, do_i, z_i_gl90, G, GV, &
-        CS, VarMix, work_on_u=.false.)
-  endif
-
-  do_any_shelf = .false.
-  if (associated(forces%frac_shelf_v)) then
-    do J=Jsq,Jeq ; do i=is,ie
+    do_any_shelf = .false.
+    if (associated(forces%frac_shelf_v)) then
       CS%a1_shelf_v(i,J) = 0.
-      do_i_shelf(i,J) = do_i(i,J) .and. forces%frac_shelf_v(i,J) > 0.
-    enddo ; enddo
-    do_any_shelf = any(do_i_shelf)
+      do_any_shelf = forces%frac_shelf_v(i,J) > 0.
+
+      if (do_any_shelf) then
+        ! Initialize non-harmonic depths
+        if (.not. CS%harmonic_visc) then
+          zh = 0.
+          Ztop_min = min(zcol, zcol_p1)
+          I_HTbl = 1. / (visc%tbl_thick_shelf_v(i,J) + dz_neglect)
+        endif
+
+        do k=1,nz
+          if (CS%harmonic_visc) then
+            hvel_shelf(k) = hvel(k)
+            dz_vel_shelf(k) = dz_vel(k)
+          else
+            ! Find upwind-biased thickness near the surface.
+            ! Perhaps this needs to be done more carefully, via find_eta.
+            h_harm = 2. * h(i,j,k) * h(i,j+1,k) &
+                / (h(i,j,k) + h(i,j+1,k) + h_neglect)
+            h_arith = 0.5 * (h(i,j+1,k) + h(i,j,k))
+            h_delta = h(i,j+1,k) - h(i,j,k)
+            dz_arith = 0.5 * (dz(i,j+1,k) + dz(i,j,k))
+
+            ! Project thickness outward across OBCs using a zero-gradient condition.
+            if (associated(OBC)) then
+              if (OBC%v_N_OBCs_on_PE) then
+                if (OBC%segnum_v(i,J) > 0) then
+                  h_harm = h(i,j,k)
+                  h_arith = h(i,j,k)
+                  h_delta = 0.
+                  dz_arith = dz(i,j,k)
+                endif
+              endif
+
+              if (OBC%v_S_OBCs_on_PE) then
+                if (OBC%segnum_v(i,J) < 0) then
+                  h_harm = h(i,j+1,k)
+                  h_arith = h(i,j+1,k)
+                  h_delta = 0.
+                  dz_arith = dz(i,j+1,k)
+                endif
+              endif
+            endif
+
+            zcol = zcol - dz(i,j,k)
+            zcol_p1 = zcol_p1 - dz(i,j+1,k)
+
+            zh = zh + dz_harm(k)
+
+            hvel_shelf(k) = hvel(k)
+            dz_vel_shelf(k) = dz_vel(k)
+
+            if (v(i,J,k) * h_delta > 0.) then
+              if (zh * I_HTbl < CS%harm_BL_val) then
+                hvel_shelf(k) = min(hvel(k), h_harm)
+                dz_vel_shelf(k) = min(dz_vel(k), dz_harm(k))
+              else
+                z2_wt = 1.
+                if (zh * I_HTbl < 2. * CS%harm_BL_val) &
+                  z2_wt = max(0., min(1., zh * I_HTbl * I_valBL - 1.))
+
+                z2 = z2_wt * (max(zh, Ztop_min - min(zcol, zcol_p1)) * I_HTbl)
+                ! TODO: Replace **6
+                topfn = 1. / (1. + 0.09 * z2**6)
+
+                hvel_shelf(k) = min(hvel(k), (1. - topfn) * h_arith + topfn * h_harm)
+                dz_vel_shelf(k) = min(dz_vel(k), (1. - topfn) * dz_arith + topfn * dz_harm(k))
+              endif
+            endif
+          endif
+        enddo
+
+        call find_coupling_coef(a_shelf, dz_vel_shelf, i, j, dz_harm, &
+            bbl_thick, kv_bbl, z_i, h_ml, dt, G, GV, US, CS, visc, Ustar_2d, &
+            tv, work_on_u=.false., OBC=OBC, shelf=.true.)
+
+        CS%a1_shelf_v(i,J) = a_shelf(1)
+      endif
+    endif
 
     if (do_any_shelf) then
-      ! Initialize non-harmonic depths
-      if (.not. CS%harmonic_visc) then
-        do J=Jsq,Jeq ; do i=is,ie ; if (do_i_shelf(i,J)) then
-          zh(i,J) = 0.
-          Ztop_min(i,J) = min(zcol(i,j), zcol(i,j+1))
-          I_HTbl(i,J) = 1. / (visc%tbl_thick_shelf_v(i,J) + dz_neglect)
-        endif ; enddo ; enddo
+      if (CS%use_GL90_in_SSW) then
+        do K=1,nz+1
+          CS%a_v(I,j,K) = min(a_cpl_max, (forces%frac_shelf_v(I,j) * a_shelf(K) + &
+                                         (1. - forces%frac_shelf_v(I,j)) * a_cpl(K)) + a_cpl_gl90(K))
+
+          ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
+          ! CS%a_v(I,j,K) = min(a_cpl_max, forces%frac_shelf_v(I,j) * max(a_shelf(K), a_cpl(K)) + &
+          !                                (1. - forces%frac_shelf_v(I,j)) * a_cpl(K))
+
+          CS%a_v_gl90(I,j,K) = min(a_cpl_max, a_cpl_gl90(K))
+        enddo
+      else
+        do K=1,nz+1
+          CS%a_v(I,j,K) = min(a_cpl_max, (forces%frac_shelf_v(I,j) * a_shelf(K) + &
+                                           (1. - forces%frac_shelf_v(I,j)) * a_cpl(K)))
+          ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
+          ! CS%a_v(I,j,K) = min(a_cpl_max, forces%frac_shelf_v(I,j) * max(a_shelf(K), a_cpl(K)) + &
+          !                                (1. - forces%frac_shelf_v(I,j)) * a_cpl(K))
+        enddo
       endif
 
       do k=1,nz
-        if (CS%harmonic_visc) then
-          do J=Jsq,Jeq ; do i=is,ie
-            hvel_shelf(i,J,k) = hvel(i,J,k)
-            dz_vel_shelf(i,J,k) = dz_vel(i,J,k)
-          enddo ; enddo
-        else
-          ! Find upwind-biased thickness near the surface.
-          ! Perhaps this needs to be done more carefully, via find_eta.
-          do J=Jsq,Jeq ; do i=is,ie ; if (do_i(i,J)) then
-            h_harm(i,J) = 2. * h(i,j,k) * h(i,j+1,k) &
-                / (h(i,j,k) + h(i,j+1,k) + h_neglect)
-            h_arith(i,J) = 0.5 * (h(i,j+1,k) + h(i,j,k))
-            h_delta(i,J) = h(i,j+1,k) - h(i,j,k)
-            dz_arith(i,J) = 0.5 * (dz(i,j+1,k) + dz(i,j,k))
-          endif ; enddo ; enddo
-
-          ! Project thickness outward across OBCs using a zero-gradient condition.
-          if (associated(OBC)) then
-            if (OBC%v_N_OBCs_on_PE) then
-              do J=Js_N_OBC,Je_N_OBC ; do i=is_N_OBC,ie_N_OBC
-                if (do_i(i,J) .and. OBC%segnum_v(i,J) > 0) then
-                  h_harm(i,J) = h(i,j,k)
-                  h_arith(i,J) = h(i,j,k)
-                  h_delta(i,J) = 0.
-                  dz_arith(i,J) = dz(i,j,k)
-                endif
-              enddo ; enddo
-            endif
-
-            if (OBC%v_S_OBCs_on_PE) then
-              do J=Js_S_OBC,Je_S_OBC ; do i=is_S_OBC,ie_S_OBC
-                if (do_i(i,J) .and. OBC%segnum_v(i,J) < 0) then
-                  h_harm(i,J) = h(i,j+1,k)
-                  h_arith(i,J) = h(i,j+1,k)
-                  h_delta(i,J) = 0.
-                  dz_arith(i,J) = dz(i,j+1,k)
-                endif
-              enddo ; enddo
-            endif
-          endif
-
-          do J=Jsq,Jeq+1 ; do i=is,ie
-            zcol(i,j) = zcol(i,j) - dz(i,j,k)
-          enddo ; enddo
-
-          do J=Jsq,Jeq ; do i=is,je ; if (do_i_shelf(i,J)) then
-            zh(i,J) = zh(i,J) + dz_harm(i,J,k)
-
-            hvel_shelf(i,J,k) = hvel(i,J,k)
-            dz_vel_shelf(i,J,k) = dz_vel(i,J,k)
-
-            if (v(i,J,k) * h_delta(i,J) > 0.) then
-              if (zh(i,J) * I_HTbl(i,J) < CS%harm_BL_val) then
-                hvel_shelf(i,J,k) = min(hvel(i,J,k), h_harm(i,J))
-                dz_vel_shelf(i,J,k) = min(dz_vel(i,J,k), dz_harm(i,J,k))
-              else
-                z2_wt = 1.
-                if (zh(i,J) * I_HTbl(i,J) < 2. * CS%harm_BL_val) &
-                  z2_wt = max(0., min(1., zh(i,J) * I_HTbl(i,J) * I_valBL - 1.))
-
-                z2 = z2_wt * (max(zh(i,J), Ztop_min(i,J) - min(zcol(i,j), zcol(i,j+1))) * I_HTbl(i,J))
-                topfn = 1. / (1. + 0.09 * z2**6)
-
-                h_arith(i,J) = 0.5 * (h(i,j+1,k) + h(i,j,k))
-                dz_arith(i,J) = 0.5 * (dz(i,j+1,k) + dz(i,j,k))
-
-                hvel_shelf(i,J,k) = min(hvel(i,J,k), (1. - topfn) * h_arith(i,J) + topfn * h_harm(i,J))
-                dz_vel_shelf(i,J,k) = min(dz_vel(i,J,k), (1. - topfn) * dz_arith(i,J) + topfn * dz_harm(i,J,k))
-              endif
-            endif
-          endif ; enddo ; enddo
-        endif
-      enddo
-
-      call find_coupling_coef(a_shelf, dz_vel_shelf, do_i_shelf, dz_harm, &
-          bbl_thick, kv_bbl, z_i, h_ml, dt, G, GV, US, CS, visc, Ustar_2d, &
-          tv, work_on_u=.false., OBC=OBC, shelf=.true.)
-
-      do J=Jsq,Jeq ; do i=is,ie ; if (do_i_shelf(i,J)) then
-        CS%a1_shelf_v(i,J) = a_shelf(i,J,1)
-      endif ; enddo ; enddo
-    endif
-  endif
-
-  if (do_any_shelf) then
-    if (CS%use_GL90_in_SSW) then
-      do K=1,nz+1
-        do J=Jsq,Jeq ; do i=is,ie
-          if (do_i_shelf(i,J)) then
-            CS%a_v(i,J,K) = min(a_cpl_max, (forces%frac_shelf_v(i,J) * a_shelf(i,J,k) + &
-                                           (1. - forces%frac_shelf_v(i,J)) * a_cpl(i,J,K)) + a_cpl_gl90(i,J,K))
-            ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
-            ! CS%a_v(i,J,K) = min(a_cpl_max, forces%frac_shelf_v(i,J) * max(a_shelf(i,J,K), a_cpl(i,J,K)) + &
-            !                                (1. - forces%frac_shelf_v(i,J)) * a_cpl(i,J,K))
-            CS%a_v_gl90(i,J,K) = min(a_cpl_max, a_cpl_gl90(i,J,K))
-          elseif (do_i(i,J)) then
-            CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,J,K) + a_cpl_gl90(i,J,K))
-            CS%a_v_gl90(i,J,K) = min(a_cpl_max, a_cpl_gl90(i,J,K))
-          endif
-        enddo ; enddo
+        ! Should we instead take the inverse of the average of the inverses?
+        CS%h_v(I,j,k) = forces%frac_shelf_v(I,j) * hvel_shelf(k) &
+            + (1. - forces%frac_shelf_v(I,j)) * hvel(k) + h_neglect
       enddo
     else
-      do K=1,nz+1
-        do J=Jsq,Jeq ; do i=is,ie
-          if (do_i_shelf(i,J)) then
-            CS%a_v(i,J,K) = min(a_cpl_max, (forces%frac_shelf_v(i,J) * a_shelf(i,J,k) + &
-                                           (1. - forces%frac_shelf_v(i,J)) * a_cpl(i,J,K)))
-            ! This is Alistair's suggestion, but it destabilizes the model. I do not know why. RWH
-            ! CS%a_v(i,J,K) = min(a_cpl_max, forces%frac_shelf_v(i,J) * max(a_shelf(i,J,K), a_cpl(i,J,K)) + &
-            !                                (1. - forces%frac_shelf_v(i,J)) * a_cpl(i,J,K))
-          elseif (do_i(i,J)) then
-            CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,J,K))
-          endif
-        enddo ; enddo
-      enddo
-    endif
-
-
-    do k=1,nz
-      do J=Jsq,Jeq ; do i=is,ie
-        if (do_i_shelf(i,J)) then
-          ! Should we instead take the inverse of the average of the inverses?
-          CS%h_v(i,J,k) = forces%frac_shelf_v(i,J)  * hvel_shelf(i,J,k) + &
-                     (1. - forces%frac_shelf_v(i,J)) * hvel(i,J,k) + h_neglect
-        elseif (do_i(i,J)) then
-          CS%h_v(i,J,k) = hvel(i,J,k) + h_neglect
-        endif
-      enddo ; enddo
-    enddo
-  else
-    if (CS%use_GL90_in_SSW) then
-      do K=1,nz+1
-        do J=Jsq,Jeq ; do i=is,ie ; if (do_i(i,J)) then
-          a_cpl(i,J,K) = a_cpl(i,J,K) + a_cpl_gl90(i,J,K)
-        endif ; enddo ; enddo
-      enddo
-
-      do K=1,nz+1
-        do J=Jsq,Jeq; do i=is,ie ; if (do_i(i,J)) then
-          CS%a_v_gl90(i,J,K) = min(a_cpl_max, a_cpl_gl90(i,J,K))
-        endif ; enddo ; enddo
-      enddo
-    endif
-
-    do concurrent (J=Jsq:Jeq)
-      do K=1,nz+1
-        do concurrent (i=is:ie, do_i(i,j))
-          CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(i,J,K))
+      if (CS%use_GL90_in_SSW) then
+        do K=1,nz+1
+          a_cpl(K) = a_cpl(K) + a_cpl_gl90(K)
         enddo
+
+        do K=1,nz+1
+          CS%a_v_gl90(i,J,K) = min(a_cpl_max, a_cpl_gl90(K))
+        enddo
+      endif
+
+      do K=1,nz+1
+        CS%a_v(i,J,K) = min(a_cpl_max, a_cpl(K))
       enddo
 
       do k=1,nz
-        do concurrent (i=is:ie, do_i(i,j))
-          CS%h_v(i,J,k) = hvel(i,J,k) + h_neglect
-        enddo
+        CS%h_v(i,J,k) = hvel(k) + h_neglect
       enddo
-    enddo
-  endif
+    endif
 
-  !$omp target exit data map(release: a_cpl, h_ml)
+    ! Diagnose total Kv at v-points
+    if (CS%id_Kv_v > 0) then
+      do k=1,nz
+        Kv_v(i,J,k) = 0.5 * (CS%a_v(i,J,K) + CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
+      enddo
+    endif
 
-  !$omp target exit data map(delete: kv_bbl, bbl_thick, I_Hbbl)
-  !$omp target exit data map(delete: h_harm, h_arith, dz_harm, h_delta, dz_arith, z_i, hvel, dz_vel)
-  !$omp target exit data map(delete: zh, zcol)
-  !$omp target exit data map(delete: Dmin, zi_dir)
-  !$omp target exit data map(delete: do_i)
+    ! Diagnose GL90 Kv at v-points
+    if (CS%id_Kv_gl90_v > 0) then
+      do k=1,nz
+        Kv_gl90_v(i,J,k) = 0.5 * (CS%a_v_gl90(i,J,K) + CS%a_v_gl90(i,J,K+1)) * CS%h_v(i,J,k)
+      enddo
+    endif
+  endif ; enddo ; enddo
+
+  !$omp target exit data map(delete: z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &
+  !$omp& tv, varmix, hvel_shelf, dz_vel_shelf, a_shelf, hml_u, kv_u, kv_gl90_u)
+
+  ! These are used in diagnostics, so they need to be mapped back and forth
+  !$omp target exit data map(from: hML_u, kv_u, kv_gl90_u )
+  !$omp target exit data map(from: hML_v, kv_v, kv_gl90_v)
+
   !$omp target exit data map(delete: Ustar_2d)
 
-  ! Diagnose total Kv at v-points
-  if (CS%id_Kv_v > 0) then
-    do k=1,nz
-      do J=Jsq,Jeq ; do i=is,ie ; if (do_i(i,J)) then
-        Kv_v(i,J,k) = 0.5 * (CS%a_v(i,J,K)+CS%a_v(i,J,K+1)) * CS%h_v(i,J,k)
-      endif ; enddo ; enddo
-    enddo
-  endif
-
-  ! Diagnose GL90 Kv at v-points
-  if (CS%id_Kv_gl90_v > 0) then
-    do k=1,nz
-      do J=Jsq,Jeq ; do i=is,ie ; if (do_i(i,J)) then
-        Kv_gl90_v(i,J,k) = 0.5 * (CS%a_v_gl90(i,J,K)+CS%a_v_gl90(i,J,K+1)) * CS%h_v(i,J,k)
-      endif ; enddo ; enddo
-    enddo
-  endif
-
   if (CS%debug) then
-    !$omp target update from(CS%h_u, CS%h_v)
-    call uvchksum("vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
+    call uvchksum("loop vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
                   unscale=GV%H_to_m, scalar_pair=.true.)
-    !$omp target update from(CS%a_u, CS%a_v)
     call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, &
                   unscale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
     if (allocated(hML_u) .and. allocated(hML_v)) &
@@ -2399,32 +2106,542 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
 
 end subroutine vertvisc_coef
 
+!> Calculate the 'coupling coefficient' (a_cpl) at the interfaces.
+!! If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the adjacent
+!! layer thicknesses are used to calculate a_cpl near the bottom.
+pure subroutine find_coupling_coef_k(a_cpl, hvel, i, j, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
+                              dt, G, GV, US, CS, visc, Ustar_2d, tv, work_on_u, OBC, shelf)
+  !$omp declare target
+  type(ocean_grid_type),     intent(in)  :: G  !< Ocean grid structure
+  type(verticalGrid_type),   intent(in)  :: GV !< Ocean vertical grid structure
+  type(unit_scale_type),     intent(in)  :: US !< A dimensional unit scaling type
+  real, dimension(SZK_(GV)+1), &
+                             intent(out) :: a_cpl !< Coupling coefficient across interfaces [H T-1 ~> m s-1 or Pa s m-1]
+  real, dimension(SZK_(GV)), &
+                             intent(in)  :: hvel !< Distance between interfaces at velocity points [Z ~> m]
+  integer,                   intent(in)  :: i    !< Column i-index
+  integer,                   intent(in)  :: j    !< Column j-index
+  real, dimension(SZK_(GV)), &
+                             intent(in)  :: h_harm !< Harmonic mean of thicknesses around a velocity
+                                                   !! grid point [Z ~> m]
+  real, intent(in)  :: bbl_thick !< Bottom boundary layer thickness [Z ~> m]
+  real, intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, exclusive of
+                                                   !! any depth-dependent contributions from
+                                                   !! visc%Kv_shear [H Z T-1 ~> m2 s-1 or Pa s]
+  real, dimension(SZK_(GV)+1), intent(in) :: z_i !< Estimate of interface heights above the bottom,
+                                                 !! normalized by the bottom boundary layer thickness [nondim]
+  real,                      intent(out) :: h_ml !< Mixed layer depth [Z ~> m]
+  real,                      intent(in)  :: dt   !< Time increment [T ~> s]
+  type(vertvisc_CS),         intent(in)  :: CS   !< Vertical viscosity control structure
+  type(vertvisc_type),       intent(in)  :: visc !< Structure containing viscosities and bottom drag
+  real, dimension(SZI_(G),SZJ_(G)), &
+                             intent(in)  :: Ustar_2d !< The wind friction velocity, calculated using
+                                                 !! the Boussinesq reference density or the
+                                                 !! time-evolving surface density in non-Boussinesq
+                                                 !! mode [Z T-1 ~> m s-1]
+  type(thermo_var_ptrs),     intent(in)  :: tv   !< A structure containing pointers to any available
+                                                 !! thermodynamic fields.
+  logical,                   intent(in)  :: work_on_u !< If true, u-points are being calculated,
+                                                  !! otherwise they are v-points
+  type(ocean_OBC_type),      pointer     :: OBC   !< Open boundary condition structure
+  logical,         optional, intent(in)  :: shelf !< If present and true, use a surface boundary
+                                                  !! condition appropriate for an ice shelf.
+
+  real :: u_star    ! ustar at a velocity point [Z T-1 ~> m s-1]
+  real :: tau_mag   ! The magnitude of the wind stress at a velocity point including gustiness [H Z T-2 ~> m2 s-2 or Pa]
+  real :: absf      ! The average of the neighboring absolute values of f [T-1 ~> s-1].
+  real :: rho_av1   ! The harmonic mean surface layer density at velocity points [R ~> kg m-3]
+  real :: z_t       ! The distance from the top, sometimes normalized
+                    ! by Hmix, [Z ~> m] or [nondim].
+  real :: kv_TBL    ! The viscosity in a top boundary layer under ice [H Z T-1 ~> m2 s-1 or Pa s]
+  real :: tbl_thick ! The thickness of the top boundary layer [Z ~> m]
+  real :: Kv_add    ! A viscosity to add [H Z T-1 ~> m2 s-1 or Pa s]
+  real :: Kv_tot    ! The total viscosity at an interface [H Z T-1 ~> m2 s-1 or Pa s]
+  integer :: nk_in_ml   ! The index of the deepest interface in the mixed layer.
+  real :: h_shear ! The distance over which shears occur [Z ~> m].
+  real :: dhc     ! The distance between the center of adjacent layers [Z ~> m].
+  real :: visc_ml ! The mixed layer viscosity [H Z T-1 ~> m2 s-1 or Pa s].
+  real :: I_Hmix  ! The inverse of the mixed layer thickness [Z-1 ~> m-1].
+  real :: a_ml    ! The layer coupling coefficient across an interface in
+                  ! the mixed layer [H T-1 ~> m s-1 or Pa s m-1].
+  real :: a_floor ! A lower bound on the layer coupling coefficient across an interface in
+                  ! the mixed layer [H T-1 ~> m s-1 or Pa s m-1].
+  real :: I_amax  ! The inverse of the maximum coupling coefficient [T H-1 ~> s m-1 or s m2 kg-1].
+  real :: temp1   ! A temporary variable [Z2 ~> m2]
+  real :: ustar2_denom ! A temporary variable in the surface boundary layer turbulence
+                  ! calculations [H Z-1 T-1 ~> s-1 or kg m-3 s-1]
+  real :: h_neglect ! A vertical distance that is so small it is usually lost
+                  ! in roundoff and can be neglected [Z ~> m].
+  real :: z2      ! A copy of z_i [nondim]
+  real :: botfn   ! A function that is 1 at the bottom and small far from it [nondim]
+  real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
+  real :: kv_top  ! A viscosity associated with the top boundary layer [H Z T-1 ~> m2 s-1 or Pa s]
+  logical :: do_shelf, do_OBCs, can_exit
+  integer :: k
+  integer :: nz, max_nk
+
+  nz = GV%ke
+
+  h_neglect = GV%dZ_subroundoff
+
+  if (CS%answer_date < 20190101) then
+    !   The maximum coupling coefficient was originally introduced to avoid
+    ! truncation error problems in the tridiagonal solver. Effectively, the 1e-10
+    ! sets the maximum coupling coefficient increment to 1e10 m per timestep.
+    I_amax = (1.0e-10*GV%H_to_m) * dt
+  else
+    I_amax = 0.0
+  endif
+
+  do_shelf = .false. ; if (present(shelf)) do_shelf = shelf
+
+  do_OBCs = .false.
+  !if (associated(OBC)) then
+  !  if (work_on_u) then
+  !    do_OBCS = OBC%u_E_OBCs_on_PE .or. OBC%u_W_OBCs_on_PE
+  !  else
+  !    do_OBCS = OBC%v_N_OBCs_on_PE .or. OBC%v_S_OBCs_on_PE
+  !  endif
+  !endif
+
+  a_cpl(:) = 0.
+  h_ml = 0.
+
+  if (CS%Kvml_invZ2 > 0. .and. .not. do_shelf) then
+    I_Hmix = 1. / (CS%Hmix + h_neglect)
+    z_t = h_neglect * I_Hmix
+  endif
+
+  do K=2,nz
+    Kv_tot = CS%Kv
+
+    if (CS%Kvml_invZ2 > 0. .and. .not. do_shelf) then
+      ! This is an older (vintage ~1997) way to prevent wind stresses from driving very
+      ! large flows in nearly massless near-surface layers when there is not a physically-
+      ! based surface boundary layer parameterization.  It does not have a plausible
+      ! physical basis, and probably should not be used.
+      z_t = z_t + h_harm(k-1) * I_Hmix
+      Kv_tot = CS%Kv + CS%Kvml_invZ2 / ((z_t * z_t) *  &
+               (1. + 0.09 * z_t * z_t * z_t * z_t * z_t * z_t))
+    endif
+
+    if (associated(visc%Kv_shear)) then
+      ! Add in viscosities that are determined by physical processes that are handled in
+      ! other modules, and which do not respond immediately to the changing layer thicknesses.
+      ! These processes may include shear-driven mixing or contributions from some boundary
+      ! layer turbulence schemes.  Other viscosity contributions that respond to the evolving
+      ! layer thicknesses or the surface wind stresses are added later.
+      if (work_on_u) then
+        Kv_add = 0.5 * (visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
+
+        if (do_OBCs) then
+          if (OBC%u_E_OBCs_on_PE) then
+            if (OBC%segnum_u(I,j) > 0) then
+              Kv_add = visc%Kv_shear(i,j,k)
+            endif
+          endif
+
+          if (OBC%u_W_OBCs_on_PE) then
+            if (OBC%segnum_u(I,j) < 0) then
+              Kv_add = visc%Kv_shear(i+1,j,k)
+            endif
+          endif
+        endif
+
+        Kv_tot = Kv_tot + Kv_add
+      else
+        Kv_add = 0.5 * (visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
+
+        if (do_OBCs) then
+          if (OBC%v_N_OBCs_on_PE) then
+            if (OBC%segnum_v(i,J) > 0) then
+              Kv_add = visc%Kv_shear(i,j,k)
+            endif
+          endif
+
+          if (OBC%v_S_OBCs_on_PE) then
+            if (OBC%segnum_v(i,J) < 0) then
+              Kv_add = visc%Kv_shear(i,j+1,k)
+            endif
+          endif
+        endif
+
+        Kv_tot = Kv_tot + Kv_add
+      endif
+    endif
+
+    if (associated(visc%Kv_shear_Bu)) then
+      ! This is similar to what was done above, but for contributions coming from the corner
+      ! (vorticity) points.  Because OBCs run through the faces and corners there is no need
+      ! to further modify these viscosities here to take OBCs into account.
+      if (work_on_u) then
+        Kv_tot = Kv_tot + 0.5 * (visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
+      else
+        Kv_tot = Kv_tot + 0.5 * (visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
+      endif
+    endif
+
+    ! Set the viscous coupling coefficients, excluding surface mixed layer contributions
+    ! for now, but including viscous bottom drag, working up from the bottom.
+    if (CS%bottomdraglaw) then
+      !    botfn determines when a point is within the influence of the bottom
+      !  boundary layer, going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(k)
+      botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
+
+      Kv_tot = Kv_tot + (kv_bbl - CS%Kv) * botfn
+      dhc = 0.5 * (hvel(k) + hvel(k-1))
+      if (dhc > bbl_thick) then
+        h_shear = ((1. - botfn) * dhc + botfn * bbl_thick) + h_neglect
+      else
+        h_shear = dhc + h_neglect
+      endif
+
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(K) = Kv_tot / (h_shear + (I_amax * Kv_tot))
+    elseif (abs(CS%Kv_extra_bbl) > 0.0) then
+      ! There is a simple enhancement of the near-bottom viscosities, but no
+      ! adjustment of the viscous coupling length scales to give a particular
+      ! bottom stress.
+
+      !    botfn determines when a point is within the influence of the bottom
+      !  boundary layer, going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(k)
+      botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
+
+      Kv_tot = Kv_tot + CS%Kv_extra_bbl * botfn
+      h_shear = 0.5 * (hvel(k) + hvel(k-1) + h_neglect)
+
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(K) = Kv_tot / (h_shear + I_amax * Kv_tot)
+    else
+      ! Any near-bottom viscous enhancements were already incorporated into
+      ! Kv_tot, and there is no adjustment of the viscous coupling length
+      ! scales to give a particular bottom stress.
+
+      h_shear = 0.5 * (hvel(k) + hvel(k-1) + h_neglect)
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(K) = Kv_tot / (h_shear + I_amax * Kv_tot)
+    endif
+  enddo
+
+  ! Assign the bottom coupling coefficients
+  if (CS%bottomdraglaw) then
+    dhc = hvel(nz) * 0.5
+    a_cpl(nz+1) = kv_bbl / ((min(dhc, bbl_thick) + h_neglect) + I_amax * kv_bbl)
+  elseif (abs(CS%Kv_extra_bbl) > 0.0) then
+    a_cpl(nz+1) = (CS%Kv + CS%Kv_extra_bbl) &
+        / ((0.5 * hvel(nz) + h_neglect) + I_amax * (CS%Kv + CS%Kv_extra_bbl))
+  else
+    a_cpl(nz+1) = CS%Kv / ((0.5 * hvel(nz) + h_neglect) + I_amax * CS%Kv)
+  endif
+
+  ! Add surface intensified viscous coupling, either as a no-slip boundary condition under a
+  ! rigid ice-shelf, or due to wind-stress driven surface boundary layer mixing that has not
+  ! already been added via visc%Kv_shear.
+  if (do_shelf) then
+    ! Set the coefficients to include the no-slip surface stress.
+    if (work_on_u) then
+      kv_TBL = visc%Kv_tbl_shelf_u(I,j)
+      tbl_thick = visc%tbl_thick_shelf_u(I,j) + h_neglect
+    else
+      kv_TBL = visc%Kv_tbl_shelf_v(i,J)
+      tbl_thick = visc%tbl_thick_shelf_v(i,J) + h_neglect
+    endif
+    z_t = 0.0
+
+    ! If a_cpl(1) were not already 0, it would be added here.
+    if (0.5 * hvel(1) > tbl_thick) then
+      a_cpl(1) = kv_TBL / (tbl_thick + I_amax * kv_TBL)
+    else
+      a_cpl(1) = kv_TBL / ((0.5 * hvel(1) + h_neglect) + I_amax * kv_TBL)
+    endif
+
+    do K=2,nz
+      z_t = z_t + hvel(k-1) / tbl_thick
+      topfn = 1. / (1. + 0.09 * z_t**6)
+
+      dhc = 0.5 * (hvel(k) + hvel(k-1))
+      if (dhc > tbl_thick) then
+        h_shear = ((1. - topfn) * dhc + topfn * tbl_thick) + h_neglect
+      else
+        h_shear = dhc + h_neglect
+      endif
+
+      kv_top = topfn * kv_TBL
+      a_cpl(K) = a_cpl(K) + kv_top / (h_shear + I_amax * kv_top)
+    enddo
+  elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0) .or. CS%fixed_LOTW_ML .or. CS%apply_LOTW_floor) then
+
+    ! Find the friction velocity and the absolute value of the Coriolis parameter at this point.
+    ! Zero out the friction velocity on land points.
+    u_star = 0.
+    tau_mag = 0.
+
+    if (allocated(tv%SpV_avg)) then
+      rho_av1 = 0.
+
+      if (work_on_u) then
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i+1,j))
+        rho_av1 = 2. / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i+1,j,1))
+        absf = 0.5 * (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+
+        if (do_OBCs) then
+          if (OBC%u_E_OBCs_on_PE) then
+            if (OBC%segnum_u(I,j) > 0) then
+              u_star = Ustar_2d(i,j)
+              rho_av1 = 1. / tv%SpV_avg(i,j,1)
+            endif
+          endif
+
+          if (OBC%u_W_OBCs_on_PE) then
+            if (OBC%segnum_u(I,j) < 0) then
+              u_star = Ustar_2d(i+1,j)
+              rho_av1 = 1. / tv%SpV_avg(i+1,j,1)
+            endif
+          endif
+        endif
+      else
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i,j+1))
+        rho_av1 = 2. / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i,j+1,1))
+        absf = 0.5 * (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+
+        if (do_OBCs) then
+          if (OBC%v_N_OBCs_on_PE) then
+            if (OBC%segnum_v(i,J) > 0) then
+              u_star = Ustar_2d(i,j)
+              rho_av1 = 1. / tv%SpV_avg(i,j,1)
+            endif
+          endif
+
+          if (OBC%v_S_OBCs_on_PE) then
+            if (OBC%segnum_v(i,J) < 0) then
+              u_star = Ustar_2d(i,j+1)
+              rho_av1 = 1. / tv%SpV_avg(i,j+1,1)
+            endif
+          endif
+        endif
+      endif
+
+      tau_mag = GV%RZ_to_H * rho_av1 * u_star**2
+    else ! (.not.allocated(tv%SpV_avg))
+      if (work_on_u) then
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i+1,j))
+        absf = 0.5 * (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
+
+        if (do_OBCs) then
+          if (OBC%u_E_OBCs_on_PE) then
+            if (OBC%segnum_u(I,j) > 0) then
+              u_star = Ustar_2d(i,j)
+            endif
+          endif
+
+          if (OBC%u_W_OBCs_on_PE) then
+            if (OBC%segnum_u(I,j) < 0) then
+              u_star = Ustar_2d(i+1,j)
+            endif
+          endif
+        endif
+      else
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i,j+1))
+        absf = 0.5 * (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
+
+        if (do_OBCs) then
+          if (OBC%v_N_OBCs_on_PE) then
+              if (OBC%segnum_v(i,J) > 0) then
+                u_star = Ustar_2d(i,j)
+              endif
+          endif
+
+          if (OBC%v_S_OBCs_on_PE) then
+            if (OBC%segnum_v(i,J) < 0) then
+              u_star = Ustar_2d(i,j+1)
+            endif
+          endif
+        endif
+      endif
+
+      tau_mag = GV%Z_to_H * u_star**2
+    endif
+
+    ! Determine the thickness of the surface ocean boundary layer and its extent in index space.
+    nk_in_ml = 0
+
+    if (CS%dynamic_viscous_ML) then
+      ! The fractional number of layers that are within the viscous boundary layer were
+      ! previously stored in visc%nkml_visc_[uv].
+      h_ml = h_neglect
+      max_nk = 0
+
+      if (work_on_u) then
+        nk_in_ml = ceiling(visc%nkml_visc_u(I,j))
+        max_nk = max(max_nk, nk_in_ml)
+
+        do k=1,max_nk
+          if (k <= visc%nkml_visc_u(I,j)) then ! This layer is all in the ML.
+            h_ml = h_ml + hvel(k)
+          elseif (k < visc%nkml_visc_u(I,j) + 1.) then ! Part of this layer is in the ML.
+            h_ml = h_ml + ((visc%nkml_visc_u(I,j) + 1.) - k) * hvel(k)
+          endif
+        enddo
+      else
+        nk_in_ml = ceiling(visc%nkml_visc_v(i,J))
+        max_nk = max(max_nk, nk_in_ml)
+
+        do k=1,max_nk
+          if (k <= visc%nkml_visc_v(i,J)) then ! This layer is all in the ML.
+            h_ml = h_ml + hvel(k)
+          elseif (k < visc%nkml_visc_v(i,J) + 1.) then ! Part of this layer is in the ML.
+            h_ml = h_ml + ((visc%nkml_visc_v(i,J) + 1.) - k) * hvel(k)
+          endif
+        enddo
+      endif
+    elseif (GV%nkml>0) then
+      ! This is a simple application of a refined-bulk mixed layer with GV%nkml sublayers.
+      max_nk = GV%nkml
+      nk_in_ml = GV%nkml
+
+      h_ml = h_neglect
+
+      do k=1,GV%nkml
+        h_ml = h_ml + hvel(k)
+      enddo
+    elseif (CS%fixed_LOTW_ML .or. CS%apply_LOTW_floor) then
+      ! Determine which interfaces are within CS%Hmix of the surface, and set the viscous
+      ! boundary layer thickness to the the smaller of CS%Hmix and the depth of the ocean.
+      h_ml = 0.0
+      do k=1,nz
+        can_exit = .true.
+        if (h_ml < CS%Hmix) then
+          nk_in_ml = k
+
+          if (h_ml + hvel(k) < CS%Hmix) then
+            h_ml = h_ml + hvel(k)
+            can_exit = .false.  ! Part of the next deeper layer is also in the mixed layer.
+          else
+            h_ml = CS%Hmix
+          endif
+        endif
+
+        if (can_exit) exit  ! All remaining layers in this row are below the mixed layer depth.
+      enddo
+
+      ! This made more sense in the slab/layer solvers...
+      max_nk = 0
+      max_nk = max(max_nk, nk_in_ml)
+    endif
+
+    ! Avoid working on land or on columns where the viscous coupling could not be increased.
+    if (u_star <= 0.) nk_in_ml = 0
+
+    ! Set the viscous coupling at the interfaces as the larger of what was previously
+    ! set and the contributions from the surface boundary layer.
+    z_t = 0.0
+    if (CS%apply_LOTW_floor .and. &
+        (CS%dynamic_viscous_ML .or. GV%nkml > 0 .or. CS%fixed_LOTW_ML)) then
+      do K=2,max_nk
+        if (k <= nk_in_ml) then
+          z_t = z_t + hvel(k-1)
+
+          !   The viscosity in visc_ml is set to go to 0 at the mixed layer top and bottom
+          ! (in a log-layer) and be further limited by rotation to give the natural Ekman length.
+          temp1 = (z_t * h_ml - z_t * z_t)
+          if (GV%Boussinesq) then
+            ustar2_denom = (CS%vonKar * GV%Z_to_H * u_star**2) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          else
+            ustar2_denom = (CS%vonKar * tau_mag) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          endif
+
+          visc_ml = temp1 * ustar2_denom
+          ! Set the viscous coupling based on the model's vertical resolution.  The omission of
+          ! the I_amax factor here is consistent with answer dates above 20190101.
+          a_ml = visc_ml / (0.25 * (hvel(k) + hvel(k-1) + h_neglect))
+
+          ! As a floor on the viscous coupling, assume that the length scale in the denominator can
+          ! not be larger than the distance from the surface, consistent with a logarithmic velocity
+          ! profile.  This is consistent with visc_ml, but cancels out common factors of z_t.
+          a_floor = (h_ml - z_t) * ustar2_denom
+
+          ! Choose the largest estimate of a_cpl.
+          a_cpl(K) = max(a_cpl(K), a_ml, a_floor)
+          ! An option could be added to change this to: a_cpl(i,K) = max(a_cpl(i,K) + a_ml, a_floor)
+        endif
+      enddo
+    elseif (CS%apply_LOTW_floor) then
+      do K=2,max_nk
+        if (k <= nk_in_ml) then
+          z_t = z_t + hvel(k-1)
+
+          temp1 = (z_t * h_ml - z_t * z_t)
+          if (GV%Boussinesq) then
+            ustar2_denom = (CS%vonKar * GV%Z_to_H * u_star**2) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          else
+            ustar2_denom = (CS%vonKar * tau_mag) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          endif
+
+          ! As a floor on the viscous coupling, assume that the length scale in the denominator can not
+          ! be larger than the distance from the surface, consistent with a logarithmic velocity profile.
+          a_cpl(K) = max(a_cpl(K), (h_ml - z_t) * ustar2_denom)
+        endif
+      enddo
+    else
+      do K=2,max_nk
+        if (k <= nk_in_ml) then
+          z_t = z_t + hvel(k-1)
+
+          temp1 = (z_t * h_ml - z_t * z_t)
+          !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
+          ! and be further limited by rotation to give the natural Ekman length.
+          ! The following expressions are mathematically equivalent.
+          if (GV%Boussinesq .or. (CS%answer_date < 20230601)) then
+            visc_ml = u_star * CS%vonKar * (GV%Z_to_H * temp1 * u_star) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          else
+            visc_ml = CS%vonKar * (temp1 * tau_mag) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          endif
+          a_ml = visc_ml / (0.25 * (hvel(k) + hvel(k-1) + h_neglect) + 0.5 * I_amax * visc_ml)
+
+          ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
+          a_cpl(K) = max(a_cpl(K), a_ml)
+          ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
+        endif
+      enddo
+    endif
+  endif
+end subroutine find_coupling_coef_k
+
 
 !> Calculate the 'coupling coefficient' (a_cpl) at the interfaces.
 !! If BOTTOMDRAGLAW is defined, the minimum of Hbbl and half the adjacent
 !! layer thicknesses are used to calculate a_cpl near the bottom.
-subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
+subroutine find_coupling_coef(a_cpl, hvel, i, j, h_harm, bbl_thick, kv_bbl, z_i, h_ml, &
                               dt, G, GV, US, CS, visc, Ustar_2d, tv, work_on_u, OBC, shelf)
+  !$omp declare target
   type(ocean_grid_type),     intent(in)  :: G  !< Ocean grid structure
   type(verticalGrid_type),   intent(in)  :: GV !< Ocean vertical grid structure
   type(unit_scale_type),     intent(in)  :: US !< A dimensional unit scaling type
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
+  real, dimension(SZK_(GV)+1), &
                              intent(out) :: a_cpl !< Coupling coefficient across interfaces [H T-1 ~> m s-1 or Pa s m-1]
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)), &
+  real, dimension(SZK_(GV)), &
                              intent(in)  :: hvel !< Distance between interfaces at velocity points [Z ~> m]
-  logical, dimension(SZIB_(G),SZJB_(G)), &
-                             intent(in)  :: do_i !< If true, determine coupling coefficient for a column
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)), &
+  integer,                   intent(in)  :: i    !< Column i-index
+  integer,                   intent(in)  :: j    !< Column j-index
+  real, dimension(SZK_(GV)), &
                              intent(in)  :: h_harm !< Harmonic mean of thicknesses around a velocity
                                                    !! grid point [Z ~> m]
-  real, dimension(SZIB_(G),SZJB_(G)), intent(in)  :: bbl_thick !< Bottom boundary layer thickness [Z ~> m]
-  real, dimension(SZIB_(G),SZJB_(G)), intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, exclusive of
+  real, intent(in)  :: bbl_thick !< Bottom boundary layer thickness [Z ~> m]
+  real, intent(in)  :: kv_bbl !< Bottom boundary layer viscosity, exclusive of
                                                    !! any depth-dependent contributions from
                                                    !! visc%Kv_shear [H Z T-1 ~> m2 s-1 or Pa s]
-  real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)+1), &
+  real, dimension(SZK_(GV)+1), &
                              intent(in)  :: z_i  !< Estimate of interface heights above the bottom,
                                                  !! normalized by the bottom boundary layer thickness [nondim]
-  real, dimension(SZIB_(G),SZJB_(G)), intent(out) :: h_ml !< Mixed layer depth [Z ~> m]
+  real, intent(out) :: h_ml !< Mixed layer depth [Z ~> m]
   real,                      intent(in)  :: dt   !< Time increment [T ~> s]
   type(vertvisc_CS),         intent(in)  :: CS   !< Vertical viscosity control structure
   type(vertvisc_type),       intent(in)  :: visc !< Structure containing viscosities and bottom drag
@@ -2443,12 +2660,10 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
 
   ! Local variables
 
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
+  real :: &
     u_star, &   ! ustar at a velocity point [Z T-1 ~> m s-1]
-    u_star_cpu, &   ! ustar at a velocity point [Z T-1 ~> m s-1]
     tau_mag, &  ! The magnitude of the wind stress at a velocity point including gustiness [H Z T-2 ~> m2 s-2 or Pa]
     absf, &     ! The average of the neighboring absolute values of f [T-1 ~> s-1].
-    absf_cpu, &     ! The average of the neighboring absolute values of f [T-1 ~> s-1].
     rho_av1, &  ! The harmonic mean surface layer density at velocity points [R ~> kg m-3]
     z_t, &      ! The distance from the top, sometimes normalized
                 ! by Hmix, [Z ~> m] or [nondim].
@@ -2456,7 +2671,7 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
     tbl_thick, &! The thickness of the top boundary layer [Z ~> m]
     Kv_add, &   ! A viscosity to add [H Z T-1 ~> m2 s-1 or Pa s]
     Kv_tot      ! The total viscosity at an interface [H Z T-1 ~> m2 s-1 or Pa s]
-  integer, dimension(SZIB_(G),SZJB_(G)) :: &
+  integer :: &
     nk_in_ml      ! The index of the deepest interface in the mixed layer.
   real :: h_shear ! The distance over which shears occur [Z ~> m].
   real :: dhc     ! The distance between the center of adjacent layers [Z ~> m].
@@ -2477,18 +2692,9 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   real :: topfn   ! A function that is 1 at the top and small far from it [nondim]
   real :: kv_top  ! A viscosity associated with the top boundary layer [H Z T-1 ~> m2 s-1 or Pa s]
   logical :: do_shelf, do_OBCs, can_exit
-  integer :: i, j, k
-  integer :: is, ie, js, je
+  integer :: k
   integer :: nz, max_nk
-  integer :: is_N_OBC, is_S_OBC, Is_E_OBC, Is_W_OBC, ie_N_OBC, ie_S_OBC, Ie_E_OBC, Ie_W_OBC
-  integer :: js_N_OBC, js_S_OBC, Js_E_OBC, Js_W_OBC, je_N_OBC, je_S_OBC, Je_E_OBC, Je_W_OBC
-  if (work_on_u) then
-    Is = G%IscB ; Ie = G%IecB
-    js = G%jsc ; je = G%jec
-  else
-    is = G%isc ; ie = G%iec
-    Js = G%JscB ; Je = G%JecB
-  endif
+
   nz = GV%ke
 
   h_neglect = GV%dZ_subroundoff
@@ -2508,54 +2714,30 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
   if (associated(OBC)) then
     if (work_on_u) then
       do_OBCS = OBC%u_E_OBCs_on_PE .or. OBC%u_W_OBCs_on_PE
-      Is_E_OBC = max(G%IscB, OBC%Is_u_E_obc) ; Ie_E_OBC = min(G%IecB, OBC%Ie_u_E_obc)
-      Is_W_OBC = max(G%IscB, OBC%Is_u_W_obc) ; Ie_W_OBC = min(G%IecB, OBC%Ie_u_W_obc)
-      js_E_OBC = max(G%jsc, OBC%js_u_E_obc) ; je_E_OBC = min(G%jec, OBC%je_u_E_obc)
-      js_W_OBC = max(G%jsc, OBC%js_u_W_obc) ; je_W_OBC = min(G%jec, OBC%je_u_W_obc)
     else
       do_OBCS = OBC%v_N_OBCs_on_PE .or. OBC%v_S_OBCs_on_PE
-      is_N_OBC = max(G%isc, OBC%is_v_N_obc) ; ie_N_OBC = min(G%iec, OBC%ie_v_N_obc)
-      is_S_OBC = max(G%isc, OBC%is_v_S_obc) ; ie_S_OBC = min(G%iec, OBC%ie_v_S_obc)
-      Js_N_OBC = max(G%JscB, OBC%Js_v_N_obc) ; Je_N_OBC = min(G%JecB, OBC%Je_v_N_obc)
-      Js_S_OBC = max(G%JscB, OBC%Js_v_S_obc) ; Je_S_OBC = min(G%JecB, OBC%Je_v_S_obc)
     endif
   endif
 
-  ! TODO: Fix bounds
-  do concurrent (k=1:nz, j=js:je,i=is:ie)
-    a_cpl(i,j,k) = 0.0
-  enddo
-
-  do concurrent (j=js:je, i=is:ie)
-    h_ml(i,j) = 0.0
-  enddo
-
-  !$omp target enter data map(alloc: z_t, Kv_tot, Kv_add)
-  !$omp target enter data map(alloc: u_star, absf, tau_mag)
-  !$omp target enter data map(to: visc%Kv_shear)
+  a_cpl(:) = 0.
+  h_ml = 0.
 
   if (CS%Kvml_invZ2 > 0. .and. .not. do_shelf) then
     I_Hmix = 1. / (CS%Hmix + h_neglect)
-    do concurrent (j=js:je, i=is:ie)
-      z_t(i,j) = h_neglect * I_Hmix
-    enddo
+    z_t = h_neglect * I_Hmix
   endif
 
   do K=2,nz
-    do concurrent (j=js:je, i=is:ie)
-      Kv_tot(i,j) = CS%Kv
-    enddo
+    Kv_tot = CS%Kv
 
     if (CS%Kvml_invZ2 > 0. .and. .not. do_shelf) then
       ! This is an older (vintage ~1997) way to prevent wind stresses from driving very
       ! large flows in nearly massless near-surface layers when there is not a physically-
       ! based surface boundary layer parameterization.  It does not have a plausible
       ! physical basis, and probably should not be used.
-      do concurrent (j=js:je, i=is:ie, do_i(i,j))
-        z_t(i,j) = z_t(i,j) + h_harm(i,j,k-1) * I_Hmix
-        Kv_tot(i,j) = CS%Kv + CS%Kvml_invZ2 / ((z_t(i,j)*z_t(i,j)) *  &
-                 (1. + 0.09 * z_t(i,j) * z_t(i,j) * z_t(i,j) * z_t(i,j) * z_t(i,j) * z_t(i,j)))
-      enddo
+      z_t = z_t + h_harm(k-1) * I_Hmix
+      Kv_tot = CS%Kv + CS%Kvml_invZ2 / ((z_t * z_t) *  &
+               (1. + 0.09 * z_t * z_t * z_t * z_t * z_t * z_t))
     endif
 
     if (associated(visc%Kv_shear)) then
@@ -2565,59 +2747,41 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       ! layer turbulence schemes.  Other viscosity contributions that respond to the evolving
       ! layer thicknesses or the surface wind stresses are added later.
       if (work_on_u) then
-        ! FIXME: Uppercase i?
-        do concurrent (j=js:je, i=is:ie, do_i(i,j))
-          Kv_add(i,j) = 0.5*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
-        enddo
+        Kv_add = 0.5 * (visc%Kv_shear(i,j,k) + visc%Kv_shear(i+1,j,k))
 
         if (do_OBCs) then
           if (OBC%u_E_OBCs_on_PE) then
-            do j=js_E_OBC,je_E_OBC ; do I=Is_E_OBC,Ie_E_OBC
-              if (do_i(I,j) .and. OBC%segnum_u(I,j) > 0) then
-                Kv_add(i,j) = visc%Kv_shear(i,j,k)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_u(I,j) > 0) then
+              Kv_add = visc%Kv_shear(i,j,k)
+            endif
           endif
 
           if (OBC%u_W_OBCs_on_PE) then
-            do j=js_W_OBC,je_W_OBC ; do I=Is_W_OBC,Ie_W_OBC
-              if (do_i(I,j) .and. OBC%segnum_u(I,j) < 0) then
-                Kv_add(i,j) = visc%Kv_shear(i+1,j,k)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_u(I,j) < 0) then
+              Kv_add = visc%Kv_shear(i+1,j,k)
+            endif
           endif
         endif
 
-        do concurrent (j=js:je, i=is:ie, do_i(i,j))
-          Kv_tot(i,j) = Kv_tot(i,j) + Kv_add(i,j)
-        enddo
+        Kv_tot = Kv_tot + Kv_add
       else
-        ! FIXME: Uppercase j?
-        do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-          Kv_add(i,j) = 0.5*(visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
-        endif ; enddo ; enddo
+        Kv_add = 0.5 * (visc%Kv_shear(i,j,k) + visc%Kv_shear(i,j+1,k))
 
         if (do_OBCs) then
           if (OBC%v_N_OBCs_on_PE) then
-            do J=Js_N_OBC,Je_N_OBC ; do i=is_N_OBC,ie_N_OBC
-              if (do_i(i,J) .and. OBC%segnum_v(i,J) > 0) then
-                Kv_add(i,j) = visc%Kv_shear(i,j,k)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_v(i,J) > 0) then
+              Kv_add = visc%Kv_shear(i,j,k)
+            endif
           endif
 
           if (OBC%v_S_OBCs_on_PE) then
-            do J=Js_S_OBC,Je_S_OBC ; do i=is_S_OBC,ie_S_OBC
-              if (do_i(i,J) .and. OBC%segnum_v(i,J) < 0) then
-                Kv_add(i,j) = visc%Kv_shear(i,j+1,k)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_v(i,J) < 0) then
+              Kv_add = visc%Kv_shear(i,j+1,k)
+            endif
           endif
         endif
 
-        do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-          Kv_tot(i,j) = Kv_tot(i,j) + Kv_add(i,j)
-        endif ; enddo ; enddo
+        Kv_tot = Kv_tot + Kv_add
       endif
     endif
 
@@ -2626,434 +2790,341 @@ subroutine find_coupling_coef(a_cpl, hvel, do_i, h_harm, bbl_thick, kv_bbl, z_i,
       ! (vorticity) points.  Because OBCs run through the faces and corners there is no need
       ! to further modify these viscosities here to take OBCs into account.
       if (work_on_u) then
-        do J=Js,Je ; do I=Is,Ie ; If (do_i(i,j)) then
-          Kv_tot(I,J) = Kv_tot(I,J) + 0.5 * (visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
-        endif ; enddo ; enddo
+        Kv_tot = Kv_tot + 0.5 * (visc%Kv_shear_Bu(I,J-1,k) + visc%Kv_shear_Bu(I,J,k))
       else
-        do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-          Kv_tot(i,j) = Kv_tot(i,j) + 0.5 * (visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
-        endif ; enddo ; enddo
+        Kv_tot = Kv_tot + 0.5 * (visc%Kv_shear_Bu(I-1,J,k) + visc%Kv_shear_Bu(I,J,k))
       endif
     endif
 
     ! Set the viscous coupling coefficients, excluding surface mixed layer contributions
     ! for now, but including viscous bottom drag, working up from the bottom.
     if (CS%bottomdraglaw) then
-      do concurrent (j=js:je, i=is:ie, do_i(i,j))
-        !    botfn determines when a point is within the influence of the bottom
-        !  boundary layer, going from 1 at the bottom to 0 in the interior.
-        z2 = z_i(i,j,k)
-        botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
+      !    botfn determines when a point is within the influence of the bottom
+      !  boundary layer, going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(k)
+      botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
 
-        Kv_tot(i,j) = Kv_tot(i,j) + (kv_bbl(i,j) - CS%Kv)*botfn
-        dhc = 0.5 * (hvel(i,j,k) + hvel(i,j,k-1))
-        if (dhc > bbl_thick(i,j)) then
-          h_shear = ((1. - botfn) * dhc + botfn*bbl_thick(i,j)) + h_neglect
-        else
-          h_shear = dhc + h_neglect
-        endif
+      Kv_tot = Kv_tot + (kv_bbl - CS%Kv) * botfn
+      dhc = 0.5 * (hvel(k) + hvel(k-1))
+      if (dhc > bbl_thick) then
+        h_shear = ((1. - botfn) * dhc + botfn * bbl_thick) + h_neglect
+      else
+        h_shear = dhc + h_neglect
+      endif
 
-        ! Calculate the coupling coefficients from the viscosities.
-        a_cpl(i,j,K) = Kv_tot(i,j) / (h_shear + (I_amax * Kv_tot(i,j)))
-      enddo
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(K) = Kv_tot / (h_shear + (I_amax * Kv_tot))
     elseif (abs(CS%Kv_extra_bbl) > 0.0) then
       ! There is a simple enhancement of the near-bottom viscosities, but no
       ! adjustment of the viscous coupling length scales to give a particular
       ! bottom stress.
 
-      do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-        !    botfn determines when a point is within the influence of the bottom
-        !  boundary layer, going from 1 at the bottom to 0 in the interior.
-        z2 = z_i(i,j,k)
-        botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
+      !    botfn determines when a point is within the influence of the bottom
+      !  boundary layer, going from 1 at the bottom to 0 in the interior.
+      z2 = z_i(k)
+      botfn = 1. / (1. + 0.09 * z2 * z2 * z2 * z2 * z2 * z2)
 
-        Kv_tot(i,j) = Kv_tot(i,j) + CS%Kv_extra_bbl*botfn
-        h_shear = 0.5 * (hvel(i,j,k) + hvel(i,j,k-1) + h_neglect)
+      Kv_tot = Kv_tot + CS%Kv_extra_bbl * botfn
+      h_shear = 0.5 * (hvel(k) + hvel(k-1) + h_neglect)
 
-        ! Calculate the coupling coefficients from the viscosities.
-        a_cpl(i,j,K) = Kv_tot(i,j) / (h_shear + I_amax * Kv_tot(i,j))
-      endif ; enddo ; enddo ! i & k loops
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(K) = Kv_tot / (h_shear + I_amax * Kv_tot)
     else
       ! Any near-bottom viscous enhancements were already incorporated into
       ! Kv_tot, and there is no adjustment of the viscous coupling length
       ! scales to give a particular bottom stress.
 
-      do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-        h_shear = 0.5*(hvel(i,j,k) + hvel(i,j,k-1) + h_neglect)
-        ! Calculate the coupling coefficients from the viscosities.
-        a_cpl(i,j,K) = Kv_tot(i,j) / (h_shear + I_amax*Kv_tot(i,j))
-      endif ; enddo ; enddo ! i & k loops
+      h_shear = 0.5 * (hvel(k) + hvel(k-1) + h_neglect)
+      ! Calculate the coupling coefficients from the viscosities.
+      a_cpl(K) = Kv_tot / (h_shear + I_amax * Kv_tot)
     endif
   enddo
 
-
-
   ! Assign the bottom coupling coefficients
   if (CS%bottomdraglaw) then
-    do concurrent (j=js:je, i=is:ie, do_i(i,j))
-      dhc = hvel(i,j,nz)*0.5
-      a_cpl(i,j,nz+1) = kv_bbl(i,j) / ((min(dhc, bbl_thick(i,j)) + h_neglect) + I_amax*kv_bbl(i,j))
-    enddo
+    dhc = hvel(nz) * 0.5
+    a_cpl(nz+1) = kv_bbl / ((min(dhc, bbl_thick) + h_neglect) + I_amax * kv_bbl)
   elseif (abs(CS%Kv_extra_bbl) > 0.0) then
-    do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-      a_cpl(i,j,nz+1) = (CS%Kv + CS%Kv_extra_bbl) &
-          / ((0.5 * hvel(i,j,nz) + h_neglect) + I_amax * (CS%Kv + CS%Kv_extra_bbl))
-    endif ; enddo ; enddo
+    a_cpl(nz+1) = (CS%Kv + CS%Kv_extra_bbl) &
+        / ((0.5 * hvel(nz) + h_neglect) + I_amax * (CS%Kv + CS%Kv_extra_bbl))
   else
-    do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-      a_cpl(i,j,nz+1) = CS%Kv / ((0.5 * hvel(i,j,nz) + h_neglect) + I_amax * CS%Kv)
-    endif ; enddo ; enddo
+    a_cpl(nz+1) = CS%Kv / ((0.5 * hvel(nz) + h_neglect) + I_amax * CS%Kv)
   endif
-
 
   ! Add surface intensified viscous coupling, either as a no-slip boundary condition under a
   ! rigid ice-shelf, or due to wind-stress driven surface boundary layer mixing that has not
   ! already been added via visc%Kv_shear.
   if (do_shelf) then
     ! Set the coefficients to include the no-slip surface stress.
-    do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-      if (work_on_u) then
-        kv_TBL(i,j) = visc%Kv_tbl_shelf_u(I,j)
-        tbl_thick(i,j) = visc%tbl_thick_shelf_u(I,j) + h_neglect
-      else
-        kv_TBL(i,j) = visc%Kv_tbl_shelf_v(i,J)
-        tbl_thick(i,j) = visc%tbl_thick_shelf_v(i,J) + h_neglect
-      endif
-      z_t(i,j) = 0.0
+    if (work_on_u) then
+      kv_TBL = visc%Kv_tbl_shelf_u(I,j)
+      tbl_thick = visc%tbl_thick_shelf_u(I,j) + h_neglect
+    else
+      kv_TBL = visc%Kv_tbl_shelf_v(i,J)
+      tbl_thick = visc%tbl_thick_shelf_v(i,J) + h_neglect
+    endif
 
-      ! If a_cpl(i,1) were not already 0, it would be added here.
-      if (0.5*hvel(i,j,1) > tbl_thick(i,j)) then
-        a_cpl(i,j,1) = kv_TBL(i,j) / (tbl_thick(i,j) + I_amax * kv_TBL(i,j))
-      else
-        a_cpl(i,j,1) = kv_TBL(i,j) &
-            / ((0.5 * hvel(i,j,1) + h_neglect) + I_amax * kv_TBL(i,j))
-      endif
-    endif ; enddo ; enddo
+    z_t = 0.0
+
+    ! If a_cpl(1) were not already 0, it would be added here.
+    if (0.5 * hvel(1) > tbl_thick) then
+      a_cpl(1) = kv_TBL / (tbl_thick + I_amax * kv_TBL)
+    else
+      a_cpl(1) = kv_TBL / ((0.5 * hvel(1) + h_neglect) + I_amax * kv_TBL)
+    endif
 
     do K=2,nz
-      do j=js,je ; do i=is,ie ;  if (do_i(i,j)) then
-        z_t(i,j) = z_t(i,j) + hvel(i,j,k-1) / tbl_thick(i,j)
-        topfn = 1. / (1. + 0.09 * z_t(i,j)**6)
+      z_t = z_t + hvel(k-1) / tbl_thick
+      topfn = 1. / (1. + 0.09 * z_t**6)
 
-        dhc = 0.5 * (hvel(i,j,k) + hvel(i,j,k-1))
-        if (dhc > tbl_thick(i,j)) then
-          h_shear = ((1. - topfn) * dhc + topfn * tbl_thick(i,j)) + h_neglect
-        else
-          h_shear = dhc + h_neglect
-        endif
+      dhc = 0.5 * (hvel(k) + hvel(k-1))
+      if (dhc > tbl_thick) then
+        h_shear = ((1. - topfn) * dhc + topfn * tbl_thick) + h_neglect
+      else
+        h_shear = dhc + h_neglect
+      endif
 
-        kv_top = topfn * kv_TBL(i,j)
-        a_cpl(i,j,K) = a_cpl(i,j,K) + kv_top / (h_shear + I_amax * kv_top)
-      endif ; enddo ; enddo
+      kv_top = topfn * kv_TBL
+      a_cpl(K) = a_cpl(K) + kv_top / (h_shear + I_amax * kv_top)
     enddo
   elseif (CS%dynamic_viscous_ML .or. (GV%nkml>0) .or. CS%fixed_LOTW_ML .or. CS%apply_LOTW_floor) then
 
     ! Find the friction velocity and the absolute value of the Coriolis parameter at this point.
-    ! NOTE: why was absf(:,:) zerored?
-    do concurrent (j=js:je, i=is:ie)
-      u_star(i,j) = 0.0  ! Zero out the friction velocity on land points.
-      absf(i,j) = 0.0
-      tau_mag(i,j) = 0.0  ! Zero out the friction velocity on land points.
-    enddo
+    u_star = 0.   ! Zero out the friction velocity on land points.
+    tau_mag = 0.  ! Zero out the friction velocity on land points.
 
     if (allocated(tv%SpV_avg)) then
-      rho_av1(:,:) = 0.0
+      rho_av1 = 0.
 
       if (work_on_u) then
-        do j=js,je ; do I=is,ie ; if (do_i(i,j)) then
-          u_star(I,j) = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i+1,j))
-          rho_av1(I,j) = 2. / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i+1,j,1))
-          absf(I,j) = 0.5 * (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
-        endif ; enddo ; enddo
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i+1,j))
+        rho_av1 = 2. / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i+1,j,1))
+        absf = 0.5 * (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
 
         if (do_OBCs) then
           if (OBC%u_E_OBCs_on_PE) then
-            do j=js_E_OBC,je_E_OBC ; do I=Is_E_OBC,Ie_E_OBC
-              if (do_i(I,j) .and. OBC%segnum_u(I,j) > 0) then
-                u_star(I,j) = Ustar_2d(i,j)
-                rho_av1(I,j) = 1. / tv%SpV_avg(i,j,1)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_u(I,j) > 0) then
+              u_star = Ustar_2d(i,j)
+              rho_av1 = 1. / tv%SpV_avg(i,j,1)
+            endif
           endif
 
           if (OBC%u_W_OBCs_on_PE) then
-            do j=js_W_OBC,je_W_OBC ; do I=Is_W_OBC,Ie_W_OBC
-              if (do_i(I,j) .and. OBC%segnum_u(I,j) < 0) then
-                u_star(I,j) = Ustar_2d(i+1,j)
-                rho_av1(I,j) = 1. / tv%SpV_avg(i+1,j,1)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_u(I,j) < 0) then
+              u_star = Ustar_2d(i+1,j)
+              rho_av1 = 1. / tv%SpV_avg(i+1,j,1)
+            endif
           endif
         endif
       else
-        do J=Js,Je ; do i=is,ie ; if (do_i(i,J)) then
-          u_star(i,J) = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i,j+1))
-          rho_av1(i,J) = 2. / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i,j+1,1))
-          absf(i,J) = 0.5 * (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
-        endif ; enddo ; enddo
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i,j+1))
+        rho_av1 = 2. / (tv%SpV_avg(i,j,1) + tv%SpV_avg(i,j+1,1))
+        absf = 0.5 * (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
 
         if (do_OBCs) then
           if (OBC%v_N_OBCs_on_PE) then
-            do J=Js_N_OBC,Je_N_OBC ; do i=is_N_OBC,ie_N_obc
-              if (do_i(i,J) .and. OBC%segnum_v(i,J) > 0) then
-                u_star(i,J) = Ustar_2d(i,j)
-                rho_av1(i,J) = 1. / tv%SpV_avg(i,j,1)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_v(i,J) > 0) then
+              u_star = Ustar_2d(i,j)
+              rho_av1 = 1. / tv%SpV_avg(i,j,1)
+            endif
           endif
 
           if (OBC%v_S_OBCs_on_PE) then
-            do J=Js_S_OBC,Je_S_OBC ; do i=is_S_OBC,ie_S_obc
-              if (do_i(i,J) .and. OBC%segnum_v(i,J) < 0) then
-                u_star(i,J) = Ustar_2d(i,j+1)
-                rho_av1(i,J) = 1. / tv%SpV_avg(i,j+1,1)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_v(i,J) < 0) then
+              u_star = Ustar_2d(i,j+1)
+              rho_av1 = 1. / tv%SpV_avg(i,j+1,1)
+            endif
           endif
         endif
       endif
 
-      do J=Js,Je ; do I=is,ie
-        tau_mag(I,J) = GV%RZ_to_H * rho_av1(i,j) * u_star(I,J)**2
-      enddo ; enddo
+      tau_mag = GV%RZ_to_H * rho_av1 * u_star**2
     else ! (.not.allocated(tv%SpV_avg))
       if (work_on_u) then
-        do concurrent (j=js:je, I=Is:Ie, do_i(i,j))
-          u_star(I,j) = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i+1,j))
-          absf(I,j) = 0.5 * (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
-        enddo
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i+1,j))
+        absf = 0.5 * (abs(G%CoriolisBu(I,J-1)) + abs(G%CoriolisBu(I,J)))
 
         if (do_OBCs) then
           if (OBC%u_E_OBCs_on_PE) then
-            do j=js_E_OBC,je_E_OBC ; do I=Is_E_OBC,Ie_E_OBC
-              if (do_i(I,j) .and. OBC%segnum_u(I,j) > 0) then
-                u_star(I,j) = Ustar_2d(i,j)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_u(I,j) > 0) then
+              u_star = Ustar_2d(i,j)
+            endif
           endif
 
           if (OBC%u_W_OBCs_on_PE) then
-            do j=js_W_OBC,je_W_OBC ; do I=Is_W_OBC,Ie_W_OBC
-              if (do_i(I,j) .and. OBC%segnum_u(I,j) < 0) then
-                u_star(I,j) = Ustar_2d(i+1,j)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_u(I,j) < 0) then
+              u_star = Ustar_2d(i+1,j)
+            endif
           endif
         endif
       else
-        do concurrent (J=Js:Je, i=is:ie, do_i(i,j))
-          u_star(i,J) = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i,j+1))
-          absf(i,J) = 0.5 * (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
-        enddo
+        u_star = 0.5 * (Ustar_2d(i,j) + Ustar_2d(i,j+1))
+        absf = 0.5 * (abs(G%CoriolisBu(I-1,J)) + abs(G%CoriolisBu(I,J)))
 
         if (do_OBCs) then
           if (OBC%v_N_OBCs_on_PE) then
-            do J=Js_N_OBC,Je_N_OBC ; do i=is_N_OBC,ie_N_OBC
-              if (do_i(i,J) .and. OBC%segnum_v(i,J) > 0) then
-                u_star(i,J) = Ustar_2d(i,j)
+              if (OBC%segnum_v(i,J) > 0) then
+                u_star = Ustar_2d(i,j)
               endif
-            enddo ; enddo
           endif
 
           if (OBC%v_S_OBCs_on_PE) then
-            do J=Js_S_OBC,Je_S_OBC ; do i=is_S_OBC,ie_S_OBC
-              if (do_i(i,J) .and. OBC%segnum_v(i,J) < 0) then
-                u_star(i,J) = Ustar_2d(i,j+1)
-              endif
-            enddo ; enddo
+            if (OBC%segnum_v(i,J) < 0) then
+              u_star = Ustar_2d(i,j+1)
+            endif
           endif
         endif
       endif
 
-      do concurrent (J=Js:Je, I=is:ie)
-        tau_mag(I,J) = GV%Z_to_H*u_star(I,J)**2
-      enddo
+      tau_mag = GV%Z_to_H * u_star**2
     endif
 
     ! Determine the thickness of the surface ocean boundary layer and its extent in index space.
-    !$omp target enter data map(alloc: nk_in_ml)
-    do concurrent (j=js:je, i=is:ie, do_i(i,j))
-      nk_in_ml(i,j) = 0
-    enddo
-
+    nk_in_ml = 0
     if (CS%dynamic_viscous_ML) then
       ! The fractional number of layers that are within the viscous boundary layer were
       ! previously stored in visc%nkml_visc_[uv].
-      ! TODO: for some reaosn, it seems h_ml is being copied back
-      do concurrent (j=js:je, i=is:ie)
-        h_ml(i,j) = h_neglect
-      enddo
-
+      h_ml = h_neglect
       max_nk = 0
-      if (work_on_u) then
-        do concurrent (j=js:je, i=is:ie, do_i(i,j)) DO_LOCALITY(reduce(max:max_nk))
-          nk_in_ml(I,j) = ceiling(visc%nkml_visc_u(I,j))
-          max_nk = max(max_nk, nk_in_ml(I,j))
-        enddo
-        ! TODO: max_nk is transferred back, try to keep it on the device
 
-        do concurrent (j=js:je)
-          do k=1,max_nk
-            do concurrent (i=is:ie, do_i(i,j))
-              if (k <= visc%nkml_visc_u(I,j)) then ! This layer is all in the ML.
-                h_ml(i,j) = h_ml(i,j) + hvel(i,j,k)
-              elseif (k < visc%nkml_visc_u(I,j) + 1.) then ! Part of this layer is in the ML.
-                h_ml(i,j) = h_ml(i,j) + ((visc%nkml_visc_u(I,j) + 1.) - k) * hvel(i,j,k)
-              endif
-            enddo
-          enddo
-        enddo
-      else
-        do concurrent (j=js:je, i=is:ie, do_i(i,j)) DO_LOCALITY(reduce(max:max_nk))
-          nk_in_ml(i,j) = ceiling(visc%nkml_visc_v(i,J))
-          max_nk = max(max_nk, nk_in_ml(i,j))
-        enddo
+      if (work_on_u) then
+        nk_in_ml = ceiling(visc%nkml_visc_u(I,j))
+        max_nk = max(max_nk, nk_in_ml)
 
         do k=1,max_nk
-          do concurrent (j=js:je, i=is:ie, do_i(i,j))
-            if (k <= visc%nkml_visc_v(i,J)) then ! This layer is all in the ML.
-              h_ml(i,j) = h_ml(i,j) + hvel(i,j,k)
-            elseif (k < visc%nkml_visc_v(i,J) + 1.) then ! Part of this layer is in the ML.
-              h_ml(i,j) = h_ml(i,j) + ((visc%nkml_visc_v(i,J) + 1.) - k) * hvel(i,j,k)
-            endif
-          enddo
+          if (k <= visc%nkml_visc_u(I,j)) then ! This layer is all in the ML.
+            h_ml = h_ml + hvel(k)
+          elseif (k < visc%nkml_visc_u(I,j) + 1.) then ! Part of this layer is in the ML.
+            h_ml = h_ml + ((visc%nkml_visc_u(I,j) + 1.) - k) * hvel(k)
+          endif
+        enddo
+      else
+        nk_in_ml = ceiling(visc%nkml_visc_v(i,J))
+        max_nk = max(max_nk, nk_in_ml)
+
+        do k=1,max_nk
+          if (k <= visc%nkml_visc_v(i,J)) then ! This layer is all in the ML.
+            h_ml = h_ml + hvel(k)
+          elseif (k < visc%nkml_visc_v(i,J) + 1.) then ! Part of this layer is in the ML.
+            h_ml = h_ml + ((visc%nkml_visc_v(i,J) + 1.) - k) * hvel(k)
+          endif
         enddo
       endif
     elseif (GV%nkml>0) then
       ! This is a simple application of a refined-bulk mixed layer with GV%nkml sublayers.
       max_nk = GV%nkml
-      do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-        nk_in_ml(i,j) = GV%nkml
-      endif ; enddo ; enddo
+      nk_in_ml = GV%nkml
 
-      h_ml(:,:) = h_neglect
+      h_ml = h_neglect
 
       do k=1,GV%nkml
-        do j=js,je ; do i=is,ie ; if (do_i(i,j)) then
-          h_ml(i,j) = h_ml(i,j) + hvel(i,j,k)
-        endif ; enddo ; enddo
+        h_ml = h_ml + hvel(k)
       enddo
     elseif (CS%fixed_LOTW_ML .or. CS%apply_LOTW_floor) then
       ! Determine which interfaces are within CS%Hmix of the surface, and set the viscous
       ! boundary layer thickness to the the smaller of CS%Hmix and the depth of the ocean.
-      h_ml(:,:) = 0.0
+      h_ml = 0.0
       do k=1,nz
         can_exit = .true.
-        do j=js,je ; do i=is,ie ; if (do_i(i,j) .and. (h_ml(i,j) < CS%Hmix)) then
-          nk_in_ml(i,j) = k
+        if (h_ml < CS%Hmix) then
+          nk_in_ml = k
 
-          if (h_ml(i,j) + hvel(i,j,k) < CS%Hmix) then
-            h_ml(i,j) = h_ml(i,j) + hvel(i,j,k)
+          if (h_ml + hvel(k) < CS%Hmix) then
+            h_ml = h_ml + hvel(k)
             can_exit = .false.  ! Part of the next deeper layer is also in the mixed layer.
           else
-            h_ml(i,j) = CS%Hmix
+            h_ml = CS%Hmix
           endif
-        endif ; enddo ; enddo
+        endif
 
         if (can_exit) exit  ! All remaining layers in this row are below the mixed layer depth.
       enddo
 
-      max_nk = 0
-      do j=js,je ; do i=is,ie
-        max_nk = max(max_nk, nk_in_ml(i,j))
-      enddo ; enddo
+      max_nk = max(0, nk_in_ml)
     endif
 
-    ! Avoid working on land or on columns where the viscous coupling could not be increased.
-    do concurrent (j=js:je, i=is:ie, u_star(i,j) <= 0. .or. .not. do_i(i,j))
-      nk_in_ml(i,j) = 0
-    enddo
+    ! Avoid working on columns where the viscous coupling could not be increased.
+    if (u_star <= 0.) nk_in_ml = 0
 
     ! Set the viscous coupling at the interfaces as the larger of what was previously
     ! set and the contributions from the surface boundary layer.
-    do concurrent (j=js:je, i=is:ie)
-      z_t(i,j) = 0.0
-    enddo
-
+    z_t = 0.
     if (CS%apply_LOTW_floor .and. &
-        (CS%dynamic_viscous_ML .or. (GV%nkml>0) .or. CS%fixed_LOTW_ML)) then
+        (CS%dynamic_viscous_ML .or. GV%nkml > 0 .or. CS%fixed_LOTW_ML)) then
       do K=2,max_nk
-        do j=js,je ; do i=is,ie ; if (k <= nk_in_ml(i,j)) then
-          z_t(i,j) = z_t(i,j) + hvel(i,j,k-1)
+        if (k <= nk_in_ml) then
+          z_t = z_t + hvel(k-1)
 
           !   The viscosity in visc_ml is set to go to 0 at the mixed layer top and bottom
           ! (in a log-layer) and be further limited by rotation to give the natural Ekman length.
-          temp1 = (z_t(i,j)*h_ml(i,j) - z_t(i,j)*z_t(i,j))
+          temp1 = (z_t * h_ml - z_t * z_t)
           if (GV%Boussinesq) then
-            ustar2_denom = (CS%vonKar * GV%Z_to_H * u_star(i,j)**2) &
-                / (absf(i,j) * temp1 + (h_ml(i,j) + h_neglect) * u_star(i,j))
+            ustar2_denom = (CS%vonKar * GV%Z_to_H * u_star**2) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
           else
-            ustar2_denom = (CS%vonKar * tau_mag(i,j)) &
-                / (absf(i,j) * temp1 + (h_ml(i,j) + h_neglect) * u_star(i,j))
+            ustar2_denom = (CS%vonKar * tau_mag) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
           endif
 
           visc_ml = temp1 * ustar2_denom
           ! Set the viscous coupling based on the model's vertical resolution.  The omission of
           ! the I_amax factor here is consistent with answer dates above 20190101.
-          a_ml = visc_ml / (0.25 * (hvel(i,j,k) + hvel(i,j,k-1) + h_neglect))
+          a_ml = visc_ml / (0.25 * (hvel(k) + hvel(k-1) + h_neglect))
 
           ! As a floor on the viscous coupling, assume that the length scale in the denominator can
           ! not be larger than the distance from the surface, consistent with a logarithmic velocity
           ! profile.  This is consistent with visc_ml, but cancels out common factors of z_t.
-          a_floor = (h_ml(i,j) - z_t(i,j)) * ustar2_denom
+          a_floor = (h_ml - z_t) * ustar2_denom
 
           ! Choose the largest estimate of a_cpl.
-          a_cpl(i,j,K) = max(a_cpl(i,j,K), a_ml, a_floor)
+          a_cpl(K) = max(a_cpl(K), a_ml, a_floor)
           ! An option could be added to change this to: a_cpl(i,K) = max(a_cpl(i,K) + a_ml, a_floor)
-        endif ; enddo ; enddo
+        endif
       enddo
     elseif (CS%apply_LOTW_floor) then
       do K=2,max_nk
-        do j=js,je ; do i=is,ie ; if (k <= nk_in_ml(i,j)) then
-          z_t(i,j) = z_t(i,j) + hvel(i,j,k-1)
+        if (k <= nk_in_ml) then
+          z_t = z_t + hvel(k-1)
 
-          temp1 = (z_t(i,j)*h_ml(i,j) - z_t(i,j) * z_t(i,j))
+          temp1 = (z_t * h_ml - z_t * z_t)
           if (GV%Boussinesq) then
-            ustar2_denom = (CS%vonKar * GV%Z_to_H * u_star(i,j)**2) &
-                / (absf(i,j) * temp1 + (h_ml(i,j) + h_neglect) * u_star(i,j))
+            ustar2_denom = (CS%vonKar * GV%Z_to_H * u_star**2) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
           else
-            ustar2_denom = (CS%vonKar * tau_mag(i,j)) &
-                / (absf(i,j) * temp1 + (h_ml(i,j) + h_neglect) * u_star(i,j))
+            ustar2_denom = (CS%vonKar * tau_mag) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
           endif
 
           ! As a floor on the viscous coupling, assume that the length scale in the denominator can not
           ! be larger than the distance from the surface, consistent with a logarithmic velocity profile.
-          a_cpl(i,j,K) = max(a_cpl(i,j,K), (h_ml(i,j) - z_t(i,j)) * ustar2_denom)
-        endif ; enddo ; enddo
+          a_cpl(K) = max(a_cpl(K), (h_ml - z_t) * ustar2_denom)
+        endif
       enddo
     else
-      do concurrent (j=js:je)
-        do K=2,max_nk
-          do concurrent (i=is:ie, k <= nk_in_ml(i,j))
-            z_t(i,j) = z_t(i,j) + hvel(i,j,k-1)
+      do K=2,max_nk
+        if (k <= nk_in_ml) then
+          z_t = z_t + hvel(k-1)
 
-            temp1 = (z_t(i,j) * h_ml(i,j) - z_t(i,j) * z_t(i,j))
-            !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
-            ! and be further limited by rotation to give the natural Ekman length.
-            ! The following expressions are mathematically equivalent.
-            if (GV%Boussinesq .or. (CS%answer_date < 20230601)) then
-              visc_ml = u_star(i,j) * CS%vonKar * (GV%Z_to_H * temp1 * u_star(i,j)) &
-                  / (absf(i,j) * temp1 + (h_ml(i,j)+h_neglect) * u_star(i,j))
-            else
-              visc_ml = CS%vonKar * (temp1 * tau_mag(i,j)) &
-                  / (absf(i,j) * temp1 + (h_ml(i,j) + h_neglect) * u_star(i,j))
-            endif
-            a_ml = visc_ml / (0.25 * (hvel(i,j,k) + hvel(i,j,k-1) + h_neglect) + 0.5 * I_amax * visc_ml)
+          temp1 = (z_t * h_ml - z_t * z_t)
+          !   This viscosity is set to go to 0 at the mixed layer top and bottom (in a log-layer)
+          ! and be further limited by rotation to give the natural Ekman length.
+          ! The following expressions are mathematically equivalent.
+          if (GV%Boussinesq .or. (CS%answer_date < 20230601)) then
+            visc_ml = u_star * CS%vonKar * (GV%Z_to_H * temp1 * u_star) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          else
+            visc_ml = CS%vonKar * (temp1 * tau_mag) &
+                / (absf * temp1 + (h_ml + h_neglect) * u_star)
+          endif
+          a_ml = visc_ml / (0.25 * (hvel(k) + hvel(k-1) + h_neglect) + 0.5 * I_amax * visc_ml)
 
-            ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
-            a_cpl(i,j,K) = max(a_cpl(i,j,K), a_ml)
-            ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
-          enddo
-        enddo
+          ! Choose the largest estimate of a_cpl, but these could be changed to be additive.
+          a_cpl(K) = max(a_cpl(K), a_ml)
+          ! An option could be added to change this to: a_cpl(i,K) = a_cpl(i,K) + a_ml
+        endif
       enddo
     endif
   endif
-
-  !$omp target exit data map(delete: u_star, absf, tau_mag)
-  !$omp target exit data map(delete: z_t, Kv_tot, Kv_add)
-  !$omp target exit data map(delete: nk_in_ml)
-  !$omp target exit data map(release: visc%Kv_shear)
-
 end subroutine find_coupling_coef
 
 !> Velocity components which exceed a threshold for physically reasonable values
