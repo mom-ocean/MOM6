@@ -736,7 +736,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   ! c1(k) is -c'_(k - 1)
   ! and the right-hand-side is destructively updated to be d'_k
 
-  !$omp target enter data map(alloc: b1, c1, d1, Ray, b_denom_1)
+  !$omp target enter data map(alloc: c1)
   !$omp target enter data map(to: visc%Ray_u) if (allocated(visc%Ray_u))
 
   !$omp target teams loop collapse(2) &
@@ -1098,7 +1098,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
 
   call vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS)
 
-  !$omp target exit data map(delete: b1, c1, d1, Ray, b_denom_1)
+  !$omp target exit data map(delete: c1)
 
   !$omp target exit data map(from: ADp%du_dt_str, ADp%dv_dt_str)
   !$omp target exit data map(delete: ADp)
