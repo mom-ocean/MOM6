@@ -389,7 +389,9 @@ def scan_fortran_file(src_file, defines=None):
 
     cpp_defines = defines if defines is not None else []
 
-    cpp_macros = dict([t.split('=') for t in cpp_defines])
+    cpp_macros = dict(
+        [t.split('=') if '=' in t else (t, None) for t in cpp_defines]
+    )
     cpp_group_stack = []
 
     with io.open(src_file, 'r', errors='replace') as file:
