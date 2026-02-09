@@ -553,7 +553,7 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   type(accel_diag_ptrs), intent(inout)   :: ADp    !< Accelerations in the momentum
                                                    !! equations for diagnostics
   type(cont_diag_ptrs),  intent(inout)   :: CDp    !< Continuity equation terms
-  type(vertvisc_CS),     pointer         :: CS     !< Vertical viscosity control structure
+  type(vertvisc_CS)                      :: CS     !< Vertical viscosity control structure
   real, dimension(SZIB_(G),SZJ_(G)), &
                    optional, intent(out) :: taux_bot !< Zonal bottom stress from ocean to
                                                      !! rock [R L Z T-2 ~> Pa]
@@ -611,9 +611,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
   is = G%isc ; ie = G%iec; js = G%jsc; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
-
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
-         "Module must be initialized before it is used.")
 
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
          "Module must be initialized before it is used.")
@@ -1197,7 +1194,7 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
                                               !! viscosity is applied in the meridional direction [nondim]
   real,                  intent(in)    :: dt  !< Time increment [T ~> s]
   type(unit_scale_type), intent(in)    :: US  !< A dimensional unit scaling type
-  type(vertvisc_CS),     pointer       :: CS  !< Vertical viscosity control structure
+  type(vertvisc_CS)                    :: CS  !< Vertical viscosity control structure
 
   ! Local variables
 
@@ -1216,15 +1213,10 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
   is = G%isc ; ie = G%iec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
-  if (.not.associated(CS)) call MOM_error(FATAL,"MOM_vert_friction(visc): "// &
-         "Module must be initialized before it is used.")
-
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_vert_friction(remnant): "// &
          "Module must be initialized before it is used.")
 
   ! Find the zonal viscous remnant using a modification of a standard tridagonal solver.
-
-  !$omp target enter data map(alloc: b1, c1, d1, Ray, b_denom_1)
 
   !$omp target teams loop collapse(2) &
   !$omp   private(b1, c1, d1, Ray, b_denom_1)
@@ -1279,8 +1271,6 @@ subroutine vertvisc_remnant(visc, visc_rem_u, visc_rem_v, dt, G, GV, US, CS)
       visc_rem_v(i,J,k) = visc_rem_v(i,J,k) + c1(k+1) * visc_rem_v(i,J,k+1)
     enddo
   endif ; enddo ; enddo
-
-  !$omp target exit data map(delete: b1, c1, d1, Ray, b_denom_1)
 
   if (CS%debug) then
     !$omp target update from(visc_rem_u, visc_rem_v)
@@ -3144,7 +3134,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   type(mech_forcing),      intent(in)    :: forces !< A structure with the driving mechanical forces
   type(vertvisc_type),     intent(in)    :: visc   !< Viscosities and bottom drag
   real,                    intent(in)    :: dt     !< Time increment [T ~> s]
-  type(vertvisc_CS),       pointer       :: CS     !< Vertical viscosity control structure
+  type(vertvisc_CS)                      :: CS     !< Vertical viscosity control structure
 
   ! Local variables
 
