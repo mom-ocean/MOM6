@@ -1,9 +1,11 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 ! The are stubs for ocean stochastic physics
 ! the fully functional code is available at
 ! http://github.com/noaa-psd/stochastic_physics
 module get_stochy_pattern_mod
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 implicit none ; private
 

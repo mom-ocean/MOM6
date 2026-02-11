@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Interface to vertical tidal mixing schemes including CVMix tidal mixing.
 module MOM_tidal_mixing
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator,      only : diag_ctrl, time_type, register_diag_field
 use MOM_diag_mediator,      only : safe_alloc_ptr, post_data

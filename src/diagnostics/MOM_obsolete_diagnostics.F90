@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides a mechanism for recording diagnostic variables that are no longer
 !! valid, along with their replacement name if appropriate.
 module MOM_obsolete_diagnostics
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl, found_in_diagtable
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe

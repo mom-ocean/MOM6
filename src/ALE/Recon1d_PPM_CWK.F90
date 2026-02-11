@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Piecewise Parabolic Method 1D reconstruction in model index space
 !!
 !! This implementation of PPM follows Colella and Woodward, 1984, using uniform thickness
@@ -9,8 +13,6 @@
 !! realized only when the grid-spacing is exactly uniform. This scheme deviates from CW84
 !! when the grid spacing is variable.
 module Recon1d_PPM_CWK
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_type, only : Recon1d, testing
 use Recon1d_PLM_CWK, only : PLM_CWK

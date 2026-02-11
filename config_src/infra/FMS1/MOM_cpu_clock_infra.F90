@@ -1,9 +1,11 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Wraps the MPP cpu clock functions
 !!
 !! The functions and constants should be accessed via mom_cpu_clock
 module MOM_cpu_clock_infra
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 ! These interfaces and constants from MPP/FMS will not be directly exposed outside of this module
 use fms_mod, only : clock_flag_default

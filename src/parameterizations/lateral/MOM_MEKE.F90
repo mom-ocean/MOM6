@@ -1,9 +1,12 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Implements the Mesoscale Eddy Kinetic Energy framework
 !! with topographic beta effect included in computing beta in Rhines scale
 
 module MOM_MEKE
 
-! This file is part of MOM6. See LICENSE.md for the license.
 use iso_fortran_env,       only : real32
 
 use MOM_coms,              only : PE_here

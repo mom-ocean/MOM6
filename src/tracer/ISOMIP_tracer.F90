@@ -1,11 +1,13 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Routines used to set up and use a set of (one for now)
 !! dynamically passive tracers in the ISOMIP configuration.
 !!
 !! For now, just one passive tracer is injected in
 !! the sponge layer.
 module ISOMIP_tracer
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 ! Original sample tracer package by Robert Hallberg, 2002
 ! Adapted to the ISOMIP test case by Gustavo Marques, May 2016

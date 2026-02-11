@@ -1,7 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Methods for testing for, and list of, obsolete run-time parameters.
 module MOM_obsolete_params
 
-! This file is part of MOM6. See LICENSE.md for the license.
 ! This module was first conceived and written by Robert Hallberg, July 2010.
 
 use MOM_error_handler, only : MOM_error, FATAL, WARNING, is_root_pe

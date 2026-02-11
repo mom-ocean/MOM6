@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> 1D reconstructions using the Piecewise Constant Method (PCM)
 module Recon1d_PCM
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_type, only : Recon1d, testing
 

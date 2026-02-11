@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This was originally share code in CIME, but required CIME as a
 !! dependency to build the MOM cap.  The options here for setting
 !! a restart alarm are useful for all caps, so a second step is to

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> These interfaces allow for ocean or sea-ice variables to be replaced with data.
 module MOM_data_override
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_data_override_infra, only : data_override_init => impose_data_init
 use MOM_data_override_infra, only : data_override => impose_data

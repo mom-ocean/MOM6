@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Monotonized Piecewise Linear Method 1D reconstruction
 !!
 !! This implementation of PLM follows White and Adcroft, 2008 \cite white2008.
@@ -8,8 +12,6 @@
 !! This differs from recon1d_mplm_wa_poly in the internally not polynomial representations
 !! are referred to.
 module Recon1d_MPLM_WA
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_PLM_CW, only : PLM_CW, testing
 

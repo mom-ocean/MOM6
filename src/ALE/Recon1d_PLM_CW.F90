@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Piecewise Linear Method 1D reconstruction
 !!
 !! This implementation of PLM follows Colella and Woodward, 1984 \cite colella1984, with cells
@@ -6,8 +10,6 @@
 !! in a cell) are bounded by the neighboring cell means.
 !! This does not yield monotonic profiles for the general remapping problem.
 module Recon1d_PLM_CW
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_type, only : Recon1d, testing
 

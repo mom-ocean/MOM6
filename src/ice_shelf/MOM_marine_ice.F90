@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Routines incorporating the effects of marine ice (sea-ice and icebergs) into
 !! the ocean model dynamics and thermodynamics.
 module MOM_marine_ice
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_constants,     only : hlf
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, diag_ctrl

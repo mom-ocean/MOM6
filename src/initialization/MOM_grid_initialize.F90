@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Initializes horizontal grid
 module MOM_grid_initialize
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums,     only : hchksum, Bchksum, uvchksum, hchksum_pair, Bchksum_pair
 use MOM_domains,       only : pass_var, pass_vector, pe_here, root_PE, broadcast

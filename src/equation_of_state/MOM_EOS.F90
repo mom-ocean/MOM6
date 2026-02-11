@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides subroutines for quantities specific to the equation of state
 module MOM_EOS
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_EOS_base_type, only : EOS_base
 use MOM_EOS_linear, only : linear_EOS, avg_spec_vol_linear

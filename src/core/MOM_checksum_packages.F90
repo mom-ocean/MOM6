@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides routines that do checksums of groups of MOM variables
 module MOM_checksum_packages
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 !   This module provides several routines that do check-sums of groups
 ! of variables in the various dynamic solver routines.

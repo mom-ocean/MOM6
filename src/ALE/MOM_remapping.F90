@@ -1,7 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides column-wise vertical remapping functions
 module MOM_remapping
 
-! This file is part of MOM6. See LICENSE.md for the license.
 ! Original module written by Laurent White, 2008.06.09
 
 use MOM_error_handler, only : MOM_error, FATAL

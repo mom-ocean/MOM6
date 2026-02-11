@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Functions to convert between conservative and potential temperature
 module MOM_temperature_convert
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 implicit none ; private
 

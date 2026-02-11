@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This module provides added functionality to the FMS temporal and spatial interpolation routines
 module MOM_interpolate
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : allocate_rotated_array, rotate_array
 use MOM_error_handler,   only : MOM_error, FATAL

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This module provides coupler type interfaces for use by MOM6
 module MOM_coupler_types
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform,   only : allocate_rotated_array, rotate_array
 use MOM_couplertype_infra, only : CT_spawn, CT_initialized, CT_destructor, atmos_ocn_coupler_flux

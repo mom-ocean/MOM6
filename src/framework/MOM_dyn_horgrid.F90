@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Contains a shareable dynamic type for describing horizontal grids and metric data
 !! and utilty routines that work on this type.
 module MOM_dyn_horgrid
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array, rotate_array_pair
 use MOM_domains,         only : MOM_domain_type, deallocate_MOM_domain

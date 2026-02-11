@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Forcing for the idealized hurricane and SCM_idealized_hurricane examples.
 module Idealized_hurricane
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 ! History
 !--------

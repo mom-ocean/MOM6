@@ -1,11 +1,13 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> \brief Reads the only Fortran name list needed to boot-strap the model.
 !!
 !! The name list parameters indicate which directories to use for
 !! certain types of input and output, and which files to look in for
 !! the full parsable input parameter file(s).
 module MOM_get_input
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : open_param_file, param_file_type

@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This module contains the main regridding routines.
 !!
 !! Regridding comprises two steps:
@@ -7,8 +11,6 @@
 !!
 !! Original module written by Laurent White, 2008.06.09
 module MOM_ALE
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging,        only : check_column_integrals
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl

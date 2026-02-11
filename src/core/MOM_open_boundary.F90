@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Controls where open boundary conditions are applied
 module MOM_open_boundary
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform,      only : rotate_array, rotate_array_pair
 use MOM_coms,                 only : sum_across_PEs, Set_PElist, Get_PElist, PE_here, num_PEs

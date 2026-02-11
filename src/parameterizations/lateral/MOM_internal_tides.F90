@@ -1,9 +1,11 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Subroutines that use the ray-tracing equations to propagate the internal tide energy density.
 !!
 !! \author Benjamin Mater & Robert Hallberg, 2015
 module MOM_internal_tides
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums,     only : hchksum
 use MOM_debugging,     only : is_NaN

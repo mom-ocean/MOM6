@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This tracer package is used to test advection schemes
 module advection_test_tracer
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,            only : EFP_type
 use MOM_coupler_types,   only : set_coupler_type_data, atmos_ocn_coupler_flux

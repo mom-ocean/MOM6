@@ -1,9 +1,11 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 #include "do_concurrent_compat.h"
 
 !> Barotropic solver
 module MOM_barotropic
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums, only : chksum0
 use MOM_coms,      only : any_across_PEs

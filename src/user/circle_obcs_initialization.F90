@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Configures the model for the "circle_obcs" experiment which tests
 !! Open Boundary Conditions radiating an SSH anomaly.
 module circle_obcs_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_sponge, only : sponge_CS, set_up_sponge_field, initialize_sponge
 use MOM_error_handler, only : MOM_mesg, MOM_error, FATAL, is_root_pe

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides gridded random number capability
 module MOM_random
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_hor_index,    only : hor_index_type
 use MOM_time_manager, only : time_type, set_date, get_date

@@ -1,6 +1,8 @@
-module MOM_surface_forcing_mct
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
 
-! This file is part of MOM6. See LICENSE.md for the license.
+module MOM_surface_forcing_mct
 
 use MOM_coms,             only : reproducing_sum, field_chksum
 use MOM_constants,        only : hlv, hlf

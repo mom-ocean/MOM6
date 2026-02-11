@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides integrals of density
 module MOM_density_integrals
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_EOS,              only : EOS_type
 use MOM_EOS,              only : EOS_quadrature, EOS_domain

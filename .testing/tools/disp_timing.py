@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# This file is part of MOM6, the Modular Ocean Model version 6.
+# See the LICENSE file for licensing information.
+# SPDX-License-Identifier: Apache-2.0
 
 from __future__ import print_function
 

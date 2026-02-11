@@ -1,8 +1,11 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Calculates Zanna and Bolton 2020 parameterization
 !! Implemented by Perezhogin P.A. Contact: pperezhogin@gmail.com
 module MOM_Zanna_Bolton
 
-! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_grid,          only : ocean_grid_type
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_diag_mediator, only : diag_ctrl, time_type

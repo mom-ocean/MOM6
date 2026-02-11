@@ -1,11 +1,13 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> A tracer package for tracers computed in the MARBL library
 !!
 !! Currently configured for use with marbl0.36.0
 !! https://github.com/marbl-ecosys/MARBL/releases/tag/marbl0.36.0
 !! (clone entire repo into pkg/MARBL)
 module MARBL_tracers
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,            only : EFP_type, root_PE, broadcast
 use MOM_debugging,       only : hchksum

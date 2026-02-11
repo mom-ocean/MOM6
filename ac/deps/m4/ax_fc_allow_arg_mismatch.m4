@@ -1,3 +1,7 @@
+dnl This file is part of MOM6, the Modular Ocean Model version 6.
+dnl See the LICENSE file for licensing information.
+dnl SPDX-License-Identifier: Apache-2.0
+dnl
 dnl Test if mismatched function arguments are permitted.
 dnl
 dnl This macro tests if a flag is required to enable mismatched functions in

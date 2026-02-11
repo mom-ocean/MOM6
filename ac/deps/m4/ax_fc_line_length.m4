@@ -1,3 +1,7 @@
+dnl This file is part of MOM6, the Modular Ocean Model version 6.
+dnl See the LICENSE file for licensing information.
+dnl SPDX-License-Identifier: Apache-2.0
+dnl
 # AX_FC_LINE_LENGTH([LENGTH], [ACTION-IF-SUCCESS],
 #		    [ACTION-IF-FAILURE = FAILURE])
 # ------------------------------------------------

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> A module to monitor the overall CPU time used by MOM6 and project when to stop the model
 module MOM_write_cputime
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,          only : sum_across_PEs, num_pes
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, is_root_pe

@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Initializes fixed aspects of the model, such as horizontal grid metrics,
 !! topography and Coriolis.
 module MOM_fixed_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging, only : hchksum, qchksum, uvchksum
 use MOM_domains, only : pass_var

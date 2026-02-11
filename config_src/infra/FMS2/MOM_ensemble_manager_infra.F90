@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> A simple (very thin) wrapper for managing ensemble member layout information
 module MOM_ensemble_manager_infra
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use ensemble_manager_mod, only : FMS_ensemble_manager_init => ensemble_manager_init
 use ensemble_manager_mod, only : FMS_ensemble_pelist_setup => ensemble_pelist_setup

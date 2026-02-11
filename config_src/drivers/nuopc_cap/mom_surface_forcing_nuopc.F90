@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Converts the input ESMF data (import data) to a MOM-specific data type (surface_forcing_CS).
 module MOM_surface_forcing_nuopc
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,             only : reproducing_sum, field_chksum
 use MOM_constants,        only : hlv, hlf

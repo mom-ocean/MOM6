@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Configures the models sponges for the Rotating Gravity Current (RGC) experiment.
 module RGC_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 !***********************************************************************
 !* By Elizabeth Yankovsky, May 2018                                    *

@@ -1,3 +1,7 @@
+dnl This file is part of MOM6, the Modular Ocean Model version 6.
+dnl See the LICENSE file for licensing information.
+dnl SPDX-License-Identifier: Apache-2.0
+dnl
 dnl Determine the flag required to force 64-bit reals.
 dnl
 dnl Many applications do not specify the kind of its real variables, even

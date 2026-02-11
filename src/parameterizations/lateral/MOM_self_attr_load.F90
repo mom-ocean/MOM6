@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 module MOM_self_attr_load
 
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_MODULE

@@ -1,7 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides the ocean stochastic equation of state
 module MOM_stoch_eos
 
-! This file is part of MOM6. See LICENSE.md for the license.
 use MOM_diag_mediator,    only : register_diag_field, post_data, diag_ctrl
 use MOM_error_handler,    only : MOM_error, FATAL
 use MOM_file_parser,      only : get_param, param_file_type

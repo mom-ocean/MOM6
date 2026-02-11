@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This tracer package dyes flow through open boundaries
 module dyed_obc_tracer
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coupler_types,      only : atmos_ocn_coupler_flux
 use MOM_diag_mediator,      only : diag_ctrl

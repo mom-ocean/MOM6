@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This module provides tools that can be used to check the uniqueness of the dimensional
 !! scaling factors used by the MOM6 ocean model or other models
 module MOM_unique_scales
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, assert, MOM_get_verbosity
 

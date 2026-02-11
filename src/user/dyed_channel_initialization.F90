@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Initialization for the dyed_channel configuration
 module dyed_channel_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_dyn_horgrid,     only : dyn_horgrid_type
 use MOM_error_handler,   only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe

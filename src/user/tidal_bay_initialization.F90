@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Configures the model for the "tidal_bay" experiment.
 !! tidal_bay = Tidally resonant bay from Zygmunt Kowalik's class on tides.
 module tidal_bay_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,           only : reproducing_sum
 use MOM_dyn_horgrid,    only : dyn_horgrid_type

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Describes the decomposed MOM domain and has routines for communications across PEs
 module MOM_domains
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms_infra,       only : MOM_infra_init, MOM_infra_end
 use MOM_coms_infra,       only : PE_here, root_PE, num_PEs, broadcast

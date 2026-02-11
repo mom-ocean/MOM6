@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Piecewise Parabolic Method 1D reconstruction following Colella and Woodward, 1984
 !!
 !! This implementation of PPM follows Colella and Woodward, 1984 \cite colella1984, with
@@ -9,8 +13,6 @@
 !! regrid_edge_values.edge_values_explicit_h4cw() function followed by ppm_functions.ppm_reconstruction()
 !! (reached with "PPM_CW"), are equivalent. Similarly recon1d_ppm_hybgen (this implementation) is equivalent also.
 module Recon1d_PPM_hybgen
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_type, only : testing
 use Recon1d_PPM_CW, only : PPM_CW

@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Piecewise Linear Method 1D reconstruction ported from "hybgen" module in Hycom.
 !!
 !! This implementation of PLM follows Colella and Woodward, 1984, with cells resorting to PCM for
@@ -10,8 +14,6 @@
 !! The mom_hybgen_remap.hybgen_plm_coefs() function calculates PLM coefficients numerically
 !! equiavalent to the recon1d_plm_hybgen module (this implementation).
 module Recon1d_PLM_hybgen
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_type, only : Recon1d, testing
 

@@ -1,6 +1,8 @@
-program test_reproducing_sum
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
 
-! This file is part of MOM6. See LICENSE.md for the license.
+program test_reproducing_sum
 
 use MOM_coms, only : PE_here, root_PE, num_PEs, reproducing_sum
 use MOM_coms, only : sum_across_PEs, max_across_PEs, max_count_prec

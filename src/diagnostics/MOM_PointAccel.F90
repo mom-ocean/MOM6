@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Debug accelerations at a given point
 !!
 !!    The two subroutines in this file write out all of the terms
@@ -6,8 +10,6 @@
 !! threshold, in order to determine which term is culpable.
 !! often this is done for debugging purposes.
 module MOM_PointAccel
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_domains, only : pe_here

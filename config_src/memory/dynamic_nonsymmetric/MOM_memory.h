@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !/// \brief Compile-time memory settings
 !/// \details This include file determines the compile-time memory settings.
 !/// There are several variants of this file and only one should be in the search path for compilation.

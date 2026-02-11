@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> The equation of state using the Wright 1997 expressions with reduced range of data.
 module MOM_EOS_Wright_red
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_EOS_base_type, only : EOS_base
 use MOM_hor_index, only : hor_index_type

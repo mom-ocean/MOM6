@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Piecewise Parabolic Method 1D reconstruction with h4 interpolation for edges
 !!
 !! This implementation of PPM follows White and Adcroft 2008 \cite white2008, with cells
@@ -7,8 +11,6 @@
 !! This uses numerical expressions refactored at the beginning of 2019.
 !! The first and last cells are always limited to PCM.
 module Recon1d_PPM_H4_2019
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_type, only : Recon1d, testing
 

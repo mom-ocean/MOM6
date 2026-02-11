@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> A dummy version of atmos_ocean_fluxes_mod module for
 !! use when the vastly larger FMS package is not needed.
 module atmos_ocean_fluxes_mod
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 implicit none ; private
 

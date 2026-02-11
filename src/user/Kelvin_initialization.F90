@@ -1,11 +1,13 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Configures the model for the Kelvin wave experiment.
 !!
 !! Kelvin = coastally-trapped Kelvin waves from the ROMS examples.
 !! Initialize with level surfaces and drive the wave in at the west,
 !! radiate out at the east.
 module Kelvin_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_dyn_horgrid,    only : dyn_horgrid_type
 use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe

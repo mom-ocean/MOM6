@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides checksumming functions for debugging
 !!
 !! This module contains subroutines that perform various error checking and
@@ -5,8 +9,6 @@
 !! the SIS2 code, except for the use of the ocean_grid_type and by keeping them
 !! separate we retain the ability to set up MOM6 and SIS2 debugging separately.
 module MOM_debugging
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_checksums,     only : hchksum, Bchksum, qchksum, uvchksum, hchksum_pair
 use MOM_checksums,     only : is_NaN, chksum, MOM_checksums_init

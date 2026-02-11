@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Configures the model for the idealized seamount test case.
 module seamount_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_domains, only : sum_across_PEs
 use MOM_dyn_horgrid, only : dyn_horgrid_type

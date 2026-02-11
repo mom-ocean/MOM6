@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> The routines here implement the offline tracer algorithm used in MOM6. These are called from step_offline
 !! Some routines called here can be found in the MOM_offline_aux module.
 module MOM_offline_main
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_ALE,                  only : ALE_CS, ALE_regrid, ALE_offline_inputs
 use MOM_ALE,                  only : pre_ALE_adjustments, ALE_update_regrid_weights

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> The equation of state using the TEOS10 expressions
 module MOM_EOS_TEOS10
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use gsw_mod_toolbox, only : gsw_sp_from_sr, gsw_pt_from_ct, gsw_sr_from_sp, gsw_ct_from_pt
 use gsw_mod_toolbox, only : gsw_rho, gsw_specvol

@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Functions that calculate the surface wind stresses and fluxes of buoyancy
 !! or temperature/salinity and fresh water, in ocean-only (solo) mode.
 !!
@@ -6,8 +10,6 @@
 !! return quickly without doing anything.  In addition, any I/O of forcing
 !! fields is controlled by surface_forcing_init, located in this file.
 module MOM_surface_forcing
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_constants,           only : hlv, hlf
 use MOM_cpu_clock,           only : cpu_clock_id, cpu_clock_begin, cpu_clock_end

@@ -1,9 +1,11 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Calculates any requested diagnostic quantities
 !! that are not calculated in the various subroutines.
 !! Diagnostic quantities are requested by allocating them memory.
 module MOM_diagnostics
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,              only : reproducing_sum
 use MOM_coupler_types,     only : coupler_type_send_data

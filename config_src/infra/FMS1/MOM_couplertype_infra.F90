@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> This module wraps the FMS coupler types module
 module MOM_couplertype_infra
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use coupler_types_mod, only : coupler_type_spawn, coupler_type_initialized, coupler_type_destructor
 use coupler_types_mod, only : coupler_type_set_diags, coupler_type_send_data, coupler_type_copy_data

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> A tracer package that is used as a diagnostic in the DOME experiments
 module DOME_tracer
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coupler_types,   only : set_coupler_type_data, atmos_ocn_coupler_flux
 use MOM_diag_mediator,   only : diag_ctrl

@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !//! \brief Memory macros
 !//! \details This is a header file to define macros for static and dynamic memory allocation.
 !//! Define STATIC_MEMORY_ in MOM_memory.h for static memory allocation.

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides transparent structures with groups of MOM6 variables and supporting routines
 module MOM_variables
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array, rotate_vector
 use MOM_coupler_types, only : coupler_1d_bc_type, coupler_2d_bc_type

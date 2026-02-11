@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> A wrapper for the FMS diag_manager routines. This module should be the
 !! only MOM6 module which imports the FMS shared infrastructure for
 !! diagnostics. Pass through interfaces are being documented
@@ -5,8 +9,6 @@
 !! consistent with the FMS infrastructure (Any future updates to
 !! those APIs would be applied here).
 module MOM_diag_manager_infra
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use, intrinsic :: iso_fortran_env, only : real64
 use diag_axis_mod,    only : fms_axis_init=>diag_axis_init

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Time step the adiabatic dynamic core of MOM using RK2 method.
 module MOM_dynamics_split_RK2
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_variables,    only : vertvisc_type, thermo_var_ptrs, porous_barrier_type
 use MOM_variables,    only : BT_cont_type, alloc_bt_cont_type, dealloc_bt_cont_type

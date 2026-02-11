@@ -1,9 +1,12 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Regrid columns for the HyCOM coordinate
 module coord_hycom
 
-! This file is part of MOM6. See LICENSE.md for the license.
-
 use MOM_error_handler, only : MOM_error, FATAL
+use MOM_EOS,           only : EOS_type, calculate_density
 use MOM_remapping,     only : remapping_CS, remapping_core_h
 use MOM_EOS,           only : EOS_type, calculate_density
 use regrid_interp,     only : interp_CS_type, build_and_interpolate_grid, regridding_set_ppolys

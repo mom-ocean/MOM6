@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Solve the layer continuity equation.
 module MOM_continuity
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_continuity_PPM, only : continuity=>continuity_PPM
 use MOM_continuity_PPM, only : continuity_stencil=>continuity_PPM_stencil

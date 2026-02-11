@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> A module with intrinsic functions that are used by MOM but are not supported
 !!  by some compilers.
 module MOM_intrinsic_functions
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use iso_fortran_env, only : stdout => output_unit, stderr => error_unit
 use iso_fortran_env, only : int64, real64

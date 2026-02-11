@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Calculates the energy requirements of mixing.
 module MOM_diapyc_energy_req
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 !! \author By Robert Hallberg, May 2015
 

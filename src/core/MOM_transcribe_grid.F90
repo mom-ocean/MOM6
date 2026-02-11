@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Module with routines for copying information from a shared dynamic horizontal
 !! grid to an ocean-specific horizontal grid and the reverse.
 module MOM_transcribe_grid
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_array_transform, only : rotate_array, rotate_array_pair
 use MOM_domains,         only : pass_var, pass_vector

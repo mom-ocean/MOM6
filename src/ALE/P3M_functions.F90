@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Cubic interpolation functions
 module P3M_functions
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use regrid_edge_values, only : bound_edge_values, average_discontinuous_edge_values
 

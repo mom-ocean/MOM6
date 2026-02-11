@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Provides functions used with the Piecewise-Parabolic-Method in the vertical ALE algorithm.
 module PPM_functions
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 ! First version was created by Laurent White, June 2008.
 ! Substantially re-factored January 2016.

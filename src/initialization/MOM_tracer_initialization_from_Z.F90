@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Initializes hydrography from z-coordinate climatology files
 module MOM_tracer_initialization_from_Z
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_debugging,     only : hchksum
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end

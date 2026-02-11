@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Functions for calculating interface heights, including free surface height.
 module MOM_interface_heights
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_density_integrals, only : int_specific_vol_dp, avg_specific_vol, int_density_dz
 use MOM_debugging,     only : hchksum

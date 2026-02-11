@@ -1,10 +1,12 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Extrapolated-Monotonized Piecewise Linear Method 1D reconstruction
 !!
 !! This extends MPLM_WA, following White and Adcroft, 2008 \cite white2008, by extrapolating for the slopes of the
 !! first and last cells. This extrapolation is used by White et al., 2009, during grid-generation.
 module Recon1d_EMPLM_WA
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_MPLM_WA, only : MPLM_WA, testing
 

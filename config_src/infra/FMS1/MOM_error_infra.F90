@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Routines for error handling and I/O management
 module MOM_error_infra
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use mpp_mod, only : mpp_error, mpp_pe, mpp_root_pe, mpp_stdlog=>stdlog, mpp_stdout=>stdout
 use mpp_mod, only : NOTE, WARNING, FATAL

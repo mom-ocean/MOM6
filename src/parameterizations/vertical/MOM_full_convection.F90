@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Does full convective adjustment of unstable regions via a strong diffusivity.
 module MOM_full_convection
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_grid,              only : ocean_grid_type
 use MOM_interface_heights, only : thickness_to_dz

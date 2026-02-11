@@ -1,3 +1,7 @@
+dnl This file is part of MOM6, the Modular Ocean Model version 6.
+dnl See the LICENSE file for licensing information.
+dnl SPDX-License-Identifier: Apache-2.0
+dnl
 dnl AX_FC_CRAY_POINTER([ACTION-IF-SUCCESS], [ACTION-IF-FAILURE])
 dnl
 dnl This macro tests if any flags are required to enable Cray pointers.

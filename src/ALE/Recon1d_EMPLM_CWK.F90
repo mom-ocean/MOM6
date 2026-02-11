@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Piecewise Linear Method 1D reconstruction in index space and boundary extrapolation
 !!
 !! This implementation of PLM follows Colella and Woodward, 1984 \cite colella1984, except for assuming
@@ -6,8 +10,6 @@
 !! The slope of the first and last cells are set so that the first interior edge values match the interior
 !! cell (i.e. extrapolates from the interior).
 module Recon1d_EMPLM_CWK
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use Recon1d_type, only : testing
 use Recon1d_MPLM_CWK, only : MPLM_CWK

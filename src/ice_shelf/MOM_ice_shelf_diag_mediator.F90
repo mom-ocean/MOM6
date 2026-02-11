@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Convenient wrappers to the FMS diag_manager interfaces with additional diagnostic capabilies.
 module MOM_IS_diag_mediator
 

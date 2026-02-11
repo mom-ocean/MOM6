@@ -1,6 +1,8 @@
-module MOM_surface_forcing_gfdl
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
 
-! This file is part of MOM6. See LICENSE.md for the license.
+module MOM_surface_forcing_gfdl
 
 !#CTRL# use MOM_controlled_forcing, only : apply_ctrl_forcing, register_ctrl_forcing_restarts
 !#CTRL# use MOM_controlled_forcing, only : controlled_forcing_init, controlled_forcing_end

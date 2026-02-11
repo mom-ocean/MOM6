@@ -1,3 +1,7 @@
+# This file is part of MOM6, the Modular Ocean Model version 6.
+# See the LICENSE file for licensing information.
+# SPDX-License-Identifier: Apache-2.0
+
 # tc4 preprocessor configuration
 AC_PREREQ([2.63])
 AC_INIT([], [])

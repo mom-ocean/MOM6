@@ -1,8 +1,10 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Initialization routines for the dense water formation
 !! and overflow experiment.
 module dense_water_initialization
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_ALE_sponge,    only : ALE_sponge_CS, set_up_ALE_sponge_field, initialize_ALE_sponge
 use MOM_dyn_horgrid,   only : dyn_horgrid_type

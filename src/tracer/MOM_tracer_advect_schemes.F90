@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !>  This module contains constants for the tracer advection schemes.
 module MOM_tracer_advect_schemes
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_error_handler,   only : MOM_error, FATAL
 

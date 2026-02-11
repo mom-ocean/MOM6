@@ -1,3 +1,7 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> provides runtime remapping of diagnostics to z star, sigma and
 !! rho vertical coordinates.
 !!
@@ -26,8 +30,6 @@
 
 
 module MOM_diag_remap
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_coms,             only : reproducing_sum_EFP, EFP_to_real
 use MOM_coms,             only : EFP_type, assignment(=), EFP_sum_across_PEs

@@ -1,7 +1,9 @@
+! This file is part of MOM6, the Modular Ocean Model version 6.
+! See the LICENSE file for licensing information.
+! SPDX-License-Identifier: Apache-2.0
+
 !> Defines the horizontal index type (hor_index_type) used for providing index ranges
 module MOM_hor_index
-
-! This file is part of MOM6. See LICENSE.md for the license.
 
 use MOM_domains, only : MOM_domain_type, get_domain_extent, get_global_shape
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL
