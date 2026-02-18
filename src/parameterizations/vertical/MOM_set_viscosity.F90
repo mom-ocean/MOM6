@@ -482,8 +482,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       is = G%isc ; ie = G%iec
       jstart = Jsq
     endif
-    do concurrent (j=jstart:Jeq) DO_LOCALITY(local(k))
 
+    do concurrent (j=jstart:Jeq)
       if (m==1) then
         do concurrent (i=is:ie)
           do_i(i,j) = (G%mask2dCu(I,j) > 0.0)
@@ -557,7 +557,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       if (associated(OBC)) then ; if (OBC%number_of_segments > 0) then
         ! Apply a zero gradient projection of thickness across OBC points.
         if (m==1) then
-          do concurrent (I=is:ie, do_i(I,j) .and. (OBC%segnum_u(I,j) /= 0))
+          do concurrent (I=is:ie, do_i(I,j) .and. (OBC%segnum_u(I,j) /= 0)) &
+              DO_LOCALITY(local(k))
             if (OBC%segnum_u(I,j) > 0) then  ! OBC_DIRECTION_E
               do k=1,nz
                 h_at_vel(I,j,k) = h(i,j,k) ; h_vel(I,j,k) = h(i,j,k)
@@ -595,7 +596,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
             endif
           enddo
         else
-          do concurrent (i=is:ie, do_i(i,j) .and. (OBC%segnum_v(i,J) /= 0))
+          do concurrent (i=is:ie, do_i(i,j) .and. (OBC%segnum_v(i,J) /= 0)) &
+              DO_LOCALITY(local(k))
             if (OBC%segnum_v(i,J) > 0) then  ! OBC_DIRECTION_N
               do k=1,nz
                 h_at_vel(i,j,k) = h(i,j,k) ; h_vel(i,j,k) = h(i,j,k)
@@ -654,7 +656,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         ! Calculate the mean velocity magnitude over the bottommost CS%Hbbl of
         ! the water column for determining the quadratic bottom drag.
         ! Used in ustar(i,j)
-        do concurrent (i=is:ie, do_i(i,j))
+        do concurrent (i=is:ie, do_i(i,j)) DO_LOCALITY(local(k))
           htot_vel = 0.0 ; hwtot = 0.0 ; hutot = 0.0
           dztot_vel = 0.0 ; dzwtot = 0.0
           Thtot = 0.0 ; Shtot = 0.0 ; SpV_htot = 0.0
