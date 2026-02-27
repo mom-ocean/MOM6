@@ -105,6 +105,8 @@ Key rules:
 - **No global/module data** -- all state lives in control structures passed as arguments
 - **All arguments must have declared `intent`** (`in`, `out`, or `inout`); pointers exempt
 - **Every module has `_init` and `_end` subroutines** for lifecycle management
+- **`! Local variables`** comment separates dummy arguments from local declarations in subroutines
+- **Prefer `allocatable` over `pointer`** for control structure members
 
 ### Naming Conventions
 
@@ -237,6 +239,31 @@ call get_param(param_file, mdl, "PARAM_NAME", CS%variable, &
 - Parameters documented in auto-generated `MOM_parameter_doc.all` files
 - Use `scale=` argument for unit conversion from MKS input to internal units
 - Always provide `default=` when sensible; use `fail_if_missing=.true.` otherwise
+- Use `do_not_log=.not.CS%Feature` to suppress logging when a parent feature is inactive
+
+### Answer-Changing Parameters: `_BUG` Flags and `ANSWER_DATE`
+
+When a bug fix or improvement changes numerical answers, MOM6 uses two mechanisms to preserve backward compatibility:
+
+**`_BUG` flags**: Boolean parameters that retain old (buggy) behavior by default:
+```fortran
+call get_param(param_file, mdl, "OBC_TEMP_SALT_NEEDED_BUG", OBC%ts_needed_bug, &
+               "If true, recover a bug that OBC temperature and salinity can be ignored "//&
+               "even if they are registered tracers in the rest of the model.", default=.true.)
+```
+- Name format: `FEATURE_BUG` (e.g., `VISC_REM_BUG`, `FRICTWORK_BUG`, `KAPPA_SHEAR_ITER_BUG`)
+- Default is `.true.` (bug ON, old behavior preserved)
+- Description starts with "If true, recover a bug that..."
+- Users opt into the fix by setting to `.false.`
+
+**`ANSWER_DATE` flags**: Integer dates selecting algorithm versions:
+```fortran
+call get_param(param_file, mdl, "HOR_DIFF_ANSWER_DATE", CS%answer_date, &
+               "...", default=99991231)
+```
+- Format: `YYYYMMDD` (e.g., `20251231`)
+- `DEFAULT_ANSWER_DATE` provides a single knob to update all answer-date defaults
+- `ENABLE_BUGS_BY_DEFAULT=False` activates all bug fixes (recommended for new configurations)
 
 ## Diagnostics
 
@@ -258,6 +285,13 @@ Key conventions:
 - `v_extensive=.true.` for vertically integrated quantities
 - Guard computation with `if (id > 0)` to avoid unnecessary work
 - Standard diagnostic name prefixes follow CMOR conventions when applicable
+
+### Masking and Missing Values
+
+- **Never set diagnostic arrays to a missing value** before passing to `post_data()`. Masking of land/invalid points is handled automatically by the diagnostics infrastructure based on the diagnostic's registered axes.
+- **Do not pass `mask=` to `post_data()`** for non-static diagnostics on standard grids -- the infrastructure applies the correct mask automatically.
+- **Do pass `mask=`** for static fields (`is_static=.true.`), non-standard masks, or sub-domain-sized arrays.
+- **Never compare field values against `missing_value`** in unit-conversion code -- rescaling can cause valid data to coincidentally match the missing value sentinel.
 
 ## Testing
 
@@ -329,9 +363,13 @@ Short imperative summary (aim for ~50 chars)
 
 Conventions from the lead developers:
 - **`*` prefix** on title if the commit changes numerical answers (checksums)
-- **`+` prefix** on title to indicate new features/additions
+- **`+` prefix** on title to indicate new public interfaces or parameters
+- **`*+` or `+*`** when both answer-changing and adding new interfaces
+- No prefix for refactoring, cleanup, or comment-only changes that are bitwise identical
 - **Always state impact on numerical results**: "All answers are bitwise identical" or explain what changes
 - **Multi-commit PRs**: introduce infrastructure first, use it in a second commit
+- **Minimize public scope**: only export symbols needed by other modules; remove from `public` when refactoring makes a symbol internal-only
+- **Comment closing `enddo`/`endif`** for non-trivial nested loops: `enddo ! n-loop for segments`
 
 ### PR Description Style
 
@@ -468,9 +506,32 @@ pkg/
 
 ### Fixing a Bug
 - Always state whether the fix changes answers in the commit message
-- If it could change answers, consider a runtime parameter defaulting to `.false.` (old behavior)
+- **Any change that alters existing numerical answers** -- whether a bug fix, accuracy improvement, or algorithmic reorganization -- must provide a runtime parameter (`_BUG` flag or `ANSWER_DATE`) to toggle between old and new behavior, with the default preserving old behavior
+- This applies even when the developer's tests show negligible differences -- existing users may be in production runs
 - Trace through secondary effects before concluding the fix is safe
 - Run `test.regression` to verify impact
+
+## Architecture: Infrastructure Layering
+
+MOM6 has a strict dependency hierarchy that must never be violated:
+
+```
+config_src/infra/  -->  src/framework/  -->  src/core/, src/parameterizations/, etc.
+```
+
+- **`config_src/infra/`** (FMS1/FMS2 wrappers) must **never** import from `src/framework/`
+- **Code duplication** between infra and framework is acceptable to maintain this invariant
+- FMS1 and FMS2 infra directories must expose the same public API
+- API changes to infra-level functions must be checked against downstream consumers (SIS2, ice shelf code)
+
+## Defensive Programming
+
+- **Check `allocated()` / `associated()`** before accessing arrays tied to optional features (e.g., features controlled by runtime parameters like `FRAZIL` may not allocate all related arrays)
+- **Short-circuit evaluation**: put allocation checks first in compound conditions: `if (allocated(arr) .and. (condition))`
+- **Type-correct comparisons**: when comparing real-valued masks, use `== 1.` not `== 1`
+- **FATAL error messages** should include: file name, subroutine name, and the specific condition or input that triggered the error
+- **Validate user inputs early**: check for duplicates, overflow, and missing required fields in configuration parsing; include the problematic input string in error messages
+- **Mark known issues** with `!###` comment prefix
 
 ## Common Pitfalls
 
@@ -484,6 +545,10 @@ pkg/
 8. **Tabs in source**: CI will fail; use spaces only
 9. **Trailing whitespace**: CI will fail
 10. **`sum()` intrinsic**: operation order undefined across compilers
+11. **Soft case index convention**: use uppercase `I`, `J` for velocity-face indices, lowercase `i`, `j` for tracer-cell -- Fortran is case-insensitive but this convention is enforced in review
+12. **Answer-changing without a `_BUG` flag**: any numerical change requires a runtime parameter to preserve old behavior
+13. **Unnecessary `mask=` in `post_data()`**: the infrastructure handles masking automatically for non-static diagnostics
+14. **Accessing unallocated optional arrays**: always check `allocated()` before using arrays tied to optional features
 
 ## Helpful Resources
 
