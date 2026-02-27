@@ -15,6 +15,11 @@ from the official wiki, ReadTheDocs documentation, CI infrastructure, and the co
 of important historical PRs. Following these guidelines ensures that AI-generated contributions
 match the quality and consistency expected by the MOM6 community.
 
+This is a **living document** intended to be constantly updated as both the MOM6 codebase
+and Claude's capabilities evolve. As developers gain experience using Claude Code on MOM6,
+common mistakes and new best practices should be added here. See the
+"Common Claude Mistakes" section at the end of this file -- it is expected to grow over time.
+
 ## Project Overview
 
 MOM6 (Modular Ocean Model, version 6) is a next-generation open-source ocean model developed by NOAA-GFDL. It combines the best of GOLD and MOM5 into a modern Fortran codebase solving the primitive equations for ocean dynamics on an Arakawa C-grid. Key features:
@@ -512,3 +517,10 @@ when citing prior work in Doxygen documentation or commit messages.
 - **Run tests**: `make -C .testing -j test` before any PR
 - **Respect the C-grid**: use correct staggering (soft case convention for indices)
 - **Write Doxygen comments**: `!>` for entities, `!<` for inline, with units
+
+## Common Claude Mistakes
+
+This section catalogs recurring mistakes that Claude makes when working on MOM6 code.
+It should be updated as new patterns emerge from experience.
+
+*(No entries yet -- add mistakes here as they are discovered.)*
