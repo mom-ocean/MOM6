@@ -12,9 +12,8 @@ When Claude Code operates inside a repository, it reads this `CLAUDE.md` file au
 to learn project-specific conventions, coding standards, and development workflows. Everything
 below captures the patterns, rules, and best practices that govern MOM6 development -- drawn
 from the official wiki, ReadTheDocs documentation, CI infrastructure, and the coding style
-of lead developers (particularly Robert Hallberg and Alistair Adcroft). Following these
-guidelines ensures that AI-generated contributions match the quality and consistency expected
-by the MOM6 community.
+of important historical PRs. Following these guidelines ensures that AI-generated contributions
+match the quality and consistency expected by the MOM6 community.
 
 ## Project Overview
 
