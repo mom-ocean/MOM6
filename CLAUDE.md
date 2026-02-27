@@ -1,5 +1,21 @@
 # MOM6 rules for agent-assisted development
 
+## Purpose of this document
+
+This file guides [Claude Code](https://docs.anthropic.com/en/docs/claude-code) -- Anthropic's agentic
+command-line tool for software development -- when working on the MOM6 codebase. Claude Code uses Claude,
+Anthropic's AI assistant, to read and edit files, run shell commands, search codebases, and interact with
+git and GitHub, all from the terminal. It is available via `npm install -g @anthropic-ai/claude-code`
+or at https://claude.ai/download.
+
+When Claude Code operates inside a repository, it reads this `CLAUDE.md` file automatically
+to learn project-specific conventions, coding standards, and development workflows. Everything
+below captures the patterns, rules, and best practices that govern MOM6 development -- drawn
+from the official wiki, ReadTheDocs documentation, CI infrastructure, and the coding style
+of lead developers (particularly Robert Hallberg and Alistair Adcroft). Following these
+guidelines ensures that AI-generated contributions match the quality and consistency expected
+by the MOM6 community.
+
 ## Project Overview
 
 MOM6 (Modular Ocean Model, version 6) is a next-generation open-source ocean model developed by NOAA-GFDL. It combines the best of GOLD and MOM5 into a modern Fortran codebase solving the primitive equations for ocean dynamics on an Arakawa C-grid. Key features:
