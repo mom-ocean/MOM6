@@ -493,6 +493,12 @@ pkg/
 - MOM6 forum: https://bb.cgd.ucar.edu/cesm/forums/mom6.148/
 - CVMix documentation: https://github.com/CVMix/CVMix-src
 - TEOS-10 (GSW): http://www.teos-10.org/
+- GOTM (General Ocean Turbulence Model): https://gotm.net/
+
+### Key References
+
+The project bibliography lives in `docs/references.bib` and `docs/zotero.bib`. Consult these
+when citing prior work in Doxygen documentation or commit messages.
 
 ## AI Assistant Behavior
 
