@@ -131,7 +131,8 @@ This is a critical MOM6 convention for the Arakawa C-grid staggering:
 ### Memory Macros
 
 Array dimensions use preprocessor macros from `MOM_memory.h`:
-- `SZI_(G)`, `SZJ_(G)`, `SZK_(GV)` for explicit-shape arrays
+- `SZI_(G)`, `SZJ_(G)`, `SZK_(GV)` for explicit-shape cell-center arrays
+- `SZIB_(G)`, `SZJB_(G)`, `SZKB_(GV)` for explicit-shape face/edge-point arrays
 - `NIMEM_`, `NJMEM_`, `NKMEM_` for allocatable arrays
 
 ## Unit Documentation (Critical Convention)
