@@ -102,7 +102,7 @@ end module MOM_module_name
 Key rules:
 - **`implicit none ; private`** on a single line in every module
 - **Explicit `only` imports** on all `use` statements -- no blanket imports
-- **No global/module data** -- all state lives in control structures passed as arguments
+- **No global/module data** -- all state lives in control structures passed as arguments (rare exceptions exist, e.g., clock timers)
 - **All arguments must have declared `intent`** (`in`, `out`, or `inout`); pointers exempt
 - **Every module has `_init` and `_end` subroutines** for lifecycle management
 - **`! Local variables`** comment separates dummy arguments from local declarations in subroutines
