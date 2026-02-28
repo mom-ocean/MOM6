@@ -104,8 +104,8 @@ Key rules:
 - **Explicit `only` imports** on all `use` statements -- no blanket imports
 - **No global/module data** -- all state lives in control structures passed as arguments (rare exceptions exist, e.g., clock timers)
 - **All arguments must have declared `intent`** (`in`, `out`, or `inout`), including pointers (some existing code is out of date in this regard)
-- **Every module has `_init` and `_end` subroutines** for lifecycle management
-- **`! Local variables`** comment separates dummy arguments from local declarations in subroutines
+- Convention: most modules have `_init` and `_end` subroutines for lifecycle management
+- Convention: `! Local variables` comment separates dummy arguments from local declarations
 - **Prefer `allocatable` over `pointer`** for control structure members
 
 ### Naming Conventions
