@@ -440,7 +440,7 @@ src/
   user/                          # Idealized configuration initialization
 config_src/
   drivers/
-    solo_driver/                 # Ocean-only standalone (simplest; testing)
+    solo_driver/                 # Ocean-only standalone
     FMS_cap/                     # GFDL coupler
     nuopc_cap/                   # NUOPC/CESM coupling
     unit_tests/                  # Unit test executables
