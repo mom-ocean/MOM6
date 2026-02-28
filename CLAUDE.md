@@ -33,7 +33,7 @@ MOM6 (Modular Ocean Model, version 6) is a next-generation open-source ocean mod
 
 ### Language & Environment
 
-- **Language**: Fortran 2003+ (free-form `.F90`, preprocessed)
+- **Language**: Fortran (2023-compliant)
 - **Build systems**: Autoconf (primary), CMake (experimental), GNU Make for testing
 - **Dependencies**: FMS framework, CVMix, GSW-Fortran (TEOS-10)
 - **Compilers**: Must compile under GNU, Intel, and PGI
