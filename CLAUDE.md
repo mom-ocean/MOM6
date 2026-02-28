@@ -527,7 +527,7 @@ config_src/infra/  -->  src/framework/  -->  src/core/, src/parameterizations/, 
 ## Defensive Programming
 
 - **Check `allocated()` / `associated()`** before accessing arrays tied to optional features (e.g., features controlled by runtime parameters like `FRAZIL` may not allocate all related arrays)
-- **Short-circuit evaluation**: put allocation checks first in compound conditions: `if (allocated(arr) .and. (condition))`
+- **No short-circuit evaluation**: Fortran does not guarantee short-circuit evaluation; allocation checks must not appear in compound conditions. Convert `if (allocated(arr) .and. (condition))` to nested if-blocks
 - **Type-correct comparisons**: when comparing real-valued masks, use `== 1.` not `== 1`
 - **FATAL error messages** should include: file name, subroutine name, and the specific condition or input that triggered the error
 - **Validate user inputs early**: check for duplicates, overflow, and missing required fields in configuration parsing; include the problematic input string in error messages
