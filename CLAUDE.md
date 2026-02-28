@@ -531,7 +531,7 @@ config_src/infra/  -->  src/framework/  -->  src/core/, src/parameterizations/, 
 - **Type-correct comparisons**: when comparing real-valued masks, use `== 1.` not `== 1`
 - **FATAL error messages** should include: file name, subroutine name, and the specific condition or input that triggered the error
 - **Validate user inputs early**: check for duplicates, overflow, and missing required fields in configuration parsing; include the problematic input string in error messages
-- **`!###` comment prefix** marks known bugs or inaccurate expressions that change answers and will be cleaned up later
+- **`!###` comment prefix** marks known bugs or inaccurate expressions that change answers and will be cleaned up later -- do not modify code marked with `!###` unless explicitly asked
 
 ## Common Pitfalls
 
