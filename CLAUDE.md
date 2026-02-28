@@ -395,8 +395,8 @@ On every push and PR, GitHub Actions runs:
 ```
 src/
   core/                          # Dynamical core
-    MOM.F90                      # Main stepping routines (~5000 lines)
-    MOM_barotropic.F90           # Barotropic solver (~6700 lines)
+    MOM.F90                      # Main stepping routines
+    MOM_barotropic.F90           # Barotropic solver
     MOM_continuity_PPM.F90       # PPM-based continuity
     MOM_dynamics_split_RK2.F90   # Split RK2 time stepping
     MOM_grid.F90                 # Horizontal grid type
@@ -431,7 +431,7 @@ src/
       MOM_MEKE.F90               # Mesoscale eddy kinetic energy
       MOM_Zanna_Bolton.F90       # Zanna-Bolton backscatter
     vertical/                    # Vertical mixing
-      MOM_energetic_PBL.F90      # ePBL mixed layer (~4500 lines)
+      MOM_energetic_PBL.F90      # ePBL mixed layer
       MOM_CVMix_KPP.F90          # KPP via CVMix
       MOM_diabatic_driver.F90    # Diabatic processes driver
       MOM_set_diffusivity.F90    # Background diffusivity
