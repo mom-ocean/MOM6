@@ -190,14 +190,15 @@ MOM6 demands bitwise reproducibility across processor counts and build modes. Th
 2. **Never use `sum()`, `prod()`, or `matmul()` intrinsics** -- operation order is undefined
 3. **Pre-compute reciprocals**: `Q * G%IareaT(i,j)` not `Q / G%areaT(i,j)`
 4. **Never write `B / C * D`**: use `(B * D) / C` (explicit grouping)
-5. **Avoid the exponent operator `**`**: write `a * a * a` not `a**3` (compilers emit transcendental `pow()`)
-6. **Avoid transcendental functions** where possible (sin, cos, log, non-integer powers are implementation-dependent)
-7. **`sqrt()` is safe** (IEEE-754 exactly rounded); use MOM6's `cuberoot` for cube roots
-8. **Explicit parenthesization for FP precision**: group unit-conversion factors before multiplying data
+5. **No double divisions**: write `a / b / c` as `a / (b * c)`
+6. **Avoid the exponent operator `**`**: write `a * a * a` not `a**3` (compilers emit transcendental `pow()`)
+7. **Avoid transcendental functions** where possible (sin, cos, log, non-integer powers are implementation-dependent)
+8. **`sqrt()` is safe** (IEEE-754 exactly rounded); use MOM6's `cuberoot` for cube roots
+9. **Explicit parenthesization for FP precision**: group unit-conversion factors before multiplying data
    ```fortran
    tmp = ( ( tv%C_p * GV%H_to_RZ ) * h(i,j,k) ) * tv%T(i,j,k)
    ```
-9. **Vanished layer pattern**: `h + h_neglect` (not `max(h, h_neglect)`)
+10. **Vanished layer pattern**: `h + h_neglect` (not `max(h, h_neglect)`)
 
 ### Array Syntax
 
