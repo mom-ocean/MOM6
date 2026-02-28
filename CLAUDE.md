@@ -356,11 +356,11 @@ Checks for tabs, trailing whitespace, and line length violations.
 ### Commit Message Format
 
 ```
-Short imperative summary (aim for ~50 chars)
+Short imperative summary (50 chars if at all possible)
 
-  Detailed explanation indented by 2 spaces, wrapped at ~80 columns.
-  Describe what was changed and why. Reference issues with #NNN.
-  All answers are bitwise identical.
+Detailed explanation wrapped at 72 characters.
+Describe what was changed and why. Reference issues with #NNN.
+All answers are bitwise identical.
 ```
 
 Conventions from the lead developers:
