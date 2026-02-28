@@ -110,7 +110,7 @@ Key rules:
 
 ### Naming Conventions
 
-- **Files**: `MOM_something.F90` (module inside is `MOM_something`)
+- **Files**: one module per file; module name must match file name (e.g., `MOM_something.F90` contains module `MOM_something`)
 - **Variables**: `snake_case` for multi-word names (Doxygen-compatible)
 - **Control structures**: `module_CS` (e.g., `energetic_PBL_CS`), always `private`
 - **Diagnostic IDs**: `id_diag_name`, initialized to `-1`
