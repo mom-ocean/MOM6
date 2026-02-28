@@ -349,9 +349,9 @@ Checks for tabs, trailing whitespace, and line length violations.
 ### Branch Strategy
 
 - **Work on forks**, not branches on the primary repository
-- **Branch from `dev/gfdl`** for all new work
+- **Branch from `main`** for all new work
 - **Never rebase a pushed branch**
-- Submit changes via pull requests to `dev/gfdl`
+- Submit changes via pull requests to `main`
 
 ### Commit Message Format
 
