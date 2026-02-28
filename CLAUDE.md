@@ -40,7 +40,7 @@ MOM6 (Modular Ocean Model, version 6) is a next-generation open-source ocean mod
 - **Testing**: Comprehensive CI via GitHub Actions and GFDL GitLab pipeline
 - **Repository**: https://github.com/NOAA-GFDL/MOM6
 - **Documentation**: https://mom6.readthedocs.io/en/main/
-- **Examples**: https://github.com/NOAA-GFDL/MOM6-examples/wiki
+- **Examples**: https://github.com/NOAA-GFDL/MOM6-examples
 - **Main branch**: `dev/gfdl` (GFDL development); `main` (inter-lab coordination)
 
 ## Code Style & Conventions
