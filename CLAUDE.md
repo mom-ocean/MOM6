@@ -390,8 +390,6 @@ On every push and PR, GitHub Actions runs:
 4. Code coverage reporting
 5. For PRs: regression testing and timing comparison against target branch
 
-Additionally, GFDL's internal GitLab runs ~400 tests across 59 configurations on Gaea HPC (GNU/Intel/PGI, debug/repro).
-
 ## Source Directory Structure
 
 ```
