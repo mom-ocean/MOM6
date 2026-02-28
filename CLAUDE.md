@@ -37,7 +37,7 @@ MOM6 (Modular Ocean Model, version 6) is a next-generation open-source ocean mod
 - **Build systems**: Autoconf, mkmf (legacy, recommended for new users)
 - **Dependencies**: netCDF (HDF5), MPI, FMS framework, CVMix, GSW-Fortran (TEOS-10)
 - **Compilers**: Any standards-compliant Fortran compiler (regularly tested with GNU, Intel, NVIDIA)
-- **Testing**: Comprehensive CI via GitHub Actions and GFDL GitLab pipeline
+- **Testing**: Comprehensive test suite in `.testing/`, used in GitHub Actions
 - **Repository**: https://github.com/NOAA-GFDL/MOM6
 - **Documentation**: https://mom6.readthedocs.io/en/main/
 - **Examples**: https://github.com/NOAA-GFDL/MOM6-examples
