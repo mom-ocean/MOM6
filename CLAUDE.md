@@ -448,7 +448,7 @@ config_src/
   memory/
     dynamic_symmetric/           # Symmetric memory layout (default)
     dynamic_nonsymmetric/        # Asymmetric memory layout
-  infra/                         # FMS1/FMS2 wrappers
+  infra/                         # Framework interface (e.g. FMS1/2)
   external/                      # Null hooks for optional components
 pkg/
   CVMix-src/                     # Community Vertical Mixing
