@@ -159,7 +159,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   integer :: TILE_SIZE_Y !< Number of j-points in each GPU tile [nondim].
 
   ! could be made runtime modifiable
-#ifndef _OPENACC
+#ifndef __NVCOMPILER_OPENMP_GPU
   TILE_SIZE_X = 32
   TILE_SIZE_Y = 4
 #endif
@@ -178,7 +178,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   !$omp target enter data map(alloc: h_W, h_E, h_S, h_N)
 
   if (x_first) then
-#ifdef _OPENACC
+#ifdef __NVCOMPILER_OPENMP_GPU
     TILE_SIZE_X = G%iedB-G%isdB+1
     TILE_SIZE_Y = G%jed-G%jsd+1
 #endif
@@ -189,7 +189,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
                          TILE_SIZE_X, TILE_SIZE_Y, LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin)
 
-#ifdef _OPENACC
+#ifdef __NVCOMPILER_OPENMP_GPU
     TILE_SIZE_X = G%ied-G%isd+1
     TILE_SIZE_Y = G%jedB-G%jsdB+1
 #endif
@@ -204,7 +204,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
 
   else  ! .not. x_first
 
-#ifdef _OPENACC
+#ifdef __NVCOMPILER_OPENMP_GPU
     TILE_SIZE_X = G%ied-G%isd+1
     TILE_SIZE_Y = G%jedB-G%jsdB+1
 #endif
@@ -216,7 +216,7 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
                               LB, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
     call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hin)
 
-#ifdef _OPENACC
+#ifdef __NVCOMPILER_OPENMP_GPU
     TILE_SIZE_X = G%iedB-G%isdB+1
     TILE_SIZE_Y = G%jed-G%jsd+1
 #endif
@@ -633,12 +633,12 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
   call cpu_clock_begin(id_clock_correct)
 
-  !$acc enter data async(1) &
-  !$acc   create(uhbt_t,uh_t,u_t,duhdu,du,du_min_CFL,du_max_CFL,duhdu_tot_0,uh_tot_0, &
-  !$acc     visc_rem_max,do_I,visc_rem,simple_OBC_pt) &
-  !$acc   copyin(u,h_in,h_W,h_E,du_cor,u_cor,uh,CS,BT_cont,BT_cont%uBT_WW,BT_cont%uBT_EE,&
-  !$acc     BT_cont%FA_u_WW,BT_cont%FA_u_EE,BT_cont%FA_u_W0,BT_cont%FA_u_E0,visc_rem_u,&
-  !$acc     por_face_areaU,G,G%dxCu,G%mask2dCu,G%dxT,G%dy_Cu,G%IareaT,G%IdxT,uhbt)
+  !$omp target enter data &
+  !$omp   map(alloc:uhbt_t,uh_t,u_t,duhdu,du,du_min_CFL,du_max_CFL,duhdu_tot_0,uh_tot_0, &
+  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt) &
+  !$omp   map(to:u,h_in,h_W,h_E,du_cor,u_cor,uh,CS,BT_cont,BT_cont%uBT_WW,BT_cont%uBT_EE,&
+  !$omp     BT_cont%FA_u_WW,BT_cont%FA_u_EE,BT_cont%FA_u_W0,BT_cont%FA_u_E0,visc_rem_u,&
+  !$omp     por_face_areaU,G,G%dxCu,G%mask2dCu,G%dxT,G%dy_Cu,G%IareaT,G%IdxT,uhbt)
 
   use_visc_rem = present(visc_rem_u)
 
@@ -652,7 +652,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   endif ; endif
 
   if (present(du_cor)) then
-    !$acc parallel loop async(1) collapse(2) default(present)
+    !$omp target teams loop collapse(2)
     do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
       du_cor(I,j) = 0.0
     enddo ; enddo
@@ -670,7 +670,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   if (.not.use_visc_rem) then
-    !$acc parallel loop async(1) collapse(3) default(present)
+    !$omp target teams loop collapse(3)
     do k=1,nz ; do j=1,TILE_SIZE_Y ; do i=1,TILE_SIZE_X
       visc_rem(i,j,k) = 1.0
     enddo ; enddo ; enddo
@@ -680,28 +680,26 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     i_end = min(i_start+TILE_SIZE_X-1,ieh)
     j_end = min(j_start+TILE_SIZE_Y-1,jeh)
 
-    !$acc parallel loop async(1) collapse(3) default(present)
+    !$omp target teams loop collapse(3)
     do k=1,nz ; do j=j_start,j_end ; do I=i_start-1,i_end+1
       u_t(I-i_start+1,j-j_start+1,k) = u(I,j,k)
     enddo ; enddo ; enddo
 
-    !$acc parallel loop async(1) collapse(2) default(present)
+    !$omp target teams loop collapse(2)
     do j=j_start,j_end ; do i=i_start,i_end
       do_I(i-i_start+1,j-j_start+1) = .true.
     enddo ; enddo
     ! Set uh and duhdu.
-    !$acc parallel async(1) default(present) &
-    !$acc   private(k) firstprivate(nz,use_visc_rem,local_open_BC,local_specified_BC)
-    !$acc loop seq
+    !$omp target private(k)
     do k=1,nz
       if (use_visc_rem) then
-        !$acc loop collapse(2) private(ii,jj)
+        !$omp loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do I=i_start,i_end
           ii=I-i_start+1 ; jj=j-j_start+1
           visc_rem(ii,jj,k) = visc_rem_u(I,j,k)
         enddo ; enddo
       endif
-      !$acc loop collapse(2) private(ii,jj)
+      !$omp loop collapse(2) private(ii,jj)
       do j=j_start,j_end ; do i=i_start,i_end
         ii=i-i_start+1 ; jj=j-j_start+1
         call flux_elem(u_t(ii,jj,k),h_in(i,j,k),h_in(i+1,j,k),h_W(i,j,k),h_W(i+1,j,k),h_E(i,j,k),&
@@ -714,34 +712,33 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                              OBC%segnum_u(i,j))
       enddo ; enddo
       if (local_specified_BC) then
-        !$acc loop collapse(2) private(l_seg)
+        !$omp loop collapse(2) private(l_seg)
         do j=j_start,j_end ; do i=i_start,i_end ; if (OBC%segnum_u(I,j) /= 0) then
           l_seg = abs(OBC%segnum_u(I,j))
           if (OBC%segment(l_seg)%specified) uh_t(I-i_start+1,j-j_start+1,k) = OBC%segment(l_seg)%normal_trans(I,j,k)
         endif ; enddo ; enddo
       endif
     enddo
-    !$acc end parallel
+    !$omp end target
 
     if (present(uhbt) .or. set_BT_cont) then
       if (use_visc_rem .and. CS%use_visc_rem_max) then
-        !$acc parallel async(1) default(present) firstprivate(nz)
-        !$acc loop collapse(2) private(ii,jj,k)
+        !$omp target private(k)
+        !$omp loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
           visc_rem_max(ii,jj) = 0.0
         enddo ; enddo
-        !$acc loop seq
         do k=1,nz
-          !$acc loop collapse(2) private(ii,jj)
+          !$omp loop collapse(2) private(ii,jj)
           do j=j_start,j_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             visc_rem_max(ii,jj) = max(visc_rem_max(ii,jj), visc_rem(ii,jj,k))
           enddo ; enddo
         enddo
-        !$acc end parallel
+        !$omp end target
       else
-        !$acc parallel loop async(1) collapse(2) default(present) private(ii,jj)
+        !$omp target teams loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
           visc_rem_max(ii,jj) = 1.0
@@ -749,8 +746,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       endif
       !   Set limits on du that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
-      !$acc parallel async(1) default(present) firstprivate(nz)
-      !$acc loop collapse(2) private(ii,jj,I_vrm,dx_W,dx_E)
+      !$omp target private(k)
+      !$omp loop collapse(2) private(ii,jj,I_vrm,dx_W,dx_E)
       do j=j_start,j_end ; do I=i_start,i_end
         ii=I-i_start+1 ; jj=j-j_start+1
         I_vrm = 0.0
@@ -763,22 +760,20 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         du_min_CFL(ii,jj) = -2.0 * (CFL_dt * dx_E) * I_vrm
         uh_tot_0(ii,jj) = 0.0 ; duhdu_tot_0(ii,jj) = 0.0
       enddo ; enddo
-      !$acc loop seq
       do k=1,nz
-        !$acc loop collapse(2) private(ii,jj)
+        !$omp loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do I=i_start,i_end
           ii=I-i_start+1 ; jj=j-j_start+1
           duhdu_tot_0(ii,jj) = duhdu_tot_0(ii,jj) + duhdu(ii,jj,k)
           uh_tot_0(ii,jj) = uh_tot_0(ii,jj) + uh_t(ii,jj,k)
         enddo
       enddo ; enddo
-      !$acc end parallel
+      !$omp end target
       if (use_visc_rem) then
         if (CS%aggress_adjust) then
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dx_W,dx_E,du_lim)
             do j=j_start,j_end ; do I=i_start,i_end
               ii=I-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -795,12 +790,11 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                 du_min_CFL(ii,jj) = du_lim / visc_rem(ii,jj,k)
             enddo ; enddo
           enddo
-          !$acc end parallel
+          !$omp end target
         else
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dx_E,dx_W)
             do j=j_start,j_end ; do I=i_start,i_end
               ii=I-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -814,14 +808,13 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                 du_min_CFL(ii,jj) = -(dx_E*CFL_dt + u_t(ii,jj,k)) / visc_rem(ii,jj,k)
             enddo ; enddo
           enddo
-          !$acc end parallel
+          !$omp end target
         endif
       else
         if (CS%aggress_adjust) then
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dx_W,dx_E)
             do j=j_start,j_end ; do I=i_start,i_end
               ii=I-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -835,12 +828,11 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                           ((-dx_E*I_dt - u_t(ii,jj,k)) + MAX(0.0,u_t(ii+1,jj,k))) )
             enddo ; enddo
           enddo
-          !$acc end parallel
+          !$omp end target
         else
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dx_W,dx_E)
             do j=j_start,j_end ; do I=i_start,i_end
               ii=I-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -852,10 +844,10 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
               du_min_CFL(ii,jj) = MAX(du_min_CFL(ii,jj), -(dx_E*CFL_dt + u_t(ii,jj,k)))
             enddo ; enddo
           enddo
-          !$acc end parallel
+          !$omp end target
         endif
       endif
-      !$acc parallel loop async(1) collapse(2) default(present)
+      !$omp target teams loop collapse(2)
       do j=j_start,j_end ; do I=i_start,i_end
         ii=I-i_start+1 ; jj=j-j_start+1
         du_max_CFL(ii,jj) = max(du_max_CFL(ii,jj),0.0)
@@ -865,7 +857,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       any_simple_OBC = .false.
       if (present(uhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then
-          !$acc parallel loop async(1) collapse(2) default(present)
+          !$omp target teams loop collapse(2) private(ii,jj,l_seg)
           do j=j_start,j_end ; do I=i_start,i_end
             ii=I-i_start+1 ; jj=j-j_start+1
             l_seg = abs(OBC%segnum_u(I,j))
@@ -876,14 +868,14 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             do_I(ii,jj) = .not.simple_OBC_pt(ii,jj)
             any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(ii,jj)
           enddo ; enddo ; else
-          !$acc parallel loop async(1) collapse(2) default(present)
+          !$omp target teams loop collapse(2)
           do j=j_start,j_end ; do I=i_start,i_end
             do_I(I-i_start+1,j-j_start+1) = .true.
           enddo ; enddo ; endif
       endif
 
       if (present(uhbt)) then
-        !$acc parallel loop async(1) collapse(2) default(present)
+        !$omp target teams loop collapse(2)
         do j=j_start,j_end ; do I=i_start,i_end
           uhbt_t(I-i_start+1,j-j_start+1) = uhbt(I,j)
         enddo ; enddo
@@ -894,7 +886,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                               uh_t, OBC=OBC)
 
         if (present(u_cor)) then
-          !$acc parallel loop async(1) collapse(3) default(present)
+          !$omp target teams loop collapse(3) private(ii,jj)
           do k=1,nz ; do j=j_start,j_end ; do I=i_start,i_end
             ii=I-i_start+1 ; jj=j-j_start+1
             u_cor(I,j,k) = u_t(ii,jj,k) + du(ii,jj) * visc_rem(ii,jj,k)
@@ -905,7 +897,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         endif ! u-corrected
 
         if (present(du_cor)) then
-          !$acc parallel loop async(1) collapse(2) default(present)
+          !$omp target teams loop collapse(2) private(ii,jj)
           do j=j_start,j_end ; do I=i_start,i_end
             ii=I-i_start+1 ; jj=j-j_start+1
             du_cor(I,j) = du(ii,jj)
@@ -920,16 +912,15 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                               visc_rem_max, i_start, i_end, j_start, j_end, do_I, &
                               por_face_areaU, TILE_SIZE_X, TILE_SIZE_Y)
         if (any_simple_OBC) then
-          !$acc parallel async(1) firstprivate(nz) private(k)
-          !$acc loop collapse(2) private(ii,jj)
+          !$omp target private(k)
+          !$omp loop collapse(2) private(ii,jj)
           do j=j_start,j_end ; do I=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             if (simple_OBC_pt(II,jj)) FAuI(II,jj) = GV%H_subroundoff*G%dy_Cu(I,j)
           enddo ; enddo
           ! NOTE: simple_OBC_pt should prevent access to segment OBC_NONE
-          !$acc loop seq
           do k=1,nz
-            !$acc loop collapse(2) private(ii,jj,l_seg)
+            !$omp loop collapse(2) private(ii,jj,l_seg)
             do j=j_start,j_end ; do I=i_start,i_end
               ii=i-i_start+1 ; jj=j-j_start+1
               if (simple_OBC_pt(II,jj)) then
@@ -941,7 +932,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
               endif
             enddo ; enddo
           enddo
-          !$acc loop collapse(2) private(ii,jj)
+          !$omp loop collapse(2) private(ii,jj)
           do j=j_start,j_end ; do I=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             if (simple_OBC_pt(ii,jj)) then
@@ -950,27 +941,25 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
               BT_cont%uBT_WW(I,j) = 0.0 ; BT_cont%uBT_EE(I,j) = 0.0
             endif
           enddo ; enddo
-          !$acc end parallel
+          !$omp end target
         endif
       endif ! set_BT_cont
 
     endif ! present(uhbt) or set_BT_cont
 
-    !$acc parallel loop async(1) collapse(3) default(present)
+    !$omp target teams loop collapse(3)
     do k=1,nz ; do j=j_start,j_end ; do I=i_start,i_end
       uh(I,j,k) = uh_t(I-i_start+1,j-j_start+1,k)
     enddo ; enddo ; enddo
 
   enddo ; enddo ! ij tile loop
 
-  !$acc exit data async(1) &
-  !$acc   delete(uhbt_t,uh_t,u_t,u,duhdu,du,du_min_CFL,du_max_CFL,duhdu_tot_0,uh_tot_0,&
-  !$acc     visc_rem_max,do_I,visc_rem,h_in,h_W,h_E,CS,BT_cont,visc_rem_u,por_face_areaU,&
-  !$acc     G,G%dxCu,G%mask2dCu,G%dxT,G%dy_Cu,G%IareaT,G%IdxT,simple_OBC_pt,uhbt) &
-  !$acc   copyout(du_cor,u_cor,uh,BT_cont%uBT_WW,BT_cont%uBT_EE,BT_cont%FA_u_WW,BT_cont%FA_u_EE,&
-  !$acc     BT_cont%FA_u_W0,BT_cont%FA_u_E0)
-
-  !$acc wait(1)
+  !$omp target exit data &
+  !$omp   map(release:uhbt_t,uh_t,u_t,u,duhdu,du,du_min_CFL,du_max_CFL,duhdu_tot_0,uh_tot_0,&
+  !$omp     visc_rem_max,do_I,visc_rem,h_in,h_W,h_E,CS,BT_cont,visc_rem_u,por_face_areaU,&
+  !$omp     G,G%dxCu,G%mask2dCu,G%dxT,G%dy_Cu,G%IareaT,G%IdxT,simple_OBC_pt,uhbt) &
+  !$omp   map(from:du_cor,u_cor,uh,BT_cont%uBT_WW,BT_cont%uBT_EE,BT_cont%FA_u_WW,BT_cont%FA_u_EE,&
+  !$omp     BT_cont%FA_u_W0,BT_cont%FA_u_E0)
 
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
@@ -1375,8 +1364,8 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   logical :: domore, do_I(TILE_SIZE_X,TILE_SIZE_Y)
   logical :: local_open_BC ! True if there are open OBC points on this PE [nondim].
 
-  !$acc enter data async(1) &
-  !$acc   create(uh_err,uh_err_best,duhdu_tot,du_min,du_max,do_I)
+  !$omp target enter data &
+  !$omp   map(alloc: uh_err,uh_err_best,duhdu_tot,du_min,du_max,do_I)
 
   nz = GV%ke
   local_open_BC = .false.
@@ -1384,9 +1373,9 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
 
   tol_vel = CS%tol_vel
 
-  !$acc parallel async(1) private(k) firstprivate(tol_vel,nz,max_itts) private(tol_eta,itt) default(present)
+  !$omp target private(k,tol_eta,itt) !firstprivate(tol_vel,nz,max_itts)
 
-  !$acc loop collapse(2) private(ii,jj)
+  !$omp loop collapse(2) private(ii,jj)
   do j=j_start,j_end ; do I=i_start,i_end
     ii=I-i_start+1 ; jj=j-j_start+1
     du(ii,jj) = 0.0 ; do_I(ii,jj) = do_I_in(ii,jj)
@@ -1395,7 +1384,6 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
     uh_err_best(ii,jj) = abs(uh_err(ii,jj))
   enddo ; enddo
 
-  !$acc loop seq
   do itt=1,max_itts
     select case (itt)
       case (:1) ; tol_eta = 1e-6 * CS%tol_eta
@@ -1404,17 +1392,17 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
       case default ; tol_eta = CS%tol_eta
     end select
 
-    !$acc loop collapse(2) private(ii,jj)
+    !$omp loop collapse(2) private(ii,jj)
     do j=j_start,j_end ; do I=i_start,i_end
       ii=I-i_start+1 ; jj=j-j_start+1
       if (uh_err(ii,jj) > 0.0) then ; du_max(ii,jj) = du(ii,jj)
       elseif (uh_err(ii,jj) < 0.0) then ; du_min(ii,jj) = du(ii,jj)
       else ; do_I(ii,jj) = .false. ; endif
     enddo ; enddo
-#ifndef _OPENACC
+#ifndef __NVCOMPILER_OPENMP_GPU
     domore = .false.
 #endif
-    !$acc loop collapse(2) private(ii,jj,ddu,du_prev)
+    !$omp loop collapse(2) private(ii,jj,ddu,du_prev)
     do j=j_start,j_end ; do I=i_start,i_end
       ii=I-i_start+1 ; jj=j-j_start+1
       if (do_I(ii,jj)) then
@@ -1439,7 +1427,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
               if (du_prev - du_min(ii,jj) < 1.0e-15*abs(du(ii,jj))) do_I(ii,jj) = .false.
             endif
           endif
-#ifndef _OPENACC
+#ifndef __NVCOMPILER_OPENMP_GPU
           if (do_I(ii,jj)) domore = .true.
 #endif
         else
@@ -1447,18 +1435,17 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
         endif
       endif
     enddo ; enddo
-#ifndef _OPENACC
+#ifndef __NVCOMPILER_OPENMP_GPU
     if (.not.domore) exit
 #endif
 
-    !$acc loop collapse(2) private(ii,jj)
+    !$omp loop collapse(2) private(ii,jj)
     do j=j_start,j_end ; do I=i_start,i_end
       ii=I-i_start+1 ; jj=j-j_start+1
       uh_err(ii,jj) = -uhbt(ii,jj) ; duhdu_tot(ii,jj) = 0.0
     enddo ; enddo
-    !$acc loop seq
     do k=1,nz
-      !$acc loop collapse(2) private(ii,jj,duhdu,u_new)
+      !$omp loop collapse(2) private(ii,jj,duhdu,u_new)
       do j=j_start,j_end ; do i=i_start,i_end
         ii=i-i_start+1 ; jj=j-j_start+1
         if (do_I(ii,jj)) then
@@ -1476,7 +1463,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
         endif
       enddo ; enddo
     enddo
-    !$acc loop collapse(2) private(ii,jj)
+    !$omp loop collapse(2) private(ii,jj)
     do j=j_start,j_end ; do I=i_start,i_end
       ii=I-i_start+1 ; jj=j-j_start+1
       uh_err_best(ii,jj) = min(uh_err_best(ii,jj), abs(uh_err(ii,jj)))
@@ -1485,10 +1472,10 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
   ! If there are any faces which have not converged to within the tolerance,
   ! so-be-it, or else use a final upwind correction?
   ! This never seems to happen with 20 iterations as max_itt.
-  !$acc end parallel
+  !$omp end target
 
-  !$acc exit data async(1) &
-  !$acc   delete(uh_err,uh_err_best,duhdu_tot,du_min,du_max,do_I)
+  !$omp target exit data &
+  !$omp   map(release: uh_err,uh_err_best,duhdu_tot,du_min,du_max,do_I)
 
 end subroutine zonal_flux_adjust
 
@@ -1575,14 +1562,14 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   integer :: i, j, k, nz, ii, jj !< Tile loop indices [nondim].
   real, dimension(TILE_SIZE_X,TILE_SIZE_Y,SZK_(GV)) :: uh_tmp
 
-  !$acc enter data async(1) &
-  !$acc   create(du0,duL,duR,du_CFL,FAmt_L,FAmt_R,FAmt_0,uhtot_L,uhtot_R,zeros,uh_tmp)
+  !$omp target enter data &
+  !$omp   map(alloc: du0,duL,duR,du_CFL,FAmt_L,FAmt_R,FAmt_0,uhtot_L,uhtot_R,zeros,uh_tmp)
 
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
  ! Diagnose the zero-transport correction, du0.
-  !$acc parallel loop async(1) collapse(2) default(present)
+  !$omp target teams loop collapse(2) private(ii,jj)
   do j=j_start,j_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     zeros(ii,jj) = 0.0
@@ -1594,8 +1581,8 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   ! Determine the westerly- and easterly- fluxes.  Choose a sufficiently
   ! negative velocity correction for the easterly-flux, and a sufficiently
   ! positive correction for the westerly-flux.
-  !$acc parallel async(1) default(present)
-  !$acc loop collapse(2)
+  !$omp target private(k)
+  !$omp loop collapse(2) private(ii,jj)
   do j=j_start,j_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     du_CFL(ii,jj) = (CFL_min * Idt) * G%dxCu(i,j)
@@ -1605,9 +1592,8 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
     uhtot_L(ii,jj) = 0.0 ; uhtot_R(ii,jj) = 0.0
   enddo ; enddo
 
-  !$acc loop seq
   do k=1,nz
-    !$acc loop collapse(2)
+    !$omp loop collapse(2) private(ii,jj,visc_rem_lim)
     do j=j_start,j_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=j-j_start+1
       if (do_I(ii,jj)) then
@@ -1621,12 +1607,11 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
       endif
     enddo ; enddo
   enddo
-  !$acc end parallel
+  !$omp end target
 
-  !$acc parallel async(1) default(present)
-  !$acc loop seq
+  !$omp target private(k)
   do k=1,nz
-    !$acc loop collapse(2) private(ii,jj,u_L,u_R,u_0,duhdu_0,duhdu_L,duhdu_R,uh_L,uh_R)
+    !$omp loop collapse(2) private(ii,jj,u_L,u_R,u_0,duhdu_0,duhdu_L,duhdu_R,uh_L,uh_R)
     do j=j_start,j_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=j-j_start+1
       if (do_I(ii,jj)) then
@@ -1653,7 +1638,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
       endif
     enddo ; enddo
   enddo
-  !$acc loop collapse(2)
+  !$omp loop collapse(2) private(ii,jj,FA_0,FA_avg)
   do j=j_start,j_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     if (do_I(ii,jj)) then
@@ -1686,10 +1671,10 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
       BT_cont%uBT_WW(i,j) = 0.0 ; BT_cont%uBT_EE(i,j) = 0.0
     endif
   enddo ; enddo
-  !$acc end parallel
+  !$omp end target
 
-  !$acc exit data async(1) &
-  !$acc   delete(du0,duL,duR,du_CFL,FAmt_L,FAmt_R,FAmt_0,uhtot_L,uhtot_R,zeros,uh_tmp)
+  !$omp target exit data &
+  !$omp   map(release: du0,duL,duR,du_CFL,FAmt_L,FAmt_R,FAmt_0,uhtot_L,uhtot_R,zeros,uh_tmp)
 
 end subroutine set_zonal_BT_cont
 
@@ -1777,12 +1762,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
   call cpu_clock_begin(id_clock_correct)
 
-  !$acc enter data async(1) &
-  !$acc   create(vhbt_t,vh_t,v_t,dvhdv,dv,dv_min_CFL,dv_max_CFL,dvhdv_tot_0,vh_tot_0, &
-  !$acc     visc_rem_max,do_I,visc_rem,simple_OBC_pt) &
-  !$acc   copyin(v,h_in,h_S,h_N,dv_cor,v_cor,vh,CS,BT_cont,BT_cont%vBT_NN,BT_cont%vBT_SS,&
-  !$acc     BT_cont%FA_v_NN,BT_cont%FA_v_SS,BT_cont%FA_v_S0,BT_cont%FA_v_N0,visc_rem_v,&
-  !$acc     por_face_areaV,G,G%mask2dCv,G%dyT,G%dyCv,G%IareaT,G%IdyT,G%dx_Cv,vhbt)
+  !$omp target enter data &
+  !$omp   map(alloc:vhbt_t,vh_t,v_t,dvhdv,dv,dv_min_CFL,dv_max_CFL,dvhdv_tot_0,vh_tot_0, &
+  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt) &
+  !$omp   map(to:v,h_in,h_S,h_N,dv_cor,v_cor,vh,CS,BT_cont,BT_cont%vBT_NN,BT_cont%vBT_SS,&
+  !$omp     BT_cont%FA_v_NN,BT_cont%FA_v_SS,BT_cont%FA_v_S0,BT_cont%FA_v_N0,visc_rem_v,&
+  !$omp     por_face_areaV,G,G%mask2dCv,G%dyT,G%dyCv,G%IareaT,G%IdyT,G%dx_Cv,vhbt)
 
   use_visc_rem = present(visc_rem_v)
 
@@ -1796,7 +1781,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   endif ; endif
 
   if (present(dv_cor)) then
-    !$acc parallel loop async(1) collapse(2) default(present)
+    !$omp target teams loop collapse(2)
     do j=G%jsdB,G%jedB ; do i=G%isd,G%ied
       dv_cor(i,J) = 0.0
     enddo ; enddo
@@ -1814,7 +1799,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   if (.not.use_visc_rem) then
-    !$acc parallel loop async(1) collapse(3) default(present)
+    !$omp target teams loop collapse(3)
     do k=1,nz ; do j=1,TILE_SIZE_Y ; do i=1,TILE_SIZE_X
       visc_rem(i,j,k) = 1.0
     enddo ; enddo ; enddo
@@ -1823,29 +1808,27 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   do j_start = jsh-1, jeh, TILE_SIZE_Y ; do i_start = ish, ieh, TILE_SIZE_X
     j_end = min(j_start + TILE_SIZE_Y-1, jeh)
     i_end = min(i_start + TILE_SIZE_X-1, ieh)
-    !$acc parallel loop async(1) collapse(2) default(present)
+    !$omp target teams loop collapse(2) private(ii,jj)
     do j=j_start,j_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=j-j_start+1
       do_I(ii,JJ) = .true.
     enddo ; enddo
-    !$acc parallel loop async(1) collapse(3) default(present)
+    !$omp target teams loop collapse(3) private(ii,jj)
     do k=1,nz ; do j=j_start-1,j_end+1 ; do i=i_start,i_end
       jj=j-j_start+1 ; ii=i-i_start+1
       v_t(ii,jj,k) = v(i,j,k)
     enddo ; enddo ; enddo
     ! This sets vh and dvhdv.
-    !$acc parallel async(1) default(present) &
-    !$acc   private(k) firstprivate(nz,use_visc_rem,local_open_BC,local_specified_BC)
-    !$acc loop seq
+    !$omp target private(k)
     do k=1,nz
       if (use_visc_rem) then
-        !$acc loop collapse(2) private(ii,jj)
+        !$omp loop collapse(2) private(ii,jj)
         do J=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
           visc_rem(ii,JJ,k) = visc_rem_v(i,J,k)
         enddo ; enddo
       endif
-      !$acc loop collapse(2) private(ii,JJ)
+      !$omp loop collapse(2) private(ii,JJ)
       do J=j_start,j_end ; do i=i_start,i_end
         ii=i-i_start+1 ; jj=j-j_start+1
         call flux_elem(v_t(ii,JJ,k),h_in(i,J,k),h_in(i,J+1,k),h_S(i,J,k),h_S(i,J+1,k),&
@@ -1858,34 +1841,33 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                              OBC%segnum_v(i,J))
       enddo ; enddo
       if (local_specified_BC) then
-        !$acc loop collapse(2) private(l_seg)
+        !$omp loop collapse(2) private(l_seg)
         do J=J_start,J_end ; do i=i_start,i_end ; if (OBC%segnum_v(i,J) /= 0) then
           l_seg = abs(OBC%segnum_v(i,J))
           if (OBC%segment(l_seg)%specified) vh_t(i,J,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
         endif ; enddo ; enddo
       endif
     enddo ! k-loop
-    !$acc end parallel
+    !$omp end target
 
     if (present(vhbt) .or. set_BT_cont) then
       if (use_visc_rem .and. CS%use_visc_rem_max) then
-        !$acc parallel async(1) default(present) firstprivate(nz)
-        !$acc loop collapse(2) private(ii,jj,k)
+        !$omp target private(k)
+        !$omp loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
           visc_rem_max(ii,JJ) = 0.0
         enddo ; enddo
-        !$acc loop seq
         do k=1,nz
-          !$acc loop collapse(2) private(ii,jj)
+          !$omp loop collapse(2) private(ii,jj)
           do j=j_start,j_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             visc_rem_max(ii,JJ) = max(visc_rem_max(ii,JJ), visc_rem(ii,JJ,k))
           enddo ; enddo
         enddo
-        !$acc end parallel
+        !$omp end target
       else
-        !$acc parallel loop async(1) collapse(2) default(present) private(ii,jj)
+        !$omp target teams loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
           visc_rem_max(ii,JJ) = 1.0
@@ -1893,8 +1875,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       endif
       !   Set limits on dv that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
-      !$acc parallel async(1) default(present) firstprivate(nz)
-      !$acc loop collapse(2) private(ii,jj,I_vrm,dy_S,dy_N)
+      !$omp target private(k)
+      !$omp loop collapse(2) private(ii,jj,I_vrm,dy_S,dy_N)
       do J=J_start,J_end ; do i=i_start,i_end
         ii=i-i_start+1 ; jj=j-j_start+1
         I_vrm = 0.0
@@ -1907,23 +1889,21 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         dv_min_CFL(ii,JJ) = -2.0 * (CFL_dt * dy_N) * I_vrm
         vh_tot_0(ii,JJ) = 0.0 ; dvhdv_tot_0(ii,JJ) = 0.0
       enddo ; enddo
-      !$acc loop seq
       do k=1,nz
-        !$acc loop collapse(2) private(ii,jj)
+        !$omp loop collapse(2) private(ii,jj)
         do J=J_start,J_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
           dvhdv_tot_0(ii,JJ) = dvhdv_tot_0(ii,JJ) + dvhdv(ii,jj,k)
           vh_tot_0(ii,JJ) = vh_tot_0(ii,JJ) + vh_t(ii,JJ,k)
         enddo
       enddo ; enddo
-      !$acc end parallel
+      !$omp end target
 
       if (use_visc_rem) then
         if (CS%aggress_adjust) then
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dy_S,dy_N,dv_lim)
             do J=J_start,J_end ; do i=i_start,i_end
               ii=i-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -1939,12 +1919,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                 dv_min_CFL(ii,JJ) = dv_lim / visc_rem(ii,JJ,k)
             enddo
           enddo ; enddo
-          !$acc end parallel
+          !$omp end target
         else
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dy_S,dy_N)
             do J=J_start,J_end ; do i=i_start,i_end
               ii=i-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -1959,14 +1938,13 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                 dv_min_CFL(ii,JJ) = -(dy_N*CFL_dt + v_t(ii,JJ,k)) / visc_rem(ii,JJ,k)
             enddo ; enddo
           enddo
-          !$acc end parallel
+          !$omp end target
         endif
       else
         if (CS%aggress_adjust) then
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dy_S,dy_N)
             do J=J_start,J_end ; do i=i_start,i_end
               ii=i-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -1979,12 +1957,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                           ((-dy_N*I_dt - v_t(ii,JJ,k)) + MAX(0.0,v_t(ii,JJ+1,k))) )
             enddo ; enddo
           enddo
-          !$acc end parallel
+          !$omp end target
         else
-          !$acc parallel async(1) default(present)
-          !$acc loop seq
+          !$omp target private(k)
           do k=1,nz
-            !$acc loop collapse(2)
+            !$omp loop collapse(2) private(ii,jj,dy_S,dy_N)
             do J=J_start,J_end ; do i=i_start,i_end
               ii=i-i_start+1 ; jj=j-j_start+1
               if (CS%vol_CFL) then
@@ -1995,10 +1972,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               dv_min_CFL(ii,JJ) = max(dv_min_CFL(ii,JJ), -(dy_N*CFL_dt + v_t(ii,JJ,k)))
             enddo ; enddo
           enddo
-          !$acc end parallel
+          !$omp end target
         endif
       endif
-      !$acc parallel loop async(1) collapse(2) default(present)
+      !$omp target teams loop collapse(2) private(ii,jj)
       do j=j_start,j_end ; do i=i_start,i_end
         ii=i-i_start+1 ; jj=j-j_start+1
         dv_max_CFL(ii,JJ) = max(dv_max_CFL(ii,JJ),0.0)
@@ -2008,7 +1985,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       any_simple_OBC = .false.
       if (present(vhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then
-          !$acc parallel loop async(1) collapse(2) default(present)
+          !$omp target teams loop collapse(2) private(ii,jj,l_seg)
           do J=J_start,J_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=J-j_start+1
             l_seg = abs(OBC%segnum_v(i,J))
@@ -2019,14 +1996,14 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
             do_I(ii,jj) = .not.simple_OBC_pt(ii,jj)
             any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(ii,jj)
           enddo ; enddo ; else
-          !$acc parallel loop async(1) collapse(2) default(present)
+          !$omp target teams loop collapse(2)
           do J=J_start,J_end ; do i=i_start,i_end
             do_I(i-i_start+1,J-j_start+1) = .true.
           enddo ; enddo ; endif
       endif
 
       if (present(vhbt)) then
-        !$acc parallel loop async(1) collapse(2) default(present)
+        !$omp target teams loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
           vhbt_t(ii,Jj) = vhbt(i,j)
@@ -2038,7 +2015,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                          TILE_SIZE_X, TILE_SIZE_Y, vh_t, OBC)
 
         if (present(v_cor)) then
-          !$acc parallel loop async(1) collapse(3) default(present)
+          !$omp target teams loop collapse(3) private(ii,jj)
           do k=1,nz ; do J=J_start,J_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             v_cor(i,J,k) = v_t(ii,JJ,k) + dv(ii,JJ) * visc_rem(ii,JJ,k)
@@ -2049,7 +2026,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         endif ! v-corrected
 
         if (present(dv_cor)) then
-          !$acc parallel loop async(1) collapse(2) default(present)
+          !$omp target teams loop collapse(2) private(ii,jj)
           do J=J_start,J_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             dv_cor(i,J) = dv(ii,JJ)
@@ -2063,16 +2040,15 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                visc_rem_max, i_start, i_end, j_start, j_end, do_I, &
                                por_face_areaV, TILE_SIZE_X, TILE_SIZE_Y)
         if (any_simple_OBC) then
-          !$acc parallel async(1) firstprivate(nz) private(k)
-          !$acc loop collapse(2) private(ii,jj)
+          !$omp target private(k)
+          !$omp loop collapse(2) private(ii,jj)
           do J=J_start,J_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             if (simple_OBC_pt(ii,JJ)) FAvi(ii,JJ) = GV%H_subroundoff*G%dx_Cv(i,J)
           enddo ; enddo
           ! NOTE: simple_OBC_pt should prevent access to segment OBC_NONE
-          !$acc loop seq
           do k=1,nz
-            !$acc loop collapse(2) private(ii,jj)
+            !$omp loop collapse(2) private(ii,jj,l_seg)
             do J=J_start,J_end ; do i=i_start,i_end
               ii=i-i_start+1 ; jj=j-j_start+1
               if (simple_OBC_pt(ii,JJ)) then
@@ -2084,6 +2060,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               endif
             enddo ; enddo
           enddo
+          !$omp loop collapse(2) private(ii,jj)
           do J=J_start,J_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
             if (simple_OBC_pt(ii,jj)) then
@@ -2092,13 +2069,13 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
               BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
             endif
           enddo ; enddo
-          !$acc end parallel
+          !$omp end target
         endif
       endif ! set_BT_cont
 
     endif ! present(vhbt) or set_BT_cont
 
-    !$acc parallel loop async(1) collapse(3) default(present)
+    !$omp target teams loop collapse(3) private(ii,jj)
     do k=1,nz ; do j=j_start,j_end ; do i=i_start,i_end
       jj=j-j_start+1 ; ii=i-i_start+1
       vh(i,j,k) = vh_t(ii,jj,k)
@@ -2106,14 +2083,12 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
   enddo ; enddo ! ij_tile loops
 
-  !$acc exit data async(1) &
-  !$acc   delete(vhbt_t,vh_t,v_t,v,dvhdv,dv,dv_min_CFL,dv_max_CFL,dvhdv_tot_0,vh_tot_0,&
-  !$acc     visc_rem_max,do_I,visc_rem,h_in,h_S,h_N,CS,BT_cont,visc_rem_v,por_face_areaV,&
-  !$acc     G,G%mask2dCv,G%dyT,G%dyCv,G%IareaT,G%IdyT,G%dx_Cv,simple_OBC_pt,vhbt) &
-  !$acc   copyout(dv_cor,v_cor,vh,BT_cont%vBT_NN,BT_cont%vBT_SS,BT_cont%FA_v_NN,BT_cont%FA_v_SS,&
-  !$acc     BT_cont%FA_v_S0,BT_cont%FA_v_N0)
-
-  !$acc wait(1)
+  !$omp target exit data &
+  !$omp   map(release:vhbt_t,vh_t,v_t,v,dvhdv,dv,dv_min_CFL,dv_max_CFL,dvhdv_tot_0,vh_tot_0,&
+  !$omp     visc_rem_max,do_I,visc_rem,h_in,h_S,h_N,CS,BT_cont,visc_rem_v,por_face_areaV,&
+  !$omp     G,G%mask2dCv,G%dyT,G%dyCv,G%IareaT,G%IdyT,G%dx_Cv,simple_OBC_pt,vhbt) &
+  !$omp   map(from:dv_cor,v_cor,vh,BT_cont%vBT_NN,BT_cont%vBT_SS,BT_cont%FA_v_NN,BT_cont%FA_v_SS,&
+  !$omp     BT_cont%FA_v_S0,BT_cont%FA_v_N0)
 
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
@@ -2424,8 +2399,8 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   integer :: i, j, k, nz, itt, max_itts = 20, ii, jj
   logical :: domore, do_I(TILE_SIZE_X,TILE_SIZE_Y), local_open_BC
 
-  !$acc enter data async(1) &
-  !$acc   create(vh_err,vh_err_best,dvhdv_tot,dv_min,dv_max,do_I)
+  !$omp target enter data &
+  !$omp   map(alloc:vh_err,vh_err_best,dvhdv_tot,dv_min,dv_max,do_I)
 
   local_open_BC = .false.
   if (present(OBC)) then ; if (associated(OBC)) then
@@ -2435,9 +2410,9 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   nz = GV%ke
   tol_vel = CS%tol_vel
 
-  !$acc parallel async(1) private(k) firstprivate(tol_vel,nz,max_itts) private(tol_eta,itt) default(present)
+  !$omp target private(k,tol_eta,itt) !firstprivate(tol_vel,nz,max_itts)
 
-  !$acc loop collapse(2) private(ii,jj)
+  !$omp loop collapse(2) private(ii,jj)
   do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     dv(ii,JJ) = 0.0 ; do_I(ii,JJ) = do_I_in(ii,JJ)
@@ -2446,7 +2421,6 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
     vh_err_best(ii,JJ) = abs(vh_err(ii,JJ))
   enddo ; enddo
 
-  !$acc loop seq
   do itt=1,max_itts
     select case (itt)
       case (:1) ; tol_eta = 1e-6 * CS%tol_eta
@@ -2455,17 +2429,17 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
       case default ; tol_eta = CS%tol_eta
     end select
 
-    !$acc loop collapse(2) private(ii,jj)
+    !$omp loop collapse(2) private(ii,jj)
     do j=j_start,j_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=j-j_start+1
       if (vh_err(ii,JJ) > 0.0) then ; dv_max(ii,JJ) = dv(ii,JJ)
       elseif (vh_err(ii,JJ) < 0.0) then ; dv_min(ii,JJ) = dv(ii,JJ)
       else ; do_I(ii,JJ) = .false. ; endif
     enddo ; enddo
-#ifndef _OPENACC
+#ifndef __NVCOMPILER_OPENMP_GPU
     domore = .false.
 #endif
-    !$acc loop collapse(2) private(ii,jj,ddv,dv_prev)
+    !$omp loop collapse(2) private(ii,jj,ddv,dv_prev)
     do J=J_start,J_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=j-j_start+1 ; if (do_I(ii,JJ)) then
       if ((dt * min(G%IareaT(i,j),G%IareaT(i,j+1))*abs(vh_err(ii,JJ)) > tol_eta) .or. &
@@ -2489,24 +2463,23 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
             if (dv_prev - dv_min(ii,JJ) < 1.0e-15*abs(dv(ii,JJ))) do_I(ii,JJ) = .false.
           endif
         endif
-#ifndef _OPENACC
+#ifndef __NVCOMPILER_OPENMP_GPU
         if (do_I(ii,JJ)) domore = .true.
 #endif
       else
         do_I(ii,JJ) = .false.
       endif
     endif ; enddo ; enddo
-#ifndef _OPENACC
+#ifndef __NVCOMPILER_OPENMP_GPU
     if (.not.domore) exit
 #endif
-    !$acc loop collapse(2) private(ii,jj)
+    !$omp loop collapse(2) private(ii,jj)
     do J=J_start,J_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=J-j_start+1
       vh_err(ii,JJ) = -vhbt(ii,JJ) ; dvhdv_tot(ii,JJ) = 0.0
     enddo ; enddo
-    !$acc loop seq
     do k=1,nz
-      !$acc loop collapse(2) private(ii,jj,dvhdv,v_new)
+      !$omp loop collapse(2) private(ii,jj,dvhdv,v_new)
       do J=J_start,J_end ; do i=i_start,i_end
         ii=i-i_start+1 ; jj=j-j_start+1
         if (do_I(ii,JJ)) then
@@ -2524,7 +2497,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
         endif
       enddo ; enddo
     enddo
-    !$acc loop collapse(2) private(ii,jj)
+    !$omp loop collapse(2) private(ii,jj)
     do J=J_start,J_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=J-j_start+1
       vh_err_best(ii,JJ) = min(vh_err_best(ii,JJ), abs(vh_err(ii,JJ)))
@@ -2533,10 +2506,10 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   ! If there are any faces which have not converged to within the tolerance,
   ! so-be-it, or else use a final upwind correction?
   ! This never seems to happen with 20 iterations as max_itt.
-  !$acc end parallel
+  !$omp end target
 
-  !$acc exit data async(1) &
-  !$acc   delete(vh_err,vh_err_best,dvhdv_tot,dv_min,dv_max,do_I)
+  !$omp target exit data &
+  !$omp   map(release:vh_err,vh_err_best,dvhdv_tot,dv_min,dv_max,do_I)
 
 end subroutine meridional_flux_adjust
 
@@ -2625,14 +2598,14 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   integer :: i, j, k, nz, ii, jj
   real :: vh_tmp(TILE_SIZE_X,TILE_SIZE_Y,SZK_(GV))
 
-  !$acc enter data async(1) &
-  !$acc   create(dv0,dvL,dvR,dv_CFL,FAmt_L,FAmt_R,FAmt_0,vhtot_L,vhtot_R,zeros,vh_tmp)
+  !$omp target enter data &
+  !$omp   map(alloc:dv0,dvL,dvR,dv_CFL,FAmt_L,FAmt_R,FAmt_0,vhtot_L,vhtot_R,zeros,vh_tmp)
 
   nz = GV%ke ; Idt = 1.0 / dt
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
  ! Diagnose the zero-transport correction, dv0.
-  !$acc parallel loop async(1) collapse(2) default(present)
+  !$omp target teams loop collapse(2) private(ii,jj)
   do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     zeros(ii,JJ) = 0.0
@@ -2646,8 +2619,8 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   ! negative velocity correction for the northerly-flux, and a sufficiently
   ! positive correction for the southerly-flux.
   ! domore = .false.
-  !$acc parallel async(1) default(present)
-  !$acc loop collapse(2)
+  !$omp target private(k)
+  !$omp loop collapse(2) private(ii,jj)
   do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     ! if (do_I(ii,JJ)) then
@@ -2669,9 +2642,8 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   !   return
   ! endif
 
-  !$acc loop seq
   do k=1,nz
-    !$acc loop collapse(2)
+    !$omp loop collapse(2) private(ii,jj,visc_rem_lim)
     do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     if (do_I(ii,jj)) then
@@ -2683,11 +2655,10 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
         dvL(ii,JJ) = -(v(ii,JJ,k) - dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) / visc_rem_lim
     endif
   endif ; enddo ; enddo ; enddo
-  !$acc end parallel
-  !$acc parallel async(1) default(present)
-  !$acc loop seq
+  !$omp end target
+  !$omp target private(k)
   do k=1,nz
-    !$acc loop collapse(2) private(ii,jj,v_L,v_R,v_0,dvhdv_0,dvhdv_L,dvhdv_R,vh_L,vh_R)
+    !$omp loop collapse(2) private(ii,jj,v_L,v_R,v_0,dvhdv_0,dvhdv_L,dvhdv_R,vh_0,vh_L,vh_R)
     do J=J_start,J_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=j-j_start+1
       if (do_I(ii,jj)) then
@@ -2711,7 +2682,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
       endif
     enddo ; enddo
   enddo
-  !$acc loop collapse(2)
+  !$omp loop collapse(2) private(ii,jj,FA_0,FA_avg)
   do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     if (do_I(ii,JJ)) then
@@ -2741,10 +2712,10 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
     BT_cont%vBT_SS(i,J) = 0.0 ; BT_cont%vBT_NN(i,J) = 0.0
   endif ; enddo ; enddo
-  !$acc end parallel
+  !$omp end target
 
-  !$acc exit data async(1) &
-  !$acc   delete(dv0,dvL,dvR,dv_CFL,FAmt_L,FAmt_R,FAmt_0,vhtot_L,vhtot_R,zeros,vh_tmp)
+  !$omp target exit data &
+  !$omp   map(release:dv0,dvL,dvR,dv_CFL,FAmt_L,FAmt_R,FAmt_0,vhtot_L,vhtot_R,zeros,vh_tmp)
 
 end subroutine set_merid_BT_cont
 
