@@ -630,15 +630,13 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   integer :: i_start !< The i-index of the start of the current tile [nondim].
   integer :: j_end   !< The j-index of the end of the current tile [nondim].
   integer :: i_end   !< The i-index of the end of the current tile [nondim].
+  integer :: nteams
 
   call cpu_clock_begin(id_clock_correct)
 
   !$omp target enter data &
   !$omp   map(alloc:uhbt_t,uh_t,u_t,duhdu,du,du_min_CFL,du_max_CFL,duhdu_tot_0,uh_tot_0, &
-  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt) &
-  !$omp   map(to:u,h_in,h_W,h_E,du_cor,u_cor,uh,CS,BT_cont,BT_cont%uBT_WW,BT_cont%uBT_EE,&
-  !$omp     BT_cont%FA_u_WW,BT_cont%FA_u_EE,BT_cont%FA_u_W0,BT_cont%FA_u_E0,visc_rem_u,&
-  !$omp     por_face_areaU,G,G%dxCu,G%mask2dCu,G%dxT,G%dy_Cu,G%IareaT,G%IdxT,uhbt)
+  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt)
 
   use_visc_rem = present(visc_rem_u)
 
@@ -680,6 +678,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     i_end = min(i_start+TILE_SIZE_X-1,ieh)
     j_end = min(j_start+TILE_SIZE_Y-1,jeh)
 
+    ! calculate number of teams
+    !$ nteams = ceiling(real((j_end-j_start+1)*(i_end-i_start+1))/128.)
+
     !$omp target teams loop collapse(3)
     do k=1,nz ; do j=j_start,j_end ; do I=i_start-1,i_end+1
       u_t(I-i_start+1,j-j_start+1,k) = u(I,j,k)
@@ -690,7 +691,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       do_I(i-i_start+1,j-j_start+1) = .true.
     enddo ; enddo
     ! Set uh and duhdu.
-    !$omp target private(k)
+    !$omp target teams num_teams(nteams) thread_limit(128)
     do k=1,nz
       if (use_visc_rem) then
         !$omp loop collapse(2) private(ii,jj)
@@ -719,11 +720,11 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         endif ; enddo ; enddo
       endif
     enddo
-    !$omp end target
+    !$omp end target teams
 
     if (present(uhbt) .or. set_BT_cont) then
       if (use_visc_rem .and. CS%use_visc_rem_max) then
-        !$omp target private(k)
+        !$omp target
         !$omp loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
@@ -746,7 +747,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       endif
       !   Set limits on du that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
-      !$omp target private(k)
+      !$omp target
       !$omp loop collapse(2) private(ii,jj,I_vrm,dx_W,dx_E)
       do j=j_start,j_end ; do I=i_start,i_end
         ii=I-i_start+1 ; jj=j-j_start+1
@@ -771,7 +772,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       !$omp end target
       if (use_visc_rem) then
         if (CS%aggress_adjust) then
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dx_W,dx_E,du_lim)
             do j=j_start,j_end ; do I=i_start,i_end
@@ -792,7 +793,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           enddo
           !$omp end target
         else
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dx_E,dx_W)
             do j=j_start,j_end ; do I=i_start,i_end
@@ -812,7 +813,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         endif
       else
         if (CS%aggress_adjust) then
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dx_W,dx_E)
             do j=j_start,j_end ; do I=i_start,i_end
@@ -830,7 +831,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           enddo
           !$omp end target
         else
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dx_W,dx_E)
             do j=j_start,j_end ; do I=i_start,i_end
@@ -847,7 +848,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           !$omp end target
         endif
       endif
-      !$omp target teams loop collapse(2)
+      !$omp target teams loop collapse(2) private(ii,jj)
       do j=j_start,j_end ; do I=i_start,i_end
         ii=I-i_start+1 ; jj=j-j_start+1
         du_max_CFL(ii,jj) = max(du_max_CFL(ii,jj),0.0)
@@ -857,7 +858,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       any_simple_OBC = .false.
       if (present(uhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then
-          !$omp target teams loop collapse(2) private(ii,jj,l_seg)
+          !$omp target teams loop collapse(2) private(ii,jj,l_seg) reduction(.or.:any_simple_OBC)
           do j=j_start,j_end ; do I=i_start,i_end
             ii=I-i_start+1 ; jj=j-j_start+1
             l_seg = abs(OBC%segnum_u(I,j))
@@ -912,7 +913,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                               visc_rem_max, i_start, i_end, j_start, j_end, do_I, &
                               por_face_areaU, TILE_SIZE_X, TILE_SIZE_Y)
         if (any_simple_OBC) then
-          !$omp target private(k)
+          !$omp target
           !$omp loop collapse(2) private(ii,jj)
           do j=j_start,j_end ; do I=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
@@ -955,11 +956,8 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   enddo ; enddo ! ij tile loop
 
   !$omp target exit data &
-  !$omp   map(release:uhbt_t,uh_t,u_t,u,duhdu,du,du_min_CFL,du_max_CFL,duhdu_tot_0,uh_tot_0,&
-  !$omp     visc_rem_max,do_I,visc_rem,h_in,h_W,h_E,CS,BT_cont,visc_rem_u,por_face_areaU,&
-  !$omp     G,G%dxCu,G%mask2dCu,G%dxT,G%dy_Cu,G%IareaT,G%IdxT,simple_OBC_pt,uhbt) &
-  !$omp   map(from:du_cor,u_cor,uh,BT_cont%uBT_WW,BT_cont%uBT_EE,BT_cont%FA_u_WW,BT_cont%FA_u_EE,&
-  !$omp     BT_cont%FA_u_W0,BT_cont%FA_u_E0)
+  !$omp   map(release:uhbt_t,uh_t,u_t,duhdu,du,du_min_CFL,du_max_CFL,duhdu_tot_0,uh_tot_0,&
+  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt)
 
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
@@ -1373,7 +1371,7 @@ subroutine zonal_flux_adjust(u, h_in, h_W, h_E, uhbt, uh_tot_0, duhdu_tot_0, &
 
   tol_vel = CS%tol_vel
 
-  !$omp target private(k,tol_eta,itt) !firstprivate(tol_vel,nz,max_itts)
+  !$omp target
 
   !$omp loop collapse(2) private(ii,jj)
   do j=j_start,j_end ; do I=i_start,i_end
@@ -1581,7 +1579,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   ! Determine the westerly- and easterly- fluxes.  Choose a sufficiently
   ! negative velocity correction for the easterly-flux, and a sufficiently
   ! positive correction for the westerly-flux.
-  !$omp target private(k)
+  !$omp target
   !$omp loop collapse(2) private(ii,jj)
   do j=j_start,j_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
@@ -1609,7 +1607,7 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   enddo
   !$omp end target
 
-  !$omp target private(k)
+  !$omp target
   do k=1,nz
     !$omp loop collapse(2) private(ii,jj,u_L,u_R,u_0,duhdu_0,duhdu_L,duhdu_R,uh_L,uh_R)
     do j=j_start,j_end ; do i=i_start,i_end
@@ -1759,15 +1757,13 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   logical :: simple_OBC_pt(TILE_SIZE_X,TILE_SIZE_Y) ! Indicates points with specified transport OBCs
   type(OBC_segment_type), pointer :: segment => NULL()
   integer :: j_start, j_end, i_start, i_end, ii, jj
+  integer :: nteams
 
   call cpu_clock_begin(id_clock_correct)
 
   !$omp target enter data &
   !$omp   map(alloc:vhbt_t,vh_t,v_t,dvhdv,dv,dv_min_CFL,dv_max_CFL,dvhdv_tot_0,vh_tot_0, &
-  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt) &
-  !$omp   map(to:v,h_in,h_S,h_N,dv_cor,v_cor,vh,CS,BT_cont,BT_cont%vBT_NN,BT_cont%vBT_SS,&
-  !$omp     BT_cont%FA_v_NN,BT_cont%FA_v_SS,BT_cont%FA_v_S0,BT_cont%FA_v_N0,visc_rem_v,&
-  !$omp     por_face_areaV,G,G%mask2dCv,G%dyT,G%dyCv,G%IareaT,G%IdyT,G%dx_Cv,vhbt)
+  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt)
 
   use_visc_rem = present(visc_rem_v)
 
@@ -1808,6 +1804,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   do j_start = jsh-1, jeh, TILE_SIZE_Y ; do i_start = ish, ieh, TILE_SIZE_X
     j_end = min(j_start + TILE_SIZE_Y-1, jeh)
     i_end = min(i_start + TILE_SIZE_X-1, ieh)
+    !$ nteams = ceiling(real((j_end-j_start+1)*(i_end-i_start+1))/128.)
     !$omp target teams loop collapse(2) private(ii,jj)
     do j=j_start,j_end ; do i=i_start,i_end
       ii=i-i_start+1 ; jj=j-j_start+1
@@ -1819,7 +1816,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       v_t(ii,jj,k) = v(i,j,k)
     enddo ; enddo ; enddo
     ! This sets vh and dvhdv.
-    !$omp target private(k)
+    !$omp target teams num_teams(nteams)
     do k=1,nz
       if (use_visc_rem) then
         !$omp loop collapse(2) private(ii,jj)
@@ -1848,11 +1845,11 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         endif ; enddo ; enddo
       endif
     enddo ! k-loop
-    !$omp end target
+    !$omp end target teams
 
     if (present(vhbt) .or. set_BT_cont) then
       if (use_visc_rem .and. CS%use_visc_rem_max) then
-        !$omp target private(k)
+        !$omp target
         !$omp loop collapse(2) private(ii,jj)
         do j=j_start,j_end ; do i=i_start,i_end
           ii=i-i_start+1 ; jj=j-j_start+1
@@ -1875,7 +1872,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       endif
       !   Set limits on dv that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
-      !$omp target private(k)
+      !$omp target
       !$omp loop collapse(2) private(ii,jj,I_vrm,dy_S,dy_N)
       do J=J_start,J_end ; do i=i_start,i_end
         ii=i-i_start+1 ; jj=j-j_start+1
@@ -1901,7 +1898,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
       if (use_visc_rem) then
         if (CS%aggress_adjust) then
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dy_S,dy_N,dv_lim)
             do J=J_start,J_end ; do i=i_start,i_end
@@ -1921,7 +1918,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
           enddo ; enddo
           !$omp end target
         else
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dy_S,dy_N)
             do J=J_start,J_end ; do i=i_start,i_end
@@ -1942,7 +1939,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         endif
       else
         if (CS%aggress_adjust) then
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dy_S,dy_N)
             do J=J_start,J_end ; do i=i_start,i_end
@@ -1959,7 +1956,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
           enddo
           !$omp end target
         else
-          !$omp target private(k)
+          !$omp target
           do k=1,nz
             !$omp loop collapse(2) private(ii,jj,dy_S,dy_N)
             do J=J_start,J_end ; do i=i_start,i_end
@@ -1985,7 +1982,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
       any_simple_OBC = .false.
       if (present(vhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then
-          !$omp target teams loop collapse(2) private(ii,jj,l_seg)
+          !$omp target teams loop collapse(2) private(ii,jj,l_seg) reduction(.or.:any_simple_OBC)
           do J=J_start,J_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=J-j_start+1
             l_seg = abs(OBC%segnum_v(i,J))
@@ -2040,7 +2037,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                visc_rem_max, i_start, i_end, j_start, j_end, do_I, &
                                por_face_areaV, TILE_SIZE_X, TILE_SIZE_Y)
         if (any_simple_OBC) then
-          !$omp target private(k)
+          !$omp target
           !$omp loop collapse(2) private(ii,jj)
           do J=J_start,J_end ; do i=i_start,i_end
             ii=i-i_start+1 ; jj=j-j_start+1
@@ -2084,11 +2081,8 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   enddo ; enddo ! ij_tile loops
 
   !$omp target exit data &
-  !$omp   map(release:vhbt_t,vh_t,v_t,v,dvhdv,dv,dv_min_CFL,dv_max_CFL,dvhdv_tot_0,vh_tot_0,&
-  !$omp     visc_rem_max,do_I,visc_rem,h_in,h_S,h_N,CS,BT_cont,visc_rem_v,por_face_areaV,&
-  !$omp     G,G%mask2dCv,G%dyT,G%dyCv,G%IareaT,G%IdyT,G%dx_Cv,simple_OBC_pt,vhbt) &
-  !$omp   map(from:dv_cor,v_cor,vh,BT_cont%vBT_NN,BT_cont%vBT_SS,BT_cont%FA_v_NN,BT_cont%FA_v_SS,&
-  !$omp     BT_cont%FA_v_S0,BT_cont%FA_v_N0)
+  !$omp   map(release:vhbt_t,vh_t,v_t,dvhdv,dv,dv_min_CFL,dv_max_CFL,dvhdv_tot_0,vh_tot_0,&
+  !$omp     visc_rem_max,do_I,visc_rem,simple_OBC_pt)
 
   if (local_open_BC .and. set_BT_cont) then
     do n = 1, OBC%number_of_segments
@@ -2410,7 +2404,7 @@ subroutine meridional_flux_adjust(v, h_in, h_S, h_N, vhbt, vh_tot_0, dvhdv_tot_0
   nz = GV%ke
   tol_vel = CS%tol_vel
 
-  !$omp target private(k,tol_eta,itt) !firstprivate(tol_vel,nz,max_itts)
+  !$omp target
 
   !$omp loop collapse(2) private(ii,jj)
   do J=J_start,J_end ; do i=i_start,i_end
@@ -2619,7 +2613,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   ! negative velocity correction for the northerly-flux, and a sufficiently
   ! positive correction for the southerly-flux.
   ! domore = .false.
-  !$omp target private(k)
+  !$omp target
   !$omp loop collapse(2) private(ii,jj)
   do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
@@ -2656,7 +2650,7 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     endif
   endif ; enddo ; enddo ; enddo
   !$omp end target
-  !$omp target private(k)
+  !$omp target
   do k=1,nz
     !$omp loop collapse(2) private(ii,jj,v_L,v_R,v_0,dvhdv_0,dvhdv_L,dvhdv_R,vh_0,vh_L,vh_R)
     do J=J_start,J_end ; do i=i_start,i_end
