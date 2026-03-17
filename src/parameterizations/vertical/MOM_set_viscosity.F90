@@ -384,8 +384,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     mask_u(I,j) = G%mask2dCu(I,j)
   enddo
 
-  !$omp target update from(mask_u, mask_v, D_u, D_v) if(associated(OBC))
   if (associated(OBC)) then
+    !$omp target update from(mask_u, mask_v, D_u, D_v)
     ! Use a one-sided projection of bottom depths at OBC points.
     if (OBC%v_N_OBCs_on_PE) then
       Js_OBC = max(js-1, OBC%Js_v_N_obc) ; Je_OBC = min(je, OBC%Je_v_N_obc)
@@ -423,9 +423,7 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         if (OBC%segnum_u(I,j) < 0) D_u(I,j) = G%bathyT(i+1,j) + G%Z_ref !  OBC_DIRECTION_W
       enddo ; enddo
     endif
-  endif
 
-  if (associated(OBC)) then
     do n=1,OBC%number_of_segments
     ! Now project bottom depths across cell-corner points in the OBCs.  The two
     ! projections have to occur in sequence and can not be combined easily.
@@ -450,8 +448,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       enddo
     endif
     enddo
+    !$omp target update to(mask_u, mask_v, D_u, D_v)
   endif
-  !$omp target update to(mask_u, mask_v, D_u, D_v) if(associated(OBC))
 
   if (.not.use_BBL_EOS) then
     do concurrent (k=1:nz, j=G%jsdB:G%Jedb, i=G%isdB:G%iedB)
@@ -1127,8 +1125,6 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
       endif
     endif ; enddo ; enddo ! end of i & j loops
   enddo ! end of m loop
-  !!$omp target update from(visc%bbl_thick_u, visc%bbl_thick_v)
-  !!$omp target update from(visc%kv_bbl_u, visc%kv_bbl_v)
 
   !$omp target exit data map(release: dz, tv, tv%T, tv%S, S_vel, T_vel, SpV_vel, h_vel, h_at_vel, &
   !$omp   dz_vel, dz_at_vel, Rml, Rml_vel, p_ref, ustar, umag_avg, u2_bg, mask_u, mask_v, &
@@ -1153,17 +1149,22 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     call post_data(CS%id_Ray_v, visc%Ray_v, CS%diag)
 
   if (CS%debug) then
-    if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) &
-        call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, &
-                      unscale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
-    if (allocated(visc%kv_bbl_u) .and. allocated(visc%kv_bbl_v)) &
-        call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
-                      haloshift=0, unscale=GV%HZ_T_to_m2_s, scalar_pair=.true.)
-    if (allocated(visc%bbl_thick_u) .and. allocated(visc%bbl_thick_v)) &
-        call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, visc%bbl_thick_v, &
-                      G%HI, haloshift=0, unscale=US%Z_to_m, scalar_pair=.true.)
+    if (allocated(visc%Ray_u) .and. allocated(visc%Ray_v)) then
+      !$omp target update from(visc%Ray_u, visc%Ray_v)
+      call uvchksum("Ray [uv]", visc%Ray_u, visc%Ray_v, G%HI, haloshift=0, &
+                    unscale=GV%H_to_m*US%s_to_T, scalar_pair=.true.)
+    endif
+    if (allocated(visc%kv_bbl_u) .and. allocated(visc%kv_bbl_v)) then
+      !$omp target update from(visc%Kv_bbl_u, visc%Kv_bbl_v)
+      call uvchksum("kv_bbl_[uv]", visc%kv_bbl_u, visc%kv_bbl_v, G%HI, &
+                    haloshift=0, unscale=GV%HZ_T_to_m2_s, scalar_pair=.true.)
+    endif
+    if (allocated(visc%bbl_thick_u) .and. allocated(visc%bbl_thick_v)) then
+      !$omp target update from(visc%bbl_thick_u, visc%bbl_thick_v)
+      call uvchksum("bbl_thick_[uv]", visc%bbl_thick_u, visc%bbl_thick_v, &
+                    G%HI, haloshift=0, unscale=US%Z_to_m, scalar_pair=.true.)
+    endif
   endif
-
 end subroutine set_viscous_BBL
 
 !> Determine the normalized open length of each interface, given the edge depths and normalized
