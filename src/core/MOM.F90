@@ -912,6 +912,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
+      !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
+
       ! Store pre-dynamics thicknesses for proper diagnostic remapping for transports or
       ! advective tendencies.  If there are more than one dynamics steps per advective
       ! step (i.e DT_THERM > DT), this needs to be stored at the first dynamics call.
@@ -922,6 +924,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       ! The pre-dynamics velocities might be stored for debugging truncations.
       if (associated(CS%u_prev) .and. associated(CS%v_prev)) then
+        !$omp target update from(u, v)
         do k=1,nz ; do j=jsd,jed ; do I=IsdB,IedB
           CS%u_prev(I,j,k) = u(I,j,k)
         enddo ; enddo ; enddo
@@ -964,13 +967,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       if (associated(CS%HA_CSp)) call HA_accum_FtF(Time_Local, CS%HA_CSp)
 
-      !$omp target enter data map(to: dt)
-      !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_tradv_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
-      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
-      !$omp target exit data map(release: dt)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -982,11 +981,15 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       endif
 
       if (do_advection) then ! Do advective transport and lateral tracer mixing.
+        !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
         call step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
         if (CS%diabatic_first .and. abs(CS%t_dyn_rel_thermo) > 1e-6*dt) call MOM_error(FATAL, &
                 "step_MOM: Mismatch between the dynamics and diabatic times "//&
                 "with DIABATIC_FIRST.")
+        !$omp target update to(CS%uhtr, CS%vhtr)
       endif
+
+      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
     endif ! end of (do_dyn)
 
     !===========================================================================
