@@ -1249,6 +1249,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
       call cpu_clock_end(id_clock_thick_diff)
 
       call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+
       !$omp target update to(h, CS%uhtr, CS%vhtr)
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse_first (step_MOM)")
     endif
@@ -1404,28 +1405,34 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     enddo; enddo
   endif
 
-  !$omp target update from(u, v, h)
-  !$omp target update from(CS%uhtr, CS%vhtr)
-
   if ((CS%thickness_diffuse .or. CS%interface_filter) .and. &
       .not.CS%thickness_diffuse_first) then
 
     if (CS%debug) call hchksum(h,"Pre-thickness_diffuse h", G%HI, haloshift=0, unscale=GV%H_to_MKS)
 
     if (CS%thickness_diffuse) then
+      !$omp target update from(h, CS%uhtr, CS%vhtr)
       call cpu_clock_begin(id_clock_thick_diff)
+
       if (CS%VarMix%use_variable_mixing) &
         call calc_slope_functions(h, CS%tv, dt, G, GV, US, CS%VarMix, OBC=CS%OBC)
+
       call thickness_diffuse(h, CS%uhtr, CS%vhtr, CS%tv, dt, G, GV, US, &
                              CS%MEKE, CS%VarMix, CS%CDp, CS%thickness_diffuse_CSp, CS%stoch_CS)
 
-      if (CS%debug) call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
+      if (CS%debug) &
+        call hchksum(h,"Post-thickness_diffuse h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
+
       call cpu_clock_end(id_clock_thick_diff)
+
       call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+      !$omp target update to(h, CS%uhtr, CS%vhtr)
+
       if (showCallTree) call callTree_waypoint("finished thickness_diffuse (step_MOM)")
     endif
 
     if (CS%interface_filter) then
+      !$omp target update from(h, CS%uhtr, CS%vhtr)
       if (allocated(CS%tv%SpV_avg)) call pass_var(CS%tv%SpV_avg, G%Domain, clock=id_clock_pass)
       CS%tv%valid_SpV_halo = min(G%Domain%nihalo, G%Domain%njhalo)
       call cpu_clock_begin(id_clock_int_filter)
@@ -1438,6 +1445,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
       endif
       call cpu_clock_end(id_clock_int_filter)
       call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+      !$omp target update to(h, CS%uhtr, CS%vhtr)
       if (showCallTree) call callTree_waypoint("finished interface_filter (step_MOM)")
     endif
   endif
@@ -1449,17 +1457,22 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
       call uvchksum("Pre-mixedlayer_restrat uhtr", &
                     CS%uhtr, CS%vhtr, G%HI, haloshift=0, unscale=GV%H_to_MKS*US%L_to_m**2)
     endif
+    !$omp target update from(h, CS%uhtr, CS%vhtr)
     call cpu_clock_begin(id_clock_ml_restrat)
     call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, CS%visc%h_ML, &
                             CS%visc%sfc_buoy_flx, CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
     call cpu_clock_end(id_clock_ml_restrat)
     call pass_var(h, G%Domain, clock=id_clock_pass, halo=max(2,CS%cont_stencil))
+    !$omp target update to(h, CS%uhtr, CS%vhtr)
     if (CS%debug) then
       call hchksum(h,"Post-mixedlayer_restrat h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
       call uvchksum("Post-mixedlayer_restrat [uv]htr", &
                     CS%uhtr, CS%vhtr, G%HI, haloshift=0, unscale=GV%H_to_MKS*US%L_to_m**2)
     endif
   endif
+
+  !$omp target update from(u, v, h)
+  !$omp target update from(CS%uhtr, CS%vhtr)
 
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
