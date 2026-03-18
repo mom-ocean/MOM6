@@ -842,7 +842,10 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   call cpu_clock_end(id_clock_other)
 
   rel_time = 0.0
+
   do n=1,n_max
+    !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
+
     if (CS%use_diabatic_time_bug) then
       ! This wrong form of update was used until Feb 2018, recovered with CS%use_diabatic_time_bug=T.
       CS%Time = Time_start + real_to_time(US%T_to_s*int(floor(rel_time+0.5*dt+0.5)))
@@ -852,6 +855,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! Set the universally visible time to the middle of the time step.
       CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
     endif
+
     ! Set the local time to the end of the time step.
     Time_local = Time_start + real_to_time(US%T_to_s*rel_time)
 
@@ -864,6 +868,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     !===========================================================================
     ! This is the first place where the diabatic processes and remapping could occur.
     if (CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0) .and. do_thermo) then ! do thermodynamics.
+      !$omp target update from(u, v, h)
 
       if (.not.do_dyn) then
         dtdia = dt
@@ -909,15 +914,16 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       if (dtdia > dt .and. .not. CS%use_diabatic_time_bug) & ! Reset CS%Time to its previous value.
         ! This step was missing prior to Feb 2018, recovered with CS%use_diabatic_time_bug=T.
         CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
+
+      !$omp target update to(u, v, h)
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
-      !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
-
       ! Store pre-dynamics thicknesses for proper diagnostic remapping for transports or
       ! advective tendencies.  If there are more than one dynamics steps per advective
       ! step (i.e DT_THERM > DT), this needs to be stored at the first dynamics call.
       if (.not.CS%preadv_h_stored .and. (CS%t_dyn_rel_adv == 0.)) then
+        !$omp target update from(h)
         call diag_copy_diag_to_storage(CS%diag_pre_dyn, h, CS%diag)
         CS%preadv_h_stored = .true.
       endif
@@ -1058,12 +1064,11 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call cpu_clock_end(id_clock_dynamics)
     endif
 
-    !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
-
     !===========================================================================
     ! Calculate diagnostics at the end of the time step if the state is self-consistent.
     if (MOM_state_is_synchronized(CS)) then
     !### Perhaps this should be if (CS%t_dyn_rel_thermo == 0.0)
+      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
       call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
       ! Diagnostics that require the complete state to be up-to-date can be calculated.
 
@@ -1082,6 +1087,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     if (do_dyn .and. .not.CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
+
+    !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
 
   enddo ! complete the n loop
 
