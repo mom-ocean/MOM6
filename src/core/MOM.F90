@@ -969,6 +969,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_tradv_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
+      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
       !$omp target exit data map(release: dt)
 
       !===========================================================================
@@ -1292,8 +1293,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     call cpu_clock_begin(id_clock_BBL_visc)
     call set_viscous_BBL(CS%u, CS%v, CS%h, CS%tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
     call cpu_clock_end(id_clock_BBL_visc)
-    !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
-    !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM)")
     call disable_averaging(CS%diag)
   endif
@@ -1326,6 +1325,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
 
     if (CS%use_alt_split) then
       !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
+      !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
+      !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
       call step_MOM_dyn_split_RK2b(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                   CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2b_CSp, calc_dtbt, CS%VarMix, &
@@ -1351,6 +1352,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
 
     if (CS%use_RK2) then
       !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
+      !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
+      !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
       call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE, CS%pbv, &
@@ -1358,6 +1361,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
       !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
     else
       !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
+      !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
+      !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
       call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, CS%pbv, &
@@ -1471,17 +1476,19 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     endif
   endif
 
-  !$omp target update from(u, v, h)
-  !$omp target update from(CS%uhtr, CS%vhtr)
-
   ! Whenever thickness changes let the diag manager know, target grids
   ! for vertical remapping may need to be regenerated.
   call diag_update_remap_grids(CS%diag)
 
   if (CS%useMEKE .and. CS%MEKE_in_dynamics) then
+    !$omp target update from(u, v, h)
+    !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
+    !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
+    ! TODO: visc? [uv]h?
     call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
                            CS%visc, dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr, &
                            CS%u, CS%v, CS%tv, Time_local)
+    !$omp target update to(u, v)
   endif
   call disable_averaging(CS%diag)
 
@@ -1489,7 +1496,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
   CS%t_dyn_rel_adv = CS%t_dyn_rel_adv + dt
 
   if (CS%use_particles .and. CS%do_dynamics .and. CS%use_uh_particles) then
-    !Run particles using thickness-weighted velocity
+    !$omp target update to(h, CS%uhtr, CS%vhtr)
+    ! Run particles using thickness-weighted velocity
     call particles_run(CS%particles, Time_local, CS%uhtr, CS%vhtr, CS%h, &
         CS%tv, CS%t_dyn_rel_adv, CS%use_uh_particles)
   endif
@@ -1507,16 +1515,33 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
 
   call cpu_clock_end(id_clock_dynamics)
 
-  call cpu_clock_begin(id_clock_other) ; call cpu_clock_begin(id_clock_diagnostics)
-  call enable_averages(dt, Time_local, CS%diag)
-  ! These diagnostics are available after every time dynamics step.
-  if (IDs%id_u > 0) call post_data(IDs%id_u, u, CS%diag)
-  if (IDs%id_v > 0) call post_data(IDs%id_v, v, CS%diag)
-  if (IDs%id_h > 0) call post_data(IDs%id_h, h, CS%diag)
-  if (CS%use_stochastic_EOS) call post_stoch_EOS_diags(CS%stoch_eos_CS, CS%tv, CS%diag)
-  call disable_averaging(CS%diag)
-  call cpu_clock_end(id_clock_diagnostics) ; call cpu_clock_end(id_clock_other)
+  ! Diagnostic finalization
 
+  call cpu_clock_begin(id_clock_other)
+  call cpu_clock_begin(id_clock_diagnostics)
+
+  call enable_averages(dt, Time_local, CS%diag)
+
+  ! These diagnostics are available after every time dynamics step.
+  if (IDs%id_u > 0) then
+    !$omp target update from(u)
+    call post_data(IDs%id_u, u, CS%diag)
+  endif
+  if (IDs%id_v > 0) then
+    !$omp target update from(v)
+    call post_data(IDs%id_v, v, CS%diag)
+  endif
+  if (IDs%id_h > 0) then
+    !$omp target update from(h)
+    call post_data(IDs%id_h, h, CS%diag)
+  endif
+
+  if (CS%use_stochastic_EOS) call post_stoch_EOS_diags(CS%stoch_eos_CS, CS%tv, CS%diag)
+
+  call disable_averaging(CS%diag)
+
+  call cpu_clock_end(id_clock_diagnostics)
+  call cpu_clock_end(id_clock_other)
 end subroutine step_MOM_dynamics
 
 !> step_MOM_tracer_dyn does tracer advection and lateral diffusion, bringing the
@@ -1721,6 +1746,8 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     call cpu_clock_begin(id_clock_diabatic)
 
+    !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
+    !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
                   Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%stoch_CS, CS%OBC, Waves)
     fluxes%fluxes_used = .true.
