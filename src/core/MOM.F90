@@ -1324,19 +1324,20 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     endif
 
     if (CS%use_alt_split) then
+      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
       call step_MOM_dyn_split_RK2b(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                   CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2b_CSp, calc_dtbt, CS%VarMix, &
                   CS%MEKE, CS%thickness_diffuse_CSp, CS%pbv, waves=waves)
+      !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
     else
       call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                   CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
                   CS%MEKE, CS%thickness_diffuse_CSp, CS%pbv, CS%stoch_CS, waves=waves)
-      !$omp target update from(u, v, h)
-      !$omp target update from(CS%uhtr, CS%vhtr)
       ! TODO: uh, vh, CS%eta_av_bc ?
     endif
+
     if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_split (step_MOM)")
 
   elseif (CS%do_dynamics) then ! ------------------------------------ not SPLIT
@@ -1348,34 +1349,38 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     ! useful for debugging purposes.
 
     if (CS%use_RK2) then
+      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
       call step_MOM_dyn_unsplit_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_RK2_CSp, CS%VarMix, CS%MEKE, CS%pbv, &
                CS%stoch_CS)
+      !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
     else
+      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
       call step_MOM_dyn_unsplit(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                CS%eta_av_bc, G, GV, US, CS%dyn_unsplit_CSp, CS%VarMix, CS%MEKE, CS%pbv, &
                CS%stoch_CS, Waves=Waves)
+      !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
     endif
-    if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
 
-  endif ! -------------------------------------------------- end SPLIT
+    if (showCallTree) call callTree_waypoint("finished step_MOM_dyn_unsplit (step_MOM)")
+  endif
 
   if (CS%use_particles .and. CS%do_dynamics .and. (.not. CS%use_uh_particles)) then
     if (CS%thickness_diffuse_first) call MOM_error(WARNING,"particles_run: "//&
       "Thickness_diffuse_first is true and use_uh_particles is false. "//&
       "This is usually a bad combination.")
-    !Run particles using unweighted velocity
+    ! Run particles using unweighted velocity
+    !$omp target update from(u, v, h)
     call particles_run(CS%particles, Time_local, CS%u, CS%v, CS%h, &
                        CS%tv, dt, CS%use_uh_particles)
     call particles_to_z_space(CS%particles, h)
   endif
 
-
-
   ! Update the model's current to reflect wind-wave growth
   if (Waves%Stokes_DDT .and. (.not.Waves%Passive_Stokes_DDT)) then
+    !$omp target update from(u, v)
     do J=jsq,jeq ; do i=is,ie
       v(i,J,:) = v(i,J,:) + Waves%ddt_us_y(i,J,:)*dt
     enddo; enddo
@@ -1383,6 +1388,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
       u(I,j,:) = u(I,j,:) + Waves%ddt_us_x(I,j,:)*dt
     enddo; enddo
     call pass_vector(u,v,G%Domain)
+    !$omp target update to(u, v)
   endif
   ! Added an additional output to track Stokes drift time tendency.
   ! It is mostly for debugging, and perhaps doesn't need to hang
@@ -1398,6 +1404,8 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     enddo; enddo
   endif
 
+  !$omp target update from(u, v, h)
+  !$omp target update from(CS%uhtr, CS%vhtr)
 
   if ((CS%thickness_diffuse .or. CS%interface_filter) .and. &
       .not.CS%thickness_diffuse_first) then
