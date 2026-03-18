@@ -965,7 +965,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       if (associated(CS%HA_CSp)) call HA_accum_FtF(Time_Local, CS%HA_CSp)
 
       !$omp target enter data map(to: dt)
-      !$omp target update to(u, v, h)
+      !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_tradv_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
@@ -1236,8 +1236,7 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
 
     call enable_averages(dt_tr_adv, Time_local+real_to_time(US%T_to_s*(dt_tr_adv-dt)), CS%diag)
     if (CS%thickness_diffuse) then
-      !$omp target update from(h)
-      ! TODO: CS%[uv]htr is already on host
+      !$omp target update from(h, CS%uhtr, CS%vhtr)
       call cpu_clock_begin(id_clock_thick_diff)
 
       if (CS%VarMix%use_variable_mixing) &
@@ -1330,7 +1329,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
                   CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2b_CSp, calc_dtbt, CS%VarMix, &
                   CS%MEKE, CS%thickness_diffuse_CSp, CS%pbv, waves=waves)
     else
-      !$omp target update to(CS%uhtr, CS%vhtr)
       call step_MOM_dyn_split_RK2(u, v, h, CS%tv, CS%visc, Time_local, dt, forces, &
                   p_surf_begin, p_surf_end, CS%uh, CS%vh, CS%uhtr, CS%vhtr, &
                   CS%eta_av_bc, G, GV, US, CS%dyn_split_RK2_CSp, calc_dtbt, CS%VarMix, &
@@ -4584,6 +4582,7 @@ subroutine MOM_end(CS)
   ! TODO: debug_truncations deallocation
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
+  !$omp target exit data map(delete: CS%uhtr, CS%vhtr)
 
   if (associated(CS%Hml)) deallocate(CS%Hml)
   if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)
