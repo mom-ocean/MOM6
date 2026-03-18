@@ -988,8 +988,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
                 "with DIABATIC_FIRST.")
         !$omp target update to(CS%uhtr, CS%vhtr)
       endif
-
-      !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
     endif ! end of (do_dyn)
 
     !===========================================================================
@@ -999,8 +997,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     else
       do_diabatic = (do_thermo .and. ((MOD(n,ntstep) == 0) .or. (n==n_max)))
     endif
-    if ((CS%t_dyn_rel_adv==0.0) .and. (.not.CS%diabatic_first) .and. do_diabatic) then
 
+    if ((CS%t_dyn_rel_adv==0.0) .and. (.not.CS%diabatic_first) .and. do_diabatic) then
+      !$omp target update from(u, v, h)
       dtdia = CS%t_dyn_rel_thermo
       ! If the MOM6 dynamic and thermodynamic time stepping is being orchestrated
       ! by the coupler, the value of diabatic_first does not matter.
@@ -1037,9 +1036,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! This step was missing prior to Feb 2018, and is skipped with CS%use_diabatic_time_bug=T.
       if (dtdia > dt .and. .not. CS%use_diabatic_time_bug) &
         CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
+
+      !$omp target update to(u, v, h)
     endif
 
     if (do_dyn) then
+      !$omp target update from(h)
       call cpu_clock_begin(id_clock_dynamics)
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
@@ -1055,6 +1057,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       endif
       call cpu_clock_end(id_clock_dynamics)
     endif
+
+    !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
 
     !===========================================================================
     ! Calculate diagnostics at the end of the time step if the state is self-consistent.
