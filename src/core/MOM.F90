@@ -1024,6 +1024,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         CS%Time = CS%Time - real_to_time(0.5*US%T_to_s*(dtdia-dt))
 
       ! Apply diabatic forcing, do mixing, and regrid.
+      !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
+      !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
       if ( CS%use_ALE_algorithm ) &
@@ -1738,8 +1740,14 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       call porous_widths_interface(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
       call pass_vector(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV, &
                       G%Domain, direction=To_ALL+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
+      !$omp target update to(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV)
+      !$omp target update to(CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
     endif
+    !$omp target update to(u, v, h)
     call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
+    !$omp target update from(CS%visc%Ray_u, Cs%visc%Ray_v)
+    !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
+    !$omp target update from(CS%visc%Kv_bbl_u, CS%visc%Kv_bbl_v)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
   endif
@@ -1760,8 +1768,6 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     call cpu_clock_begin(id_clock_diabatic)
 
-    !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
-    !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
                   Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%stoch_CS, CS%OBC, Waves)
     fluxes%fluxes_used = .true.
