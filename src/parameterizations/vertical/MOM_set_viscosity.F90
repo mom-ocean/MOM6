@@ -2121,8 +2121,13 @@ subroutine set_viscous_ML(u, v, h, tv, forces, visc, dt, G, GV, US, CS)
   if (.not.CS%initialized) call MOM_error(FATAL,"MOM_set_viscosity(visc_ML): "//&
          "Module must be initialized before it is used.")
 
+  ! TODO: Remove this check and move it outside of the function call.
   if (.not.(CS%dynamic_viscous_ML .or. associated(forces%frac_shelf_u) .or. &
             associated(forces%frac_shelf_v)) ) return
+
+  ! NOTE: Requried since this is called by the GPU-enabled dycore, but it could
+  !   also be implicitly fixing other functions.
+  !$omp target update from(u, v)
 
   Rho0x400_G = 400.0*(GV%H_to_RZ / GV%g_Earth_Z_T2)
   cdrag_sqrt = sqrt(CS%cdrag)

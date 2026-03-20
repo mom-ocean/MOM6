@@ -626,8 +626,9 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   enddo
 
   call enable_averages(dt, Time_local, CS%diag)
+  ! NOTE: this is on CPU and conditionally called (using `if (..) return`)
+  !   It contains GPU/CPU data transfers for [uv]_inst and visc fields.
   call set_viscous_ML(u_inst, v_inst, h, tv, forces, visc, dt, G, GV, US, CS%set_visc_CSp)
-  ! TODO: !$omp target update to(visc%...)
   call disable_averaging(CS%diag)
 
   if (CS%debug) then

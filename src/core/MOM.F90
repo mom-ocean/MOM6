@@ -843,9 +843,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   rel_time = 0.0
 
+  !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
   do n=1,n_max
-    !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
-
     if (CS%use_diabatic_time_bug) then
       ! This wrong form of update was used until Feb 2018, recovered with CS%use_diabatic_time_bug=T.
       CS%Time = Time_start + real_to_time(US%T_to_s*int(floor(rel_time+0.5*dt+0.5)))
@@ -1089,10 +1088,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
     if (do_dyn .and. .not.CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
-
-    !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
-
-  enddo ! complete the n loop
+  enddo
+  !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
 
   if (CS%count_calls .and. cycle_start) CS%nstep_tot = CS%nstep_tot + 1
 
