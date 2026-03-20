@@ -972,9 +972,11 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
       if (associated(CS%HA_CSp)) call HA_accum_FtF(Time_Local, CS%HA_CSp)
 
+      !$omp target enter data map(to: dt)
       call step_MOM_dynamics(forces, CS%p_surf_begin, CS%p_surf_end, dt, &
                              dt_tradv_here, bbl_time_int, CS, &
                              Time_local, Waves=Waves)
+      !$omp target exit data map(release: dt)
 
       !===========================================================================
       ! This is the start of the tracer advection part of the algorithm.
@@ -1023,8 +1025,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         CS%Time = CS%Time - real_to_time(0.5*US%T_to_s*(dtdia-dt))
 
       ! Apply diabatic forcing, do mixing, and regrid.
-      !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
-      !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
       if ( CS%use_ALE_algorithm ) &
@@ -1497,7 +1497,6 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
     !$omp target update from(u, v, h)
     !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
     !$omp target update from(CS%visc%kv_bbl_u, CS%visc%kv_bbl_v)
-    ! TODO: visc? [uv]h?
     call step_forward_MEKE(CS%MEKE, h, CS%VarMix%SN_u, CS%VarMix%SN_v, &
                            CS%visc, dt, G, GV, US, CS%MEKE_CSp, CS%uhtr, CS%vhtr, &
                            CS%u, CS%v, CS%tv, Time_local)
@@ -1734,6 +1733,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     call cpu_clock_begin(id_clock_BBL_visc)
     !update porous barrier fractional cell metrics
     if (CS%use_porbar) then
+      !$omp target update from(h)
       call porous_widths_interface(h, CS%tv, G, GV, US, CS%pbv, CS%por_bar_CS)
       call pass_vector(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV, &
                       G%Domain, direction=To_ALL+SCALAR_PAIR, clock=id_clock_pass, halo=CS%cont_stencil)
@@ -1742,15 +1742,18 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     endif
     !$omp target update to(u, v, h)
     call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
-    !$omp target update from(CS%visc%Ray_u, Cs%visc%Ray_v)
-    !$omp target update from(CS%visc%bbl_thick_u, CS%visc%bbl_thick_v)
-    !$omp target update from(CS%visc%Kv_bbl_u, CS%visc%Kv_bbl_v)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
   endif
 
   call cpu_clock_begin(id_clock_thermo)
   if (.not.CS%adiabatic) then
+    !$omp target update from(CS%visc%Ray_u) if (allocated(CS%visc%Ray_u))
+    !$omp target update from(CS%visc%Ray_v) if (allocated(CS%visc%Ray_v))
+    !$omp target update from(CS%visc%bbl_thick_u) if (allocated(CS%visc%bbl_thick_u))
+    !$omp target update from(CS%visc%bbl_thick_v) if (allocated(CS%visc%bbl_thick_v))
+    !$omp target update from(CS%visc%Kv_bbl_u) if (allocated(CS%visc%Kv_bbl_u))
+    !$omp target update from(CS%visc%Kv_bbl_v) if (allocated(CS%visc%Kv_bbl_v))
     if (CS%debug) then
       call uvchksum("Pre-diabatic [uv]", u, v, G%HI, haloshift=2, unscale=US%L_T_to_m_s)
       call hchksum(h,"Pre-diabatic h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
