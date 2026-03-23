@@ -262,6 +262,7 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_cg1) then
+    !$omp target update from(h)
     if (.not. allocated(CS%cg1)) call MOM_error(FATAL, &
       "calc_resoln_function: %cg1 is not associated with Resoln_scaled_Kh.")
     if (CS%khth_use_ebt_struct .or. CS%kdgl90_use_ebt_struct &
@@ -285,8 +286,10 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
     call create_group_pass(CS%pass_cg1, CS%cg1, G%Domain)
     call do_group_pass(CS%pass_cg1, G%Domain)
   endif
+
   if (CS%BS_use_sqg_struct .or. CS%khth_use_sqg_struct .or. CS%khtr_use_sqg_struct &
       .or. CS%kdgl90_use_sqg_struct .or. CS%id_sqg_struct>0) then
+    !$omp target update from(h)
     call calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE, OBC)
     call pass_var(CS%sqg_struct, G%Domain)
   endif
@@ -535,7 +538,6 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
     call uvchksum("Res_fn_[uv]", CS%Res_fn_u, CS%Res_fn_v, G%HI, haloshift=0, &
                   unscale=1.0, scalar_pair=.true.)
   endif
-
 end subroutine calc_resoln_function
 
 !> Calculates and stores functions of SQG mode

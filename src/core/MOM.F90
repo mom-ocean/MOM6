@@ -790,7 +790,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
     if (CS%VarMix%use_variable_mixing) then
-      !$omp target update from(h)
       call enable_averages(cycle_time, Time_start + real_to_time(US%T_to_s*cycle_time), CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix, CS%MEKE, CS%OBC, dt)
       call calc_depth_function(G, CS%VarMix)
@@ -914,9 +913,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         !$omp target update to(u, v, h)
       endif
 
-      !$omp target update from(u, v, h)
+      !!$omp target update from(u, v, h)
       call post_diabatic_halo_updates(CS, G, GV, US, u, v, h, CS%tv)
-      !$omp target update to(u, v, h)
+      !!$omp target update to(u, v, h)
 
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
@@ -1046,9 +1045,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         !$omp target update to(u, v, h)
       endif
 
-      !$omp target update from(u, v, h)
+      !!$omp target update from(u, v, h)
       call post_diabatic_halo_updates(CS, G, GV, US, u, v, h, CS%tv)
-      !$omp target update to(u, v, h)
+      !!$omp target update to(u, v, h)
 
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
@@ -2077,7 +2076,8 @@ subroutine post_diabatic_halo_updates(CS, G, GV, US, u, v, h, tv)
   if (associated(tv%S)) &
     call create_group_pass(pass_uv_T_S_h, tv%S, G%Domain, halo=dynamics_stencil)
   call create_group_pass(pass_uv_T_S_h, h, G%Domain, halo=dynamics_stencil)
-  call do_group_pass(pass_uv_T_S_h, G%Domain, clock=id_clock_pass)
+  ! TODO: Safe? what about T and S?
+  call do_group_pass(pass_uv_T_S_h, G%Domain, clock=id_clock_pass, omp_offload=.true.)
 
   if ((.not.tv%frazil_was_reset) .and. CS%vertex_shear) call pass_var(tv%frazil, G%Domain, halo=1)
 
