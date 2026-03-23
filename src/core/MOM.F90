@@ -633,6 +633,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   call cpu_clock_begin(id_clock_other)
 
   if (CS%debug) then
+    !$omp target update from(u, v, h)
     call query_debugging_checks(do_redundant=debug_redundant)
     call MOM_state_chksum("Beginning of step_MOM ", u, v, h, CS%uh, CS%vh, G, GV, US)
   endif
@@ -738,6 +739,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       do j=jsd,jed ; do i=isd,ied ; CS%tv%p_surf(i,j) = forces%p_surf(i,j) ; enddo ; enddo
 
       if (allocated(CS%tv%SpV_avg) .and. associated(CS%tv%T)) then
+        !$omp target update from(h)
         ! The internal ocean state depends on the surface pressues, so update SpV_avg.
         dynamics_stencil = min(3, G%Domain%nihalo, G%Domain%njhalo)
         call calc_derived_thermo(CS%tv, h, G, GV, US, halo=dynamics_stencil, debug=CS%debug)
@@ -762,6 +764,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     if (associated(CS%tv%p_surf) .and. associated(fluxes%p_surf)) then
       do j=js,je ; do i=is,ie ; CS%tv%p_surf(i,j) = fluxes%p_surf(i,j) ; enddo ; enddo
       if (allocated(CS%tv%SpV_avg)) then
+        !$omp target update from(h)
         call pass_var(CS%tv%p_surf, G%Domain, clock=id_clock_pass)
         ! The internal ocean state depends on the surface pressues, so update SpV_avg.
         call extract_diabatic_member(CS%diabatic_CSp, diabatic_halo=halo_sz)
@@ -787,6 +790,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
 
     if (CS%VarMix%use_variable_mixing) then
+      !$omp target update from(h)
       call enable_averages(cycle_time, Time_start + real_to_time(US%T_to_s*cycle_time), CS%diag)
       call calc_resoln_function(h, CS%tv, G, GV, US, CS%VarMix, CS%MEKE, CS%OBC, dt)
       call calc_depth_function(G, CS%VarMix)
@@ -823,6 +827,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
   else ! not do_dyn.
     if (CS%UseWaves) then ! Diagnostics are not enabled in this call.
+      !$omp target update from(h)
       call find_ustar(fluxes, CS%tv, U_star, G, GV, US, halo=1)
       call thickness_to_dz(h, CS%tv, dz, G, GV, US, halo_size=1)
       call Update_Stokes_Drift(G, GV, US, Waves, dz, U_star, time_interval, do_dyn)
@@ -830,6 +835,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   endif
 
   if (CS%debug) then
+    !$omp target update from(u, v, h)
     if (cycle_start) &
       call MOM_state_chksum("Before steps ", u, v, h, CS%uh, CS%vh, G, GV, US)
     if (cycle_start .and. debug_redundant) &
@@ -843,7 +849,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   rel_time = 0.0
 
-  !$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
+  ! TODO: This appears safe to remove but needs verification.
+  !**!$omp target update to(u, v, h, CS%uhtr, CS%vhtr)
+
   do n=1,n_max
     if (CS%use_diabatic_time_bug) then
       ! This wrong form of update was used until Feb 2018, recovered with CS%use_diabatic_time_bug=T.
@@ -867,8 +875,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     !===========================================================================
     ! This is the first place where the diabatic processes and remapping could occur.
     if (CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0) .and. do_thermo) then ! do thermodynamics.
-      !$omp target update from(u, v, h)
-
       if (.not.do_dyn) then
         dtdia = dt
       elseif (thermo_does_span_coupling) then
@@ -901,9 +907,17 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            end_time_thermo, .true., Waves=Waves)
-      if ( CS%use_ALE_algorithm ) &
+
+      if ( CS%use_ALE_algorithm ) then
+        !$omp target update from(u, v, h)
         call ALE_regridding_and_remapping(CS, G, GV, US, u, v, h, CS%tv, dtdia, Time_local)
+        !$omp target update to(u, v, h)
+      endif
+
+      !$omp target update from(u, v, h)
       call post_diabatic_halo_updates(CS, G, GV, US, u, v, h, CS%tv)
+      !$omp target update to(u, v, h)
+
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       ! The diabatic processes are now ahead of the dynamics by dtdia.
@@ -914,7 +928,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         ! This step was missing prior to Feb 2018, recovered with CS%use_diabatic_time_bug=T.
         CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
 
-      !$omp target update to(u, v, h)
     endif ! end of block "(CS%diabatic_first .and. (CS%t_dyn_rel_adv==0.0))"
 
     if (do_dyn) then
@@ -1006,7 +1019,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
 
     if ((CS%t_dyn_rel_adv==0.0) .and. (.not.CS%diabatic_first) .and. do_diabatic) then
-      !$omp target update from(u, v, h)
       dtdia = CS%t_dyn_rel_thermo
       ! If the MOM6 dynamic and thermodynamic time stepping is being orchestrated
       ! by the coupler, the value of diabatic_first does not matter.
@@ -1027,9 +1039,17 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! Apply diabatic forcing, do mixing, and regrid.
       call step_MOM_thermo(CS, G, GV, US, u, v, h, CS%tv, fluxes, dtdia, &
                            Time_local, .false., Waves=Waves)
-      if ( CS%use_ALE_algorithm ) &
+
+      if ( CS%use_ALE_algorithm ) then
+        !$omp target update from(u, v, h)
         call ALE_regridding_and_remapping(CS, G, GV, US, u, v, h, CS%tv, dtdia, Time_local)
+        !$omp target update to(u, v, h)
+      endif
+
+      !$omp target update from(u, v, h)
       call post_diabatic_halo_updates(CS, G, GV, US, u, v, h, CS%tv)
+      !$omp target update to(u, v, h)
+
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
       if ((CS%t_dyn_rel_thermo==0.0) .and. .not.do_dyn) then
@@ -1043,8 +1063,6 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
       ! This step was missing prior to Feb 2018, and is skipped with CS%use_diabatic_time_bug=T.
       if (dtdia > dt .and. .not. CS%use_diabatic_time_bug) &
         CS%Time = Time_start + real_to_time(US%T_to_s*(rel_time - 0.5*dt))
-
-      !$omp target update to(u, v, h)
     endif
 
     if (do_dyn) then
@@ -1089,7 +1107,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     if (do_dyn .and. .not.CS%count_calls) CS%nstep_tot = CS%nstep_tot + 1
     if (showCallTree) call callTree_leave("DT cycles (step_MOM)")
   enddo
-  !$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
+
+  ! TODO: This appears safe to remove but needs verification.
+  !**!$omp target update from(u, v, h, CS%uhtr, CS%vhtr)
 
   if (CS%count_calls .and. cycle_start) CS%nstep_tot = CS%nstep_tot + 1
 
@@ -1161,11 +1181,12 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     call accumulate_net_input(fluxes, sfc_state, CS%tv, fluxes%dt_buoy_accum, &
                               G, US, CS%sum_output_CSp)
 
-  if (MOM_state_is_synchronized(CS)) &
+  if (MOM_state_is_synchronized(CS)) then
+    !$omp target update from(u, v, h)
     call write_energy(CS%u, CS%v, CS%h, CS%tv, Time_local, CS%nstep_tot, &
                       G, GV, US, CS%sum_output_CSp, CS%tracer_flow_CSp, &
                       dt_forcing=real_to_time(US%T_to_s*time_interval) )
-
+  endif
   call cpu_clock_end(id_clock_other)
 
   ! De-rotate fluxes and copy back to the input, since they can be changed.
@@ -1740,7 +1761,6 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
       !$omp target update to(CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV)
       !$omp target update to(CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
     endif
-    !$omp target update to(u, v, h)
     call set_viscous_BBL(u, v, h, tv, CS%visc, G, GV, US, CS%set_visc_CSp, CS%pbv)
     call cpu_clock_end(id_clock_BBL_visc)
     if (showCallTree) call callTree_wayPoint("done with set_viscous_BBL (step_MOM_thermo)")
@@ -1768,8 +1788,10 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
 
     call cpu_clock_begin(id_clock_diabatic)
 
+    !$omp target update from(u, v, h)
     call diabatic(u, v, h, tv, CS%Hml, fluxes, CS%visc, CS%ADp, CS%CDp, dtdia, &
                   Time_end_thermo, G, GV, US, CS%diabatic_CSp, CS%stoch_CS, CS%OBC, Waves)
+    !$omp target update to (u,v,h)
     fluxes%fluxes_used = .true.
 
     if (CS%stoch_CS%do_skeb) then
