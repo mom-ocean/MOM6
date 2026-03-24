@@ -967,7 +967,10 @@ subroutine calculate_vertical_integrals(h, tv, p_surf, G, GV, US, CS)
   endif
 
   if (CS%id_col_ht > 0) then
+    !$omp target update to(h)
+    !$omp target enter data map(alloc: z_top)
     call find_eta(h, tv, G, GV, US, z_top)
+    !$omp target exit data map(from: z_top)
     do j=js,je ; do i=is,ie
       z_bot(i,j) = z_top(i,j) + G%bathyT(i,j)
     enddo ; enddo

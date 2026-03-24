@@ -682,7 +682,10 @@ subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE, OBC)
         f(i,j) = max(0.25 * abs((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) + &
                          (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1))), f_subround)
       enddo ; enddo
+      !$omp target update to(h)
+      !$omp target enter data map(alloc: e)
       call find_eta(h, tv, G, GV, US, e, halo_size=2)  !### Could be halo_size=1?
+      !$omp target exit data map(from: e)
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
                                   CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
                                   dzSxN=dzSxN, dzSyN=dzSyN, halo=1, OBC=OBC, OBC_N2=CS%OBC_friendly)
@@ -779,7 +782,10 @@ subroutine calc_slope_functions(h, tv, dt, G, GV, US, CS, OBC)
          "Module must be initialized before it is used.")
 
   if (CS%calculate_Eady_growth_rate) then
+    !$omp target update to(h)
+    !$omp target enter data map(alloc: e)
     call find_eta(h, tv, G, GV, US, e, halo_size=2)
+    !$omp target exit data map(from: e)
     if (CS%use_simpler_Eady_growth_rate) then
       call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
                                   CS%slope_x, CS%slope_y, N2_u=N2_u, N2_v=N2_v, dzu=dzu, dzv=dzv, &
@@ -1368,7 +1374,10 @@ subroutine calc_QG_slopes(h, tv, dt, G, GV, US, slope_x, slope_y, CS, OBC)
   if (.not. CS%initialized) call MOM_error(FATAL, "MOM_lateral_mixing_coeffs.F90, calc_QG_slopes: "//&
          "Module must be initialized before it is used.")
 
+  !$omp target update to(h)
+  !$omp target enter data map(alloc: e)
   call find_eta(h, tv, G, GV, US, e, halo_size=3)
+  !$omp target exit data map(from: e)
   call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*CS%kappa_smooth, CS%use_stanley_iso, &
                               slope_x, slope_y, halo=2, OBC=OBC, OBC_N2=CS%OBC_friendly)
 

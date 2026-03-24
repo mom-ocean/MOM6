@@ -241,7 +241,8 @@ type, public :: MOM_control_struct ; private
     GV => NULL()    !< structure containing vertical grid info
   type(unit_scale_type), pointer :: &
     US => NULL()    !< structure containing various unit conversion factors
-  type(thermo_var_ptrs) :: tv !< structure containing pointers to available thermodynamic fields
+  type(thermo_var_ptrs), allocatable :: tv
+    !< structure containing pointers to available thermodynamic fields
   real :: t_dyn_rel_adv !< The time of the dynamics relative to tracer advection and lateral mixing
                     !! [T ~> s], or equivalently the elapsed time since advectively updating the
                     !! tracers.  t_dyn_rel_adv is invariably positive and may span multiple coupling timesteps.
@@ -257,8 +258,8 @@ type, public :: MOM_control_struct ; private
                     !! have been stored for use in diagnostics.
 
   type(diag_ctrl)     :: diag !< structure to regulate diagnostic output timing
-  type(vertvisc_type), allocatable :: visc !< structure containing vertical viscosities,
-                    !! bottom drag viscosities, and related fields
+  type(vertvisc_type), allocatable :: visc
+    !< structure containing vertical viscosities, bottom drag viscosities, and related fields
   type(MEKE_type) :: MEKE   !< Fields related to the Mesoscale Eddy Kinetic Energy
   logical :: adiabatic !< If true, there are no diapycnal mass fluxes, and no calls
                     !! to routines to calculate or apply diapycnal fluxes.
@@ -336,7 +337,7 @@ type, public :: MOM_control_struct ; private
   real, dimension(:,:), pointer :: frac_shelf_h => NULL() !< fraction of total area occupied
   !! by ice shelf [nondim]
   real, dimension(:,:), pointer :: mass_shelf => NULL() !< Mass of ice shelf [R Z ~> kg m-2]
-  type(accel_diag_ptrs) :: ADp  !< structure containing pointers to accelerations,
+  type(accel_diag_ptrs), allocatable :: ADp  !< structure containing pointers to accelerations,
                                 !! for derived diagnostics (e.g., energy budgets)
   type(cont_diag_ptrs)  :: CDp  !< structure containing pointers to continuity equation
                                 !! terms, for derived diagnostics (e.g., energy budgets)
@@ -422,7 +423,7 @@ type, public :: MOM_control_struct ; private
     !< Pointer to the control structure for the diabatic driver
   type(MEKE_CS) :: MEKE_CSp
     !< Pointer to the control structure for the MEKE updates
-  type(VarMix_CS) :: VarMix
+  type(VarMix_CS), allocatable :: VarMix
     !< Control structure for the variable mixing module
   type(tracer_registry_type),    pointer :: tracer_Reg => NULL()
     !< Pointer to the MOM tracer registry
@@ -796,7 +797,9 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   if (cycle_start) then
     CS%time_in_cycle = 0.0
-    do j=js,je ; do i=is,ie ; CS%ssh_rint(i,j) = 0.0 ; enddo ; enddo
+    do concurrent (j=js:je, i=is:ie)
+      CS%ssh_rint(i,j) = 0.
+    enddo
 
     if (CS%VarMix%use_variable_mixing) then
       Time_end_diag = Time_start + real_to_time(cycle_time, unscale=US%T_to_s)
@@ -914,9 +917,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         !$omp target update to(u, v, h)
       endif
 
-      !!$omp target update from(u, v, h)
       call post_diabatic_halo_updates(CS, G, GV, US, u, v, h, CS%tv)
-      !!$omp target update to(u, v, h)
 
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
@@ -1039,9 +1040,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
         !$omp target update to(u, v, h)
       endif
 
-      !!$omp target update from(u, v, h)
       call post_diabatic_halo_updates(CS, G, GV, US, u, v, h, CS%tv)
-      !!$omp target update to(u, v, h)
 
       CS%time_in_thermo_cycle = CS%time_in_thermo_cycle + dtdia
 
@@ -1058,21 +1057,29 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
 
     if (do_dyn) then
-      !$omp target update from(h)
+      !$omp target enter data map(alloc: ssh)
+
       call cpu_clock_begin(id_clock_dynamics)
       ! Determining the time-average sea surface height is part of the algorithm.
       ! This may be eta_av if Boussinesq, or need to be diagnosed if not.
       CS%time_in_cycle = CS%time_in_cycle + dt
-      call find_eta(h, CS%tv, G, GV, US, ssh, CS%eta_av_bc, dZref=G%Z_ref)
-      do j=js,je ; do i=is,ie
-        CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt*ssh(i,j)
-      enddo ; enddo
+      !$omp target enter data map(to: CS%eta_av_bc)
+      call find_eta(h, CS%tv, G, GV, US, ssh, eta_bt=CS%eta_av_bc, dZref=G%Z_ref)
+      !$omp target exit data map(release: CS%eta_av_bc)
+
+      do concurrent (j=js:je, i=is:ie)
+        CS%ssh_rint(i,j) = CS%ssh_rint(i,j) + dt * ssh(i,j)
+      enddo
+
       if (CS%IDs%id_ssh_inst > 0) then
+        !$omp target update from(ssh)
         call enable_averages(dt, Time_local, CS%diag)
         call post_data(CS%IDs%id_ssh_inst, ssh, CS%diag)
         call disable_averaging(CS%diag)
       endif
       call cpu_clock_end(id_clock_dynamics)
+
+      !$omp target exit data map(delete: ssh)
     endif
 
     !===========================================================================
@@ -1108,12 +1115,20 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
   call cpu_clock_begin(id_clock_other)
 
   if (CS%time_in_cycle > 0.0) then
+    !$omp target enter data map(alloc: ssh)
+
     I_wt_ssh = 1.0/CS%time_in_cycle
-    do j=js,je ; do i=is,ie
-      ssh(i,j) = CS%ssh_rint(i,j)*I_wt_ssh
+    do concurrent (j=js:je, i=is:ie)
+      ssh(i,j) = CS%ssh_rint(i,j) * I_wt_ssh
       CS%ave_ssh_ibc(i,j) = ssh(i,j)
-    enddo ; enddo
-    if (associated(CS%HA_CSp)) call HA_accum('ssh', ssh, Time_local, G, CS%HA_CSp)
+    enddo
+    !$omp target update from(CS%ave_ssh_ibc)
+
+    if (associated(CS%HA_CSp)) then
+      !$omp target update from(ssh)
+      call HA_accum('ssh', ssh, Time_local, G, CS%HA_CSp)
+    endif
+
     if (do_dyn) then
       call adjust_ssh_for_p_atm(CS%tv, G, GV, US, CS%ave_ssh_ibc, forces%p_surf_SSH, &
                                 CS%calc_rho_for_sea_lev)
@@ -1151,15 +1166,24 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
 
     call cpu_clock_begin(id_clock_diagnostics)
+
+    !$omp target update from(ssh) &
+    !$omp   if (CS%time_in_cycle > 0. .or. CS%time_in_thermo_cycle > 0.)
+
     if (CS%time_in_cycle > 0.0) then
       call enable_averages(CS%time_in_cycle, Time_local, CS%diag)
       call post_surface_dyn_diags(CS%sfc_IDs, G, CS%diag, sfc_state_diag, ssh)
     endif
+
     if (CS%time_in_thermo_cycle > 0.0) then
       call enable_averages(CS%time_in_thermo_cycle, Time_local, CS%diag)
       call post_surface_thermo_diags(CS%sfc_IDs, G, GV, US, CS%diag, CS%time_in_thermo_cycle, &
                                      sfc_state_diag, CS%tv, ssh, CS%ave_ssh_ibc)
     endif
+
+    !$omp target exit data map(delete: ssh) &
+    !$omp   if (CS%time_in_cycle > 0. .or. CS%time_in_thermo_cycle > 0.)
+
     call disable_averaging(CS%diag)
     call cpu_clock_end(id_clock_diagnostics)
     if (CS%rotate_index) then
@@ -2523,6 +2547,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
        "FPMIX=True only works when SPLIT=True.")
   endif
 
+  ! NOTE: tv is used, even if there is no thermodynamics
+  allocate(CS%tv)
+
   call get_param(param_file, "MOM", "BOUSSINESQ", Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true., do_not_log=.true.)
   call get_param(param_file, "MOM", "SEMI_BOUSSINESQ", semi_Boussinesq, &
@@ -3146,6 +3173,9 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   CS%t_dyn_rel_adv = 0.0 ; CS%t_dyn_rel_thermo = 0.0 ; CS%t_dyn_rel_diag = 0.0
   CS%n_dyn_steps_in_adv = 0
 
+  allocate(CS%ADp)
+  !$omp target enter data map(alloc: CS%ADp)
+
   if (debug_truncations) then
     allocate(CS%u_prev(IsdB:IedB,jsd:jed,nz), source=0.0)
     allocate(CS%v_prev(isd:ied,JsdB:JedB,nz), source=0.0)
@@ -3171,9 +3201,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   if (CS%interp_p_surf) allocate(CS%p_surf_prev(isd:ied,jsd:jed), source=0.0)
 
   ALLOC_(CS%ssh_rint(isd:ied,jsd:jed)) ; CS%ssh_rint(:,:) = 0.0
+  !$omp target enter data map(to: CS%ssh_rint)
   ALLOC_(CS%ave_ssh_ibc(isd:ied,jsd:jed)) ; CS%ave_ssh_ibc(:,:) = 0.0
+  !$omp target enter data map(to: CS%ave_ssh_ibc)
   ALLOC_(CS%eta_av_bc(isd:ied,jsd:jed)) ; CS%eta_av_bc(:,:) = 0.0 ! -G%Z_ref
-  !$omp target enter data map(alloc: CS%eta_av_bc)
+  !$omp target enter data map(to: CS%eta_av_bc)
   CS%time_in_cycle = 0.0 ; CS%time_in_thermo_cycle = 0.0
 
   !allocate porous topography variables
@@ -3657,7 +3689,10 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   CS%useMEKE = MEKE_init(Time, G, GV, US, param_file, diag, CS%dbcomms_CS, CS%MEKE_CSp, CS%MEKE, &
                          restart_CSp, CS%MEKE_in_dynamics)
 
+  allocate(CS%VarMix)
+  !$omp target enter data map(alloc: CS%VarMix)
   call VarMix_init(Time, G, GV, US, param_file, diag, CS%VarMix)
+
   !$omp target enter data map(to: CS%set_visc_CSp)
   call set_visc_init(Time, G, GV, US, param_file, diag, CS%visc, CS%set_visc_CSp, restart_CSp, CS%OBC)
   call thickness_diffuse_init(Time, G, GV, US, param_file, diag, CS%CDp, CS%thickness_diffuse_CSp)
@@ -3853,11 +3888,15 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
 
   if (.not.query_initialized(CS%ave_ssh_ibc, "ave_ssh", restart_CSp)) then
+    !$omp target update to(CS%h)
     if (CS%split) then
-      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta, dZref=G%Z_ref)
+      !$omp target enter data map(to: eta)
+      call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, eta_bt=eta, dZref=G%Z_ref)
+      !$omp target exit data map(release: eta)
     else
       call find_eta(CS%h, CS%tv, G, GV, US, CS%ave_ssh_ibc, dZref=G%Z_ref)
     endif
+    !$omp target update from(CS%ave_ssh_ibc)
     call set_initialized(CS%ave_ssh_ibc, "ave_ssh", restart_CSp)
   endif
   if (CS%split) deallocate(eta)
@@ -3914,7 +3953,10 @@ subroutine finish_MOM_initialization(Time, dirs, CS)
     restart_CSp_tmp = CS%restart_CS
     call restart_registry_lock(restart_CSp_tmp, unlocked=.true.)
     allocate(z_interface(SZI_(G),SZJ_(G),SZK_(GV)+1))
+    !$omp target update to(CS%h)
+    !$omp target enter data map(alloc: z_interface)
     call find_eta(CS%h, CS%tv, G, GV, US, z_interface, dZref=G%Z_ref)
+    !$omp target exit data map(from: z_interface)
     call register_restart_field(z_interface, "eta", .true., restart_CSp_tmp, &
                                 "Interface heights", "meter", z_grid='i', conversion=US%Z_to_m)
     ! NOTE: write_ic=.true. routes routine to fms2 IO write_initial_conditions interface
@@ -4697,6 +4739,9 @@ subroutine MOM_end(CS)
   if (associated(CS%tv%TempxPmE)) deallocate(CS%tv%TempxPmE)
 
   DEALLOC_(CS%ave_ssh_ibc) ; DEALLOC_(CS%ssh_rint) ; DEALLOC_(CS%eta_av_bc)
+  !$omp target exit data map(delete: CS%ave_ssh_ibc)
+  !$omp target exit data map(delete: CS%ssh_rint)
+  !$omp target exit data map(delete: CS%eta_av_bc)
 
   ! TODO: debug_truncations deallocation
 

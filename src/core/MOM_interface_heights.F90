@@ -158,19 +158,21 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
   dZ_ref = 0.0 ; if (present(dZref)) dZ_ref = dZref
 
   if (GV%Boussinesq) then
-    !$OMP parallel default(shared) private(dilate,htot)
-    !$OMP do
-    do j=jsv,jev ; do i=isv,iev ; eta(i,j,nz+1) = -(G%bathyT(i,j) + dZ_ref) ; enddo ; enddo
-    !$OMP do
-    do j=jsv,jev ; do k=nz,1,-1 ; do i=isv,iev
-      eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*GV%H_to_Z
-    enddo ; enddo ; enddo
+    do concurrent (j=jsv:jev, i=isv:iev)
+      eta(i,j,nz+1) = -(G%bathyT(i,j) + dZ_ref)
+    enddo
+
+    do concurrent (j=jsv:jev, i=isv:iev)
+      do k=nz,1,-1
+        eta(i,j,K) = eta(i,j,K+1) + h(i,j,k)*GV%H_to_Z
+      enddo
+    enddo
+
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
       ! that is used for the dynamics.
-      !$OMP do
-      do j=jsv,jev    !$OMP parallel do default(shared)
-
+      !$omp target update from(eta)
+      do j=jsv,jev
         do i=isv,iev
           dilate(i) = (eta_bt(i,j)*GV%H_to_Z + G%bathyT(i,j)) / &
                       (eta(i,j,1) + (G%bathyT(i,j) + dZ_ref))
@@ -180,12 +182,12 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
                        (G%bathyT(i,j) + dZ_ref)
         enddo ; enddo
       enddo
+      !$omp target update to(eta)
     endif
-    !$OMP end parallel
   else
+    !$omp target update from(eta)
     call find_dz_for_eta(h, tv, G, GV, US, dz_lay, halo_size)
-    !$OMP parallel default(shared) private(dilate,htot)
-    !$OMP do
+
     do j=jsv,jev
       do i=isv,iev ; eta(i,j,nz+1) = -(G%bathyT(i,j) + dZ_ref) ; enddo
       do k=nz,1,-1 ; do i=isv,iev
@@ -196,7 +198,6 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
     if (present(eta_bt)) then
       ! Dilate the water column to agree with the free surface height
       ! from the time-averaged barotropic solution.
-      !$OMP do
       do j=jsv,jev
         do i=isv,iev ; htot(i) = GV%H_subroundoff ; enddo
         do k=1,nz ; do i=isv,iev ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
@@ -207,9 +208,8 @@ subroutine find_eta_3d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
         enddo ; enddo
       enddo
     endif
-    !$OMP end parallel
+    !$omp target update to(eta)
   endif
-
 end subroutine find_eta_3d
 
 !> Calculates the free surface height, using the appropriate form for consistency
@@ -247,35 +247,38 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
 
   dZ_ref = 0.0 ; if (present(dZref)) dZ_ref = dZref
 
+  !$omp target enter data map(to: eta_bt) if (present(eta_bt))
+
   if (GV%Boussinesq) then
     if (present(eta_bt)) then
-      !$OMP parallel do default(shared)
-      do j=js,je ; do i=is,ie
+      do concurrent (j=js:je, i=is:ie)
         eta(i,j) = GV%H_to_Z*eta_bt(i,j) - dZ_ref
-      enddo ; enddo
+      enddo
     else
-      !$OMP parallel do default(shared)
-      do j=js,je
-        do i=is,ie ; eta(i,j) = -(G%bathyT(i,j) + dZ_ref) ; enddo
-        do k=1,nz ; do i=is,ie
+      do concurrent (j=js:je)
+        do concurrent (i=is:ie)
+          eta(i,j) = -G%bathyT(i,j) + dZ_ref
+        enddo
+
+        do k=1,nz ; do concurrent (i=is:ie)
           eta(i,j) = eta(i,j) + h(i,j,k)*GV%H_to_Z
         enddo ; enddo
       enddo
     endif
   else
+    !$omp target update from(eta)
     call find_dz_for_eta(h, tv, G, GV, US, dz_lay, halo_size)
-    !$OMP parallel default(shared) private(htot)
-    !$OMP do
+
     do j=js,je
       do i=is,ie ; eta(i,j) = -(G%bathyT(i,j) + dZ_ref) ; enddo
       do k=1,nz ; do i=is,ie
         eta(i,j) = eta(i,j) + dz_lay(i,j,k)
       enddo ; enddo
     enddo
+
     if (present(eta_bt)) then
       !   Dilate the water column to agree with the time-averaged column
       ! mass from the barotropic solution.
-      !$OMP do
       do j=js,je
         do i=is,ie ; htot(i) = GV%H_subroundoff ; enddo
         do k=1,nz ; do i=is,ie ; htot(i) = htot(i) + h(i,j,k) ; enddo ; enddo
@@ -284,10 +287,9 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
                      (G%bathyT(i,j) + dZ_ref)
         enddo
       enddo
+      !$omp target update to(eta)
     endif
-    !$OMP end parallel
   endif
-
 end subroutine find_eta_2d
 
 

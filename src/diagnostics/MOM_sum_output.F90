@@ -566,7 +566,10 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     do k=1,nz ; vol_lay(k) = (1.0 / GV%Rho0) * mass_lay(k) ; enddo
   else
     if (CS%do_APE_calc) then
+      !$omp target update to(h)
+      !$omp target enter data map(alloc: eta)
       call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
+      !$omp target exit data map(from: eta)
       do k=1,nz ; do j=js,je ; do i=is,ie
         tmp1(i,j,k) = (eta(i,j,K)-eta(i,j,K+1)) * areaTm(i,j)
       enddo ; enddo ; enddo

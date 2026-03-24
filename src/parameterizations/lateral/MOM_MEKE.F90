@@ -1875,7 +1875,10 @@ subroutine ML_MEKE_calculate_features(G, GV, US, CS, Rd_dx_h, u, v, tv, h, dt, f
     h_u(I,j,k) = 0.5*(h(i,j,k)*G%mask2dT(i,j) + h(i+1,j,k)*G%mask2dT(i+1,j)) + GV%Angstrom_H
     h_v(i,J,k) = 0.5*(h(i,j,k)*G%mask2dT(i,j) + h(i,j+1,k)*G%mask2dT(i,j+1)) + GV%Angstrom_H
   enddo ; enddo ; enddo
+  !$omp target update to(h)
+  !$omp target enter data map(alloc: e)
   call find_eta(h, tv, G, GV, US, e, halo_size=2)
+  !$omp target exit data map(from: e)
   ! Note the hard-coded dimenisional constant in the following line.
   call calc_isoneutral_slopes(G, GV, US, h, e, tv, dt*1.e-7*GV%m2_s_to_HZ_T, .false., slope_x, slope_y)
   call pass_vector(slope_x, slope_y, G%Domain)

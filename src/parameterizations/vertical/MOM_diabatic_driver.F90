@@ -343,7 +343,10 @@ subroutine diabatic(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, &
   if (CS%id_T_predia > 0) call post_data(CS%id_T_predia, tv%T, CS%diag)
   if (CS%id_S_predia > 0) call post_data(CS%id_S_predia, tv%S, CS%diag)
   if (CS%id_e_predia > 0) then
+    !$omp target update to(h)
+    !$omp target enter data map(alloc: eta)
     call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
+    !$omp target exit data map(from: eta)
     call post_data(CS%id_e_predia, eta, CS%diag)
   endif
 

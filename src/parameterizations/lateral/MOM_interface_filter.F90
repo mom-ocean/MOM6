@@ -111,7 +111,10 @@ subroutine interface_filter(h, uhtr, vhtr, tv, dt, G, GV, US, CDp, CS)
     "order specified by INTERFACE_FILTER_ORDER.")
 
   ! Calculates interface heights, e, in [Z ~> m].
+  !$omp target update to(h)
+  !$omp target enter data map(alloc: e)
   call find_eta(h, tv, G, GV, US, e, halo_size=filter_itts)
+  !$omp target exit data map(from: e)
 
   ! Set the smoothing length scales to apply at each iteration.
   if (filter_itts == 1) then

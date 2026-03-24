@@ -1222,7 +1222,10 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read, z_top_shelf)
   endif
 
   ! Convert thicknesses to interface heights.
+  !$omp target update from(h)
+  !$omp target enter data map(alloc: eta)
   call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
+  !$omp target exit data map(from: eta)
 
   do j=js,je ; do i=is,ie ; if (G%mask2dT(i,j) > 0.0) then
 !    if (eta_sfc(i,j) < eta(i,j,nz+1)) then
@@ -1404,7 +1407,10 @@ subroutine calc_sfc_displacement(PF, G, GV, US, mass_shelf, tv, h)
   max_iter = 1e3
   call MOM_mesg("Started calculating initial interface position under ice shelf ")
   ! Convert thicknesses to interface heights.
+  !$omp target update to(h)
+  !$omp target enter data map(alloc: eta)
   call find_eta(h, tv, G, GV, US, eta, dZref=G%Z_ref)
+  !$omp target exit data map(from: eta)
   do j=js,je ; do i=is,ie
     iter = 1
     z_top_shelf(i,j) = 0.0

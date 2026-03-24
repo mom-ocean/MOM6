@@ -313,7 +313,10 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   ! currently no treatment for using optional find_eta arguments if present
+  !$omp target update to(h)
+  !$omp target enter data map(alloc: eta)
   call find_eta(h, tv, G, GV, US, eta, halo_size=1)
+  !$omp target exit data map(from: eta)
 
   dz_neglect = GV%dZ_subroundoff
 

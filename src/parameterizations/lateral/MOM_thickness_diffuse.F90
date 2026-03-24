@@ -235,7 +235,10 @@ subroutine thickness_diffuse(h, uhtr, vhtr, tv, dt, G, GV, US, MEKE, VarMix, CDp
   enddo ; enddo
 
   ! Calculates interface heights, e, in [Z ~> m].
+  !$omp target update to(h)
+  !$omp target enter data map(alloc: e)
   call find_eta(h, tv, G, GV, US, e, halo_size=1)
+  !$omp target exit data map(from: e)
 
   ! Set the diffusivities.
   !$OMP parallel default(shared)

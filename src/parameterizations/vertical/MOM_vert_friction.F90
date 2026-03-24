@@ -1434,13 +1434,13 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
 
   ! First do u-points
 
+  ! TODO: tv and VarMix probably should be conditionally transferred (if at all)
   !$omp target enter data map(alloc: z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &
   !$omp& tv, varmix, hvel_shelf, dz_vel_shelf, a_shelf)
 
   ! These are used in diagnostics, so they need to be mapped back and forth
   !$omp target enter data map(to: hML_u, kv_u, kv_gl90_u )
   !$omp target enter data map(to: hML_v, kv_v, kv_gl90_v)
-
 
   !$omp target teams distribute parallel do collapse(2) &
   !$omp   private(z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &

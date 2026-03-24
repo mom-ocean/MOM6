@@ -490,7 +490,10 @@ subroutine pre_ALE_diagnostics(G, GV, US, h, u, v, tv, CS)
   if (CS%id_T_preale > 0) call post_data(CS%id_T_preale, tv%T, CS%diag)
   if (CS%id_S_preale > 0) call post_data(CS%id_S_preale, tv%S, CS%diag)
   if (CS%id_e_preale > 0) then
+    !$omp target update to(h)
+    !$omp target enter data map(alloc: eta_preale)
     call find_eta(h, tv, G, GV, US, eta_preale, dZref=G%Z_ref)
+    !$omp target exit data map(from: eta_preale)
     call post_data(CS%id_e_preale, eta_preale, CS%diag)
   endif
 
