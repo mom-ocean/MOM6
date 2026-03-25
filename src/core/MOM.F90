@@ -818,6 +818,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
     endif
     if (CS%UseWaves) then
       ! Update wave information, which is presently kept static over each call to step_mom
+      !$omp target update from(h)
       call enable_averages(time_interval, Time_start + real_to_time(US%T_to_s*time_interval), CS%diag)
       call find_ustar(forces, CS%tv, U_star, G, GV, US, halo=1)
       call thickness_to_dz(h, CS%tv, dz, G, GV, US, halo_size=1)
