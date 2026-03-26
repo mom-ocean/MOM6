@@ -279,6 +279,7 @@ program MOM6
 
   ! Call initialize MOM with an optional Ice Shelf CS which, if present triggers
   ! initialization of ice shelf parameters and arrays.
+  !$omp target enter data map(alloc: MOM_CSp)
   if (segment_start_time_set) then
     ! In this case, the segment starts at a time fixed by ocean_solo.res
     Time = segment_start_time
@@ -632,6 +633,7 @@ program MOM6
   call cpu_clock_end(termClock)
 
   call MOM_end(MOM_CSp)
+  !$omp target exit data map(delete: MOM_CSp)
 
   ! This closes out the infrastructure, including clocks, I/O and message passing communicators.
   call io_infra_end() ; call MOM_infra_end()
