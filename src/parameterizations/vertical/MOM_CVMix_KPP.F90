@@ -1827,7 +1827,7 @@ subroutine KPP_get_BLD(CS, BLD, G, US, m_to_BLD_units)
                                                        !! to the desired units for BLD [various]
   ! Local variables
   real :: scale  ! A dimensional rescaling factor in [nondim] or other units.
-  integer :: i,j
+  integer :: i, j
 
   scale = 1.0 ; if (present(m_to_BLD_units)) scale = US%Z_to_m*m_to_BLD_units
 
@@ -1847,7 +1847,7 @@ subroutine KPP_get_Lam2(CS, Lam2, G, US)
   real, dimension(SZI_(G),SZJ_(G)), intent(inout) :: Lam2 !< (Langmuir Number)^-2 [nondim]
 
   ! Local variables
-  integer :: i,j ! Horizontal indices
+  integer :: i, j ! Horizontal indices
 
   !$OMP parallel do default(none) shared(Lam2, CS, G)
   do j = G%jsc, G%jec ; do i = G%isc, G%iec

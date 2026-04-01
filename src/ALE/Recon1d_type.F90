@@ -269,7 +269,7 @@ subroutine remap_to_sub_grid(this, h0, u0, n1, h_sub, &
   real :: dh0_eff ! Running sum of source cell thickness [H]
   integer :: i0_last_thick_cell, n0
 ! real :: u0_min(this%n), u0_max(this%n) ! Min/max of u0 for each source cell [A]
-! real :: ul,ur ! Left/right edge values [A]
+! real :: ul, ur ! Left/right edge values [A]
 
   n0 = this%n
 

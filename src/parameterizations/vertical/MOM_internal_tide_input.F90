@@ -354,7 +354,7 @@ subroutine get_input_TKE(G, TKE_itidal_input, nFreq, CS)
                                                          !! [H Z2 T-3 ~> m3 s-3 or W m-2].
   type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
                                                  !! structure for the internal tide input module.
-  integer :: i,j,fr
+  integer :: i, j, fr
 
   do fr=1,nFreq ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
     TKE_itidal_input(i,j,fr) = CS%TKE_itidal_input(i,j,fr)
@@ -370,7 +370,7 @@ subroutine get_barotropic_tidal_vel(G, vel_btTide, nFreq, CS)
                          intent(out) :: vel_btTide !< Barotropic velocity read from file [L T-1 ~> m s-1].
   type(int_tide_input_CS),   target       :: CS !< A pointer that is set to point to the control
                                                  !! structure for the internal tide input module.
-  integer :: i,j,fr
+  integer :: i, j, fr
 
   do fr=1,nFreq ; do j=G%jsd,G%jed ; do i=G%isd,G%ied
     vel_btTide(i,j,fr) = CS%tideamp(i,j,fr)

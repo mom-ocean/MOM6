@@ -101,7 +101,7 @@ subroutine MOM_calculate_grad_Coriolis(dF_dx, dF_dy, G, US)
   type(unit_scale_type),    optional, intent(in)    :: US !< A dimensional unit scaling type
   ! Local variables
   character(len=40)  :: mdl = "MOM_calculate_grad_Coriolis" ! This subroutine's name.
-  integer :: i,j
+  integer :: i, j
   real :: f1, f2 ! Average of adjacent Coriolis parameters [T-1 ~> s-1]
 
   call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
@@ -132,7 +132,7 @@ function diagnoseMaximumDepth(D, G)
                            intent(in) :: D !< Ocean bottom depth in [m] or [Z ~> m]
   real :: diagnoseMaximumDepth             !< The global maximum ocean bottom depth in [m] or [Z ~> m]
   ! Local variables
-  integer :: i,j
+  integer :: i, j
   diagnoseMaximumDepth = D(G%isc,G%jsc)
   do j=G%jsc, G%jec ; do i=G%isc, G%iec
     diagnoseMaximumDepth = max(diagnoseMaximumDepth,D(i,j))

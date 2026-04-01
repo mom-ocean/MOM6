@@ -103,7 +103,7 @@ subroutine random_2d_01(CS, HI, rand)
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1 [nondim]
   ! Local variables
-  integer :: i,j
+  integer :: i, j
 
   do j = HI%jsd,HI%jed
     do i = HI%isd,HI%ied
@@ -120,7 +120,7 @@ subroutine random_2d_norm(CS, HI, rand)
   type(hor_index_type), intent(in)    :: HI !< Horizontal index structure
   real, dimension(HI%isd:HI%ied,HI%jsd:HI%jed), intent(out) :: rand !< Random numbers between 0 and 1 [nondim]
   ! Local variables
-  integer :: i,j,n
+  integer :: i, j, n
 
   do j = HI%jsd,HI%jed
     do i = HI%isd,HI%ied
@@ -156,7 +156,7 @@ subroutine random_2d_constructor(CS, HI, Time, seed)
   type(time_type),      intent(in)    :: Time !< Current model time
   integer,              intent(in)    :: seed !< Seed for PRNG
   ! Local variables
-  integer :: i,j,sseed,tseed
+  integer :: i, j, sseed, tseed
 
   if (.not. allocated(CS%stream2d)) allocate( CS%stream2d(HI%isd:HI%ied,HI%jsd:HI%jed) )
 
@@ -177,9 +177,9 @@ end subroutine random_2d_constructor
 integer function seed_from_time(Time)
   type(time_type), intent(in)    :: Time !< Current model time
   ! Local variables
-  integer :: yr,mo,dy,hr,mn,sc,s1,s2
+  integer :: yr, mo, dy, hr, mn, sc, s1, s2
 
-  call get_date(Time,yr,mo,dy,hr,mn,sc)
+  call get_date(Time, yr, mo, dy, hr, mn, sc)
   s1 = sc + 61*(mn + 61*hr) + 379 ! Range 379 .. 89620
   ! Fun fact: 2147483647 is the eighth Mersenne prime.
   ! This is not the reason for using 2147483647 here. It is the

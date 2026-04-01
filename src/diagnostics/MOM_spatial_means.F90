@@ -763,7 +763,7 @@ subroutine adjust_area_mean_to_zero(array, G, scaling, unit_scale, unscale)
   real :: scalefac  ! A scaling factor for the variable [a A-1 ~> 1]
   real :: areaIntPosVals, areaIntNegVals ! The global area integral of the positive and negative values [m2 a]
   real :: posScale, negScale ! The scaling factor to apply to positive or negative values [nondim]
-  integer :: i,j
+  integer :: i, j
 
   scalefac = 1.0
   if (present(unscale)) then ; scalefac = unscale

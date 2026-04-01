@@ -704,7 +704,7 @@ subroutine determine_land_blocks(mask, nx, ny, idiv, jdiv, ibuf, jbuf, num_maske
   integer, dimension(idiv) :: iend     !< The ending index of each division along x axis
   integer, dimension(jdiv) :: jbegin   !< The starting index of each division along y axis
   integer, dimension(jdiv) :: jend     !< The ending index of each division along y axis
-  integer :: i, j, ib, ie, jb,je
+  integer :: i, j, ib, ie, jb, je
 
   call compute_extent(1, nx, idiv, ibegin, iend)
   call compute_extent(1, ny, jdiv, jbegin, jend)

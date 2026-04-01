@@ -446,7 +446,7 @@ subroutine set_coord_from_file(Rlay, g_prime, GV, US, param_file)
   integer :: k, nz
   character(len=40)  :: mdl = "set_coord_from_file" ! This subroutine's name.
   character(len=40)  :: coord_var
-  character(len=200) :: filename,coord_file,inputdir ! Strings for file/path
+  character(len=200) :: filename, coord_file, inputdir ! Strings for file/path
   nz = GV%ke
 
   call callTree_enter(trim(mdl)//"(), MOM_coord_initialization.F90")

@@ -6502,7 +6502,7 @@ subroutine barotropic_get_tav(CS, ubtav, vbtav, G, US)
                                                             !! over a baroclinic timestep [L T-1 ~> m s-1]
   type(unit_scale_type),             intent(in)    :: US    !< A dimensional unit scaling type
   ! Local variables
-  integer :: i,j
+  integer :: i, j
 
   do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
     ubtav(I,j) = CS%ubtav(I,j)

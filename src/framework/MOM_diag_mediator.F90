@@ -1782,7 +1782,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
                                                 !! in internally scaled arbitrary units [A ~> a]
   type(diag_ctrl),   intent(in) :: diag_CS !< Structure used to regulate diagnostic output
   logical, optional, intent(in) :: is_static !< If true, this is a static field that is always offered.
-  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
+  real, optional, target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
 
   ! Local variables
   real, dimension(:,:,:), pointer :: locfield ! The field being offered in arbitrary unscaled units [a]
@@ -4500,7 +4500,7 @@ subroutine downsample_diag_field_3d(locfield, locfield_dsamp, dl, diag_cs, diag,
   integer, intent(inout) :: iev            !< i-end index for diagnostics
   integer, intent(inout) :: jsv            !< j-start index for diagnostics
   integer, intent(inout) :: jev            !< j-end index for diagnostics
-  real,    optional,target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
+  real, optional, target, intent(in) :: mask(:,:,:) !< If present, use this real array as the data mask [nondim]
   ! Local variables
   real, dimension(:,:,:), pointer :: locmask ! A pointer to the mask [nondim]
   integer :: f1, f2, isv_o, jsv_o
@@ -4539,7 +4539,7 @@ subroutine downsample_diag_field_2d(locfield, locfield_dsamp, dl, diag_cs, diag,
   integer, intent(inout) :: iev            !< i-end index for diagnostics
   integer, intent(inout) :: jsv            !< j-start index for diagnostics
   integer, intent(inout) :: jev            !< j-end index for diagnostics
-  real,    optional,target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask [nondim].
+  real, optional, target, intent(in) :: mask(:,:) !< If present, use this real array as the data mask [nondim].
   ! Local variables
   real, dimension(:,:), pointer :: locmask ! A pointer to the mask [nondim]
   integer :: f1, f2, isv_o, jsv_o

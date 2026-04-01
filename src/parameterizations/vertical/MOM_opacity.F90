@@ -1390,7 +1390,7 @@ subroutine init_ohlmann_table(optics)
   !! in log-space that any increment in Table 1a
   integer, parameter :: nval_lut=401
   real :: chl, log10chl_lut, w1, w2
-  integer :: n,m,mm1,err
+  integer :: n, m, mm1, err
 
   allocate(optics%a1_lut(nval_lut),optics%b1_lut(nval_lut),&
        &   optics%a2_lut(nval_lut),optics%b2_lut(nval_lut),&

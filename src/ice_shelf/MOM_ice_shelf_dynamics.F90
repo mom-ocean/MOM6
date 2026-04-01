@@ -518,7 +518,7 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                           ! in through open boundaries [C ~> degC]
   !This include declares and sets the variable "version".
 # include "version_variable.h"
-  character(len=200) :: IC_file,filename,inputdir
+  character(len=200) :: IC_file, filename, inputdir
   character(len=40)  :: var_name
   character(len=40)  :: mdl = "MOM_ice_shelf_dyn"  ! This module's name.
   logical :: shelf_mass_is_dynamic, override_shelf_movement, active_shelf_dynamics
@@ -1196,7 +1196,7 @@ subroutine volume_above_floatation(CS, G, ISS, vaf, hemisphere)
   integer :: IS_ID ! local copy of hemisphere
   real, dimension(SZI_(G),SZJ_(G))  :: vaf_cell !< cell-wise volume above floatation [Z L2 ~> m3]
   integer, dimension(SZI_(G),SZJ_(G))  :: mask ! a mask for active cells depending on hemisphere indicated
-  integer :: is,ie,js,je,i,j
+  integer :: is, ie, js, je, i, j
 
   if (CS%GL_couple) &
     call MOM_error(FATAL, "MOM_ice_shelf_dyn, volume above floatation calculation assumes GL_couple=.FALSE..")
@@ -1339,7 +1339,7 @@ subroutine ice_visc_diag(CS,G,ice_visc)
   type(ocean_grid_type),  intent(in) :: G  !< The grid structure used by the ice shelf.
   real, dimension(SZDI_(G),SZDJ_(G)), intent(out)  :: ice_visc !< area-averaged vertically integrated ice viscosity
                                                                !! [R L2 Z T-1 ~> Pa s m]
-  integer :: i,j
+  integer :: i, j
 
   ice_visc(:,:)=0.0
   if (CS%visc_qps==4) then
@@ -1635,7 +1635,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   logical :: converged ! Indicates nonlinear convergence
   logical :: calc_Au_for_convergence ! Used for convergence criteria than need a CG_action
   character(len=160) :: mesg  ! The text of an error message
-  integer :: conv_flag, i, j, k,l, iter, nodefloat
+  integer :: conv_flag, i, j, k, l, iter, nodefloat
   integer :: Isdq, Iedq, Jsdq, Jedq, isd, ied, jsd, jed
   integer :: Iscq, Iecq, Jscq, Jecq, isc, iec, jsc, jec
   real    :: err_max, err_tempu, err_tempv, err_init ! Errors in [R L3 Z T-2 ~> kg m s-2] or [L T-1 ~> m s-1]
@@ -3323,7 +3323,7 @@ subroutine calve_to_mask(G, h_shelf, area_shelf_h, hmask, calve_mask)
   real, dimension(SZDI_(G),SZDJ_(G)), intent(in)    :: calve_mask !< A mask that indicates where the ice
                                                              !! shelf can exist, and where it will calve.
 
-  integer                        :: i,j
+  integer :: i, j
 
   do j=G%jsc,G%jec ; do i=G%isc,G%iec
     if ((calve_mask(i,j) == 0.0) .and. (hmask(i,j) /= 0.0)) then
@@ -4407,7 +4407,7 @@ subroutine IS_dynamics_post_data_2(CS, ISS, G)
   real, dimension(SZDI_(G),SZDJ_(G),3) :: dev_stress ! deviatoric stress components xx,yy, and xy [R L Z T-2 ~> Pa]
   real, dimension(SZDI_(G),SZDJ_(G),2) :: p_dev_stress ! horizontal principal deviatoric stress [R L Z T-2 ~> Pa]
   real, dimension(SZDI_(G),SZDJ_(G))  :: ice_visc ! area-averaged ice viscosity [R L2 T-1 ~> Pa s]
-  real :: p1,p2 ! Used to calculate strain-rate principal components [T-1 ~> s-1]
+  real :: p1, p2 ! Used to calculate strain-rate principal components [T-1 ~> s-1]
   integer :: i, j
 
   !Allocate the gradient basis functions for 1 cell-centered quadrature point per cell
@@ -4844,7 +4844,7 @@ subroutine change_in_draft(CS, G, h_shelf0, h_shelf1, ddraft)
                           intent(in)    :: h_shelf1 !< the current thickness of the ice shelf [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)), &
                           intent(inout)    :: ddraft !< the change in shelf draft thickness
-  real :: b0,b1
+  real :: b0, b1
   integer :: i, j, isc, iec, jsc, jec
   real    :: OD
 
@@ -4909,7 +4909,7 @@ subroutine bilinear_shape_functions (X, Y, Phi, area)
 ! ... will all cells have the same shape and dimension?
 
   real, dimension(4) :: xquad, yquad ! [nondim]
-  real :: a,b,c,d  ! Various lengths [L ~> m]
+  real :: a, b, c, d ! Various lengths [L ~> m]
   real :: xexp, yexp ! [nondim]
   integer :: node, qpoint, xnode, ynode
 

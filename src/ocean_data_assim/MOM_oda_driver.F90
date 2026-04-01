@@ -125,7 +125,7 @@ type, public :: ODA_CS ; private
   logical :: do_bias_adjustment !< If true, use spatio-temporally varying climatological tendency
                                 !! adjustment for Temperature and Salinity
   real :: bias_adjustment_multiplier !< A scaling for the bias adjustment [nondim]
-  integer :: assim_method !< Method: NO_ASSIM,EAKF_ASSIM or OI_ASSIM
+  integer :: assim_method !< Method: NO_ASSIM, EAKF_ASSIM or OI_ASSIM
   integer :: ensemble_size !< Size of the ensemble
   integer :: ensemble_id = 0 !< id of the current ensemble member
   integer, pointer, dimension(:,:) :: ensemble_pelist !< PE list for ensemble members
@@ -578,7 +578,7 @@ subroutine get_bias_correction_tracer(Time, US, CS)
   real, allocatable, dimension(:), target :: z_edges_in ! Cell edge depths for input data [Z ~> m]
   real :: missing_value ! A value indicating that there is no valid input data at this point [CU ~> conc]
   integer, dimension(3) :: fld_sz
-  integer :: i,j,k
+  integer :: i, j, k
 
 
   call cpu_clock_begin(id_clock_bias_adjustment)

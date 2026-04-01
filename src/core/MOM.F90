@@ -302,7 +302,7 @@ type, public :: MOM_control_struct ; private
                                      !! number of dynamics steps in nstep_tot
   logical :: debug                   !< If true, write verbose checksums for debugging purposes.
   logical :: debug_OBCs              !< If true, write verbose OBC values for debugging purposes.
-  integer :: ntrunc                  !< number u,v truncations since last call to write_energy
+  integer :: ntrunc                  !< number u, v truncations since last call to write_energy
 
   integer :: cont_stencil            !< The stencil for thickness from the continuity solver.
   integer :: dyn_h_stencil           !< The stencil for thickness for the dynamics based on
@@ -596,7 +596,7 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
 
   logical :: do_advection    ! If true, do tracer advection.
   logical :: do_diabatic     ! If true, do diabatic update.
-  logical :: thermo_does_span_coupling ! If true,thermodynamic (diabatic) forcing spans
+  logical :: thermo_does_span_coupling ! If true, thermodynamic (diabatic) forcing spans
                                        ! multiple coupling timesteps.
   logical :: tradv_does_span_coupling  ! If true, tracer advection spans
                                        ! multiple coupling timesteps.

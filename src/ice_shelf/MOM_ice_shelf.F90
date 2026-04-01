@@ -1020,7 +1020,7 @@ subroutine adjust_ice_sheet_frazil(sfc_state_in, fluxes_in, CS)
                                                  !! the ice-shelf state
   type(surface), pointer :: sfc_state => NULL()
   type(forcing), pointer :: fluxes => NULL()
-  integer :: i,j,is,ie,js,je
+  integer :: i, j, is, ie, js, je
 
   G => CS%grid ; ISS => CS%ISS
 

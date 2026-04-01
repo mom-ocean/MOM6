@@ -4011,7 +4011,7 @@ subroutine gradient_at_q_points(G, GV, segment, uvel, vvel)
   type(OBC_segment_type), intent(inout) :: segment !< OBC segment structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: uvel !< zonal velocity [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)    :: vvel !< meridional velocity [L T-1 ~> m s-1]
-  integer :: i,j,k
+  integer :: i, j, k
 
   if (.not. segment%on_pe) return
 
