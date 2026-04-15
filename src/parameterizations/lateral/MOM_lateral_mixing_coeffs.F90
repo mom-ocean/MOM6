@@ -49,8 +49,8 @@ type, public :: VarMix_CS
                                   !! speed and calculate the resolution function
                                   !! independently at each point.
   logical :: use_stored_slopes    !< If true, stores isopycnal slopes in this structure.
-  logical :: Resoln_use_ebt       !< If true, uses the equivalent barotropic wave speed instead
-                                  !! of first baroclinic wave for calculating the resolution fn.
+  logical :: Resoln_use_ebt       !< If true, use the equivalent barotropic wave speed instead of the
+                                  !! first baroclinic wave speed for calculating the resolution function.
   logical :: khth_use_ebt_struct  !< If true, uses the equivalent barotropic structure
                                   !! as the vertical structure of thickness diffusivity.
   logical :: kdgl90_use_ebt_struct  !< If true, uses the equivalent barotropic structure
@@ -85,7 +85,9 @@ type, public :: VarMix_CS
                                   !! interface heights as a proxy for isopycnal slopes.
   logical :: OBC_friendly         !< If true, use only interior data for thickness weighting and
                                   !! to calculate stratification and other fields at open boundary
-                                  !!  condition faces.
+                                  !! condition faces.
+  logical :: res_fn_OBC_bug       !< If false, use only interior data for calculating the resolution
+                                  !! functions at open boundary condition faces and vertices.
   real :: cropping_distance       !< Distance from surface or bottom to filter out outcropped or
                                   !! incropped interfaces for the Eady growth rate calc [Z ~> m]
   real :: h_min_N2                !< The minimum vertical distance to use in the denominator of the
@@ -206,6 +208,7 @@ subroutine calc_depth_function(G, CS)
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq
   integer :: i, j
   real    :: H0   ! The depth above which KHTH is linearly scaled away [Z ~> m]
+  real    :: h1, h2  ! Temporary total thicknesses [Z ~> m]
   real    :: expo ! exponent used in the depth dependent scaling [nondim]
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
@@ -224,11 +227,15 @@ subroutine calc_depth_function(G, CS)
   expo = CS%depth_scaled_khth_exp
 !$OMP do
   do j=js,je ; do I=is-1,Ieq
-    CS%Depth_fn_u(I,j) = (MIN(1.0, (0.5*(G%bathyT(i,j) + G%bathyT(i+1,j)) + G%Z_ref)/H0))**expo
+    h1 = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0)
+    h2 = max(G%meanSL(i+1,j) + G%bathyT(i+1,j), 0.0)
+    CS%Depth_fn_u(I,j) = (MIN(1.0, (0.5 * (h1 + h2)) / H0))**expo
   enddo ; enddo
 !$OMP do
   do J=js-1,Jeq ; do i=is,ie
-    CS%Depth_fn_v(i,J) = (MIN(1.0, (0.5*(G%bathyT(i,j) + G%bathyT(i,j+1)) + G%Z_ref)/H0))**expo
+    h1 = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0)
+    h2 = max(G%meanSL(i,j+1) + G%bathyT(i,j+1), 0.0)
+    CS%Depth_fn_v(i,J) = (MIN(1.0, (0.5 * (h1 + h2)) / H0))**expo
   enddo ; enddo
 
 end subroutine calc_depth_function
@@ -248,10 +255,11 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
   ! Local variables
   ! Depending on the power-function being used, dimensional rescaling may be limited, so some
   ! of the following variables have units that depend on that power.
-  real :: cg1_q  ! The gravity wave speed interpolated to q points [L T-1 ~> m s-1] or [m s-1].
-  real :: cg1_u  ! The gravity wave speed interpolated to u points [L T-1 ~> m s-1] or [m s-1].
-  real :: cg1_v  ! The gravity wave speed interpolated to v points [L T-1 ~> m s-1] or [m s-1].
+  real :: cg1_q(SZIB_(G),SZJB_(G)) ! The gravity wave speed interpolated to q points [L T-1 ~> m s-1] or [m s-1].
+  real :: cg1_u(SZIB_(G),SZJ_(G))  ! The gravity wave speed interpolated to u points [L T-1 ~> m s-1] or [m s-1].
+  real :: cg1_v(SZI_(G),SZJB_(G))  ! The gravity wave speed interpolated to v points [L T-1 ~> m s-1] or [m s-1].
   real :: dx_term ! A term in the denominator [L2 T-2 ~> m2 s-2] or [m2 s-2]
+  logical :: apply_u_OBC, apply_v_OBC  ! If true, OBCs will be used to set the wave speed at some points on this PE.
   integer :: power_2
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: i, j, k
@@ -376,13 +384,40 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
   if (.not. allocated(CS%beta_dx2_v)) call MOM_error(FATAL, &
     "calc_resoln_function: %beta_dx2_v is not associated with Resoln_scaled_Kh.")
 
+  apply_u_OBC = .false. ; apply_v_OBC = .false.
+  if (associated(OBC) .and. (.not.CS%res_fn_OBC_bug)) then
+    apply_u_OBC = OBC%u_OBCs_on_PE
+    apply_v_OBC = OBC%v_OBCs_on_PE
+  endif
+
+  !$OMP parallel default(shared) private(dx_term,power_2)
+
+  if (apply_u_OBC .or. apply_v_OBC) then
+    !$OMP do
+    do J=js-1,Jeq ; do I=is-1,Ieq
+      if ((OBC%segnum_u(I,j) /= 0) .or. (OBC%segnum_u(I,j+1) /= 0) .or. &
+          (OBC%segnum_v(i,J) /= 0) .or. (OBC%segnum_u(i+1,J) /= 0)) then
+        ! This is an OBC node, so use the fact that G%mask2dT is zero behind OBCs.  The nondimensional
+        ! constant 1e-20 in the denominator makes this a de facto implementation of Adcroft's reciprocal
+        ! rule with a value that works for either 64-bit or 32-bit real numbers.
+        cg1_q(I,J) = ((G%mask2dT(i,j) * CS%cg1(i,j) + G%mask2dT(i+1,j+1) * CS%cg1(i+1,j+1)) + &
+                      (G%mask2dT(i+1,j) * CS%cg1(i+1,j) + G%mask2dT(i,j+1) * CS%cg1(i,j+1))) / &
+                     ((G%mask2dT(i,j) + G%mask2dT(i+1,j+1)) + (G%mask2dT(i+1,j) + G%mask2dT(i,j+1)) + 1.0e-20)
+      else
+        cg1_q(I,J) = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
+      endif
+    enddo ; enddo
+  else
+    !$OMP do
+    do J=js-1,Jeq ; do I=is-1,Ieq
+      cg1_q(I,J) = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
+    enddo ; enddo
+  endif
+
   !   Do this calculation on the extent used in MOM_hor_visc.F90, and
   ! MOM_tracer.F90 so that no halo update is needed.
-
-!$OMP parallel default(none) shared(is,ie,js,je,Ieq,Jeq,CS,US) &
-!$OMP                       private(dx_term,cg1_q,power_2,cg1_u,cg1_v)
   if (CS%Res_fn_power_visc >= 100) then
-!$OMP do
+    !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
       if ((CS%Res_coef_visc * CS%cg1(i,j))**2 > dx_term) then
@@ -391,139 +426,173 @@ subroutine calc_resoln_function(h, tv, G, GV, US, CS, MEKE, OBC, dt)
         CS%Res_fn_h(i,j) = 1.0
       endif
     enddo ; enddo
-!$OMP do
+    !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
-      dx_term = CS%f2_dx2_q(I,J) +  cg1_q * CS%beta_dx2_q(I,J)
-      if ((CS%Res_coef_visc * cg1_q)**2 > dx_term) then
+      dx_term = CS%f2_dx2_q(I,J) +  cg1_q(I,J) * CS%beta_dx2_q(I,J)
+      if ((CS%Res_coef_visc * cg1_q(I,J))**2 > dx_term) then
         CS%Res_fn_q(I,J) = 0.0
       else
         CS%Res_fn_q(I,J) = 1.0
       endif
     enddo ; enddo
   elseif (CS%Res_fn_power_visc == 2) then
-!$OMP do
+    !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)
       CS%Res_fn_h(i,j) = dx_term / (dx_term + (CS%Res_coef_visc * CS%cg1(i,j))**2)
     enddo ; enddo
-!$OMP do
+    !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
-      dx_term = CS%f2_dx2_q(I,J) +  cg1_q * CS%beta_dx2_q(I,J)
-      CS%Res_fn_q(I,J) = dx_term / (dx_term + (CS%Res_coef_visc * cg1_q)**2)
+      dx_term = CS%f2_dx2_q(I,J) +  cg1_q(I,J) * CS%beta_dx2_q(I,J)
+      CS%Res_fn_q(I,J) = dx_term / (dx_term + (CS%Res_coef_visc * cg1_q(I,J))**2)
     enddo ; enddo
   elseif (mod(CS%Res_fn_power_visc, 2) == 0) then
     power_2 = CS%Res_fn_power_visc / 2
-!$OMP do
+    !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (US%L_T_to_m_s**2*(CS%f2_dx2_h(i,j) + CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**power_2
       CS%Res_fn_h(i,j) = dx_term / &
           (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
-!$OMP do
+    !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
-      dx_term = (US%L_T_to_m_s**2*(CS%f2_dx2_q(I,J) + cg1_q * CS%beta_dx2_q(I,J)))**power_2
+      dx_term = (US%L_T_to_m_s**2*(CS%f2_dx2_q(I,J) + cg1_q(I,J) * CS%beta_dx2_q(I,J)))**power_2
       CS%Res_fn_q(I,J) = dx_term / &
-          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*cg1_q)**CS%Res_fn_power_visc)
+          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*cg1_q(I,J))**CS%Res_fn_power_visc)
     enddo ; enddo
   else
-!$OMP do
+    !$OMP do
     do j=js-1,je+1 ; do i=is-1,ie+1
       dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_h(i,j) + &
                                     CS%cg1(i,j)*CS%beta_dx2_h(i,j)))**CS%Res_fn_power_visc
       CS%Res_fn_h(i,j) = dx_term / &
          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*CS%cg1(i,j))**CS%Res_fn_power_visc)
     enddo ; enddo
-!$OMP do
+    !$OMP do
     do J=js-1,Jeq ; do I=is-1,Ieq
-      cg1_q = 0.25 * ((CS%cg1(i,j) + CS%cg1(i+1,j+1)) + (CS%cg1(i+1,j) + CS%cg1(i,j+1)))
       dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_q(I,J) + &
-                                    cg1_q * CS%beta_dx2_q(I,J)))**CS%Res_fn_power_visc
+                                    cg1_q(I,J) * CS%beta_dx2_q(I,J)))**CS%Res_fn_power_visc
       CS%Res_fn_q(I,J) = dx_term / &
-          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*cg1_q)**CS%Res_fn_power_visc)
+          (dx_term + (CS%Res_coef_visc * US%L_T_to_m_s*cg1_q(I,J))**CS%Res_fn_power_visc)
     enddo ; enddo
   endif
 
   if (CS%interpolate_Res_fn) then
-    do j=js,je ; do I=is-1,Ieq
-      CS%Res_fn_u(I,j) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i+1,j))
-    enddo ; enddo
-    do J=js-1,Jeq ; do i=is,ie
-      CS%Res_fn_v(i,J) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i,j+1))
-    enddo ; enddo
-  else ! .not.CS%interpolate_Res_fn
-    if (CS%Res_fn_power_khth >= 100) then
-!$OMP do
+    if (apply_u_OBC) then
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
-        if ((CS%Res_coef_khth * cg1_u)**2 > dx_term) then
+        CS%Res_fn_u(I,j) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i+1,j))
+        if (OBC%segnum_u(I,j) > 0) CS%Res_fn_u(I,j) = CS%Res_fn_h(i,j) ! Eastern OBC
+        if (OBC%segnum_u(I,j) < 0) CS%Res_fn_u(I,j) = CS%Res_fn_h(i+1,j) ! Western OBC
+      enddo ; enddo
+    else
+      do j=js,je ; do I=is-1,Ieq
+        CS%Res_fn_u(I,j) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i+1,j))
+      enddo ; enddo
+    endif
+
+    if (apply_v_OBC) then
+      do J=js-1,Jeq ; do i=is,ie
+        CS%Res_fn_v(i,J) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i,j+1))
+        if (OBC%segnum_v(i,J) > 0) CS%Res_fn_v(i,J) = CS%Res_fn_h(i,j) ! Northern OBC
+        if (OBC%segnum_v(i,J) < 0) CS%Res_fn_v(i,J) = CS%Res_fn_h(i,j+1) ! Southern OBC
+      enddo ; enddo
+    else
+      do J=js-1,Jeq ; do i=is,ie
+        CS%Res_fn_v(i,J) = 0.5*(CS%Res_fn_h(i,j) + CS%Res_fn_h(i,j+1))
+      enddo ; enddo
+    endif
+
+  else ! .not.CS%interpolate_Res_fn
+    if (apply_u_OBC) then
+      !$OMP do
+      do j=js,je ; do I=is-1,Ieq
+        cg1_u(I,j) = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+        if (OBC%segnum_u(I,j) > 0) cg1_u(I,j) = CS%cg1(i,j) ! Eastern OBC
+        if (OBC%segnum_u(I,j) < 0) cg1_u(I,j) = CS%cg1(i+1,j) ! Western OBC
+      enddo ; enddo
+    else
+      !$OMP do
+      do j=js,je ; do I=is-1,Ieq
+        cg1_u(I,j) = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
+      enddo ; enddo
+    endif
+
+    if (apply_v_OBC) then
+      !$OMP do
+      do J=js-1,Jeq ; do i=is,ie
+        cg1_v(i,J) = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+        if (OBC%segnum_v(i,J) > 0) cg1_v(i,J) = CS%cg1(i,j) ! Northern OBC
+        if (OBC%segnum_v(i,J) < 0) cg1_v(i,J) = CS%cg1(i,j+1) ! Southern OBC
+      enddo ; enddo
+    else
+      !$OMP do
+      do J=js-1,Jeq ; do i=is,ie
+        cg1_v(i,J) = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
+      enddo ; enddo
+    endif
+
+    if (CS%Res_fn_power_khth >= 100) then
+      !$OMP do
+      do j=js,je ; do I=is-1,Ieq
+        dx_term = CS%f2_dx2_u(I,j) + cg1_u(I,j) * CS%beta_dx2_u(I,j)
+        if ((CS%Res_coef_khth * cg1_u(I,j))**2 > dx_term) then
           CS%Res_fn_u(I,j) = 0.0
         else
           CS%Res_fn_u(I,j) = 1.0
         endif
       enddo ; enddo
-!$OMP do
+      !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
-        if ((CS%Res_coef_khth * cg1_v)**2 > dx_term) then
+        dx_term = CS%f2_dx2_v(i,J) + cg1_v(i,J) * CS%beta_dx2_v(i,J)
+        if ((CS%Res_coef_khth * cg1_v(i,J))**2 > dx_term) then
           CS%Res_fn_v(i,J) = 0.0
         else
           CS%Res_fn_v(i,J) = 1.0
         endif
       enddo ; enddo
     elseif (CS%Res_fn_power_khth == 2) then
-!$OMP do
+      !$OMP do
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)
-        CS%Res_fn_u(I,j) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_u)**2)
+        dx_term = CS%f2_dx2_u(I,j) + cg1_u(I,j) * CS%beta_dx2_u(I,j)
+        CS%Res_fn_u(I,j) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_u(I,j))**2)
       enddo ; enddo
-!$OMP do
+      !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)
-        CS%Res_fn_v(i,J) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_v)**2)
+        dx_term = CS%f2_dx2_v(i,J) + cg1_v(i,J) * CS%beta_dx2_v(i,J)
+        CS%Res_fn_v(i,J) = dx_term / (dx_term + (CS%Res_coef_khth * cg1_v(i,J))**2)
       enddo ; enddo
     elseif (mod(CS%Res_fn_power_khth, 2) == 0) then
       power_2 = CS%Res_fn_power_khth / 2
-!$OMP do
+      !$OMP do
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
-        dx_term = (US%L_T_to_m_s**2 * (CS%f2_dx2_u(I,j) + cg1_u * CS%beta_dx2_u(I,j)))**power_2
+        dx_term = (US%L_T_to_m_s**2 * (CS%f2_dx2_u(I,j) + cg1_u(I,j) * CS%beta_dx2_u(I,j)))**power_2
         CS%Res_fn_u(I,j) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_u)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_u(I,j))**CS%Res_fn_power_khth)
       enddo ; enddo
-!$OMP do
+      !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
-        dx_term = (US%L_T_to_m_s**2 * (CS%f2_dx2_v(i,J) + cg1_v * CS%beta_dx2_v(i,J)))**power_2
+        dx_term = (US%L_T_to_m_s**2 * (CS%f2_dx2_v(i,J) + cg1_v(i,J) * CS%beta_dx2_v(i,J)))**power_2
         CS%Res_fn_v(i,J) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_v)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_v(i,J))**CS%Res_fn_power_khth)
       enddo ; enddo
     else
-!$OMP do
+      !$OMP do
       do j=js,je ; do I=is-1,Ieq
-        cg1_u = 0.5 * (CS%cg1(i,j) + CS%cg1(i+1,j))
         dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_u(I,j) + &
-                                      cg1_u * CS%beta_dx2_u(I,j)))**CS%Res_fn_power_khth
+                                      cg1_u(I,j) * CS%beta_dx2_u(I,j)))**CS%Res_fn_power_khth
         CS%Res_fn_u(I,j) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_u)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_u(I,j))**CS%Res_fn_power_khth)
       enddo ; enddo
-!$OMP do
+      !$OMP do
       do J=js-1,Jeq ; do i=is,ie
-        cg1_v = 0.5 * (CS%cg1(i,j) + CS%cg1(i,j+1))
         dx_term = (US%L_T_to_m_s*sqrt(CS%f2_dx2_v(i,J) + &
-                                      cg1_v * CS%beta_dx2_v(i,J)))**CS%Res_fn_power_khth
+                                      cg1_v(i,J) * CS%beta_dx2_v(i,J)))**CS%Res_fn_power_khth
         CS%Res_fn_v(i,J) = dx_term / &
-            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_v)**CS%Res_fn_power_khth)
+            (dx_term + (CS%Res_coef_khth * US%L_T_to_m_s*cg1_v(i,J))**CS%Res_fn_power_khth)
       enddo ; enddo
     endif
   endif
-!$OMP end parallel
+  !$OMP end parallel
 
   if (query_averaging_enabled(CS%diag)) then
     if (CS%id_Res_fn > 0) call post_data(CS%id_Res_fn, CS%Res_fn_h, CS%diag)
@@ -553,23 +622,23 @@ subroutine calc_sqg_struct(h, tv, G, GV, US, CS, dt, MEKE, OBC)
   type(ocean_OBC_type),                      pointer       :: OBC !< Open boundaries control structure
 
   ! Local variables
-  real, dimension(SZI_(G), SZJ_(G), SZK_(GV)+1) :: e    ! The interface heights relative to mean sea level [Z ~> m]
-  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of buoyancy frequency at u-points [L2 Z-2 T-2 ~> s-2]
-  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of buoyancy frequency at v-points [L2 Z-2 T-2 ~> s-2]
-  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzu ! Z-thickness at u-points [Z ~> m]
-  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzv ! Z-thickness at v-points [Z ~> m]
-  real, dimension(SZIB_(G), SZJ_(G),SZK_(GV)+1) :: dzSxN ! |Sx| N times dz at u-points [Z T-1 ~> m s-1]
-  real, dimension(SZI_(G), SZJB_(G),SZK_(GV)+1) :: dzSyN ! |Sy| N times dz at v-points [Z T-1 ~> m s-1]
-  real, dimension(SZI_(G), SZJ_(G)) :: f  ! Absolute value of the Coriolis parameter at h point [T-1 ~> s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)+1) :: e     ! The interface heights relative to mean sea level [Z ~> m]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: N2_u ! Square of buoyancy frequency at u-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: N2_v ! Square of buoyancy frequency at v-points [L2 Z-2 T-2 ~> s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: dzu  ! Z-thickness at u-points [Z ~> m]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: dzv  ! Z-thickness at v-points [Z ~> m]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)+1) :: dzSxN ! |Sx| N times dz at u-points [Z T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)+1) :: dzSyN ! |Sy| N times dz at v-points [Z T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G)) :: f  ! Absolute value of the Coriolis parameter at h point [T-1 ~> s-1]
   real :: N2             ! Positive buoyancy frequency square or zero [L2 Z-2 T-2 ~> s-2]
   real :: dzc            ! Spacing between two adjacent layers in stretched vertical coordinate [Z ~> m]
   real :: f_subround     ! The minimal resolved value of Coriolis parameter to prevent division by zero [T-1 ~> s-1]
-  real, dimension(SZI_(G), SZJ_(G)) :: Le  ! Eddy length scale [L ~> m]
+  real, dimension(SZI_(G),SZJ_(G)) :: Le  ! Eddy length scale [L ~> m]
 
-  real :: dz(SZI_(G), SZJ_(G), SZK_(GV))  ! Geometric layer thicknesses in height units [Z ~> m]
-  real :: I_f_Le(SZI_(G), SZJ_(G))  ! The inverse of the absolute value of f times the Eddy
+  real :: dz(SZI_(G),SZJ_(G),SZK_(GV))  ! Geometric layer thicknesses in height units [Z ~> m]
+  real :: I_f_Le(SZI_(G),SZJ_(G))   ! The inverse of the absolute value of f times the Eddy
                                     ! length scale [T L-1 ~> s m-1]
-  real :: p_i(SZI_(G), SZJ_(G))     ! Pressure at the interface [R L2 T-2 ~> Pa]
+  real :: p_i(SZI_(G),SZJ_(G))      ! Pressure at the interface [R L2 T-2 ~> Pa]
   real :: T_i(SZI_(G))              ! Temperature at the interface [C ~> degC]
   real :: S_i(SZI_(G))              ! Salinity at the interface [S ~> ppt]
   real :: dRho_dS(SZI_(G))          ! Local change in density with salinity using the model EOS and
@@ -781,18 +850,18 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   integer :: OBC_dir_v(SZI_(G),SZJB_(G))  ! An integer indicating where there are v OBCs: +1 for
                                  ! northern OBCs, -1 for southern OBCs and 0 at points with no OBCs.
   real :: h4_u(SZIB_(G),SZJ_(G),SZK_(GV)+1)  ! The product of the 4 thicknesses surrounding a u-point
-                                 ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg2 m-4]
+                                 ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg4 m-8]
   real :: h4_v(SZI_(G),SZJB_(G),SZK_(GV)+1)  ! The product of the 4 thicknesses surrounding a v-point
-                                 ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg2 m-4]
+                                 ! interface or the inward equivalent with OBCs [H4 ~> m4 or kg4 m-8]
   integer :: i, j, k, is, ie, js, je, nz
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_Visbeck_coeffs_old: "// &
          "Module must be initialized before it is used.")
 
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. allocated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. allocated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function: "// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. allocated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:R"// &
+  if (.not. allocated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function: "// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -805,7 +874,7 @@ subroutine calc_Visbeck_coeffs_old(h, slope_x, slope_y, N2_u, N2_v, G, GV, US, C
   ! These settings apply where there are not open boundary conditions.
   OBC_dir_u(:,:) = 0 ; OBC_dir_v(:,:) = 0
 
-  if (associated(OBC).and. CS%OBC_friendly) then
+  if (associated(OBC) .and. CS%OBC_friendly) then
    ! Store the direction of any OBC faces.
    !$OMP parallel do default(shared)
     do j=js-1,je+1 ; do I=is-1,ie ; if (OBC%segnum_u(I,j) /= 0) then
@@ -987,7 +1056,7 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN,
   real :: dz_neglect ! A negligibly small distance to avoid division by zero [Z ~> m]
   real :: r_crp_dist ! The inverse of the distance over which to scale the cropping [Z-1 ~> m-1]
   real :: dB, dT ! Elevation variables used when cropping [Z ~> m]
-  integer :: i, j, k, l_seg
+  integer :: i, j, k
   logical :: crop
 
   dz_neglect = GV%dZ_subroundoff
@@ -1008,7 +1077,7 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN,
     CS%SN_v(i,j) = 0.0
   enddo ; enddo
 
-  !$OMP parallel do default(shared) private(dnew,dz,weight,l_seg,vint_SN,sum_dz,dT,dB)
+  !$OMP parallel do default(shared) private(dnew,dz,weight,vint_SN,sum_dz,dT,dB)
   do j=G%jsc-1,G%jec+1
     do I=G%isc-1,G%iec
       vint_SN(I) = 0.
@@ -1051,7 +1120,7 @@ subroutine calc_Eady_growth_rate_2D(CS, G, GV, US, h, e, dzu, dzv, dzSxN, dzSyN,
     enddo
   enddo
 
-  !$OMP parallel do default(shared) private(dnew,dz,weight,l_seg,vint_SN,sum_dz,dT,dB)
+  !$OMP parallel do default(shared) private(dnew,dz,weight,vint_SN,sum_dz,dT,dB)
   do J=G%jsc-1,G%jec
     do i=G%isc-1,G%iec+1
       vint_SN(i) = 0.
@@ -1132,6 +1201,7 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
   ! real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! The vertical distance across each layer [Z ~> m]
   real :: H_cutoff      ! Local estimate of a minimum thickness for masking [H ~> m or kg m-2]
   real :: dZ_cutoff     ! A minimum water column depth for masking [H ~> m or kg m-2]
+  real :: h1, h2        ! Temporary total thicknesses [Z ~> m]
   real :: h_neglect     ! A thickness that is so small it is usually lost
                         ! in roundoff and can be neglected [H ~> m or kg m-2].
   real :: S2            ! Interface slope squared [Z2 L-2 ~> nondim]
@@ -1146,15 +1216,14 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
                         ! bathymetric depth for certain calculations.
   integer :: is, ie, js, je, nz
   integer :: i, j, k
-  integer :: l_seg
 
   if (.not. CS%initialized) call MOM_error(FATAL, "calc_slope_functions_using_just_e: "// &
          "Module must be initialized before it is used.")
 
   if (.not. CS%calculate_Eady_growth_rate) return
-  if (.not. allocated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. allocated(CS%SN_u)) call MOM_error(FATAL, "calc_slope_function: "// &
          "%SN_u is not associated with use_variable_mixing.")
-  if (.not. allocated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function:"// &
+  if (.not. allocated(CS%SN_v)) call MOM_error(FATAL, "calc_slope_function: "// &
          "%SN_v is not associated with use_variable_mixing.")
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
@@ -1241,9 +1310,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
       enddo
     else
       do I=is-1,ie
-        if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > dZ_cutoff ) then
-          CS%SN_u(I,j) = G%OBCmaskCu(I,j) * sqrt( CS%SN_u(I,j) / &
-                                                  (max(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref) )
+        h1 = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0)
+        h2 = max(G%meanSL(i+1,j) + G%bathyT(i+1,j), 0.0)
+        if ( min(h1, h2) > dZ_cutoff ) then
+          CS%SN_u(I,j) = G%OBCmaskCu(I,j) * sqrt( CS%SN_u(I,j) / max(h1, h2) )
         else
           CS%SN_u(I,j) = 0.0
         endif
@@ -1266,9 +1336,10 @@ subroutine calc_slope_functions_using_just_e(h, G, GV, US, CS, e)
         ! There is a primordial horizontal indexing bug on the following line from the previous
         ! versions of the code.  This comment should be deleted by the end of 2024.
         ! if ( min(G%bathyT(i,j), G%bathyT(i+1,j)) + G%Z_ref > dZ_cutoff ) then
-        if ( min(G%bathyT(i,j), G%bathyT(i,j+1)) + G%Z_ref > dZ_cutoff ) then
-          CS%SN_v(i,J) = G%OBCmaskCv(i,J) * sqrt( CS%SN_v(i,J) / &
-                                                  (max(G%bathyT(i,j), G%bathyT(i,j+1)) + G%Z_ref) )
+        h1 = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0)
+        h2 = max(G%meanSL(i,j+1) + G%bathyT(i,j+1), 0.0)
+        if ( min(h1, h2) > dZ_cutoff ) then
+          CS%SN_v(i,J) = G%OBCmaskCv(i,J) * sqrt( CS%SN_v(i,J) / max(h1, h2) )
         else
           CS%SN_v(i,J) = 0.0
         endif
@@ -1530,7 +1601,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "when the first baroclinic deformation radius is well "//&
                  "resolved.", default=.false.)
   call get_param(param_file, mdl, "DEPTH_SCALED_KHTH", CS%Depth_scaled_KhTh, &
-                 "If true, KHTH is scaled away when the depth is shallower"//&
+                 "If true, KHTH is scaled away when the depth is shallower "//&
                  "than a reference depth: KHTH = MIN(1,H/H0)**N * KHTH, "//&
                  "where H0 is a reference depth, controlled via DEPTH_SCALED_KHTH_H0, "//&
                  "and the exponent (N) is controlled via DEPTH_SCALED_KHTH_EXP.",&
@@ -1551,7 +1622,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   if (.not.use_MEKE) Resoln_scaled_MEKE_visc = .false.
   call get_param(param_file, mdl, "RESOLN_USE_EBT", CS%Resoln_use_ebt, &
                  "If true, uses the equivalent barotropic wave speed instead "//&
-                 "of first baroclinic wave for calculating the resolution fn.",&
+                 "of first baroclinic wave for calculating the resolution function.",&
                  default=.false.)
   call get_param(param_file, mdl, "BACKSCAT_EBT_POWER", CS%BS_EBT_power, &
                  "Power to raise EBT vertical structure to when backscatter "// &
@@ -1635,6 +1706,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "open boundary condition faces.", &
                  default=enable_bugs, do_not_log=(number_of_OBC_segments<=0))
   CS%OBC_friendly = .not. MIXING_COEFS_OBC_BUG
+  call get_param(param_file, mdl, "RESOLN_FUNCTION_OBC_BUG", CS%res_fn_OBC_bug, &
+                 "If false, use only interior data for calculating the resolution functions at "//&
+                 "open boundary condition faces and vertices.", &
+                 default=enable_bugs, do_not_log=(number_of_OBC_segments<=0))
 
   if (CS%Resoln_use_ebt .or. CS%khth_use_ebt_struct .or. CS%kdgl90_use_ebt_struct &
       .or. CS%BS_EBT_power>0. .or. CS%khtr_use_ebt_struct) then
@@ -1724,7 +1799,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                    "that avoids division by layer thickness. Recommended.", default=.false.)
     if (CS%use_simpler_Eady_growth_rate) then
       if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
-           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init: "//&
            "When USE_SIMPLER_EADY_GROWTH_RATE=True, USE_STORED_SLOPES must also be True.")
       call get_param(param_file, mdl, "EADY_GROWTH_RATE_D_SCALE", CS%Eady_GR_D_scale, &
                      "The depth from surface over which to average SN when calculating "//&
@@ -1889,10 +1964,10 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "function independently at each point.", default=.false.)
     if (CS%interpolate_Res_fn) then
       if (CS%Res_coef_visc /= CS%Res_coef_khth) call MOM_error(FATAL, &
-           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init: "//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_SCALE_COEF.")
       if (CS%Res_fn_power_visc /= CS%Res_fn_power_khth) call MOM_error(FATAL, &
-           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init: "//&
            "When INTERPOLATE_RES_FN=True, VISC_RES_FN_POWER must equal KH_RES_FN_POWER.")
     endif
     call get_param(param_file, mdl, "GILL_EQUATORIAL_LD", Gill_equatorial_Ld, &
@@ -2049,7 +2124,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     enddo ; enddo
 
     if (.not. CS%use_stored_slopes) call MOM_error(FATAL, &
-           "MOM_lateral_mixing_coeffs.F90, VarMix_init:"//&
+           "MOM_lateral_mixing_coeffs.F90, VarMix_init: "//&
            "USE_STORED_SLOPES must be True when using QG Leith.")
   endif
 

@@ -61,8 +61,8 @@ subroutine check_scaling_uniqueness(component, descs, weights, key, scales, max_
   enddo
 
   if (verbosity >= 7) then
-    write(mesg, '(I8)') ns
-    call MOM_mesg(trim(component)//": Extracted "//trim(adjustl(mesg))//" unit combinations from the list.")
+    write(mesg, '(I0)') ns
+    call MOM_mesg(trim(component)//": Extracted "//trim(mesg)//" unit combinations from the list.")
     mesg = "Dim Key:  ["
     do i=1,ndims ; mesg = trim(mesg)//"  "//trim(key(i)) ; enddo
     mesg = trim(mesg)//"]:"
@@ -119,7 +119,7 @@ subroutine check_scaling_uniqueness(component, descs, weights, key, scales, max_
       endif
       if (better_cost == 0) exit
       if (verbosity >= 7) then
-        write(mesg, '("Iteration ",I2," scaling cost reduced from ",I8," with original scales to ", I8)') &
+        write(mesg, '("Iteration ",I0," scaling cost reduced from ",I0," with original scales to ", I0)') &
                     itt, orig_cost, better_cost
         call MOM_mesg(trim(component)//": "//trim(mesg)//" with revised scaling factors.")
       endif
@@ -128,15 +128,15 @@ subroutine check_scaling_uniqueness(component, descs, weights, key, scales, max_
       test_cost = non_unique_scales(prev_scales, list, descs, weights, silent=(verbosity<4))
       mesg = trim(component)//": Suggested improved scales: "
       do i=1,ndims ; if ((prev_scales(i) /= scales(i)) .and. (scales(i) /= 0)) then
-        write(msg_frag, '(I3)') prev_scales(i)
-        mesg = trim(mesg)//" "//trim(key(i))//"_RESCALE_POWER = "//trim(adjustl(msg_frag))
+        write(msg_frag, '(I0)') prev_scales(i)
+        mesg = trim(mesg)//" "//trim(key(i))//"_RESCALE_POWER = "//trim(msg_frag)
       endif ; enddo
       call MOM_mesg(mesg)
 
-      write(mesg, '(I8)') orig_cost
-      write(msg_frag, '(I8)') test_cost
-      mesg = trim(component)//": Scaling overlaps reduced from "//trim(adjustl(mesg))//&
-             " with original scales to "//trim(adjustl(msg_frag))//" with suggested scales."
+      write(mesg, '(I0)') orig_cost
+      write(msg_frag, '(I0)') test_cost
+      mesg = trim(component)//": Scaling overlaps reduced from "//trim(mesg)//&
+             " with original scales to "//trim(msg_frag)//" with suggested scales."
       call MOM_mesg(mesg)
     endif
 
@@ -196,9 +196,9 @@ subroutine encode_dim_powers(scaling, key, dim_powers)
       if (verify(fragment(ipow:), numbers) == 0) then
         read(fragment(ipow:),*) dp
         dimnm = fragment(:ipow-1)
-        ! write(mesg, '(I3)') dp
+        ! write(mesg, '(I0)') dp
         ! call MOM_mesg("Parsed fragment "//trim(fragment)//" from "//trim(scaling)//&
-        !               " as "//trim(dimnm)//trim(adjustl(mesg)))
+        !               " as "//trim(dimnm)//trim(mesg))
       else
         dimnm = fragment
         dp = 1
@@ -319,9 +319,9 @@ integer function non_unique_scales(scales, list, descs, weights, silent)
       ! the likelihood that these factors would be combined in an expression.
       non_unique_scales = min(non_unique_scales + wt_merge(n) * wt_merge(m), 99999999)
       if (verbose) then
-        write(mesg, '(I8)') res_pow(n)
+        write(mesg, '(I0)') res_pow(n)
         call MOM_mesg("The factors "//trim(descs(n))//" and "//trim(descs(m))//" both scale to "//&
-                      trim(adjustl(mesg))//" for the given powers.")
+                      trim(mesg)//" for the given powers.")
 
         ! call MOM_mesg("Powers ["//trim(int_array_msg(list(:,n)))//"] and ["//&
         !                    trim(int_array_msg(list(:,m)))//"] with rescaling by ["//&
@@ -345,8 +345,7 @@ function int_array_msg(array)
   if (ni < 1) return
 
   do i=1,ni
-    write(msg_frag, '(I8)') array(i)
-    msg_frag = adjustl(msg_frag)
+    write(msg_frag, '(I0)') array(i)
     if (i == 1) then
       int_array_msg = trim(msg_frag)
     else

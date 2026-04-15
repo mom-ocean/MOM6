@@ -9,9 +9,13 @@ use MOM_array_transform, only : allocate_rotated_array, rotate_array
 use MOM_error_handler,   only : MOM_error, FATAL
 use MOM_interp_infra,    only : time_interp_extern, init_external_field=>init_extern_field
 use MOM_interp_infra,    only : time_interp_external_init=>time_interp_extern_init
-use MOM_interp_infra,    only : horiz_interp_type, get_external_field_info
+use MOM_interp_infra,    only : horiz_interp_type
+use MOM_interp_infra,    only : get_external_field_info_infra => get_external_field_info
 use MOM_interp_infra,    only : run_horiz_interp, build_horiz_interp_weights
 use MOM_interp_infra,    only : external_field
+use MOM_io_infra,        only : axistype
+use MOM_io_infra,        only : get_axis_size, get_axis_data
+use MOM_io,              only : axis_info, set_axis_info
 use MOM_time_manager, only : time_type, set_date, operator(+), operator(<), operator(>)
 
 implicit none ; private
@@ -28,7 +32,8 @@ type, public :: forcing_timeseries_dataset
     type(time_type) :: m2d_offset    !< add to model time to get data time
 end type forcing_timeseries_dataset
 
-public :: time_interp_external, init_external_field, time_interp_external_init, get_external_field_info
+public :: time_interp_external, init_external_field, time_interp_external_init
+public :: get_external_field_info
 public :: horiz_interp_type, run_horiz_interp, build_horiz_interp_weights
 public :: external_field
 public :: forcing_timeseries_set_time_type_vars
@@ -278,5 +283,47 @@ function map_model_time_to_forcing_time(Time, forcing_dataset)
   endif
 
 end function map_model_time_to_forcing_time
+
+
+subroutine get_external_field_info(field, size, axes, missing)
+  type(external_field), intent(in) :: field
+    !< Handle for time interpolated external field returned from a previous
+    !! call to init_external_field()
+  integer, optional, intent(inout) :: size(4)
+    !< Dimension sizes for the input data
+  type(axis_info), optional, intent(inout) :: axes(4)
+    !< Axis types for the input data
+  real, optional, intent(inout) :: missing
+    !< Missing value for the input data
+
+  type(axistype) :: axes_infra(4)
+    ! Axis as represented in the infra
+  character(len=256) :: axis_name
+    ! Axis name
+  real, allocatable :: ax_data(:)
+    ! Axis points
+
+  integer :: n
+    ! Axis index
+  integer :: ax_size
+    ! Axis size
+
+  if (present(axes)) then
+    call get_external_field_info_infra(field, size=size, axes=axes_infra, &
+        missing=missing)
+    ! TODO: Most of these methods were written to expect four dimensions.
+    do n=1,4
+      ! Convert axistype to axis_info
+      ax_size = get_axis_size(axes_infra(n))
+      allocate(ax_data(ax_size))
+      call get_axis_data(axes_infra(n), axis_name, ax_data)
+      call set_axis_info(axes(n), trim(axis_name), ax_data=ax_data)
+      deallocate(ax_data)
+    enddo
+  else
+    call get_external_field_info_infra(field, size=size, missing=missing)
+  endif
+end subroutine get_external_field_info
+
 
 end module MOM_interpolate

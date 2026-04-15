@@ -54,7 +54,7 @@ subroutine register_obsolete_diagnostics(param_file, diag)
   if (diag_found(diag, 'KPP_dTdt', 'KPP_NLT_dTdt'))                         foundEntry = .true.
   if (diag_found(diag, 'KPP_dSdt', 'KPP_NLT_dSdt'))                         foundEntry = .true.
 
-  if (causeFatal) then; errType = FATAL
+  if (causeFatal) then ; errType = FATAL
   else ; errType = WARNING ; endif
   if (foundEntry .and. is_root_pe()) &
     call MOM_error(errType, 'MOM_obsolete_diagnostics: Obsolete diagnostics found in diag_table.')

@@ -18,6 +18,7 @@ use MOM_domains,       only : To_North, To_East
 use MOM_domains,       only : pass_var, CORNER
 use MOM_cpu_clock,     only : cpu_clock_id, cpu_clock_begin, cpu_clock_end
 use MOM_cpu_clock,     only : CLOCK_MODULE, CLOCK_ROUTINE
+use MOM_ANN,           only : ANN_init, ANN_apply_array_sio, ANN_end, ANN_CS
 
 implicit none ; private
 
@@ -79,6 +80,12 @@ type, public :: ZB2020_CS ; private
         maskw_h,  & !< Mask of land point at h points multiplied by filter weight [nondim]
         maskw_q     !< Same mask but for q points [nondim]
 
+  logical :: use_ann  !< If True, momentum fluxes are inferred with ANN
+  integer :: stencil_size  !< Default is 3x3
+  type(ANN_CS) :: ann_Tall !< ANN instance for off-diagonal and diagonal stress
+  character(len=200) :: ann_file_Tall !< Path to netcdf file with ANN
+  real :: subroundoff_shear !< Small dimensional constant for save division by zero [T-1 ~> s-1]
+
   type(diag_ctrl), pointer :: diag => NULL() !< A type that regulates diagnostics output
   !>@{ Diagnostic handles
   integer :: id_ZB2020u = -1, id_ZB2020v = -1, id_KE_ZB2020 = -1
@@ -93,6 +100,7 @@ type, public :: ZB2020_CS ; private
   integer :: id_clock_copy
   integer :: id_clock_cdiss
   integer :: id_clock_stress
+  integer :: id_clock_stress_ANN
   integer :: id_clock_divergence
   integer :: id_clock_mpi
   integer :: id_clock_filter
@@ -143,6 +151,16 @@ subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
                  "If true, turns on Zanna-Bolton-2020 (ZB) " //&
                  "subgrid momentum parameterization of mesoscale eddies.", default=.false.)
   if (.not. use_ZB2020) return
+
+  call get_param(param_file, mdl, "ZB2020_USE_ANN", CS%use_ann, &
+                 "ANN inference of momentum fluxes", default=.false.)
+
+  call get_param(param_file, mdl, "ZB2020_ANN_STENCIL_SIZE", CS%stencil_size, &
+                 "ANN stencil size", default=3)
+
+  call get_param(param_file, mdl, "ZB2020_ANN_FILE_TALL", CS%ann_file_Tall, &
+                 "ANN parameters for prediction of Txy, Txx and Tyy netcdf input", &
+                 default="INPUT/EXP1/Tall.nc")
 
   call get_param(param_file, mdl, "ZB_SCALING", CS%amplitude, &
                  "The nondimensional scaling factor in ZB model, " //&
@@ -217,11 +235,17 @@ subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
   CS%id_clock_copy = cpu_clock_id('(ZB2020 copy fields)', grain=CLOCK_ROUTINE, sync=.false.)
   CS%id_clock_cdiss = cpu_clock_id('(ZB2020 compute c_diss)', grain=CLOCK_ROUTINE, sync=.false.)
   CS%id_clock_stress = cpu_clock_id('(ZB2020 compute stress)', grain=CLOCK_ROUTINE, sync=.false.)
+  CS%id_clock_stress_ANN = cpu_clock_id('(ZB2020 compute stress ANN)', grain=CLOCK_ROUTINE, sync=.false.)
   CS%id_clock_divergence = cpu_clock_id('(ZB2020 compute divergence)', grain=CLOCK_ROUTINE, sync=.false.)
   CS%id_clock_mpi = cpu_clock_id('(ZB2020 filter MPI exchanges)', grain=CLOCK_ROUTINE, sync=.false.)
   CS%id_clock_filter = cpu_clock_id('(ZB2020 filter no MPI)', grain=CLOCK_ROUTINE, sync=.false.)
   CS%id_clock_post = cpu_clock_id('(ZB2020 post data)', grain=CLOCK_ROUTINE, sync=.false.)
   CS%id_clock_source = cpu_clock_id('(ZB2020 compute energy source)', grain=CLOCK_ROUTINE, sync=.false.)
+
+  CS%subroundoff_shear = 1e-30 * US%T_to_s
+  if (CS%use_ann) then
+    call ANN_init(CS%ann_Tall, CS%ann_file_Tall)
+  endif
 
   ! Allocate memory
   ! We set the stress tensor and velocity gradient tensor to zero
@@ -240,13 +264,13 @@ subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
 
   ! Precomputing the scaling coefficient
   ! Mask is included to automatically satisfy B.C.
-  do j=js-1,je+1 ; do i=is-1,ie+1
+  do j=js-2,je+2 ; do i=is-2,ie+2
     CS%kappa_h(i,j) = -CS%amplitude * G%areaT(i,j) * G%mask2dT(i,j)
-  enddo; enddo
+  enddo ; enddo
 
-  do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+  do J=Jsq-2,Jeq+2 ; do I=Isq-2,Ieq+2
     CS%kappa_q(I,J) = -CS%amplitude * G%areaBu(I,J) * G%mask2dBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   if (CS%Klower_R_diss > 0) then
     allocate(CS%ICoriolis_h(SZI_(G),SZJ_(G)))
@@ -258,13 +282,13 @@ subroutine ZB2020_init(Time, G, GV, US, param_file, diag, CS, use_ZB2020)
       CS%ICoriolis_h(i,j) = 1. / ((abs(0.25 * ((G%CoriolisBu(I,J) + G%CoriolisBu(I-1,J-1)) &
                           + (G%CoriolisBu(I-1,J) + G%CoriolisBu(I,J-1)))) + subroundoff_Cor) &
                           * CS%Klower_R_diss)
-    enddo; enddo
+    enddo ; enddo
   endif
 
   if (CS%Stress_iter > 0 .or. CS%HPF_iter > 0) then
     ! Include 1/16. factor to the mask for filter implementation
-    allocate(CS%maskw_h(SZI_(G),SZJ_(G))); CS%maskw_h(:,:) = G%mask2dT(:,:) * 0.0625
-    allocate(CS%maskw_q(SZIB_(G),SZJB_(G))); CS%maskw_q(:,:) = G%mask2dBu(:,:) * 0.0625
+    allocate(CS%maskw_h(SZI_(G),SZJ_(G))) ; CS%maskw_h(:,:) = G%mask2dT(:,:) * 0.0625
+    allocate(CS%maskw_q(SZIB_(G),SZJB_(G))) ; CS%maskw_q(:,:) = G%mask2dBu(:,:) * 0.0625
   endif
 
   ! Initialize MPI group passes
@@ -321,6 +345,10 @@ subroutine ZB2020_end(CS)
     deallocate(CS%maskw_q)
   endif
 
+  if (CS%use_ann) then
+    call ANN_end(CS%ann_Tall)
+  endif
+
 end subroutine ZB2020_end
 
 !> Save precomputed velocity gradients and thickness
@@ -362,7 +390,7 @@ subroutine ZB2020_copy_gradient_and_thickness(sh_xx, sh_xy, vort_xy, hq, &
 
   do J=js-1,Jeq ; do I=is-1,Ieq
     CS%hq(I,J,k) = hq(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   ! No physical B.C. is required for
   ! sh_xx in ZB2020. However, filtering
@@ -376,11 +404,11 @@ subroutine ZB2020_copy_gradient_and_thickness(sh_xx, sh_xy, vort_xy, hq, &
   ! flag in hor_visc module
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     CS%sh_xy(I,J,k) = sh_xy(I,J) * G%mask2dBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   do J=js-2,Jeq+1 ; do I=is-2,Ieq+1
     CS%vort_xy(I,J,k) = vort_xy(I,J) * G%mask2dBu(I,J)
-  enddo; enddo
+  enddo ; enddo
 
   call cpu_clock_end(CS%id_clock_copy)
 
@@ -419,13 +447,7 @@ subroutine ZB2020_lateral_stress(u, v, h, diffu, diffv, G, GV, CS, &
   real, dimension(SZIB_(G),SZJB_(G)), intent(in) :: dx2q    !< dx^2 at q points [L2 ~> m2]
   real, dimension(SZIB_(G),SZJB_(G)), intent(in) :: dy2q    !< dy^2 at q points [L2 ~> m2]
 
-  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
-
   call cpu_clock_begin(CS%id_clock_module)
-
-  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
-  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   ! Compute attenuation if specified
   call compute_c_diss(G, GV, CS)
@@ -435,7 +457,11 @@ subroutine ZB2020_lateral_stress(u, v, h, diffu, diffv, G, GV, CS, &
 
   ! Compute the stress tensor given the
   ! (optionally sharpened) velocity gradients
-  call compute_stress(G, GV, CS)
+  if (CS%use_ann) then
+    call compute_stress_ANN_collocated(G, GV, CS)
+  else
+    call compute_stress(G, GV, CS)
+  endif
 
   ! Smooth the stress tensor if specified
   call filter_stress(G, GV, CS)
@@ -469,7 +495,7 @@ subroutine compute_c_diss(G, GV, CS)
   type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
+  integer :: i, j, k
 
   real :: shear ! Shear in Klower2018 formula at h points [T-1 ~> s-1]
 
@@ -491,7 +517,7 @@ subroutine compute_c_diss(G, GV, CS)
                    + ((CS%sh_xy(I-1,J  ,k)**2) + (CS%sh_xy(I,J-1,k)**2)) &
                     ))
         CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
-      enddo; enddo
+      enddo ; enddo
 
     ! sqrt(sh_xx**2 + sh_xy**2 + vort_xy**2)
     elseif (CS%Klower_shear == 1) then
@@ -503,7 +529,7 @@ subroutine compute_c_diss(G, GV, CS)
                    +  (CS%sh_xy(I,J-1,k)**2   + CS%vort_xy(I,J-1,k)**2))  &
                     ))
         CS%c_diss(i,j,k) = 1. / (1. + shear * CS%ICoriolis_h(i,j))
-      enddo; enddo
+      enddo ; enddo
     endif
 
   enddo ! end of k loop
@@ -544,7 +570,7 @@ subroutine compute_stress(G, GV, CS)
   real :: vort_sh ! vort_xy*sh_xy in h point [T-2 ~> s-2]
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
+  integer :: i, j, k
 
   logical :: sum_sq_flag ! Flag to compute trace
   logical :: vort_sh_scheme_0, vort_sh_scheme_1 ! Flags to compute diagonal trace-free part
@@ -615,6 +641,144 @@ subroutine compute_stress(G, GV, CS)
   call cpu_clock_end(CS%id_clock_stress)
 
 end subroutine compute_stress
+
+!> Compute stress tensor T =
+!! (Txx, Txy;
+!!  Txy, Tyy)
+!! with ANN in non-dimensional form:
+!! T = dx^2 * |grad V|^2 * ANN(grad V / |grad V|)
+!! The sign of the stress tensor is such that:
+!! (du/dt, dv/dt) = 1/h * div(h * T)
+!! Algorithm:
+!! 1) Interpolate input features (sh_xy, sh_xx, vort_xy) to grid centers
+!! 2) Compute norm of velocity gradients on a stencil
+!! 3) Non-dimensionalize input features
+!! 4) Make ANN inference in grid centers
+!! 5) Restore physical dimensionality and interpolate Txy back to corners
+subroutine compute_stress_ANN_collocated(G, GV, CS)
+  type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
+  type(verticalGrid_type), intent(in)    :: GV   !< The ocean's vertical grid structure
+  type(ZB2020_CS),         intent(inout) :: CS   !< ZB2020 control structure.
+
+  integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: i, j, k, m
+  integer :: ii, jj
+  integer :: nij
+
+  real, allocatable :: x(:,:)        ! Vector of non-dimensional input features
+                                     ! number of horizontal grid points x
+                                     ! (sh_xy, sh_xx, vort_xy) on a stencil    [nondim]
+  real, allocatable :: y(:,:)        ! Vector of nondimensional
+                                     ! output features number of horizontal grid points x
+                                     ! (Txy,Txx,Tyy) [nondim]
+  real :: yy(3)                      ! Vector of dimensional
+                                     ! output features (Txy,Txx,Tyy) [L2 T-2 ~> m2 s-2]
+  real :: tmp                        ! Temporal value of squared norm [T-2 ~> s-2]
+  integer :: offset                  ! Half the stencil size. Used for selection
+  integer :: stencil_points          ! The number of points after flattening
+
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)) :: &
+        sh_xy_h,   & ! sh_xy interpolated to the center [T-1 ~> s-1]
+        vort_xy_h, & ! vort_xy interpolated to the center [T-1 ~> s-1]
+        norm_h       ! Norm of input feautres in center points [T-1 ~> s-1]
+
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+        sqr_h, & ! Squared norm of velocity gradients in center points [T-2 ~> s-2]
+        Txy      ! Predicted Txy in center points                      [T-1 ~> s-1]
+
+  call cpu_clock_begin(CS%id_clock_stress_ANN)
+
+  is  = G%isc  ; ie  = G%iec  ; js  = G%jsc  ; je  = G%jec ; nz = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
+
+  ! Number of horizontal grid points in ANN inference loop below
+  nij = (ie - is + 5) * (je - js + 5)
+  allocate(x(nij, 3 * CS%stencil_size**2))
+  allocate(y(nij, 3))
+
+  sh_xy_h = 0.
+  vort_xy_h = 0.
+  norm_h = 0.
+
+  call pass_var(CS%sh_xy, G%Domain, clock=CS%id_clock_mpi, position=CORNER)
+  call pass_var(CS%sh_xx, G%Domain, clock=CS%id_clock_mpi)
+  call pass_var(CS%vort_xy, G%Domain, clock=CS%id_clock_mpi, position=CORNER)
+
+  offset = (CS%stencil_size-1)/2
+  stencil_points = CS%stencil_size**2
+
+  ! Interpolate input features
+  do k=1,nz
+    do j=js-2,je+2 ; do i=is-2,ie+2
+      ! It is assumed that B.C. is applied to sh_xy and vort_xy
+      sh_xy_h(i,j,k) = 0.25 * ( (CS%sh_xy(I-1,J-1,k) + CS%sh_xy(I,J,k)) &
+                              + (CS%sh_xy(I-1,J,k) + CS%sh_xy(I,J-1,k)) )
+
+      vort_xy_h(i,j,k) = 0.25 * ( (CS%vort_xy(I-1,J-1,k) + CS%vort_xy(I,J,k)) &
+                                + (CS%vort_xy(I-1,J,k) + CS%vort_xy(I,J-1,k)) )
+
+      sqr_h(i,j) = (((CS%sh_xx(i,j,k)**2) + (sh_xy_h(i,j,k)**2)) + (vort_xy_h(i,j,k)**2)) * G%mask2dT(i,j)
+    enddo ; enddo
+
+    do j=js,je ; do i=is,ie
+      tmp = 0.0
+      do jj=j-offset,j+offset ; do ii=i-offset,i+offset
+        tmp = tmp + sqr_h(ii,jj)
+      enddo ; enddo
+      norm_h(i,j,k) = sqrt(tmp)
+    enddo ; enddo
+  enddo
+
+  call pass_var(sh_xy_h, G%Domain, clock=CS%id_clock_mpi)
+  call pass_var(vort_xy_h, G%Domain, clock=CS%id_clock_mpi)
+  call pass_var(norm_h, G%Domain, clock=CS%id_clock_mpi)
+
+  do k=1,nz
+    m = 0
+    do j=js-2,je+2 ; do i=is-2,ie+2
+      m = m + 1
+      x(m,1:stencil_points) =                                                            &
+                        RESHAPE(sh_xy_h(i-offset:i+offset,                               &
+                                        j-offset:j+offset,k), (/stencil_points/))
+      x(m,stencil_points+1:2*stencil_points) =                                           &
+                        RESHAPE(CS%sh_xx(i-offset:i+offset,                              &
+                                         j-offset:j+offset,k), (/stencil_points/))
+      x(m,2*stencil_points+1:3*stencil_points) =                                         &
+                        RESHAPE(vort_xy_h(i-offset:i+offset,                             &
+                                          j-offset:j+offset,k), (/stencil_points/))
+
+      x(m,:) = x(m,:) / (norm_h(i,j,k) + CS%subroundoff_shear)
+    enddo ; enddo
+
+    call ANN_apply_array_sio(nij, x, y, CS%ann_Tall)
+
+    m = 0
+    do j=js-2,je+2 ; do i=is-2,ie+2
+      m = m+1
+      yy(:) = y(m, :) * norm_h(i,j,k) * norm_h(i,j,k) * CS%kappa_h(i,j)
+
+      Txy(i,j)      = yy(1)
+      CS%Txx(i,j,k) = yy(2)
+      CS%Tyy(i,j,k) = yy(3)
+    enddo ; enddo
+
+    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+      CS%Txy(I,J,k) = 0.25 * ( (Txy(i+1,j+1) + Txy(i,j)) &
+                             + (Txy(i+1,j)   + Txy(i,j+1))) * G%mask2dBu(I,J)
+    enddo ; enddo
+
+  enddo ! end of k loop
+
+  call pass_var(CS%Txy, G%Domain, clock=CS%id_clock_mpi, position=CORNER)
+  call pass_var(CS%Txx, G%Domain, clock=CS%id_clock_mpi)
+  call pass_var(CS%Tyy, G%Domain, clock=CS%id_clock_mpi)
+
+  deallocate(x)
+  deallocate(y)
+
+  call cpu_clock_end(CS%id_clock_stress_ANN)
+
+end subroutine compute_stress_ANN_collocated
 
 !> Compute the divergence of subgrid stress
 !! weighted with thickness, i.e.
@@ -715,24 +879,22 @@ subroutine compute_stress_divergence(u, v, h, diffu, diffv, dx2h, dy2h, dx2q, dy
       enddo ; enddo
     endif
 
-    ! Evaluate 1/h x.Div(h S) (Line 1495 of MOM_hor_visc.F90)
-    ! Minus occurs because in original file (du/dt) = - div(S),
-    ! but here is the discretization of div(S)
+    ! Evaluate du/dt=1/h x.Div(h T) (Line 1495 of MOM_hor_visc.F90)
     do j=js,je ; do I=Isq,Ieq
       h_u = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i+1,j)*h(i+1,j,k)) + h_neglect
-      fx = -((G%IdyCu(I,j)*(Mxx(i,j) - Mxx(i+1,j)) + &
-              G%IdxCu(I,j)*(dx2q(I,J-1)*Mxy(I,J-1) - dx2q(I,J)*Mxy(I,J))) * &
+      fx =  ((G%IdyCu(I,j)*(Mxx(i+1,j) - Mxx(i,j)) + &
+              G%IdxCu(I,j)*((dx2q(I,J)*Mxy(I,J)) - (dx2q(I,J-1)*Mxy(I,J-1)))) * &
               G%IareaCu(I,j)) / h_u
       diffu(I,j,k) = diffu(I,j,k) + fx
       if (save_ZB2020u) &
         ZB2020u(I,j,k) = fx
     enddo ; enddo
 
-    ! Evaluate 1/h y.Div(h S) (Line 1517 of MOM_hor_visc.F90)
+    ! Evaluate dv/dt=1/h y.Div(h T) (Line 1517 of MOM_hor_visc.F90)
     do J=Jsq,Jeq ; do i=is,ie
       h_v = 0.5 * (G%mask2dT(i,j)*h(i,j,k) + G%mask2dT(i,j+1)*h(i,j+1,k)) + h_neglect
-      fy = -((G%IdxCv(i,J)*(Myy(i,j) - Myy(i,j+1)) + &
-              G%IdyCv(i,J)*(dy2q(I-1,J)*Mxy(I-1,J) - dy2q(I,J)*Mxy(I,J))) * &
+      fy =  ((G%IdxCv(i,J)*(Myy(i,j+1) - Myy(i,j)) + &
+              G%IdyCv(i,J)*((dy2q(I,J)*Mxy(I,J)) - (dy2q(I-1,J)*Mxy(I-1,J)))) * &
               G%IareaCv(i,J)) / h_v
       diffv(i,J,k) = diffv(i,J,k) + fy
       if (save_ZB2020v) &
@@ -774,7 +936,7 @@ subroutine filter_velocity_gradients(G, GV, CS)
   integer :: niter                       ! required number of iterations
 
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
-  integer :: i, j, k, n
+  integer :: i, j, k
 
   niter = CS%HPF_iter
 
@@ -791,19 +953,19 @@ subroutine filter_velocity_gradients(G, GV, CS)
   call cpu_clock_begin(CS%id_clock_filter)
   do k=1,nz
     ! Halo of size 2 is valid
-    do j=js-2,je+2; do i=is-2,ie+2
+    do j=js-2,je+2 ; do i=is-2,ie+2
       sh_xx(i,j,k) = CS%sh_xx(i,j,k)
-    enddo; enddo
+    enddo ; enddo
     ! Only halo of size 1 is valid
-    do J=Jsq-1,Jeq+1; do I=Isq-1,Ieq+1
+    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       sh_xy(I,J,k) = CS%sh_xy(I,J,k)
       vort_xy(I,J,k) = CS%vort_xy(I,J,k)
-    enddo; enddo
+    enddo ; enddo
   enddo
   call cpu_clock_end(CS%id_clock_filter)
 
-  xx_halo = 2; xy_halo = 1; vort_halo = 1;
-  xx_iter = niter; xy_iter = niter; vort_iter = niter;
+  xx_halo = 2 ; xy_halo = 1 ; vort_halo = 1
+  xx_iter = niter ; xy_iter = niter ; vort_iter = niter
 
   do while &
     (xx_iter >  0 .or. xy_iter >  0 .or. & ! filter iterations remain to be done
@@ -823,7 +985,7 @@ subroutine filter_velocity_gradients(G, GV, CS)
     ! ------ filtering sh_xy, vort_xy ----
     if (xy_halo < 1) then
       call complete_group_pass(CS%pass_xy, G%Domain, clock=CS%id_clock_mpi)
-      xy_halo = CS%HPF_halo; vort_halo = CS%HPF_halo
+      xy_halo = CS%HPF_halo ; vort_halo = CS%HPF_halo
     endif
 
     call filter_hq(G, GV, CS, xy_halo, xy_iter, q=CS%sh_xy)
@@ -838,13 +1000,13 @@ subroutine filter_velocity_gradients(G, GV, CS)
   ! B.C. are already applied to all fields
   call cpu_clock_begin(CS%id_clock_filter)
   do k=1,nz
-    do j=js-2,je+2; do i=is-2,ie+2
+    do j=js-2,je+2 ; do i=is-2,ie+2
       CS%sh_xx(i,j,k) = sh_xx(i,j,k) - CS%sh_xx(i,j,k)
-    enddo; enddo
-    do J=Jsq-1,Jeq+1; do I=Isq-1,Ieq+1
+    enddo ; enddo
+    do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
       CS%sh_xy(I,J,k) = sh_xy(I,J,k) - CS%sh_xy(I,J,k)
       CS%vort_xy(I,J,k) = vort_xy(I,J,k) - CS%vort_xy(I,J,k)
-    enddo; enddo
+    enddo ; enddo
   enddo
   call cpu_clock_end(CS%id_clock_filter)
 
@@ -871,8 +1033,8 @@ subroutine filter_stress(G, GV, CS)
 
   if (niter == 0) return
 
-  Txx_halo = 1; Tyy_halo = 1; Txy_halo = 1; ! these are required halo for Txx, Tyy, Txy
-  Txx_iter = niter; Tyy_iter = niter; Txy_iter = niter;
+  Txx_halo = 1 ; Tyy_halo = 1 ; Txy_halo = 1 ; ! these are required halo for Txx, Tyy, Txy
+  Txx_iter = niter ; Tyy_iter = niter ; Txy_iter = niter
 
   do while &
       (Txx_iter >  0 .or. Txy_iter >  0 .or. & ! filter iterations remain to be done
@@ -892,7 +1054,7 @@ subroutine filter_stress(G, GV, CS)
     ! ------- filtering Txx, Tyy ---------
     if (Txx_halo < 1) then
       call complete_group_pass(CS%pass_Th, G%Domain, clock=CS%id_clock_mpi)
-      Txx_halo = CS%Stress_halo; Tyy_halo = CS%Stress_halo
+      Txx_halo = CS%Stress_halo ; Tyy_halo = CS%Stress_halo
     endif
 
     call filter_hq(G, GV, CS, Txx_halo, Txx_iter, h=CS%Txx)
@@ -996,21 +1158,21 @@ subroutine filter_3D(x, maskw, isd, ied, jsd, jed, is, ie, js, je, nz, &
     do iter=1,niter
 
       if (direction) then
-        do j = js-halo, je+halo; do i = is-halo-1, ie+halo+1
+        do j = js-halo, je+halo ; do i = is-halo-1, ie+halo+1
           tmp(i,j) = weight * x(i,j,k) + (x(i,j-1,k) + x(i,j+1,k))
-        enddo; enddo
+        enddo ; enddo
 
-        do j = js-halo, je+halo; do i = is-halo, ie+halo;
+        do j = js-halo, je+halo ; do i = is-halo, ie+halo
           x(i,j,k) = (weight * tmp(i,j) + (tmp(i-1,j) + tmp(i+1,j))) * maskw(i,j)
-        enddo; enddo
+        enddo ; enddo
       else
-        do j = js-halo-1, je+halo+1; do i = is-halo, ie+halo
+        do j = js-halo-1, je+halo+1 ; do i = is-halo, ie+halo
           tmp(i,j) = weight * x(i,j,k) + (x(i-1,j,k) + x(i+1,j,k))
-        enddo; enddo
+        enddo ; enddo
 
-        do j = js-halo, je+halo; do i = is-halo, ie+halo;
+        do j = js-halo, je+halo ; do i = is-halo, ie+halo
           x(i,j,k) = (weight * tmp(i,j) + (tmp(i,j-1) + tmp(i,j+1))) * maskw(i,j)
-        enddo; enddo
+        enddo ; enddo
       endif
 
       halo = halo - 1
@@ -1079,7 +1241,7 @@ subroutine compute_energy_source(u, v, h, fx, fy, G, GV, CS)
           G%dxCv(i,J)
         KE_v(i,J) = vh * G%dyCv(i,J) * fy(i,J,k)
       enddo ; enddo
-      call do_group_pass(pass_KE_uv, G%domain)
+      call do_group_pass(pass_KE_uv, G%domain, clock=CS%id_clock_mpi)
       do j=js,je ; do i=is,ie
         KE_term(i,j,k) = 0.5 * G%IareaT(i,j) &
             * ((KE_u(I,j) + KE_u(I-1,j)) + (KE_v(i,J) + KE_v(i,J-1)))

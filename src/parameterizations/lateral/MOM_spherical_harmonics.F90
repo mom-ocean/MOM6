@@ -231,7 +231,7 @@ subroutine spherical_harmonics_init(G, param_file, CS)
 
   ! local variables
   real, parameter :: PI = 4.0*atan(1.0) ! 3.1415926... calculated as 4*atan(1) [nondim]
-  real, parameter :: RADIAN = PI / 180.0 ! Degree to Radian constant [rad/degree]
+  real, parameter :: RADIAN = PI / 180.0 ! Degree to Radian constant [radian degree-1]
   real, dimension(SZI_(G),SZJ_(G)) :: sin_clatT ! sine of colatitude at the t-cells [nondim].
   real :: Pmm_coef ! = sqrt{ 1.0/(4.0*PI) * prod[(2k+1)/2k)] } [nondim].
   integer :: is, ie, js, je

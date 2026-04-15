@@ -420,7 +420,7 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   endif
 
   ! obtain fluxes from IOB; note the staggering of indices
-  i0 = 0; j0 = 0
+  i0 = 0 ; j0 = 0
   do j=js,je ; do i=is,ie
     ! liquid precipitation (rain)
     if (associated(IOB%lprec)) &
@@ -439,14 +439,14 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
       fluxes%lrunoff(i,j) = kg_m2_s_conversion * IOB%rofl_flux(i-i0,j-j0) * G%mask2dT(i,j)
     else if (associated(IOB%runoff)) then
       fluxes%lrunoff(i,j) = kg_m2_s_conversion * IOB%runoff(i-i0,j-j0) * G%mask2dT(i,j)
-    end if
+    endif
 
     ! ice runoff flux
     if (associated(IOB%rofi_flux)) then
       fluxes%frunoff(i,j) = kg_m2_s_conversion * IOB%rofi_flux(i-i0,j-j0) * G%mask2dT(i,j)
     else if (associated(IOB%calving)) then
       fluxes%frunoff(i,j) = kg_m2_s_conversion * IOB%calving(i-i0,j-j0) * G%mask2dT(i,j)
-    end if
+    endif
 
     if (associated(IOB%ustar_berg)) &
       fluxes%ustar_berg(i,j) = US%m_to_Z*US%T_to_s * IOB%ustar_berg(i-i0,j-j0) * G%mask2dT(i,j)
@@ -641,7 +641,7 @@ subroutine convert_IOB_to_forces(IOB, forces, index_bounds, Time, G, US, CS)
   IsdB = G%IsdB  ; IedB = G%IedB   ; JsdB = G%JsdB  ; JedB = G%JedB
   isr = is-isd+1 ; ier  = ie-isd+1 ; jsr = js-jsd+1 ; jer = je-jsd+1
  !i0 = is - isc_bnd ; j0 = js - jsc_bnd
-  i0 = 0; j0 = 0
+  i0 = 0 ; j0 = 0
 
   Irho0 = US%L_to_Z / CS%Rho0
   Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
@@ -899,7 +899,7 @@ subroutine apply_flux_adjustments(G, US, CS, Time, fluxes)
   integer :: isc, iec, jsc, jec, i, j
   logical :: overrode_h
 
-  isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
 
   overrode_h = .false.
   call data_override('OCN', 'hflx_adj', temp_at_h(isc:iec,jsc:jec), Time, override=overrode_h)
@@ -949,7 +949,7 @@ subroutine apply_force_adjustments(G, US, CS, Time, forces)
   real :: Pa_conversion ! A unit conversion factor from Pa to the internal units [R Z L T-2 Pa-1 ~> 1]
   logical :: overrode_x, overrode_y
 
-  isc = G%isc; iec = G%iec ; jsc = G%jsc; jec = G%jec
+  isc = G%isc ; iec = G%iec ; jsc = G%jsc ; jec = G%jec
   Pa_conversion = US%kg_m3_to_R*US%m_s_to_L_T**2*US%L_to_Z
 
   tempx_at_h(:,:) = 0.0 ; tempy_at_h(:,:) = 0.0
@@ -1068,7 +1068,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "LATENT_HEAT_FUSION", CS%latent_heat_fusion, &
@@ -1227,13 +1227,13 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   if (CS%read_TIDEAMP) then
     TideAmp_file = trim(CS%inputdir) // trim(TideAmp_file)
     call MOM_read_data(TideAmp_file,'tideamp',CS%TKE_tidal,G%domain,timelevel=1, scale=US%m_to_Z*US%T_to_s)
-    do j=jsd, jed; do i=isd, ied
+    do j=jsd,jed ; do i=isd,ied
       utide = CS%TKE_tidal(i,j)
       CS%TKE_tidal(i,j) = G%mask2dT(i,j)*CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
     enddo ; enddo
   else
-    do j=jsd,jed; do i=isd,ied
+    do j=jsd,jed ; do i=isd,ied
       utide = CS%utide
       CS%TKE_tidal(i,j) = CS%Rho0*CS%cd_tides*(utide*utide*utide)
       CS%ustar_tidal(i,j) = sqrt(CS%cd_tides)*utide
@@ -1327,7 +1327,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   if (present(restore_salt)) then ; if (restore_salt) then
     salt_file = trim(CS%inputdir) // trim(CS%salt_restore_file)
     CS%srestore_handle = init_external_field(salt_file, CS%salt_restore_var_name, domain=G%Domain%mpp_domain)
-    call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed); CS%srestore_mask(:,:) = 1.0
+    call safe_alloc_ptr(CS%srestore_mask,isd,ied,jsd,jed) ; CS%srestore_mask(:,:) = 1.0
     if (CS%mask_srestore) then ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'salt_restore_mask.nc'
       call MOM_read_data(flnam,'mask', CS%srestore_mask, G%domain, timelevel=1)
@@ -1337,7 +1337,7 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, restore_salt,
   if (present(restore_temp)) then ; if (restore_temp) then
     temp_file = trim(CS%inputdir) // trim(CS%temp_restore_file)
     CS%trestore_handle = init_external_field(temp_file, CS%temp_restore_var_name, domain=G%Domain%mpp_domain)
-    call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed); CS%trestore_mask(:,:) = 1.0
+    call safe_alloc_ptr(CS%trestore_mask,isd,ied,jsd,jed) ; CS%trestore_mask(:,:) = 1.0
     if (CS%mask_trestore) then  ! read a 2-d file containing a mask for restoring fluxes
       flnam = trim(CS%inputdir) // 'temp_restore_mask.nc'
       call MOM_read_data(flnam, 'mask', CS%trestore_mask, G%domain, timelevel=1)
@@ -1403,7 +1403,7 @@ subroutine ice_ocn_bnd_type_chksum(id, timestep, iobt)
   chks = field_chksum( iobt%v_flux         ) ; if (root) write(outunit,100) 'iobt%v_flux          ', chks
   chks = field_chksum( iobt%t_flux         ) ; if (root) write(outunit,100) 'iobt%t_flux          ', chks
   chks = field_chksum( iobt%q_flux         ) ; if (root) write(outunit,100) 'iobt%q_flux          ', chks
-  chks = field_chksum( iobt%seaice_melt_heat); if (root) write(outunit,100) 'iobt%seaice_melt_heat', chks
+  chks = field_chksum( iobt%seaice_melt_heat) ; if (root) write(outunit,100) 'iobt%seaice_melt_heat', chks
   chks = field_chksum( iobt%seaice_melt)     ; if (root) write(outunit,100) 'iobt%seaice_melt    ', chks
   chks = field_chksum( iobt%salt_flux      ) ; if (root) write(outunit,100) 'iobt%salt_flux      ', chks
   chks = field_chksum( iobt%lw_flux        ) ; if (root) write(outunit,100) 'iobt%lw_flux        ', chks

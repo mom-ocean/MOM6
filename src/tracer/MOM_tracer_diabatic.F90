@@ -635,7 +635,7 @@ subroutine applyTracerBoundaryFluxesInOut(G, GV, Tr, dt, fluxes, h, evap_CFL_lim
     enddo
 
     if (numberOfGroundings - maxGroundings > 0) then
-      write(mesg, '(i4)') numberOfGroundings - maxGroundings
+      write(mesg, '(I0)') numberOfGroundings - maxGroundings
       call MOM_error(WARNING, "MOM_tracer_vertical.F90, applyTracerBoundaryFluxesInOut(): "//&
                               trim(mesg) // " groundings remaining", all_print=.true.)
     endif

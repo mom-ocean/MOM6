@@ -16,3 +16,5 @@ sphinxcontrib_htmlhelp<2.0.5
 sphinxcontrib_qthelp<1.0.7
 sphinxcontrib_serializinghtml<1.0.7
 alabaster<0.7.14
+# setuptools 82.0.0 removed pkg_resources
+setuptools<82.0.0

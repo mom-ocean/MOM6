@@ -114,8 +114,7 @@ function register_ISOMIP_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
 
   do m=1,NTR
-    if (m < 10) then ; write(name,'("tr_D",I1.1)') m
-    else ; write(name,'("tr_D",I2.2)') m ; endif
+    write(name,'("tr_D",I0)') m
     write(longname,'("Concentration of ISOMIP Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
     if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"

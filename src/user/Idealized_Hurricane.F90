@@ -24,7 +24,7 @@ use MOM_forcing_type, only : forcing, mech_forcing
 use MOM_forcing_type, only : allocate_mech_forcing
 use MOM_grid, only : ocean_grid_type
 use MOM_safe_alloc, only : safe_alloc_ptr
-use MOM_time_manager, only : time_type, operator(+), operator(/), time_type_to_real
+use MOM_time_manager, only : time_type, operator(+), operator(/), time_to_real
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables, only : thermo_var_ptrs, surface
 use MOM_verticalGrid, only : verticalGrid_type
@@ -134,8 +134,6 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   logical :: continuous_Cd  ! If true, use a continuous form for the simple drag coefficient as a
                  ! function of wind speed with the idealized hurricane.  When this is false, the
                  ! linear shape for the mid-range wind speeds is specified separately.
-  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
-                          ! recreate the bugs, or if false bugs are only used if actively selected.
 
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
@@ -230,7 +228,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
                  default=6.88, units="degrees")
   call get_param(param_file, mdl, "IDL_HURR_INFLOW_DANGLE_TR_SPEED", CS%P1_speed, &
                  "The translation speed dependence of the angle difference between the "//&
-                 "translation direction and the inflow direction"//&
+                 "translation direction and the inflow direction "//&
                  "for the parametric idealized hurricane.", &
                  default=-9.60, units="degrees s m-1", scale=US%L_T_to_m_s)
 
@@ -242,13 +240,11 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "IDL_HURR_SCM", CS%SCM_mode, &
                  "Single Column mode switch used in the SCM idealized hurricane wind profile.", &
                  default=.false.)
-  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "IDL_HURR_SCM_EDGE_TAPER_BUG", CS%edge_taper_bug, &
                  "If true and IDL_HURR_SCM is true, use a bug that does all of the tapering and "//&
                  "inflow angle calculations for radii between RAD_EDGE and RAD_AMBIENT as though "//&
                  "they were at RAD_EDGE.", &
-                 default=CS%SCM_mode.and.enable_bugs, do_not_log=.not.CS%SCM_mode)
+                 default=.false., do_not_log=.not.CS%SCM_mode)
   if (.not.CS%SCM_mode) CS%edge_taper_bug = .false.
   call get_param(param_file, mdl, "IDL_HURR_SCM_LOCY", CS%dy_from_center, &
                  "Y distance of station used in the SCM idealized hurricane wind profile.", &
@@ -314,7 +310,7 @@ subroutine idealized_hurricane_wind_init(Time, G, US, param_file, CS)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R, do_not_log=.true.)
   call get_param(param_file, mdl, "GUST_CONST", CS%gustiness, &
@@ -377,9 +373,9 @@ subroutine idealized_hurricane_wind_forcing(sfc_state, forces, day, G, US, CS)
   endif
 
   !> Compute storm center location
-  XC = CS%Hurr_cen_X0 + (time_type_to_real(day)*US%s_to_T * CS%hurr_translation_spd * &
+  XC = CS%Hurr_cen_X0 + (time_to_real(day, scale=US%s_to_T) * CS%hurr_translation_spd * &
        cos(CS%hurr_translation_dir))
-  YC = CS%Hurr_cen_Y0 + (time_type_to_real(day)*US%s_to_T * CS%hurr_translation_spd * &
+  YC = CS%Hurr_cen_Y0 + (time_to_real(day, scale=US%s_to_T) * CS%hurr_translation_spd * &
        sin(CS%hurr_translation_dir))
 
   if (CS%BR_Bench) then

@@ -29,6 +29,7 @@ public PPM_CWK, testing
 !! - average()                 *locally defined
 !! - f()                       *locally defined
 !! - dfdx()                    *locally defined
+!! - x()                       *locally defined
 !! - check_reconstruction()    *locally defined
 !! - unit_tests()              *locally defined
 !! - destroy()                 *locally defined
@@ -52,6 +53,8 @@ contains
   procedure :: f => f
   !> Implementation of the derivative of the PPM_CWK reconstruction at a point [A]
   procedure :: dfdx => dfdx
+  !> Implementation of solver for x: f(x)=t
+  procedure :: x => x
   !> Implementation of deallocation for PPM_CWK
   procedure :: destroy => destroy
   !> Implementation of check reconstruction for the PPM_CWK reconstruction
@@ -139,13 +142,13 @@ subroutine reconstruct(this, h, u)
   this%ur(n) = u(n) ! PCM
   this%ul(n) = u(n) ! PCM
 
-  do K = 2, n ! K=2 is interface between cells 1 and 2
+  do K = 2, n-1 ! K=2 is interface between cells 1 and 2
     u0 = u(k-1)
     u1 = u(k)
     u2 = u(k+1)
     a6 = 3.0 * ( ( u1 - this%ul(k) ) + ( u1 - this%ur(k) ) )
     du = this%ur(k) - this%ul(k)
-    if ( ( u2 - u1 ) * ( u1 - u0 ) <- 0.0 ) then ! Large scale extrema
+    if ( ( u2 - u1 ) * ( u1 - u0 ) <= 0.0 ) then ! Large scale extrema
       this%ul(k) = u1
       this%ur(k) = u1
     elseif ( du * a6 > du * du ) then ! Extrema on right
@@ -216,6 +219,62 @@ real function dfdx(this, k, x)
   dfdx = du + a6 * ( 2.0 * xc - 1.0 )
 
 end function dfdx
+
+!> Solver for x: f(x)=t
+real function x(this, k, t)
+  class(PPM_CWK), intent(in) :: this !< This reconstruction
+  integer,        intent(in) :: k    !< Cell number
+  real,           intent(in) :: t    !< Value to solve for [A]
+  real :: slp  ! Difference in edge values, ur-ul [A]
+  real :: a6   ! Colella and Woodward curvature parameter [A]
+  real :: sD   ! Square root of the quadratic discriminant [A]
+  real :: b    ! The b in f(x) = a x^2 + b x + c [A]
+  real :: c    ! The c in f(x) = a x^2 + b x + c [A]
+
+  ! The PPM profile is the quadratic profile: f(x) = ul + (slp+a6)*x - a6*x^2.
+  ! Setting f(x)=t gives: -a6*x^2 + (slp+a6)*x + (ul-t) = 0.
+  ! In the common parlance of solving a*x^2 + b*x + c = 0, this means
+  !  a = -a6;  b = slp+a6; c = ul-t
+  ! The quadratic formula x = ( -b +/- sD ) / ( 2a ) with sD = sqrt(b^2-4*a*c)
+  ! can suffer from catastrophic cancellation in some scenarios.
+  ! A mathematically equivalent form of x = 2c / ( -b -/+ sD ) also can fail.
+  ! Usually, to avoid catastrophic cancellation, we use the rule
+  !   If b>0 then the two roots are
+  !     ra = -(b+sD)/(2a)
+  !     rc = -2c/(b+sD)
+  !   otherwise if b<0 then the two roots are
+  !     ra = (-b+sD)/(2a)
+  !     rc = 2c/(-b+sD)
+  ! In all expressions, sD and b do not have cancelling contributions due to the signs.
+  ! Note that here, if b>0 then c<0, and vice versa, because we are looking
+  ! for f(x)=t which shifts "c" by t so that the root we are interested in
+  ! falls in the range 0 <= x <= 1 (assuming t falls in ul...ur).
+  ! When b>0 and a>0 then -b/(2a)<0 and ra<0<rc, so we need rc
+  ! When b>0 and a<0 then -b/(2a)>0 and ra>rc, so we need rc
+  ! When b<0 and a>0 then -b/(2a)>0 and ra>rc, so we need rc
+  ! When b<0 and a<0 then -b/(2a)<0 and ra<0<rc, so we need rc
+  ! So a form that always gives us the root that we want is
+  !   x = -2c/(b+sgn(b)*sD)
+  slp = this%ur(k) - this%ul(k)
+  a6 = 3.0 * ((this%u_mean(k) - this%ul(k)) + (this%u_mean(k) - this%ur(k)))
+  b = slp + a6 ! to avoid repeated computation
+  c = this%ul(k) - t ! to avoid repeated computation
+  if (abs(slp) > 0.) then
+    ! The max(0,..a.) here is out of an abundance of caution, but if the PPM parameters
+    ! have been made monotonic then the max is not necessary.
+    sD = sqrt( max( 0., b**2 + 4. * a6 * c ) )
+    ! Calculate the reciprocal of the denominator. Note: even if b=0, sign(sD,b)=sD>0.
+    x = 1. / ( b + sign( sD, b ) )
+    ! The actual root is
+    x = -2. * c * x
+    x = max( 0., min( 1., x ) )
+  else
+    ! Constant (or inconsistent) profile (ul=ur, a6=?): infer position from adjacent cell slopes.
+    x = 0.5 ! fallback
+    slp = this%ul(min(k+1,this%n)) - this%ur(max(k-1,1))
+    if (abs(slp) > 0.) x = 0.5 + sign( 0.5, slp ) ! either 0 or 1
+  endif
+end function x
 
 !> Average between xa and xb for cell k of a 1D PPM reconstruction [A]
 real function average(this, k, xa, xb)
@@ -374,6 +433,17 @@ logical function unit_tests(this, verbose, stdout, stderr)
   call test%real_arr(5, ul, (/1.,3.,12.,27.,61./), 'Return left edge')
   call test%real_arr(5, um, (/1.,6.75,18.75,36.75,61./), 'Return center')
   call test%real_arr(5, ur, (/1.,12.,27.,48.,61./), 'Return right edge')
+
+  call test%real_scalar( this%x(3,12.), 0., 'f-1(3,12)=0')
+  call test%real_scalar( this%x(3,15.1875), 0.25, 'f-1(3,15.1875)=0.25')
+  call test%real_scalar( this%x(3,18.75), 0.5, 'f-1(3,18.75)=0.5')
+  call test%real_scalar( this%x(3,27.), 1., 'f-1(3,27)=1')
+
+  call this%reconstruct( (/2.,2.,2.,2.,2./), (/-1.,-7.,-19.,-37.,-61./) )
+  call test%real_scalar( this%x(3,-12.), 0., 'f-1(3,-12)=0')
+  call test%real_scalar( this%x(3,-15.1875), 0.25, 'f-1(3,-15.1875)=0.25')
+  call test%real_scalar( this%x(3,-18.75), 0.5, 'f-1(3,-18.75)=0.5')
+  call test%real_scalar( this%x(3,-27.), 1., 'f-1(3,-27)=1')
 
   ! x = 3 i   i=0 at origin
   ! f(x) = x^2 / 3   = 3 i^2

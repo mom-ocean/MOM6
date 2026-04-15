@@ -31,6 +31,7 @@ public PLM_CWK, testing
 !! - average()              -> recon1d_plm_cw.average()
 !! - f()                    -> recon1d_plm_cw.f()
 !! - dfdx()                 -> recon1d_plm_cw.dfdx()
+!! - x()                    -> recon1d_plm_cw.x()
 !! - check_reconstruction() -> recon1d_plm_cw.check_reconstruction()
 !! - unit_tests()           -> recon1d_plm_cw.unit_tests()
 !! - destroy()              -> recon1d_plm_cw.destroy()

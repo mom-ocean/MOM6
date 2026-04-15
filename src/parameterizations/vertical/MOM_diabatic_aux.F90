@@ -651,7 +651,7 @@ subroutine set_pen_shortwave(optics, fluxes, G, GV, US, CS, opacity, tracer_flow
       do j=js,je ; do i=is,ie
         if ((G%mask2dT(i,j) > 0.0) .and. (chl_2d(i,j) < 0.0)) then
           write(mesg,'(" Time_interp negative chl of ",(1pe12.4)," at i,j = ",&
-                    & 2(i3), "lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
+                    & I0,", ",I0," lon/lat = ",(1pe12.4)," E ", (1pe12.4), " N.")') &
                      chl_2d(i,j), i, j, G%geoLonT(i,j), G%geoLatT(i,j)
           call MOM_error(FATAL, "MOM_diabatic_aux set_pen_shortwave: "//trim(mesg))
         endif
@@ -1340,7 +1340,7 @@ subroutine applyBoundaryFluxesInOut(CS, G, GV, US, dt, fluxes, optics, nsw, h, t
     enddo
 
     if (numberOfGroundings - maxGroundings > 0) then
-      write(mesg, '(i4)') numberOfGroundings - maxGroundings
+      write(mesg, '(I0)') numberOfGroundings - maxGroundings
       call MOM_error(WARNING, "MOM_diabatic_aux:F90, applyBoundaryFluxesInOut(): "//&
                               trim(mesg) // " groundings remaining")
     endif

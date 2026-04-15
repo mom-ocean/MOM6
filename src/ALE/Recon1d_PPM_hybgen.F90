@@ -129,14 +129,14 @@ subroutine reconstruct(this, h, u)
   this%ur(n) = u(n) ! PCM
   this%ul(n) = u(n) ! PCM
 
-  do K = 2, n ! K=2 is interface between cells 1 and 2
+  do K = 2, n-1 ! K=2 is interface between cells 1 and 2
     u0 = u(k-1)
     u1 = u(k)
     u2 = u(k+1)
     a6 = 3.0 * ( ( u1 - this%ul(k) ) + ( u1 - this%ur(k) ) )
     a6 = 6.0 * u1 - 3.0 * ( this%ul(k) + this%ur(k) )
     du = this%ur(k) - this%ul(k)
-    if ( ( u2 - u1 ) * ( u1 - u0 ) <- 0.0 ) then ! Large scale extrema
+    if ( ( u2 - u1 ) * ( u1 - u0 ) <= 0.0 ) then ! Large scale extrema
       this%ul(k) = u1
       this%ur(k) = u1
     elseif ( du * a6 > du * du ) then ! Extrema on right

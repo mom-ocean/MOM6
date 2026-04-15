@@ -18,7 +18,7 @@ use MOM_grid,          only : ocean_grid_type
 use MOM_interpolate,   only : time_interp_external
 use MOM_interp_infra,  only : run_horiz_interp, build_horiz_interp_weights
 use MOM_interp_infra,  only : horiz_interp_type, horizontal_interp_init
-use MOM_interp_infra,  only : get_external_field_info
+use MOM_interpolate,   only : get_external_field_info
 use MOM_interp_infra,  only : external_field
 use MOM_time_manager,  only : time_type
 use MOM_io,            only : axis_info, get_axis_info, get_var_axes_info, MOM_read_data
@@ -89,7 +89,7 @@ subroutine myStats(array, missing, G, k, mesg, unscale, full_halo)
   call min_across_PEs(minA)
   call max_across_PEs(maxA)
   if (is_root_pe()) then
-    write(lMesg(1:120),'(2(a,es12.4),a,i3,1x,a)') &
+    write(lMesg(1:120),'(2(a,es12.4),a,I0,1x,a)') &
          'init_from_Z: min=',minA*scl,' max=',maxA*scl,' Level=',k,trim(mesg)
     call MOM_mesg(lMesg,2)
   endif
@@ -214,8 +214,8 @@ subroutine fill_miss_2d(aout, good, fill, prev, G, acrit, num_pass, relc, debug,
       endif ; enddo ; enddo
     elseif (nfill == nfill_prev) then
       call MOM_error(WARNING, &
-           'Unable to fill missing points using either data at the same vertical level from a connected basin'//&
-           'or using a point from a previous vertical level.  Make sure that the original data has some valid'//&
+           'Unable to fill missing points using either data at the same vertical level from a connected basin '//&
+           'or using a point from a previous vertical level.  Make sure that the original data has some valid '//&
            'data in all basins.', .true.)
       write(mesg,*) 'nfill=',nfill
       call MOM_error(WARNING, mesg, .true.)

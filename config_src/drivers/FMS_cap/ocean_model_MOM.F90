@@ -47,7 +47,7 @@ use MOM_surface_forcing_gfdl, only : forcing_save_restart
 use MOM_time_manager, only : time_type, operator(>), operator(+), operator(-)
 use MOM_time_manager, only : operator(*), operator(/), operator(/=)
 use MOM_time_manager, only : operator(<=), operator(>=), operator(<)
-use MOM_time_manager, only : real_to_time, time_type_to_real
+use MOM_time_manager, only : real_to_time, time_to_real
 use MOM_tracer_flow_control, only : call_tracer_register, tracer_flow_control_init
 use MOM_tracer_flow_control, only : call_tracer_flux_init
 use MOM_unit_scaling, only : unit_scale_type
@@ -56,7 +56,7 @@ use MOM_verticalGrid, only : verticalGrid_type
 use MOM_ice_shelf, only : initialize_ice_shelf, shelf_calc_flux, ice_shelf_CS
 use MOM_ice_shelf, only : initialize_ice_shelf_fluxes, initialize_ice_shelf_forces
 use MOM_ice_shelf, only : add_shelf_forces, ice_shelf_end, ice_shelf_save_restart
-use MOM_ice_shelf, only : ice_sheet_calving_to_ocean_sfc
+use MOM_ice_shelf, only : ice_sheet_calving_to_ocean_sfc, adjust_ice_sheet_frazil
 use MOM_wave_interface, only: wave_parameters_CS, MOM_wave_interface_init
 use MOM_wave_interface, only: Update_Surface_Waves
 use iso_fortran_env, only : int64
@@ -284,7 +284,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   OS%Time = Time_in ; OS%Time_dyn = Time_in
   ! Call initialize MOM with an optional Ice Shelf CS which, if present triggers
   ! initialization of ice shelf parameters and arrays.
-  point_calving=.false.; if (present(calve_ice_shelf_bergs)) point_calving=calve_ice_shelf_bergs
+  point_calving = .false. ; if (present(calve_ice_shelf_bergs)) point_calving = calve_ice_shelf_bergs
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
                       Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
                       diag_ptr=OS%diag, count_calls=.true., ice_shelf_CSp=OS%ice_shelf_CSp, &
@@ -342,7 +342,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
   call get_param(param_file, mdl, "RHO_0", Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=OS%US%kg_m3_to_R)
   call get_param(param_file, mdl, "G_EARTH", G_Earth, &
@@ -374,7 +374,8 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
 
   !allocate(OS%sfc_state)
   call allocate_surface_state(OS%sfc_state, OS%grid, use_temperature, do_integrals=.true., &
-                              gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot)
+                              gas_fields_ocn=gas_fields_ocn, use_meltpot=use_melt_pot, &
+                              use_iceshelves=OS%use_ice_shelf)
 
   if (present(wind_stagger)) then
     call surface_forcing_init(Time_in, OS%grid, OS%US, param_file, OS%diag, &
@@ -411,6 +412,9 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, wind_stagger, gas
                                 Ocean_sfc%axes(1:2), Time_in)
 
     call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
+
+    if (OS%use_ice_shelf .and. allocated(OS%sfc_state%frazil)) &
+      call adjust_ice_sheet_frazil(OS%sfc_state, OS%fluxes, OS%Ice_shelf_CSp)
 
     call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 
@@ -493,7 +497,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   integer :: is, ie, js, je
 
   call callTree_enter("update_ocean_model(), ocean_model_MOM.F90")
-  dt_coupling = OS%US%s_to_T*time_type_to_real(Ocean_coupling_time_step)
+  dt_coupling = time_to_real(Ocean_coupling_time_step, scale=OS%US%s_to_T)
 
   if (.not.associated(OS)) then
     call MOM_error(FATAL, "update_ocean_model called with an unassociated "// &
@@ -655,7 +659,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
 
         if (step_thermo) then
           ! Back up Time1 to the start of the thermodynamic segment.
-          Time1 = Time1 - real_to_time(OS%US%T_to_s*(dtdia - dt_dyn))
+          Time1 = Time1 - real_to_time(dtdia - dt_dyn, unscale=OS%US%T_to_s)
           call step_MOM(OS%forces, OS%fluxes, OS%sfc_state, Time1, dtdia, OS%MOM_CSp, &
                         Waves=OS%Waves, do_dynamics=.false., do_thermodynamics=.true., &
                         start_cycle=.false., end_cycle=(n==n_max), cycle_length=dt_coupling)
@@ -663,7 +667,7 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
       endif
 
       t_elapsed_seg = t_elapsed_seg + dt_dyn
-      Time1 = Time_seg_start + real_to_time(OS%US%T_to_s*t_elapsed_seg)
+      Time1 = Time_seg_start + real_to_time(t_elapsed_seg, unscale=OS%US%T_to_s)
     enddo
   endif
 
@@ -680,6 +684,10 @@ subroutine update_ocean_model(Ice_ocean_boundary, OS, Ocean_sfc, time_start_upda
   if (OS%fluxes%fluxes_used .and. do_thermo) then
     call forcing_diagnostics(OS%fluxes, OS%sfc_state, OS%grid, OS%US, OS%Time, OS%diag, OS%forcing_CSp%handles)
   endif
+
+  !only ,ale ice-shelf frazil adjustments if sfc_state%frazil was updated (do_thermo=True)
+  if (do_thermo .and. OS%use_ice_shelf .and. allocated(OS%sfc_state%frazil)) &
+    call adjust_ice_sheet_frazil(OS%sfc_state, OS%fluxes, OS%Ice_shelf_CSp)
 
 ! Translate state into Ocean.
 !  call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US, &
@@ -988,6 +996,9 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
+
+  if (OS%use_ice_shelf .and. allocated(OS%sfc_state%frazil)) &
+    call adjust_ice_sheet_frazil(OS%sfc_state, OS%fluxes, OS%Ice_shelf_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 

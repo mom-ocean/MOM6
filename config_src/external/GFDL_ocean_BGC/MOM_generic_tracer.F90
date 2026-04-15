@@ -18,7 +18,7 @@ module MOM_generic_tracer
 ! ### These imports should not reach into FMS directly ###
 
 use MOM_ALE_sponge, only : ALE_sponge_CS
-use MOM_coms, only : EFP_type
+use MOM_coms, only : EFP_type, real_to_EFP
 use MOM_diag_mediator, only : diag_ctrl
 use MOM_error_handler, only : MOM_error, FATAL
 use MOM_file_parser, only : param_file_type
@@ -197,7 +197,13 @@ function MOM_generic_tracer_stock(h, stocks, G, GV, CS, names, units, stock_inde
   integer                                           :: MOM_generic_tracer_stock !< Return value, the
                                                                    !! number of stocks calculated here.
 
+  integer :: m
   MOM_generic_tracer_stock = 0
+
+  ! These should never be used, but they are set to avoid compile-time warnings
+  do m=1,size(names) ; names(m) = "" ; enddo
+  do m=1,size(units) ; units(m) = "" ; enddo
+  do m=1,size(stocks) ; stocks(m) = real_to_EFP(0.0) ; enddo
 
 end function MOM_generic_tracer_stock
 
@@ -229,7 +235,23 @@ function MOM_generic_tracer_min_max(ind_start, got_minmax, gmin, gmax, G, CS, na
   integer                                       :: MOM_generic_tracer_min_max !< Return value, the
                                                           !! number of tracers done here.
 
+  integer :: m
+
   MOM_generic_tracer_min_max = 0
+
+  ! These should never be used, but they are set to avoid compile-time warnings.  Note that the minimum values
+  ! are delibarately set to be larger than the maximum values.
+  got_minmax(:) = .false.
+  gmax(:) = -huge(gmax)
+  gmin(:) = huge(gmin)
+  do m=1,size(names) ; names(m) = "" ; enddo
+  do m=1,size(units) ; units(m) = "" ; enddo
+  if (present(xgmin)) xgmin(:) = 0.0
+  if (present(ygmin)) ygmin(:) = 0.0
+  if (present(zgmin)) zgmin(:) = 0.0
+  if (present(xgmax)) xgmax(:) = 0.0
+  if (present(ygmax)) ygmax(:) = 0.0
+  if (present(zgmax)) zgmax(:) = 0.0
 
 end function MOM_generic_tracer_min_max
 
@@ -272,6 +294,8 @@ subroutine MOM_generic_tracer_get(name,member,array, CS)
   real, dimension(:,:,:),   pointer :: array_ptr  ! The tracer in the generic tracer structures, in
                                                   ! arbitrary units [A]
   character(len=128), parameter :: sub_name = 'MOM_generic_tracer_get'
+
+  array(:,:,:) = huge(array)
 
 end subroutine MOM_generic_tracer_get
 

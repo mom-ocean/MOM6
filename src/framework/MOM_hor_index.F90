@@ -57,7 +57,7 @@ type, public :: hor_index_type
 end type hor_index_type
 
 !> Copy the contents of one horizontal index type into another
-interface assignment(=); module procedure HIT_assign ; end interface
+interface assignment(=) ; module procedure HIT_assign ; end interface
 
 contains
 

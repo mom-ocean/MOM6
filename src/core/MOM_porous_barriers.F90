@@ -26,7 +26,7 @@ public porous_widths_layer, porous_widths_interface, porous_barriers_init
 #include <MOM_memory.h>
 
 !> The control structure for the MOM_porous_barriers module
-type, public :: porous_barrier_CS; private
+type, public :: porous_barrier_CS ; private
   logical :: initialized = .false.  !< True if this control structure has been initialized.
   type(diag_ctrl), pointer :: &
       diag => Null()                !< A structure to regulate diagnostic output timing
@@ -91,8 +91,8 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
 
   call cpu_clock_begin(id_clock_porous_barrier)
 
-  is = G%isc; ie = G%iec; js = G%jsc; je = G%jec; nk = GV%ke
-  Isq = G%IscB; Ieq = G%IecB; Jsq = G%JscB; Jeq = G%JecB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (CS%answer_date < 20220806) then
     dmask = 0.0
@@ -141,7 +141,7 @@ subroutine porous_widths_layer(h, tv, G, GV, US, pbv, CS, eta_bt)
   endif
 
   ! v-points
-  do J=Jsq,Jeq ; do i=is,ie; do_I(i,J) = .False. ; enddo ; enddo
+  do J=Jsq,Jeq ; do i=is,ie ; do_I(i,J) = .False. ; enddo ; enddo
 
   do J=Jsq,Jeq ; do i=is,ie ; if (G%porous_DavgV(i,J) < dmask) then
     call calc_por_layer(G%porous_DminV(i,J), G%porous_DmaxV(i,J), G%porous_DavgV(i,J), &
@@ -218,8 +218,8 @@ subroutine porous_widths_interface(h, tv, G, GV, US, pbv, CS, eta_bt)
 
   call cpu_clock_begin(id_clock_porous_barrier)
 
-  is = G%isc; ie = G%iec; js = G%jsc; je = G%jec; nk = GV%ke
-  Isq = G%IscB; Ieq = G%IecB; Jsq = G%JscB; Jeq = G%JecB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (CS%answer_date < 20220806) then
     dmask = 0.0
@@ -309,8 +309,8 @@ subroutine calc_eta_at_uv(eta_u, eta_v, interp, dmask, h, tv, G, GV, US, eta_bt)
   real :: dz_neglect ! A negligible height difference [Z ~> m]
   integer :: i, j, k, nk, is, ie, js, je, Isq, Ieq, Jsq, Jeq
 
-  is = G%isc; ie = G%iec; js = G%jsc; je = G%jec; nk = GV%ke
-  Isq = G%IscB; Ieq = G%IecB; Jsq = G%JscB; Jeq = G%JecB
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nk = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   ! currently no treatment for using optional find_eta arguments if present
   call find_eta(h, tv, G, GV, US, eta, halo_size=1)

@@ -337,19 +337,19 @@ subroutine build_and_interpolate_grid(CS, densities, n0, h0, x0, target_values, 
   integer,               intent(in)    :: n1  !< The number of points on the output grid
   real, dimension(n0),   intent(in)    :: densities !< Input cell densities [R ~> kg m-3]
   real, dimension(n1+1), intent(in)    :: target_values !< Target values of interfaces [R ~> kg m-3]
-  real, dimension(n0),   intent(in)    :: h0  !< Initial cell widths [H]
-  real, dimension(n0+1), intent(in)    :: x0  !< Source interface positions [H]
-  real, dimension(n1),   intent(inout) :: h1  !< Output cell widths [H]
-  real, dimension(n1+1), intent(inout) :: x1  !< Target interface positions [H]
+  real, dimension(n0),   intent(in)    :: h0  !< Initial cell widths usually in [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(n0+1), intent(in)    :: x0  !< Source interface positions [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(n1),   intent(inout) :: h1  !< Output cell widths [H ~> m or kg m-2] or [Z ~> m]
+  real, dimension(n1+1), intent(inout) :: x1  !< Target interface positions [H ~> m or kg m-2] or [Z ~> m]
   real,                  intent(in)    :: h_neglect !< A negligibly small width for the
-                                           !! purpose of cell reconstructions [H]
-                                           !! in the same units as h0.
-  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width
-                                           !! for the purpose of edge value calculations [H]
-                                           !! in the same units as h0.
+                                           !! purpose of cell reconstructions in the same
+                                           !! units as h0 [H ~> m or kg m-2] or [Z ~> m].
+  real,        optional, intent(in)    :: h_neglect_edge !< A negligibly small width for the
+                                           !! purpose of edge value calculations in the same
+                                           !! units as h0 [H ~> m or kg m-2] or [Z ~> m]
 
   real, dimension(n0,2) :: ppoly0_E   ! Polynomial edge values [R ~> kg m-3]
-  real, dimension(n0,2) :: ppoly0_S   ! Polynomial edge slopes [R H-1]
+  real, dimension(n0,2) :: ppoly0_S   ! Polynomial edge slopes [R H-1 ~> kg m-4 or m-1] or [R Z-1 ~> kg m-4]
   real, dimension(n0,DEGREE_MAX+1) :: ppoly0_C  ! Polynomial interpolant coeficients on the local 0-1 grid [R ~> kg m-3]
   integer :: degree
 

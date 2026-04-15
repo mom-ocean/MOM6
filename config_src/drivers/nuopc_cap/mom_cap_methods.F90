@@ -27,7 +27,7 @@ use MOM_domains,               only: pass_var
 use mpp_domains_mod,           only: mpp_get_compute_domain
 
 ! By default make data private
-implicit none; private
+implicit none ; private
 
 ! Public member functions
 public :: mom_set_geomtype
@@ -76,12 +76,16 @@ end subroutine mom_set_geomtype
 !> This function has a few purposes:
 !! (1) it imports surface fluxes using data from the mediator; and
 !! (2) it can apply restoring in SST and SSS.
-subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, rc)
-  type(ocean_public_type)       , intent(in)    :: ocean_public       !< Ocean surface state
-  type(ocean_grid_type)         , intent(in)    :: ocean_grid         !< Ocean model grid
-  type(ESMF_State)              , intent(inout) :: importState        !< incoming data from mediator
-  type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary !< Ocean boundary forcing
-  integer                       , intent(inout) :: rc                 !< Return code
+!! (3) it can convert imported stokes drift components to zero if they are missing.
+subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary, &
+                      set_missing_stks_to_zero, rc)
+  type(ocean_public_type)       , intent(in)    :: ocean_public             !< Ocean surface state
+  type(ocean_grid_type)         , intent(in)    :: ocean_grid               !< Ocean model grid
+  logical                       , intent(in)    :: set_missing_stks_to_zero !< If true, set
+                                                                            !! missing stokes drift to zero
+  type(ESMF_State)              , intent(inout) :: importState              !< incoming data from mediator
+  type(ice_ocean_boundary_type) , intent(inout) :: ice_ocean_boundary       !< Ocean boundary forcing
+  integer                       , intent(inout) :: rc                       !< Return code
 
   ! Local Variables
   integer                         :: i, j, ib, ig, jg, n
@@ -245,7 +249,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
     call state_getimport(importState, 'Foxx_hrain', isc, iec, jsc, jec, &
          ice_ocean_boundary%hrain, areacor=med2mod_areacor, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
 
   !----
   ! enthalpy from frozen precipitation (hsnow)
@@ -254,7 +258,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
     call state_getimport(importState, 'Foxx_hsnow', isc, iec, jsc, jec, &
          ice_ocean_boundary%hsnow, areacor=med2mod_areacor, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
 
   !----
   ! enthalpy from liquid runoff (hrofl)
@@ -263,7 +267,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
     call state_getimport(importState, 'Foxx_hrofl', isc, iec, jsc, jec, &
          ice_ocean_boundary%hrofl, areacor=med2mod_areacor, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
 
   !----
   ! enthalpy from frozen runoff (hrofi)
@@ -272,7 +276,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
     call state_getimport(importState, 'Foxx_hrofi', isc, iec, jsc, jec, &
          ice_ocean_boundary%hrofi, areacor=med2mod_areacor, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
 
   !----
   ! enthalpy from liquid glc runoff (hrofl_glc)
@@ -281,7 +285,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
     call state_getimport(importState, 'Foxx_hrofl_glc', isc, iec, jsc, jec, &
          ice_ocean_boundary%hrofl_glc, areacor=med2mod_areacor, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
 
   !----
   ! enthalpy from frozen glc runoff (hrofi_glc)
@@ -290,7 +294,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
     call state_getimport(importState, 'Foxx_hrofi_glc', isc, iec, jsc, jec, &
          ice_ocean_boundary%hrofi_glc, areacor=med2mod_areacor, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
   !----
   ! enthalpy from evaporation (hevap)
   !----
@@ -298,7 +302,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
     call state_getimport(importState, 'Foxx_hevap', isc, iec, jsc, jec, &
          ice_ocean_boundary%hevap, areacor=med2mod_areacor, rc=rc)
     if (ChkErr(rc,__LINE__,u_FILE_u)) return
-  end if
+  endif
 
   !----
   ! enthalpy from condensation (hcond)
@@ -387,7 +391,7 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
           areacor=med2mod_areacor, do_sum=.true., esmf_ind=esmf_ind, rc=rc)
       if (ChkErr(rc,__LINE__,u_FILE_u)) return
     enddo
-  end if
+  endif
 
   !----
   ! dust flux from sea ice
@@ -541,12 +545,26 @@ subroutine mom_import(ocean_public, ocean_grid, importState, ice_ocean_boundary,
         do i = isc, iec
           ig = i + ocean_grid%isc - isc
           !rotate
-          do ib = 1, nsc
-            ice_ocean_boundary%ustkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stkx(i,j,ib) &
-                 - ocean_grid%sin_rot(ig,jg)*stky(i,j,ib)
-            ice_ocean_boundary%vstkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stky(i,j,ib) &
-                 + ocean_grid%sin_rot(ig,jg)*stkx(i,j,ib)
-          enddo
+          if (set_missing_stks_to_zero) then
+            do ib = 1, nsc
+              if ((abs(stkx(i,j,ib)-9.99E20_ESMF_KIND_R8) <= 0.01_ESMF_KIND_R8)) then
+                ice_ocean_boundary%ustkb(i,j,ib) = 0.0
+                ice_ocean_boundary%vstkb(i,j,ib) = 0.0
+              else
+                ice_ocean_boundary%ustkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stkx(i,j,ib) &
+                    - ocean_grid%sin_rot(ig,jg)*stky(i,j,ib)
+                ice_ocean_boundary%vstkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stky(i,j,ib) &
+                    + ocean_grid%sin_rot(ig,jg)*stkx(i,j,ib)
+              endif
+            enddo
+          else
+            do ib = 1, nsc
+              ice_ocean_boundary%ustkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stkx(i,j,ib) &
+                  - ocean_grid%sin_rot(ig,jg)*stky(i,j,ib)
+              ice_ocean_boundary%vstkb(i,j,ib) = ocean_grid%cos_rot(ig,jg)*stky(i,j,ib) &
+                  + ocean_grid%sin_rot(ig,jg)*stkx(i,j,ib)
+            enddo
+          endif
           ! apply masks
           ice_ocean_boundary%ustkb(i,j,:) = ice_ocean_boundary%ustkb(i,j,:) * ocean_grid%mask2dT(ig,jg)
           ice_ocean_boundary%vstkb(i,j,:) = ice_ocean_boundary%vstkb(i,j,:) * ocean_grid%mask2dT(ig,jg)

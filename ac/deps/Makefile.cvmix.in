@@ -1,0 +1,30 @@
+# Makefile template for CVMix
+#
+# Compiler flags are configured by autoconf's configure script.
+#
+# Source code dependencies are configured by makedep and saved to Makefile.dep.
+
+FC = @FC@
+LD = @FC@
+AR = @AR@
+PYTHON = @PYTHON@
+MAKEDEP = @MAKEDEP@
+
+DEFS = @DEFS@
+CPPFLAGS = @CPPFLAGS@
+FCFLAGS = @FCFLAGS@
+LDFLAGS = @LDFLAGS@
+LIBS = @LIBS@
+ARFLAGS = @ARFLAGS@
+
+-include Makefile.dep
+
+# Generate Makefile from template
+Makefile: Makefile.in config.status
+	./config.status
+
+
+.PHONY: depend
+depend: Makefile.dep
+Makefile.dep:
+	$(PYTHON) $(MAKEDEP) $(DEFS) -o Makefile.dep -e -x libcvmix.a @srcdir@/src/shared

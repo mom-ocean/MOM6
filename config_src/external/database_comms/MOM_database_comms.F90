@@ -8,7 +8,7 @@ use MOM_file_parser,                only : param_file_type
 use MOM_error_handler,              only : MOM_error, WARNING
 use database_client_interface,      only : dbclient_type
 
-implicit none; private
+implicit none ; private
 
 !> Control structure to store Database communication related parameters and objects
 type, public :: dbcomms_CS_type

@@ -1560,8 +1560,8 @@ logical function size_mismatch_3d(var_a, var_b, turns, size_msg)
                          (size(var_a,2) /= size(var_b,1)) .or. &
                          (size(var_a,3) /= size(var_b,3)) )
   endif
-  write(size_msg, '(3(I8), " vs ", 3(I8))') size(var_a,1), size(var_a,2), size(var_a,3), &
-                                           size(var_b,1), size(var_b,2), size(var_b,3)
+  write(size_msg, '(3(1x,I0), " vs ", 3(1x,I0))') size(var_a,1), size(var_a,2), size(var_a,3), &
+                                                  size(var_b,1), size(var_b,2), size(var_b,3)
 end function size_mismatch_3d
 
 
@@ -1689,11 +1689,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
 
     restartpath = trim(directory) // trim(restartname)
 
-    if (num_files < 10) then
-      write(suffix,'("_",I1)') num_files
-    else
-      write(suffix,'("_",I2)') num_files
-    endif
+    write(suffix,'("_",I0)') num_files
 
     length = len_trim(restartpath)
     if (length < 3) then  ! This case is very uncommon but this test avoids segmentation-faults.
@@ -1725,15 +1721,15 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
       endif
       if (verbose) then
         if (pos == CENTER) then
-          write(mesg, '(" is in CENTER position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+          write(mesg, '(" is in CENTER position, checksum range",4(1x,I0))') isL, ieL, jsL, jeL
         elseif (pos == CORNER) then
-          write(mesg, '(" is in CORNER position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+          write(mesg, '(" is in CORNER position, checksum range",4(1x,I0))') isL, ieL, jsL, jeL
         elseif (pos == NORTH_FACE) then
-          write(mesg, '(" is in NORTH_FACE position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+          write(mesg, '(" is in NORTH_FACE position, checksum range",4(1x,I0))') isL, ieL, jsL, jeL
         elseif (pos == EAST_FACE) then
-          write(mesg, '(" is in EAST_FACE position, checksum range ",4(I8))') isL, ieL, jsL, jeL
+          write(mesg, '(" is in EAST_FACE position, checksum range",4(1x,I0))') isL, ieL, jsL, jeL
         else
-          write(mesg, '(" is in another position, ",I4,", checksum range ",4(I8))') pos, isL, ieL, jsL, jeL
+          write(mesg, '(" is in another position, ",I0,", checksum range",4(1x,I0))') pos, isL, ieL, jsL, jeL
         endif
         call MOM_mesg(trim(var_name)//mesg)
       endif
@@ -1860,8 +1856,7 @@ subroutine restore_state(filename, directory, day, G, CS)
     exit
   enddo
 
-  if (n>num_file) call MOM_error(WARNING,"MOM_restart: " // &
-                                 "No times found in restart files.")
+  if (n>num_file) call MOM_error(WARNING, "MOM_restart: No times found in restart files.")
 
   ! Check the remaining files for different times and issue a warning
   ! if they differ from the first time.
@@ -1873,9 +1868,9 @@ subroutine restore_state(filename, directory, day, G, CS)
       deallocate(time_vals)
 
       if (t1 /= t2 .and. is_root_PE()) then
-        write(mesg,'("WARNING: Restart file ",I2," has time ",F10.4,"whereas &
-         &simulation is restarted at ",F10.4," (differing by ",F10.4,").")')&
-               m,t1,t2,t1-t2
+        write(mesg,'("WARNING: Restart file ",I0," has time ",F10.4,"whereas &
+              &simulation is restarted at ",F10.4," (differing by ",F10.4,").")') &
+              m, t1, t2, t1-t2
         call MOM_error(WARNING, "MOM_restart: "//mesg)
       endif
     enddo
@@ -2151,11 +2146,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
         endif
         filepath = trim(directory) // trim(restartname)
 
-        if (num_restart < 10) then
-          write(suffix,'("_",I1)') num_restart
-        else
-          write(suffix,'("_",I2)') num_restart
-        endif
+        write(suffix,'("_",I0)') num_restart
         if (num_restart > 0) filepath = trim(filepath) // suffix
 
         filepath = trim(filepath)//".nc"
@@ -2203,10 +2194,10 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
         if (present(global_files)) global_files(nf) = .true.
         if (present(file_paths)) file_paths(nf) = filepath
         if (is_root_pe() .and. (present(IO_handles))) &
-          call MOM_error(NOTE,"MOM_restart: MOM run restarted using : "//trim(filepath))
+          call MOM_error(NOTE, "MOM_restart: MOM run restarted using : "//trim(filepath))
       else
         if (present(IO_handles)) &
-          call MOM_error(WARNING,"MOM_restart: Unable to find restart file : "//trim(filepath))
+          call MOM_error(WARNING, "MOM_restart: Unable to find restart file : "//trim(filepath))
       endif
 
     endif
@@ -2407,8 +2398,7 @@ subroutine restart_error(CS)
   if (CS%novars > CS%max_fields) then
     write(num,'(I0)') CS%novars
     call MOM_error(FATAL,"MOM_restart: Too many fields registered for " // &
-           "restart.  Set MAX_FIELDS to be at least " // &
-           trim(adjustl(num)) // " in the MOM input file.")
+           "restart.  Set MAX_FIELDS to be at least "//trim(num)//" in the MOM input file.")
   else
     call MOM_error(FATAL,"MOM_restart: Unspecified fatal error.")
   endif

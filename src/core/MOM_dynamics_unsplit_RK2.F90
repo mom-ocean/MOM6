@@ -68,14 +68,14 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_error_handler, only : MOM_set_verbosity
 use MOM_file_parser, only : get_param, log_param, log_version, param_file_type
 use MOM_get_input, only : directories
-use MOM_time_manager, only : time_type, time_type_to_real, operator(+)
+use MOM_time_manager, only : time_type, operator(+)
 use MOM_time_manager, only : operator(-), operator(>), operator(*), operator(/)
 
 use MOM_ALE, only : ALE_CS
 use MOM_boundary_update, only : update_OBC_data, update_OBC_CS
 use MOM_barotropic, only : barotropic_CS
 use MOM_continuity, only : continuity, continuity_init, continuity_CS, continuity_stencil
-use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS
+use MOM_CoriolisAdv, only : CorAdCalc, CoriolisAdv_init, CoriolisAdv_CS, CoriolisAdv_stencil
 use MOM_debugging, only : check_redundant
 use MOM_grid, only : ocean_grid_type
 use MOM_hor_index, only : hor_index_type
@@ -254,11 +254,13 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   real :: dt_visc   ! The time step for a part of the update due to viscosity [T ~> s]
   logical :: dyn_p_surf
   integer :: i, j, k, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: cor_stencil  ! Stencil size for Coriolis schemes [nondim]
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
   dt_pred = dt * CS%BE
+  cor_stencil = CoriolisAdv_stencil(CS%CoriolisAdv)
 
-  h_av(:,:,:) = 0; hp(:,:,:) = 0
+  h_av(:,:,:) = 0 ; hp(:,:,:) = 0
   up(:,:,:) = 0
   vp(:,:,:) = 0
 
@@ -294,12 +296,15 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   ! and could/should be optimized out. -AJA
   call continuity(u_in, v_in, h_in, hp, uh, vh, dt_pred, G, GV, US, CS%continuity_CSp, CS%OBC, pbv)
   call cpu_clock_end(id_clock_continuity)
-  call pass_var(hp, G%Domain, clock=id_clock_pass)
-  call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
+  call pass_var(hp, G%Domain, halo=cor_stencil, clock=id_clock_pass)
+  call pass_vector(uh, vh, G%Domain, halo=cor_stencil, clock=id_clock_pass)
+  if (cor_stencil > 2) then
+    call pass_vector(u_in, v_in, G%Domain, halo=cor_stencil, clock=id_clock_pass)
+  endif
 
 ! h_av = (h + hp)/2  (used in PV denominator)
   call cpu_clock_begin(id_clock_mom_update)
-  do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
+  do k=1,nz ; do j=js-cor_stencil,je+cor_stencil ; do i=is-cor_stencil,ie+cor_stencil
     h_av(i,j,k) = (h_in(i,j,k) + hp(i,j,k)) * 0.5
   enddo ; enddo ; enddo
   call cpu_clock_end(id_clock_mom_update)
@@ -368,7 +373,7 @@ subroutine step_MOM_dyn_unsplit_RK2(u_in, v_in, h_in, tv, visc, Time_local, dt, 
   call pass_vector(uh, vh, G%Domain, clock=id_clock_pass)
 
 ! h_av <- (h + hp)/2   (centered at n-1/2)
-  do k=1,nz ; do j=js-2,je+2 ; do i=is-2,ie+2
+  do k=1,nz ; do j=js-cor_stencil,je+cor_stencil ; do i=is-cor_stencil,ie+cor_stencil
     h_av(i,j,k) = (h_in(i,j,k) + hp(i,j,k)) * 0.5
   enddo ; enddo ; enddo
 
@@ -531,7 +536,7 @@ end subroutine register_restarts_dyn_unsplit_RK2
 subroutine initialize_dyn_unsplit_RK2(u, v, h, tv, Time, G, GV, US, param_file, diag, CS, &
                                       Accel_diag, Cont_diag, MIS, &
                                       OBC, update_OBC_CSp, ALE_CSp, set_visc, &
-                                      visc, dirs, ntrunc, cont_stencil)
+                                      visc, dirs, ntrunc, cont_stencil, dyn_h_stencil)
   type(ocean_grid_type),                     intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),                   intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),                     intent(in)    :: US   !< A dimensional unit scaling type
@@ -574,6 +579,9 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, tv, Time, G, GV, US, param_file, 
                                                        !! velocity is truncated (this should be 0).
   integer,                                   intent(out)   :: cont_stencil !< The stencil for
                                                        !! thickness from the continuity solver.
+  integer,                                   intent(out)   :: dyn_h_stencil !< The stencil for
+                                                       !! thickness for the dynamics based on the
+                                                       !! continuity solver and Coriolis scheme.
 
   !   This subroutine initializes all of the variables that are used by this
   ! dynamic core, including diagnostics and the cpu clocks.
@@ -583,9 +591,6 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, tv, Time, G, GV, US, param_file, 
   character(len=48) :: flux_units
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
-  logical :: use_correct_dt_visc
-  logical :: test_value  ! This is used to determine whether a logical parameter is being set explicitly.
-  logical :: explicit_bug, explicit_fix ! These indicate which parameters are set explicitly.
   integer :: isd, ied, jsd, jed, nz, IsdB, IedB, JsdB, JedB
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -604,7 +609,7 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, tv, Time, G, GV, US, param_file, 
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "BE", CS%be, &
                  "If SPLIT is true, BE determines the relative weighting "//&
-                 "of a  2nd-order Runga-Kutta baroclinic time stepping "//&
+                 "of a 2nd-order Runga-Kutta baroclinic time stepping "//&
                  "scheme (0.5) and a backward Euler scheme (1) that is "//&
                  "used for the Coriolis and inertial terms.  BE may be "//&
                  "from 0.5 to 1, but instability may occur near 0.5. "//&
@@ -620,33 +625,6 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, tv, Time, G, GV, US, param_file, 
                  units="nondim", default=0.0)
 
   call get_param(param_file, mdl, "UNSPLIT_DT_VISC_BUG", CS%dt_visc_bug, &
-                 "If false, use the correct timestep in the viscous terms applied in the first "//&
-                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
-                 "of the turbulent mixed layer properties for viscosity with unsplit or "//&
-                 "unsplit_RK2.  If true, an older incorrect value is used.", &
-                 default=.false., do_not_log=.true.)
-  ! This is used to test whether UNSPLIT_DT_VISC_BUG is being explicitly set.
-  call get_param(param_file, mdl, "UNSPLIT_DT_VISC_BUG", test_value, default=.true., do_not_log=.true.)
-  explicit_bug = CS%dt_visc_bug .eqv. test_value
-  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", use_correct_dt_visc, &
-                 "If true, use the correct timestep in the viscous terms applied in the first "//&
-                 "predictor step with the unsplit time stepping scheme, and in the calculation "//&
-                 "of the turbulent mixed layer properties for viscosity with unsplit or "//&
-                 "unsplit_RK2.", default=.true., do_not_log=.true.)
-  call get_param(param_file, mdl, "FIX_UNSPLIT_DT_VISC_BUG", test_value, default=.false., do_not_log=.true.)
-  explicit_fix = use_correct_dt_visc .eqv. test_value
-
-  if (explicit_bug .and. explicit_fix .and. (use_correct_dt_visc .eqv. CS%dt_visc_bug)) then
-    ! UNSPLIT_DT_VISC_BUG is being explicitly set, and should not be changed.
-    call MOM_error(FATAL, "UNSPLIT_DT_VISC_BUG and FIX_UNSPLIT_DT_VISC_BUG are both being set "//&
-                   "with inconsistent values.  FIX_UNSPLIT_DT_VISC_BUG is an obsolete "//&
-                   "parameter and should be removed.")
-  elseif (explicit_fix) then
-    call MOM_error(WARNING, "FIX_UNSPLIT_DT_VISC_BUG is an obsolete parameter.  "//&
-                   "Use UNSPLIT_DT_VISC_BUG instead (noting that it has the opposite sense).")
-    CS%dt_visc_bug = .not.use_correct_dt_visc
-  endif
-  call log_param(param_file, mdl, "UNSPLIT_DT_VISC_BUG", CS%dt_visc_bug, &
                  "If false, use the correct timestep in the viscous terms applied in the first "//&
                  "predictor step with the unsplit time stepping scheme, and in the calculation "//&
                  "of the turbulent mixed layer properties for viscosity with unsplit or "//&
@@ -673,9 +651,10 @@ subroutine initialize_dyn_unsplit_RK2(u, v, h, tv, Time, G, GV, US, param_file, 
   Accel_diag%PFu => CS%PFu ; Accel_diag%PFv => CS%PFv
   Accel_diag%CAu => CS%CAu ; Accel_diag%CAv => CS%CAv
 
-  call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp)
+  call continuity_init(Time, G, GV, US, param_file, diag, CS%continuity_CSp, CS%OBC)
   cont_stencil = continuity_stencil(CS%continuity_CSp)
   call CoriolisAdv_init(Time, G, GV, US, param_file, diag, CS%ADp, CS%CoriolisAdv)
+  dyn_h_stencil = max(cont_stencil, CoriolisAdv_stencil(CS%CoriolisAdv))
   if (CS%calculate_SAL) call SAL_init(h, tv, G, GV, US, param_file, CS%SAL_CSp)
   if (CS%use_tides) call tidal_forcing_init(Time, G, US, param_file, CS%tides_CSp)
   call PressureForce_init(Time, G, GV, US, param_file, diag, CS%PressureForce_CSp, CS%ADp, &

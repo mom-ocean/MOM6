@@ -178,8 +178,9 @@ end subroutine diag_remap_set_active
 
 !> Configure the vertical axes for a diagnostic remapping control structure.
 !! Reads a configuration parameters to determine coordinate generation.
-subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
+subroutine diag_remap_configure_axes(remap_cs, G, GV, US, param_file)
   type(diag_remap_ctrl),   intent(inout) :: remap_cs !< Diag remap control structure
+  type(ocean_grid_type),   intent(in)    :: G  !< The ocean's grid type
   type(verticalGrid_type), intent(in)    :: GV !< ocean vertical grid structure
   type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file structure
@@ -194,7 +195,7 @@ subroutine diag_remap_configure_axes(remap_cs, GV, US, param_file)
     layers        ! Numerical values for layer vertical coordinates, in unscaled units
                   ! that might be [m], [kg m-3] or [nondim], depending on the coordinate.
 
-  call initialize_regridding(remap_cs%regrid_cs, GV, US, GV%max_depth, param_file, mod, &
+  call initialize_regridding(remap_cs%regrid_cs, G, GV, US, GV%max_depth, param_file, mod, &
            trim(remap_cs%vertical_coord_name), "DIAG_COORD", trim(remap_cs%diag_coord_name))
   call set_regrid_params(remap_cs%regrid_cs, min_thickness=0., integrate_downward_for_e=.false.)
 

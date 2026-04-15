@@ -53,6 +53,9 @@ type, public :: continuity_PPM_CS ; private
                              !! discrepancies between the barotropic solution and
                              !! the sum of the layer thicknesses [L T-1 ~> m s-1].
   real :: CFL_limit_adjust   !< The maximum CFL of the adjusted velocities [nondim]
+  real :: h_marg_min         !< Negligible floor on h_marg, the marginal thickness
+                             !! used to calculate the partial derivative of transports
+                             !! with velocities [H ~> m or kg m-2]
   logical :: aggress_adjust  !< If true, allow the adjusted velocities to have a
                              !! relative CFL change up to 0.5.  False by default.
   logical :: vol_CFL         !< If true, use the ratio of the open face lengths
@@ -161,8 +164,8 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   x_first = (MOD(G%first_direction,2) == 0)
 
   if (present(visc_rem_u) .neqv. present(visc_rem_v)) call MOM_error(FATAL, &
-      "MOM_continuity_PPM: Either both visc_rem_u and visc_rem_v or neither"// &
-      " one must be present in call to continuity_PPM.")
+      "MOM_continuity_PPM: Either both visc_rem_u and visc_rem_v or neither "// &
+      "one must be present in call to continuity_PPM.")
 
   !$omp target enter data map(alloc: h_W, h_E, h_S, h_N)
 
@@ -2617,6 +2620,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
   type(ocean_OBC_type),              pointer     :: OBC !< Open boundaries control structure.
+  integer :: k      !< vertical grid index
 
   ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: slp ! The slopes per grid point [H ~> m or kg m-2]
@@ -2625,7 +2629,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
   real :: dMx, dMn     ! The difference between the local thickness and the maximum (dMx) or
                        ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
   character(len=256) :: mesg
-  integer :: i, j, k, isl, iel, jsl, jel, nz, n, stencil
+  integer :: i, j, isl, iel, jsl, jel, nz, n, stencil
   logical :: local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
 
@@ -2641,13 +2645,13 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, h_min, monotonic, sim
 
   if ((isl-stencil < G%isd) .or. (iel+stencil > G%ied)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_x called with a ", &
-               & "x-halo that needs to be increased by ",i2,".")') &
+               & "x-halo that needs to be increased by ",I0,".")') &
                stencil + max(G%isd-isl,iel-G%ied)
     call MOM_error(FATAL,mesg)
   endif
   if ((jsl < G%jsd) .or. (jel > G%jed)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_x called with a ", &
-               & "y-halo that needs to be increased by ",i2,".")') &
+               & "y-halo that needs to be increased by ",I0,".")') &
                max(G%jsd-jsl,jel-G%jed)
     call MOM_error(FATAL,mesg)
   endif
@@ -2760,6 +2764,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
                     !! arithmetic mean thicknesses as the default edge values
                     !! for a simple 2nd order scheme.
   type(ocean_OBC_type),              pointer     :: OBC !< Open boundaries control structure.
+  integer :: k      !< vertical grid index
 
   ! Local variables with useful mnemonic names.
   real, dimension(SZI_(G),SZJ_(G),SZK_(GV))  :: slp ! The slopes per grid point [H ~> m or kg m-2]
@@ -2768,7 +2773,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
   real :: dMx, dMn     ! The difference between the local thickness and the maximum (dMx) or
                        ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
   character(len=256) :: mesg
-  integer :: i, j, k, isl, iel, jsl, jel, nz, n, stencil
+  integer :: i, j, isl, iel, jsl, jel, nz, n, stencil
   logical :: local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
 
@@ -2784,13 +2789,13 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, h_min, monotonic, sim
 
   if ((isl < G%isd) .or. (iel > G%ied)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_y called with a ", &
-               & "x-halo that needs to be increased by ",i2,".")') &
+               & "x-halo that needs to be increased by ",I0,".")') &
                max(G%isd-isl,iel-G%ied)
     call MOM_error(FATAL,mesg)
   endif
   if ((jsl-stencil < G%jsd) .or. (jel+stencil > G%jed)) then
     write(mesg,'("In MOM_continuity_PPM, PPM_reconstruction_y called with a ", &
-                 & "y-halo that needs to be increased by ",i2,".")') &
+                 & "y-halo that needs to be increased by ",I0,".")') &
                  stencil + max(G%jsd-jsl,jel-G%jed)
     call MOM_error(FATAL,mesg)
   endif
@@ -2989,22 +2994,32 @@ pure function ratio_max(a, b, maxrat) result(ratio)
 end function ratio_max
 
 !> Initializes continuity_ppm_cs
-subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
+subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS, OBC)
   type(time_type), target, intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),   intent(in)    :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in)    :: GV   !< Vertical grid structure.
-  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
+  type(unit_scale_type),   intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< A structure indicating
                   !! the open file to parse for model parameter values.
   type(diag_ctrl), target, intent(inout) :: diag !< A structure that is used to
                   !! regulate diagnostic output.
   type(continuity_PPM_CS), intent(inout) :: CS   !< Module's control structure.
+  type(ocean_OBC_type),    pointer       :: OBC  !< Open boundaries control structure.
+  logical :: local_open_BC, use_h_marg_min
+  type(OBC_segment_type), pointer :: segment => NULL()
+  integer :: n
 
   !> This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_continuity_PPM" ! This module's name.
+  character(len=256) :: mesg
 
   CS%initialized = .true.
+
+  local_open_BC = .false.
+  if (associated(OBC)) then
+    local_open_BC = OBC%open_u_BCs_exist_globally
+  endif
 
 ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -3063,12 +3078,35 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS)
                  "If true, use the marginal face areas from the continuity "//&
                  "solver for use as the weights in the barotropic solver. "//&
                  "Otherwise use the transport averaged areas.", default=.true.)
+  call get_param(param_file, mdl, "CONT_USE_H_MARG_MIN", use_h_marg_min, &
+                 "If true, the marginal thickness used and returned from continuity "//&
+                 "is bounded from below by a sub-roundoff value. Otherwise the "//&
+                 "minimum is 0.", default=.false.)
   CS%diag => diag
   !$omp target update to(CS)
 
   id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)
   id_clock_update = cpu_clock_id('(Ocean continuity update)', grain=CLOCK_ROUTINE)
   id_clock_correct = cpu_clock_id('(Ocean continuity correction)', grain=CLOCK_ROUTINE)
+
+  if (use_h_marg_min) then
+    CS%h_marg_min = GV%H_subroundoff
+  else
+    CS%h_marg_min = 0.
+  endif
+
+  if (local_open_BC) then
+    do n=1, OBC%number_of_segments
+      segment => OBC%segment(n)
+      if (associated(segment%h_Reg)) then
+        if (.not. allocated(segment%h_Reg%h_res)) then
+          write(mesg,'("In MOM_continuity_PPM, continuity_PPM_init called with ", &
+                & "badly configured h_res.")')
+          call MOM_error(FATAL, mesg)
+        endif
+      endif
+    enddo
+  endif
 
 end subroutine continuity_PPM_init
 

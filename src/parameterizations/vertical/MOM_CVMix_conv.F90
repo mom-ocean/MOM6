@@ -87,7 +87,7 @@ logical function CVMix_conv_init(Time, G, GV, US, param_file, diag, CS)
   ! be aplied in the boundary layer
   if (useEPBL) then
     call MOM_error(WARNING, 'MOM_CVMix_conv_init: '// &
-           'CVMix convection may not be properly applied when ENERGETICS_SFC_PBL = True'//&
+           'CVMix convection may not be properly applied when ENERGETICS_SFC_PBL = True '//&
            'as convective mixing might occur in the boundary layer.')
   endif
 

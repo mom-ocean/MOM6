@@ -199,7 +199,7 @@ subroutine PressureForce_Mont_nonBouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pb
     ! of self-attraction and loading.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0)
+      SSH(i,j) = min(-G%bathyT(i,j) - G%meanSL(i,j), 0.0)
     enddo ; enddo
     if (use_EOS) then
       !$OMP parallel do default(shared)
@@ -478,7 +478,7 @@ subroutine PressureForce_Mont_Bouss(h, tv, PFu, PFv, G, GV, US, CS, p_atm, pbce,
     ! barotropic tides.
     !$OMP parallel do default(shared)
     do j=Jsq,Jeq+1
-      do i=Isq,Ieq+1 ; SSH(i,j) = min(-G%bathyT(i,j) - G%Z_ref, 0.0) ; enddo
+      do i=Isq,Ieq+1 ; SSH(i,j) = min(-G%bathyT(i,j) - G%meanSL(i,j), 0.0) ; enddo
       do k=1,nz ; do i=Isq,Ieq+1
         SSH(i,j) = SSH(i,j) + h(i,j,k)*GV%H_to_Z
       enddo ; enddo
@@ -692,18 +692,18 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   if (use_EOS) then
     if (present(rho_star)) then
       do concurrent (j=Jsq:Jeq+1)
-      do concurrent (i=Isq:Ieq+1)
-        Ihtot(i,j) = GV%H_to_Z / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
-        pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_Z
-      enddo
-
-      do k=2,nz
         do concurrent (i=Isq:Ieq+1)
-          pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) &
-              * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
+          Ihtot(i,j) = GV%H_to_Z / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
+          pbce(i,j,1) = GFS_scale * rho_star(i,j,1) * GV%H_to_Z
+        enddo
+
+        do k=2,nz
+          do concurrent (i=Isq:Ieq+1)
+            pbce(i,j,k) = pbce(i,j,k-1) + (rho_star(i,j,k) - rho_star(i,j,k-1)) &
+                * ((e(i,j,K) - e(i,j,nz+1)) * Ihtot(i,j))
+          enddo
         enddo
       enddo
-    enddo
     else
       !$omp target data &
       !$omp   map(alloc: EOSdom, press, T_int, S_int, rho_in_situ) &
@@ -717,7 +717,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
       do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
         Ihtot(i,j) = GV%H_to_Z / ((e(i,j,1) - e(i,j,nz+1)) + dz_neglect)
-        press(i,j) = -Rho0xG * (e(i,j,1) - G%Z_ref)
+        press(i,j) = -Rho0xG * (e(i,j,1) - G%meanSL(i,j))
       enddo
 
       call calculate_density(tv%T(:,:,1), tv%S(:,:,1), press, rho_in_situ, &
@@ -729,7 +729,7 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
 
       do k=2,nz
         do concurrent (j=Jsq:Jeq+1, i=Isq:Ieq+1)
-          press(i,j) = -Rho0xG * (e(i,j,K) - G%Z_ref)
+          press(i,j) = -Rho0xG * (e(i,j,K) - G%meanSL(i,j))
           T_int(i,j) = 0.5 * (tv%T(i,j,k-1) + tv%T(i,j,k))
           S_int(i,j) = 0.5 * (tv%S(i,j,k-1) + tv%S(i,j,k))
         enddo
@@ -906,7 +906,7 @@ subroutine PressureForce_Mont_init(Time, G, GV, US, param_file, diag, CS, SAL_CS
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%R_to_kg_m3)
   call get_param(param_file, mdl, "TIDES", CS%tides, &

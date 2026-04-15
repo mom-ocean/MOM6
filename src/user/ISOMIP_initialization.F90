@@ -372,7 +372,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
       do j=js,je ; do i=is,ie
         xi0 = 0.0
         do k = 1,nz
-          !T0(k) = T_Ref; S0(k) = S_Ref
+          !T0(k) = T_Ref ; S0(k) = S_Ref
           xi1 = xi0 + 0.5 * h(i,j,k)
           S0(k) = S_sur - dS_dz * xi1
           T0(k) = T_sur - dT_dz * xi1
@@ -428,7 +428,7 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
   end select
 
   ! for debugging
-  !i=G%iec; j=G%jec
+  !i = G%iec ; j = G%jec
   !do k = 1,nz
   !  call calculate_density(T(i,j,k), S(i,j,k),0.0,rho_tmp,eqn_of_state, scale=US%kg_m3_to_R)
   !  write(mesg,*) 'k,h,T,S,rho,Rlay',k,US%Z_to_m*h(i,j,k),US%C_to_degC*T(i,j,k),US%S_to_ppt*S(i,j,k),rho_tmp,GV%Rlay(k)
@@ -437,9 +437,9 @@ subroutine ISOMIP_initialize_temperature_salinity ( T, S, h, depth_tot, G, GV, U
 
 end subroutine ISOMIP_initialize_temperature_salinity
 
-!> Sets up the the inverse restoration time (Idamp), and
-! the values towards which the interface heights and an arbitrary
-! number of tracers should be restored within each sponge.
+!> Sets up the inverse restoration time (Idamp), and
+!! the values towards which the interface heights and an arbitrary
+!! number of tracers should be restored within each sponge.
 subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp, ACSp)
   type(ocean_grid_type),   intent(in) :: G    !< The ocean's grid structure.
   type(verticalGrid_type), intent(in) :: GV   !< The ocean's vertical grid structure.
@@ -625,7 +625,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
     enddo ; enddo
 
     ! for debugging
-    !i=G%iec; j=G%jec
+    !i = G%iec ; j = G%jec
     !do k = 1,nz
     !  call calculate_density(T(i,j,k), S(i,j,k), 0.0, rho_tmp, tv%eqn_of_state, scale=US%kg_m3_to_R)
     !  write(mesg,*) 'Sponge - k,h,T,S,rho,Rlay',k,h(i,j,k),T(i,j,k),S(i,j,k),rho_tmp,GV%Rlay(k)
@@ -677,7 +677,7 @@ subroutine ISOMIP_initialize_sponges(G, GV, US, tv, depth_tot, PF, use_ALE, CSp,
     call MOM_read_data(filename, salt_var, S(:,:,:), G%Domain, scale=US%ppt_to_S)
 
     ! for debugging
-    !i=G%iec; j=G%jec
+    !i = G%iec ; j = G%jec
     !do k = 1,nz
     !  call calculate_density(T(i,j,k), S(i,j,k), 0.0, rho_tmp, tv%eqn_of_state, scale=US%kg_m3_to_R)
     !  write(mesg,*) 'Sponge - k,eta,T,S,rho,Rlay',k,eta(i,j,k),T(i,j,k),&

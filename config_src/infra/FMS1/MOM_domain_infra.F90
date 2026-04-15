@@ -1215,7 +1215,7 @@ subroutine redistribute_array_2d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1234,7 +1234,7 @@ subroutine redistribute_array_3d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
@@ -1253,7 +1253,7 @@ subroutine redistribute_array_4d(Domain1, array1, Domain2, array2, complete)
   ! Local variables
   logical :: do_complete
 
-  do_complete=.true.;if (PRESENT(complete)) do_complete = complete
+  do_complete=.true. ; if (PRESENT(complete)) do_complete = complete
 
   call mpp_redistribute(Domain1, array1, Domain2, array2, do_complete)
 
