@@ -873,9 +873,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp target enter data &
   !$omp   map(alloc: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
-  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, ubt_prev, vbt_prev, &
-  !$omp       ubt_trans, vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, &
-  !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
+  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, &
+  !$omp       Cor_ref_u, Cor_ref_v, DCor_u, DCor_v, &
+  !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
   !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, &
   !$omp       PFu_avg, PFv_avg)
 
@@ -2351,9 +2351,9 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
   !$omp target exit data &
   !$omp   map(release: ubt_Cor, vbt_Cor, wt_u, wt_v, av_rem_u, av_rem_v, ubt_wtd, vbt_wtd, Coru_avg, &
   !$omp       Corv_avg, LDu_avg, LDv_avg, e_anom, q, ubt, vbt, bt_rem_u, bt_rem_v, BT_force_u, &
-  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, ubt_prev, vbt_prev, &
-  !$omp       ubt_trans, vbt_trans, Cor_u, Cor_v, Cor_ref_u, Cor_ref_v, PFu, PFv, DCor_u, DCor_v, &
-  !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_pred, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
+  !$omp       BT_force_v, u_accel_bt, v_accel_bt, uhbt, vhbt, uhbt0, vhbt0, &
+  !$omp       Cor_ref_u, Cor_ref_v, DCor_u, DCor_v, &
+  !$omp       Datu, Datv, f_4_u, f_4_v, eta, eta_sum, eta_wtd, eta_IC, eta_PF, eta_PF_1, &
   !$omp       d_eta_PF, gtot_E, gtot_W, gtot_N, gtot_S, eta_src, dyn_coef_eta, BTCL_u, BTCL_v, &
   !$omp       PFu_avg, PFv_avg)
 

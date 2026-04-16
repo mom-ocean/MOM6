@@ -698,9 +698,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: bhstr_xx, bhstr_xy) if (CS%biharmonic)
 
   !$omp target enter data map(alloc: hrat_min) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
   !$omp target enter data map(alloc: visc_bound_rem) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
   !$omp target enter data map(alloc: sh_xy_q) &
   !$omp   if (CS%id_sh_xy_q > 0)
 
@@ -2344,9 +2344,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: bhstr_xx, bhstr_xy) if (CS%biharmonic)
 
   !$omp target exit data map(delete: hrat_min) &
-  !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
   !$omp target exit data map(delete: visc_bound_rem) &
-  !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
 
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
@@ -3431,7 +3431,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   !$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Kh_max_xy) &
-  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !$omp   if (CS%Laplacian .and. CS%bound_Kh)
   !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
@@ -3444,10 +3444,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
   !$omp target enter data map(to: CS%Biharm_const2_xy) &
   !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
-  !$omp target enter data map(to: CS%Ah_max_xx) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target enter data map(to: CS%Ah_max_xy) &
-  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
+  !$omp target enter data map(to: CS%Ah_max_xx) if (CS%bound_Ah)
+  !$omp target enter data map(to: CS%Ah_max_xy) if (CS%bound_Ah)
 
 end subroutine hor_visc_init
 
@@ -3676,7 +3674,7 @@ subroutine hor_visc_end(CS)
   !$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Kh_max_xy) &
-  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !$omp   if (CS%Laplacian .and. CS%bound_Kh)
   !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
@@ -3689,10 +3687,8 @@ subroutine hor_visc_end(CS)
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
   !$omp target exit data map(delete: CS%Biharm_const2_xy) &
   !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
-  !$omp target exit data map(delete: CS%Ah_max_xx) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target exit data map(delete: CS%Ah_max_xy) &
-  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
+  !$omp target exit data map(delete: CS%Ah_max_xx) if (CS%bound_Ah)
+  !$omp target exit data map(delete: CS%Ah_max_xy) if (CS%bound_Ah)
 
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)
