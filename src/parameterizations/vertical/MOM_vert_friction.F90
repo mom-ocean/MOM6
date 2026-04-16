@@ -3208,7 +3208,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
     endif
   else  ! Do not report accelerations leading to large velocities.
     ntrunc = 0
-
     do concurrent (k=1:nz, j=js:je, I=Isq:Ieq) DO_LOCALITY(reduce(+: ntrunc))
       if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
       elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
@@ -3229,13 +3228,11 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
     do_any_write =.false.
     trunc_any = .false.
 
-    !do J=Jsq,Jeq ; do i=is,ie
     do concurrent (J=Jsq:Jeq, i=is:ie)
       dowrite(i,J) = .false.
       vel_report(i,J) = 3.0e8 * US%m_s_to_L_T
     enddo
 
-    !do k=1,nz ; do J=Jsq,Jeq ; do i=is,ie
     do concurrent (k=1:nz, J=Jsq:Jeq, i=is:ie) &
         DO_LOCALITY(reduce(.or.: trunc_any, do_any_write))
       if (abs(v(i,J,k)) < CS%vel_underflow) v(i,J,k) = 0.0
@@ -3258,7 +3255,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
 
     if (trunc_any) then
       ntrunc = 0
-
       do concurrent (k=1:nz, J=Jsq:Jeq, i=is:ie) DO_LOCALITY(reduce(+: ntrunc))
         if ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
           v(i,J,k) = (-0.9*CS%CFL_trunc) * (G%areaT(i,j+1) / (dt * G%dx_Cv(i,J)))
@@ -3271,7 +3267,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
         endif
       enddo
 
-      CS%ntrunc = CS%ntrunc + 1
+      CS%ntrunc = CS%ntrunc + ntrunc
     endif
 
     if (do_any_write) then
@@ -3284,7 +3280,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
     endif
   else  ! Do not report accelerations leading to large velocities.
     ntrunc = 0
-
     do concurrent (k=1:nz, J=Jsq:Jeq, i=is:ie) DO_LOCALITY(reduce(+: ntrunc))
       if (abs(v(i,J,k)) < CS%vel_underflow) then ; v(i,J,k) = 0.0
       elseif ((v(i,J,k) * (dt * G%dx_Cv(i,J))) * G%IareaT(i,j+1) < -CS%CFL_trunc) then
@@ -3298,7 +3293,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
       endif
     enddo
 
-    CS%ntrunc = CS%ntrunc + 1
+    CS%ntrunc = CS%ntrunc + ntrunc
   endif
 
   !$omp target exit data map(release: u_old, v_old)
