@@ -3152,8 +3152,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
   !$omp target enter data map(alloc: dowrite, vel_report)
   !$omp target enter data map(alloc: u_old, v_old)
 
-!**** new
-
   if (len_trim(CS%u_trunc_file) > 0) then
     do_any_write = .false.
     trunc_any = .false.
@@ -3209,6 +3207,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
       endif ; enddo ; enddo
     endif
   else  ! Do not report accelerations leading to large velocities.
+    ntrunc = 0
+
     do concurrent (k=1:nz, j=js:je, I=Isq:Ieq) DO_LOCALITY(reduce(+: ntrunc))
       if (abs(u(I,j,k)) < CS%vel_underflow) then ; u(I,j,k) = 0.0
       elseif ((u(I,j,k) * (dt * G%dy_Cu(I,j))) * G%IareaT(i+1,j) < -CS%CFL_trunc) then
