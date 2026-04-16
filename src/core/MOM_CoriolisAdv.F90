@@ -285,7 +285,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   !$omp target enter data map(alloc: Area_h, Area_q)
 
-  do concurrent (j=Js_q:Je_q+1, I=Isq:Ieq+1)
+  do concurrent (j=Js_q:Je_q+1, I=Is_q:Ie_q+1)
     Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo
 
