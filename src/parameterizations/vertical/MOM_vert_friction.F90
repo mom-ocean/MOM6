@@ -3203,7 +3203,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
     endif
 
     if (do_any_write) then
-      !$omp target update from (u_old)
+      !$omp target update from (u_old, vel_report)
       do j=js,je ; do I=Isq,Ieq ; if (dowrite(I,j)) then
         ! Call a diagnostic reporting subroutines are called if unphysically large values are found.
         call write_u_accel(I, j, u_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
@@ -3275,7 +3275,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
     endif
 
     if (do_any_write) then
-      !$omp target update from(v_old)
+      !$omp target update from(v_old, vel_report)
       do J=Jsq,Jeq ; do i=is,ie ; if (dowrite(i,J)) then
         ! Call a diagnostic reporting subroutines are called if unphysically large values are found.
         call write_v_accel(i, J, v_old, h, ADp, CDp, dt, G, GV, US, CS%PointAccel_CSp, &
@@ -3300,7 +3300,7 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
     CS%ntrunc = CS%ntrunc + ntrunc
   endif
 
-  !$omp target exit data map(release: u_old, v_old)
+  !$omp target exit data map(release: u_old, v_old, dowrite, vel_report)
 end subroutine vertvisc_limit_vel
 
 
