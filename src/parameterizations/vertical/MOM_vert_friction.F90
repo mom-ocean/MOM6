@@ -936,6 +936,10 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
   endif
 
+  !$omp target enter data map(to: visc%Ray_v) if (allocated(visc%Ray_v))
+
+  !$omp target teams loop collapse(2) &
+  !$omp   private(b1, c1, d1, Ray, b_denom_1)
   do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
     Ray = 0.
     if (allocated(visc%Ray_v)) Ray = visc%Ray_v(i,J,1)

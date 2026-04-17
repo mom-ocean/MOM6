@@ -1113,6 +1113,7 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   endif
 
   if (G%nonblocking_updates) then
+    !$omp target update from(u_inst, v_inst)
     call cpu_clock_end(id_clock_vertvisc)
     call start_group_pass(CS%pass_uv, G%Domain, clock=id_clock_pass)
     call cpu_clock_begin(id_clock_vertvisc)
