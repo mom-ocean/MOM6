@@ -678,7 +678,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
         ! Calculate the mean velocity magnitude over the bottommost CS%Hbbl of
         ! the water column for determining the quadratic bottom drag.
         ! Used in ustar(i,j)
-        do concurrent (i=is:ie, do_i(i,j)) DO_LOCALITY(local(k))
+        do concurrent (i=is:ie, do_i(i,j)) DO_LOCALITY(local(k, cdrag_sqrt)) &
+            DO_LOCALITY(local_init(cdrag_sqrt_H, cdrag_sqrt_H_RL))
           htot_vel = 0.0 ; hwtot = 0.0 ; hutot = 0.0
           dztot_vel = 0.0 ; dzwtot = 0.0
           Thtot = 0.0 ; Shtot = 0.0 ; SpV_htot = 0.0
@@ -754,8 +755,8 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
           endif
         enddo
       else
-        !*!do concurrent (i=is:ie) ; ustar(i,j) = cdrag_sqrt_H*CS%drag_bg_vel ; enddo
-        do concurrent (i=is:ie)
+        do concurrent (i=is:ie) DO_LOCALITY(local(cdrag_sqrt)) &
+            DO_LOCALITY(local_init(cdrag_sqrt_H))
           if (CS%bottomdragmap) then
             if (m==1) then
               cdrag_sqrt = sqrt(CS%cdrag_u(i,j))
@@ -797,13 +798,16 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
     ! rotation (h_f) and stratification (h_N):
     !    ( h / h_f )^2 + ( h / h_N ) = 1
     ! When stratification dominates h_N<<h_f, and vice versa.
-    !$omp target teams loop collapse(2) thread_limit(128) &
-    !$omp   private(k, ustarsq, htot, dztot, Thtot, Shtot, oldfn, Dfn, Dh, Ddz, frac_used, Rhtot, &
-    !$omp   C2f, ustH, bbl_thick, Vol_bbl_chan, vol_below, D_vel, Dp, tmp, Dm, crv, slope, &
-    !$omp   max_dL_trig_itt, max_norm_err_trig, max_norm_err_iter, norm_err_trig, norm_err_iter, &
-    !$omp   dL_trig_itt, vol_err_trig, L_trig, L, vol_err_iter, BBL_visc_frac, BBL_frac, &
-    !$omp   cdrag_conv, h_vel_pos, Cell_width, gam, Rayleigh, v_at_u, u_at_v, kv_bbl, h_sum, &
-    !$omp   I_hwtot, h_bbl_fr, root)
+    !$omp target teams loop collapse(2) thread_limit(128) private( &
+    !$omp   k, ustarsq, htot, dztot, Thtot, Shtot, oldfn, Dfn, Dh, Ddz, &
+    !$omp   frac_used, Rhtot, C2f, ustH, bbl_thick, Vol_bbl_chan, vol_below, &
+    !$omp   D_vel, D_vel_p, D_vel_m, Dp, tmp, Dm, crv, slope, &
+    !$omp   max_dL_trig_itt, max_norm_err_trig, max_norm_err_iter, &
+    !$omp   norm_err_trig, norm_err_iter, dL_trig_itt, vol_err_trig, L_trig, &
+    !$omp   L, vol_err_iter, BBL_visc_frac, BBL_frac, cdrag_conv, h_vel_pos, &
+    !$omp   Cell_width, gam, Rayleigh, v_at_u, u_at_v, kv_bbl, h_sum, &
+    !$omp   I_hwtot, h_bbl_fr, root, cdrag &
+    !$omp ) firstprivate(cdrag_L_to_H, cdrag_RL_to_H)
     do j=jstart,jeq ; do i=is,ie ; if (do_i(i,j)) then
       ! The 400.0 in this expression is the square of a Ci introduced in KW99, eq. 2.22.
       ustarsq = Rho0x400_G * ustar(i,j)**2 ! Note not in units of u*^2 but [H R ~> kg m-2 or kg2 m-5]
