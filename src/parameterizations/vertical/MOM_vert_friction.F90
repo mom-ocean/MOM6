@@ -3198,7 +3198,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
               (CS%h_u(I,j,k) > H_report)) ntrunc = ntrunc + 1
         endif
       enddo
-
       CS%ntrunc = CS%ntrunc + ntrunc
     endif
 
@@ -3223,9 +3222,8 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
         if (((I >= G%isc) .and. (I <= G%iec) .and. (j >= G%jsc) .and. (j <= G%jec)) .and. &
             (CS%h_u(I,j,k) > H_report)) ntrunc = ntrunc + 1
       endif
-
-      CS%ntrunc = CS%ntrunc + ntrunc
     enddo
+    CS%ntrunc = CS%ntrunc + ntrunc
   endif
 
   if (len_trim(CS%v_trunc_file) > 0) then
@@ -3270,7 +3268,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
               (CS%h_v(i,J,k) > H_report)) ntrunc = ntrunc + 1
         endif
       enddo
-
       CS%ntrunc = CS%ntrunc + ntrunc
     endif
 
@@ -3296,7 +3293,6 @@ subroutine vertvisc_limit_vel(u, v, h, ADp, CDp, forces, visc, dt, G, GV, US, CS
             (CS%h_v(i,J,k) > H_report)) ntrunc = ntrunc + 1
       endif
     enddo
-
     CS%ntrunc = CS%ntrunc + ntrunc
   endif
 
