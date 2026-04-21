@@ -3179,6 +3179,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   allocate(CS%pbv%por_layer_widthV(isd:ied,JsdB:JedB,nz+1), source=1.0)
   !$omp target enter data map(to: CS%pbv)
   !$omp target enter data map(to: CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
+  !$omp target enter data map(to: CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV)
 
   ! Use the Wright equation of state by default, unless otherwise specified
   ! Note: this line and the following block ought to be in a separate
@@ -4638,8 +4639,9 @@ subroutine MOM_end(CS)
   if (CS%use_ALE_algorithm) call ALE_end(CS%ALE_CSp)
 
   !deallocate porous topography variables
-  !$omp target exit data map(release: CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
+  !$omp target exit data map(delete: CS%pbv%por_face_areaU, CS%pbv%por_face_areaV)
   deallocate(CS%pbv%por_face_areaU) ; deallocate(CS%pbv%por_face_areaV)
+  !$omp target exit data map(delete: CS%pbv%por_layer_widthU, CS%pbv%por_layer_widthV)
   deallocate(CS%pbv%por_layer_widthU) ; deallocate(CS%pbv%por_layer_widthV)
 
   ! NOTE: Allocated in PressureForce_FV_Bouss
