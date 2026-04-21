@@ -250,6 +250,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   logical :: Stokes_VF
   real :: u_v, v_u      ! u_v is the u velocity at v point, v_u is the v velocity at u point [L T-1 ~> m s-1]
   real :: q_v, q_u      ! PV at the u and v points [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1]
+  logical :: use_weno   ! True if using one of the WENO schemes
   integer :: seventh_order, fifth_order, third_order ! Order of accuracy for the WENO calculations
   real :: u_q8(8) ! Eight-point zonal velocity at WENO stencils [L T-1 ~> m s-1]
   real :: u_q6(6) ! Six-point zonal velocity at WENO stencils [L T-1 ~> m s-1]
@@ -276,8 +277,11 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   stencil = CoriolisAdv_stencil(CS)
 
-  if ((CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO) .or. (CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO) .or. &
-      (CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO)) then
+  use_weno = CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO
+
+  if (use_weno) then
     Is_q = is - stencil ; Ie_q = ie + stencil - 1 ; Js_q = js - stencil ; Je_q = je + stencil - 1
   else
     Is_q = G%IscB - 1 ; Ie_q = G%IecB + 1 ; Js_q = G%JscB - 1 ; Je_q = G%JecB + 1
@@ -330,6 +334,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target enter data map(alloc: dvdx, dudy)
   !$omp target enter data map(alloc: hArea_u, hArea_v)
   !$omp target enter data map(alloc: rel_vort, abs_vort, q, Ih_q)
+  !$omp target enter data map(alloc: h_q) if (use_weno)
   !$omp target enter data map(alloc: a, b, c, d, ep_u, ep_v)
   !$omp target enter data map(alloc: KE, KEx, KEy)
   ! TODO: These Stokes_VF fields seem associated with diagnostics
@@ -592,9 +597,17 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     do concurrent (J=Js_q:Je_q, I=Is_q:Ie_q)
       hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
       Ih_q(I,J) = Area_q(I,J) / (hArea_q + vol_neglect)
-      h_q(I,J) = hArea_q / max(Area_q(I,J), area_neglect)
       q(I,J) = abs_vort(I,J) * Ih_q(I,J)
     enddo
+
+    ! NOTE: `h_q` is only used by WENO and was pulled out of the above loop to
+    !   improve GPU performance, but it may need to be moved back.
+    if (use_weno) then
+      do concurrent (J=Js_q:Je_q, I=Is_q:Ie_q)
+        hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
+        h_q(I,J) = hArea_q / max(Area_q(I,J), area_neglect)
+      enddo
+    endif
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
@@ -821,7 +834,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       enddo
     elseif (CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO) then
-      ! TODO: GPU data transfers
+      !$omp target update from(u, vh, abs_vort, h_q, q)
       do j=js,je ; do I=Isq,Ieq
         v_u = 0.25*G%IdxCu(I,j)*((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
         ! check whether there is masked land points in the stencil
@@ -869,8 +882,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
         endif
       enddo ; enddo
+      !$omp target update to(CAu)
     elseif (CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO) then
-      ! TODO: GPU data transfers
+      !$omp target update from(u, vh, abs_vort, h_q, q)
       do j=js,je ; do I=Isq,Ieq
         v_u = 0.25*G%IdxCu(I,j)*((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
         third_order = (G%mask2dCu(I,j-2) * G%mask2dCu(I,j-1) * G%mask2dCu(I,j) * &
@@ -906,7 +920,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       enddo ; enddo
     elseif (CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO) then
-      ! TODO: GPU data transfers
+      !$omp target update from(u, vh, abs_vort, h_q, q)
       do j=js,je ; do I=Isq,Ieq
         v_u = 0.25*G%IdxCu(I,j)*((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
         third_order = (G%mask2dCu(I,j-2) * G%mask2dCu(I,j-1) * G%mask2dCu(I,j) * &
@@ -931,6 +945,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
           CAu(I,j,k) = (q_u * v_u)
         endif
       enddo ; enddo
+      !$omp target update to(CAu)
     endif
 
     ! Add in the additional terms with Arakawa & Lamb.
@@ -1059,7 +1074,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
       enddo
     elseif (CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO) then
-      ! TODO: GPU data transfer
+      !$omp target update from(v, uh, abs_vort, h_q, q)
       do J=Jsq,Jeq ; do i=is,ie
         u_v = 0.25*G%IdyCv(i,J)*((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
 
@@ -1108,8 +1123,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
       enddo ; enddo
+      !$omp target update to(CAv)
     elseif (CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO) then
-      ! TODO: GPU data transfer
+      !$omp target update from(v, uh, abs_vort, h_q, q)
       do J=Jsq,Jeq ; do i=is,ie
         u_v = 0.25*G%IdyCv(i,J)*((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
 
@@ -1147,8 +1163,9 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
       enddo ; enddo
+      !$omp target update to(CAv)
     elseif (CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO) then
-      ! TODO: GPU data transfer
+      !$omp target update from(v, uh, abs_vort, h_q, q)
       do J=Jsq,Jeq ; do i=is,ie
         u_v = 0.25*G%IdyCv(i,J)*((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
 
@@ -1176,6 +1193,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
       enddo ; enddo
+      !$omp target update to(CAv)
     endif
     ! Add in the additonal terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
@@ -1268,6 +1286,7 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   !$omp target exit data map(delete: dvdx, dudy)
   !$omp target exit data map(delete: hArea_u, hArea_v)
   !$omp target exit data map(delete: rel_vort, abs_vort, q, Ih_q)
+  !$omp target exit data map(delete: h_q) if (use_weno)
   !$omp target exit data map(delete: a, b, c, d, ep_u, ep_v)
   !$omp target exit data map(delete: KE, KEx, KEy)
   !$omp target exit data map(delete: dvSdx, duSdy, stk_vort, qS) if (Stokes_VF)
@@ -1991,6 +2010,7 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   character(len=40)  :: mdl = "MOM_CoriolisAdv" ! This module's name.
   character(len=20)  :: tmpstr
   character(len=400) :: mesg
+  logical :: use_weno
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
@@ -2057,8 +2077,11 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
             "#define CORIOLIS_SCHEME "//trim(tmpstr)//" found in input file.")
   end select
 
-  if (CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO .or. &
-          CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO .or. CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO) then
+  use_weno = CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO
+
+  if (use_weno) then
     call get_param(param_file, mdl, "WENO_VELOCITY_SMOOTH", CS%weno_velocity_smooth, &
             "If true, use velocity to compute weighting for WENO. ", &
                   default=.false.)
