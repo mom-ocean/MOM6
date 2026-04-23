@@ -134,8 +134,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
 
   !$omp target update to(uhtr, vhtr, h_end)
 
-  !$omp target enter data map(to: OBC) map(alloc: domore_u, domore_v, uhr, vhr, uh_neglect, &
-  !$omp   vh_neglect, hprev, local_advect_scheme, Reg, Reg%Tr(:))
+  !$omp target enter data map(to: OBC, Reg, Reg%Tr(:)) map(alloc: domore_u, domore_v, uhr, vhr, uh_neglect, &
+  !$omp   vh_neglect, hprev, local_advect_scheme)
 
   do concurrent (k=1:nz, j=jsd:jed)
     domore_u(j,k) = .false.
@@ -417,7 +417,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
     endif
   endif
 
-  !$omp target exit data map(from: hprev) map(release: uhr, vhr, uh_neglect, vh_neglect, domore_u, &
+  !$omp target exit data map(release: hprev, uhr, vhr, uh_neglect, vh_neglect, domore_u, &
   !$omp   domore_v, local_advect_scheme, OBC, Reg, Reg%Tr(:))
 
   call cpu_clock_end(id_clock_advect)
