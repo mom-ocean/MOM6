@@ -2679,14 +2679,27 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   do concurrent (J=jsvf-1:jevf, i=isvf-1:ievf+1)
     vbt_trans(i,J) = 0.0
   enddo
+
   if (integral_BT_cont) then
-    ubt_int(:,:) = 0.0 ; uhbt_int(:,:) = 0.0
-    vbt_int(:,:) = 0.0 ; vhbt_int(:,:) = 0.0
+    !$omp target enter data map(alloc: ubt_int, uhbt_int, vbt_int, vhbt_int, cfl_ltd_vol)
+
+    do concurrent (j=CS%jsdw:CS%jedw, I=CS%isdw-1:CS%iedw)
+      ubt_int(I,j) = 0.
+      uhbt_int(I,j) = 0.
+    enddo
+
+    do concurrent (J=CS%jsdw-1:CS%jedw, i=CS%isdw:CS%iedw)
+      vbt_int(i,J) = 0.
+      vhbt_int(i,J) = 0.
+    enddo
+
+    do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw:CS%iedw)
+      cfl_ltd_vol(i,j) = huge(GV%Z_to_H)
+    enddo
   endif
 
   do concurrent (j=CS%jsdw:CS%jedw, i=CS%isdw:CS%iedw)
     p_surf_dyn(i,j) = 0.0
-    cfl_ltd_vol(i,j) = huge(GV%Z_to_H)
   enddo
 
   if (CS%bt_limit_integral_transport) then
@@ -3121,6 +3134,9 @@ subroutine btstep_timeloop(eta, ubt, vbt, uhbt0, Datu, BTCL_u, vhbt0, Datv, BTCL
   !$omp target exit data &
   !$omp   map(release: uhbt, vhbt, ubt_prev, vbt_prev, ubt_trans, vbt_trans, PFu, PFv, Cor_u, Cor_v, &
   !$omp       p_surf_dyn, submerged)
+
+  !$omp target exit data map(delete: ubt_int, uhbt_int, vbt_int, vhbt_int, cfl_ltd_vol) &
+  !$omp   if (integral_BT_cont)
 
   ! Reset the time information in the diag type.
   if (do_hifreq_output) call enable_averaging(time_int_in, time_end_in, CS%diag)
