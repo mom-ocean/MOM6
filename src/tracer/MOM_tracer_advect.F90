@@ -115,6 +115,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   integer :: IsdB, IedB, JsdB, JedB
   integer :: stencil_local          ! Stencil for the local adection scheme
   integer :: local_advect_scheme(Reg%ntr) ! contains the list of the advection for each tracer
+  integer :: domore_k_tmp
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
@@ -134,7 +135,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   !$omp target update to(uhtr, vhtr, h_end)
 
   !$omp target enter data map(to: OBC) map(alloc: domore_u, domore_v, uhr, vhr, uh_neglect, &
-  !$omp   vh_neglect, hprev, domore_k, local_advect_scheme, Reg, Reg%Tr(:))
+  !$omp   vh_neglect, hprev, local_advect_scheme, Reg, Reg%Tr(:))
 
   do concurrent (k=1:nz, j=jsd:jed)
     domore_u(j,k) = .false.
@@ -298,14 +299,14 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
 
           !   At this point, domore_k is global.  Change it so that it indicates
           ! whether any work is needed on a layer on this processor.
-          domore_k(k) = 0
-          do concurrent (j=jsv:jev, domore_u(j,k))
-            domore_k(k) = 1
+          domore_k_tmp = 0
+          do concurrent (j=jsv:jev, domore_u(j,k)) DO_LOCALITY(reduce(max:domore_k_tmp))
+            domore_k_tmp = 1
           enddo
-          do concurrent (J=jsv+stencil-1:jev-stencil, domore_v(J,k))
-            domore_k(k) = 1
+          do concurrent (J=jsv+stencil-1:jev-stencil, domore_v(J,k)) DO_LOCALITY(reduce(max:domore_k_tmp))
+            domore_k_tmp = 1
           enddo
-
+          domore_k(k) = domore_k_tmp
         enddo ! k-loop
       endif
     endif
@@ -335,15 +336,14 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
                       isv, iev, jsv, jev, k, G, GV, US, local_advect_scheme)
 
         ! Update domore_k(k) for the next iteration
-        !$omp target
-        domore_k(k) = 0
-        !$omp end target
-        do concurrent (j=jsv-stencil:jev+stencil, domore_u(j,k))
-          domore_k(k) = 1
+        domore_k_tmp = 0
+        do concurrent (j=jsv-stencil:jev+stencil, domore_u(j,k)) DO_LOCALITY(reduce(max:domore_k_tmp))
+          domore_k_tmp = 1
         enddo
-        do concurrent (J=jsv-1:jev, domore_v(J,k))
-          domore_k(k) = 1
+        do concurrent (J=jsv-1:jev, domore_v(J,k)) DO_LOCALITY(reduce(max:domore_k_tmp))
+          domore_k_tmp = 1
         enddo
+        domore_k(k) = domore_k_tmp
 
       endif ; enddo
 
@@ -362,15 +362,14 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
                       isv, iev, jsv, jev, k, G, GV, US, local_advect_scheme)
 
         ! Update domore_k(k) for the next iteration
-        !$omp target
-        domore_k(k) = 0
-        !$omp end target
-        do concurrent (j=jsv:jev, domore_u(j,k))
-          domore_k(k) = 1
+        domore_k_tmp = 0
+        do concurrent (j=jsv:jev, domore_u(j,k)) DO_LOCALITY(reduce(max:domore_k_tmp))
+          domore_k_tmp = 1
         enddo
-        do concurrent (J=jsv-1:jev, domore_v(J,k))
-          domore_k(k) = 1
+        do concurrent (J=jsv-1:jev, domore_v(J,k)) DO_LOCALITY(reduce(max:domore_k_tmp))
+          domore_k_tmp = 1
         enddo
+        domore_k(k) = domore_k_tmp
       endif ; enddo
 
     endif ! x_first
@@ -382,7 +381,6 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
 
     ! Exit if there are no layers that need more iterations.
     if (isv > is-stencil) then
-      !$omp target update from(domore_k)
       do_any = 0
       call cpu_clock_begin(id_clock_sync)
       call sum_across_PEs(domore_k(:), nz)
@@ -420,7 +418,7 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
   endif
 
   !$omp target exit data map(from: hprev) map(release: uhr, vhr, uh_neglect, vh_neglect, domore_u, &
-  !$omp   domore_v, local_advect_scheme, OBC, domore_k, Reg, Reg%Tr(:))
+  !$omp   domore_v, local_advect_scheme, OBC, Reg, Reg%Tr(:))
 
   call cpu_clock_end(id_clock_advect)
 
