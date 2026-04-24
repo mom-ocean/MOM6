@@ -18,6 +18,8 @@ use MOM_unit_scaling, only : unit_scale_type
 use MOM_variables, only : BT_cont_type, porous_barrier_type
 use MOM_verticalGrid, only : verticalGrid_type
 
+!$ use omp_lib, only: omp_get_num_devices
+
 implicit none ; private
 
 #include <MOM_memory.h>
@@ -71,6 +73,9 @@ type, public :: continuity_PPM_CS ; private
                              !! continuity solver for use as the weights in the
                              !! barotropic solver.  Otherwise use the transport
                              !! averaged areas.
+  integer :: TILE_SIZE_X     !< The x size of tiles used in array calculations.
+  integer :: TILE_SIZE_Y     !< The y size of tiles used in array calculations.
+
 end type continuity_PPM_CS
 
 !> A container for loop bounds
@@ -158,11 +163,11 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   integer :: TILE_SIZE_X !< Number of i-points in each GPU tile [nondim].
   integer :: TILE_SIZE_Y !< Number of j-points in each GPU tile [nondim].
 
-  ! could be made runtime modifiable
-#ifndef __NVCOMPILER_OPENMP_GPU
-  TILE_SIZE_X = 32
-  TILE_SIZE_Y = 4
-#endif
+  TILE_SIZE_X = CS%TILE_SIZE_X
+  TILE_SIZE_Y = CS%TILE_SIZE_Y
+  ! set defaults for CPU
+  if (TILE_SIZE_X == 0) TILE_SIZE_X = 32
+  if (TILE_SIZE_Y == 0) TILE_SIZE_Y = 4
 
   h_min = GV%Angstrom_H
 
@@ -178,24 +183,28 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
   !$omp target enter data map(alloc: h_W, h_E, h_S, h_N)
 
   if (x_first) then
-#ifdef __NVCOMPILER_OPENMP_GPU
-    TILE_SIZE_X = G%iedB-G%isdB+1
-    TILE_SIZE_Y = G%jed-G%jsd+1
-#endif
+
     !  First advect zonally, with loop bounds that accomodate the subsequent meridional advection.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.true.)
+    ! set default tile sizes for GPU
+    !$ if (omp_get_num_devices() > 0) then
+      !$ if (CS%TILE_SIZE_X == 0) TILE_SIZE_X = LB%ieh-LB%ish+2
+      !$ if (CS%TILE_SIZE_Y == 0) TILE_SIZE_Y = LB%jeh-LB%jsh+1
+    !$ endif
+
     call zonal_edge_thickness(hin, h_W, h_E, G, GV, US, CS, OBC, LB)
     call zonal_mass_flux(u, hin, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
                          TILE_SIZE_X, TILE_SIZE_Y, LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
     call continuity_zonal_convergence(h, uh, dt, G, GV, LB, hin)
 
-#ifdef __NVCOMPILER_OPENMP_GPU
-    TILE_SIZE_X = G%ied-G%isd+1
-    TILE_SIZE_Y = G%jedB-G%jsdB+1
-#endif
-
     !  Now advect meridionally, using the updated thicknesses to determine the fluxes.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
+
+    !$ if (omp_get_num_devices() > 0) then
+      !$ if (CS%TILE_SIZE_X == 0) TILE_SIZE_X = LB%ieh-LB%ish+1
+      !$ if (CS%TILE_SIZE_Y == 0) TILE_SIZE_Y = LB%jeh-LB%jsh+2
+    !$ endif
+
     call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC, LB)
     call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                               TILE_SIZE_X, TILE_SIZE_Y, &
@@ -204,24 +213,24 @@ subroutine continuity_PPM(u, v, hin, h, uh, vh, dt, G, GV, US, CS, OBC, pbv, uhb
 
   else  ! .not. x_first
 
-#ifdef __NVCOMPILER_OPENMP_GPU
-    TILE_SIZE_X = G%ied-G%isd+1
-    TILE_SIZE_Y = G%jedB-G%jsdB+1
-#endif
     !  First advect meridionally, with loop bounds that accomodate the subsequent zonal advection.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.true., j_stencil=.false.)
+    !$ if (omp_get_num_devices() > 0) then
+      !$ if (CS%TILE_SIZE_X == 0) TILE_SIZE_X = LB%ieh-LB%ish+1
+      !$ if (CS%TILE_SIZE_Y == 0) TILE_SIZE_Y = LB%jeh-LB%jsh+2
+    !$ endif
     call meridional_edge_thickness(hin, h_S, h_N, G, GV, US, CS, OBC, LB)
     call meridional_mass_flux(v, hin, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
                               TILE_SIZE_X, TILE_SIZE_Y, &
                               LB, vhbt, visc_rem_v, v_cor, BT_cont, dv_cor)
     call continuity_merdional_convergence(h, vh, dt, G, GV, LB, hin)
 
-#ifdef __NVCOMPILER_OPENMP_GPU
-    TILE_SIZE_X = G%iedB-G%isdB+1
-    TILE_SIZE_Y = G%jed-G%jsd+1
-#endif
     !  Now advect zonally, using the updated thicknesses to determine the fluxes.
     LB = set_continuity_loop_bounds(G, CS, i_stencil=.false., j_stencil=.false.)
+    !$ if (omp_get_num_devices() > 0) then
+      !$ if (CS%TILE_SIZE_X == 0) TILE_SIZE_X = LB%ieh-LB%ish+2
+      !$ if (CS%TILE_SIZE_Y == 0) TILE_SIZE_Y = LB%jeh-LB%jsh+1
+    !$ endif
     call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC, LB)
     call zonal_mass_flux(u, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
                          TILE_SIZE_X, TILE_SIZE_Y, LB, uhbt, visc_rem_u, u_cor, BT_cont, du_cor)
@@ -3194,6 +3203,12 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS, OBC)
                  "If true, the marginal thickness used and returned from continuity "//&
                  "is bounded from below by a sub-roundoff value. Otherwise the "//&
                  "minimum is 0.", default=.false.)
+  call get_param(param_file, mdl, "CONT_TILE_SIZE_X", CS%TILE_SIZE_X, &
+                 "The x size of tiles used in calculations. If 0, a default is "//&
+                 "chosen(32 for CPU, whole computational domain for GPU)", default = 0)
+  call get_param(param_file, mdl, "CONT_TILE_SIZE_Y", CS%TILE_SIZE_Y, &
+                 "The y size of tiles used in calculations. If 0, a default is "//&
+                 "chosen(4 for CPU, whole computational domain for GPU)", default = 0)
   CS%diag => diag
   !$omp target update to(CS)
 
