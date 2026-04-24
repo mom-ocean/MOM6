@@ -19,7 +19,7 @@ use MOM_open_boundary,  only : OBC_DIRECTION_N, OBC_DIRECTION_E, OBC_DIRECTION_S
 use MOM_open_boundary,  only : OBC_registry_type
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
-use MOM_time_manager,   only : time_type, time_type_to_real
+use MOM_time_manager,   only : time_type, time_to_real
 
 implicit none ; private
 
@@ -125,8 +125,7 @@ logical function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
                  "The timescale with which the inflowing open boundary velocities are nudged toward "//&
                  "their intended values with the Kelvin wave test case, or a negative value to keep "//&
                  "the value that is set when the OBC segments are initialized.", &
-                 units="s", default=1.0/(0.3*86400.), scale=US%s_to_T)
-                 !### Change the default nudging timescale to -1. or another value?
+                 units="s", default=-1.0, scale=US%s_to_T)
   call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "KELVIN_SET_OBC_INDEXING_BUGS", CS%indexing_bugs, &
@@ -249,7 +248,7 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
   if (G%grid_unit_to_L <= 0.) call MOM_error(FATAL, 'Kelvin_initialization.F90: '// &
           "Kelvin_set_OBC_data() is only set to work with Cartesian axis units.")
 
-  time_sec = US%s_to_T*time_type_to_real(Time)
+  time_sec = time_to_real(Time, scale=US%s_to_T)
   PI = 4.0*atan(1.0)
 
   turns = modulo(G%HI%turns, 4)
@@ -286,8 +285,8 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
     segment => OBC%segment(n)
     if (.not. segment%on_pe) cycle
 
-   unrot_dir = segment%direction
-   if (turns /= 0) unrot_dir = rotate_OBC_segment_direction(segment%direction, -turns)
+    unrot_dir = segment%direction
+    if (turns /= 0) unrot_dir = rotate_OBC_segment_direction(segment%direction, -turns)
 
     ! Apply values to the inflow end only.
     if ((unrot_dir == OBC_DIRECTION_E) .or. (unrot_dir == OBC_DIRECTION_N)) cycle
@@ -349,9 +348,19 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
             enddo
           endif
         else
-          ! Baroclinic, not rotated yet (and apparently not working as intended yet).
+          ! Baroclinic, not rotated yet
           segment%SSH(I,j) = 0.0
           segment%normal_vel_bt(I,j) = 0.0
+          ! Use inside bathymetry
+          if (segment%direction == OBC_DIRECTION_W) then
+            depth_tot_vel = depth_tot(i+1,j)
+          elseif (segment%direction == OBC_DIRECTION_S) then
+            depth_tot_vel = depth_tot(i,j+1)
+          elseif (segment%direction == OBC_DIRECTION_E) then
+            depth_tot_vel = depth_tot(i,j)
+          elseif (segment%direction == OBC_DIRECTION_N) then
+            depth_tot_vel = depth_tot(i,j)
+          endif
           ! I suspect that the velocities in both of the following loops should instead be
           !   normal_vel(I,j,k) = CS%inflow_amp * CS%u_struct(k) * exp(-lambda * y) * cos_wt
           ! In addition, there should be a specification of the interface-height anomalies at the
@@ -370,6 +379,16 @@ subroutine Kelvin_set_OBC_data(OBC, CS, G, GV, US, h, Time)
               segment%normal_vel(I,j,k) = (normal_sign*mag_int) * &
                    exp(-lambda * y) * cos(PI * CS%mode * (k - 0.5) / nz) * cos_wt
             enddo
+          endif
+          if (associated(segment%h_Reg)) then
+            if (allocated(segment%h_Reg%h)) then
+              do k=1,nz
+                segment%h_Reg%h(I,j,k) = depth_tot_vel / nz + &
+                              ((CS%mode * PI) * CS%inflow_amp / (N0 * nz)) * &
+                                          cos(((PI * k) * CS%mode) / nz) * &
+                                          exp(-lambda * y) * cos_wt
+              enddo
+            endif
           endif
         endif
       enddo ; enddo

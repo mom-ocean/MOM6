@@ -8,8 +8,6 @@ module MOM_io_infra
 use MOM_domain_infra,     only : MOM_domain_type, rescale_comp_data, AGRID, BGRID_NE, CGRID_NE
 use MOM_domain_infra,     only : domain2d, domain1d, CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_error_infra,      only : MOM_error=>MOM_err, NOTE, FATAL, WARNING, is_root_PE
-use MOM_string_functions, only : lowercase
-
 use fms2_io_mod,          only : fms2_open_file => open_file, check_if_open, fms2_close_file => close_file
 use fms2_io_mod,          only : fms2_flush_file => flush_file
 use fms2_io_mod,          only : FmsNetcdfDomainFile_t, FmsNetcdfFile_t, fms2_read_data => read_data
@@ -48,7 +46,8 @@ integer, parameter :: MULTIPLE = 401
 public :: open_file, open_ASCII_file, file_is_open, close_file, flush_file, file_exists
 public :: get_file_info, get_file_fields, get_file_times, get_filename_suffix
 public :: read_field, read_vector, write_metadata, write_field
-public :: field_exists, get_field_atts, get_field_size, get_axis_data, read_field_chksum
+public :: field_exists, get_field_atts, get_field_size, read_field_chksum
+public :: get_axis_size, get_axis_data, set_axis_data
 public :: io_infra_init, io_infra_end, MOM_namelist_file, check_namelist_error, write_version
 public :: stdout_if_root
 ! These types act as containers for information about files, fields and axes, respectively,
@@ -717,20 +716,61 @@ function find_index(vec) result(loc)
 end function find_index
 
 
+!> Get the axis size from an axistype
+function get_axis_size(axis) result(axis_size)
+  type(axistype), intent(in) :: axis
+    !< Infra axis
+  integer :: axis_size
+    !< Axis size
+
+  axis_size = size(axis%ax_data)
+end function get_axis_size
+
+
 !> Extracts and returns the axis data stored in an axistype.
-subroutine get_axis_data( axis, dat )
-  type(axistype),     intent(in)  :: axis !< An axis type
-  real, dimension(:), intent(out) :: dat  !< The data in the axis variable
+subroutine get_axis_data(axis, axis_name, axis_data)
+  type(axistype), intent(in) :: axis
+    !< Infra axis
+  character(len=256), intent(out) :: axis_name
+    !< Axis name
+  real, dimension(:), intent(out) :: axis_data
+    !< Axis points
 
   integer :: i
 
-  ! This routine might not be needed for MOM6.
   if (allocated(axis%ax_data)) then
-    if (size(axis%ax_data) > size(dat)) call MOM_error(FATAL, &
-      "get_axis_data called with too small of an output data array for "//trim(axis%name))
-    do i=1,size(axis%ax_data) ; dat(i) = axis%ax_data(i) ; enddo
+    if (size(axis%ax_data) > size(axis_data)) &
+      call MOM_error(FATAL, "get_axis_data called with too small of an " &
+          // "output data array for " // trim(axis%name) // ".")
+    do i=1,size(axis%ax_data)
+      axis_data(i) = axis%ax_data(i)
+    enddo
   endif
+
+  axis_name = axis%name
 end subroutine get_axis_data
+
+
+!> Return a new axistype based on axis specs
+subroutine set_axis_data(axis, axis_name, axis_data)
+  type(axistype), intent(inout) :: axis
+    !< Target axis
+  character(len=256), intent(in) :: axis_name
+    !< Target axis name
+  real, intent(in) :: axis_data(:)
+    !< Target axis values
+
+  axis%name = axis_name
+
+  if (allocated(axis%ax_data)) deallocate(axis%ax_data)
+  allocate(axis%ax_data(size(axis_data)))
+
+  axis%ax_data(:) = axis_data(:)
+
+  ! NOTE: We do not yet consider domain-decomposed axes.
+  axis%domain_decomposed = .false.
+end subroutine set_axis_data
+
 
 !> This routine uses the fms_io subroutine read_data to read a scalar named
 !! "fieldname" from a single or domain-decomposed file "filename".
@@ -2037,5 +2077,26 @@ function find_unlimited_dimension_name(fileobj) result(label)
   if (.not. allocated(label)) &
     label = ''
 end function find_unlimited_dimension_name
+
+! NOTE: `lowercase is duplicated from `src/framework/MOM_string_functions.F90`
+!   in order to avoid any dependency of the infra on the framework.
+
+!> Return a string in which all uppercase letters have been replaced by
+!! their lowercase counterparts.
+function lowercase(input_string)
+  character(len=*),     intent(in) :: input_string !< The string to modify
+  character(len=len(input_string)) :: lowercase !< The modified output string
+!   This function returns a string in which all uppercase letters have been
+! replaced by their lowercase counterparts.  It is loosely based on the
+! lowercase function in mpp_util.F90.
+  integer, parameter :: co=iachar('a')-iachar('A') ! case offset
+  integer :: k
+
+  lowercase = input_string
+  do k=1, len_trim(input_string)
+    if (lowercase(k:k) >= 'A' .and. lowercase(k:k) <= 'Z') &
+        lowercase(k:k) = achar(ichar(lowercase(k:k))+co)
+  enddo
+end function lowercase
 
 end module MOM_io_infra

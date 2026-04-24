@@ -143,7 +143,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   if (.not. associated(Reg)) call tracer_registry_init(param_file, Reg)
 
   if (Reg%ntr>=MAX_FIELDS_) then
-    write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I3," to allow for &
+    write(mesg,'("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I0," to allow for &
         &all the tracers being registered via register_tracer.")') Reg%ntr+1
     call MOM_error(FATAL,"MOM register_tracer: "//mesg)
   endif
@@ -237,7 +237,7 @@ subroutine register_tracer(tr_ptr, Reg, param_file, HI, GV, name, longname, unit
   if (present(diag_form)) Tr%diag_form = diag_form
 
   Tr%advect_scheme = -1
-  if(present(advect_scheme)) Tr%advect_scheme = advect_scheme
+  if (present(advect_scheme)) Tr%advect_scheme = advect_scheme
 
   Tr%t => tr_ptr
 
@@ -717,7 +717,7 @@ subroutine post_tracer_diagnostics_at_sync(Reg, h, diag_prev, diag, G, GV, dt)
   integer :: i, j, k, is, ie, js, je, nz, m
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
-  Idt = 0.; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
+  Idt = 0. ; if (dt/=0.) Idt = 1.0 / dt ! The "if" is in case the diagnostic is called for a zero length interval
 
   ! Tendency diagnostics need to be posted on the grid from the last call to this routine
   call diag_save_grids(diag)
@@ -799,7 +799,7 @@ subroutine post_tracer_transport_diagnostics(G, GV, Reg, h_diag, diag)
       enddo
       exit
     endif
-  endif; enddo
+  endif ; enddo
 
   do m=1,Reg%ntr ; if (Reg%Tr(m)%registry_diags) then
     Tr => Reg%Tr(m)
@@ -982,9 +982,9 @@ subroutine tracer_registry_init(param_file, Reg)
 
   init_calls = init_calls + 1
   if (init_calls > 1) then
-    write(mesg,'("tracer_registry_init called ",I3, &
+    write(mesg,'("tracer_registry_init called ",I0, &
       &" times with different registry pointers.")') init_calls
-    if (is_root_pe()) call MOM_error(WARNING,"MOM_tracer"//mesg)
+    if (is_root_pe()) call MOM_error(WARNING,"MOM_tracer "//mesg)
   endif
 
 end subroutine tracer_registry_init

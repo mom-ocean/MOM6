@@ -19,6 +19,7 @@ public PCM
 !!   average()                 *locally defined
 !!   f()                       *locally defined
 !!   dfdx()                    *locally defined
+!! - x()                       *locally defined
 !!   check_reconstruction()    *locally defined
 !!   unit_tests()              *locally defined
 !!   destroy()                 *locally defined
@@ -38,6 +39,8 @@ contains
   procedure :: f => f
   !> Implementation of the derivative of the PCM reconstruction at a point [A]
   procedure :: dfdx => dfdx
+  !> Implementation of solver for x: f(x)=t
+  procedure :: x => x
   !> Implementation of deallocation for PCM
   procedure :: destroy => destroy
   !> Implementation of check reconstruction for the PCM reconstruction
@@ -106,6 +109,24 @@ real function dfdx(this, k, x)
   dfdx = 0.
 
 end function dfdx
+
+!> Solver for x: f(x)=t
+real function x(this, k, t)
+  class(PCM), intent(in) :: this !< This reconstruction
+  integer,    intent(in) :: k    !< Cell number
+  real,       intent(in) :: t    !< Value to solve for [A]
+  real :: slp  ! Difference across cell [A]
+
+  slp = this%u_mean(min(k+1,this%n)) - this%u_mean(max(k-1,1))
+  if ( abs(slp) > 0. ) slp = sign(1., slp)
+  x = 0.5 ! Fall back if t==u_mean
+  ! if t>u_mean & slp=1 then x=1
+  ! if t<u_mean & slp=1 then x=0
+  ! if t>u_mean & slp=-1 then x=0
+  ! if t<u_mean & slp=-1 then x=1
+  ! if slp=0 then x=0.5
+  if ( abs(t - this%u_mean(k)) > 0. ) x = 0.5 + slp * sign(0.5, t - this%u_mean(k))
+end function x
 
 !> Average between xa and xb for cell k of a 1D PCM reconstruction [A]
 real function average(this, k, xa, xb)
@@ -182,6 +203,16 @@ logical function unit_tests(this, verbose, stdout, stderr)
   call test%real_arr(3, ul, (/0.,0.,0./), 'dfdx on left edge')
   call test%real_arr(3, um, (/0.,0.,0./), 'dfdx in center')
   call test%real_arr(3, ur, (/0.,0.,0./), 'dfdx on right edge')
+
+  call test%real_scalar( this%x(1,0.), 0., 'f-1(1,0)=0')
+  call test%real_scalar( this%x(1,1.), 0.5, 'f-1(1,1)=0.5')
+  call test%real_scalar( this%x(1,3.), 1., 'f-1(1,3)=1')
+  call test%real_scalar( this%x(2,1.), 0., 'f-1(2,1)=0')
+  call test%real_scalar( this%x(2,3.), 0.5, 'f-1(2,3)=0.5')
+  call test%real_scalar( this%x(2,5.), 1., 'f-1(2,5)=1')
+  call test%real_scalar( this%x(3,3.), 0., 'f-1(3,3)=0')
+  call test%real_scalar( this%x(3,5.), 0.5, 'f-1(3,5)=0.5')
+  call test%real_scalar( this%x(3,7.), 1., 'f-1(3,7)=1')
 
   do k = 1, 3
     um(k) = this%average(k, 0.5, 0.75)

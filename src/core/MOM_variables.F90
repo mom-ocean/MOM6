@@ -91,9 +91,9 @@ type, public :: thermo_var_ptrs
                          !! When conservative temperature is used, this is
                          !! constant and exactly 3991.86795711963 J degC-1 kg-1.
   logical :: T_is_conT = .false. !< If true, the temperature variable tv%T is
-                         !! actually the conservative temperature [degC].
+                         !! actually the conservative temperature [C ~> degC].
   logical :: S_is_absS = .false. !< If true, the salinity variable tv%S is
-                         !! actually the absolute salinity in units of [gSalt kg-1].
+                         !! actually the absolute salinity in units of [S ~> gSalt kg-1].
   real :: min_salinity   !< The minimum value of salinity when BOUND_SALINITY=True [S ~> ppt].
   real, allocatable, dimension(:,:,:) :: SpV_avg
                          !< The layer averaged in situ specific volume [R-1 ~> m3 kg-1].
@@ -404,7 +404,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
 
   is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
-  isdB = G%isdB ; iedB = G%iedB; jsdB = G%jsdB ; jedB = G%jedB
+  isdB = G%isdB ; iedB = G%iedB ; jsdB = G%jsdB ; jedB = G%jedB
 
   use_temp = .true. ; if (present(use_temperature)) use_temp = use_temperature
   alloc_integ = .true. ; if (present(do_integrals)) alloc_integ = do_integrals

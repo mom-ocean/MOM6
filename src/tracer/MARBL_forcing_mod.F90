@@ -378,7 +378,7 @@ contains
         endwhere
         fluxes%fracr_cat(i,j,:) = G%mask2dT(i,j) * fluxes%fracr_cat(i,j,:)
         fluxes%qsw_cat(i,j,:)   = (US%W_m2_to_QRZ_T * G%mask2dT(i,j)) * fluxes%qsw_cat(i,j,:)
-      enddo; enddo
+      enddo ; enddo
     endif
 
   end subroutine convert_driver_fields_to_forcings

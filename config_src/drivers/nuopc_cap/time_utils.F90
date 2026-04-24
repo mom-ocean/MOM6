@@ -20,7 +20,7 @@ use ESMF,               only: ESMF_LOGERR_PASSTHRU,ESMF_TimeInterval
 use ESMF,               only: ESMF_TimeIntervalGet, ESMF_TimeSet, ESMF_SUCCESS
 use MOM_cap_methods,    only: ChkErr
 
-implicit none; private
+implicit none ; private
 
 !> Converts calendar from FMS to ESMF format
 interface fms2esmf_cal

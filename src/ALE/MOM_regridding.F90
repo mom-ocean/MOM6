@@ -5,9 +5,10 @@
 !> Generates vertical grids as part of the ALE algorithm
 module MOM_regridding
 
-use MOM_error_handler, only : MOM_error, FATAL, WARNING, assert
+use MOM_error_handler, only : MOM_error, FATAL, WARNING, NOTE, assert
 use MOM_file_parser,   only : param_file_type, get_param, log_param
 use MOM_io,            only : file_exists, field_exists, field_size, MOM_read_data
+use MOM_io,            only : read_variable
 use MOM_io,            only : vardesc, var_desc, SINGLE_FILE
 use MOM_io,            only : MOM_netCDF_file, MOM_field
 use MOM_io,            only : create_MOM_file, MOM_write_field
@@ -16,6 +17,7 @@ use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : ocean_grid_type, thermo_var_ptrs
 use MOM_verticalGrid,  only : verticalGrid_type
 use MOM_EOS,           only : EOS_type, calculate_density
+use MOM_domains,       only : max_across_PEs, pass_var
 use MOM_string_functions, only : uppercase, extractWord, extract_integer, extract_real
 
 use MOM_remapping, only : remapping_CS
@@ -25,14 +27,20 @@ use regrid_consts, only : REGRIDDING_LAYER, REGRIDDING_ZSTAR
 use regrid_consts, only : REGRIDDING_RHO, REGRIDDING_SIGMA
 use regrid_consts, only : REGRIDDING_ARBITRARY, REGRIDDING_SIGMA_SHELF_ZSTAR
 use regrid_consts, only : REGRIDDING_HYCOM1, REGRIDDING_HYBGEN, REGRIDDING_ADAPTIVE
-use regrid_interp, only : interp_CS_type, set_interp_scheme, set_interp_extrap, set_interp_answer_date
+use regrid_interp, only : interp_CS_type
+use regrid_interp, only : set_interp_scheme, set_interp_extrap, set_interp_answer_date
 
-use coord_zlike,  only : init_coord_zlike, zlike_CS, set_zlike_params, build_zstar_column, end_coord_zlike
-use coord_sigma,  only : init_coord_sigma, sigma_CS, set_sigma_params, build_sigma_column, end_coord_sigma
+use coord_zlike,  only : zlike_CS
+use coord_zlike,  only : init_coord_zlike, set_zlike_params, build_zstar_column, end_coord_zlike
+use coord_sigma,  only : sigma_CS
+use coord_sigma,  only : init_coord_sigma, set_sigma_params, build_sigma_column, end_coord_sigma
 use coord_rho,    only : init_coord_rho, rho_CS, set_rho_params, build_rho_column, end_coord_rho
 use coord_rho,    only : old_inflate_layers_1d
-use coord_hycom,  only : init_coord_hycom, hycom_CS, set_hycom_params, build_hycom1_column, end_coord_hycom
-use coord_adapt,  only : init_coord_adapt, adapt_CS, set_adapt_params, build_adapt_column, end_coord_adapt
+use coord_hycom,  only : hycom_CS
+use coord_hycom,  only : init_coord_hycom, set_hycom_params, build_hycom1_column, end_coord_hycom
+use coord_hycom,  only : init_3d_coord_hycom
+use coord_adapt,  only : adapt_CS
+use coord_adapt,  only : init_coord_adapt, set_adapt_params, build_adapt_column, end_coord_adapt
 use MOM_hybgen_regrid, only : hybgen_regrid, hybgen_regrid_CS, init_hybgen_regrid, end_hybgen_regrid
 use MOM_hybgen_regrid, only : write_Hybgen_coord_file
 
@@ -68,6 +76,12 @@ type, public :: regridding_CS ; private
   !> A flag to indicate that the target_density arrays has been filled with data.
   logical :: target_density_set = .false.
 
+  !> Nominal HYCOM1 3D near-surface resolution [Z ~> m]
+  real, allocatable, dimension(:,:,:) :: coordinateResolution_3d
+
+  !> Nominal HYCOM1 3D density of interfaces [R ~> kg m-3]
+  real, allocatable, dimension(:,:,:) :: target_density_3d
+
   !> This array is set by function set_regrid_max_depths()
   !! It specifies the maximum depth that every interface is allowed to take [H ~> m or kg m-2].
   real, dimension(:), allocatable :: max_interface_depths
@@ -88,8 +102,15 @@ type, public :: regridding_CS ; private
   !> Minimum thickness allowed when building the new grid through regridding [H ~> m or kg m-2].
   real :: min_thickness
 
+  !> If true, call adjust_interface_motion() after initial grid generation
+  logical :: use_adjust_interface_motion
+
   !> Reference pressure for potential density calculations [R L2 T-2 ~> Pa]
   real :: ref_pressure = 2.e7
+
+  !> If true, always pass through the depth-based time filtering that uses CS%old_grid_weight
+  !! If false, allows bypassing of the call if CS%old_grid_weight==0
+  logical :: use_depth_based_time_filter
 
   !> Weight given to old coordinate when blending between new and old grids [nondim]
   !! Used only below depth_of_time_filter_shallow, with a cubic variation
@@ -185,8 +206,10 @@ integer, parameter :: MAX_PARAM_LENGTH = 120
 contains
 
 !> Initialization and configures a regridding control structure based on customizable run-time parameters
-subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_mode, param_prefix, param_suffix)
+subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
+                                 coord_mode, param_prefix, param_suffix)
   type(regridding_CS),        intent(inout) :: CS  !< Regridding control structure
+  type(ocean_grid_type),      intent(in)    :: G   !< Ocean grid structure
   type(verticalGrid_type),    intent(in)    :: GV  !< Ocean vertical grid structure
   type(unit_scale_type),      intent(in)    :: US  !< A dimensional unit scaling type
   real,                       intent(in)    :: max_depth  !< The maximum depth of the ocean [Z ~> m].
@@ -199,6 +222,11 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
   ! Local variables
   integer :: ke ! Number of levels
+  integer :: n_sigma  ! Number of shallow dz's, for HYBRID_MAP or HYBRID_3D
+  integer :: np       ! Number of profiles,    for HYBRID_MAP
+  integer :: nceiling ! ceiling  of map index, for HYBRID_MAP
+  integer :: nfloor   ! floor    of map index, for HYBRID_MAP
+  real ::    nfrac    ! fraction of map index, for HYBRID_MAP [nondim]
   character(len=80)  :: string, string2, varName ! Temporary strings
   character(len=40)  :: coord_units, coord_res_param ! Temporary strings
   character(len=MAX_PARAM_LENGTH) :: param_name
@@ -215,13 +243,25 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   real :: maximum_depth ! The maximum depth of the ocean [m] (not in Z).
   real :: dz_extra      ! The thickness of an added layer to append to the woa09_dz profile when
                         ! maximum_depth is large [m] (not in Z).
+  real :: nominalDepth  ! Depth of ocean bottom in thickness units (positive downward) [H ~> m or kg m-2]
+  real :: depth_q       ! A depth scale factor [nondim]
+  real :: depth_s       ! The end of the shallow Z regime [m]
+  real :: depth_d       ! The start of the deep Z regime [m]
   real :: adaptTimeRatio, adaptZoomCoeff ! Temporary variables for input parameters [nondim]
   real :: adaptBuoyCoeff, adaptAlpha     ! Temporary variables for input parameters [nondim]
   real :: adaptZoom  ! The thickness of the near-surface zooming region with the adaptive coordinate [H ~> m or kg m-2]
   real :: adaptDrho0 ! Reference density difference for stratification-dependent diffusion. [R ~> kg m-3]
-  integer :: k, nzf(4)
+  integer :: i, j, k, nzf(4)
   real, dimension(:), allocatable :: dz     ! Resolution (thickness) in units of coordinate, which may be [m]
                                             ! or [Z ~> m] or [H ~> m or kg m-2] or [R ~> kg m-3] or other units.
+  real, dimension(:,:),   allocatable :: dz_2d  ! 2D resolution (thickness) in units of coordinate, which may be [m]
+                                            ! or [Z ~> m] or [H ~> m or kg m-2] or [R ~> kg m-3] or other units.
+  real, dimension(:,:,:), allocatable :: dz_3d  ! 3D resolution (thickness) in units of coordinate, which may be [m]
+                                            ! or [Z ~> m] or [H ~> m or kg m-2] or [R ~> kg m-3] or other units.
+  real, dimension(:), allocatable :: dz_shallow  ! Shallow resolution (thickness), for HYBRID_MAP or HYBRID_3D [m]
+  real, dimension(:,:),   allocatable :: rho_target_2d ! 2D target density used in HYBRID mode [kg m-3]
+  real, dimension(:,:,:), allocatable :: rho_target_3d ! 3D target density used in HYBRID mode [kg m-3]
+  real, dimension(:,:),   allocatable :: index_map ! Region array of indexes for HYBRID_MAP [nondim]
   real, dimension(:), allocatable :: h_max  ! Maximum layer thicknesses [H ~> m or kg m-2]
   real, dimension(:), allocatable :: z_max  ! Maximum interface depths [H ~> m or kg m-2] or other
                                             ! units depending on the coordinate
@@ -266,8 +306,8 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
   main_parameters=.false.
   if (len_trim(param_prefix)==0) main_parameters=.true.
-  if (main_parameters .and. len_trim(param_suffix)>0) call MOM_error(FATAL,trim(mdl)//', initialize_regridding: '// &
-              'Suffix provided without prefix for parameter names!')
+  if (main_parameters .and. len_trim(param_suffix)>0) call MOM_error(FATAL,trim(mdl)//&
+              ' initialize_regridding: Suffix provided without prefix for parameter names!')
 
   CS%nk = 0
   CS%regridding_scheme = coordinateMode(coord_mode)
@@ -311,11 +351,11 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (.not.GV%Boussinesq) remap_answer_date = max(remap_answer_date, 20230701)
     call set_regrid_params(CS, remap_answer_date=remap_answer_date)
     call get_param(param_file, mdl, "REGRIDDING_ANSWER_DATE", regrid_answer_date, &
-                 "The vintage of the expressions and order of arithmetic to use for regridding.  "//&
-                 "Values below 20190101 result in the use of older, less accurate expressions "//&
-                 "that were in use at the end of 2018.  Higher values result in the use of more "//&
-                 "robust and accurate forms of mathematically equivalent expressions.", &
-                 default=20181231, do_not_log=.not.GV%Boussinesq) ! ### change to default=default_answer_date)
+                "The vintage of the expressions and order of arithmetic to use for regridding.  "//&
+                "Values below 20190101 result in the use of older, less accurate expressions "//&
+                "that were in use at the end of 2018.  Higher values result in the use of more "//&
+                "robust and accurate forms of mathematically equivalent expressions.", &
+                default=default_answer_date, do_not_log=.not.GV%Boussinesq)
     if (.not.GV%Boussinesq) regrid_answer_date = max(regrid_answer_date, 20230701)
     call set_regrid_params(CS, regrid_answer_date=regrid_answer_date)
   endif
@@ -358,8 +398,23 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  " FNC1:string - FNC1:dz_min,H_total,power,precision\n"//&
                  " HYBRID:string - read from a file. The string specifies\n"//&
                  "               the filename and two variable names, separated\n"//&
-                 "               by a comma or space, for sigma-2 and dz. e.g.\n"//&
-                 "               HYBRID:vgrid.nc,sigma2,dz",&
+                 "               by a comma or space, for sigma-2 and dz.\n"//&
+                 "               e.g. HYBRID:vgrid.nc,sigma2,dz\n"//&
+                 " HYBRID_3D:string - read from a file. The string specifies\n"//&
+                 "               the filename and two 3D variable names, separated\n"//&
+                 "               by a comma or space, for sigma-2 and dz. The\n"//&
+                 "               latter can be FNC1:string which is used everywhere.\n"//&
+                 "               e.g. HYBRID_3D:vgrid.nc,sigma2,dz\n"//&
+                 " HYBRID_MAP:string - read from a file. The string specifies\n"//&
+                 "               the filename and three variable names, separated\n"//&
+                 "               by a comma or space, for map, sigma-2 and dz.\n"//&
+                 "               Map is a spatial index array with, maxval(map)=N,\n"//&
+                 "               and the others are 2D arrays containing N profiles.\n"//&
+                 "               Map typically contains integer values, but it can\n"//&
+                 "               contain real values, I+w, which imply using\n"//&
+                 "               the weighted sum of profiles I and I+1.\n"//&
+                 "               Dz can be FNC1:string which is used everywhere.\n"//&
+                 "               e.g. HYBRID_MAP:vgrid.nc,map,sigma2,dz",&
                  default=trim(string2))
   message = "The distribution of vertical resolution for the target\n"//&
             "grid used for Eulerian-like coordinates. For example,\n"//&
@@ -380,14 +435,22 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     endif
     allocate(dz(ke))
     dz(:) = uniformResolution(ke, coord_mode, tmpReal, &
-                              US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(min(2,ke)))), &
-                              US%R_to_kg_m3*(GV%Rlay(ke) + 0.5*(GV%Rlay(ke)-GV%Rlay(max(ke-1,1)))) )
+                US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(min(2,ke)))), &
+                US%R_to_kg_m3*(GV%Rlay(ke) + 0.5*(GV%Rlay(ke)-GV%Rlay(max(ke-1,1)))) )
     if (main_parameters) call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                    trim(message), units=trim(coord_units))
   elseif (trim(string)=='PARAM') then
     ! Read coordinate resolution (main model = ALE_RESOLUTION)
-    ke = GV%ke ! Use model nk by default
-    allocate(dz(ke))
+    allocate(dz(1001))
+    dz(:) = -1. ! Setting to <0 allows detection of unset elements
+    call get_param(param_file, mdl, coord_res_param, dz, "Scan", units="", do_not_log=.true.)
+    if (dz(1001)>=0.) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+        "PARAM specification is limited to 1000 values. Hack the code to use more!")
+    do ke=1,1000 ! Find number of defined levels
+      if (dz(ke+1)<0.) exit
+    enddo
+    deallocate(dz)
+    allocate(dz(ke)) ! Allocate with the correct number of levels, and re-read thicknesses
     call get_param(param_file, mdl, coord_res_param, dz, &
                    trim(message), units=trim(coord_units), fail_if_missing=.true.)
   elseif (index(trim(string),'FILE:')==1) then
@@ -405,9 +468,9 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
 
     varName = trim( extractWord(trim(string(6:)), 2) )
     if (len_trim(varName)==0) then
-      if (field_exists(fileName,'dz')) then; varName = 'dz'
-      elseif (field_exists(fileName,'dsigma')) then; varName = 'dsigma'
-      elseif (field_exists(fileName,'ztest')) then; varName = 'ztest'
+      if (field_exists(fileName,'dz')) then ; varName = 'dz'
+      elseif (field_exists(fileName,'dsigma')) then ; varName = 'dsigma'
+      elseif (field_exists(fileName,'ztest')) then ; varName = 'ztest'
       else ;  call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
                     "Coordinate variable not specified and none could be guessed.")
       endif
@@ -426,11 +489,13 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       varName=trim(varName(12:))
       call verify_variable_units(filename, varName, expected_units, message, ierr, alt_units)
       if (ierr) call MOM_error(FATAL, trim(mdl)//", initialize_regridding: "//&
-                  "Unsupported format in grid definition '"//trim(filename)//"'. Error message "//trim(message))
+                  "Unsupported format in grid definition '"//trim(filename)//&
+                  "'. Error message "//trim(message))
       call field_size(trim(fileName), trim(varName), nzf)
       ke = nzf(1)-1
-      if (ke < 1) call MOM_error(FATAL, trim(mdl)//" initialize_regridding via Var "//trim(varName)//&
-                                 "in FILE "//trim(filename)//" requires at least 2 target interface values.")
+      if (ke < 1) call MOM_error(FATAL, trim(mdl)//" initialize_regridding via Var "//&
+                    trim(varName)//"in FILE "//trim(filename)//&
+                    " requires at least 2 target interface values.")
       if (CS%regridding_scheme == REGRIDDING_RHO) then
         allocate(rho_target(ke+1))
         call MOM_read_data(trim(fileName), trim(varName), rho_target)
@@ -455,7 +520,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (main_parameters) call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
   elseif (index(trim(string),'FNC1:')==1) then
-    ke = GV%ke; allocate(dz(ke))
+    ke = GV%ke ; allocate(dz(ke))
     call dz_function1( trim(string(6:)), dz )
     if (main_parameters) call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
@@ -463,31 +528,220 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     ! Function used for set target interface densities
     ke = rho_function1( trim(string(7:)), rho_target )
   elseif (index(trim(string),'HYBRID:')==1) then
-    ke = GV%ke; allocate(dz(ke))
-    ! The following assumes the FILE: syntax of above but without "FILE:" in the string
+    ke = GV%ke
+    allocate(dz(ke))
     allocate(rho_target(ke+1))
+    ! The following assumes the FILE: syntax of above but without "FILE:" in the string
+    varName = trim( extractWord(trim(string(8:)), 3) )
+    if (varname == " ") call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID "// &
+        "Too few arguments in ("//trim(string)//")")
     fileName = trim( extractWord(trim(string(8:)), 1) )
     if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
-    if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
-      "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+    if (.not. file_exists(fileName)) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID "// &
+        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
     varName = trim( extractWord(trim(string(8:)), 2) )
-    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
-      "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID "// &
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
     call MOM_read_data(trim(fileName), trim(varName), rho_target)
     varName = trim( extractWord(trim(string(8:)), 3) )
     if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz
       call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
     else ! Read dz from file
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: HYBRID "// &
-        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+          trim(mdl)//", initialize_regridding: HYBRID "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       call MOM_read_data(trim(fileName), trim(varName), dz)
     endif
     if (main_parameters) then
       call log_param(param_file, mdl, "!"//coord_res_param, dz, &
                trim(message), units=coordinateUnits(coord_mode))
       call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target, &
-               'HYBRID target densities for interfaces', units=coordinateUnits(coord_mode))
+               'HYBRID target densities for interfaces', units="kg m-3")
     endif
+  elseif (index(trim(string),'HYBRID_3D:')==1) then
+    ke = GV%ke
+    allocate(dz_3d(SZI_(G),SZJ_(G),ke), source=0.0)
+    allocate(rho_target_3d(SZI_(G),SZJ_(G),ke+1), source=0.0)
+    ! The following assumes the FILE: syntax of above but without "FILE:" in the string
+    varName = trim( extractWord(trim(string(11:)), 3) )
+    if (varname == " ") call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_3D "// &
+        "Too few arguments in ("//trim(string)//")")
+    fileName = trim( extractWord(trim(string(11:)), 1) )
+    if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
+    if (.not. file_exists(fileName)) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_3D "// &
+        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+    varName = trim( extractWord(trim(string(11:)), 2) )
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_3D "// &
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    call MOM_read_data(trim(fileName), trim(varName), rho_target_3d, G%Domain)
+    call pass_var(rho_target_3d, G%Domain, halo=1)
+    varName = trim( extractWord(trim(string(11:)), 3) )
+    if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz_3d
+      allocate(dz(ke))
+      call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
+      ! Adjust target grid to be consistent with maximum_depth
+      tmpReal = sum( dz(:) )
+      if (tmpReal < maximum_depth) then
+        dz(ke) = dz(ke) + ( maximum_depth - tmpReal )
+      endif
+      do i=G%isc-1,G%iec+1 ; do j=G%jsc-1,G%jec+1
+        if (G%mask2dT(i,j)>0.) then
+          do k=1,ke
+            dz_3d(i,j,k) = dz(k)
+          enddo
+        endif !mask2dT
+      enddo ; enddo
+      if (main_parameters) then
+        call log_param(param_file, mdl, "!"//coord_res_param, dz, &
+                trim(message), units=coordinateUnits(coord_mode))
+      endif
+    else ! Read dz from file
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+          trim(mdl)//", initialize_regridding: HYBRID_3D "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+      call MOM_read_data(trim(fileName), trim(varName), dz_3d, G%Domain)
+      call pass_var(dz_3d, G%Domain, halo=1)
+      ! set nominal 1-d dz to UNIFORM
+      allocate(dz(ke))
+      dz(:) = uniformResolution(ke, coord_mode, maximum_depth, &
+                  US%R_to_kg_m3*(GV%Rlay(1) + 0.5*(GV%Rlay(1)-GV%Rlay(min(2,ke)))), &
+                  US%R_to_kg_m3*(GV%Rlay(ke) + 0.5*(GV%Rlay(ke)-GV%Rlay(max(ke-1,1)))) )
+    endif !dz
+  elseif (index(trim(string),'HYBRID_MAP:')==1) then
+    ke = GV%ke
+    allocate(dz_3d(SZI_(G),SZJ_(G),ke), source=0.0)
+    allocate(rho_target_3d(SZI_(G),SZJ_(G),ke+1), source=0.0)
+    allocate(index_map(SZI_(G),SZJ_(G)), source=1.0)
+    ! The following assumes the FILE: syntax of above but without "FILE:" in the string
+    varName = trim( extractWord(trim(string(12:)), 4) )
+    if (varname == " ") call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_3D "// &
+        "Too few arguments in ("//trim(string)//")")
+    fileName = trim( extractWord(trim(string(12:)), 1) )
+    if (fileName(1:1)/='.' .and. filename(1:1)/='/') fileName = trim(inputdir) // trim( fileName )
+    if (.not. file_exists(fileName)) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
+        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+    varName = trim( extractWord(trim(string(12:)), 2) )
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    call MOM_read_data(trim(fileName), trim(varName), index_map, G%Domain)
+    call pass_var(index_map, G%Domain, halo=1)
+    !find maximum index
+    np = 1
+    do j=G%jsc, G%jec ; do i=G%isc, G%iec
+      np = max(np,ceiling(index_map(i,j)))
+    enddo ; enddo
+    call max_across_PEs(np)
+    write(string2,"(i3)") np
+    call MOM_error(NOTE, &
+        trim(mdl)//", initialize_regridding: HYBRID_MAP NP="//trim(string2))
+    if (np<1) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_MAP to small NP from "//trim(varName))
+    allocate(dz_2d(ke,np))
+    allocate(rho_target_2d(ke+1,np))
+    varName = trim( extractWord(trim(string(12:)), 3) )
+    if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+        trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
+        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+    ! MOM_read_data can't handle this array
+    call read_variable(trim(fileName), trim(varName), rho_target_2d)
+    if (main_parameters) then
+      call log_param(param_file, mdl, "!TARGET_DENSITIES", rho_target_2d(:,1), &
+               'HYBRID target densities for interfaces', units="kg m-3")
+    endif
+    do i=G%isc-1,G%iec+1 ; do j=G%jsc-1,G%jec+1
+      if (G%mask2dT(i,j)>0.) then
+        nfloor = floor(index_map(i,j))
+        nceiling = ceiling(index_map(i,j))
+        if (nfloor<1 .or. nceiling>np) then
+          write(0,'(a,2i5,a,g20.6)') 'HYBRID_MAP: i,j=',i,j,'index_map(i,j)=', index_map(i,j)
+          call MOM_error(FATAL, trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
+              "index_map out of range")
+        endif
+        if (nfloor == nceiling) then
+          do k=1,ke+1
+            rho_target_3d(i,j,k) = rho_target_2d(k,nfloor)
+          enddo
+        else
+          nfrac = index_map(i,j) - nfloor  !between 0.0 and 1.0
+          do k=1,ke+1
+            rho_target_3d(i,j,k) = (1.0-nfrac)*rho_target_2d(k,nfloor) + &
+                                        nfrac *rho_target_2d(k,nceiling)
+          enddo
+        endif !integer:else
+      endif !mask2dT
+    enddo ; enddo
+    varName = trim( extractWord(trim(string(12:)), 4) )
+    if (varName(1:5) == 'FNC1:') then ! Use FNC1 to calculate dz_3d
+      allocate(dz(ke))
+      call dz_function1( trim(string((index(trim(string),'FNC1:')+5):)), dz )
+      ! Adjust target grid to be consistent with maximum_depth
+      tmpReal = sum( dz(:) )
+      if (tmpReal < maximum_depth) then
+        dz(ke) = dz(ke) + ( maximum_depth - tmpReal )
+      endif
+      do i=G%isc-1,G%iec+1 ; do j=G%jsc-1,G%jec+1
+        if (G%mask2dT(i,j)>0.) then
+          do k=1,ke
+            dz_3d(i,j,k) = dz(k)
+          enddo
+        endif !mask2dT
+      enddo ; enddo
+      if (main_parameters) then
+        call log_param(param_file, mdl, "!"//coord_res_param, dz, &
+                trim(message), units=coordinateUnits(coord_mode))
+      endif
+    else ! Read dz from file
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL, &
+          trim(mdl)//", initialize_regridding: HYBRID_MAP "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+      ! MOM_read_data can't handle this array
+      call read_variable(trim(fileName), trim(varName), dz_2d)
+      if (main_parameters) then
+        call log_param(param_file, mdl, "!"//coord_res_param, dz_2d(:,1), &
+                trim(message), units=coordinateUnits(coord_mode))
+      endif
+      do i=1,np
+        tmpReal = sum( dz_2d(:,i) )
+        if (tmpReal < maximum_depth) then
+          dz_2d(ke,i) = dz_2d(ke,i) + ( maximum_depth - tmpReal )
+        endif
+      enddo
+      allocate(dz(ke))
+      dz(:) = dz_2d(:,1)
+      if (main_parameters) then
+        call log_param(param_file, mdl, "!"//coord_res_param, dz, &
+                trim(message), units=coordinateUnits(coord_mode))
+      endif
+      do i=G%isc-1,G%iec+1 ; do j=G%jsc-1,G%jec+1
+        if (G%mask2dT(i,j)>0.) then
+          nfloor = floor(index_map(i,j))
+          nceiling = ceiling(index_map(i,j))
+          if (nfloor == nceiling) then
+            do k=1,ke
+              dz_3d(i,j,k) = dz_2d(k,nfloor)
+            enddo
+          else
+            nfrac = index_map(i,j) - nfloor  !between 0.0 and 1.0
+            do k=1,ke
+              dz_3d(i,j,k) = (1.0-nfrac)*dz_2d(k,nfloor) + &
+                                  nfrac *dz_2d(k,nceiling)
+            enddo
+          endif !integer:else
+        endif !mask2dT
+      enddo ; enddo
+    endif !dz
+    deallocate(index_map)
+    deallocate(rho_target_2d)
+    deallocate(dz_2d)
   elseif (index(trim(string),'WOA09INT')==1) then
     if (len_trim(string)==8) then ! string=='WOA09INT'
       tmpReal = 0. ; ke = 0 ; dz_extra = 0.
@@ -559,7 +813,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
     if (ke > size(woa09_dz_approx)) dz(ke) = dz_extra
   else
     call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-      "Unrecognized coordinate configuration"//trim(string))
+        "Unrecognized coordinate configuration"//trim(string))
   endif
 
   if (main_parameters) then
@@ -568,31 +822,116 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
         coordinateMode(coord_mode) == REGRIDDING_HYCOM1 .or. &
         coordinateMode(coord_mode) == REGRIDDING_HYBGEN .or. &
         coordinateMode(coord_mode) == REGRIDDING_ADAPTIVE) then
-      ! Adjust target grid to be consistent with maximum_depth
-      tmpReal = sum( dz(:) )
-      if (tmpReal < maximum_depth) then
-        dz(ke) = dz(ke) + ( maximum_depth - tmpReal )
-      elseif (tmpReal > maximum_depth) then
-        if ( dz(ke) + ( maximum_depth - tmpReal ) > 0. ) then
+      if (allocated(dz)) then
+        ! Adjust target grid to be consistent with maximum_depth
+        tmpReal = sum( dz(:) )
+        if (tmpReal < maximum_depth) then
           dz(ke) = dz(ke) + ( maximum_depth - tmpReal )
-        else
-          call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-            "MAXIMUM_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
+        elseif (tmpReal > maximum_depth) then
+          if ( dz(ke) + ( maximum_depth - tmpReal ) > 0. ) then
+            dz(ke) = dz(ke) + ( maximum_depth - tmpReal )
+          else
+            call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
+                "MAXIMUM_DEPTH was too shallow to adjust bottom layer of DZ!"//trim(string))
+          endif
         endif
-      endif
+      endif !allocated(dz)
     endif
   endif
+
+  if (coordinateMode(coord_mode) == REGRIDDING_HYCOM1) then
+    allocate(dz_shallow(ke))
+    call get_param(param_file, mdl, "SHALLOW_"//trim(coord_res_param), dz_shallow, &
+                   "HYBGEN-style Z-sigma-Z near surface fixed coordinate. "//&
+                   "The default of all zeros turns this option off. "//&
+                   "Let N_SIGMA be the number of consecutive non-zero entries, typically < NK. "//&
+                   "Use SHALLOW_"//trim(coord_res_param)//" when rest depth is shallower than "//&
+                   "SUM(SHALLOW_"//trim(coord_res_param)//"(1:N_SIGMA)). "//&
+                   "Use "//trim(coord_res_param)//" when rest depth is deeper than "//&
+                   "SUM("//trim(coord_res_param)//"(1:N_SIGMA)). "//&
+                   "Otherwise use a linear sum of the two weighted by rest depth.",&
+                   units="m", default=0.0)
+    n_sigma = ke
+    depth_s = 0.0
+    do k= 1,ke
+      depth_s = depth_s + dz_shallow(k)
+      if (dz_shallow(k) == 0.0) then
+        n_sigma = k-1
+        exit
+      endif
+    enddo
+    if (n_sigma > 0) then
+      if (main_parameters) call log_param(param_file, mdl, "!N_SIGMA", n_sigma, &
+                   "Number of consecutive non-zero entries in SHALLOW_"//&
+                   trim(coord_res_param)//".")
+      if (.not.allocated(dz_3d)) then
+        allocate(dz_3d(SZI_(G),SZJ_(G),ke), source=0.0)
+        allocate(rho_target_3d(SZI_(G),SZJ_(G),ke+1), source=0.0)
+        do i=G%isc-1,G%iec+1 ; do j=G%jsc-1,G%jec+1
+          if (G%mask2dT(i,j)>0.) then
+            do k=1,ke
+              dz_3d(i,j,k) = dz(k)
+            enddo
+            do k=1,ke+1
+              rho_target_3d(i,j,k) = rho_target(k)
+            enddo
+          endif !mask2dT
+        enddo ; enddo
+      endif
+      do i=G%isc-1,G%iec+1 ; do j=G%jsc-1,G%jec+1
+        if (G%mask2dT(i,j)>0.) then
+          nominalDepth = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0) * US%Z_to_m
+          if (nominalDepth <= depth_s) then
+            do k= 1,n_sigma
+              dz_3d(i,j,k) = dz_shallow(k)
+            enddo
+            do k= n_sigma+1,ke
+              dz_3d(i,j,k) = dz_shallow(n_sigma)
+            enddo
+          else ! >depth_s
+            depth_d = 0.0
+            do k= 1,n_sigma
+              depth_d = depth_d + dz_3d(i,j,k)
+            enddo
+            ! do nothing if nominalDepth >= depth_d
+            if (nominalDepth < depth_d) then
+              depth_q = (nominalDepth - depth_s) / (depth_d - depth_s)
+              do k= 1,n_sigma
+                dz_3d(i,j,k) = (1.0-depth_q)*dz_shallow(k) + depth_q*dz_3d(i,j,k)
+              enddo
+              do k= n_sigma+1,ke
+                dz_3d(i,j,k) = (1.0-depth_q)*dz_shallow(n_sigma) + depth_q*dz_3d(i,j,k)
+              enddo
+            endif !<depth_d and >depth_s
+          endif !nominalDepth
+        endif !mask2dT
+      enddo ; enddo
+    endif !n_sigma
+    deallocate(dz_shallow)
+  endif !REGRIDDING_HYCOM1
 
   CS%nk=ke
 
   ! Target resolution (for fixed coordinates)
-  allocate( CS%coordinateResolution(CS%nk), source=-1.E30 )
-  if (state_dependent(CS%regridding_scheme)) then
-    ! Target values
-    allocate( CS%target_density(CS%nk+1), source=-1.E30*US%kg_m3_to_R )
+  if (allocated(dz_3d)) then
+    allocate( CS%coordinateResolution(CS%nk), source=-1.E30 )
+    allocate( CS%coordinateResolution_3d(SZI_(G),SZJ_(G),CS%nk), source=-1.E30 )
+    allocate( CS%target_density_3d(SZI_(G),SZJ_(G),CS%nk+1), source=-1.E30*US%kg_m3_to_R )
+  else
+    allocate( CS%coordinateResolution(CS%nk), source=-1.E30 )
+    if (state_dependent(CS%regridding_scheme)) then
+      ! Target values
+      allocate( CS%target_density(CS%nk+1), source=-1.E30*US%kg_m3_to_R )
+    endif
   endif
 
-  if (allocated(dz)) then
+  if (allocated(dz_3d)) then
+    ! set both 1d and 3d fields
+    call setCoordinateResolution(dz, CS, scale=US%m_to_Z)
+    call setCoordinateResolution_3d(dz_3d, CS, scale=US%m_to_Z)
+    CS%coord_scale = US%Z_to_m
+    deallocate(dz_3d)
+  elseif (allocated(dz)) then
     if (coordinateMode(coord_mode) == REGRIDDING_SIGMA) then
       call setCoordinateResolution(dz, CS, scale=1.0)
     elseif (coordinateMode(coord_mode) == REGRIDDING_RHO) then
@@ -614,39 +953,42 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
   ! ensure CS%ref_pressure is rescaled properly
   CS%ref_pressure = US%Pa_to_RL2_T2 * CS%ref_pressure
 
-  if (allocated(rho_target)) then
+  if (allocated(rho_target_3d)) then
+    call set_target_densities_3d(CS, G, US%kg_m3_to_R, rho_target_3d)
+    deallocate(rho_target_3d)
+  elseif (allocated(rho_target)) then
     call set_target_densities(CS, US%kg_m3_to_R*rho_target)
     deallocate(rho_target)
-
-  ! \todo This line looks like it would overwrite the target densities set just above?
   elseif (coordinateMode(coord_mode) == REGRIDDING_RHO) then
     call set_target_densities_from_GV(GV, US, CS)
     call log_param(param_file, mdl, "!TARGET_DENSITIES", US%R_to_kg_m3*CS%target_density(:), &
-             'RHO target densities for interfaces', units=coordinateUnits(coord_mode))
+             'RHO target densities for interfaces', "kg m-3")
   endif
 
   ! initialise coordinate-specific control structure
-  call initCoord(CS, GV, US, coord_mode, param_file)
+  call initCoord(CS, G, GV, US, coord_mode, param_file)
 
   if (coord_is_state_dependent) then
     if (main_parameters) then
-      call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), P_Ref, &
+      call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), &
+                   P_Ref, &
                    "The pressure that is used for calculating the coordinate "//&
                    "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
                    "This is only used if USE_EOS and ENABLE_THERMODYNAMICS are true.", &
                    units="Pa", default=2.0e7, scale=US%Pa_to_RL2_T2)
     else
-      call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), P_Ref, &
-                   "The pressure that is used for calculating the diagnostic coordinate "//&
-                   "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
-                   "This is only used for the RHO coordinate.", &
-                   units="Pa", default=2.0e7, scale=US%Pa_to_RL2_T2)
+      call get_param(param_file, mdl, create_coord_param(param_prefix, "P_REF", param_suffix), &
+                     P_Ref, &
+                     "The pressure that is used for calculating the diagnostic coordinate "//&
+                     "density.  (1 Pa = 1e4 dbar, so 2e7 is commonly used.) "//&
+                     "This is only used for the RHO coordinate.", &
+                     units="Pa", default=2.0e7, scale=US%Pa_to_RL2_T2)
     endif
-    call get_param(param_file, mdl, create_coord_param(param_prefix, "REGRID_COMPRESSIBILITY_FRACTION", param_suffix), &
-                 tmpReal, &
-                 "When interpolating potential density profiles we can add "//&
-                 "some artificial compressibility solely to make homogeneous "//&
-                 "regions appear stratified.", units="nondim", default=0.)
+    call get_param(param_file, mdl, create_coord_param(param_prefix, &
+                   "REGRID_COMPRESSIBILITY_FRACTION", param_suffix), tmpReal, &
+                   "When interpolating potential density profiles we can add "//&
+                   "some artificial compressibility solely to make homogeneous "//&
+                   "regions appear stratified.", units="nondim", default=0.)
     call set_regrid_params(CS, compress_fraction=tmpReal, ref_pressure=P_Ref)
   endif
 
@@ -656,14 +998,20 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
                  "thickness allowed.", units="m", scale=GV%m_to_H, &
                  default=regriddingDefaultMinThickness )
     call set_regrid_params(CS, min_thickness=tmpReal)
+    call get_param(param_file, mdl, "USE_ADJUST_INTERFACE_MOTION", tmpLogical, &
+              "When regridding, after the primary grid generation, call a function that ensures "//&
+              "positive layer thicknesses. Historically, this was required.", default=.true.)
+    call set_regrid_params(CS, use_adjust_interface_motion=tmpLogical)
   else
     call set_regrid_params(CS, min_thickness=0.)
+    call set_regrid_params(CS, use_adjust_interface_motion=.true.)
+    call set_regrid_params(CS, use_depth_based_time_filter=.true.)
   endif
 
   if (main_parameters .and. coordinateMode(coord_mode) == REGRIDDING_HYCOM1) then
     call get_param(param_file, mdl, "HYCOM1_ONLY_IMPROVES", tmpLogical, &
-              "When regridding, an interface is only moved if this improves the fit to the target density.", &
-              default=.false.)
+              "When regridding, an interface is only moved if this improves "//&
+              "the fit to the target density.", default=.false.)
     call set_hycom_params(CS%hycom_CS, only_improves=tmpLogical)
   endif
 
@@ -726,19 +1074,21 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
         ! Otherwise assume we should look for the file in INPUTDIR
         fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
       endif
-      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)// &
+          ", initialize_regridding: "// &
+          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
 
       do_sum = .false.
       varName = trim( extractWord(trim(string(6:)), 2) )
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)// &
+          ", initialize_regridding: "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
       if (len_trim(varName)==0) then
-        if (field_exists(fileName,'z_max')) then; varName = 'z_max'
-        elseif (field_exists(fileName,'dz')) then; varName = 'dz' ; do_sum = .true.
-        elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max' ; do_sum = .true.
+        if (field_exists(fileName,'z_max')) then ; varName = 'z_max'
+        elseif (field_exists(fileName,'dz')) then ; varName = 'dz' ; do_sum = .true.
+        elseif (field_exists(fileName,'dz_max')) then ; varName = 'dz_max' ; do_sum = .true.
         else ; call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-          "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+            "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
       if (do_sum) then
@@ -758,7 +1108,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call set_regrid_max_depths(CS, z_max, GV%m_to_H)
     else
       call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
+          "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
     endif
     deallocate(z_max)
     deallocate(dz_max)
@@ -791,17 +1141,19 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
         ! Otherwise assume we should look for the file in INPUTDIR
         fileName = trim(inputdir) // trim( extractWord(trim(longString(6:200)), 1) )
       endif
-      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(longString)//")")
+      if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)// &
+          ", initialize_regridding: "// &
+          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(longString)//")")
 
       varName = trim( extractWord(trim(longString(6:)), 2) )
-      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(longString)//")")
+      if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)// &
+          ", initialize_regridding: "// &
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(longString)//")")
       if (len_trim(varName)==0) then
-        if (field_exists(fileName,'h_max')) then; varName = 'h_max'
-        elseif (field_exists(fileName,'dz_max')) then; varName = 'dz_max'
+        if (field_exists(fileName,'h_max')) then ; varName = 'h_max'
+        elseif (field_exists(fileName,'dz_max')) then ; varName = 'dz_max'
         else ; call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-          "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
+            "MAXIMUM_INT_DEPTHS variable not specified and none could be guessed.")
         endif
       endif
       call MOM_read_data(trim(fileName), trim(varName), h_max)
@@ -815,7 +1167,7 @@ subroutine initialize_regridding(CS, GV, US, max_depth, param_file, mdl, coord_m
       call set_regrid_max_thickness(CS, h_max, GV%m_to_H)
     else
       call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-        "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(longString))
+          "Unrecognized MAX_LAYER_THICKNESS_CONFIG "//trim(longString))
     endif
     deallocate(h_max)
   endif
@@ -837,6 +1189,8 @@ subroutine end_regridding(CS)
   if (associated(CS%hybgen_CS)) call end_hybgen_regrid(CS%hybgen_CS)
 
   deallocate( CS%coordinateResolution )
+  if (allocated(CS%coordinateResolution_3d)) deallocate( CS%coordinateResolution_3d )
+  if (allocated(CS%target_density_3d)) deallocate( CS%target_density_3d )
   if (allocated(CS%target_density)) deallocate( CS%target_density )
   if (allocated(CS%max_interface_depths) ) deallocate( CS%max_interface_depths )
   if (allocated(CS%max_layer_thickness) ) deallocate( CS%max_layer_thickness )
@@ -877,7 +1231,7 @@ subroutine regridding_main( remapCS, CS, G, GV, US, h, tv, h_new, dzInterface, &
                                                                       !! coordinate [H ~> m or kg m-2]
   real, dimension(SZI_(G),SZJ_(G),CS%nk+1),   intent(inout) :: dzInterface !< The change in position of each
                                                                       !! interface [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: frac_shelf_h !< Fractional ice shelf coverage [nomdim]
+  real, dimension(SZI_(G),SZJ_(G)), optional, intent(in   ) :: frac_shelf_h !< Fractional ice shelf coverage [nondim]
   logical, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
                                     optional, intent(out  ) :: PCM_cell !< Use PCM remapping in cells where true
 
@@ -912,15 +1266,15 @@ subroutine regridding_main( remapCS, CS, G, GV, US, h, tv, h_new, dzInterface, &
       tot_dz(i,j) = tot_dz(i,j) + GV%H_to_RZ * tv%SpV_avg(i,j,k) * h(i,j,k)
     enddo ; enddo ; enddo
     do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
-      if ((tot_dz(i,j) > 0.0) .and. (G%bathyT(i,j)+G%Z_ref > 0.0)) then
-        nom_depth_H(i,j) = (G%bathyT(i,j)+G%Z_ref) * (tot_h(i,j) / tot_dz(i,j))
+      if (tot_dz(i,j) > 0.0) then
+        nom_depth_H(i,j) = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0) * (tot_h(i,j) / tot_dz(i,j))
       else
         nom_depth_H(i,j) = 0.0
       endif
     enddo ; enddo
   else
     do j=G%jsc-1,G%jec+1 ; do i=G%isc-1,G%iec+1
-      nom_depth_H(i,j) = max((G%bathyT(i,j)+G%Z_ref) * Z_to_H, 0.0)
+      nom_depth_H(i,j) = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0) * Z_to_H
     enddo ; enddo
   endif
 
@@ -1073,7 +1427,7 @@ subroutine check_grid_column( nk, h, dzInterface, msg )
       write(0,*) 'k,h,hnew=',k,h(k),h_new
       write(0,*) 'dzI(k+1),dzI(k)=',dzInterface(k+1),dzInterface(k)
       call MOM_error( FATAL, 'MOM_regridding, check_grid_column: '//&
-        'Negative layer thickness implied by re-gridding, '//trim(msg))
+          'Negative layer thickness implied by re-gridding, '//trim(msg))
     endif
     total_h_new = total_h_new + h_new
 
@@ -1088,14 +1442,14 @@ subroutine check_grid_column( nk, h, dzInterface, msg )
     write(0,*) 'Hold,Hnew,Hnew-Hold=',total_h_old,total_h_new,total_h_new-total_h_old
     write(0,*) 'eps,(n)/2*eps*H=',eps,real(nk-1)*0.5*(total_h_old+total_h_new)*eps
     call MOM_error( FATAL, 'MOM_regridding, check_grid_column: '//&
-      'Re-gridding did NOT conserve total thickness to within roundoff '//trim(msg))
+        'Re-gridding did NOT conserve total thickness to within roundoff '//trim(msg))
   endif
 
   ! Check that the top and bottom are intentionally moving
   if (dzInterface(1) /= 0.) call MOM_error( FATAL, &
-    'MOM_regridding, check_grid_column: Non-zero dzInterface at surface! '//trim(msg))
+      'MOM_regridding, check_grid_column: Non-zero dzInterface at surface! '//trim(msg))
   if (dzInterface(nk+1) /= 0.) call MOM_error( FATAL, &
-    'MOM_regridding, check_grid_column: Non-zero dzInterface at bottom! '//trim(msg))
+      'MOM_regridding, check_grid_column: Non-zero dzInterface at bottom! '//trim(msg))
 
 end subroutine check_grid_column
 
@@ -1151,11 +1505,11 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
   if (debug) then
     do k=2,CS%nk+1
       if (sgn*(z_new(k)-z_new(k-1)) < -5e-16*(abs(z_new(k))+abs(z_new(k-1))) ) &
-        call MOM_error(FATAL, "filtered_grid_motion: z_new is tangled.")
+          call MOM_error(FATAL, "filtered_grid_motion: z_new is tangled.")
     enddo
     do k=2,nk+1
       if (sgn*(z_old(k)-z_old(k-1)) < -5e-16*(abs(z_old(k))+abs(z_old(k-1))) ) &
-        call MOM_error(FATAL, "filtered_grid_motion: z_old is tangled.")
+          call MOM_error(FATAL, "filtered_grid_motion: z_old is tangled.")
     enddo
     ! ddz_g_s(:) = 0.0 ; ddz_g_d(:) = 0.0
   endif
@@ -1229,9 +1583,9 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
 !         ddz_g_d(k) = sgn * (dz0 + 2.0*F0*dzwt / (Bq + sqrt(Bq**2 + 4.0*Aq*F0*dzwt) )) - dz_g(k)
 !
 !         if (abs(ddz_g_s(k)) > 1e-12*(abs(dz_g(k)) + abs(dz_g(k)+ddz_g_s(k)))) &
-!           call MOM_error(WARNING, "filtered_grid_motion: Expect z_output to be tangled (sc).")
+!             call MOM_error(WARNING, "filtered_grid_motion: Expect z_output to be tangled (sc).")
 !         if (abs(ddz_g_d(k) - ddz_g_s(k)) > 1e-12*(abs(dz_g(k)+ddz_g_d(k)) + abs(dz_g(k)+ddz_g_s(k)))) &
-!           call MOM_error(WARNING, "filtered_grid_motion: Expect z_output to be tangled.")
+!             call MOM_error(WARNING, "filtered_grid_motion: Expect z_output to be tangled.")
 !       endif
       endif
 
@@ -1247,7 +1601,7 @@ subroutine filtered_grid_motion( CS, nk, z_old, z_new, dz_g )
     enddo
     do k=2,CS%nk+1
       if (sgn*((z_act(k))-z_act(k-1)) < -1e-15*(abs(z_act(k))+abs(z_act(k-1))) ) &
-        call MOM_error(FATAL, "filtered_grid_motion: z_output is tangled.")
+          call MOM_error(FATAL, "filtered_grid_motion: z_output is tangled.")
     enddo
   endif
 
@@ -1336,7 +1690,8 @@ subroutine build_zstar_grid( CS, G, GV, h, nom_depth_H, dzInterface, frac_shelf_
       endif
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
+      if (CS%use_depth_based_time_filter .or. CS%old_grid_weight>0.) &
+        call filtered_grid_motion(CS, nz, zOld, zNew, dzInterface(i,j,:))
 
 #ifdef __DO_SAFETY_CHECKS__
       dh = max(nominalDepth,totalThickness)
@@ -1361,7 +1716,7 @@ subroutine build_zstar_grid( CS, G, GV, h, nom_depth_H, dzInterface, frac_shelf_
       endif
 #endif
 
-      call adjust_interface_motion( CS, nz, h(i,j,:), dzInterface(i,j,:) )
+      if (CS%use_adjust_interface_motion) call adjust_interface_motion( CS, nz, h(i,j,:), dzInterface(i,j,:) )
 
     enddo
   enddo
@@ -1435,7 +1790,8 @@ subroutine build_sigma_grid( CS, G, GV, h, nom_depth_H, dzInterface )
         zOld(k) = zOld(k+1) + h(i,j,k)
       enddo
 
-      call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
+      if (CS%use_depth_based_time_filter .or. CS%old_grid_weight>0.) &
+        call filtered_grid_motion(CS, nz, zOld, zNew, dzInterface(i,j,:))
 
 #ifdef __DO_SAFETY_CHECKS__
       dh = max(nominalDepth,totalThickness)
@@ -1450,10 +1806,12 @@ subroutine build_sigma_grid( CS, G, GV, h, nom_depth_H, dzInterface )
           write(0,*) k,zOld(nz+1),zNew(k)
         enddo
         do k=1,min(nz,CS%nk)
-          write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k),CS%coordinateResolution(k)
+          write(0,*) k,h(i,j,k),zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k), &
+                     CS%coordinateResolution(k)
         enddo
         do k=min(nz,CS%nk)+1,CS%nk
-          write(0,*) k,0.0,zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k),CS%coordinateResolution(k)
+          write(0,*) k,0.0,zNew(k)-zNew(k+1),totalThickness*CS%coordinateResolution(k), &
+                     CS%coordinateResolution(k)
         enddo
         call MOM_error( FATAL, &
                'MOM_regridding, build_sigma_grid: top surface has moved!!!' )
@@ -1580,7 +1938,8 @@ subroutine build_rho_grid( G, GV, US, h, nom_depth_H, tv, dzInterface, remapCS, 
       endif
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, nz, zOld, zNew, dzInterface(i,j,:) )
+      if (CS%use_depth_based_time_filter .or. CS%old_grid_weight>0.) &
+        call filtered_grid_motion(CS, nz, zOld, zNew, dzInterface(i,j,:))
 
 #ifdef __DO_SAFETY_CHECKS__
       do k=2,CS%nk
@@ -1637,7 +1996,8 @@ end subroutine build_rho_grid
 !! \remark { Based on Bleck, 2002: An ocean-ice general circulation model framed in
 !! hybrid isopycnic-Cartesian coordinates, Ocean Modelling 37, 55-88.
 !! http://dx.doi.org/10.1016/S1463-5003(01)00012-9 }
-subroutine build_grid_HyCOM1( G, GV, US, h, nom_depth_H, tv, h_new, dzInterface, remapCS, CS, frac_shelf_h, zScale )
+subroutine build_grid_HyCOM1( G, GV, US, h, nom_depth_H, tv, h_new, dzInterface, remapCS, CS, &
+                              frac_shelf_h, zScale )
   type(ocean_grid_type),                     intent(in)    :: G  !< Grid structure
   type(verticalGrid_type),                   intent(in)    :: GV !< Ocean vertical grid structure
   type(unit_scale_type),                     intent(in)    :: US !< A dimensional unit scaling type
@@ -1703,17 +2063,18 @@ subroutine build_grid_HyCOM1( G, GV, US, h, nom_depth_H, tv, h_new, dzInterface,
              ( 0.5 * ( z_col(K) + z_col(K+1) ) * (GV%H_to_RZ*GV%g_Earth) - tv%P_Ref )
       enddo
 
-      call build_hycom1_column(CS%hycom_CS, remapCS, tv%eqn_of_state, GV%ke, nominalDepth, &
+      call build_hycom1_column(CS%hycom_CS, remapCS, tv%eqn_of_state, GV%ke, i, j, nominalDepth, &
            h(i,j,:), tv%T(i,j,:), tv%S(i,j,:), p_col, &
            z_col, z_col_new, zScale=zScale, &
            h_neglect=h_neglect, h_neglect_edge=h_neglect_edge)
 
       ! Calculate the final change in grid position after blending new and old grids
-      call filtered_grid_motion( CS, GV%ke, z_col, z_col_new, dz_col )
+      if (CS%use_depth_based_time_filter .or. CS%old_grid_weight>0.) &
+        call filtered_grid_motion( CS, GV%ke, z_col, z_col_new, dz_col )
 
       ! This adjusts things robust to round-off errors
       dz_col(:) = -dz_col(:)
-      call adjust_interface_motion( CS, GV%ke, h(i,j,:), dz_col(:) )
+      if (CS%use_adjust_interface_motion) call adjust_interface_motion( CS, GV%ke, h(i,j,:), dz_col(:) )
 
       dzInterface(i,j,1:nki+1) = dz_col(1:nki+1)
       if (nki<CS%nk) dzInterface(i,j,nki+2:CS%nk+1) = 0.
@@ -1785,12 +2146,14 @@ subroutine build_grid_adaptive(G, GV, US, h, nom_depth_H, tv, dzInterface, remap
       cycle
     endif
 
-    call build_adapt_column(CS%adapt_CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, nom_depth_H, zNext)
+    call build_adapt_column(CS%adapt_CS, G, GV, US, tv, i, j, zInt, tInt, sInt, h, &
+                            nom_depth_H, zNext)
 
-    call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext, dzInterface(i,j,:))
+    if (CS%use_depth_based_time_filter .or. CS%old_grid_weight>0.) &
+      call filtered_grid_motion(CS, nz, zInt(i,j,:), zNext, dzInterface(i,j,:))
     ! convert from depth to z
     do K = 1, nz+1 ; dzInterface(i,j,K) = -dzInterface(i,j,K) ; enddo
-    call adjust_interface_motion(CS, nz, h(i,j,:), dzInterface(i,j,:))
+    if (CS%use_adjust_interface_motion) call adjust_interface_motion(CS, nz, h(i,j,:), dzInterface(i,j,:))
   enddo ; enddo
 end subroutine build_grid_adaptive
 
@@ -1818,8 +2181,8 @@ subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new < -3.0*h_err) then
       write(0,*) 'h<0 at k=',k,'h_old=',h_old(k), &
-        'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
-        'h_new=',h_new,'h_err=',h_err
+          'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
+          'h_new=',h_new,'h_err=',h_err
       call MOM_error( FATAL, 'MOM_regridding: adjust_interface_motion() - '//&
                      'implied h<0 is larger than roundoff!')
     endif
@@ -1830,8 +2193,8 @@ subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
       h_new = ( dz_int(k) - dz_int(k+1) )
       if (h_new < -3.0*h_err) then
         write(0,*) 'h<0 at k=',k,'h_old was empty',&
-          'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
-          'h_new=',h_new,'h_err=',h_err
+            'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
+            'h_new=',h_new,'h_err=',h_err
         call MOM_error( FATAL, 'MOM_regridding: adjust_interface_motion() - '//&
                        'implied h<0 is larger than roundoff!')
       endif
@@ -1840,14 +2203,14 @@ subroutine adjust_interface_motion( CS, nk, h_old, dz_int )
   do k = min(CS%nk,nk),2,-1
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<CS%min_thickness) &
-      dz_int(k) = ( dz_int(k+1) - h_old(k) ) + CS%min_thickness ! Implies next h_new = min_thickness
+        dz_int(k) = ( dz_int(k+1) - h_old(k) ) + CS%min_thickness ! Implies next h_new = min_thickness
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<0.) &
-      dz_int(k) = ( 1. - eps ) * ( dz_int(k+1) - h_old(k) ) ! Backup in case min_thickness==0
+        dz_int(k) = ( 1. - eps ) * ( dz_int(k+1) - h_old(k) ) ! Backup in case min_thickness==0
     h_new = h_old(k) + ( dz_int(k) - dz_int(k+1) )
     if (h_new<0.) then
       write(0,*) 'h<0 at k=',k,'h_old=',h_old(k), &
-        'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
+          'wup=',dz_int(k),'wdn=',dz_int(k+1),'dw_dz=',dz_int(k) - dz_int(k+1), &
         'h_new=',h_new
       stop 'Still did not work!'
       call MOM_error( FATAL, 'MOM_regridding: adjust_interface_motion() - '//&
@@ -1952,7 +2315,8 @@ subroutine convective_adjustment(G, GV, h, tv)
           tv%S(i,j,k) = S1 ; tv%S(i,j,k+1) = S0
           h(i,j,k)    = h1 ; h(i,j,k+1)    = h0
           ! Recompute densities at levels k and k+1
-          call calculate_density(tv%T(i,j,k), tv%S(i,j,k), p_col(k), densities(k), tv%eqn_of_state)
+          call calculate_density(tv%T(i,j,k), tv%S(i,j,k), p_col(k), &
+                                  densities(k), tv%eqn_of_state)
           call calculate_density(tv%T(i,j,k+1), tv%S(i,j,k+1), p_col(k+1), &
                                   densities(k+1), tv%eqn_of_state )
           ! Because p_col is has uniform values, these calculate_density calls are equivalent to
@@ -2008,7 +2372,7 @@ function uniformResolution(nk,coordMode,maxDepth,rhoLight,rhoHeavy)
 
     case default
       call MOM_error(FATAL, "MOM_regridding, uniformResolution: "//&
-       "Unrecognized choice for coordinate mode ("//trim(coordMode)//").")
+          "Unrecognized choice for coordinate mode ("//trim(coordMode)//").")
 
   end select ! type of grid
 
@@ -2016,13 +2380,14 @@ end function uniformResolution
 
 !> Initialize the coordinate resolutions by calling the appropriate initialization
 !! routine for the specified coordinate mode.
-subroutine initCoord(CS, GV, US, coord_mode, param_file)
+subroutine initCoord(CS, G, GV, US, coord_mode, param_file)
   type(regridding_CS),     intent(inout) :: CS !< Regridding control structure
+  type(ocean_grid_type),   intent(in)    :: G  !< Ocean grid structure
+  type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in)    :: US !< A dimensional unit scaling type
   character(len=*),        intent(in)    :: coord_mode !< A string indicating the coordinate mode.
                                                !! See the documentation for regrid_consts
                                                !! for the recognized values.
-  type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
-  type(unit_scale_type),   intent(in)    :: US  !< A dimensional unit scaling type
   type(param_file_type),   intent(in)    :: param_file !< Parameter file
 
   select case (coordinateMode(coord_mode))
@@ -2035,8 +2400,14 @@ subroutine initCoord(CS, GV, US, coord_mode, param_file)
   case (REGRIDDING_RHO)
     call init_coord_rho(CS%rho_CS, CS%nk, CS%ref_pressure, CS%target_density, CS%interp_CS)
   case (REGRIDDING_HYCOM1)
-    call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, &
-                          CS%interp_CS)
+    if (allocated(CS%coordinateResolution_3d)) then
+      call init_3d_coord_hycom(CS%hycom_CS, G, CS%nk, &
+                               CS%coordinateResolution_3d, CS%target_density_3d, &
+                               CS%interp_CS)
+    else
+      call init_coord_hycom(CS%hycom_CS, CS%nk, CS%coordinateResolution, CS%target_density, &
+                            CS%interp_CS)
+    endif
   case (REGRIDDING_HYBGEN)
     call init_hybgen_regrid(CS%hybgen_CS, GV, US, param_file)
   case (REGRIDDING_ADAPTIVE)
@@ -2067,6 +2438,26 @@ subroutine setCoordinateResolution( dz, CS, scale )
 
 end subroutine setCoordinateResolution
 
+!> Set the 3d fixed resolution data
+subroutine setCoordinateResolution_3d( dz_3d, CS, scale )
+  real, dimension(:,:,:),  intent(in)    :: dz_3d !< A vector of vertical grid spacings, in arbitrary coordinate
+                                           !! dependent units, such as [m] for a z-coordinate or [kg m-3]
+                                           !! for a density coordinate.
+  type(regridding_CS), intent(inout) :: CS !< Regridding control structure
+  real,      optional, intent(in)    :: scale !< A scaling factor converting dz to coordRes [Z m-1 ~> 1]
+
+  if (.not.allocated(CS%coordinateResolution_3d)) &
+      call MOM_error(FATAL,'setCoordinateResolution_3d: '//&
+                           'CS%coordinateResolution_3d not allocated.')
+
+  if (present(scale)) then
+    CS%coordinateResolution_3d(:,:,:) = scale*dz_3d(:,:,:)
+  else
+    CS%coordinateResolution_3d(:,:,:) = dz_3d(:,:,:)
+  endif
+
+end subroutine setCoordinateResolution_3d
+
 !> Set target densities based on the old Rlay variable
 subroutine set_target_densities_from_GV( GV, US, CS )
   type(verticalGrid_type), intent(in)    :: GV !< Ocean vertical grid structure
@@ -2089,6 +2480,22 @@ subroutine set_target_densities_from_GV( GV, US, CS )
   CS%target_density_set = .true.
 
 end subroutine set_target_densities_from_GV
+
+!> Set target densities based on vector of interface values
+subroutine set_target_densities_3d( CS, G, scale, rho_int_3d )
+  type(regridding_CS),  intent(inout) :: CS    !< Regridding control structure
+  type(ocean_grid_type),intent(in)    :: G     !< Ocean grid structure
+  real,                 intent(in)    :: scale !< A scaling factor converting densities [R m3 kg-1 ~> 1]
+  real, dimension(SZI_(G),SZJ_(G),CS%nk+1), intent(in) :: rho_int_3d !< Interface densities [kg m-3]
+
+  if (.not.allocated(CS%target_density_3d)) &
+      call MOM_error(FATAL,'set_target_densities_3d: '//&
+                           'CS%target_density_3d not allocated.')
+
+  CS%target_density_3d(:,:,:) = scale * rho_int_3d(:,:,:)
+  CS%target_density_set = .true.
+
+end subroutine set_target_densities_3d
 
 !> Set target densities based on vector of interface values
 subroutine set_target_densities( CS, rho_int )
@@ -2122,12 +2529,14 @@ subroutine set_regrid_max_depths( CS, max_depths, units_to_H )
 
   ! Check for sign reversals in the depths.
   if (max_depths(CS%nk+1) < max_depths(1)) then
-    do K=1,CS%nk ; if (max_depths(K+1) > max_depths(K)) &
-      call MOM_error(FATAL, "Unordered list of maximum depths sent to set_regrid_max_depths!")
+    do K=1,CS%nk
+      if (max_depths(K+1) > max_depths(K)) &
+          call MOM_error(FATAL, "Unordered list of maximum depths sent to set_regrid_max_depths!")
     enddo
   else
-    do K=1,CS%nk ; if (max_depths(K+1) < max_depths(K)) &
-      call MOM_error(FATAL, "Unordered list of maximum depths sent to set_regrid_max_depths.")
+    do K=1,CS%nk
+      if (max_depths(K+1) < max_depths(K)) &
+          call MOM_error(FATAL, "Unordered list of maximum depths sent to set_regrid_max_depths.")
     enddo
   endif
 
@@ -2287,8 +2696,8 @@ function getCoordinateInterfaces( CS, undo_scaling )
   ! densities, rather than computing the interfaces based on resolution
   if (CS%regridding_scheme == REGRIDDING_RHO) then
     if (.not. CS%target_density_set) &
-      call MOM_error(FATAL, 'MOM_regridding, getCoordinateInterfaces: '//&
-                            'target densities not set!')
+        call MOM_error(FATAL, 'MOM_regridding, getCoordinateInterfaces: '//&
+                              'target densities not set!')
 
     if (unscale) then
       getCoordinateInterfaces(:) = CS%coord_scale * CS%target_density(:)
@@ -2375,18 +2784,21 @@ end function getCoordinateShortName
 
 !> Can be used to set any of the parameters for MOM_regridding.
 subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_grid_weight, &
-             interp_scheme, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
-             compress_fraction, ref_pressure, &
+             use_depth_based_time_filter, depth_of_time_filter_shallow, depth_of_time_filter_deep, &
+             interp_scheme, use_adjust_interface_motion, compress_fraction, ref_pressure, &
              integrate_downward_for_e, remap_answers_2018, remap_answer_date, regrid_answer_date, &
-             adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, adaptAlpha, adaptDoMin, adaptDrho0)
+             adaptTimeRatio, adaptZoom, adaptZoomCoeff, adaptBuoyCoeff, &
+             adaptAlpha, adaptDoMin, adaptDrho0)
   type(regridding_CS), intent(inout) :: CS !< Regridding control structure
   logical, optional, intent(in) :: boundary_extrapolation !< Extrapolate in boundary cells
   real,    optional, intent(in) :: min_thickness    !< Minimum thickness allowed when building the
                                                     !! new grid [H ~> m or kg m-2]
   real,    optional, intent(in) :: old_grid_weight  !< Weight given to old coordinate when time-filtering grid [nondim]
-  character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
+  logical, optional, intent(in) :: use_depth_based_time_filter !< Allow depth-based time filtering
   real,    optional, intent(in) :: depth_of_time_filter_shallow !< Depth to start cubic [H ~> m or kg m-2]
   real,    optional, intent(in) :: depth_of_time_filter_deep !< Depth to end cubic [H ~> m or kg m-2]
+  character(len=*), optional, intent(in) :: interp_scheme !< Interpolation method for state-dependent coordinates
+  logical, optional, intent(in) :: use_adjust_interface_motion !< Call adjust_interface_motion()
   real,    optional, intent(in) :: compress_fraction !< Fraction of compressibility to add to potential density [nondim]
   real,    optional, intent(in) :: ref_pressure     !< The reference pressure for density-dependent
                                                     !! coordinates [R L2 T-2 ~> Pa]
@@ -2417,14 +2829,20 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
       call MOM_error(FATAL,'MOM_regridding, set_regrid_params: Weight is out side the range 0..1!')
     CS%old_grid_weight = old_grid_weight
   endif
-  if (present(depth_of_time_filter_shallow)) CS%depth_of_time_filter_shallow = depth_of_time_filter_shallow
-  if (present(depth_of_time_filter_deep)) CS%depth_of_time_filter_deep = depth_of_time_filter_deep
+  if (present(use_depth_based_time_filter)) CS%use_depth_based_time_filter = &
+                                                 use_depth_based_time_filter
+  if (present(depth_of_time_filter_shallow)) CS%depth_of_time_filter_shallow = &
+                                                depth_of_time_filter_shallow
+  if (present(depth_of_time_filter_deep)) CS%depth_of_time_filter_deep = &
+                                             depth_of_time_filter_deep
   if (present(depth_of_time_filter_shallow) .or. present(depth_of_time_filter_deep)) then
-    if (CS%depth_of_time_filter_deep<CS%depth_of_time_filter_shallow) call MOM_error(FATAL,'MOM_regridding, '//&
+    if (CS%depth_of_time_filter_deep<CS%depth_of_time_filter_shallow) call MOM_error(FATAL, &
+                     'MOM_regridding, '//&
                      'set_regrid_params: depth_of_time_filter_deep<depth_of_time_filter_shallow!')
   endif
 
   if (present(min_thickness)) CS%min_thickness = min_thickness
+  if (present(use_adjust_interface_motion)) CS%use_adjust_interface_motion = use_adjust_interface_motion
   if (present(compress_fraction)) CS%compressibility_fraction = compress_fraction
   if (present(ref_pressure)) CS%ref_pressure = ref_pressure
   if (present(integrate_downward_for_e)) CS%integrate_downward_for_e = integrate_downward_for_e
@@ -2448,12 +2866,14 @@ subroutine set_regrid_params( CS, boundary_extrapolation, min_thickness, old_gri
     if (present(min_thickness)) call set_rho_params(CS%rho_CS, min_thickness=min_thickness)
     if (present(ref_pressure)) call set_rho_params(CS%rho_CS, ref_pressure=ref_pressure)
     if (present(integrate_downward_for_e)) &
-      call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
-    if (associated(CS%rho_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
-      call set_rho_params(CS%rho_CS, interp_CS=CS%interp_CS)
+        call set_rho_params(CS%rho_CS, integrate_downward_for_e=integrate_downward_for_e)
+    if (associated(CS%rho_CS) .and. (present(interp_scheme) .or. &
+                                     present(boundary_extrapolation))) &
+        call set_rho_params(CS%rho_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_HYCOM1)
-    if (associated(CS%hycom_CS) .and. (present(interp_scheme) .or. present(boundary_extrapolation))) &
-      call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS)
+    if (associated(CS%hycom_CS) .and. (present(interp_scheme) .or. &
+                                       present(boundary_extrapolation))) &
+        call set_hycom_params(CS%hycom_CS, interp_CS=CS%interp_CS)
   case (REGRIDDING_HYBGEN)
     ! Do nothing for now.
   case (REGRIDDING_ADAPTIVE)
@@ -2513,8 +2933,8 @@ function getStaticThickness( CS, SSH, depth )
   real :: z, dz  ! Vertical positions and grid spacing [Z ~> m]
 
   select case ( CS%regridding_scheme )
-    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1, REGRIDDING_HYBGEN, &
-           REGRIDDING_ADAPTIVE )
+    case ( REGRIDDING_ZSTAR, REGRIDDING_SIGMA_SHELF_ZSTAR, REGRIDDING_HYCOM1, &
+           REGRIDDING_HYBGEN, REGRIDDING_ADAPTIVE )
       if (depth>0.) then
         z = ssh
         do k = 1, CS%nk

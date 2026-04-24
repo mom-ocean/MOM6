@@ -133,8 +133,7 @@ function register_advection_test_tracer(G, GV, param_file, CS, tr_Reg, restart_C
   allocate(CS%tr(isd:ied,jsd:jed,nz,NTR), source=0.0)
 
   do m=1,NTR
-    if (m < 10) then ; write(name,'("tr",I1.1)') m
-    else ; write(name,'("tr",I2.2)') m ; endif
+    write(name,'("tr",I0)') m
     write(longname,'("Concentration of Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
     if (GV%Boussinesq) then ; flux_units = "kg kg-1 m3 s-1"

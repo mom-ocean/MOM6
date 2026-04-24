@@ -421,10 +421,10 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
 !/BGR: New options for including Langmuir effects
 !/ 1. Options related to enhancing the mixing coefficient
   call get_param(paramFile, mdl, "USE_KPP_LT_K", CS%LT_K_Enhancement, &
-       'Flag for Langmuir turbulence enhancement of turbulent'//&
+       'Flag for Langmuir turbulence enhancement of turbulent '//&
        'mixing coefficient.', Default=.false.)
   call get_param(paramFile, mdl, "STOKES_MIXING", CS%Stokes_Mixing, &
-       'Flag for Langmuir turbulence enhancement of turbulent'//&
+       'Flag for Langmuir turbulence enhancement of turbulent '//&
        'mixing coefficient.', Default=.false.)
   if (CS%LT_K_Enhancement) then
     call get_param(paramFile, mdl, 'KPP_LT_K_SHAPE', string,                 &
@@ -471,7 +471,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
   endif
 !/ 2. Options related to enhancing the unresolved Vt2/entrainment in Rib
   call get_param(paramFile, mdl, "USE_KPP_LT_VT2", CS%LT_Vt2_Enhancement, &
-       'Flag for Langmuir turbulence enhancement of Vt2'//&
+       'Flag for Langmuir turbulence enhancement of Vt2 '//&
        'in Bulk Richardson Number.', Default=.false.)
   if (CS%LT_Vt2_Enhancement) then
     call get_param(paramFile, mdl, "KPP_LT_VT2_METHOD",string ,                  &
@@ -525,7 +525,7 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
                  "The vintage of the order of arithmetic in the CVMix KPP calculations.  Values "//&
                  "below 20240501 recover the answers from early in 2024, while higher values "//&
                  "use expressions that have been refactored for rotational symmetry.", &
-                 default=20240101) !### Change to: default=default_answer_date)
+                 default=default_answer_date)
 
   call closeParameterBlock(paramFile)
 
@@ -567,11 +567,11 @@ logical function KPP_init(paramFile, G, GV, US, diag, Time, CS, passive)
         cmor_field_name='oml', cmor_long_name='ocean_mixed_layer_thickness_defined_by_mixing_scheme', &
         cmor_units='m', cmor_standard_name='Ocean Mixed Layer Thickness Defined by Mixing Scheme')
   endif
-  if( CS%StokesMOST ) then
-  CS%id_StokesXI = register_diag_field('ocean_model', 'StokesXI', diag%axesT1, Time, &
-      'Stokes Similarity Parameter', 'nondim')
-  CS%id_Lam2     = register_diag_field('ocean_model', 'Lam2',  diag%axesT1, Time, &
-      'Ustk0_ustar', 'nondim')
+  if ( CS%StokesMOST ) then
+    CS%id_StokesXI = register_diag_field('ocean_model', 'StokesXI', diag%axesT1, Time, &
+        'Stokes Similarity Parameter', 'nondim')
+    CS%id_Lam2     = register_diag_field('ocean_model', 'Lam2',  diag%axesT1, Time, &
+        'Ustk0_ustar', 'nondim')
   endif
   CS%id_BulkDrho = register_diag_field('ocean_model', 'KPP_BulkDrho', diag%axesTL, Time, &
       'Bulk difference in density used in Bulk Richardson number, as used by [CVMix] KPP', &
@@ -878,7 +878,7 @@ subroutine KPP_calculate(CS, G, GV, US, h, tv, uStar, buoyFlux, Kt, Ks, Kv, &
 
           call MOM_error(FATAL,"KPP_calculate, after CVMix_coeffs_kpp: "// &
                    "Negative vertical viscosity or diffusivity has been detected. " // &
-                   "This is likely related to the choice of MATCH_TECHNIQUE and INTERP_TYPE2." //&
+                   "This is likely related to the choice of MATCH_TECHNIQUE and INTERP_TYPE2. " //&
                    "You might consider using the default options for these parameters." )
         endif
       enddo
@@ -1078,7 +1078,6 @@ subroutine KPP_compute_BLD(CS, G, GV, US, h, Temp, Salt, u, v, tv, uStar, buoyFl
                                                                  ! [L T-1 ~> m s-1]
   real :: StokesXI     ! Stokes similarity parameter [nondim]
   real, dimension( GV%ke )     :: StokesXI_1d ,   StokesVt_1d    !  Parameters of TKE production ratio [nondim]
-  real :: Llimit ! Stable boundary Layer Limit =  vonk Lstar [Z ~> m]
   integer :: kbl ! index of cell containing boundary layer depth
 
   if (CS%Stokes_Mixing .and. .not.associated(Waves)) call MOM_error(FATAL, &

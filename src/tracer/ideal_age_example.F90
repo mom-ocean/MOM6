@@ -18,7 +18,7 @@ use MOM_open_boundary, only : ocean_OBC_type
 use MOM_restart, only : query_initialized, set_initialized, MOM_restart_CS
 use MOM_spatial_means, only : global_mass_int_EFP
 use MOM_sponge, only : set_up_sponge_field, sponge_CS
-use MOM_time_manager, only : time_type, time_type_to_real
+use MOM_time_manager, only : time_type, time_to_real
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_tracer_Z_init, only : tracer_Z_init
@@ -179,7 +179,7 @@ function register_ideal_age_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
 
   CS%BL_residence_num = 0
   if (do_BL_residence) then
-    CS%ntr = CS%ntr + 1 ; m = CS%ntr; CS%BL_residence_num = CS%ntr
+    CS%ntr = CS%ntr + 1 ; m = CS%ntr ; CS%BL_residence_num = CS%ntr
     CS%tr_desc(m) = var_desc("BL_age", "yr", "BL Residence Time Tracer", caller=mdl)
     CS%tracer_ages(m) = .true. ; CS%growth_rate(m) = 0.0
     CS%IC_val(m) = 0.0 ; CS%young_val(m) = 0.0 ; CS%tracer_start_year(m) = 0.0
@@ -373,7 +373,7 @@ subroutine ideal_age_tracer_column_physics(h_old, h_new, ea, eb, fluxes, dt, G, 
   Isecs_per_year = 1.0 / (365.0*86400.0*US%s_to_T)
   !   Set the surface value of tracer 1 to increase exponentially
   ! with a 30 year time scale.
-  year = US%s_to_T*time_type_to_real(CS%Time) * Isecs_per_year
+  year = time_to_real(CS%Time, scale=US%s_to_T) * Isecs_per_year
 
   do m=1,CS%ntr
 

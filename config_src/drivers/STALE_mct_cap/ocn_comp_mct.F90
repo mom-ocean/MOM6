@@ -31,7 +31,7 @@ use MOM,                  only: extract_surface_state
 use MOM_variables,        only: surface
 use MOM_domains,          only: MOM_infra_init
 use MOM_restart,          only: save_restart
-use MOM_ice_shelf,        only: ice_shelf_save_restart
+use MOM_ice_shelf,        only: ice_shelf_save_restart, adjust_ice_sheet_frazil
 use MOM_domains,          only: num_pes, root_pe, pe_here
 use MOM_grid,             only: ocean_grid_type, get_global_grid_size
 use MOM_error_handler,    only: MOM_error, FATAL, is_root_pe, WARNING
@@ -61,7 +61,7 @@ use MOM_coupler_types,   only : coupler_type_spawn
 use MOM_coupler_types,   only : coupler_type_initialized, coupler_type_copy_data
 
 ! By default make data private
-implicit none; private
+implicit none ; private
 
 #include <MOM_memory.h>
 
@@ -201,7 +201,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
 
     !  set the shr log io unit number
     call shr_file_setLogUnit(stdout)
-  end if
+  endif
 
   call set_calendar_type(NOLEAP)  !TODO: confirm this
 
@@ -280,7 +280,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
                   "Coeff. used to convert net shortwave rad. into "//&
                   "near-IR, diffuse shortwave.", units="nondim", default=0.215)
   else
-    glb%c1 = 0.0; glb%c2 = 0.0; glb%c3 = 0.0; glb%c4 = 0.0
+    glb%c1 = 0.0 ; glb%c2 = 0.0 ; glb%c3 = 0.0 ; glb%c4 = 0.0
   endif
 
   ! Close param file before it gets opened by ocean_model_init again.
@@ -316,13 +316,13 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
     close(nu)
     if (is_root_pe()) then
       write(stdout,*) 'Reading restart file(s): ',trim(restartfiles)
-    end if
+    endif
     call shr_file_freeUnit(nu)
     call ocean_model_init(glb%ocn_public, glb%ocn_state, time0, time_start, input_restart_file=trim(restartfiles))
   endif
   if (is_root_pe()) then
     write(stdout,'(/12x,a/)') '======== COMPLETED MOM INITIALIZATION ========'
-  end if
+  endif
 
   ! Initialize ocn_state%sfc_state out of sight
   call ocean_model_init_sfc(glb%ocn_state, glb%ocn_public)
@@ -384,14 +384,14 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   if (mom_cpl_dt /= ocn_cpl_dt) then
     write(stdout,*) 'ERROR mom_cpl_dt and ocn_cpl_dt must be identical'
     call exit(0)
-  end if
+  endif
 
   ! send initial state to driver
 
   !TODO:
   ! if ( lsend_precip_fact )  then
   !    call seq_infodata_PutData( infodata, precip_fact=precip_fact)
-  ! end if
+  ! endif
 
   if (debug .and. root_pe().eq.pe_here()) print *, "calling ocn_export"
   call ocn_export(glb%ind, glb%ocn_public, glb%grid, o2x_o%rattr, mom_cpl_dt, ncouple_per_day)
@@ -412,7 +412,7 @@ subroutine ocn_init_mct( EClock, cdata_o, x2o_o, o2x_o, NLFilename )
   if (is_root_pe()) then
     call shr_file_setLogUnit (shrlogunit)
     call shr_file_setLogLevel(shrloglev)
-  end if
+  endif
 
 end subroutine ocn_init_mct
 
@@ -488,10 +488,10 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
       time_start = time_start-coupling_timestep
       ! double the first coupling interval (to account for the missing coupling interval to due to lag)
       coupling_timestep = coupling_timestep*2
-    end if
+    endif
 
     firstCall = .false.
-  end if
+  endif
 
   ! Debugging clocks
   if (debug .and. is_root_pe()) then
@@ -526,7 +526,7 @@ subroutine ocn_run_mct( EClock, cdata_o, x2o_o, o2x_o)
           c1=glb%c1, c2=glb%c2, c3=glb%c3, c4=glb%c4)
   else
     call ocn_import(x2o_o%rattr, glb%ind,  glb%grid, Ice_ocean_boundary, glb%ocn_public, stdout, Eclock )
-  end if
+  endif
 
   ! Update internal ocean
   call update_ocean_model(ice_ocean_boundary, glb%ocn_state, glb%ocn_public, time_start, coupling_timestep)
@@ -760,7 +760,7 @@ character(32) function get_runtype()
   else
     write(stdout,*) 'ocn_comp_mct ERROR: unknown starttype'
     call exit(0)
-  end if
+  endif
   return
 
 end function
@@ -780,6 +780,9 @@ subroutine ocean_model_init_sfc(OS, Ocean_sfc)
                           (/is,is,ie,ie/), (/js,js,je,je/), as_needed=.true.)
 
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
+
+  if (OS%use_ice_shelf .and. allocated(OS%sfc_state%frazil)) &
+    call adjust_ice_sheet_frazil(OS%sfc_state, OS%fluxes, OS%Ice_shelf_CSp)
 
   call convert_state_to_ocean_type(OS%sfc_state, Ocean_sfc, OS%grid, OS%US)
 

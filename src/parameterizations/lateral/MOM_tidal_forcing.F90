@@ -11,10 +11,8 @@ use MOM_domains,       only : pass_var
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING
 use MOM_file_parser,   only : get_param, log_version, param_file_type
 use MOM_grid,          only : ocean_grid_type
-use MOM_harmonic_analysis, &
-                       only : HA_init, HA_register, harmonic_analysis_CS
 use MOM_io,            only : field_exists, file_exists, MOM_read_data
-use MOM_time_manager,  only : set_date, time_type, time_type_to_real, operator(-)
+use MOM_time_manager,  only : set_date, time_type, time_minus_signed
 use MOM_unit_scaling,  only : unit_scale_type
 
 implicit none ; private
@@ -100,7 +98,7 @@ subroutine astro_longitudes_init(time_ref, longitudes)
   real, parameter :: PI = 4.0 * atan(1.0)            !> 3.14159... [nondim]
 
   ! Find date at time_ref in days since midnight at the start of 1900-01-01
-  D = time_type_to_real(time_ref - set_date(1900, 1, 1, 0, 0, 0)) / (24.0 * 3600.0)
+  D = time_minus_signed(time_ref, set_date(1900, 1, 1, 0, 0, 0)) / (24.0 * 3600.0)
   ! Time since 1900-01-01 in Julian centuries
   ! Kowalik and Luick use 36526, but Schureman uses 36525 which I think is correct.
   T = D / 36525.0
@@ -237,13 +235,12 @@ end subroutine nodal_fu
 !! while fields like the background viscosities are 2-D arrays.
 !! ALLOC is a macro defined in MOM_memory.h for allocate or nothing with
 !! static memory.
-subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
+subroutine tidal_forcing_init(Time, G, US, param_file, CS)
   type(time_type),        intent(in)    :: Time !< The current model time.
   type(ocean_grid_type),  intent(inout) :: G    !< The ocean's grid structure.
   type(unit_scale_type),  intent(in)    :: US   !< A dimensional unit scaling type
   type(param_file_type),  intent(in)    :: param_file !< A structure to parse for run-time parameters.
   type(tidal_forcing_CS), intent(inout) :: CS   !< Tidal forcing control structure
-  type(harmonic_analysis_CS), optional, intent(out) :: HA_CS !< Control structure for harmonic analysis
 
   ! Local variables
   real, dimension(SZI_(G), SZJ_(G)) :: &
@@ -263,7 +260,6 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
                                               !! calculating tidal forcing.
   type(time_type) :: nodal_time               !< Model time to calculate nodal modulation for.
   type(astro_longitudes) :: nodal_longitudes  !< Solar and lunar longitudes for tidal forcing
-  logical :: HA_ssh, HA_ubt, HA_vbt
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tidal_forcing" ! This module's name.
@@ -272,7 +268,7 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
   integer :: i, j, c, is, ie, js, je, isd, ied, jsd, jed, nc
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
-  isd = G%isd ; ied = G%ied ; jsd = G%jsd; jed = G%jed
+  isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
@@ -372,8 +368,8 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
                    old_name='TIDE_SAL_SCALAR_VALUE')
 
   if (nc > MAX_CONSTITUENTS) then
-    write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least",I3, &
-                &"to accommodate all the registered tidal constituents.")') nc
+    write(mesg,'("Increase MAX_CONSTITUENTS in MOM_tidal_forcing.F90 to at least ",I0, &
+                &" to accommodate all the registered tidal constituents.")') nc
     call MOM_error(FATAL, "MOM_tidal_forcing"//mesg)
   endif
 
@@ -568,20 +564,6 @@ subroutine tidal_forcing_init(Time, G, US, param_file, CS, HA_CS)
     endif
   enddo
 
-  if (present(HA_CS)) then
-    call HA_init(Time, US, param_file, CS%time_ref, CS%nc, CS%freq, CS%phase0, CS%const_name, &
-                 CS%tide_fn, CS%tide_un, HA_CS)
-    call get_param(param_file, mdl, "HA_SSH", HA_ssh, &
-                   "If true, perform harmonic analysis of sea serface height.", default=.false.)
-    if (HA_ssh) call HA_register('ssh', 'h', HA_CS)
-    call get_param(param_file, mdl, "HA_UBT", HA_ubt, &
-                   "If true, perform harmonic analysis of zonal barotropic velocity.", default=.false.)
-    if (HA_ubt) call HA_register('ubt', 'u', HA_CS)
-    call get_param(param_file, mdl, "HA_VBT", HA_vbt, &
-                   "If true, perform harmonic analysis of meridional barotropic velocity.", default=.false.)
-    if (HA_vbt) call HA_register('vbt', 'v', HA_CS)
-  endif
-
   id_clock_tides = cpu_clock_id('(Ocean tides)', grain=CLOCK_MODULE)
 
 end subroutine tidal_forcing_init
@@ -651,7 +633,7 @@ subroutine calc_tidal_forcing(Time, e_tide_eq, e_tide_sal, G, US, CS)
     return
   endif
 
-  now = US%s_to_T * time_type_to_real(Time - cs%time_ref)
+  now = time_minus_signed(Time, cs%time_ref, scale=US%s_to_T)
 
   do c=1,CS%nc
     m = CS%struct(c)
@@ -725,7 +707,7 @@ subroutine calc_tidal_forcing_legacy(Time, e_sal, e_sal_tide, e_tide_eq, e_tide_
     return
   endif
 
-  now = US%s_to_T * time_type_to_real(Time - cs%time_ref)
+  now = time_minus_signed(Time, cs%time_ref, scale=US%s_to_T)
 
   do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
     e_sal_tide(i,j) = e_sal(i,j)

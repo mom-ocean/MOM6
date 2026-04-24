@@ -106,7 +106,7 @@ logical function hor_bnd_diffusion_init(Time, G, GV, US, param_file, diag, diaba
            "This module implements horizontal diffusion of tracers near boundaries", &
            all_default=.not.hor_bnd_diffusion_init)
   call get_param(param_file, mdl, "USE_HORIZONTAL_BOUNDARY_DIFFUSION", hor_bnd_diffusion_init, &
-                 "If true, enables the horizonal boundary tracer's diffusion module.", &
+                 "If true, enables the horizontal boundary tracer's diffusion module.", &
                  default=.false.)
   if (.not. hor_bnd_diffusion_init) return
 
@@ -552,7 +552,7 @@ subroutine merge_interfaces(nk, h_L, h_R, hbl_L, hbl_R, H_subroundoff, h)
   n = (2*nk)+3
   allocate(eta_all(n))
   ! compute and merge interfaces
-  eta_L(:) = 0.0; eta_R(:) = 0.0; eta_all(:) = 0.0
+  eta_L(:) = 0.0 ; eta_R(:) = 0.0 ; eta_all(:) = 0.0
   kk = 0
   do k=2,nk+1
     eta_L(k) = eta_L(k-1) + h_L(k-1)
@@ -812,7 +812,7 @@ subroutine fluxes_layer_method(boundary, ke, hbl_L, hbl_R, h_L, h_R, phi_L, phi_
     htot_max = MIN(hbl_L, hbl_R)
   endif
 
-  tmp1 = 0.0; tmp2 = 0.0
+  tmp1 = 0.0 ; tmp2 = 0.0
   do k = 1,ke
     ! apply flux_limiter
     if (CS%limiter .and. F_layer(k) /= 0.) then
@@ -1023,7 +1023,7 @@ logical function near_boundary_unit_tests( verbose )
 
   ! All cases in this section have hbl which are equal to the column thicknesses
   test_name = 'Equal hbl and same layer thicknesses (gradient from right to left)'
-  hbl_L = 2.; hbl_R = 2.
+  hbl_L = 2. ; hbl_R = 2.
   h_L = (/2.,2./) ; h_R = (/2.,2./)
   phi_L = (/0.,0./) ; phi_R = (/1.,1./)
   khtr_u = (/1.,1.,1./)
@@ -1034,7 +1034,7 @@ logical function near_boundary_unit_tests( verbose )
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/-2.0,0.0/) )
 
   test_name = 'Equal hbl and same layer thicknesses (gradient from left to right)'
-  hbl_L = 2.; hbl_R = 2.
+  hbl_L = 2. ; hbl_R = 2.
   h_L = (/2.,2./) ; h_R = (/2.,2./)
   phi_L = (/2.,1./) ; phi_R = (/1.,1./)
   khtr_u = (/0.5,0.5,0.5/)
@@ -1045,7 +1045,7 @@ logical function near_boundary_unit_tests( verbose )
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/1.0,0.0/) )
 
   test_name = 'hbl < column thickness, hbl same, linear profile right, khtr=2'
-  hbl_L = 2; hbl_R = 2
+  hbl_L = 2 ; hbl_R = 2
   h_L = (/1.,2./) ; h_R = (/1.,2./)
   phi_L = (/0.,0./) ; phi_R = (/0.5,2./)
   khtr_u = (/2.,2.,2./)
@@ -1057,7 +1057,7 @@ logical function near_boundary_unit_tests( verbose )
                              test_layer_fluxes( verbose, nk, test_name, F_layer, (/-1.0,-4.0/) )
 
   test_name = 'Different hbl and different column thicknesses (zero gradient)'
-  hbl_L = 12; hbl_R = 20
+  hbl_L = 12 ; hbl_R = 20
   h_L = (/6.,6./) ; h_R = (/10.,10./)
   phi_L = (/1.,1./) ; phi_R = (/1.,1./)
   khtr_u = (/1.,1.,1./)
@@ -1069,7 +1069,7 @@ logical function near_boundary_unit_tests( verbose )
 
   test_name = 'Different hbl and different column thicknesses (gradient from left to right)'
 
-  hbl_L = 15; hbl_R = 10.
+  hbl_L = 15 ; hbl_R = 10.
   h_L = (/10.,5./) ; h_R = (/10.,0./)
   phi_L = (/1.,1./) ; phi_R = (/0.,0./)
   khtr_u = (/1.,1.,1./)

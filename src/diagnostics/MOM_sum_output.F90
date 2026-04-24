@@ -411,9 +411,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   real :: QRZL2_to_J   ! The combination of unit rescaling factors to convert integrated heat
                        ! content into mks units [J Q-1 R-1 Z-1 L-2 ~> 1]
   real :: J_to_QRZL2   ! The combination of unit rescaling factors to rescale integrated heat
-                       ! content from mks units into the internal units of MOM6 [Q R Z L J-1 ~> 1]
+                       ! content from mks units into the internal units of MOM6 [Q R Z L2 J-1 ~> 1]
   real :: kg_to_RZL2   ! The combination of unit rescaling factors to rescale masses from
-                       ! mks units into the internal units of MOM6 [R Z L kg-1 ~> 1]
+                       ! mks units into the internal units of MOM6 [R Z L2 kg-1 ~> 1]
   real :: salt_to_kg   ! A factor used to rescale salt contents [kg R-1 Z-1 L-2 ~> nondim]
   integer :: num_nc_fields  ! The number of fields that will actually go into
                             ! the NetCDF file.
@@ -855,10 +855,8 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
   elseif (reday < 1.0e11) then ; write(day_str, '(F15.3)') reday
   else ;                         write(day_str, '(ES15.9)') reday ; endif
 
-  if     (n < 1000000)   then ; write(n_str, '(I6)')  n
-  elseif (n < 10000000)  then ; write(n_str, '(I7)')  n
-  elseif (n < 100000000) then ; write(n_str, '(I8)')  n
-  else                        ; write(n_str, '(I10)') n ; endif
+  if (n < 1000000) then ; write(n_str, '(I6)') n
+  else                  ; write(n_str, '(I0)') n ; endif
 
   date_str = trim(mesg_intro)//trim(day_str)
   if (date_stamped) &

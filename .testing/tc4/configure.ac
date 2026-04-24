@@ -51,24 +51,29 @@ AX_FC_CHECK_C_LIB([netcdf], [nc_create], [], [
 ])
 
 # Confirm that the Fortran compiler can link to the netCDF Fortran library.
-# NOTE:
-#   - We test nf_create, rather than nf90_create, since AX_FC_CHECK_LIB can
-#     not currently probe the Fortran 90 interfaces.
-#   - nf-config does not have --libdir, so we parse the --flibs output.
-AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
-  AS_UNSET([ax_fc_cv_lib_netcdff_nf_create])
-  AC_PATH_PROG([NF_CONFIG], [nf-config])
-  AS_IF([test -n "$NF_CONFIG"], [
-    AC_SUBST([LDFLAGS],
-      ["$LDFLAGS $($NF_CONFIG --flibs | xargs -n1 | grep "^-L" | sort -u | xargs)"]
+# NOTE: nf-config does not have --libdir, so we parse the --flibs output.
+MOM6_FC_CHECK_LIB([netcdff], [nf90_create], [netcdf], [path,cmode,ncid], [rc], [
+        character :: path
+        integer :: cmode, ncid, rc],
+  [], [
+    AS_UNSET([mom6_fc_cv_lib_netcdff_nf90_create])
+    AC_PATH_PROG([NF_CONFIG], [nf-config])
+    AS_IF([test -n "$NF_CONFIG"], [
+      AC_SUBST([LDFLAGS],
+        ["$LDFLAGS $($NF_CONFIG --flibs | xargs -n1 | grep "^-L" | sort -u | xargs)"]
+      )
+    ], [
+      AC_MSG_ERROR([Could not find nf-config.])
+    ])
+    MOM6_FC_CHECK_LIB([netcdff], [nf90_create], [netcdf], [path,cmode,ncid], [rc], [
+        character :: path
+        integer :: cmode, ncid, rc],
+      [], [
+        AC_MSG_ERROR([Could not find netCDF Fortran library.])
+      ]
     )
-  ], [
-    AC_MSG_ERROR([Could not find nf-config.])
-  ])
-  AX_FC_CHECK_LIB([netcdff], [nf_create], [], [], [
-    AC_MSG_ERROR([Could not find netCDF Fortran library.])
-  ])
-])
+  ]
+)
 
 
 AC_CONFIG_FILES([Makefile])

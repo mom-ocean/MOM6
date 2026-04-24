@@ -1005,7 +1005,8 @@ subroutine edge_slopes_implicit_h5( N, h, u, edge_slopes, h_neglect, answer_date
   real, dimension(7)    :: x            ! Coordinate system with 0 at edges in the same units as h [H]
   real, parameter       :: C1_12 = 1.0 / 12.0   ! A rational parameter [nondim]
   real, parameter       :: C5_6 = 5.0 / 6.0     ! A rational parameter [nondim]
-  real                  :: dx, xavg     ! Differences and averages of successive values of x [same units as h]
+  real                  :: dx           ! Differences between successive values of x in the same units as h [H]
+  real                  :: xavg         ! Average of successive values of x in the same units as h [H]
   real, dimension(6,6)  :: Asys         ! The matrix that is being inverted for a solution,
                                         ! in units that might vary with the second (j) index as [H^j]
   real, dimension(6)    :: Bsys         ! The right hand side of the system to solve for C in various

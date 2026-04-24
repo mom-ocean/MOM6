@@ -14,7 +14,7 @@ use MOM_hor_index, only : hor_index_type
 use MOM_interface_heights, only : thickness_to_dz
 use MOM_io, only : file_exists, MOM_read_data, slasher, vardesc, var_desc
 use MOM_restart, only : query_initialized, set_initialized, MOM_restart_CS
-use MOM_time_manager, only : time_type, time_type_to_real
+use MOM_time_manager, only : time_type
 use MOM_tracer_registry, only : register_tracer, tracer_registry_type
 use MOM_tracer_diabatic, only : tracer_vertdiff, applyTracerBoundaryFluxesInOut
 use MOM_unit_scaling, only : unit_scale_type

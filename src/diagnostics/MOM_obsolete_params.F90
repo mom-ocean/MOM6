@@ -111,9 +111,22 @@ subroutine find_obsolete_params(param_file)
   call obsolete_real(param_file, "MIN_Z_DIAG_INTERVAL")
   call obsolete_char(param_file, "Z_OUTPUT_GRID_FILE")
 
+  call obsolete_logical(param_file, "CFL_BASED_TRUNCATIONS", .true.)
+  call obsolete_logical(param_file, "KD_BACKGROUND_VIA_KDML_BUG", .false.)
+  call obsolete_logical(param_file, "USE_DIABATIC_TIME_BUG", .false.)
+
   call read_param(param_file, "INTERPOLATE_SPONGE_TIME_SPACE", test_logic)
   call obsolete_logical(param_file, "NEW_SPONGES", warning_val=test_logic, &
                         hint="Use INTERPOLATE_SPONGE_TIME_SPACE instead.")
+
+  test_logic = .true. ; call read_param(param_file, "BOUND_KH", test_logic)
+  call obsolete_logical(param_file, "BETTER_BOUND_KH", warning_val=test_logic, hint="Use BOUND_KH alone.")
+  test_logic = .true. ; call read_param(param_file, "BOUND_AH", test_logic)
+  call obsolete_logical(param_file, "BETTER_BOUND_AH", warning_val=test_logic, hint="Use BOUND_AH alone.")
+
+  test_logic = .false. ; call read_param(param_file, "UNSPLIT_DT_VISC_BUG", test_logic)
+  call obsolete_logical(param_file, "FIX_UNSPLIT_DT_VISC_BUG", warning_val=(.not.test_logic), &
+                        hint="Use UNSPLIT_DT_VISC_BUG instead, but with the reversed meaning.")
 
   call obsolete_logical(param_file, "SMOOTH_RI", hint="Instead use N_SMOOTH_RI.")
 
@@ -204,7 +217,7 @@ subroutine obsolete_char(param_file, varname, warning_val, hint)
   logical :: var_is_set  ! True if this value was read by read_param.
   logical :: only_warn
 
-  test_string = ''; call read_param(param_file, varname, test_string, set=var_is_set)
+  test_string = '' ; call read_param(param_file, varname, test_string, set=var_is_set)
   hint_msg = " " ; if (present(hint)) hint_msg = hint
 
   if (var_is_set) then
@@ -241,8 +254,8 @@ subroutine obsolete_real(param_file, varname, warning_val, hint, only_warn)
   logical :: issue_warning
   character(len=128) :: hint_msg
 
-  test_val = -9e35; call read_param(param_file, varname, test_val, set=var_is_set)
-  warn_val = -9e35; if (present(warning_val)) warn_val = warning_val
+  test_val = -9e35 ; call read_param(param_file, varname, test_val, set=var_is_set)
+  warn_val = -9e35 ; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
   issue_warning = .false. ; if (present(only_warn)) issue_warning = only_warn
 
@@ -269,8 +282,8 @@ subroutine obsolete_int(param_file, varname, warning_val, hint)
   integer :: test_val, warn_val
   character(len=128) :: hint_msg
 
-  test_val = -123456788; call read_param(param_file, varname, test_val, set=var_is_set)
-  warn_val = -123456788; if (present(warning_val)) warn_val = warning_val
+  test_val = -123456788 ; call read_param(param_file, varname, test_val, set=var_is_set)
+  warn_val = -123456788 ; if (present(warning_val)) warn_val = warning_val
   hint_msg = " " ; if (present(hint)) hint_msg = hint
 
   if (var_is_set) then

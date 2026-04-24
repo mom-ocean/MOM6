@@ -375,12 +375,12 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       if (GV%Boussinesq) then
         !$OMP parallel do default(shared)
         do j=js-1,je+1 ; do i=is-1,ie+1
-          depth_tot(i,j) = (G%bathyT(i,j) + G%Z_ref) * GV%Z_to_H
+          depth_tot(i,j) = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0) * GV%Z_to_H
         enddo ; enddo
       else
         !$OMP parallel do default(shared)
         do j=js-1,je+1 ; do i=is-1,ie+1
-          depth_tot(i,j) = (G%bathyT(i,j) + G%Z_ref) * CS%rho_fixed_total_depth * GV%RZ_to_H
+          depth_tot(i,j) = max(G%meanSL(i,j) + G%bathyT(i,j), 0.0) * CS%rho_fixed_total_depth * GV%RZ_to_H
         enddo ; enddo
       endif
     else
@@ -620,7 +620,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       !$OMP parallel do default(shared)
       do j=js-1,je+1 ; do I=is-2,ie+1
         ! MEKE_uflux is used here as workspace with units of [L2 T-2 ~> m2 s-2].
-        MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * G%OBCmaskCu(I,j)) * &
+        MEKE_uflux(I,j) = (G%dy_Cu(I,j)*G%IdxCu_OBCmask(I,j)) * &
             (MEKE%MEKE(i+1,j) - MEKE%MEKE(i,j))
       ! This would have units of [R Z L2 T-2 ~> kg s-2]
       ! MEKE_uflux(I,j) = ((G%dy_Cu(I,j)*G%IdxCu(I,j)) * &
@@ -630,7 +630,7 @@ subroutine step_forward_MEKE(MEKE, h, SN_u, SN_v, visc, dt, G, GV, US, CS, hu, h
       !$OMP parallel do default(shared)
       do J=js-2,je+1 ; do i=is-1,ie+1
         ! MEKE_vflux is used here as workspace with units of [L2 T-2 ~> m2 s-2].
-        MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * G%OBCmaskCv(i,J)) * &
+        MEKE_vflux(i,J) = (G%dx_Cv(i,J)*G%IdyCv_OBCmask(i,J)) * &
             (MEKE%MEKE(i,j+1) - MEKE%MEKE(i,j))
       ! This would have units of [R Z L2 T-2 ~> kg s-2]
       ! MEKE_vflux(i,J) = ((G%dx_Cv(i,J)*G%IdyCv(i,J)) * &
@@ -1367,7 +1367,7 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
   if (.not. MEKE_init) return
   CS%initialized = .true.
   call get_param(param_file, mdl, "MEKE_IN_DYNAMICS", meke_in_dynamics, &
-                 "If true, step MEKE forward with the dynamics"// &
+                 "If true, step MEKE forward with the dynamics "// &
                  "otherwise with the tracer timestep.", &
                  default=.true.)
 
@@ -1431,7 +1431,7 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
                    "The nondimensional coefficient governing the efficiency of the GEOMETRIC \n"//&
                    "thickness diffusion.", units="nondim", default=0.05)
     call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_ALT", CS%MEKE_equilibrium_alt, &
-                   "If true, use an alternative formula for computing the (equilibrium)"//&
+                   "If true, use an alternative formula for computing the (equilibrium) "//&
                    "initial value of MEKE.", default=.false.)
     call get_param(param_file, mdl, "MEKE_EQUILIBRIUM_RESTORING", CS%MEKE_equilibrium_restoring, &
                    "If true, restore MEKE back to its equilibrium value, which is calculated at "//&
@@ -1525,15 +1525,15 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
                  "the deformation radius or grid-spacing. Only used if "//&
                  "MEKE_OLD_LSCALE=True", default=.false.)
   call get_param(param_file, mdl, "MEKE_VISCOSITY_COEFF_KU", CS%viscosity_coeff_Ku, &
-                 "If non-zero, is the scaling coefficient in the expression for"//&
-                 "viscosity used to parameterize harmonic lateral momentum mixing by"//&
-                 "unresolved eddies represented by MEKE. Can be negative to"//&
+                 "If non-zero, is the scaling coefficient in the expression for "//&
+                 "viscosity used to parameterize harmonic lateral momentum mixing by "//&
+                 "unresolved eddies represented by MEKE. Can be negative to "//&
                  "represent backscatter from the unresolved eddies.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_VISCOSITY_COEFF_AU", CS%viscosity_coeff_Au, &
-                 "If non-zero, is the scaling coefficient in the expression for"//&
-                 "viscosity used to parameterize biharmonic lateral momentum mixing by"//&
-                 "unresolved eddies represented by MEKE. Can be negative to"//&
+                 "If non-zero, is the scaling coefficient in the expression for "//&
+                 "viscosity used to parameterize biharmonic lateral momentum mixing by "//&
+                 "unresolved eddies represented by MEKE. Can be negative to "//&
                  "represent backscatter from the unresolved eddies.", &
                  units="nondim", default=0.0)
   call get_param(param_file, mdl, "MEKE_FIXED_MIXING_LENGTH", CS%Lfixed, &
@@ -1542,7 +1542,7 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
                  units="m", default=0.0, scale=US%m_to_L)
   call get_param(param_file, mdl, "MEKE_FIXED_TOTAL_DEPTH", CS%fixed_total_depth, &
                  "If true, use the nominal bathymetric depth as the estimate of the "//&
-                 "time-varying ocean depth.  Otherwise base the depth on the total ocean mass"//&
+                 "time-varying ocean depth.  Otherwise base the depth on the total ocean mass "//&
                  "per unit area.", default=.true.)
   call get_param(param_file, mdl, "MEKE_TOTAL_DEPTH_RHO", CS%rho_fixed_total_depth, &
                  "A density used to translate the nominal bathymetric depth into an estimate "//&
@@ -1724,11 +1724,13 @@ logical function MEKE_init(Time, G, GV, US, param_file, diag, dbcomms_CS, CS, ME
   if (coldStart) CS%initialize = .false.
   if (CS%initialize) call MOM_error(WARNING, &
                        "MEKE_init: Initializing MEKE with a local equilibrium balance.")
-  if (.not.query_initialized(MEKE%Le, "MEKE_Le", restart_CS) .and. allocated(MEKE%Le)) then
-    !$OMP parallel do default(shared)
-    do j=js,je ; do i=is,ie
-      MEKE%Le(i,j) = sqrt(G%areaT(i,j))
-    enddo ; enddo
+  if (allocated(MEKE%Le)) then
+    if (.not.query_initialized(MEKE%Le, "MEKE_Le", restart_CS)) then
+      !$OMP parallel do default(shared)
+      do j=js,je ; do i=is,ie
+        MEKE%Le(i,j) = sqrt(G%areaT(i,j))
+      enddo ; enddo
+    endif
   endif
 
   ! Set up group passes.  In the case of a restart, these fields need a halo update now.

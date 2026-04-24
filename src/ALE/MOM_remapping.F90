@@ -38,6 +38,7 @@ use Recon1d_PPM_CWK, only : PPM_CWK
 use Recon1d_EPPM_CWK, only : EPPM_CWK
 use Recon1d_PPM_H4_2019, only : PPM_H4_2019
 use Recon1d_PPM_H4_2018, only : PPM_H4_2018
+use Recon1d_PLM_WLS, only : PLM_WLS
 
 implicit none ; private
 
@@ -439,7 +440,7 @@ subroutine build_reconstructions_1d( CS, n0, h0, u0, ppoly_r_coefs, &
   integer :: k, n
   logical :: deb ! Do debugging
 
-  deb=.false.; if (present(debug)) deb=debug
+  deb = .false. ; if (present(debug)) deb = debug
 
   h_neg_edge = h_neglect ; if (present(h_neglect_edge)) h_neg_edge = h_neglect_edge
 
@@ -577,12 +578,12 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
       u_min = min(u_l, u_c)
       u_max = max(u_l, u_c)
       if (ppoly_r_E(i0,1) < u_min) then
-        write(0,'(a,i4,5(1x,a,1pe24.16))') 'Left edge undershoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+        write(0,'(a,I0,5(1x,a,1pe24.16))') 'Left edge undershoot at ',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
                                            'edge=',ppoly_r_E(i0,1),'err=',ppoly_r_E(i0,1)-u_min
         problem_detected = .true.
       endif
       if (ppoly_r_E(i0,1) > u_max) then
-        write(0,'(a,i4,5(1x,a,1pe24.16))') 'Left edge overshoot at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+        write(0,'(a,I0,5(1x,a,1pe24.16))') 'Left edge overshoot at ',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
                                            'edge=',ppoly_r_E(i0,1),'err=',ppoly_r_E(i0,1)-u_max
         problem_detected = .true.
       endif
@@ -591,19 +592,19 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
       u_min = min(u_c, u_r)
       u_max = max(u_c, u_r)
       if (ppoly_r_E(i0,2) < u_min) then
-        write(0,'(a,i4,5(1x,a,1pe24.16))') 'Right edge undershoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
+        write(0,'(a,I0,5(1x,a,1pe24.16))') 'Right edge undershoot at ',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
                                            'edge=',ppoly_r_E(i0,2),'err=',ppoly_r_E(i0,2)-u_min
         problem_detected = .true.
       endif
       if (ppoly_r_E(i0,2) > u_max) then
-        write(0,'(a,i4,5(1x,a,1pe24.16))') 'Right edge overshoot at',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
+        write(0,'(a,I0,5(1x,a,1pe24.16))') 'Right edge overshoot at ',i0,'u(i0)=',u_c,'u(i0+1)=',u_r, &
                                            'edge=',ppoly_r_E(i0,2),'err=',ppoly_r_E(i0,2)-u_max
         problem_detected = .true.
       endif
     endif
     if (i0 > 1) then
       if ( (u_c-u_l)*(ppoly_r_E(i0,1)-ppoly_r_E(i0-1,2)) < 0.) then
-        write(0,'(a,i4,5(1x,a,1pe24.16))') 'Non-monotonic edges at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
+        write(0,'(a,I0,5(1x,a,1pe24.16))') 'Non-monotonic edges at',i0,'u(i0-1)=',u_l,'u(i0)=',u_c, &
                                            'right edge=',ppoly_r_E(i0-1,2),'left edge=',ppoly_r_E(i0,1)
         write(0,'(5(a,1pe24.16,1x))') 'u(i0)-u(i0-1)',u_c-u_l,'edge diff=',ppoly_r_E(i0,1)-ppoly_r_E(i0-1,2)
         problem_detected = .true.
@@ -614,7 +615,7 @@ subroutine check_reconstructions_1d(n0, h0, u0, deg, boundary_extrapolation, &
       write(0,'(3(a,1pe24.16,1x))') 'u_l=',u_l,'u_c=',u_c,'u_r=',u_r
       write(0,'(a4,10a24)') 'i0','h0(i0)','u0(i0)','left edge','right edge','Polynomial coefficients'
       do n = 1, n0
-        write(0,'(i4,1p10e24.16)') n,h0(n),u0(n),ppoly_r_E(n,1),ppoly_r_E(n,2),ppoly_r_coefs(n,:)
+        write(0,'(I0,1p10e24.16)') n,h0(n),u0(n),ppoly_r_E(n,1),ppoly_r_E(n,2),ppoly_r_coefs(n,:)
       enddo
       call MOM_error(FATAL, 'MOM_remapping, check_reconstructions_1d: '// &
                    'Edge values or polynomial coefficients were inconsistent!')
@@ -1795,6 +1796,9 @@ subroutine setReconstructionType(string,CS)
     case ("C_PPM_H4_2018")
       allocate( PPM_H4_2018 :: CS%reconstruction )
       CS%remapping_scheme = REMAPPING_VIA_CLASS
+    case ("C_PLM_WLS")
+      allocate( PLM_WLS :: CS%reconstruction )
+      CS%remapping_scheme = REMAPPING_VIA_CLASS
     case default
       call MOM_error(FATAL, "setReconstructionType: "//&
        "Unrecognized choice for REMAPPING_SCHEME ("//trim(string)//").")
@@ -1864,7 +1868,7 @@ subroutine test_recon_consistency(test, scheme, n0, niter, h_neglect)
   integer :: iter ! Loop counter
   integer :: seed_size ! Number of integers used by seed
   integer, allocatable :: seed(:) ! Random number seed
-  character(len=8) :: label ! Generated label
+  character(len=16) :: label ! Generated label
 
   call initialize_remapping(remapCS, scheme, nk=n0, h_neglect=h_neglect, &
                             force_bounds_in_subcell=.false. )
@@ -1892,8 +1896,8 @@ subroutine test_recon_consistency(test, scheme, n0, niter, h_neglect)
 
   enddo
 
-  write(label(1:8),'(i8)') niter
-  call test%test( error, trim(adjustl(label))//' consistency tests of '//scheme )
+  write(label,'(I0)') niter
+  call test%test( error, trim(label)//' consistency tests of '//scheme )
 
   call remapCS%reconstruction%destroy()
 
@@ -1914,7 +1918,7 @@ subroutine test_preserve_uniform(test, scheme, n0, niter, h_neglect)
   integer :: iter ! Loop counter
   integer :: seed_size ! Number of integers used by seed
   integer, allocatable :: seed(:) ! Random number seed
-  character(len=8) :: label ! Generated label
+  character(len=16) :: label ! Generated label
 
   call initialize_remapping(remapCS, scheme, nk=n0, h_neglect=h_neglect, &
                             force_bounds_in_subcell=.true., &
@@ -1950,8 +1954,8 @@ subroutine test_preserve_uniform(test, scheme, n0, niter, h_neglect)
 
   enddo
 
-  write(label(1:8),'(i8)') niter
-  call test%test( error, trim(adjustl(label))//' uniformity tests of '//scheme )
+  write(label,'(I0)') niter
+  call test%test( error, trim(label)//' uniformity tests of '//scheme )
 
 end subroutine test_preserve_uniform
 
@@ -1973,7 +1977,7 @@ subroutine test_unchanged_grid(test, scheme, n0, niter, h_neglect)
   real :: u0(n0), u1(n0) ! Source and target values [A]
   logical :: error ! Indicates a divergence
   integer :: iter ! Loop counter
-  character(len=8) :: label ! Generated label
+  character(len=16) :: label ! Generated label
 
   call initialize_remapping(remapCS, scheme, nk=n0, h_neglect=h_neglect, &
                             force_bounds_in_subcell=.true., &
@@ -2003,8 +2007,8 @@ subroutine test_unchanged_grid(test, scheme, n0, niter, h_neglect)
 
   enddo
 
-  write(label(1:8),'(i8)') niter
-  call test%test( error, trim(adjustl(label))//' unchanged grid tests of '//scheme )
+  write(label,'(I0)') niter
+  call test%test( error, trim(label)//' unchanged grid tests of '//scheme )
 
   call remapCS%reconstruction%destroy()
 
@@ -2028,7 +2032,7 @@ subroutine compare_two_schemes(test, CS1, CS2, n0, n1, niter, msg)
   integer :: iter ! Loop counter
   integer :: seed_size ! Number of integers used by seed
   integer, allocatable :: seed(:) ! Random number seed
-  character(len=8) :: label ! Generated label
+  character(len=16) :: label ! Generated label
 
   call random_seed(size=seed_size)
   allocate( seed(seed_Size) )
@@ -2064,8 +2068,8 @@ subroutine compare_two_schemes(test, CS1, CS2, n0, n1, niter, msg)
     endif
   enddo
 
-  write(label(1:8),'(i8)') niter
-  call test%test( error, trim(adjustl(label))//' comparisons of '//msg )
+  write(label,'(I0)') niter
+  call test%test( error, trim(label)//' comparisons of '//msg )
 
 end subroutine compare_two_schemes
 
@@ -2098,22 +2102,23 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   integer :: om4 ! Loop parameter, 0 or 1
   integer :: ntests ! Number of iterations when brute force testing
   character(len=4) :: om4_tag ! Generated label
-  type(PCM) :: PCM
-  type(PLM_CW) :: PLM_CW
-  type(PLM_hybgen) :: PLM_hybgen
-  type(MPLM_WA) :: MPLM_WA
-  type(EMPLM_WA) :: EMPLM_WA
-  type(MPLM_WA_poly) :: MPLM_WA_poly
-  type(EMPLM_WA_poly) :: EMPLM_WA_poly
-  type(PLM_CWK) :: PLM_CWK
-  type(MPLM_CWK) :: MPLM_CWK
-  type(EMPLM_CWK) :: EMPLM_CWK
-  type(PPM_H4_2019) :: PPM_H4_2019
-  type(PPM_H4_2018) :: PPM_H4_2018
-  type(PPM_CW) :: PPM_CW
-  type(PPM_hybgen) :: PPM_hybgen
-  type(PPM_CWK) :: PPM_CWK
-  type(EPPM_CWK) :: EPPM_CWK
+  type(PCM) :: PCM_instance
+  type(PLM_CW) :: PLM_CW_instance
+  type(PLM_hybgen) :: PLM_hybgen_instance
+  type(MPLM_WA) :: MPLM_WA_instance
+  type(EMPLM_WA) :: EMPLM_WA_instance
+  type(MPLM_WA_poly) :: MPLM_WA_poly_instance
+  type(EMPLM_WA_poly) :: EMPLM_WA_poly_instance
+  type(PLM_CWK) :: PLM_CWK_instance
+  type(MPLM_CWK) :: MPLM_CWK_instance
+  type(EMPLM_CWK) :: EMPLM_CWK_instance
+  type(PPM_H4_2019) :: PPM_H4_2019_instance
+  type(PPM_H4_2018) :: PPM_H4_2018_instance
+  type(PPM_CW) :: PPM_CW_instance
+  type(PPM_hybgen) :: PPM_hybgen_instance
+  type(PPM_CWK) :: PPM_CWK_instance
+  type(EPPM_CWK) :: EPPM_CWK_instance
+  type(PLM_WLS) :: PLM_WLS_instance
 
   call test%set( verbose=verbose ) ! Sets the verbosity flag in test
 ! call test%set( stop_instantly=.true. ) ! While debugging
@@ -2727,22 +2732,23 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
                      3, (/0.,0.,0./), (/0.,0.,0./) )
 
   if (verbose) write(test%stdout,*) '- - - - - - - - - - Recon1d PCM tests  - - - - - - - - -'
-  call test%test( PCM%unit_tests(verbose, test%stdout, test%stderr), 'PCM unit test')
-  call test%test( MPLM_WA%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_WA unit test')
-  call test%test( EMPLM_WA%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_WA unit test')
-  call test%test( MPLM_WA_poly%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_WA_poly unit test')
-  call test%test( EMPLM_WA_poly%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_WA_poly unit test')
-  call test%test( PLM_hybgen%unit_tests(verbose, test%stdout, test%stderr), 'PLM_hybgen unit test')
-  call test%test( PLM_CW%unit_tests(verbose, test%stdout, test%stderr), 'PLM_CW unit test')
-  call test%test( PLM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'PLM_CWK unit test')
-  call test%test( MPLM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_CWK unit test')
-  call test%test( EMPLM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_CWK unit test')
-  call test%test( PPM_H4_2019%unit_tests(verbose, test%stdout, test%stderr), 'PPM_H4_2019 unit test')
-  call test%test( PPM_H4_2018%unit_tests(verbose, test%stdout, test%stderr), 'PPM_H4_2018 unit test')
-  call test%test( PPM_hybgen%unit_tests(verbose, test%stdout, test%stderr), 'PPM_hybgen unit test')
-  call test%test( PPM_CW%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CW unit test')
-  call test%test( PPM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CWK unit test')
-  call test%test( EPPM_CWK%unit_tests(verbose, test%stdout, test%stderr), 'EPPM_CWK unit test')
+  call test%test( PCM_instance%unit_tests(verbose, test%stdout, test%stderr), 'PCM unit test')
+  call test%test( MPLM_WA_instance%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_WA unit test')
+  call test%test( EMPLM_WA_instance%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_WA unit test')
+  call test%test( MPLM_WA_poly_instance%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_WA_poly unit test')
+  call test%test( EMPLM_WA_poly_instance%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_WA_poly unit test')
+  call test%test( PLM_hybgen_instance%unit_tests(verbose, test%stdout, test%stderr), 'PLM_hybgen unit test')
+  call test%test( PLM_CW_instance%unit_tests(verbose, test%stdout, test%stderr), 'PLM_CW unit test')
+  call test%test( PLM_CWK_instance%unit_tests(verbose, test%stdout, test%stderr), 'PLM_CWK unit test')
+  call test%test( MPLM_CWK_instance%unit_tests(verbose, test%stdout, test%stderr), 'MPLM_CWK unit test')
+  call test%test( EMPLM_CWK_instance%unit_tests(verbose, test%stdout, test%stderr), 'EMPLM_CWK unit test')
+  call test%test( PPM_H4_2019_instance%unit_tests(verbose, test%stdout, test%stderr), 'PPM_H4_2019 unit test')
+  call test%test( PPM_H4_2018_instance%unit_tests(verbose, test%stdout, test%stderr), 'PPM_H4_2018 unit test')
+  call test%test( PPM_hybgen_instance%unit_tests(verbose, test%stdout, test%stderr), 'PPM_hybgen unit test')
+  call test%test( PPM_CW_instance%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CW unit test')
+  call test%test( PPM_CWK_instance%unit_tests(verbose, test%stdout, test%stderr), 'PPM_CWK unit test')
+  call test%test( EPPM_CWK_instance%unit_tests(verbose, test%stdout, test%stderr), 'EPPM_CWK unit test')
+  call test%test( PLM_WLS_instance%unit_tests(verbose, test%stdout, test%stderr), 'PLM_WLS unit test')
 
   ! Randomized, brute force tests
   ntests = 3000
@@ -2772,6 +2778,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   call test_recon_consistency(test, 'C_PPM_CW', n0, ntests, h_neglect)
   call test_recon_consistency(test, 'C_PPM_CWK', n0, ntests, h_neglect)
   call test_recon_consistency(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+  call test_recon_consistency(test, 'C_PLM_WLS', n0, ntests, h_neglect)
 
   call test_preserve_uniform(test, 'PCM', n0, ntests, h_neglect)
   call test_preserve_uniform(test, 'C_PCM', n0, ntests, h_neglect)
@@ -2798,6 +2805,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   call test_preserve_uniform(test, 'C_PPM_CW', n0, ntests, h_neglect)
   call test_preserve_uniform(test, 'C_PPM_CWK', n0, ntests, h_neglect)
   call test_preserve_uniform(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+  call test_preserve_uniform(test, 'C_PLM_WLS', n0, ntests, h_neglect)
 
   call test_unchanged_grid(test, 'C_PCM', n0, ntests, h_neglect)
   call test_unchanged_grid(test, 'C_PLM_CW', n0, ntests, h_neglect)
@@ -2809,6 +2817,7 @@ logical function remapping_unit_tests(verbose, num_comp_samp)
   call test_unchanged_grid(test, 'C_PPM_CW', n0, ntests, h_neglect)
   call test_unchanged_grid(test, 'C_PPM_CWK', n0, ntests, h_neglect)
   call test_unchanged_grid(test, 'C_EPPM_CWK', n0, ntests, h_neglect)
+  call test_unchanged_grid(test, 'C_PLM_WLS', n0, ntests, h_neglect)
 
   ! Check that remapping to the exact same grid leaves values unchanged
   allocate( h0(8), u0(8) )

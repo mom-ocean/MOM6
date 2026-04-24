@@ -429,7 +429,7 @@ subroutine hybgen_regrid(G, GV, US, dp, nom_depth_H, tv, CS, dzInterface, PCM_ce
   real :: dilate            ! A factor by which to dilate the target positions from z to z* [nondim]
   integer :: fixlay         ! Deepest fixed coordinate layer
   integer, dimension(0:CS%nk) :: k_end ! The index of the deepest source layer that contributes to
-                            ! each target layer, in the unusual case where the the input grid is
+                            ! each target layer, in the unusual case where the input grid is
                             ! larger than the new grid.  This situation only occurs during certain
                             ! types of initialization or when generating output diagnostics.
   integer :: i, j, k, nk, k2, nk_in
@@ -990,12 +990,12 @@ subroutine hybgen_column_regrid(CS, nk, thkbot, Rcv_tgt, &
     ! Verify that everything is consistent.
     do k=1,nk
       if (abs((h_col(k) - h_in(k)) + (dp_int(K) - dp_int(K+1))) > 1.0e-13*max(p_int(nk+1), CS%onem)) then
-        write(mesg, '("k ",i4," h ",es13.4," h_in ",es13.4, " dp ",2es13.4," err ",es13.4)') &
+        write(mesg, '("k ",I0," h ",es13.4," h_in ",es13.4, " dp ",2es13.4," err ",es13.4)') &
               k, h_col(k), h_in(k), dp_int(K), dp_int(K+1), (h_col(k) - h_in(k)) + (dp_int(K) - dp_int(K+1))
         call MOM_error(FATAL, "Mismatched thickness changes in hybgen_regrid: "//trim(mesg))
       endif
       if (h_col(k) < 0.0) then ! Could instead do: -1.0e-15*max(p_int(nk+1), CS%onem)) then
-        write(mesg, '("k ",i4," h ",es13.4," h_in ",es13.4, " dp ",2es13.4, " fixlay ",i4)') &
+        write(mesg, '("k ",I0," h ",es13.4," h_in ",es13.4, " dp ",2es13.4, " fixlay ",I0)') &
               k, h_col(k), h_in(k), dp_int(K), dp_int(K+1), fixlay
         call MOM_error(FATAL, "Significantly negative final thickness in hybgen_regrid: "//trim(mesg))
       endif

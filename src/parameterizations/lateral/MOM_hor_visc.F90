@@ -23,7 +23,9 @@ use MOM_thickness_diffuse,     only : thickness_diffuse_CS, thickness_diffuse_ge
 use MOM_io,                    only : MOM_read_data, slasher
 use MOM_MEKE_types,            only : MEKE_type
 use MOM_open_boundary,         only : ocean_OBC_type, OBC_DIRECTION_E, OBC_DIRECTION_W
-use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_NONE
+use MOM_open_boundary,         only : OBC_DIRECTION_N, OBC_DIRECTION_S
+use MOM_open_boundary,         only : OBC_STRAIN_NONE, OBC_STRAIN_ZERO, OBC_STRAIN_FREESLIP
+use MOM_open_boundary,         only : OBC_STRAIN_COMPUTED, OBC_STRAIN_SPECIFIED
 use MOM_stochastics,           only : stochastic_CS
 use MOM_unit_scaling,          only : unit_scale_type
 use MOM_verticalGrid,          only : verticalGrid_type
@@ -52,15 +54,11 @@ type, public :: hor_visc_CS ; private
                              !! are not implemented with the biharmonic viscosity.
   logical :: bound_Kh        !< If true, the Laplacian coefficient is locally
                              !! limited to guarantee stability.
-  logical :: better_bound_Kh !< If true, use a more careful bounding of the
-                             !! Laplacian viscosity to guarantee stability.
   logical :: EY24_EBT_BS     !! If true, use an equivalent barotropic backscatter
                              !! with a stabilizing kill switch in MEKE,
                              !< developed by Yankovsky et al. 2024
   logical :: bound_Ah        !< If true, the biharmonic coefficient is locally
                              !! limited to guarantee stability.
-  logical :: better_bound_Ah !< If true, use a more careful bounding of the
-                             !! biharmonic viscosity to guarantee stability.
   real    :: Re_Ah           !! If nonzero, the biharmonic coefficient is scaled
                              !< so that the biharmonic Reynolds number is equal to this [nondim].
   real    :: bound_coef      !< The nondimensional coefficient of the ratio of
@@ -104,8 +102,10 @@ type, public :: hor_visc_CS ; private
                              !! in setting the corner-point viscosities when USE_KH_BG_2D=True.
   real    :: Kh_bg_min       !< The minimum value allowed for Laplacian horizontal
                              !! viscosity [L2 T-1 ~> m2 s-1]. The default is 0.0.
-  logical :: FrictWork_bug    !< If true, retain an answer-changing bug in calculating FrictWork,
+  logical :: FrictWork_bug   !< If true, retain an answer-changing bug in calculating FrictWork,
                              !! which cancels the h in thickness flux and the h at velocity point.
+  logical :: OBC_strain_bug  !< If true, recover a bug that specified shear strain option at open
+                             !! boundaries cannot be applied.
   logical :: use_land_mask   !< Use the land mask for the computation of thicknesses
                              !! at velocity locations. This eliminates the dependence on
                              !! arbitrary values over land or outside of the domain.
@@ -136,6 +136,7 @@ type, public :: hor_visc_CS ; private
   logical :: use_cont_thick_bug  !< If true, retain an answer-changing bug for thickness at velocity points.
   type(ZB2020_CS) :: ZB2020  !< Zanna-Bolton 2020 control structure.
   logical :: use_ZB2020      !< If true, use Zanna-Bolton 2020 parameterization.
+  logical :: use_circulation !< If true, use circulation theorem to compute vorticity (for ZB20 or Leith)
 
   real ALLOCABLE_, dimension(NIMEM_,NJMEM_) :: Kh_bg_xx
                       !< The background Laplacian viscosity at h points [L2 T-1 ~> m2 s-1].
@@ -444,10 +445,11 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   real :: grid_Kh   ! Laplacian viscosity bound by grid [L2 T-1 ~> m2 s-1]
   real :: grid_Ah   ! Biharmonic viscosity bound by grid [L4 T-1 ~> m4 s-1]
 
-  logical :: rescale_Kh, legacy_bound
+  logical :: rescale_Kh
   logical :: find_FrictWork
   logical :: find_FrictWork_bh
   logical :: apply_OBC = .false.
+  logical :: apply_OBC_strain
   logical :: use_MEKE_Ku
   logical :: use_MEKE_Au
   logical :: skeb_use_frict
@@ -514,6 +516,12 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
     apply_OBC = .true.
   endif ; endif ; endif
 
+  apply_OBC_strain = .false.
+  if (present(OBC)) then ; if (associated(OBC)) then
+    apply_OBC_strain = (OBC%strain_config /= OBC_STRAIN_NONE) &
+      .and. ((.not. CS%OBC_strain_bug) .or. (OBC%strain_config /= OBC_STRAIN_SPECIFIED))
+  endif ; endif
+
   if (.not.CS%initialized) call MOM_error(FATAL, &
          "MOM_hor_visc: Module must be initialized before it is used.")
 
@@ -566,9 +574,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   else
     js_vort = js-2 ; je_vort = Jeq+1 ; is_vort = is-2 ; ie_vort = Ieq+1
   endif
-
-  legacy_bound = (CS%Smagorinsky_Kh .or. CS%Leith_Kh) .and. &
-                 (CS%bound_Kh .and. .not.CS%better_bound_Kh)
 
   if (CS%use_GME) then
 
@@ -693,9 +698,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target enter data map(alloc: bhstr_xx, bhstr_xy) if (CS%biharmonic)
 
   !$omp target enter data map(alloc: hrat_min) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
   !$omp target enter data map(alloc: visc_bound_rem) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
   !$omp target enter data map(alloc: sh_xy_q) &
   !$omp   if (CS%id_sh_xy_q > 0)
 
@@ -787,28 +792,29 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       do n=1,OBC%number_of_segments
 
       J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
-      if (OBC%zero_strain .or. OBC%freeslip_strain .or. OBC%computed_strain) then
+      if (apply_OBC_strain) then
         if (OBC%segment(n)%is_N_or_S .and. (J >= Js_vort) .and. (J <= Je_vort)) then
           do I = max(OBC%segment(n)%HI%IsdB,Is_vort), min(OBC%segment(n)%HI%IedB,Ie_vort)
-            if (OBC%zero_strain) then
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            elseif (OBC%freeslip_strain) then
-              dudy(I,J) = 0.
-            elseif (OBC%computed_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
-                            (OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%IdxCu(I,j)
-              else
-                dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
-                            (u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdxCu(I,j+1)
-              endif
-            elseif (OBC%specified_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
-              else
-                dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
-              endif
-            endif
+            select case (OBC%strain_config)
+              case (OBC_STRAIN_ZERO)
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
+              case (OBC_STRAIN_FREESLIP)
+                dudy(I,J) = 0.
+              case (OBC_STRAIN_COMPUTED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                  dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
+                              (OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%IdxCu(I,j)
+                else
+                  dudy(I,J) = 2.0*CS%DX_dyBu(I,J)* &
+                              (u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdxCu(I,j+1)
+                endif
+              case (OBC_STRAIN_SPECIFIED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                  dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j)*G%dxBu(I,J)
+                else
+                  dudy(I,J) = CS%DX_dyBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdxCu(I,j+1)*G%dxBu(I,J)
+                endif
+            end select
             if (CS%use_Leithy) then
               dvdx_smooth(I,J) = dvdx(I,J)
               dudy_smooth(I,J) = dudy(I,J)
@@ -816,25 +822,26 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo
         elseif (OBC%segment(n)%is_E_or_W .and. (I >= is_vort) .and. (I <= ie_vort)) then
           do J = max(OBC%segment(n)%HI%JsdB,js_vort), min(OBC%segment(n)%HI%JedB,je_vort)
-            if (OBC%zero_strain) then
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            elseif (OBC%freeslip_strain) then
-              dvdx(I,J) = 0.
-            elseif (OBC%computed_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
-                            (OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%IdyCv(i,J)
-              else
-                dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
-                            (v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdyCv(i+1,J)
-              endif
-            elseif (OBC%specified_strain) then
-              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
-              else
-                dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
-              endif
-            endif
+            select case (OBC%strain_config)
+              case (OBC_STRAIN_ZERO)
+                dvdx(I,J) = 0. ; dudy(I,J) = 0.
+              case (OBC_STRAIN_FREESLIP)
+                dvdx(I,J) = 0.
+              case (OBC_STRAIN_COMPUTED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                  dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
+                              (OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%IdyCv(i,J)
+                else
+                  dvdx(I,J) = 2.0*CS%DY_dxBu(I,J)* &
+                              (v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%IdyCv(i+1,J)
+                endif
+              case (OBC_STRAIN_SPECIFIED)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                  dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i,J)*G%dxBu(I,J)
+                else
+                  dvdx(I,J) = CS%DY_dxBu(I,J)*OBC%segment(n)%tangential_grad(I,J,k)*G%IdyCv(i+1,J)*G%dxBu(I,J)
+                endif
+            end select
             if (CS%use_Leithy) then
               dvdx_smooth(I,J) = dvdx(I,J)
               dudy_smooth(I,J) = dudy(I,J)
@@ -980,9 +987,18 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           vort_xy(I,J) = (2.0-G%mask2dBu(I,J)) * ( dvdx(I,J) - dudy(I,J) )
         enddo ; enddo
       else
-        do J=js_vort,je_vort ; do I=is_vort,ie_vort
-          vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
-        enddo ; enddo
+        if (CS%use_circulation) then
+          do J=js_vort,je_vort ; do I=is_vort,ie_vort
+            vort_xy(I,J) = G%mask2dBu(I,J) * G%IareaBu(I,J) * (  &
+              ((v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J)))  &
+            - ((u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j)))  &
+             )
+          enddo ; enddo
+        else
+          do J=js_vort,je_vort ; do I=is_vort,ie_vort
+            vort_xy(I,J) = G%mask2dBu(I,J) * ( dvdx(I,J) - dudy(I,J) )
+          enddo ; enddo
+        endif
       endif
     endif
 
@@ -1138,7 +1154,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo
     endif
 
-    if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
+    if (CS%bound_Ah .or. CS%bound_Kh) then
       do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
         h_min = min(h_u(I,j), h_u(I-1,j), h_v(i,J), h_v(i,J-1))
         hrat_min(i,j) = min(1.0, h_min / (h(i,j,k) + h_neglect))
@@ -1207,15 +1223,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      if (legacy_bound) then
-        ! Older method of bounding for stability
-        !$omp target update from(Kh)
-        do j=js_Kh,je_Kh ; do i=is_Kh,ie_Kh
-          Kh(i,j) = min(Kh(i,j), CS%Kh_Max_xx(i,j))
-        enddo ; enddo
-        !$omp target update to(Kh)
-      endif
-
       ! Place a floor on the viscosity, if desired.
       do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
         Kh(i,j) = max(Kh(i,j), CS%Kh_bg_min)
@@ -1261,7 +1268,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       !$omp   if ((use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) .or. CS%anisotropic)
 
       ! Newer method of bounding for stability
-      if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
+      if ((CS%bound_Kh) .and. (CS%bound_Ah)) then
         do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
           visc_bound_rem(i,j) = 1.0
           Kh_max_here = hrat_min(i,j) * CS%Kh_Max_xx(i,j)
@@ -1272,7 +1279,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             visc_bound_rem(i,j) = 1.0 - Kh(i,j) / Kh_max_here
           endif
         enddo
-      elseif (CS%better_bound_Kh) then
+      elseif (CS%bound_Kh) then
         do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
           Kh(i,j) = min(Kh(i,j), hrat_min(i,j) * CS%Kh_Max_xx(i,j))
         enddo
@@ -1428,12 +1435,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             enddo ; enddo
           endif
         endif
-
-        if (CS%bound_Ah .and. .not. CS%better_bound_Ah) then
-          do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
-            Ah(i,j) = min(Ah(i,j), CS%Ah_Max_xx(i,j))
-          enddo
-        endif
       endif ! Smagorinsky_Ah or Leith_Ah or Leith+E
 
       if (use_MEKE_Au) then
@@ -1454,8 +1455,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Ah)
       endif
 
-      if (CS%better_bound_Ah) then
-        if (CS%better_bound_Kh) then
+      if (CS%bound_Ah) then
+        if (CS%bound_Kh) then
           do concurrent (j=js_Kh:je_Kh, i=is_Kh:ie_Kh)
             Ah(i,j) = min(Ah(i,j), visc_bound_rem(i,j) * hrat_min(i,j) * CS%Ah_Max_xx(i,j))
           enddo
@@ -1565,23 +1566,24 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       enddo
 
       ! Adjust contributions to shearing strain on open boundaries.
-      if (apply_OBC) then ; if (OBC%zero_strain .or. OBC%freeslip_strain) then
+      if (apply_OBC) then ; if ((OBC%strain_config == OBC_STRAIN_ZERO) .or. &
+                                (OBC%strain_config == OBC_STRAIN_FREESLIP)) then
         !$omp target update from(dDel2vdx, dDel2udy)
         do n=1,OBC%number_of_segments
           J = OBC%segment(n)%HI%JsdB ; I = OBC%segment(n)%HI%IsdB
           if (OBC%segment(n)%is_N_or_S .and. (J >= js-1) .and. (J <= Jeq)) then
             do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-              if (OBC%zero_strain) then
+              if (OBC%strain_config == OBC_STRAIN_ZERO) then
                 dDel2vdx(I,J) = 0. ; dDel2udy(I,J) = 0.
-              elseif (OBC%freeslip_strain) then
+              elseif (OBC%strain_config == OBC_STRAIN_FREESLIP) then
                 dDel2udy(I,J) = 0.
               endif
             enddo
           elseif (OBC%segment(n)%is_E_or_W .and. (I >= is-1) .and. (I <= Ieq)) then
             do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-              if (OBC%zero_strain) then
+              if (OBC%strain_config == OBC_STRAIN_ZERO) then
                 dDel2vdx(I,J) = 0. ; dDel2udy(I,J) = 0.
-              elseif (OBC%freeslip_strain) then
+              elseif (OBC%strain_config == OBC_STRAIN_FREESLIP) then
                 dDel2vdx(I,J) = 0.
               endif
             enddo
@@ -1607,7 +1609,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           / (h_neglect3 + (h2uq + h2vq) * ((h_u(I,j) + h_u(I,j+1)) + (h_v(i,J) + h_v(i+1,J))))
     enddo
 
-    if (CS%better_bound_Ah .or. CS%better_bound_Kh) then
+    if (CS%bound_Ah .or. CS%bound_Kh) then
       do concurrent (J=js-1:Jeq, I=is-1:Ieq)
         h_min = min(h_u(I,j), h_u(I,j+1), h_v(i,J), h_v(i+1,J))
         hrat_min(I,J) = min(1.0, h_min / (hq(I,J) + h_neglect))
@@ -1715,18 +1717,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      if (legacy_bound) then
-        !$omp target update from(Kh)
-        ! Older method of bounding for stability
-        do J=js-1,Jeq ; do I=is-1,Ieq
-          Kh(I,J) = min(Kh(I,J), CS%Kh_Max_xy(I,J))
-        enddo ; enddo
-        !$omp target update to(Kh)
-      endif
-
       do concurrent (J=js-1:Jeq, I=is-1:Ieq)
-        ! Place a floor on the viscosity, if desired.
-        Kh(I,J) = max(Kh(I,J), CS%Kh_bg_min)
+        Kh(I,J) = max(Kh(I,J), CS%Kh_bg_min) ! Place a floor on the viscosity, if desired.
       enddo
 
       if (use_MEKE_Ku .and. .not. CS%EY24_EBT_BS) then
@@ -1764,7 +1756,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Kh)
       endif
 
-      if ((CS%better_bound_Kh) .and. (CS%better_bound_Ah)) then
+      if ((CS%bound_Kh) .and. (CS%bound_Ah)) then
         ! Newer method of bounding for stability
         do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           visc_bound_rem(I,J) = 1.0
@@ -1776,7 +1768,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
             visc_bound_rem(I,J) = 1.0 - Kh(I,J) / Kh_max_here
           endif
         enddo
-      elseif (CS%better_bound_Kh) then
+      elseif (CS%bound_Kh) then
         do concurrent (J=js-1:Jeq, I=is-1:Ieq)
           Kh(I,J) = min(Kh(I,J), hrat_min(I,J) * CS%Kh_Max_xy(I,J))
         enddo
@@ -1788,7 +1780,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           Kh(I,J) = 0.25 * ((Kh_h(i,j,k) + Kh_h(i+1,j+1,k)) + (Kh_h(i,j+1,k) + Kh_h(i+1,j,k)))
         enddo ; enddo
         !$omp target update to(Kh)
-      end if
+      endif
 
       if (CS%id_Kh_q > 0 .or. CS%debug) then
         !$omp target update from (Kh)
@@ -1869,12 +1861,6 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           enddo ; enddo
           !$omp target update to(Ah)
         endif
-
-        if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-          do concurrent (J=js-1:Jeq, I=is-1:Ieq)
-            Ah(I,J) = min(Ah(I,J), CS%Ah_Max_xy(I,J))
-          enddo
-        endif
       endif ! Smagorinsky_Ah or Leith_Ah
 
       if (use_MEKE_Au) then
@@ -1896,8 +1882,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
         !$omp target update to(Ah)
       endif
 
-      if (CS%better_bound_Ah) then
-        if (CS%better_bound_Kh) then
+      if (CS%bound_Ah) then
+        if (CS%bound_Kh) then
           do concurrent (J=js-1:Jeq, I=is-1:Ieq)
             Ah(I,J) = min(Ah(I,J), visc_bound_rem(I,J) * hrat_min(I,J) * CS%Ah_Max_xy(I,J))
           enddo
@@ -1927,7 +1913,7 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
           Ah(I,J) = 0.25 * ((Ah_h(i,j,k) + Ah_h(i+1,j+1,k)) + (Ah_h(i,j+1,k) + Ah_h(i+1,j,k)))
         enddo ; enddo
         !$omp target update to(Ah)
-      end if
+      endif
 
       if (CS%id_Ah_q>0 .or. CS%debug) then
         !$omp target update from(Ah)
@@ -2358,9 +2344,9 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
   !$omp target exit data map(delete: bhstr_xx, bhstr_xy) if (CS%biharmonic)
 
   !$omp target exit data map(delete: hrat_min) &
-  !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
   !$omp target exit data map(delete: visc_bound_rem) &
-  !$omp     if (CS%better_bound_Kh .or. CS%better_bound_Ah)
+  !$omp   if (CS%bound_Kh .or. CS%bound_Ah)
 
   ! Offer fields for diagnostic averaging.
   if (CS%id_normstress > 0) call post_data(CS%id_normstress, NoSt, CS%diag)
@@ -2547,6 +2533,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   ! Read parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
 
+  call get_param(param_file, mdl, "USE_CIRCULATION_IN_HORVISC", CS%use_circulation, &
+                 "Use circulation theorem to compute vorticity in horvisc module (for ZB20 or Leith)", &
+                 default=.False.)
+
   ! All parameters are read in all cases to enable parameter spelling checks.
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
@@ -2632,16 +2622,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "BOUND_KH", CS%bound_Kh, &
                  "If true, the Laplacian coefficient is locally limited "//&
                  "to be stable.", default=.true., do_not_log=.not.CS%Laplacian)
-  call get_param(param_file, mdl, "BETTER_BOUND_KH", CS%better_bound_Kh, &
-                 "If true, the Laplacian coefficient is locally limited "//&
-                 "to be stable with a better bounding than just BOUND_KH.", &
-                 default=CS%bound_Kh, do_not_log=.not.CS%Laplacian)
   call get_param(param_file, mdl, "EY24_EBT_BS", CS%EY24_EBT_BS, &
-                 "If true, use the the backscatter scheme (EBT mode with kill switch)"//&
+                 "If true, use the backscatter scheme (EBT mode with kill switch) "//&
                  "developed by Yankovsky et al. (2024). ", &
                  default=.false., do_not_log=.not.CS%Laplacian)
   if (.not.CS%Laplacian) CS%bound_Kh = .false.
-  if (.not.CS%Laplacian) CS%better_bound_Kh = .false.
   if (.not.(CS%Laplacian.and.use_MEKE)) CS%EY24_EBT_BS = .false.
   call get_param(param_file, mdl, "ANISOTROPIC_VISCOSITY", CS%anisotropic, &
                  "If true, allow anistropic viscosity in the Laplacian "//&
@@ -2714,12 +2699,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   call get_param(param_file, mdl, "BOUND_AH", CS%bound_Ah, &
                  "If true, the biharmonic coefficient is locally limited "//&
                  "to be stable.", default=.true., do_not_log=.not.CS%biharmonic)
-  call get_param(param_file, mdl, "BETTER_BOUND_AH", CS%better_bound_Ah, &
-                 "If true, the biharmonic coefficient is locally limited "//&
-                 "to be stable with a better bounding than just BOUND_AH.", &
-                 default=CS%bound_Ah, do_not_log=.not.CS%biharmonic)
   if (.not.CS%biharmonic) CS%bound_Ah = .false.
-  if (.not.CS%biharmonic) CS%better_bound_Ah = .false.
   call get_param(param_file, mdl, "RE_AH", CS%Re_Ah, &
                  "If nonzero, the biharmonic coefficient is scaled "//&
                  "so that the biharmonic Reynolds number is equal to this.", &
@@ -2732,8 +2712,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "biharmonic viscosity when no Laplacian viscosity is applied.  The default "//&
                  "is true for historical reasons, but this option probably should not be used "//&
                  "because it can contribute to numerical instabilities.", &
-                 default=.true., do_not_log=.not.((CS%better_bound_Kh).and.(CS%better_bound_Ah)))
-                 !### The default for BACKSCATTER_UNDERBOUND should be false.
+                 default=.false., do_not_log=.not.((CS%bound_Kh).and.(CS%bound_Ah)))
 
   call get_param(param_file, mdl, "SMAG_BI_CONST",Smag_bi_const, &
                  "The nondimensional biharmonic Smagorinsky constant, "//&
@@ -2757,7 +2736,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
 !          "set or allocated.  See github.com/mom-ocean/MOM6/issues/1590 for a discussion.")
 !  endif
   if (CS%use_QG_Leith_visc .and. .not. (CS%Leith_Kh .or. CS%Leith_Ah) ) then
-    call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init:"//&
+    call MOM_error(FATAL, "MOM_hor_visc.F90, hor_visc_init: "//&
                  "LEITH_KH or LEITH_AH must be True when USE_QG_LEITH_VISC=True.")
   endif
 
@@ -2792,7 +2771,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "The nondimensional coefficient of the ratio of the "//&
                  "viscosity bounds to the theoretical maximum for "//&
                  "stability without considering other terms.", units="nondim", &
-                 default=0.8, do_not_log=.not.(CS%better_bound_Ah .or. CS%better_bound_Kh))
+                 default=0.8, do_not_log=.not.(CS%bound_Ah .or. CS%bound_Kh))
   call get_param(param_file, mdl, "KILL_SWITCH_COEF", CS%KS_coef, &
                  "A nondimensional coefficient on the biharmonic viscosity that "// &
                  "sets the kill switch for backscatter. Default is 1.0.", units="nondim", &
@@ -2817,9 +2796,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "FRICTWORK_BUG", CS%FrictWork_bug, &
                  "If true, retain an answer-changing bug in calculating the FrictWork, "//&
-                 "which cancels the h in thickness flux and the h at velocity point. This is"//&
-                 "not recommended.", default=enable_bugs)
-
+                 "which cancels the h in thickness flux and the h at velocity point. This is "//&
+                 "not recommended.", default=.false.)
+  call get_param(param_file, mdl, "OBC_SPECIFIED_STRAIN_BUG", CS%OBC_strain_bug, &
+                 "If true, recover a bug that specified shear strain option at open boundaries "//&
+                 "cannot be applied.", default=.true.)
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
@@ -2898,7 +2879,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     ALLOC_(CS%grid_sp_h2(isd:ied,jsd:jed))   ; CS%grid_sp_h2(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xx(isd:ied,jsd:jed))     ; CS%Kh_bg_xx(:,:) = 0.0
     ALLOC_(CS%Kh_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Kh_bg_xy(:,:) = 0.0
-    if (CS%bound_Kh .or. CS%better_bound_Kh .or. CS%EY24_EBT_BS) then
+    if (CS%bound_Kh .or. CS%EY24_EBT_BS) then
       allocate(CS%Kh_Max_xx(Isd:Ied,Jsd:Jed), source=0.0)
       allocate(CS%Kh_Max_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
@@ -2956,7 +2937,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     ALLOC_(CS%Ah_bg_xx(isd:ied,jsd:jed))     ; CS%Ah_bg_xx(:,:) = 0.0
     ALLOC_(CS%Ah_bg_xy(IsdB:IedB,JsdB:JedB)) ; CS%Ah_bg_xy(:,:) = 0.0
     ALLOC_(CS%grid_sp_h3(isd:ied,jsd:jed))   ; CS%grid_sp_h3(:,:) = 0.0
-    if (CS%bound_Ah .or. CS%better_bound_Ah) then
+    if (CS%bound_Ah) then
       allocate(CS%Ah_Max_xx(isd:ied,jsd:jed), source=0.0)
       allocate(CS%Ah_Max_xy(IsdB:IedB,JsdB:JedB), source=0.0)
     endif
@@ -3070,11 +3051,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         slat_fn = abs( sin( deg2rad * G%geoLatT(i,j) ) ) ** Kh_pwr_of_sine
         CS%Kh_bg_xx(i,j) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xx(i,j))
       endif
-      if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
-        ! Limit the background viscosity to be numerically stable
-        CS%Kh_Max_xx(i,j) = Kh_Limit * grid_sp_h2
-        CS%Kh_bg_xx(i,j) = MIN(CS%Kh_bg_xx(i,j), CS%Kh_Max_xx(i,j))
-      endif
       min_grid_sp_h2 = min(grid_sp_h2, min_grid_sp_h2)
     enddo ; enddo
     call min_across_PEs(min_grid_sp_h2)
@@ -3105,11 +3081,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
         slat_fn = abs( sin( deg2rad * G%geoLatBu(I,J) ) ) ** Kh_pwr_of_sine
         CS%Kh_bg_xy(I,J) = MAX(Kh_sin_lat * slat_fn, CS%Kh_bg_xy(I,J))
       endif
-      if (CS%bound_Kh .and. .not.CS%better_bound_Kh) then
-        ! Limit the background viscosity to be numerically stable
-        CS%Kh_Max_xy(I,J) = Kh_Limit * grid_sp_q2
-        CS%Kh_bg_xy(I,J) = MIN(CS%Kh_bg_xy(I,J), CS%Kh_Max_xy(I,J))
-      endif
     enddo ; enddo
   endif
   if (CS%biharmonic) then
@@ -3124,7 +3095,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
     CS%Ah_bg_xy(:,:) = 0.0
     ! The 0.3 below was 0.4 in HIM 1.10.  The change in hq requires
     ! this to be less than 1/3, rather than 1/2 as before.
-    if (CS%better_bound_Ah .or. CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
+    if (CS%bound_Ah) Ah_Limit = 0.3 / (dt*64.0)
     if (CS%Smagorinsky_Ah .and. CS%bound_Coriolis) &
       BoundCorConst = 1.0 / (5.0*(bound_Cor_vel*bound_Cor_vel))
 
@@ -3154,10 +3125,6 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xx(i,j) = grid_sp_h3 / CS%Re_Ah
       if (Ah_time_scale > 0.) CS%Ah_bg_xx(i,j) = &
             MAX(CS%Ah_bg_xx(i,j), (grid_sp_h2 * grid_sp_h2) / Ah_time_scale)
-      if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-        CS%Ah_Max_xx(i,j) = Ah_Limit * (grid_sp_h2 * grid_sp_h2)
-        CS%Ah_bg_xx(i,j) = MIN(CS%Ah_bg_xx(i,j), CS%Ah_Max_xx(i,j))
-      endif
       min_grid_sp_h4 = min(grid_sp_h2**2, min_grid_sp_h4)
     enddo ; enddo
     call min_across_PEs(min_grid_sp_h4)
@@ -3179,14 +3146,10 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       if (CS%Re_Ah > 0.0) CS%Re_Ah_const_xy(i,j) = grid_sp_q3 / CS%Re_Ah
       if (Ah_time_scale > 0.) CS%Ah_bg_xy(i,j) = &
             MAX(CS%Ah_bg_xy(i,j), (grid_sp_q2 * grid_sp_q2) / Ah_time_scale)
-      if (CS%bound_Ah .and. .not.CS%better_bound_Ah) then
-        CS%Ah_Max_xy(I,J) = Ah_Limit * (grid_sp_q2 * grid_sp_q2)
-        CS%Ah_bg_xy(I,J) = MIN(CS%Ah_bg_xy(I,J), CS%Ah_Max_xy(I,J))
-      endif
     enddo ; enddo
   endif
   ! The Laplacian bounds should avoid overshoots when CS%bound_coef < 1.
-  if (CS%Laplacian .and. CS%better_bound_Kh) then
+  if (CS%Laplacian .and. CS%bound_Kh) then
     do j=js-1,Jeq+1 ; do i=is-1,Ieq+1
       denom = max( &
          (CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j)) * &
@@ -3214,7 +3177,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   endif
   ! The biharmonic bounds should avoid overshoots when CS%bound_coef < 0.5, but
   ! empirically work for CS%bound_coef <~ 1.0
-  if (CS%biharmonic .and. CS%better_bound_Ah) then
+  if (CS%biharmonic .and. CS%bound_Ah) then
     do j=js-1,Jeq+1 ; do I=is-2,Ieq+1
       u0u(I,j) = ((CS%Idxdy2u(I,j)*((CS%dy2h(i+1,j)*CS%DY_dxT(i+1,j)*(G%IdyCu(I+1,j) + G%IdyCu(I,j))) + &
                                    (CS%dy2h(i,j) * CS%DY_dxT(i,j) * (G%IdyCu(I,j) + G%IdyCu(I-1,j))) )) + &
@@ -3468,7 +3431,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   !$omp target enter data map(to: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Kh_max_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Kh_max_xy) &
-  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !$omp   if (CS%Laplacian .and. CS%bound_Kh)
   !$omp target enter data map(to: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target enter data map(to: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
@@ -3481,10 +3444,8 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
   !$omp target enter data map(to: CS%Biharm_const2_xy) &
   !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
-  !$omp target enter data map(to: CS%Ah_max_xx) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target enter data map(to: CS%Ah_max_xy) &
-  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
+  !$omp target enter data map(to: CS%Ah_max_xx) if (CS%bound_Ah)
+  !$omp target enter data map(to: CS%Ah_max_xy) if (CS%bound_Ah)
 
 end subroutine hor_visc_init
 
@@ -3713,7 +3674,7 @@ subroutine hor_visc_end(CS)
   !$omp target exit data map(delete: CS%Kh_bg_xx, CS%Kh_bg_xy) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Kh_Max_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Kh_max_xy) &
-  !$omp   if (CS%Laplacian .and. (CS%bound_Kh .or. CS%better_bound_Kh))
+  !$omp   if (CS%Laplacian .and. CS%bound_Kh)
   !$omp target exit data map(delete: CS%Laplac2_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac3_const_xx) if (CS%Laplacian)
   !$omp target exit data map(delete: CS%Laplac2_const_xy) if (CS%Smagorinsky_Kh)
@@ -3726,10 +3687,8 @@ subroutine hor_visc_end(CS)
   !$omp   if (CS%Smagorinsky_Ah .or. CS%Leith_Ah)
   !$omp target exit data map(delete: CS%Biharm_const2_xy) &
   !$omp   if (CS%bound_Coriolis .and. (CS%Smagorinsky_Ah .or. CS%Leith_Ah))
-  !$omp target exit data map(delete: CS%Ah_max_xx) &
-  !$omp   if (CS%better_bound_Kh .or. CS%better_bound_Ah)
-  !$omp target exit data map(delete: CS%Ah_max_xy) &
-  !$omp   if (CS%bound_Ah .or. CS%better_bound_Ah)
+  !$omp target exit data map(delete: CS%Ah_max_xx) if (CS%bound_Ah)
+  !$omp target exit data map(delete: CS%Ah_max_xy) if (CS%bound_Ah)
 
   if (CS%Laplacian .or. CS%biharmonic) then
     DEALLOC_(CS%dx2h) ; DEALLOC_(CS%dx2q) ; DEALLOC_(CS%dy2h) ; DEALLOC_(CS%dy2q)

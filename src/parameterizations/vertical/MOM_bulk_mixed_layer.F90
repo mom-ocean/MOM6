@@ -280,7 +280,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
                      ! over a time step from evaporating fresh water [H ~> m or kg m-2]
     Net_heat, & !   The net heating at the surface over a time step [C H ~> degC m or degC kg m-2]
                 ! Any penetrating shortwave radiation is not included in Net_heat.
-    Net_salt, & ! The surface salt flux into the ocean over a time step [S H  ~> ppt m or ppt kg m-2]
+    Net_salt, & ! The surface salt flux into the ocean over a time step [S H ~> ppt m or ppt kg m-2]
     Idecay_len_TKE, &  ! The inverse of a turbulence decay length scale [H-1 ~> m-1 or m2 kg-1].
     p_ref, &    !   Reference pressure for the potential density governing mixed
                 ! layer dynamics, almost always 0 (or 1e5) [R L2 T-2 ~> Pa].
@@ -775,7 +775,7 @@ subroutine bulkmixedlayer(h_3d, u_3d, v_3d, tv, fluxes, dt, ea, eb, G, GV, US, C
 
     ! Copy the interior thicknesses and other fields back to the 3-d arrays.
     do k=CS%nkml+1,nz ; do i=is,ie
-      h_3d(i,j,k) = h(i,k); tv%T(i,j,k) = T(i,k) ; tv%S(i,j,k) = S(i,k)
+      h_3d(i,j,k) = h(i,k) ; tv%T(i,j,k) = T(i,k) ; tv%S(i,j,k) = S(i,k)
     enddo ; enddo
 
     do k=1,nz ; do i=is,ie
@@ -1120,7 +1120,7 @@ subroutine mixedlayer_convection(h, d_eb, htot, Ttot, Stot, uhtot, vhtot,      &
   real :: T_precip     !   The temperature of the precipitation [C ~> degC].
   real :: C1_3, C1_6   !  1/3 and 1/6 [nondim]
   real :: En_fn, Frac, x1 !  Nondimensional temporary variables [nondim].
-  real :: dr, dr0      ! Temporary variables [R H ~> kg m-2 or kg2 m-5] or [R-1 H ~> m4 kg-1 or m].
+  real :: dr, dr0      ! Temporary variables [R H ~> kg m-2 or kg2 m-5] or [H R-1 ~> m4 kg-1 or m].
   real :: dr_ent, dr_comp ! Temporary variables [R H ~> kg m-2 or kg2 m-5].
   real :: dr_dh        ! The partial derivative of dr_ent with h_ent [R ~> kg m-3].
   real :: h_min, h_max !   The minimum and maximum estimates for h_ent [H ~> m or kg m-2]
@@ -2642,7 +2642,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
   integer :: i, k, k0, k1, is, ie, nz, kb1, kb2, nkmb
 
   is = G%isc ; ie = G%iec ; nz = GV%ke
-  kb1 = CS%nkml+1; kb2 = CS%nkml+2
+  kb1 = CS%nkml+1 ; kb2 = CS%nkml+2
   nkmb = CS%nkml+CS%nkbl
   h_neglect = GV%H_subroundoff
   g_2 = 0.5 * GV%g_Earth_Z_T2
@@ -2656,7 +2656,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
   dT_dS_gauge = CS%dT_dS_wt ; dS_dT_gauge = 1.0 / dT_dS_gauge
   num_events = 10.0
 
-  if (CS%nkbl /= 2) call MOM_error(FATAL, "MOM_mixed_layer"// &
+  if (CS%nkbl /= 2) call MOM_error(FATAL, "MOM_mixed_layer: "// &
                         "CS%nkbl must be 2 in mixedlayer_detrain_2.")
 
   if (dt < CS%BL_detrain_time) then ; dPE_time_ratio = CS%BL_detrain_time / (dt)
@@ -3328,7 +3328,7 @@ subroutine mixedlayer_detrain_2(h, T, S, R0, Spv0, Rcv, RcvTgt, dt, dt_diag, d_e
         h1_to_h2 = stays_merge - stays
 
         Ihk0 = 1.0 / ((h1_to_k0 + h2) + h(i,k0))
-        Ih1f = 1.0 / (h_to_bl + stays); Ih2f = 1.0 / h1_to_h2
+        Ih1f = 1.0 / (h_to_bl + stays) ; Ih2f = 1.0 / h1_to_h2
         Ih12 = 1.0 / (h1 + h2)
 
         dRcv_2dz = (Rcv(i,kb1) - Rcv(i,kb2)) * Ih12

@@ -18,8 +18,7 @@ CPPFLAGS = @CPPFLAGS@
 FCFLAGS = @FCFLAGS@
 LDFLAGS = @LDFLAGS@
 LIBS = @LIBS@
-SRC_DIRS = @SRC_DIRS@
-
+MAKEDEP_FLAGS = @MAKEDEP_FLAGS@
 
 -include Makefile.dep
 
@@ -35,8 +34,8 @@ rwildcard=$(foreach d,$(wildcard $(1:=/*)),$(call rwildcard,$d,$2) $(filter $(su
 # Generate dependencies
 .PHONY: depend
 depend: Makefile.dep
-Makefile.dep: $(MAKEDEP) $(call rwildcard,$(SRC_DIRS),*.h *.c *.inc *.F90)
-	$(PYTHON) $(MAKEDEP) $(DEFS) -o Makefile.dep -e $(SRC_DIRS)
+Makefile.dep: $(call rwildcard,$(SRC_DIRS),*.h *.c *.inc *.F90)
+	$(PYTHON) $(MAKEDEP) $(DEFS) -o Makefile.dep $(MAKEDEP_FLAGS)
 
 
 # Delete any files associated with configuration (including the Makefile).

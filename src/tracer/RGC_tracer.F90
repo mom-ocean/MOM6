@@ -121,8 +121,7 @@ function register_RGC_tracer(G, GV, param_file, CS, tr_Reg, restart_CS)
   endif
 
   do m=1,NTR
-    if (m < 10) then ; write(name,'("tr_RGC",I1.1)') m
-    else ; write(name,'("tr_RGC",I2.2)') m ; endif
+    write(name,'("tr_RGC",I0)') m
     write(longname,'("Concentration of RGC Tracer ",I2.2)') m
     CS%tr_desc(m) = var_desc(name, units="kg kg-1", longname=longname, caller=mdl)
 
@@ -298,9 +297,9 @@ subroutine RGC_tracer_column_physics(h_old, h_new,  ea,  eb, fluxes, dt, G, GV, 
 
   if (present(evap_CFL_limit) .and. present(minimum_forcing_depth)) then
     do m=1,NTR
-      do k=1,nz ;do j=js,je ; do i=is,ie
+      do k=1,nz ; do j=js,je ; do i=is,ie
         h_work(i,j,k) = h_old(i,j,k)
-      enddo ; enddo ; enddo;
+      enddo ; enddo ; enddo
       call applyTracerBoundaryFluxesInOut(G, GV, CS%tr(:,:,:,m) , dt, fluxes, h_work, &
                                           evap_CFL_limit, minimum_forcing_depth)
 

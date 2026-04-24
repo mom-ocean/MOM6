@@ -10,3 +10,7 @@ TIDE_Q1 = True
 TIDE_MF = True
 TIDE_MM = True
 TIDE_SAL_SCALAR_VALUE = 1.
+BT_STRONG_DRAG = True           !   [Boolean] default = False
+
+! Disabled for dev/gpu merge
+!RESCALE_STRONG_DRAG = True      !   [Boolean] default = False

@@ -32,6 +32,7 @@ public reset_face_lengths_named, reset_face_lengths_file, reset_face_lengths_lis
 public read_face_length_list, set_velocity_depth_max, set_velocity_depth_min
 public set_subgrid_topo_at_vel_from_file
 public compute_global_grid_integrals, write_ocean_geometry_file
+public set_meanSL_from_file
 
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
@@ -138,6 +139,41 @@ function diagnoseMaximumDepth(D, G)
   call max_across_PEs(diagnoseMaximumDepth)
 end function diagnoseMaximumDepth
 
+!> Read time mean ocean sea level from a file
+subroutine set_meanSL_from_file(meanSL, G, param_file, US)
+  type(dyn_horgrid_type),           intent(in)  :: G !< The dynamic horizontal grid type
+  real, dimension(G%isd:G%ied,G%jsd:G%jed), &
+                                    intent(out) :: meanSL !< Mean sea level referenced to a zero
+                                                          !! reference height at tracer points [Z ~> m].
+  type(param_file_type),            intent(in)  :: param_file !< Parameter file structure
+  type(unit_scale_type),            intent(in)  :: US !< A dimensional unit scaling type
+  ! Local variables
+  character(len=200) :: filename, file, inputdir ! Strings for file/path
+  character(len=200) :: varname                  ! Variable name in file
+  character(len=40)  :: mdl = "set_meanSL_from_file" ! This subroutine's name.
+  integer :: i, j
+
+  call callTree_enter(trim(mdl)//"(), MOM_shared_initialization.F90")
+
+  call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
+  inputdir = slasher(inputdir)
+  call get_param(param_file, mdl, "MEAN_SEA_LEVEL_FILE", file, &
+                 "The file from which the mean sea level is read.", &
+                 default="mean_sea_level.nc")
+  call get_param(param_file, mdl, "MEAN_SEA_LEVEL_VARNAME", varname, &
+                 "The name of the mean sea level variable in MEAN_SEA_LEVEL_FILE.", &
+                 default="meanSL")
+  filename = trim(inputdir)//trim(file)
+  call log_param(param_file, mdl, "INPUTDIR/TOPO_FILE", filename)
+
+  if (.not.file_exists(filename, G%Domain)) &
+    call MOM_error(FATAL, " "//mdl//": Unable to open "//trim(filename))
+
+  call MOM_read_data(filename, trim(varname), meanSL, G%Domain, scale=US%m_to_Z)
+  call pass_var(meanSL, G%Domain)
+
+  call callTree_leave(trim(mdl)//'()')
+end subroutine set_meanSL_from_file
 
 !> Read gridded depths from file
 subroutine initialize_topography_from_file(D, G, param_file, US)
@@ -886,6 +922,8 @@ subroutine reset_face_lengths_list(G, param_file, US)
 
     ! Count the number of u_width and v_width entries.
     call read_face_length_list(iounit, filename, num_lines, lines)
+  else
+    num_lines = 0
   endif
 
   len_lon = 360.0 ; if (G%len_lon > 0.0) len_lon = G%len_lon
@@ -932,12 +970,12 @@ subroutine reset_face_lengths_list(G, param_file, US)
     do ln=1,num_lines
       line = lines(ln)
       ! Detect keywords
-      found_u = .false.; found_v = .false.
-      found_u_por = .false.; found_v_por = .false.
-      isu = index(uppercase(line), "U_WIDTH" ); if (isu > 0) found_u = .true.
-      isv = index(uppercase(line), "V_WIDTH" ); if (isv > 0) found_v = .true.
-      isu_por = index(uppercase(line), "U_WIDTH_POR" ); if (isu_por > 0) found_u_por = .true.
-      isv_por = index(uppercase(line), "V_WIDTH_POR" ); if (isv_por > 0) found_v_por = .true.
+      found_u = .false. ; found_v = .false.
+      found_u_por = .false. ; found_v_por = .false.
+      isu = index(uppercase(line), "U_WIDTH") ; if (isu > 0) found_u = .true.
+      isv = index(uppercase(line), "V_WIDTH") ; if (isv > 0) found_v = .true.
+      isu_por = index(uppercase(line), "U_WIDTH_POR") ; if (isu_por > 0) found_u_por = .true.
+      isv_por = index(uppercase(line), "V_WIDTH_POR") ; if (isv_por > 0) found_v_por = .true.
 
       ! Store and check the relevant values.
       if (found_u) then
@@ -1164,9 +1202,9 @@ subroutine read_face_length_list(iounit, filename, num_lines, lines)
 
     ! Detect keywords
     line_up = uppercase(line)
-    found_u = .false.; found_v = .false.
-    isu = index(line_up(:last), "U_WIDTH" ); if (isu > 0) found_u = .true.
-    isv = index(line_up(:last), "V_WIDTH" ); if (isv > 0) found_v = .true.
+    found_u = .false. ; found_v = .false.
+    isu = index(line_up(:last), "U_WIDTH") ; if (isu > 0) found_u = .true.
+    isv = index(line_up(:last), "V_WIDTH") ; if (isv > 0) found_v = .true.
 
     if (found_u .and. found_v) call MOM_error(FATAL, &
       "read_face_length_list : both U_WIDTH and V_WIDTH found when "//&
@@ -1253,8 +1291,8 @@ subroutine set_subgrid_topo_at_vel_from_file(G, param_file, US)
 
   ! The signs of the depth parameters need to be inverted to be backward compatible with input files
   ! used by subroutine reset_face_lengths_list, which assumes depth is negative below the sea surface.
-  G%porous_DmaxU = -G%porous_DmaxU; G%porous_DminU = -G%porous_DminU; G%porous_DavgU = -G%porous_DavgU
-  G%porous_DmaxV = -G%porous_DmaxV; G%porous_DminV = -G%porous_DminV; G%porous_DavgV = -G%porous_DavgV
+  G%porous_DmaxU = -G%porous_DmaxU ; G%porous_DminU = -G%porous_DminU ; G%porous_DavgU = -G%porous_DavgU
+  G%porous_DmaxV = -G%porous_DmaxV ; G%porous_DminV = -G%porous_DminV ; G%porous_DavgV = -G%porous_DavgV
 
   call pass_vector(G%porous_DmaxU, G%porous_DmaxV, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)
   call pass_vector(G%porous_DminU, G%porous_DminV, G%Domain, To_All+SCALAR_PAIR, CGRID_NE)

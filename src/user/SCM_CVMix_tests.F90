@@ -185,7 +185,7 @@ subroutine SCM_CVMix_tests_surface_forcing_init(Time, G, param_file, CS)
   call get_param(param_file, mdl, "RHO_0", CS%Rho0, &
                  "The mean ocean density used with BOUSSINESQ true to "//&
                  "calculate accelerations and the mass for conservation "//&
-                 "properties, or with BOUSSINSEQ false to convert some "//&
+                 "properties, or with BOUSSINESQ false to convert some "//&
                  "parameters from vertical units of m to kg m-2.", &
                  units="kg m-3", default=1035.0, scale=US%kg_m3_to_R)
   call get_param(param_file, mdl, "RESTORE_FLUX_RHO", CS%rho_restore, &
@@ -253,7 +253,7 @@ subroutine SCM_CVMix_tests_buoyancy_forcing(sfc_state, fluxes, day, G, US, CS)
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
 
   if (CS%UseHeatFlux) then
-    ! Note CVMix test inputs give Heat flux in [Z C T-1 ~> m K/s]
+    ! Note CVMix test inputs give Heat flux in [Z C T-1 ~> m K s-1]
     ! therefore must convert to [Q R Z T-1 ~> W m-2] by multiplying
     ! by Rho0*Cp
     do J=Jsq,Jeq ; do i=is,ie

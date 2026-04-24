@@ -383,7 +383,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     call cpu_clock_end(id_clock_sync)
     num_itts = max(1, ceiling(max_CFL - 4.0*EPSILON(max_CFL)))
     I_numitts = 1.0 / (real(num_itts))
-    if (CS%id_CFL > 0) call post_data(CS%id_CFL, CFL, CS%diag, mask=G%mask2dT)
+    if (CS%id_CFL > 0) call post_data(CS%id_CFL, CFL, CS%diag)
   elseif (CS%max_diff_CFL > 0.0) then
     num_itts = max(1, ceiling(CS%max_diff_CFL - 4.0*EPSILON(CS%max_diff_CFL)))
     I_numitts = 1.0 / (real(num_itts))
@@ -643,7 +643,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         enddo
       enddo
     endif
-    !call post_data(CS%id_KhTr_u, Kh_u, CS%diag, is_static=.false., mask=G%mask2dCu)
     call post_data(CS%id_KhTr_u, Kh_u, CS%diag)
   endif
   if (CS%id_KhTr_v > 0) then
@@ -659,7 +658,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         enddo
       enddo
     endif
-    !call post_data(CS%id_KhTr_v, Kh_v, CS%diag, is_static=.false., mask=G%mask2dCv)
     call post_data(CS%id_KhTr_v, Kh_v, CS%diag)
   endif
   if (CS%id_KhTr_h > 0) then
@@ -683,7 +681,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         enddo
       endif
     enddo ; enddo
-    !call post_data(CS%id_KhTr_h, Kh_h, CS%diag, is_static=.false., mask=G%mask2dT)
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag)
   endif
 
@@ -1542,7 +1539,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
         ! this loop with those that precede it and thereby eliminate the need for three 3-d arrays.
         if (CS%answer_date <= 20240330) then
           do k=1,nPv(i,J)
-            kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
+            kLb = k0b_Lv(J)%p(i,k) ; kRb = k0b_Rv(J)%p(i,k)
             if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
               tr_flux_conv(i,j,kLb) = tr_flux_conv(i,j,kLb) - Tr_flux_3d(i,J,k)
             else
@@ -1564,7 +1561,7 @@ subroutine tracer_epipycnal_ML_diff(h, dt, Tr, ntr, khdt_epi_x, khdt_epi_y, G, &
           enddo
         else
           do k=1,nPv(i,J)
-            kLb = k0b_Lv(J)%p(i,k); kRb = k0b_Rv(J)%p(i,k)
+            kLb = k0b_Lv(J)%p(i,k) ; kRb = k0b_Rv(J)%p(i,k)
             if (deep_wt_Lv(J)%p(i,k) >= 1.0) then
               tr_flux_N(i,j,kLb) = tr_flux_N(i,j,kLb) + Tr_flux_3d(i,J,k)
             else
@@ -1643,8 +1640,6 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
   character(len=40)  :: mdl = "MOM_tracer_hor_diff" ! This module's name.
-  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
-                          ! recreate the bugs, or if false bugs are only used if actively selected.
   integer :: default_answer_date
 
   if (associated(CS)) then
@@ -1720,14 +1715,11 @@ subroutine tracer_hor_diff_init(Time, G, GV, US, param_file, diag, EOS, diabatic
                  "along-isopycnal mixed layer to interior mixing code, while higher values use "//&
                  "mathematically equivalent expressions that recover rotational symmetry "//&
                  "when DIFFUSE_ML_TO_INTERIOR is true.", &
-                 default=20240101, do_not_log=.not.CS%Diffuse_ML_interior)
-                 !### Change the default later to default_answer_date.
-  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
+                 default=default_answer_date, do_not_log=.not.CS%Diffuse_ML_interior)
   call get_param(param_file, mdl, "HOR_DIFF_LIMIT_BUG", CS%limit_bug, &
                  "If true and the answer date is 20240330 or below, use a rotational symmetry "//&
                  "breaking bug when limiting the tracer properties in tracer_epipycnal_ML_diff.", &
-                 default=enable_bugs, do_not_log=((.not.CS%Diffuse_ML_interior).or.(CS%answer_date>=20240331)))
+                 default=.false., do_not_log=((.not.CS%Diffuse_ML_interior).or.(CS%answer_date>=20240331)))
   CS%ML_KhTR_scale = 1.0
   if (CS%Diffuse_ML_interior) then
     call get_param(param_file, mdl, "ML_KHTR_SCALE", CS%ML_KhTR_scale, &

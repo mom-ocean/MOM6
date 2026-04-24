@@ -142,11 +142,7 @@ subroutine check_redundant_vC3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   integer :: k
 
   do k=1,size(u_comp,3)
-    if (k < 10) then ; write(mesg_k,'(" Layer",i2," ")') k
-    elseif (k < 100) then ; write(mesg_k,'(" Layer",i3," ")') k
-    elseif (k < 1000) then ; write(mesg_k,'(" Layer",i4," ")') k
-    else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
-
+    write(mesg_k,'(" Layer ",i0," ")') k
     call check_redundant_vC2d(trim(mesg)//trim(mesg_k), u_comp(:,:,k), &
              v_comp(:,:,k), G, is, ie, js, je, direction, unscale)
   enddo
@@ -198,8 +194,8 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     u_nonsym(i,j) = u_comp(i,j) ; v_nonsym(i,j) = v_comp(i,j)
   enddo ; enddo
 
-  if (.not.associated(G%Domain_aux)) call MOM_error(FATAL," check_redundant"//&
-    " called with a non-associated auxiliary domain the grid type.")
+  if (.not.associated(G%Domain_aux)) call MOM_error(FATAL, &
+    " check_redundant called with a non-associated auxiliary domain the grid type.")
   call pass_vector(u_nonsym, v_nonsym, G%Domain_aux, direction)
 
   do I=IsdB,IedB ; do j=jsd,jed ; u_resym(I,j) = u_comp(I,j) ; enddo ; enddo
@@ -217,7 +213,7 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (u_resym(i,j) /= u_comp(i,j) .and. &
         redundant_prints(3) < max_redundant_prints) then
       write(mesg2,'(" redundant u-components",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," on pe ",I0)') &
            sc*u_comp(i,j), sc*u_resym(i,j), sc*(u_comp(i,j)-u_resym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(3) = redundant_prints(3) + 1
@@ -227,7 +223,7 @@ subroutine check_redundant_vC2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (v_resym(i,j) /= v_comp(i,j) .and. &
         redundant_prints(3) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," x,y = ",2(1pe12.4)," on pe ",I0)') &
            sc*v_comp(i,j), sc*v_resym(i,j), sc*(v_comp(i,j)-v_resym(i,j)), i, j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)
@@ -255,11 +251,7 @@ subroutine check_redundant_sB3d(mesg, array, G, is, ie, js, je, unscale)
   integer :: k
 
   do k=1,size(array,3)
-    if (k < 10) then ; write(mesg_k,'(" Layer",i2," ")') k
-    elseif (k < 100) then ; write(mesg_k,'(" Layer",i3," ")') k
-    elseif (k < 1000) then ; write(mesg_k,'(" Layer",i4," ")') k
-    else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
-
+    write(mesg_k,'(" Layer ",i0," ")') k
     call check_redundant_sB2d(trim(mesg)//trim(mesg_k), array(:,:,k), &
                               G, is, ie, js, je, unscale)
   enddo
@@ -302,8 +294,8 @@ subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je, unscale)
     a_nonsym(i,j) = array(i,j)
   enddo ; enddo
 
-  if (.not.associated(G%Domain_aux)) call MOM_error(FATAL," check_redundant"//&
-    " called with a non-associated auxiliary domain the grid type.")
+  if (.not.associated(G%Domain_aux)) call MOM_error(FATAL, &
+    " check_redundant called with a non-associated auxiliary domain the grid type.")
   call pass_vector(a_nonsym, a_nonsym, G%Domain_aux, &
                    direction=To_All+Scalar_Pair, stagger=BGRID_NE)
 
@@ -322,7 +314,7 @@ subroutine check_redundant_sB2d(mesg, array, G, is, ie, js, je, unscale)
     if (a_resym(i,j) /= array(i,j) .and. &
         redundant_prints(2) < max_redundant_prints) then
       write(mesg2,'(" Redundant points",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," on pe ",I0)') &
            sc*array(i,j), sc*a_resym(i,j), sc*(array(i,j)-a_resym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(2) = redundant_prints(2) + 1
@@ -355,11 +347,7 @@ subroutine check_redundant_vB3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   integer :: k
 
   do k=1,size(u_comp,3)
-    if (k < 10) then ; write(mesg_k,'(" Layer",i2," ")') k
-    elseif (k < 100) then ; write(mesg_k,'(" Layer",i3," ")') k
-    elseif (k < 1000) then ; write(mesg_k,'(" Layer",i4," ")') k
-    else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
-
+    write(mesg_k,'(" Layer ",i0," ")') k
     call check_redundant_vB2d(trim(mesg)//trim(mesg_k), u_comp(:,:,k), &
              v_comp(:,:,k), G, is, ie, js, je, direction, unscale)
   enddo
@@ -411,8 +399,8 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     u_nonsym(i,j) = u_comp(i,j) ; v_nonsym(i,j) = v_comp(i,j)
   enddo ; enddo
 
-  if (.not.associated(G%Domain_aux)) call MOM_error(FATAL," check_redundant"//&
-    " called with a non-associated auxiliary domain the grid type.")
+  if (.not.associated(G%Domain_aux)) call MOM_error(FATAL, &
+    " check_redundant called with a non-associated auxiliary domain the grid type.")
   call pass_vector(u_nonsym, v_nonsym, G%Domain_aux, direction, stagger=BGRID_NE)
 
   do I=IsdB,IedB ; do J=JsdB,JedB
@@ -431,7 +419,7 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (u_resym(i,j) /= u_comp(i,j) .and. &
         redundant_prints(2) < max_redundant_prints) then
       write(mesg2,'(" redundant u-components",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," on pe ",I0)') &
            sc*u_comp(i,j), sc*u_resym(i,j), sc*(u_comp(i,j)-u_resym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(2) = redundant_prints(2) + 1
@@ -441,7 +429,7 @@ subroutine check_redundant_vB2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (v_resym(i,j) /= v_comp(i,j) .and. &
         redundant_prints(2) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," x,y = ",2(1pe12.4)," on pe ",I0)') &
            sc*v_comp(i,j), sc*v_resym(i,j), sc*(v_comp(i,j)-v_resym(i,j)), i, j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)
@@ -468,11 +456,7 @@ subroutine check_redundant_sT3d(mesg, array, G, is, ie, js, je, unscale)
   integer :: k
 
   do k=1,size(array,3)
-    if (k < 10) then ; write(mesg_k,'(" Layer",i2," ")') k
-    elseif (k < 100) then ; write(mesg_k,'(" Layer",i3," ")') k
-    elseif (k < 1000) then ; write(mesg_k,'(" Layer",i4," ")') k
-    else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
-
+    write(mesg_k,'(" Layer ",i0," ")') k
     call check_redundant_sT2d(trim(mesg)//trim(mesg_k), array(:,:,k), &
                               G, is, ie, js, je, unscale)
   enddo
@@ -522,7 +506,7 @@ subroutine check_redundant_sT2d(mesg, array, G, is, ie, js, je, unscale)
     if (a_nonsym(i,j) /= array(i,j) .and. &
         redundant_prints(1) < max_redundant_prints) then
       write(mesg2,'(" Redundant points",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," on pe ",I0)') &
            sc*array(i,j), sc*a_nonsym(i,j), sc*(array(i,j)-a_nonsym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(1) = redundant_prints(1) + 1
@@ -555,11 +539,7 @@ subroutine check_redundant_vT3d(mesg, u_comp, v_comp, G, is, ie, js, je, &
   integer :: k
 
   do k=1,size(u_comp,3)
-    if (k < 10) then ; write(mesg_k,'(" Layer",i2," ")') k
-    elseif (k < 100) then ; write(mesg_k,'(" Layer",i3," ")') k
-    elseif (k < 1000) then ; write(mesg_k,'(" Layer",i4," ")') k
-    else ; write(mesg_k,'(" Layer",i9," ")') k ; endif
-
+    write(mesg_k,'(" Layer ",i0," ")') k
     call check_redundant_vT2d(trim(mesg)//trim(mesg_k), u_comp(:,:,k), &
              v_comp(:,:,k), G, is, ie, js, je, direction, unscale)
   enddo
@@ -618,7 +598,7 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (u_nonsym(i,j) /= u_comp(i,j) .and. &
         redundant_prints(1) < max_redundant_prints) then
       write(mesg2,'(" redundant u-components",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," on pe ",I0)') &
            sc*u_comp(i,j), sc*u_nonsym(i,j), sc*(u_comp(i,j)-u_nonsym(i,j)), i, j, pe_here()
       write(0,'(A130)') trim(mesg)//trim(mesg2)
       redundant_prints(1) = redundant_prints(1) + 1
@@ -628,7 +608,7 @@ subroutine check_redundant_vT2d(mesg, u_comp, v_comp, G, is, ie, js, je, &
     if (v_nonsym(i,j) /= v_comp(i,j) .and. &
         redundant_prints(1) < max_redundant_prints) then
       write(mesg2,'(" redundant v-comps",2(1pe12.4)," differ by ", &
-                    & 1pe12.4," at i,j = ",2i4," x,y = ",2(1pe12.4)," on pe ",i4)') &
+                    & 1pe12.4," at i,j = ",I0,",",I0," x,y = ",2(1pe12.4)," on pe ",I0)') &
            sc*v_comp(i,j), sc*v_nonsym(i,j), sc*(v_comp(i,j)-v_nonsym(i,j)), i, j, &
            G%geoLonBu(i,j), G%geoLatBu(i,j), pe_here()
       write(0,'(A155)') trim(mesg)//trim(mesg2)

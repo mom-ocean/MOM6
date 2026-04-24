@@ -18,6 +18,7 @@ use MOM_hor_index,     only : hor_index_type
 use MOM_io,            only : file_exists, get_var_sizes, read_variable
 use MOM_io,            only : vardesc, var_desc
 use MOM_safe_alloc,    only : safe_alloc_ptr
+use MOM_spatial_means, only : global_area_mean
 use MOM_time_manager,  only : time_type, operator(+), operator(/)
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_variables,     only : thermo_var_ptrs, surface
@@ -68,6 +69,7 @@ type, public :: wave_parameters_CS ; private
   logical, public :: Stokes_DDT = .false.   !< Developmental:
                                             !! True if Stokes d/dt is used
   logical, public :: Passive_Stokes_DDT = .false.   !< Keeps Stokes_DDT on, but doesn't affect dynamics
+  logical :: Homogenize_Surfbands !< True to homogenize surface band Stokes drift in the horizontal
 
   real, allocatable, dimension(:,:,:), public :: &
     Us_x               !< 3d zonal Stokes drift profile [L T-1 ~> m s-1]
@@ -295,8 +297,6 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   character*(7), parameter  :: COUPLER_STRING   = "COUPLER"
   character*(5), parameter  :: INPUT_STRING     = "INPUT"
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
-  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
-                          ! recreate the bugs, or if false bugs are only used if actively selected.
   logical :: use_waves
   logical :: StatisticalWaves
 
@@ -339,8 +339,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
                  "\t >= 20230101 - More robust expressions for Update_Stokes_Drift\n"//&
                  "\t >= 20230102 - More robust expressions for get_StokesSL_LiFoxKemper\n"//&
                  "\t >= 20230103 - More robust expressions for ust_2_u10_coare3p5", &
-                 default=20221231, do_not_log=.not.GV%Boussinesq)
-                 !### In due course change the default to default=default_answer_date)
+                 default=default_answer_date, do_not_log=.not.GV%Boussinesq)
   if (.not.GV%Boussinesq) CS%answer_date = max(CS%answer_date, 20230701)
 
   ! Langmuir number Options
@@ -358,7 +357,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
     if (.not.use_waves) return
   else
     CS%WaveMethod = NULL_WaveMethod
-  end if
+  endif
 
   ! Wave modified physics
   !  Presently these are all in research mode
@@ -446,6 +445,11 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
                  "A layer thickness below which the cell-center Stokes drift is used instead of "//&
                  "the cell average.  This is only used if WAVE_INTERFACE_ANSWER_DATE < 20230101.", &
                  units="m", default=0.1, scale=US%m_to_Z, do_not_log=(CS%answer_date>=20230101))
+    call get_param(param_file, mdl, "HOMOGENIZE_SURFBANDS", CS%Homogenize_Surfbands, &
+                 "A logical which causes the code to horizontally homogenize the surface band "//&
+                 "Stokes drift, which is needed in column mode to avoid round-off differences. "//&
+                 "At present it only works with DATAOVERRIDE, and is not coded for COUPLER.",&
+                 default=.false.)
     call get_param(param_file, mdl, "SURFBAND_SOURCE", TMPSTRING2, &
                  "Choice of SURFACE_BANDS data mode, valid options include: \n"//&
                  " DATAOVERRIDE  - Read from NetCDF using FMS DataOverride. \n"//&
@@ -453,8 +457,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
                  " INPUT         - Testing with fixed values.", default=NULL_STRING)
     select case (TRIM(TMPSTRING2))
     case (NULL_STRING)! Default
-      call MOM_error(FATAL, "wave_interface_init called with SURFACE_BANDS"//&
-                           " but no SURFBAND_SOURCE.")
+      call MOM_error(FATAL, "wave_interface_init called with SURFACE_BANDS "//&
+                            "but no SURFBAND_SOURCE.")
     case (DATAOVR_STRING)! Using Data Override
       CS%DataSource = DATAOVR
       call get_param(param_file, mdl, "SURFBAND_FILENAME", CS%SurfBandFileName, &
@@ -509,8 +513,8 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
 
   case (DHH85_STRING) !Donelan et al., 1985 spectrum
     CS%WaveMethod = DHH85
-    call MOM_error(WARNING,"DHH85 only ever set-up for uniform cases w/"//&
-                           " Stokes drift in x-direction.")
+    call MOM_error(WARNING,"DHH85 only ever set-up for uniform cases w/ "//&
+                           "Stokes drift in x-direction.")
     call get_param(param_file, mdl, "DHH85_AGE_FP", CS%WaveAgePeakFreq, &
          "Choose true to use waveage in peak frequency.", default=.false.)
     call get_param(param_file, mdl, "DHH85_AGE", CS%WaveAge, &
@@ -540,12 +544,10 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   call get_param(param_file, mdl, "LA_MISALIGNMENT", CS%LA_Misalignment, &
          "Flag (logical) if using misalignment between shear and waves in LA", &
          default=.false.)
-  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "LA_MISALIGNMENT_BUG", CS%LA_misalign_bug, &
          "If true, use a code with a sign error when calculating the misalignment between "//&
          "the shear and waves when LA_MISALIGNMENT is true.", &
-         default=CS%LA_Misalignment.and.enable_bugs, do_not_log=.not.CS%LA_Misalignment)
+         default=.false., do_not_log=.not.CS%LA_Misalignment)
   call get_param(param_file, mdl, "MIN_LANGMUIR", CS%La_min,    &
          "A minimum value for all Langmuir numbers that is not physical, "//&
          "but is likely only encountered when the wind is very small and "//&
@@ -1078,6 +1080,7 @@ subroutine Surface_Bands_by_data_override(Time, G, GV, US, CS)
   character(len=48) :: dim_name(4)  ! The names of the dimensions of the variable.
   character(len=20) :: varname      ! The name of an input variable for data override.
   real :: PI       ! 3.1415926535... [nondim]
+  real :: avgx, avgy  ! The global averages of temp_x and temp_y [L T-1 ~> m s-1]
   logical :: wavenumber_exists
   integer :: ndims, b, i, j
 
@@ -1158,6 +1161,14 @@ subroutine Surface_Bands_by_data_override(Time, G, GV, US, CS)
         endif
       enddo
     enddo
+    if (CS%Homogenize_Surfbands) then
+      avgx = global_area_mean(temp_x, G)
+      avgy = global_area_mean(temp_y, G)
+      do j = G%jsd,G%jed ; do i = G%Isd,G%Ied ; if (G%mask2dT(i,j) > 0.0) then
+          temp_y(i,j) = avgy
+          temp_x(i,j) = avgx
+      endif ; enddo ; enddo
+    endif
 
     ! Interpolate to u/v grids
     do j = G%jsc,G%jec
@@ -1813,7 +1824,7 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         ! Computing (left/right) Eulerian velocities assuming the velocity passed to this routine is the
         ! Lagrangian velocity.  This requires the wave acceleration terms to be activated together.
         uE_l = 0.5*((u(I-1,j,k)-CS%Us_x(I-1,j,k))*G%mask2dCu(I-1,j) + &
-                    (u(I,j,k)-CS%Us_x(I-1,j,k))*G%mask2dCu(I,j))
+                    (u(I,j,k)-CS%Us_x(I,j,k))*G%mask2dCu(I,j))
         uE_r = 0.5*((u(I,j,k)-CS%Us_x(I,j,k))*G%mask2dCu(I,j) + &
                     (u(I+1,j,k)-CS%Us_x(I+1,j,k))*G%mask2dCu(I+1,j))
         vE_l = 0.5*((v(i,J-1,k)-CS%Us_y(i,J-1,k))*G%mask2dCv(i,J-1) + &
@@ -1825,6 +1836,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         dP_Stokes_r_dz = 0.0
         dP_Stokes_l = 0.0
         dP_Stokes_r = 0.0
+        dP_lay_Stokes_l=0.0
+        dP_lay_Stokes_r=0.0
 
         do l = 1, CS%numbands
 
@@ -1870,8 +1883,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
               dexp2kzR = exp(TwoK*zi_r(k))-exp(TwoK*zi_r(k+1))
               dexp4kzR = exp(FourK*zi_r(k))-exp(FourK*zi_r(k+1))
               dP_Stokes_r_dz = dP_Stokes_r_dz + &
-                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*iFourK*dexp4kzR)
-              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*dexp4kzR
+                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*iFourK*dexp4kzR)
+              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*dexp4kzR
             else  ! These expressions are equivalent to those above for thick layers, but more accurate for thin layers.
               exp_top = exp(TwoK*zi_r(k))
               dP_lay_Stokes_r = dP_lay_Stokes_r + &
@@ -1949,6 +1962,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
         dP_Stokes_r_dz = 0.0
         dP_Stokes_l = 0.0
         dP_Stokes_r = 0.0
+        dP_lay_Stokes_l=0.0
+        dP_lay_Stokes_r=0.0
 
         do l = 1, CS%numbands
 
@@ -1994,8 +2009,8 @@ subroutine Stokes_PGF(G, GV, US, dz, u, v, PFu_Stokes, PFv_Stokes, CS )
               dexp2kzR = exp(TwoK*zi_r(k))-exp(TwoK*zi_r(k+1))
               dexp4kzR = exp(FourK*zi_r(k))-exp(FourK*zi_r(k+1))
               dP_Stokes_r_dz = dP_Stokes_r_dz + &
-                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*iFourK*dexp4kzR)
-              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_l*uS0_l+vS0_l*vS0_l)*dexp4kzR
+                               ((uE_r*uS0_r+vE_r*vS0_r)*iTwoK*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*iFourK*dexp4kzR)
+              dP_Stokes_r = dP_Stokes_r + (uE_r*uS0_r+vE_r*vS0_r)*dexp2kzR + 0.5*(uS0_r*uS0_r+vS0_r*vS0_r)*dexp4kzR
             else  ! These expressions are equivalent to those above for thick layers, but more accurate for thin layers.
               exp_top = exp(TwoK*zi_r(k))
               dP_lay_Stokes_r = dP_lay_Stokes_r + &

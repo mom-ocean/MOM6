@@ -22,7 +22,6 @@ use MOM_tracer_diabatic,    only : tracer_vertdiff, applyTracerBoundaryFluxesInO
 use MOM_unit_scaling,       only : unit_scale_type
 use MOM_variables,          only : surface
 use MOM_verticalGrid,       only : verticalGrid_type
-use MOM_open_boundary,      only : OBC_segment_type, register_segment_tracer
 use MOM_tracer_registry,    only : tracer_type
 use MOM_tracer_registry,    only : tracer_name_lookup
 use MOM_tracer_advect_schemes, only : set_tracer_advect_scheme, TracerAdvectionSchemeDoc
@@ -95,7 +94,7 @@ function register_dyed_obc_tracer(HI, GV, param_file, CS, tr_Reg, restart_CS)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "NUM_DYED_TRACERS", CS%ntr, &
                  "The number of dyed_obc tracers in this run. Each tracer "//&
-                 "should have a separate boundary segment."//&
+                 "should have a separate boundary segment.  "//&
                  "If not present, use NUM_DYE_TRACERS.", default=-1)
   if (CS%ntr == -1) then
     !for backward compatibility

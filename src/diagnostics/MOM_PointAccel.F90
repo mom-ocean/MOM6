@@ -150,7 +150,7 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     enddo
     ke = k
     if (ke < ks) then
-      ks = 1; ke = nz; write(file,'("U: Unable to set ks & ke.")')
+      ks = 1 ; ke = nz ; write(file,'("U: Unable to set ks & ke.")')
     endif
     if (CS%full_column) then
       ks = 1 ; ke = nz
@@ -159,8 +159,8 @@ subroutine write_u_accel(I, j, um, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     call get_date(CS%Time, yr, mo, day, hr, minute, sec)
     call get_time((CS%Time - set_date(yr, 1, 1, 0, 0, 0)), sec, yearday)
     write (file,'(/,"--------------------------")')
-    write (file,'(/,"Time ",i5,i4,F6.2," U-velocity violation at ",I4,": ",2(I3), &
-        & " (",F7.2," E ",F7.2," N) Layers ",I3," to ",I3,". dt = ",1PG10.4)') &
+    write (file,'(/,"Time ",I0," ",I0," ",F6.2," U-velocity violation at ",I0,": ",I0,", ",I0, &
+        & " (",F7.2," E ",F7.2," N) Layers ",I0," to ",I0,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), I, j, &
         G%geoLonCu(I,j), G%geoLatCu(I,j), ks, ke, US%T_to_s*dt
 
@@ -490,7 +490,7 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     enddo
     ke = k
     if (ke < ks) then
-      ks = 1; ke = nz; write(file,'("V: Unable to set ks & ke.")')
+      ks = 1 ; ke = nz ; write(file,'("V: Unable to set ks & ke.")')
     endif
     if (CS%full_column) then
       ks = 1 ; ke = nz
@@ -499,8 +499,8 @@ subroutine write_v_accel(i, J, vm, hin, ADp, CDp, dt, G, GV, US, CS, vel_rpt, st
     call get_date(CS%Time, yr, mo, day, hr, minute, sec)
     call get_time((CS%Time - set_date(yr, 1, 1, 0, 0, 0)), sec, yearday)
     write (file,'(/,"--------------------------")')
-    write (file,'(/,"Time ",i5,i4,F6.2," V-velocity violation at ",I4,": ",2(I3), &
-        & " (",F7.2," E ",F7.2," N) Layers ",I3," to ",I3,". dt = ",1PG10.4)') &
+    write (file,'(/,"Time ",I0," ",I0," ",F6.2," V-velocity violation at ",I0,": ",I0,", ",I0, &
+        & " (",F7.2," E ",F7.2," N) Layers ",I0," to ",I0,". dt = ",1PG10.4)') &
         yr, yearday, (REAL(sec)/3600.0), pe_here(), i, J, &
         G%geoLonCv(i,J), G%geoLatCv(i,J), ks, ke, US%T_to_s*dt
 
@@ -771,8 +771,8 @@ subroutine PointAccel_init(MIS, Time, G, param_file, diag, dirs, CS)
   CS%T => MIS%T ; CS%S => MIS%S
   CS%u_accel_bt => MIS%u_accel_bt ; CS%v_accel_bt => MIS%v_accel_bt
   CS%u_prev => MIS%u_prev ; CS%v_prev => MIS%v_prev
-  CS%u_av => MIS%u_av; if (.not.associated(MIS%u_av)) CS%u_av => MIS%u(:,:,:)
-  CS%v_av => MIS%v_av; if (.not.associated(MIS%v_av)) CS%v_av => MIS%v(:,:,:)
+  CS%u_av => MIS%u_av ; if (.not.associated(MIS%u_av)) CS%u_av => MIS%u(:,:,:)
+  CS%v_av => MIS%v_av ; if (.not.associated(MIS%v_av)) CS%v_av => MIS%v(:,:,:)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "", debugging=.true.)

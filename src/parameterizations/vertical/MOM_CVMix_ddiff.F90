@@ -183,16 +183,16 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
   integer :: i, k
 
   ! initialize dummy variables
-  pres_int(:) = 0.0; temp_int(:) = 0.0; salt_int(:) = 0.0
-  alpha_dT(:) = 0.0; beta_dS(:) = 0.0; dRho_dT(:) = 0.0
-  dRho_dS(:) = 0.0; dT(:) = 0.0; dS(:) = 0.0
+  pres_int(:) = 0.0 ; temp_int(:) = 0.0 ; salt_int(:) = 0.0
+  alpha_dT(:) = 0.0 ; beta_dS(:) = 0.0 ; dRho_dT(:) = 0.0
+  dRho_dS(:) = 0.0 ; dT(:) = 0.0 ; dS(:) = 0.0
 
 
   ! GMM, I am leaving some code commented below. We need to pass BLD to
   ! this subroutine to avoid adding diffusivity above that. This needs
   ! to be done once we re-structure the order of the calls.
   !if (.not. associated(hbl)) then
-  !  allocate(hbl(SZI_(G), SZJ_(G)));
+  !  allocate(hbl(SZI_(G), SZJ_(G)))
   !  hbl(:,:) = 0.0
   !endif
 
@@ -203,7 +203,7 @@ subroutine compute_ddiff_coeffs(h, tv, G, GV, US, j, Kd_T, Kd_S, CS, R_rho)
 
     pres_int(1) = 0. ;  if (associated(tv%p_surf)) pres_int(1) = tv%p_surf(i,j)
     ! we don't have SST and SSS, so let's use values at top-most layer
-    temp_int(1) = tv%T(i,j,1); salt_int(1) = tv%S(i,j,1)
+    temp_int(1) = tv%T(i,j,1) ; salt_int(1) = tv%S(i,j,1)
     do K=2,GV%ke
       ! pressure at interface
       pres_int(K) = pres_int(K-1) + (GV%g_Earth * GV%H_to_RZ) * h(i,j,k-1)
