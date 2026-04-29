@@ -779,8 +779,10 @@ subroutine set_viscous_BBL(u, v, h, tv, visc, G, GV, US, CS, pbv)
 
         do concurrent (i=is:ie, .not.do_i(i,j)) ; T_EOS(i,j) = 0.0 ; S_EOS(i,j) = 0.0 ; enddo
 
-        do concurrent (k=1:nz, i=is:ie)
-          press(i,j) = press(i,j) + (GV%H_to_RZ*GV%g_Earth) * h_vel(i,j,k)
+        do concurrent (i=is:ie)
+          do k=1,nz
+            press(i,j) = press(i,j) + (GV%H_to_RZ*GV%g_Earth) * h_vel(i,j,k)
+          enddo
         enddo
       endif
     enddo ! end of j loop
@@ -1861,12 +1863,11 @@ pure subroutine find_L_open_convex(vol_below, D_vel, Dp, Dm, L, GV, US, CS)
     if (vol_below(K) >= Vol_open) then
       L(K) = 1.0
     elseif (vol_below(K) <= Vol_direct) then
-      ! Both edges of the cell are bounded by walls.
-      ! if (CS%answer_date < 20240101)) then
+      if (CS%answer_date < 20260501) then
         L(K) = (-0.25*C24_crv*vol_below(K))**C1_3
-      ! else
-      !   L(K) = cuberoot(-0.25*C24_crv*vol_below(K))
-      ! endif
+      else
+        L(K) = cuberoot(-0.25*C24_crv*vol_below(K))
+      endif
     else
       ! x_R is at 1/2 but x_L is in the interior & L is found by iteratively solving
       !   vol_below(K) = 0.5*L^2*(slope + crv/3*(3-4L))
@@ -3388,6 +3389,7 @@ subroutine set_visc_init(Time, G, GV, US, param_file, diag, visc, CS, restart_CS
   if (CS%Channel_drag .or. CS%body_force_drag) then
     allocate(visc%Ray_u(IsdB:IedB,jsd:jed,nz), source=0.0)
     allocate(visc%Ray_v(isd:ied,JsdB:JedB,nz), source=0.0)
+    !$omp target enter data map(to: visc%Ray_u, visc%Ray_v)
     CS%id_Ray_u = register_diag_field('ocean_model', 'Rayleigh_u', diag%axesCuL, &
        Time, 'Rayleigh drag velocity at u points', 'm s-1', conversion=GV%H_to_m*US%s_to_T)
     CS%id_Ray_v = register_diag_field('ocean_model', 'Rayleigh_v', diag%axesCvL, &
@@ -3418,16 +3420,40 @@ subroutine set_visc_end(visc, CS)
   type(set_visc_CS),   intent(inout) :: CS   !< The control structure returned by a previous
                                              !! call to set_visc_init.
 
-  if (allocated(visc%bbl_thick_u)) deallocate(visc%bbl_thick_u)
-  if (allocated(visc%bbl_thick_v)) deallocate(visc%bbl_thick_v)
-  if (allocated(visc%kv_bbl_u)) deallocate(visc%kv_bbl_u)
-  if (allocated(visc%kv_bbl_v)) deallocate(visc%kv_bbl_v)
+  if (allocated(visc%bbl_thick_u)) then
+    !$omp target exit data map(delete: visc%bbl_thick_u)
+    deallocate(visc%bbl_thick_u)
+  endif
+  if (allocated(visc%bbl_thick_v)) then
+    !$omp target exit data map(delete: visc%bbl_thick_v)
+    deallocate(visc%bbl_thick_v)
+  endif
+  if (allocated(visc%kv_bbl_u)) then
+    !$omp target exit data map(delete: visc%kv_bbl_u)
+    deallocate(visc%kv_bbl_u)
+  endif
+  if (allocated(visc%kv_bbl_v)) then
+    !$omp target exit data map(delete: visc%kv_bbl_v)
+    deallocate(visc%kv_bbl_v)
+  endif
   if (allocated(CS%bbl_u)) deallocate(CS%bbl_u)
   if (allocated(CS%bbl_v)) deallocate(CS%bbl_v)
-  if (allocated(visc%Ray_u)) deallocate(visc%Ray_u)
-  if (allocated(visc%Ray_v)) deallocate(visc%Ray_v)
-  if (allocated(visc%nkml_visc_u)) deallocate(visc%nkml_visc_u)
-  if (allocated(visc%nkml_visc_v)) deallocate(visc%nkml_visc_v)
+  if (allocated(visc%Ray_u)) then
+    !$omp target exit data map(delete: visc%Ray_u)
+    deallocate(visc%Ray_u)
+  endif
+  if (allocated(visc%Ray_v)) then
+    !$omp target exit data map(delete: visc%Ray_v)
+    deallocate(visc%Ray_v)
+  endif
+  if (allocated(visc%nkml_visc_u)) then
+    !$omp target exit data map(delete: visc%nkml_visc_u)
+    deallocate(visc%nkml_visc_u)
+  endif
+  if (allocated(visc%nkml_visc_v)) then
+    !$omp target exit data map(delete: visc%nkml_visc_v)
+    deallocate(visc%nkml_visc_v)
+  endif
   if (associated(visc%Kd_shear)) deallocate(visc%Kd_shear)
   if (associated(visc%Kv_slow)) deallocate(visc%Kv_slow)
   if (associated(visc%TKE_turb)) deallocate(visc%TKE_turb)

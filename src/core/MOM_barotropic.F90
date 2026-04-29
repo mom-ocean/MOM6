@@ -11,6 +11,7 @@ use MOM_checksums, only : chksum0
 use MOM_coms,      only : any_across_PEs
 use MOM_cpu_clock, only : cpu_clock_id, cpu_clock_begin, cpu_clock_end, CLOCK_ROUTINE
 use MOM_debugging, only : hchksum, uvchksum, Bchksum
+use MOM_intrinsic_functions, only : nth_root
 use MOM_diag_mediator, only : post_data, query_averaging_enabled, register_diag_field
 use MOM_diag_mediator, only : diag_ctrl, enable_averaging, enable_averages
 use MOM_domains, only : min_across_PEs, clone_MOM_domain, deallocate_MOM_domain
@@ -1612,15 +1613,17 @@ subroutine btstep(U_in, V_in, eta_in, dt, bc_accel_u, bc_accel_v, forces, pbce, 
          ((nstep * av_rem_v(i,J)) / (1.0 + (nstep-1)*av_rem_v(i,J)))
     enddo
   else
+    ! `av_rem**Instep` lowers to `exp(Instep*log(av_rem))` which is not bit-identical
+    ! CPU <-> GPU when offloaded by stdpar. Use deterministic Newton nth_root instead.
     do concurrent (j=js:je, I=is-1:ie)
       bt_rem_u(I,j) = 0.0
       if (G%mask2dCu(I,j) * av_rem_u(I,j) > 0.0) &
-        bt_rem_u(I,j) = G%mask2dCu(I,j) * (av_rem_u(I,j)**Instep)
+        bt_rem_u(I,j) = G%mask2dCu(I,j) * (av_rem_u(I,j)**Instep) !nth_root(av_rem_u(I,j), nstep)
     enddo
     do concurrent (J=js-1:je, i=is:ie)
       bt_rem_v(i,J) = 0.0
       if (G%mask2dCv(i,J) * av_rem_v(i,J) > 0.0) &
-        bt_rem_v(i,J) = G%mask2dCv(i,J) * (av_rem_v(i,J)**Instep)
+        bt_rem_v(i,J) = G%mask2dCv(i,J) * (av_rem_v(i,J)**Instep) !nth_root(av_rem_v(i,J), nstep)
     enddo
   endif
 

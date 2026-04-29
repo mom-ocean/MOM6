@@ -344,11 +344,8 @@ subroutine advect_tracer(h_end, uhtr, vhtr, OBC, dt, G, GV, US, CS, Reg, x_first
           domore_k_tmp = 1
         enddo
         domore_k(k) = domore_k_tmp
-
       endif ; enddo
-
     else
-
       do k=1,nz ; if (domore_k(k) > 0) then
         ! First, advect meridionally.
         call advect_y(Reg%Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &

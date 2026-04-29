@@ -733,7 +733,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   ! and the right-hand-side is destructively updated to be d'_k
 
   !$omp target enter data map(alloc: c1)
-  !$omp target enter data map(to: visc%Ray_u) if (allocated(visc%Ray_u))
 
   !$omp target teams loop collapse(2) &
   !$omp   private(b1, c1, d1, Ray, b_denom_1)
@@ -936,8 +935,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
     enddo
   endif
 
-  !$omp target enter data map(to: visc%Ray_v) if (allocated(visc%Ray_v))
-
   !$omp target teams loop collapse(2) &
   !$omp   private(b1, c1, d1, Ray, b_denom_1)
   do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
@@ -1107,8 +1104,6 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   !$omp target exit data map(from: ADp%du_dt_str, ADp%dv_dt_str)
   !$omp target exit data map(delete: ADp)
   !$omp target exit data map(delete: surface_stress)
-  !$omp target exit data map(delete: visc%Ray_u) if (allocated(visc%Ray_u))
-  !$omp target exit data map(delete: visc%Ray_v) if (allocated(visc%Ray_v))
 
   ! Here the velocities associated with open boundary conditions are applied.
   if (associated(OBC)) then
@@ -1441,6 +1436,11 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
   ! These are used in diagnostics, so they need to be mapped back and forth
   !$omp target enter data map(to: hML_u, kv_u, kv_gl90_u )
   !$omp target enter data map(to: hML_v, kv_v, kv_gl90_v)
+  ! Kv_shear is persistently mapped on device via map(alloc:) in set_viscosity_init,
+  ! so map(to:) here would not copy host updates. Use target update to(...) to force
+  ! a host->device sync on every call.
+  !$omp target update to(visc%Kv_shear) if (associated(visc%Kv_shear))
+  !$omp target enter data map(to: visc%Kv_shear_Bu) if (associated(visc%Kv_shear_Bu))
 
   !$omp target teams distribute parallel do collapse(2) &
   !$omp   private(z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &
@@ -2054,6 +2054,8 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
 
   !$omp target exit data map(delete: z_i, z_i_gl90, dz_harm, hvel, dz_vel, a_cpl, a_cpl_gl90, &
   !$omp& tv, varmix, hvel_shelf, dz_vel_shelf, a_shelf, hml_u, kv_u, kv_gl90_u)
+  ! Kv_shear stays persistently mapped (see entry above); only release Kv_shear_Bu.
+  !$omp target exit data map(release: visc%Kv_shear_Bu) if (associated(visc%Kv_shear_Bu))
 
   ! These are used in diagnostics, so they need to be mapped back and forth
   !$omp target exit data map(from: hML_u, kv_u, kv_gl90_u )
@@ -2062,6 +2064,7 @@ subroutine vertvisc_coef(u, v, h, dz, forces, visc, tv, dt, G, GV, US, CS, OBC, 
   !$omp target exit data map(delete: Ustar_2d)
 
   if (CS%debug) then
+    !$omp target update from(CS%h_u, CS%h_v, CS%a_u, CS%a_v)
     call uvchksum("loop vertvisc_coef h_[uv]", CS%h_u, CS%h_v, G%HI, haloshift=0, &
                   unscale=GV%H_to_m, scalar_pair=.true.)
     call uvchksum("vertvisc_coef a_[uv]", CS%a_u, CS%a_v, G%HI, haloshift=0, &

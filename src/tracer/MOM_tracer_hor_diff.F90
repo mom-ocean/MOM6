@@ -189,6 +189,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
   real :: Res_Fn     ! The local value of the resolution function [nondim].
   real :: Rd_dx      ! The local value of deformation radius over grid-spacing [nondim].
   real :: normalize  ! normalization used for diagnostic Kh_h [nondim]; diffusivity averaged to h-points.
+  real :: MEKE_KhTr_fac
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
@@ -207,8 +208,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
 
   !$omp target enter data map(to: Reg, Reg%Tr, CS) map(alloc: khdt_x, khdt_y, kh_u, kh_v)
   !$ do m = 1, Reg%ntr
-    !$omp target enter data map(to: Reg%Tr(m)%t, Reg%Tr(m)%df_x, Reg%Tr(m)%df_y, Reg%Tr(m)%df2d_x, &
-    !$omp   Reg%tr(m)%df2d_y)
+    !$omp target enter data map(to: Reg%Tr(m)%t)
+    !$omp target enter data map(to: Reg%Tr(m)%df_x) if(associated(Reg%Tr(m)%df_x))
+    !$omp target enter data map(to: Reg%Tr(m)%df_y) if(associated(Reg%Tr(m)%df_y))
+    !$omp target enter data map(to: Reg%Tr(m)%df2d_x) if(associated(Reg%Tr(m)%df2d_x))
+    !$omp target enter data map(to: Reg%Tr(m)%df2d_y) if(associated(Reg%Tr(m)%df2d_y))
   !$ enddo
 
   ntr = Reg%ntr
@@ -245,13 +249,14 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
 
   if (do_online) then
     if (use_VarMix) then
+      MEKE_KhTr_fac = MEKE%KhTr_fac
       !$omp target enter data map(to: VarMix, VarMix%SN_u, VarMix%L2u, VarMix%Res_fn_h, &
       !$omp   VarMix%Rd_dx_h, MEKE, MEKE%Kh)
       do concurrent (j=js:je, I=is-1:ie)
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2u(I,j)*VarMix%SN_u(I,j)
         if (allocated(MEKE%Kh)) &
-          Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
+          Kh_loc = Kh_loc + MEKE_KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i+1,j))
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &
           Kh_loc = Kh_loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i+1,j))
@@ -267,7 +272,7 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
         Kh_loc = CS%KhTr
         if (use_Eady) Kh_loc = Kh_loc + CS%KhTr_Slope_Cff*VarMix%L2v(i,J)*VarMix%SN_v(i,J)
         if (allocated(MEKE%Kh)) &
-          Kh_loc = Kh_loc + MEKE%KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
+          Kh_loc = Kh_loc + MEKE_KhTr_fac*sqrt(MEKE%Kh(i,j)*MEKE%Kh(i,j+1))
         if (CS%KhTr_max > 0.) Kh_loc = min(Kh_loc, CS%KhTr_max)
         if (Resoln_scaled) &
           Kh_loc = Kh_loc * 0.5*(VarMix%Res_fn_h(i,j) + VarMix%Res_fn_h(i,j+1))
@@ -634,7 +639,6 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
   endif   ! endif for CS%use_neutral_diffusion
   call cpu_clock_end(id_clock_diffuse)
 
-
   if (CS%Diffuse_ML_interior) then
     if (CS%show_call_tree) call callTree_waypoint("Calling epipycnal_ML_diff (tracer_hordiff)")
     if (CS%debug) call MOM_tracer_chksum("Before epipycnal diff ", Reg, G)
@@ -645,8 +649,11 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     call cpu_clock_end(id_clock_epimix)
   endif
   !$ do m = 1, Reg%ntr
-    !$omp target exit data map(from: Reg%Tr(m)%t, Reg%Tr(m)%df_x, Reg%Tr(m)%df_y, &
-    !$omp   Reg%Tr(m)%df2d_x, Reg%tr(m)%df2d_y)
+    !$omp target exit data map(from: Reg%Tr(m)%t)
+    !$omp target exit data map(from: Reg%Tr(m)%df_x) if(associated(Reg%Tr(m)%df_x))
+    !$omp target exit data map(from: Reg%Tr(m)%df_y) if(associated(Reg%Tr(m)%df_y))
+    !$omp target exit data map(from: Reg%Tr(m)%df2d_x) if(associated(Reg%Tr(m)%df2d_x))
+    !$omp target exit data map(from: Reg%Tr(m)%df2d_y) if(associated(Reg%Tr(m)%df2d_y))
   !$ enddo
   !$omp target exit data map(release: Reg%Tr, Reg)
 
@@ -710,8 +717,8 @@ subroutine tracer_hordiff(h, dt, MEKE, VarMix, visc, G, GV, US, CS, Reg, tv, do_
     call post_data(CS%id_KhTr_h, Kh_h, CS%diag)
   endif
 
-  !$omp target exit data map(from: khdt_x, khdt_y) if(CS%debug .or. CS%id_khdt_x>0 .or. CS%id_khdt_y>0)
-  !$omp target exit data map(delete: khdt_x, khdt_y, Kh_u, Kh_v) map(release: CS)
+  !$omp target update from(khdt_x, khdt_y) if(CS%debug .or. CS%id_khdt_x>0 .or. CS%id_khdt_y>0)
+  !$omp target exit data map(release: khdt_x, khdt_y, Kh_u, Kh_v) map(release: CS)
 
   if (CS%debug) then
     call uvchksum("After tracer diffusion khdt_[xy]", khdt_x, khdt_y, &

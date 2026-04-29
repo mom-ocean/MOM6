@@ -181,8 +181,12 @@ contains
 
   !> Local implementation of generic calculate_density_array for efficiency
   procedure :: calculate_density_array => calculate_density_array_Roquet_rho
+  !> Local implementation of generic calculate_density_array_2d for efficiency
+  procedure :: calculate_density_array_2d => calculate_density_array_2d_Roquet_rho
   !> Local implementation of generic calculate_spec_vol_array for efficiency
   procedure :: calculate_spec_vol_array => calculate_spec_vol_array_Roquet_rho
+  !> Local implementation of generic calculate_density_derivs_2d for efficiency
+  procedure :: calculate_density_derivs_2d => calculate_density_derivs_2d_Roquet_rho
 
 end type Roquet_rho_EOS
 
@@ -191,11 +195,10 @@ contains
 !> In situ density of sea water from Roquet et al., 2015 [kg m-3]
 !!
 !! This is an elemental function that can be applied to any combination of scalar and array inputs.
-real elemental function density_elem_Roquet_rho(this, T, S, pressure)
-  class(Roquet_rho_EOS), intent(in) :: this     !< This EOS
-  real,                  intent(in) :: T        !< Conservative temperature [degC]
-  real,                  intent(in) :: S        !< Absolute salinity [g kg-1]
-  real,                  intent(in) :: pressure !< Pressure [Pa]
+real elemental function density_elem_Roquet_rho_loc(T, S, pressure)
+  real, intent(in) :: T        !< Conservative temperature [degC]
+  real, intent(in) :: S        !< Absolute salinity [g kg-1]
+  real, intent(in) :: pressure !< Pressure [Pa]
 
   ! Local variables
   real :: zp     ! Pressure [Pa]
@@ -243,19 +246,30 @@ real elemental function density_elem_Roquet_rho(this, T, S, pressure)
   rho00p = zp*(R00 + zp*(R01 + zp*(R02 + zp*(R03 + zp*(R04 + zp*R05)))))
 
   rhoTS  = (rhoTS0 + rho0S0) + zp*(rhoTS1 + zp*(rhoTS2 +  zp*rhoTS3))
-  density_elem_Roquet_rho = rhoTS + rho00p  ! In situ density [kg m-3]
+  density_elem_Roquet_rho_loc = rhoTS + rho00p  ! In situ density [kg m-3]
 
+end function density_elem_Roquet_rho_loc
+
+!> Wrapper for density_elem_Roquet_rho_loc created to preserve API while calling
+!! density_elem_Roquet_rho without "this" variable that causes runtime errors on
+!! gpu runs with nvfortran.
+real elemental function density_elem_Roquet_rho(this, T, S, pressure)
+  class(Roquet_rho_EOS), intent(in) :: this     !< This EOS
+  real,                  intent(in) :: T        !< Conservative temperature [degC]
+  real,                  intent(in) :: S        !< Absolute salinity [g kg-1]
+  real,                  intent(in) :: pressure !< Pressure [Pa]
+
+  density_elem_Roquet_rho = density_elem_Roquet_rho_loc(T, S, pressure)
 end function density_elem_Roquet_rho
 
 !> In situ density anomaly of sea water from Roquet et al., 2015 [kg m-3]
 !!
 !! This is an elemental function that can be applied to any combination of scalar and array inputs.
-real elemental function density_anomaly_elem_Roquet_rho(this, T, S, pressure, rho_ref)
-  class(Roquet_rho_EOS), intent(in) :: this     !< This EOS
-  real,                  intent(in) :: T        !< Conservative temperature [degC]
-  real,                  intent(in) :: S        !< Absolute salinity [g kg-1]
-  real,                  intent(in) :: pressure !< Pressure [Pa]
-  real,                  intent(in) :: rho_ref  !< A reference density [kg m-3]
+real elemental function density_anomaly_elem_Roquet_rho_loc(T, S, pressure, rho_ref)
+  real, intent(in) :: T        !< Conservative temperature [degC]
+  real, intent(in) :: S        !< Absolute salinity [g kg-1]
+  real, intent(in) :: pressure !< Pressure [Pa]
+  real, intent(in) :: rho_ref  !< A reference density [kg m-3]
 
   ! Local variables
   real :: zp     ! Pressure [Pa]
@@ -305,8 +319,21 @@ real elemental function density_anomaly_elem_Roquet_rho(this, T, S, pressure, rh
   rho0S0 = rho0S0 - rho_ref
 
   rhoTS  = (rhoTS0 + rho0S0) + zp*(rhoTS1 + zp*(rhoTS2 +  zp*rhoTS3))
-  density_anomaly_elem_Roquet_rho = rhoTS + rho00p  ! In situ density [kg m-3]
+  density_anomaly_elem_Roquet_rho_loc = rhoTS + rho00p  ! In situ density [kg m-3]
 
+end function density_anomaly_elem_Roquet_rho_loc
+
+!> Wrapper for density_anomaly_elem_Roquet_rho_loc created to preserve API while calling
+!! density_anomaly_elem_Roquet_rho_loc without "this" variable that causes runtime errors on
+!! gpu runs with nvfortran.
+real elemental function density_anomaly_elem_Roquet_rho(this, T, S, pressure, rho_ref)
+  class(Roquet_rho_EOS), intent(in) :: this     !< This EOS
+  real,                  intent(in) :: T        !< Conservative temperature [degC]
+  real,                  intent(in) :: S        !< Absolute salinity [g kg-1]
+  real,                  intent(in) :: pressure !< Pressure [Pa]
+  real,                  intent(in) :: rho_ref  !< A reference density [kg m-3]
+
+  density_anomaly_elem_Roquet_rho = density_anomaly_elem_Roquet_rho_loc(T, S, pressure, rho_ref)
 end function density_anomaly_elem_Roquet_rho
 
 !> In situ specific volume of sea water from Roquet et al., 2015 [kg m-3]
@@ -339,15 +366,14 @@ end function spec_vol_anomaly_elem_Roquet_rho
 
 !> For a given thermodynamic state, calculate the derivatives of density with conservative
 !! temperature and absolute salinity, using the density polynomial fit EOS from Roquet et al. (2015).
-elemental subroutine calculate_density_derivs_elem_Roquet_rho(this, T, S, pressure, drho_dT, drho_dS)
-  class(Roquet_rho_EOS), intent(in)  :: this     !< This EOS
-  real,                  intent(in)  :: T        !< Conservative temperature [degC]
-  real,                  intent(in)  :: S        !< Absolute salinity [g kg-1]
-  real,                  intent(in)  :: pressure !< Pressure [Pa]
-  real,                  intent(out) :: drho_dT  !< The partial derivative of density with potential
-                                                 !! temperature [kg m-3 degC-1]
-  real,                  intent(out) :: drho_dS  !< The partial derivative of density with salinity,
-                                                 !! in [kg m-3 ppt-1]
+elemental subroutine calculate_density_derivs_elem_Roquet_rho_loc(T, S, pressure, drho_dT, drho_dS)
+  real, intent(in)  :: T        !< Conservative temperature [degC]
+  real, intent(in)  :: S        !< Absolute salinity [g kg-1]
+  real, intent(in)  :: pressure !< Pressure [Pa]
+  real, intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                !! temperature [kg m-3 degC-1]
+  real, intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                !! in [kg m-3 ppt-1]
 
   ! Local variables
   real :: zp      ! Pressure [Pa]
@@ -409,6 +435,23 @@ elemental subroutine calculate_density_derivs_elem_Roquet_rho(this, T, S, pressu
 
   ! The division by zs here is because zs = sqrt(S + S0), so drho_dS = dzs_dS * drho_dzs = (0.5 / zs) * drho_dzs
   drho_dS = (dRdzs0 + zp*(dRdzs1 + zp*(dRdzs2 + zp * dRdzs3))) / zs
+
+end subroutine calculate_density_derivs_elem_Roquet_rho_loc
+
+!> Wrapper for calculate_density_derivs_elem_Roquet_rho_loc created to preserve API while
+!! calling calculate_density_derivs_elem_Roquet_rho without "this" variable that causes
+!! runtime errors on gpu runs with nvfortran.
+elemental subroutine calculate_density_derivs_elem_Roquet_rho(this, T, S, pressure, drho_dT, drho_dS)
+  class(Roquet_rho_EOS), intent(in)  :: this     !< This EOS
+  real,                  intent(in)  :: T        !< Conservative temperature [degC]
+  real,                  intent(in)  :: S        !< Absolute salinity [g kg-1]
+  real,                  intent(in)  :: pressure !< Pressure [Pa]
+  real,                  intent(out) :: drho_dT  !< The partial derivative of density with potential
+                                                 !! temperature [kg m-3 degC-1]
+  real,                  intent(out) :: drho_dS  !< The partial derivative of density with salinity,
+                                                 !! in [kg m-3 ppt-1]
+
+  call calculate_density_derivs_elem_Roquet_rho_loc(T, S, pressure, drho_dT, drho_dS)
 
 end subroutine calculate_density_derivs_elem_Roquet_rho
 
@@ -637,11 +680,78 @@ subroutine calculate_density_array_Roquet_rho(this, T, S, pressure, rho, start, 
     enddo
   else
     do j = start, start+npts-1
-      rho(j) = density_elem_Roquet_rho(this, T(j), S(j), pressure(j))
+      rho(j) = density_elem_Roquet_rho_loc(T(j), S(j), pressure(j))
     enddo
   endif
 
 end subroutine calculate_density_array_Roquet_rho
+
+!> Calculate the in-situ density for 2D array inputs and outputs.
+subroutine calculate_density_array_2d_Roquet_rho(this, T, S, pressure, rho, dom, rho_ref)
+  class(Roquet_rho_EOS), intent(in) :: this
+    !< This EOS
+  real, intent(in)  :: T(:,:)
+    !< Conservative temperature [degC]
+  real, intent(in)  :: S(:,:)
+    !< Absolute salinity [g kg-1]
+  real, intent(in)  :: pressure(:,:)
+    !< Pressure [Pa]
+  real, intent(out) :: rho(:,:)
+    !< In situ density [kg m-3]
+  integer, intent(in) :: dom(2,2)
+    !< Index bounds of domain.  First index is rank, second is bounds
+  real, optional, intent(in) :: rho_ref
+    !< A reference density [kg m-3]
+
+  integer :: is, ie, js, je
+  integer :: i, j
+
+  is = dom(1,1) ; ie = dom(1,2)
+  js = dom(2,1) ; je = dom(2,2)
+
+  if (present(rho_ref)) then
+    do concurrent (j=js:je, i=is:ie)
+      rho(i,j) = density_anomaly_elem_Roquet_rho_loc(T(i,j), S(i,j), &
+          pressure(i,j), rho_ref)
+    enddo
+  else
+    do concurrent (j=js:je, i=is:ie)
+      rho(i,j) = density_elem_Roquet_rho_loc( T(i,j), S(i,j), pressure(i,j))
+    enddo
+  endif
+end subroutine calculate_density_array_2d_Roquet_rho
+
+!> Calculate the in-situ density derivatives for 2D array inputs and outputs.
+subroutine calculate_density_derivs_2d_Roquet_rho(this, T, S, pressure, &
+    drho_dT, drho_dS, dom)
+  class(Roquet_rho_EOS), intent(in) :: this
+    !< This EOS
+  real, intent(in)  :: T(:,:)
+    !< Conservative temperature [degC]
+  real, intent(in)  :: S(:,:)
+    !< Absolute salinity [g kg-1]
+  real, intent(in)  :: pressure(:,:)
+    !< Pressure [Pa]
+  real, intent(out) :: drho_dT(:,:)
+    !< Partial derivative of density with potential temperature [kg m-3 degC-1]
+  real, intent(out) :: drho_dS(:,:)
+    !< Partial derivative of density with salinity [kg m-3 ppt-1]
+  integer, intent(in) :: dom(2,2)
+    !< Index bounds of domain.  First index is rank, second is bounds
+
+  integer :: is, ie, js, je
+  integer :: i, j
+
+  is = dom(1,1) ; ie = dom(1,2)
+  js = dom(2,1) ; je = dom(2,2)
+
+  ! NOTE: There is an implicit copy of `this` which cannot yet be prevented.
+
+  do concurrent (j=js:je, i=is:ie)
+    call calculate_density_derivs_elem_Roquet_rho_loc(T(i,j), S(i,j), &
+        pressure(i,j), drho_dT(i,j), drho_dS(i,j))
+  enddo
+end subroutine calculate_density_derivs_2d_Roquet_rho
 
 !> Calculate the in-situ specific volume for 1D array inputs and outputs.
 subroutine calculate_spec_vol_array_Roquet_rho(this, T, S, pressure, specvol, start, npts, spv_ref)

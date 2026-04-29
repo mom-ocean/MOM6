@@ -566,7 +566,8 @@ subroutine Calc_kappa_shear_vertex(u_in, v_in, h, T_in, S_in, tv, p_surf, kappa_
   endif
 
 
-  !$OMP parallel do default(private) shared(jsB,jeB,isB,ieB,nz,h,u_in,v_in,use_temperature,tv,G,GV,US,CS,kappa_io, &
+  !$OMP parallel do default(private) shared(jsB,jeB,isB,ieB,nz,h,u_in,v_in,T_in,S_in,h_at_u,h_at_v,dz_3d,H_tiny, &
+  !$OMP                                     use_temperature,tv,G,GV,US,CS,kappa_io, &
   !$OMP                                     dz_massless,k0dt,p_surf,dt,tke_io,kv_io,kappa_vertex,h_vert,I_Prandtl, &
   !$OMP                                     diag_N2_init,diag_S2_init,diag_N2_mean,diag_S2_mean)
   do J=JsB,JeB

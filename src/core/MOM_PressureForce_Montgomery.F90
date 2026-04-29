@@ -683,7 +683,6 @@ subroutine Set_pbce_Bouss(e, tv, G, GV, US, Rho0, GFS_scale, pbce, rho_star)
   integer :: Isq, Ieq, Jsq, Jeq, nz, i, j, k
 
   !$omp target data map(alloc: Ihtot)
-
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB ; nz = GV%ke
 
   use_EOS = associated(tv%eqn_of_state)

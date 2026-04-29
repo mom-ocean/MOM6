@@ -1312,8 +1312,8 @@ subroutine step_MOM_dyn_split_RK2(u_inst, v_inst, h, tv, visc, Time_local, dt, f
   if (CS%id_deta_dt > 0) call post_data(CS%id_deta_dt, deta_dt, CS%diag)
 
   if (CS%debug) then
+    !$omp target update from(u_inst, v_inst, h, uh, vh, u_av, v_av, h_av)
     call MOM_state_chksum("Corrector ", u_inst, v_inst, h, uh, vh, G, GV, US, symmetric=sym)
-    !$omp target update from(u_av, v_av)
     call uvchksum("Corrector avg [uv]", u_av, v_av, G%HI, haloshift=1, symmetric=sym, unscale=US%L_T_to_m_s)
     call hchksum(h_av, "Corrector avg h", G%HI, haloshift=1, unscale=GV%H_to_MKS)
  !  call MOM_state_chksum("Corrector avg ", u_av, v_av, h_av, uh, vh, G, GV, US)
@@ -1640,7 +1640,7 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
   !$omp target enter data map(alloc: CS%visc_rem_u, CS%visc_rem_v)
   ALLOC_(CS%eta_PF(isd:ied,jsd:jed))          ; CS%eta_PF(:,:)       = 0.0
   ALLOC_(CS%pbce(isd:ied,jsd:jed,nz))         ; CS%pbce(:,:,:)       = 0.0
-  !$omp target enter data map(alloc: CS%pbce, CS%eta_PF)
+  !$omp target enter data map(to: CS%pbce, CS%eta_PF)
   ALLOC_(CS%u_accel_bt(IsdB:IedB,jsd:jed,nz)) ; CS%u_accel_bt(:,:,:) = 0.0
   ALLOC_(CS%v_accel_bt(isd:ied,JsdB:JedB,nz)) ; CS%v_accel_bt(:,:,:) = 0.0
   !$omp target enter data map(alloc: CS%u_accel_bt, CS%v_accel_bt)
@@ -1783,8 +1783,14 @@ subroutine initialize_dyn_split_RK2(u, v, h, tv, uh, vh, eta, Time, G, GV, US, p
         do concurrent (k=1:nz, j=jsd:jed, i=isd:ied)
           h_tmp(i,j,k) = h(i,j,k)
         enddo
+        !$omp target update to(CS%u_av, CS%v_av, CS%h_av, uh, vh)
         call continuity(CS%u_av, CS%v_av, h, h_tmp, uh, vh, dt, G, GV, US, CS%continuity_CSp, CS%OBC, pbv)
+        !$omp target update from(CS%u_av, CS%v_av, CS%h_av, uh, vh)
+
+        !$omp target update from(h_tmp)
         call pass_var(h_tmp, G%Domain, clock=id_clock_pass_init)
+        !$omp target update to(h_tmp)
+
         do concurrent (k=1:nz, j=jsd:jed, i=isd:ied)
           CS%h_av(i,j,k) = 0.5*(h(i,j,k) + h_tmp(i,j,k))
         enddo

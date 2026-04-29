@@ -3,7 +3,7 @@
 ! SPDX-License-Identifier: Apache-2.0
 
 !> A module with intrinsic functions that are used by MOM but are not supported
-!!  by some compilers.
+!! by some compilers.
 module MOM_intrinsic_functions
 
 use iso_fortran_env, only : stdout => output_unit, stderr => error_unit
@@ -11,7 +11,7 @@ use iso_fortran_env, only : int64, real64
 
 implicit none ; private
 
-public :: invcosh, cuberoot
+public :: invcosh, cuberoot, nth_root
 public :: intrinsic_functions_unit_tests
 
 ! Floating point model, if bit layout from high to low is (sign, exp, frac)
@@ -48,6 +48,7 @@ end function invcosh
 !> Returns the cube root of a real argument at roundoff accuracy, in a form that works properly with
 !! rescaling of the argument by integer powers of 8.  If the argument is a NaN, a NaN is returned.
 elemental function cuberoot(x) result(root)
+  !$omp declare target
   real, intent(in) :: x !< The argument of cuberoot in arbitrary units cubed [A3]
   real :: root !< The real cube root of x in arbitrary units [A]
 
@@ -116,43 +117,122 @@ elemental function cuberoot(x) result(root)
 end function cuberoot
 
 
+!> Bit-stable n-th root of x for x in (0, +inf) and integer n >= 1, suitable
+!! for evaluation inside `!$omp target` / `do concurrent` offloaded regions.
+!!
+!! Lowering `x**(1.0/n)` via the compiler produces `exp((1.0/n)*log(x))` — two
+!! transcendentals whose last-bit rounding differs between host libm and CUDA
+!! libdevice. This routine avoids that path entirely: it uses fixed-iteration
+!! Newton on y^n - x = 0, with y^(n-1) evaluated as repeated multiplication,
+!! and one bit-precision-polishing iteration at the end.
+!!
+!! For x in [0, 1] (the case in `MOM_barotropic.F90`'s `bt_rem = av_rem**Instep`)
+!! convergence is rapid because the linear initial guess y0 = 1 - (1-x)/n is
+!! already within a few percent of the true root.
+elemental function nth_root(x, n) result(root)
+  !$omp declare target
+  real,    intent(in) :: x  !< Argument, x >= 0 [arbitrary]
+  integer, intent(in) :: n  !< Root index, n >= 1
+  real :: root              !< x**(1/n) in the same units as x
+
+  integer, parameter :: maxitt = 20  ! Fixed (deterministic) iteration count
+  real    :: y, ypow_nm1
+  real    :: x_n_r, x_nm1_r
+  integer :: itt, k
+
+  ! Trivial cases — return early to keep loop tight and avoid 0/0 below.
+  if (n <= 1) then
+    root = x
+    return
+  endif
+  if (x == 0.0) then
+    root = 0.0
+    return
+  endif
+
+  x_n_r   = real(n)
+  x_nm1_r = real(n - 1)
+
+  ! Linear initial guess valid for x in [0, 1] and decent for moderate x > 1.
+  ! For our caller (av_rem in [0, 1], typically near 1), this is within ~1%.
+  y = 1.0 - (1.0 - x) / x_n_r
+
+  ! Newton iteration:  y_{k+1} = ((n-1)*y_k + x / y_k^{n-1}) / n
+  ! All ops are *, +, /. Integer power y^{n-1} is repeated multiplication,
+  ! so there is no `pow`/`exp/log` lowering anywhere in the iteration.
+  do itt = 1, maxitt
+    ypow_nm1 = 1.0
+    do k = 1, n - 1
+      ypow_nm1 = ypow_nm1 * y
+    enddo
+    y = (x_nm1_r * y + x / ypow_nm1) / x_n_r
+  enddo
+
+  root = y
+end function nth_root
+
+
 !> Rescale `a` to the range [0.125, 1) and compute its cube-root exponent.
+!!
+!! This function decomposes `a` into the form `s * x * 2**e` so that `x` is
+!! in the desired range.  This is accomplished by computing the integral cube
+!! root of `e` (as a division) and applying the residual to `x`.
 pure subroutine rescale_cbrt(a, x, e_r, s_a)
+  !$omp declare target
   real, intent(in) :: a
-    !< The real parameter to be rescaled for cube root in arbitrary units cubed [A3]
+    !< The number to be rescaled for cube-root computation [A3]
   real, intent(out) :: x
-    !< The rescaled value of a in the range from 0.125 < asx <= 1.0, in ambiguous units cubed [B3]
+    !< The rescaled value of `a` in the range [0.125, 1) [B3]
   integer(kind=int64), intent(out) :: e_r
-    !< Cube root of the exponent of the rescaling of `a`
+    !< The integral component of the cube-root exponent of `a`.
   integer(kind=int64), intent(out) :: s_a
-    !< The sign bit of a
+    !< Sign bit of `a`.  A nonzero value indicates negative sign.
 
   integer(kind=int64) :: xb
-    ! Floating point value of a, bit-packed as an integer
+    ! Floating point integer representation of `a`
   integer(kind=int64) :: e_a
-    ! Unscaled exponent of a
+    ! Exponent of `a`
   integer(kind=int64) :: e_x
-    ! Exponent of x
-  integer(kind=int64) :: e_div, e_mod
-    ! Quotient and remainder of e in e = 3*(e/3) + modulo(e,3).
+    ! Exponent of `x`
 
   ! Pack bits of a into xb and extract its exponent and sign.
   xb = transfer(a, 1_int64)
   s_a = ibits(xb, signbit, 1)
   e_a = ibits(xb, expbit, explen) - bias
 
-  ! Compute terms of exponent decomposition e = 3*(e/3) + modulo(e,3).
-  ! (Fortran division is round-to-zero, so we must emulate floor division.)
-  e_mod = modulo(e_a, 3_int64)
-  e_div = (e_a - e_mod)/3
+  ! The floating-point form of `a` with exponent `e` is
+  !
+  !   a = s * (1 + m) * 2**e
+  !
+  ! where (1+m) ∈ [1,2).  We want to split 2**e so that (1+m) is rescaled to
+  ! the range [0.125, 1); that is, [2**-3, 2**0).
+  !
+  ! First decompose the exponent `e` into quotient-remainder form:
+  !
+  !   e = 3⌊e/3⌋ + modulo(e,3)
+  !
+  ! Since modulo(e,3) ∈ {0,1,2}, the second term of the following expression is
+  ! in {-3,-2,-1}.
+  !
+  !   e = 3 * (⌊e/3⌋ + 1) + (modulo(e,3) - 3).
+  !
+  ! Here, (modulo(e,3) - 3) is in the range [2**-3, 1) and holds the
+  ! floating-point exponent of `x`.
+  !
+  ! Fortran integer division is round-to-zero.  To convert to floor division,
+  ! we use the sign() intrinsic to shift negative values downward.
+  !
+  !   ⌊e/3⌋ = (e + sign(1,e) - 1) / 3
+  !
+  ! ⌊e/3⌋ + 1 reduces to the form below.  This is what we call the integral
+  ! cube-root of `a` in the description above.
 
-  ! Our scaling decomposes e_a into e = {3*(e/3) + 3} + {modulo(e,3) - 3}.
+  e_r = (e_a + sign(1_int64, e_a) + 2) / 3
 
-  ! The first term is a perfect cube, whose cube root is computed below.
-  e_r = e_div + 1
+  ! modulo() is not implemented on all systems, so compute the remainder as
+  ! r = n - 3*q.
 
-  ! The second term ensures that x is shifted to [0.125, 1).
-  e_x = e_mod - 3
+  e_x = e_a - e_r * 3
 
   ! Insert the new 11-bit exponent into xb and write to x and extend the
   ! bitcount to 12, so that the sign bit is zero and x is always positive.
@@ -163,6 +243,7 @@ end subroutine rescale_cbrt
 
 !> Undo the rescaling of a real number back to its original base.
 pure function descale(x, e_a, s_a) result(a)
+  !$omp declare target
   real, intent(in) :: x
     !< The rescaled value which is to be restored in ambiguous units [B]
   integer(kind=int64), intent(in) :: e_a
