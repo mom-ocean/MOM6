@@ -247,8 +247,6 @@ subroutine find_eta_2d(h, tv, G, GV, US, eta, eta_bt, halo_size, dZref)
 
   dZ_ref = 0.0 ; if (present(dZref)) dZ_ref = dZref
 
-  !$omp target enter data map(to: eta_bt) if (present(eta_bt))
-
   if (GV%Boussinesq) then
     if (present(eta_bt)) then
       do concurrent (j=js:je, i=is:ie)
