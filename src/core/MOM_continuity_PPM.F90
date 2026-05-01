@@ -657,10 +657,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   endif ; endif
 
   if (present(du_cor)) then
-    !$omp target teams loop collapse(2)
-    do j=G%jsd,G%jed ; do I=G%IsdB,G%IedB
+    do concurrent (j=G%jsd:G%jed, I=G%IsdB:G%IedB)
       du_cor(I,j) = 0.0
-    enddo ; enddo
+    enddo
   endif
 
   if (present(LB_in)) then
@@ -675,10 +674,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   if (.not.use_visc_rem) then
-    !$omp target teams loop collapse(3)
-    do k=1,nz ; do j=1,TILE_SIZE_Y ; do i=1,TILE_SIZE_X
-      visc_rem(i,j,k) = 1.0
-    enddo ; enddo ; enddo
+    do concurrent (k=1:nz, jj=1:TILE_SIZE_Y, ii=1:TILE_SIZE_X)
+      visc_rem(ii,jj,k) = 1.0
+    enddo
   endif
 
   do j_start=jsh,jeh,TILE_SIZE_Y ; do i_start=ish-1,ieh,TILE_SIZE_X
@@ -688,10 +686,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
     ! calculate number of teams
     !$ nteams = ceiling(real((j_end-j_start+1)*(i_end-i_start+1))/128.)
 
-    !$omp target teams loop collapse(2)
-    do j=j_start,j_end ; do i=i_start,i_end
-      do_I(i-i_start+1,j-j_start+1) = .true.
-    enddo ; enddo
+    do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
+      do_I(ii,jj) = .true.
+    enddo
     ! Set uh and duhdu.
     !$omp target teams num_teams(nteams) thread_limit(128)
     do k=1,nz
@@ -741,11 +738,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
         enddo
         !$omp end target
       else
-        !$omp target teams loop collapse(2) private(ii,jj)
-        do j=j_start,j_end ; do i=i_start,i_end
-          ii=i-i_start+1 ; jj=j-j_start+1
+        do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
           visc_rem_max(ii,jj) = 1.0
-        enddo ; enddo
+        enddo
       endif
       !   Set limits on du that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
@@ -850,18 +845,15 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
           !$omp end target
         endif
       endif
-      !$omp target teams loop collapse(2) private(ii,jj)
-      do j=j_start,j_end ; do I=i_start,i_end
-        ii=I-i_start+1 ; jj=j-j_start+1
+      do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
         du_max_CFL(ii,jj) = max(du_max_CFL(ii,jj),0.0)
         du_min_CFL(ii,jj) = min(du_min_CFL(ii,jj),0.0)
-      enddo ; enddo
+      enddo
 
       any_simple_OBC = .false.
       if (present(uhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then
-          !$omp target teams loop collapse(2) private(ii,jj,l_seg) reduction(.or.:any_simple_OBC)
-          do j=j_start,j_end ; do I=i_start,i_end
+          do concurrent (j=j_start:j_end, I=i_start:i_end) DO_LOCALITY(reduce(.or.:any_simple_OBC))
             ii=I-i_start+1 ; jj=j-j_start+1
             l_seg = abs(OBC%segnum_u(I,j))
 
@@ -870,18 +862,16 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
             if (l_seg /= OBC_NONE) simple_OBC_pt(ii,jj) = OBC%segment(l_seg)%specified
             do_I(ii,jj) = .not.simple_OBC_pt(ii,jj)
             any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(ii,jj)
-          enddo ; enddo ; else
-          !$omp target teams loop collapse(2)
-          do j=j_start,j_end ; do I=i_start,i_end
-            do_I(I-i_start+1,j-j_start+1) = .true.
-          enddo ; enddo ; endif
+          enddo ; else
+          do concurrent (jj=1:j_end-j_start+1, II=1:i_end-i_start+1)
+            do_I(II,jj) = .true.
+          enddo ; endif
       endif
 
       if (present(uhbt)) then
-        !$omp target teams loop collapse(2)
-        do j=j_start,j_end ; do I=i_start,i_end
+        do concurrent (j=j_start:j_end, I=i_start:i_end)
           uhbt_t(I-i_start+1,j-j_start+1) = uhbt(I,j)
-        enddo ; enddo
+        enddo
         ! Find du and uh.
         call zonal_flux_adjust(u, h_in, h_W, h_E, uhbt_t, uh_tot_0, duhdu_tot_0, du, &
                               du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
@@ -889,22 +879,20 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
                               uh_t, OBC=OBC)
 
         if (present(u_cor)) then
-          !$omp target teams loop collapse(3) private(ii,jj)
-          do k=1,nz ; do j=j_start,j_end ; do I=i_start,i_end
+          do concurrent (k=1:nz, j=j_start:j_end, I=i_start:i_end)
             ii=I-i_start+1 ; jj=j-j_start+1
             u_cor(I,j,k) = u(I,j,k) + du(ii,jj) * visc_rem(ii,jj,k)
             if (any_simple_OBC) then ; if (simple_OBC_pt(ii,jj)) then
               u_cor(I,j,k) = OBC%segment(abs(OBC%segnum_u(I,j)))%normal_vel(I,j,k)
             endif ; endif
-          enddo ; enddo ; enddo
+          enddo
         endif ! u-corrected
 
         if (present(du_cor)) then
-          !$omp target teams loop collapse(2) private(ii,jj)
-          do j=j_start,j_end ; do I=i_start,i_end
+          do concurrent (j=j_start:j_end, I=i_start:i_end)
             ii=I-i_start+1 ; jj=j-j_start+1
             du_cor(I,j) = du(ii,jj)
-          enddo ; enddo
+          enddo
         endif
 
       endif
@@ -950,10 +938,9 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
 
     endif ! present(uhbt) or set_BT_cont
 
-    !$omp target teams loop collapse(3)
-    do k=1,nz ; do j=j_start,j_end ; do I=i_start,i_end
+    do concurrent (k=1:nz, j=j_start:j_end, I=i_start:i_end)
       uh(I,j,k) = uh_t(I-i_start+1,j-j_start+1,k)
-    enddo ; enddo ; enddo
+    enddo
 
   enddo ; enddo ! ij tile loop
 
@@ -1569,11 +1556,9 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
  ! Diagnose the zero-transport correction, du0.
-  !$omp target teams loop collapse(2) private(ii,jj)
-  do j=j_start,j_end ; do i=i_start,i_end
-    ii=i-i_start+1 ; jj=j-j_start+1
+  do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
     zeros(ii,jj) = 0.0
-  enddo ; enddo
+  enddo
   call zonal_flux_adjust(u, h_in, h_W, h_E, zeros, uh_tot_0, duhdu_tot_0, du0, &
                         du_max_CFL, du_min_CFL, dt, G, GV, US, CS, visc_rem, &
                         i_start, i_end, j_start, j_end, do_I, por_face_areaU, TILE_SIZE_X, TILE_SIZE_Y, uh_tmp)
@@ -1777,10 +1762,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   endif ; endif
 
   if (present(dv_cor)) then
-    !$omp target teams loop collapse(2)
-    do j=G%jsdB,G%jedB ; do i=G%isd,G%ied
-      dv_cor(i,J) = 0.0
-    enddo ; enddo
+    do concurrent (jj=G%jsdB:G%jedB, ii=G%isd:G%ied)
+      dv_cor(ii,jj) = 0.0
+    enddo
   endif
 
   if (present(LB_in)) then
@@ -1795,21 +1779,18 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
   if (CS%aggress_adjust) CFL_dt = I_dt
 
   if (.not.use_visc_rem) then
-    !$omp target teams loop collapse(3)
-    do k=1,nz ; do j=1,TILE_SIZE_Y ; do i=1,TILE_SIZE_X
-      visc_rem(i,j,k) = 1.0
-    enddo ; enddo ; enddo
+    do concurrent (k=1:nz, jj=1:TILE_SIZE_Y, ii=1:TILE_SIZE_X)
+      visc_rem(ii,jj,k) = 1.0
+    enddo
   endif
 
   do j_start = jsh-1, jeh, TILE_SIZE_Y ; do i_start = ish, ieh, TILE_SIZE_X
     j_end = min(j_start + TILE_SIZE_Y-1, jeh)
     i_end = min(i_start + TILE_SIZE_X-1, ieh)
     !$ nteams = ceiling(real((j_end-j_start+1)*(i_end-i_start+1))/128.)
-    !$omp target teams loop collapse(2) private(ii,jj)
-    do j=j_start,j_end ; do i=i_start,i_end
-      ii=i-i_start+1 ; jj=j-j_start+1
+    do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
       do_I(ii,JJ) = .true.
-    enddo ; enddo
+    enddo
     ! This sets vh and dvhdv.
     !$omp target teams num_teams(nteams)
     do k=1,nz
@@ -1859,11 +1840,9 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         enddo
         !$omp end target
       else
-        !$omp target teams loop collapse(2) private(ii,jj)
-        do j=j_start,j_end ; do i=i_start,i_end
-          ii=i-i_start+1 ; jj=j-j_start+1
+        do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
           visc_rem_max(ii,JJ) = 1.0
-        enddo ; enddo
+        enddo
       endif
       !   Set limits on dv that will keep the CFL number between -1 and 1.
       ! This should be adequate to keep the root bracketed in all cases.
@@ -1967,18 +1946,15 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
           !$omp end target
         endif
       endif
-      !$omp target teams loop collapse(2) private(ii,jj)
-      do j=j_start,j_end ; do i=i_start,i_end
-        ii=i-i_start+1 ; jj=j-j_start+1
+      do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
         dv_max_CFL(ii,JJ) = max(dv_max_CFL(ii,JJ),0.0)
         dv_min_CFL(ii,JJ) = min(dv_min_CFL(ii,JJ),0.0)
-      enddo ; enddo
+      enddo
 
       any_simple_OBC = .false.
       if (present(vhbt) .or. set_BT_cont) then
         if (local_specified_BC .or. local_Flather_OBC) then
-          !$omp target teams loop collapse(2) private(ii,jj,l_seg) reduction(.or.:any_simple_OBC)
-          do J=J_start,J_end ; do i=i_start,i_end
+          do concurrent (J=J_start:J_end, i=i_start:i_end) DO_LOCALITY(reduce(.or.:any_simple_OBC))
             ii=i-i_start+1 ; jj=J-j_start+1
             l_seg = abs(OBC%segnum_v(i,J))
 
@@ -1987,19 +1963,17 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
             if (l_seg /= 0) simple_OBC_pt(ii,jj) = OBC%segment(l_seg)%specified
             do_I(ii,jj) = .not.simple_OBC_pt(ii,jj)
             any_simple_OBC = any_simple_OBC .or. simple_OBC_pt(ii,jj)
-          enddo ; enddo ; else
-          !$omp target teams loop collapse(2)
-          do J=J_start,J_end ; do i=i_start,i_end
-            do_I(i-i_start+1,J-j_start+1) = .true.
-          enddo ; enddo ; endif
+          enddo ; else
+          do concurrent (JJ=1:J_end-J_start+1, ii=1:i_end-i_start+1)
+            do_I(ii,JJ) = .true.
+          enddo ; endif
       endif
 
       if (present(vhbt)) then
-        !$omp target teams loop collapse(2) private(ii,jj)
-        do j=j_start,j_end ; do i=i_start,i_end
+        do concurrent (j=j_start:j_end, i=i_start:i_end)
           ii=i-i_start+1 ; jj=j-j_start+1
           vhbt_t(ii,Jj) = vhbt(i,j)
-        enddo ; enddo
+        enddo
         ! Find dv and vh.
         call meridional_flux_adjust(v, h_in, h_S, h_N, vhbt_t, vh_tot_0, dvhdv_tot_0, dv, &
                                          dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
@@ -2007,22 +1981,20 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
                                          TILE_SIZE_X, TILE_SIZE_Y, vh_t, OBC)
 
         if (present(v_cor)) then
-          !$omp target teams loop collapse(3) private(ii,jj)
-          do k=1,nz ; do J=J_start,J_end ; do i=i_start,i_end
+          do concurrent (k=1:nz, J=J_start:J_end, i=i_start:i_end)
             ii=i-i_start+1 ; jj=j-j_start+1
             v_cor(i,J,k) = v(i,J,k) + dv(ii,JJ) * visc_rem(ii,JJ,k)
             if (any_simple_OBC) then ; if (simple_OBC_pt(ii,jj)) then
               v_cor(i,J,k) = OBC%segment(abs(OBC%segnum_v(i,J)))%normal_vel(i,J,k)
             endif ; endif
-          enddo ; enddo ; enddo
+          enddo
         endif ! v-corrected
 
         if (present(dv_cor)) then
-          !$omp target teams loop collapse(2) private(ii,jj)
-          do J=J_start,J_end ; do i=i_start,i_end
+          do concurrent (J=J_start:J_end, i=i_start:i_end)
             ii=i-i_start+1 ; jj=j-j_start+1
             dv_cor(i,J) = dv(ii,JJ)
-          enddo ; enddo
+          enddo
         endif
       endif
 
@@ -2067,11 +2039,10 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
 
     endif ! present(vhbt) or set_BT_cont
 
-    !$omp target teams loop collapse(3) private(ii,jj)
-    do k=1,nz ; do j=j_start,j_end ; do i=i_start,i_end
+    do concurrent (k=1:nz, j=j_start:j_end, i=i_start:i_end)
       jj=j-j_start+1 ; ii=i-i_start+1
       vh(i,j,k) = vh_t(ii,jj,k)
-    enddo ; enddo ; enddo
+    enddo
 
   enddo ; enddo ! ij_tile loops
 
@@ -2594,11 +2565,9 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   min_visc_rem = 0.1 ; CFL_min = 1e-6
 
  ! Diagnose the zero-transport correction, dv0.
-  !$omp target teams loop collapse(2) private(ii,jj)
-  do J=J_start,J_end ; do i=i_start,i_end
-    ii=i-i_start+1 ; jj=j-j_start+1
+  do concurrent (jj=1:j_end-j_start+1, ii=1:i_end-i_start+1)
     zeros(ii,JJ) = 0.0
-  enddo ; enddo
+  enddo
   call meridional_flux_adjust(v, h_in, h_S, h_N, zeros, vh_tot_0, dvhdv_tot_0, dv0, &
                               dv_max_CFL, dv_min_CFL, dt, G, GV, US, CS, visc_rem, &
                               i_start, i_end, j_start, j_end, do_I, por_face_areaV, &
