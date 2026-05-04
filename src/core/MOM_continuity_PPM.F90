@@ -272,14 +272,29 @@ subroutine continuity_3d_fluxes(u, v, h, uh, vh, dt, G, GV, US, CS, OBC, pbv)
   real :: h_E(SZI_(G),SZJ_(G),SZK_(GV)) ! East edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
   real :: h_S(SZI_(G),SZJ_(G),SZK_(GV)) ! South edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
   real :: h_N(SZI_(G),SZJ_(G),SZK_(GV)) ! North edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
+  integer :: niblock !< i block size for array calculations [nondim].
+  integer :: njblock !< j block size for array calculations [nondim].
+
+  niblock = CS%niblock
+  njblock = CS%njblock
+  if (niblock == 0) niblock = default_niblock
+  if (njblock == 0) njblock = default_njblock
 
   call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC)
+  !$ if (omp_get_num_devices() > 0) then
+    !$ if (CS%niblock == 0) niblock = G%iec-G%isc+2
+    !$ if (CS%njblock == 0) njblock = G%jec-G%jsc+1
+  !$ endif
   call zonal_mass_flux(u, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
-                       niblock=default_niblock, njblock=default_njblock)
+                       niblock=niblock, njblock=njblock)
 
   call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC)
+  !$ if (omp_get_num_devices() > 0) then
+    !$ if (CS%niblock == 0) niblock = G%iec-G%isc+1
+    !$ if (CS%njblock == 0) njblock = G%jec-G%jsc+2
+  !$ endif
   call meridional_mass_flux(v, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
-                            niblock=default_niblock, njblock=default_njblock)
+                            niblock=niblock, njblock=njblock)
 
 end subroutine continuity_3d_fluxes
 
@@ -378,6 +393,13 @@ subroutine continuity_adjust_vel(u, v, h, dt, G, GV, US, CS, OBC, pbv, uhbt, vhb
   real :: h_E(SZI_(G),SZJ_(G),SZK_(GV)) ! East edge thicknesses in the zonal PPM reconstruction [H ~> m or kg m-2]
   real :: h_S(SZI_(G),SZJ_(G),SZK_(GV)) ! South edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
   real :: h_N(SZI_(G),SZJ_(G),SZK_(GV)) ! North edge thicknesses in the meridional PPM reconstruction [H ~> m or kg m-2]
+  integer :: niblock !< i block size for array calculations [nondim].
+  integer :: njblock !< j block size for array calculations [nondim].
+
+  niblock = CS%niblock
+  njblock = CS%njblock
+  if (niblock == 0) niblock = default_niblock
+  if (njblock == 0) njblock = default_njblock
 
   ! It might not be necessary to separate the input velocity array from the adjusted velocities,
   ! but it seems safer to do so, even if it might be less efficient.
@@ -385,13 +407,21 @@ subroutine continuity_adjust_vel(u, v, h, dt, G, GV, US, CS, OBC, pbv, uhbt, vhb
   v_in(:,:,:) = v(:,:,:)
 
   call zonal_edge_thickness(h, h_W, h_E, G, GV, US, CS, OBC)
+  !$ if (omp_get_num_devices() > 0) then
+    !$ if (CS%niblock == 0) niblock = G%iec-G%isc+2
+    !$ if (CS%njblock == 0) njblock = G%jec-G%jsc+1
+  !$ endif
   call zonal_mass_flux(u_in, h, h_W, h_E, uh, dt, G, GV, US, CS, OBC, pbv%por_face_areaU, &
-                       niblock=default_niblock, njblock=default_njblock, &
+                       niblock=niblock, njblock=njblock, &
                        uhbt=uhbt, visc_rem_u=visc_rem_u, u_cor=u)
 
   call meridional_edge_thickness(h, h_S, h_N, G, GV, US, CS, OBC)
+  !$ if (omp_get_num_devices() > 0) then
+    !$ if (CS%niblock == 0) niblock = G%iec-G%isc+1
+    !$ if (CS%njblock == 0) njblock = G%jec-G%jsc+2
+  !$ endif
   call meridional_mass_flux(v_in, h, h_S, h_N, vh, dt, G, GV, US, CS, OBC, pbv%por_face_areaV, &
-                            niblock=default_niblock, njblock=default_njblock, &
+                            niblock=niblock, njblock=njblock, &
                             vhbt=vhbt, visc_rem_v=visc_rem_v, v_cor=v)
 
 end subroutine continuity_adjust_vel
