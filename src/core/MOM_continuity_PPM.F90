@@ -725,7 +725,7 @@ subroutine zonal_mass_flux(u, h_in, h_W, h_E, uh, dt, G, GV, US, CS, OBC, por_fa
       do_I(ii,jj) = .true.
     enddo
     ! Set uh and duhdu.
-    !$omp target teams num_teams(nteams) thread_limit(128)
+    !$omp target teams num_teams(nteams)
     do k=1,nz
       if (use_visc_rem) then
         !$omp loop collapse(2) private(ii,jj)
@@ -1104,6 +1104,7 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
 end subroutine zonal_BT_mass_flux
 
 !> Evaluates the zonal mass or volume fluxes in an element.
+!NVF$ INLINE
 elemental subroutine flux_elem(u, h, h_p1, h_L, h_L_p1, h_R, h_R_p1, uh, duhdu, visc_rem, &
                                G_dy_Cu, G_IareaT, G_IareaT_p1, G_IdxT, G_IdxT_p1, dt, &
                                vol_CFL, por_face_area)
@@ -1166,6 +1167,7 @@ elemental subroutine flux_elem(u, h, h_p1, h_L, h_L_p1, h_R, h_R_p1, uh, duhdu, 
 
 end subroutine flux_elem
 
+!NVF$ INLINE
 elemental subroutine flux_elem_OBC(u, h, h_p1, uh, duhdu, visc_rem, por_face_area, &
                                      G_dy_Cu, OBC, l_seg)
   real,                     intent(in)    :: u        !< Zonal/meridional velocity [L T-1 ~> m s-1].
@@ -3093,6 +3095,7 @@ subroutine PPM_limit_CW84(h_in, h_L, h_R, G, GV, iis, iie, jis, jie, nz)
 end subroutine PPM_limit_CW84
 
 !> Return the maximum ratio of a/b or maxrat.
+!NVF$ INLINE
 pure function ratio_max(a, b, maxrat) result(ratio)
   real, intent(in) :: a       !< Numerator, in arbitrary units [A]
   real, intent(in) :: b       !< Denominator, in arbitrary units [B]
