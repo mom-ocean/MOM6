@@ -1583,7 +1583,6 @@ subroutine set_zonal_BT_cont(u, h_in, h_W, h_E, BT_cont, uh_tot_0, duhdu_tot_0, 
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
                   ! flow is truly upwind [nondim]
   real :: Idt     ! The inverse of the time step [T-1 ~> s-1].
-  logical :: domore
   integer :: i, j, k, nz, ii, jj !< Tile loop indices [nondim].
   real, dimension(niblock,njblock,SZK_(GV)) :: uh_tmp
 
@@ -2593,7 +2592,6 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   real :: CFL_min ! A minimal increment in the CFL to try to ensure that the
                   ! flow is truly upwind [nondim]
   real :: Idt     ! The inverse of the time step [T-1 ~> s-1].
-  logical :: domore
   integer :: i, j, k, nz, ii, jj
   real :: vh_tmp(niblock,njblock,SZK_(GV))
 
@@ -2615,13 +2613,10 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   !   Determine the southerly- and northerly- fluxes.  Choose a sufficiently
   ! negative velocity correction for the northerly-flux, and a sufficiently
   ! positive correction for the southerly-flux.
-  ! domore = .false.
   !$omp target
   !$omp loop collapse(2) private(ii,jj)
   do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
-    ! if (do_I(ii,JJ)) then
-    ! domore = .true.
     dv_CFL(ii,JJ) = (CFL_min * Idt) * G%dyCv(i,J)
     dvR(ii,JJ) = min(0.0,dv0(ii,JJ) - dv_CFL(ii,JJ))
     dvL(ii,JJ) = max(0.0,dv0(ii,JJ) + dv_CFL(ii,JJ))
@@ -2629,27 +2624,17 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
     vhtot_L(ii,JJ) = 0.0 ; vhtot_R(ii,JJ) = 0.0
   enddo ; enddo
 
-  ! if (.not.domore) then
-  !   do J=J_start,J_end ; do i=i_start,i_end
-  !     BT_cont%FA_v_S0(i,J) = 0.0 ; BT_cont%FA_v_SS(i,J) = 0.0
-  !     BT_cont%vBT_SS(i,J) = 0.0
-  !     BT_cont%FA_v_N0(i,J) = 0.0 ; BT_cont%FA_v_NN(i,J) = 0.0
-  !     BT_cont%vBT_NN(i,J) = 0.0
-  !   enddo ; enddo
-  !   return
-  ! endif
-
   do k=1,nz
     !$omp loop collapse(2) private(ii,jj,visc_rem_lim)
     do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     if (do_I(ii,jj)) then
-    visc_rem_lim = max(visc_rem(ii,JJ,k), min_visc_rem*visc_rem_max(ii,JJ))
-    if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
-      if (v(i,J,k) + dvR(ii,JJ)*visc_rem_lim > -dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) &
-        dvR(ii,JJ) = -(v(i,J,k) + dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) / visc_rem_lim
-      if (v(i,J,k) + dvL(ii,JJ)*visc_rem_lim < dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) &
-        dvL(ii,JJ) = -(v(i,J,k) - dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) / visc_rem_lim
+      visc_rem_lim = max(visc_rem(ii,JJ,k), min_visc_rem*visc_rem_max(ii,JJ))
+      if (visc_rem_lim > 0.0) then ! This is almost always true for ocean points.
+        if (v(i,J,k) + dvR(ii,JJ)*visc_rem_lim > -dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) &
+          dvR(ii,JJ) = -(v(i,J,k) + dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) / visc_rem_lim
+        if (v(i,J,k) + dvL(ii,JJ)*visc_rem_lim < dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) &
+          dvL(ii,JJ) = -(v(i,J,k) - dv_CFL(ii,JJ)*visc_rem(ii,JJ,k)) / visc_rem_lim
     endif
   endif ; enddo ; enddo ; enddo
   !$omp end target
@@ -2683,15 +2668,15 @@ subroutine set_merid_BT_cont(v, h_in, h_S, h_N, BT_cont, vh_tot_0, dvhdv_tot_0, 
   do J=J_start,J_end ; do i=i_start,i_end
     ii=i-i_start+1 ; jj=j-j_start+1
     if (do_I(ii,JJ)) then
-    FA_0 = FAmt_0(ii,JJ) ; FA_avg = FAmt_0(ii,JJ)
-    if ((dvL(ii,JJ) - dv0(ii,JJ)) /= 0.0) &
-      FA_avg = vhtot_L(ii,JJ) / (dvL(ii,JJ) - dv0(ii,JJ))
-    if (FA_avg > max(FA_0, FAmt_L(ii,JJ))) then ; FA_avg = max(FA_0, FAmt_L(ii,JJ))
-    elseif (FA_avg < min(FA_0, FAmt_L(ii,JJ))) then ; FA_0 = FA_avg ; endif
-    BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(ii,JJ)
-    if (abs(FA_0-FAmt_L(ii,JJ)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
-      BT_cont%vBT_SS(i,J) = (1.5 * (dvL(ii,JJ) - dv0(ii,JJ))) * &
-                   ((FAmt_L(ii,JJ) - FA_avg) / (FAmt_L(ii,JJ) - FA_0))
+      FA_0 = FAmt_0(ii,JJ) ; FA_avg = FAmt_0(ii,JJ)
+      if ((dvL(ii,JJ) - dv0(ii,JJ)) /= 0.0) &
+        FA_avg = vhtot_L(ii,JJ) / (dvL(ii,JJ) - dv0(ii,JJ))
+      if (FA_avg > max(FA_0, FAmt_L(ii,JJ))) then ; FA_avg = max(FA_0, FAmt_L(ii,JJ))
+      elseif (FA_avg < min(FA_0, FAmt_L(ii,JJ))) then ; FA_0 = FA_avg ; endif
+      BT_cont%FA_v_S0(i,J) = FA_0 ; BT_cont%FA_v_SS(i,J) = FAmt_L(ii,JJ)
+      if (abs(FA_0-FAmt_L(ii,JJ)) <= 1e-12*FA_0) then ; BT_cont%vBT_SS(i,J) = 0.0 ; else
+        BT_cont%vBT_SS(i,J) = (1.5 * (dvL(ii,JJ) - dv0(ii,JJ))) * &
+                    ((FAmt_L(ii,JJ) - FA_avg) / (FAmt_L(ii,JJ) - FA_0))
     endif
 
     FA_0 = FAmt_0(ii,JJ) ; FA_avg = FAmt_0(ii,JJ)
