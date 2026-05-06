@@ -1855,7 +1855,7 @@ subroutine meridional_mass_flux(v, h_in, h_S, h_N, vh, dt, G, GV, US, CS, OBC, p
         !$omp loop collapse(2) private(l_seg)
         do J=J_start,J_end ; do i=i_start,i_end ; if (OBC%segnum_v(i,J) /= 0) then
           l_seg = abs(OBC%segnum_v(i,J))
-          if (OBC%segment(l_seg)%specified) vh_t(i,J,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
+          if (OBC%segment(l_seg)%specified) vh_t(i-i_start+1,J-J_start+1,k) = OBC%segment(l_seg)%normal_trans(i,J,k)
         endif ; enddo ; enddo
       endif
     enddo ! k-loop
