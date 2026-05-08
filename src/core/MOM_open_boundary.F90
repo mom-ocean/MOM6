@@ -253,6 +253,7 @@ type, public :: OBC_segment_type
   real :: Velocity_nudging_timescale_out !< Nudging timescale on outflow [T ~> s].
   logical :: on_pe          !< true if any portion of the segment is located in this PE's data domain
   real, allocatable :: Htot(:,:)  !< The total column thickness [H ~> m or kg m-2] at OBC-points.
+  real, allocatable :: dz(:,:,:)  !< The layer vertical extent [Z ~> m] at OBC segment faces.
   real, allocatable :: dZtot(:,:) !< The total column vertical extent [Z ~> m] at OBC segment faces.
   real, allocatable :: normal_vel(:,:,:)      !< The layer velocity normal to the OB
                                               !! segment [L T-1 ~> m s-1].
@@ -4184,6 +4185,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Htot(IsdB:IedB,jsd:jed), source=0.0)
     ! Allocate dZtot with extra values at the end to avoid segmentation faults in cases where
     ! it is interpolated to OBC vorticity points.
+    allocate(segment%dz(IsdB:IedB,jsd-1:jed+1,OBC%ke), source=0.0)
     allocate(segment%dZtot(IsdB:IedB,jsd-1:jed+1), source=0.0)
     allocate(segment%SSH(IsdB:IedB,jsd:jed), source=0.0)
     allocate(segment%tidal_elev(IsdB:IedB,jsd:jed), source=0.0)
@@ -4228,6 +4230,7 @@ subroutine allocate_OBC_segment_data(OBC, segment)
     allocate(segment%Htot(isd:ied,JsdB:JedB), source=0.0)
     ! Allocate dZtot with extra values at the end to avoid segmentation faults in cases where
     ! it is interpolated to OBC vorticity points.
+    allocate(segment%dz(isd-1:ied+1,JsdB:JedB,OBC%ke), source=0.0)
     allocate(segment%dZtot(isd-1:ied+1,JsdB:JedB), source=0.0)
     allocate(segment%SSH(isd:ied,JsdB:JedB), source=0.0)
     allocate(segment%tidal_elev(isd:ied,JsdB:JedB), source=0.0)
@@ -4276,6 +4279,7 @@ subroutine deallocate_OBC_segment_data(segment)
   if (.not. segment%on_pe) return
 
   if (allocated(segment%Htot)) deallocate(segment%Htot)
+  if (allocated(segment%dz)) deallocate(segment%dz)
   if (allocated(segment%dZtot)) deallocate(segment%dZtot)
   if (allocated(segment%SSH)) deallocate(segment%SSH)
   if (allocated(segment%tidal_elev)) deallocate(segment%tidal_elev)
@@ -4447,14 +4451,16 @@ subroutine read_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
     if (segment%is_E_or_W) then
       I = IsdB
       ! dZtot may extend one point past the end of the segment on the current PE for use at vorticity points
-      do k = 1, GV%ke ; do j = max(jsd-1, G%jsd), min(jed+1, G%jed)
-        segment%dZtot(I,j) = segment%dZtot(I,j) + dz(isd,j,k)
+      do k=1,GV%ke ; do j=max(jsd-1, G%jsd), min(jed+1, G%jed)
+        segment%dz(I,j,k) = dz(isd,j,k)
+        segment%dZtot(I,j) = segment%dZtot(I,j) + segment%dz(I,j,k)
       enddo ; enddo
     else ! (segment%direction == OBC_DIRECTION_N .or. segment%direction == OBC_DIRECTION_S)
       J = JsdB
       ! dZtot may extend one point past the end of the segment on the current PE for use at vorticity points
-      do k = 1, GV%ke ; do i = max(isd-1, G%isd), min(ied+1, G%ied)
-        segment%dZtot(i,J) = segment%dZtot(i,J) + dz(i,jsd,k)
+      do k=1, GV%ke ; do i=max(isd-1, G%isd), min(ied+1, G%ied)
+        segment%dz(i,J,k) = dz(i,jsd,k)
+        segment%dZtot(i,J) = segment%dZtot(i,J) + segment%dz(i,J,k)
       enddo ; enddo
     endif
 
@@ -4653,7 +4659,7 @@ subroutine read_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               segment%field(m)%buffer_dst(I,J,:) = 0.0  ! initialize remap destination buffer
               if ((G%mask2dCu(I,j) > 0.0) .or. (G%mask2dCu(I,j+1) > 0.0)) then
                 dz_stack(:) = (1.0 / (G%mask2dCu(I,j) + G%mask2dCu(I,j+1))) * &
-                  (G%mask2dCu(I,j) * dz(isd,j,:) + G%mask2dCu(I,j+1) * dz(isd,j+1,:))
+                  (G%mask2dCu(I,j) * segment%dz(I,j,:) + G%mask2dCu(I,j+1) * segment%dz(I,j+1,:))
                 call remapping_core_h(OBC%remap_z_CS, &
                       segment%field(m)%nk_src, segment%field(m)%dz_src(I,J,:), &
                       segment%field(m)%buffer_src(I,J,:), &
@@ -4667,12 +4673,12 @@ subroutine read_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               segment%field(m)%buffer_dst(I,j,:) = 0.0  ! initialize remap destination buffer
               if (G%mask2dCu(I,j)>0.) then
                 net_dz_src = sum( segment%field(m)%dz_src(I,j,:) )
-                net_dz_int = sum( dz(isd,j,:) )
+                net_dz_int = sum( segment%dz(I,j,:) )
                 scl_fac = net_dz_int / net_dz_src
                 call remapping_core_h(OBC%remap_z_CS, &
                       segment%field(m)%nk_src,  scl_fac*segment%field(m)%dz_src(I,j,:), &
                       segment%field(m)%buffer_src(I,j,:), &
-                      GV%ke, dz(isd,j,:), segment%field(m)%buffer_dst(I,j,:))
+                      GV%ke, segment%dz(I,j,:), segment%field(m)%buffer_dst(I,j,:))
               endif
             enddo
           endif
@@ -4686,7 +4692,7 @@ subroutine read_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
                 ! Using the h remapping approach
                 ! Pretty sure we need to check for source/target grid consistency here
                 dz_stack(:) = (1.0 / (G%mask2dCv(i,J) + G%mask2dCv(i+1,J))) * &
-                  (G%mask2dCv(i,J) * dz(i,jsd,:) + G%mask2dCv(i+1,J) * dz(i+1,jsd,:))
+                  (G%mask2dCv(i,J) * segment%dz(i,J,:) + G%mask2dCv(i+1,J) * segment%dz(i+1,J,:))
                 call remapping_core_h(OBC%remap_z_CS, &
                       segment%field(m)%nk_src, segment%field(m)%dz_src(I,J,:), &
                       segment%field(m)%buffer_src(I,J,:), &
@@ -4700,12 +4706,12 @@ subroutine read_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
               segment%field(m)%buffer_dst(i,J,:) = 0.0  ! initialize remap destination buffer
               if (G%mask2dCv(i,J)>0.) then
                 net_dz_src = sum( segment%field(m)%dz_src(i,J,:) )
-                net_dz_int = sum( dz(i,jsd,:) )
+                net_dz_int = sum( segment%dz(i,J,:) )
                 scl_fac = net_dz_int / net_dz_src
                 call remapping_core_h(OBC%remap_z_CS, &
                       segment%field(m)%nk_src, scl_fac* segment%field(m)%dz_src(i,J,:), &
                       segment%field(m)%buffer_src(i,J,:), &
-                      GV%ke, dz(i,jsd,:), segment%field(m)%buffer_dst(i,J,:))
+                      GV%ke, segment%dz(i,J,:), segment%field(m)%buffer_dst(i,J,:))
               endif
             enddo
           endif
