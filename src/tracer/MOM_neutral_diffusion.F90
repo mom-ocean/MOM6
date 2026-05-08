@@ -1583,7 +1583,7 @@ real function interpolate_for_nondim_position(dRhoNeg, Pneg, dRhoPos, Ppos)
   real, intent(in) :: dRhoPos !< Positive density difference [R ~> kg m-3]
   real, intent(in) :: Ppos    !< Position of positive density difference [R L2 T-2 ~> Pa] or [nondim]
 
-  character(len=120) :: mesg
+  character(len=256) :: mesg
 
   if ((Ppos > Pneg) .and. (dRhoPos - dRhoNeg >= 0. )) then
     if ( dRhoPos - dRhoNeg > 0. ) then
