@@ -121,7 +121,8 @@ use MOM_open_boundary,         only : setup_OBC_tracer_reservoirs
 use MOM_open_boundary,         only : setup_OBC_thickness_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
 use MOM_open_boundary,         only : open_boundary_setup_vert, initialize_segment_data
-use MOM_open_boundary,         only : update_OBC_segment_data, rotate_OBC_config
+use MOM_open_boundary,         only : update_OBC_dynamics_data, update_OBC_tracer_data
+use MOM_open_boundary,         only : rotate_OBC_config
 use MOM_open_boundary,         only : open_boundary_halo_update, write_OBC_info, chksum_OBC_segments
 use MOM_open_boundary,         only : segment_thickness_reservoir_init
 use MOM_open_boundary,         only : copy_OBC_radiation_coefs
@@ -331,7 +332,7 @@ type, public :: MOM_control_struct ; private
   real            :: dt_obc_seg_period   !< The time interval between OBC segment updates for OBGC
                                          !! tracers [T ~> s], or a negative value if the segment
                                          !! data are time-invarant, or zero to update the OBGC
-                                         !! segment data with every call to update_OBC_segment_data.
+                                         !! segment data with every call to update_OBC_tracer_data.
   type(time_type) :: dt_obc_seg_interval !< A time_time representation of dt_obc_seg_period.
   type(time_type) :: dt_obc_seg_time     !< The next time OBC segment update is applied to OBGC tracers.
 
@@ -3329,7 +3330,8 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
 
     ! Call this during initialization to fill boundary arrays from fixed values
     call read_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
-    call update_OBC_segment_data(G, GV, US, CS%OBC, CS%h, Time)
+    call update_OBC_dynamics_data(G, GV, US, CS%OBC, CS%h, Time)
+    call update_OBC_tracer_data(CS%OBC, include_bgc=.false.) ! OBC%update_OBC_seg_data is false.
     call initialize_OBC_segment_reservoirs(GV, CS%OBC)
   endif
 

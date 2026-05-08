@@ -11,8 +11,9 @@ use MOM_error_handler,         only : MOM_mesg, MOM_error, FATAL, WARNING
 use MOM_file_parser,           only : get_param, log_version, param_file_type, log_param
 use MOM_grid,                  only : ocean_grid_type
 use MOM_dyn_horgrid,           only : dyn_horgrid_type
-use MOM_open_boundary,         only : ocean_obc_type, update_OBC_segment_data, chksum_OBC_segments
+use MOM_open_boundary,         only : ocean_obc_type, chksum_OBC_segments
 use MOM_open_boundary,         only : read_OBC_segment_data
+use MOM_open_boundary,         only : update_OBC_dynamics_data, update_OBC_tracer_data
 use MOM_open_boundary,         only : OBC_registry_type, file_OBC_CS
 use MOM_open_boundary,         only : register_file_OBC, file_OBC_end
 use MOM_unit_scaling,          only : unit_scale_type
@@ -181,8 +182,11 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
 
   if (.not. OBC%user_BCs_set_globally) then
     if (OBC%any_needs_IO_for_data) call read_OBC_segment_data(G, GV, US, OBC, tv, h, Time)
-    if ((.not.CS%value_update_bug) .or. (OBC%any_needs_IO_for_data .or. OBC%add_tide_constituents)) &
-      call update_OBC_segment_data(G, GV, US, OBC, h, Time)
+    if ((.not.CS%value_update_bug) .or. &
+        (OBC%any_needs_IO_for_data .or. OBC%add_tide_constituents)) then
+      call update_OBC_dynamics_data(G, GV, US, OBC, h, Time)
+      call update_OBC_tracer_data(OBC, include_bgc=OBC%update_OBC_seg_data)
+    endif
   endif
 
   if (CS%debug_OBCs) call chksum_OBC_segments(OBC, G, GV, US, CS%nk_OBC_debug)
