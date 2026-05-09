@@ -116,7 +116,8 @@ use MOM_mixed_layer_restrat,   only : mixedlayer_restrat_register_restarts
 use MOM_obsolete_diagnostics,  only : register_obsolete_diagnostics
 use MOM_open_boundary,         only : ocean_OBC_type, open_boundary_end
 use MOM_open_boundary,         only : register_temp_salt_segments, update_segment_tracer_reservoirs
-use MOM_open_boundary,         only : read_OBC_segment_data, initialize_OBC_segment_reservoirs
+use MOM_open_boundary,         only : read_OBC_dynamics_data, read_OBC_tracer_data
+use MOM_open_boundary,         only : initialize_OBC_segment_reservoirs
 use MOM_open_boundary,         only : setup_OBC_tracer_reservoirs
 use MOM_open_boundary,         only : setup_OBC_thickness_reservoirs
 use MOM_open_boundary,         only : open_boundary_register_restarts, remap_OBC_fields
@@ -3329,9 +3330,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     call calc_derived_thermo(CS%tv, CS%h, G, GV, US)
 
     ! Call this during initialization to fill boundary arrays from fixed values
-    call read_OBC_segment_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
+    call read_OBC_dynamics_data(G, GV, US, CS%OBC, CS%tv, CS%h, Time)
     call update_OBC_dynamics_data(G, GV, US, CS%OBC, CS%h, Time)
-    call update_OBC_tracer_data(CS%OBC, include_bgc=.false.) ! OBC%update_OBC_seg_data is false.
+    ! BGC data is not read/updated at initialization since OBC%update_OBC_seg_data is false.
+    call read_OBC_tracer_data(G, GV, US, CS%OBC, Time, include_bgc=.false.)
+    call update_OBC_tracer_data(CS%OBC, include_bgc=.false.)
     call initialize_OBC_segment_reservoirs(GV, CS%OBC)
   endif
 
