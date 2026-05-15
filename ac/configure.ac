@@ -15,8 +15,22 @@ AC_INIT(
 )
 
 
-# Validate srdcir and configure input
+# Validate srcdir
 AC_CONFIG_SRCDIR([src/core/MOM.F90])
+
+# Prevent builds in the top directory ($srcdir)
+AS_IF([test "${srcdir}" = '.'], [
+  AC_MSG_ERROR([Build directory cannot be set to the top directory])
+])
+
+# Prevent builds in .testing/
+testdir=$(cd "${srcdir}/.testing" && pwd)
+AS_IF([test "$(pwd)" = "${testdir}"], [
+  AC_MSG_ERROR([Build directory cannot be set to .testing/])
+])
+
+
+# Macro configuration
 AC_CONFIG_MACRO_DIR([m4])
 
 
@@ -373,5 +387,5 @@ AC_LANG_POP([C])
 
 # Prepare output
 AC_SUBST([CPPFLAGS])
-AC_CONFIG_FILES([Makefile:Makefile.in])
+AC_CONFIG_FILES([Makefile:ac/Makefile.in])
 AC_OUTPUT
