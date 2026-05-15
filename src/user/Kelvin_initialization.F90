@@ -14,9 +14,8 @@ use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE
-use MOM_open_boundary,  only : OBC_segment_type, register_OBC, rotate_OBC_segment_direction
+use MOM_open_boundary,  only : OBC_segment_type, rotate_OBC_segment_direction
 use MOM_open_boundary,  only : OBC_DIRECTION_N, OBC_DIRECTION_E, OBC_DIRECTION_S, OBC_DIRECTION_W
-use MOM_open_boundary,  only : OBC_registry_type
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, time_to_real
@@ -59,17 +58,15 @@ end type Kelvin_OBC_CS
 contains
 
 !> Add Kelvin wave to OBC registry.
-logical function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
+logical function register_Kelvin_OBC(param_file, CS, US)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(Kelvin_OBC_CS),      pointer    :: CS         !< Kelvin wave control structure.
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
-  type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
 
   ! Local variables
   logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
                           ! recreate the bugs, or if false bugs are only used if actively selected.
   character(len=40)  :: mdl = "register_Kelvin_OBC"  !< This subroutine's name.
-  character(len=32)  :: casename = "Kelvin wave"     !< This case's name.
   character(len=200) :: config
 
   if (associated(CS)) then
@@ -132,8 +129,6 @@ logical function register_Kelvin_OBC(param_file, CS, US, OBC_Reg)
                  "If true, retain several horizontal indexing bugs that were in the original "//&
                  "version of Kelvin_set_OBC_data.", default=enable_bugs)
 
-  ! Register the Kelvin open boundary.
-  call register_OBC(casename, param_file, OBC_Reg)
   register_Kelvin_OBC = .true.
 
   ! TODO: Revisit and correct the internal Kelvin wave test case.

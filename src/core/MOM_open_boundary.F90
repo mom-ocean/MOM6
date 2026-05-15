@@ -58,8 +58,6 @@ public open_boundary_test_extern_uv
 public open_boundary_test_extern_h
 public open_boundary_zero_normal_flow
 public parse_segment_str
-public register_OBC, OBC_registry_init
-public register_file_OBC, file_OBC_end
 public segment_tracer_registry_init
 public segment_tracer_registry_end
 public segment_thickness_reservoir_init
@@ -424,7 +422,6 @@ type, public :: ocean_OBC_type
                                                       !! z-space data on segments
   type(remapping_CS), pointer :: remap_h_CS => NULL() !< ALE remapping control structure for
                                                       !! thickness-based fields on segments
-  type(OBC_registry_type), pointer :: OBC_Reg => NULL()  !< Registry type for boundaries
   real, allocatable :: rx_normal(:,:,:)     !< Array storage for normal phase speed for EW radiation OBCs
                                             !! in units of grid points per timestep [nondim]
   real, allocatable :: ry_normal(:,:,:)     !< Array storage for normal phase speed for NS radiation OBCs
@@ -492,25 +489,6 @@ type, public :: ocean_OBC_type
                                 !! without recomputing segment layer thicknesses using the current
                                 !! layer thicknesses and thermodynamic state.
 end type ocean_OBC_type
-
-!> Control structure for open boundaries that read from files.
-!! Probably lots to update here.
-type, public :: file_OBC_CS ; private
-  logical :: OBC_file_used = .false.     !< Placeholder for now to avoid an empty type.
-end type file_OBC_CS
-
-!> Type to carry something (what??) for the OBC registry.
-type, public :: OBC_struct_type
-  character(len=32)               :: name             !< OBC name used for error messages
-end type OBC_struct_type
-
-!> Type to carry basic OBC information needed for updating values.
-type, public :: OBC_registry_type
-  integer               :: nobc = 0          !< number of registered open boundary types.
-  type(OBC_struct_type) :: OB(MAX_FIELDS_)   !< array of registered boundary types.
-  logical               :: locked = .false.  !< New OBC types may be registered if locked=.false.
-                                             !! When locked=.true.,no more boundaries can be registered.
-end type OBC_registry_type
 
 !> Type to carry OBC information needed for setting segments for OBGC tracers
 type, private :: external_tracers_segments_props
@@ -5136,87 +5114,6 @@ subroutine update_OBC_ramp(Time, OBC, US, activate)
   write(msg(1:12),'(es12.3)') OBC%ramp_value
   call MOM_error(NOTE, "MOM_open_boundary: update_OBC_ramp set OBC ramp to "//trim(msg))
 end subroutine update_OBC_ramp
-
-!> register open boundary objects for boundary updates.
-subroutine register_OBC(name, param_file, Reg)
-  character(len=32),     intent(in)  :: name        !< OBC name used for error messages
-  type(param_file_type), intent(in)  :: param_file  !< file to parse for  model parameter values
-  type(OBC_registry_type), pointer   :: Reg         !< pointer to the tracer registry
-  integer :: nobc
-  character(len=256) :: mesg    ! Message for error messages.
-
-  if (.not. associated(Reg)) call OBC_registry_init(param_file, Reg)
-
-  if (Reg%nobc>=MAX_FIELDS_) then
-    write(mesg, '("Increase MAX_FIELDS_ in MOM_memory.h to at least ",I0," to allow for &
-        &all the open boundaries being registered via register_OBC.")') Reg%nobc+1
-    call MOM_error(FATAL,"MOM register_OBC: "//mesg)
-  endif
-  Reg%nobc = Reg%nobc + 1
-  nobc     = Reg%nobc
-
-  Reg%OB(nobc)%name = name
-
-  if (Reg%locked) call MOM_error(FATAL, &
-      "MOM register_OBC was called for OBC "//trim(Reg%OB(nobc)%name)//&
-      " with a locked OBC registry.")
-
-end subroutine register_OBC
-
-!> This routine include declares and sets the variable "version".
-subroutine OBC_registry_init(param_file, Reg)
-  type(param_file_type),   intent(in) :: param_file !< open file to parse for model parameters
-  type(OBC_registry_type), pointer    :: Reg        !< pointer to OBC registry
-
-  integer, save :: init_calls = 0
-
-# include "version_variable.h"
-  character(len=256) :: mesg    ! Message for error messages.
-
-  if (.not.associated(Reg)) then ; allocate(Reg)
-  else ; return ; endif
-
-  ! Read all relevant parameters and write them to the model log.
-! call log_version(param_file, mdl, version, "")
-
-  init_calls = init_calls + 1
-  if (init_calls > 1) then
-    write(mesg,'("OBC_registry_init called ",I0," times with different registry pointers.")') init_calls
-    if (is_root_pe()) call MOM_error(WARNING,"MOM_open_boundary: "//trim(mesg))
-  endif
-
-end subroutine OBC_registry_init
-
-!> Add file to OBC registry.
-function register_file_OBC(param_file, CS, US, OBC_Reg)
-  type(param_file_type),    intent(in) :: param_file !< parameter file.
-  type(file_OBC_CS),        pointer    :: CS         !< file control structure.
-  type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
-  type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
-  logical                              :: register_file_OBC
-  character(len=32)  :: casename = "OBC file"        !< This case's name.
-
-  if (associated(CS)) then
-    call MOM_error(WARNING, "register_file_OBC called with an "// &
-                            "associated control structure.")
-    return
-  endif
-  allocate(CS)
-
-  ! Register the file for boundary updates.
-  call register_OBC(casename, param_file, OBC_Reg)
-  register_file_OBC = .true.
-
-end function register_file_OBC
-
-!> Clean up the file OBC from registry.
-subroutine file_OBC_end(CS)
-  type(file_OBC_CS), pointer    :: CS   !< OBC file control structure.
-
-  if (associated(CS)) then
-    deallocate(CS)
-  endif
-end subroutine file_OBC_end
 
 !> Initialize the segment tracer registry.
 subroutine segment_tracer_registry_init(param_file, segment)

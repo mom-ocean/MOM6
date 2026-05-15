@@ -11,8 +11,7 @@ use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type, OBC_NONE, OBC_DIRECTION_W
-use MOM_open_boundary,  only : OBC_segment_type, register_OBC
-use MOM_open_boundary,  only : OBC_registry_type, rotate_OBC_segment_direction
+use MOM_open_boundary,  only : OBC_segment_type, rotate_OBC_segment_direction
 use MOM_time_manager,   only : time_type, time_to_real
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
@@ -42,12 +41,11 @@ end type shelfwave_OBC_CS
 contains
 
 !> Add shelfwave to OBC registry.
-function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
+function register_shelfwave_OBC(param_file, CS, G, US)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(shelfwave_OBC_CS),   pointer    :: CS         !< shelfwave control structure.
   type(ocean_grid_type),    intent(in) :: G          !< The ocean's grid structure.
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
-  type(OBC_registry_type),  pointer    :: OBC_Reg    !< Open boundary condition registry.
   logical                              :: register_shelfwave_OBC
 
   ! Local variables
@@ -68,8 +66,6 @@ function register_shelfwave_OBC(param_file, CS, G, US, OBC_Reg)
   endif
   allocate(CS)
 
-  ! Register the tracer for horizontal advection & diffusion.
-  call register_OBC(casename, param_file, OBC_Reg)
   call get_param(param_file, mdl, "F_0", f0, &
                  default=0.0, units="s-1", scale=US%T_to_s, do_not_log=.true.)
   call get_param(param_file, mdl,"SHELFWAVE_X_WAVELENGTH", Lx, &

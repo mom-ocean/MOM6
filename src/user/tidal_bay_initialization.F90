@@ -12,8 +12,7 @@ use MOM_error_handler,  only : MOM_mesg, MOM_error, FATAL, WARNING, is_root_pe
 use MOM_file_parser,    only : get_param, log_version, param_file_type
 use MOM_grid,           only : ocean_grid_type
 use MOM_open_boundary,  only : ocean_OBC_type
-use MOM_open_boundary,  only : OBC_segment_type, register_OBC
-use MOM_open_boundary,  only : OBC_registry_type
+use MOM_open_boundary,  only : OBC_segment_type
 use MOM_unit_scaling,   only : unit_scale_type
 use MOM_verticalGrid,   only : verticalGrid_type
 use MOM_time_manager,   only : time_type, time_to_real
@@ -36,13 +35,11 @@ end type tidal_bay_OBC_CS
 contains
 
 !> Add tidal bay to OBC registry.
-function register_tidal_bay_OBC(param_file, CS, US, OBC_Reg)
+function register_tidal_bay_OBC(param_file, CS, US)
   type(param_file_type),    intent(in) :: param_file !< parameter file.
   type(tidal_bay_OBC_CS),   intent(inout) :: CS      !< tidal bay control structure.
   type(unit_scale_type),    intent(in) :: US         !< A dimensional unit scaling type
-  type(OBC_registry_type),  pointer    :: OBC_Reg    !< OBC registry.
   logical                              :: register_tidal_bay_OBC
-  character(len=32)  :: casename = "tidal bay"       !< This case's name.
   character(len=40)  :: mdl = "tidal_bay_initialization" ! This module's name.
 
   call get_param(param_file, mdl, "TIDAL_BAY_FLOW", CS%tide_flow, &
@@ -56,8 +53,6 @@ function register_tidal_bay_OBC(param_file, CS, US, OBC_Reg)
                  "tidal bay configuration.", &
                  units="m", default=0.1, scale=US%m_to_Z)
 
-  ! Register the open boundaries.
-  call register_OBC(casename, param_file, OBC_Reg)
   register_tidal_bay_OBC = .true.
 
 end function register_tidal_bay_OBC

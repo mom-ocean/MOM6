@@ -13,7 +13,6 @@ use MOM_grid,            only : ocean_grid_type
 use MOM_open_boundary,   only : ocean_OBC_type, OBC_NONE
 use MOM_open_boundary,   only : OBC_DIRECTION_W, OBC_DIRECTION_N, OBC_DIRECTION_S, OBC_DIRECTION_E
 use MOM_open_boundary,   only : OBC_segment_type, register_segment_tracer
-use MOM_open_boundary,   only : OBC_registry_type, register_OBC
 use MOM_time_manager,    only : time_type, time_to_real
 use MOM_tracer_registry, only : tracer_registry_type, tracer_name_lookup
 use MOM_tracer_registry, only : tracer_type
@@ -44,16 +43,14 @@ integer :: ntr = 0 !< Number of dye tracers
 contains
 
 !> Add dyed channel to OBC registry.
-logical function register_dyed_channel_OBC(param_file, CS, US, OBC_Reg)
+logical function register_dyed_channel_OBC(param_file, CS, US)
   type(param_file_type),     intent(in) :: param_file !< parameter file.
   type(dyed_channel_OBC_CS), pointer    :: CS         !< Dyed channel control structure.
   type(unit_scale_type),     intent(in) :: US         !< A dimensional unit scaling type
-  type(OBC_registry_type),   pointer    :: OBC_Reg    !< OBC registry.
 
   ! Local variables
   logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
                           ! recreate the bugs, or if false bugs are only used if actively selected.
-  character(len=32)  :: casename = "dyed channel"     ! This case's name.
   character(len=40)  :: mdl = "register_dyed_channel_OBC" ! This subroutine's name.
 
   if (associated(CS)) then
@@ -79,8 +76,6 @@ logical function register_dyed_channel_OBC(param_file, CS, US, OBC_Reg)
                  "(if Boussienesq) or 1 kg m-2 layer thickness instead of the actual thickness.", &
                  default=enable_bugs)
 
-  ! Register the open boundaries.
-  call register_OBC(casename, param_file, OBC_Reg)
   register_dyed_channel_OBC = .true.
 
 end function register_dyed_channel_OBC
