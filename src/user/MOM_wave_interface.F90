@@ -1464,7 +1464,7 @@ subroutine get_StokesSL_LiFoxKemper(ustar, hbl, GV, US, CS, UStokes_SL, LA)
       UStokes_sl = UStokes * (0.715 + ((r1 + r3) + r5))
     endif
 
-    if (UStokes_sl /= 0.0) LA = sqrt(US%Z_to_L*ustar / UStokes_sl)
+    if (UStokes_sl > 0.0) LA = sqrt(US%Z_to_L*ustar / UStokes_sl)
   endif
 
 end subroutine Get_StokesSL_LiFoxKemper
