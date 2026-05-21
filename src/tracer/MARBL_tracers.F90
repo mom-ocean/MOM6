@@ -1618,7 +1618,7 @@ subroutine MARBL_tracers_column_physics(h_old, ea, eb, fluxes, dt, G, GV, US, CS
         call MARBL_instances%StatusLog%log_error_trace(&
             "MARBL_instances%interior_tendency_compute()", "MARBL_tracers_column_physics")
       endif
-      call print_marbl_log(MARBL_instances%StatusLog, G, i, j)
+      call print_marbl_log(MARBL_instances%StatusLog, G, i, j, print_lev=.true.)
       call MARBL_instances%StatusLog%erase()
 
       ! iv. Apply tendencies immediately
@@ -2330,7 +2330,7 @@ end subroutine set_riv_flux_tracer_inds
 ! TODO: some log messages come from a specific grid point, and this routine
 !       needs to include the location in the preamble
 !> This subroutine writes the contents of the MARBL log using MOM_error(NOTE, ...).
-subroutine print_marbl_log(log_to_print, G, i, j)
+subroutine print_marbl_log(log_to_print, G, i, j, print_lev)
 
   use marbl_logging, only : marbl_status_log_entry_type
   use marbl_logging, only : marbl_log_type
@@ -2340,12 +2340,16 @@ subroutine print_marbl_log(log_to_print, G, i, j)
   type(ocean_grid_type), optional, intent(in) :: G             !< The ocean's grid structure
   integer,               optional, intent(in) :: i             !< i of (i,j) index of column providing the log
   integer,               optional, intent(in) :: j             !< j of (i,j) index of column providing the log
+  logical,               optional, intent(in) :: print_lev     !< if true, print "Level: {ElementInd}"
 
   character(len=*), parameter :: subname = 'MARBL_tracers:print_marbl_log'
   character(len=256)          :: message_prefix, message_location, log_message
   type(marbl_status_log_entry_type), pointer :: tmp
   integer :: msg_lev, elem_old
+  logical :: print_lev_loc
 
+  print_lev_loc = .false.
+  if (present(print_lev)) print_lev_loc = print_lev
   ! elem_old is used to keep track of whether all messages are coming from the same point
   elem_old = -1
   write(message_prefix, "(A,I0,A)") '(Task ', PE_here(), ')'
@@ -2361,8 +2365,9 @@ subroutine print_marbl_log(log_to_print, G, i, j)
           if (present(i) .and. present(j)) then
             write(message_location, "(A,F8.3,A,F7.3,A,I0,A,I0,A,I0)") &
                 'Message from (lon, lat) (', G%geoLonT(i,j), ', ', G%geoLatT(i,j), &
-                '), which is global (i,j) (', i + G%HI%idg_offset, ', ', j + G%HI%jdg_offset, &
-                '). Level: ', tmp%ElementInd
+                '), which is global (i,j) (', i + G%HI%idg_offset, ', ', j + G%HI%jdg_offset, ')'
+            if (print_lev_loc) &
+              write(message_location, "(2A,I0)") trim(message_location), ' Level: ', tmp%ElementInd
           else
             write(message_location, "(A)") "Grid cell responsible for message is unknown"
           endif ! i,j present
