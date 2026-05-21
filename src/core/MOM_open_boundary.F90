@@ -4702,21 +4702,92 @@ end subroutine read_OBC_field_data
 !> Read OBC segment data for the dynamical fields, with field indices
 !! m=1..NUM_PHYS_FIELDS-2 (U, V, gradients, SSH, and tidal constituents).
 subroutine read_OBC_dynamics_data(G, GV, US, OBC, tv, h, Time)
-  type(ocean_grid_type),                     intent(in) :: G    !< Ocean grid structure
-  type(verticalGrid_type),                   intent(in) :: GV   !< Ocean vertical grid structure
-  type(unit_scale_type),                     intent(in) :: US   !< A dimensional unit scaling type
-  type(ocean_OBC_type),                      pointer    :: OBC  !< Open boundary structure
-  type(thermo_var_ptrs),                     intent(in) :: tv   !< Thermodynamics structure
-  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), intent(in) :: h    !< Thickness [H ~> m or kg m-2]
-  type(time_type),                           intent(in) :: Time !< Model time
+  type(ocean_grid_type),   intent(in) :: G    !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV   !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
+  type(ocean_OBC_type),    pointer    :: OBC  !< Open boundary structure
+  type(thermo_var_ptrs),   intent(in) :: tv   !< Thermodynamics structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h    !< Thickness [H ~> m or kg m-2]
+  type(time_type),         intent(in) :: Time !< Model time
 
   ! Local variables
-  integer :: i, j, k, n, m
+  integer :: n, m
   type(OBC_segment_type), pointer :: segment => NULL()
-  real :: dz(SZI_(G),SZJ_(G),SZK_(GV))  ! Distance between the interfaces around a layer [Z ~> m]
 
   if (.not. associated(OBC)) return
   if (OBC%user_BCs_set_globally) return
+
+  call update_OBC_segment_dz(G, GV, US, OBC, h, tv)
+
+  do n=1,OBC%number_of_segments
+    segment => OBC%segment(n)
+
+    if (.not. segment%on_pe) cycle ! continue to next segment if not in data domain
+
+    do m=1, NUM_PHYS_FIELDS-2
+      call read_OBC_field_data(G, GV, US, OBC, segment, m, Time)
+    enddo ! end dynamical field loop
+  enddo ! end segment loop
+end subroutine read_OBC_dynamics_data
+
+!> Read OBC segment data for tracer fields, with field indices
+!! m=NUM_PHYS_FIELDS-1..segment%num_fields (T, S, and BGC tracers).
+!! If optional arguments h and tv are not given, it is assumed that segment%dz has been calculated
+!! by a prior call to read_OBC_dynamics_data.  Otherwise, segment%dz is recalculated with h and tv.
+!! The optional argument include_bgc (default .true.) allows BGC fields to be read
+!! independently.
+subroutine read_OBC_tracer_data(G, GV, US, OBC, Time, h, tv, include_bgc)
+  type(ocean_grid_type),            intent(in) :: G    !< Ocean grid structure
+  type(verticalGrid_type),          intent(in) :: GV   !< Ocean vertical grid structure
+  type(unit_scale_type),            intent(in) :: US   !< A dimensional unit scaling type
+  type(ocean_OBC_type),             pointer    :: OBC  !< Open boundary structure
+  type(time_type),                  intent(in) :: Time !< Model time
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                          optional, intent(in) :: h  !< Thickness for recomputing dz [H ~> m or kg m-2]
+  type(thermo_var_ptrs),  optional, intent(in) :: tv !< Thermodynamics structure for recomputing dz
+  logical,                optional, intent(in) :: include_bgc       !< Read BGC tracers
+
+  ! Local variables
+  logical :: do_bgc ! If true, read BGC tracer fields
+  integer :: n, m
+  type(OBC_segment_type), pointer :: segment => NULL()
+
+  if (.not. associated(OBC)) return
+  if (OBC%user_BCs_set_globally) return
+
+  do_bgc = .true. ; if (present(include_bgc)) do_bgc = include_bgc
+
+  if (present(h) .and. present(tv)) &
+    call update_OBC_segment_dz(G, GV, US, OBC, h, tv)
+
+  do n=1,OBC%number_of_segments
+    segment => OBC%segment(n)
+    if (.not. segment%on_pe) cycle ! continue to next segment if not in data domain
+
+    do m=NUM_PHYS_FIELDS-1, segment%num_fields
+      if (.not. allocated(segment%field(m)%buffer_dst)) cycle
+      if (segment%field(m)%bgc_tracer .and. (.not. do_bgc)) cycle
+      call read_OBC_field_data(G, GV, US, OBC, segment, m, Time)
+    enddo ! end tracer field loop
+  enddo ! end segment loop
+end subroutine read_OBC_tracer_data
+
+!> Compute segment%dz and segment%dZtot at all OBC segments from the current layer thicknesses.
+!! These arrays are the target vertical grid used for remapping OBC data to the model grid.
+subroutine update_OBC_segment_dz(G, GV, US, OBC, h, tv)
+  type(ocean_grid_type),   intent(in) :: G   !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV  !< Ocean vertical grid structure
+  type(unit_scale_type),   intent(in) :: US  !< A dimensional unit scaling type
+  type(ocean_OBC_type),    pointer    :: OBC !< Open boundary structure
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)), &
+                           intent(in) :: h   !< Thickness [H ~> m or kg m-2]
+  type(thermo_var_ptrs),   intent(in) :: tv  !< Thermodynamics structure
+
+  ! Local variables
+  integer :: i, j, k, n
+  type(OBC_segment_type), pointer :: segment => NULL()
+  real :: dz(SZI_(G),SZJ_(G),SZK_(GV))  ! Distance between interfaces around a layer [Z ~> m]
 
   dz(:,:,:) = 0.0
   call thickness_to_dz(h, tv, dz, G, GV, US)
@@ -4724,8 +4795,7 @@ subroutine read_OBC_dynamics_data(G, GV, US, OBC, tv, h, Time)
 
   do n=1,OBC%number_of_segments
     segment => OBC%segment(n)
-
-    if (.not. segment%on_pe) cycle ! continue to next segment if not in data domain
+    if (.not. segment%on_pe) cycle
 
     ! dZtot may extend one point past the end of the segment on the current PE for use at vorticity points
     segment%dZtot(:,:) = 0.0
@@ -4742,48 +4812,8 @@ subroutine read_OBC_dynamics_data(G, GV, US, OBC, tv, h, Time)
         segment%dZtot(i,J) = segment%dZtot(i,J) + segment%dz(i,J,k)
       enddo ; enddo
     endif
-
-    do m=1, NUM_PHYS_FIELDS-2
-      call read_OBC_field_data(G, GV, US, OBC, segment, m, Time)
-    enddo ! end dynamical field loop
   enddo ! end segment loop
-end subroutine read_OBC_dynamics_data
-
-!> Read OBC segment data for tracer fields, with field indices
-!! m=NUM_PHYS_FIELDS-1..segment%num_fields (T, S, and BGC tracers).
-!! Assumes segment%dz has been populated by a prior call to read_OBC_dynamics_data at the current
-!! time step. The optional argument include_bgc (default .true.) allows BGC fields to be read
-!! independently.
-subroutine read_OBC_tracer_data(G, GV, US, OBC, Time, include_bgc)
-  type(ocean_grid_type),   intent(in) :: G    !< Ocean grid structure
-  type(verticalGrid_type), intent(in) :: GV   !< Ocean vertical grid structure
-  type(unit_scale_type),   intent(in) :: US   !< A dimensional unit scaling type
-  type(ocean_OBC_type),    pointer    :: OBC  !< Open boundary structure
-  type(time_type),         intent(in) :: Time !< Model time
-  logical, optional,       intent(in) :: include_bgc       !< Read BGC tracers
-
-  ! Local variables
-  logical :: do_bgc ! If true, read BGC tracer fields
-  integer :: n, m
-  type(OBC_segment_type), pointer :: segment => NULL()
-
-  if (.not. associated(OBC)) return
-  if (OBC%user_BCs_set_globally) return
-
-  do_bgc = .true. ; if (present(include_bgc)) do_bgc = include_bgc
-
-  do n=1,OBC%number_of_segments
-    segment => OBC%segment(n)
-
-    if (.not. segment%on_pe) cycle ! continue to next segment if not in data domain
-
-    do m=NUM_PHYS_FIELDS-1, segment%num_fields
-      if (.not. allocated(segment%field(m)%buffer_dst)) cycle
-      if (segment%field(m)%bgc_tracer .and. (.not. do_bgc)) cycle
-      call read_OBC_field_data(G, GV, US, OBC, segment, m, Time)
-    enddo ! end tracer field loop
-  enddo ! end segment loop
-end subroutine read_OBC_tracer_data
+end subroutine update_OBC_segment_dz
 
 !> Update OBC segment dynamical fields: normal/tangential velocity, gradient, SSH, and
 !! the thickness reservoir.
