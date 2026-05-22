@@ -482,6 +482,12 @@ type, public :: ocean_OBC_type
                                 !! concentrations.
   logical :: ts_needed_bug      !< If true, recover a bug that temperature and salinity can be ignored
                                 !! even if they are registered tracers in the rest of the model.
+  logical :: ignore_dt_obc_bgc  !< If true, DT_OBC_SEG_UPDATE_OBGC is ignored and all OBC segment
+                                !! tracer data (T/S and BGC) is updated every tracer advection step.
+                                !! If false, T/S is updated every dynamic step, which is unnecessary,
+                                !! while BGC follows its own update schedule, which may not reproduce
+                                !! across restarts.  Once DT_OBC_SEG_UPDATE_OBGC is deprecated, only
+                                !! the "true" path will be needed.
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -759,6 +765,13 @@ subroutine open_boundary_config(G, US, param_file, OBC)
   call get_param(param_file, mdl, "OBC_TEMP_SALT_NEEDED_BUG", OBC%ts_needed_bug, &
                  "If true, recover a bug that OBC temperature and salinity can be ignored "//&
                  "even if they are registered tracers in the rest of the model.", default=enable_bugs)
+  call get_param(param_file, mdl, "IGNORE_DT_OBC_SEG_UPDATE_OBGC", OBC%ignore_dt_obc_bgc, &
+                 "If true, DT_OBC_SEG_UPDATE_OBGC is ignored and all OBC segment tracer data "//&
+                 "(T/S and BGC) is updated every tracer advection step.  If false, T/S is "//&
+                 "updated every dynamic step, which is unnecessary, while BGC follows its own "//&
+                 "update schedule, which may not reproduce across restarts. Once "//&
+                 "DT_OBC_SEG_UPDATE_OBGC is deprecated, only the 'true' path will be needed.", &
+                 default=.false.)
   call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, default=.false.)
 
@@ -6810,6 +6823,7 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
   OBC%remappingScheme = OBC_in%remappingScheme
   OBC%exterior_OBC_bug = OBC_in%exterior_OBC_bug
   OBC%hor_index_bug = OBC_in%hor_index_bug
+  OBC%ignore_dt_obc_bgc = OBC_in%ignore_dt_obc_bgc
   OBC%n_tide_constituents = OBC_in%n_tide_constituents
   OBC%add_tide_constituents = OBC_in%add_tide_constituents
 

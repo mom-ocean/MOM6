@@ -181,13 +181,17 @@ subroutine update_OBC_data(OBC, G, GV, US, tv, h, CS, Time)
       call dyed_channel_update_flow(OBC, CS%dyed_channel_OBC_CSp, G, GV, US, h, Time)
 
   if (.not. OBC%user_BCs_set_globally) then
-    if (OBC%any_needs_IO_for_data) then
+    ! Update dynamics
+    if (OBC%any_needs_IO_for_data) &
       call read_OBC_dynamics_data(G, GV, US, OBC, tv, h, Time)
-      call read_OBC_tracer_data(G, GV, US, OBC, Time, include_bgc=OBC%update_OBC_seg_data)
-    endif
-    if ((.not.CS%value_update_bug) .or. &
-        (OBC%any_needs_IO_for_data .or. OBC%add_tide_constituents)) then
+    if ((.not. CS%value_update_bug) .or. &
+        (OBC%any_needs_IO_for_data .or. OBC%add_tide_constituents)) &
       call update_OBC_dynamics_data(G, GV, US, OBC, h, Time)
+    ! Update tracers: this is the old incorrect path. See step_MOM_tracer_dyn for the locked path.
+    ! If DT_OBC_SEG_UPDATE_OBGC is used (not recommended), BGC has its own update schedule, which
+    ! may happen in between tracer steps.
+    if ((.not. OBC%ignore_dt_obc_bgc) .and. OBC%any_needs_IO_for_data) then
+      call read_OBC_tracer_data(G, GV, US, OBC, Time, include_bgc=OBC%update_OBC_seg_data)
       call update_OBC_tracer_data(OBC, include_bgc=OBC%update_OBC_seg_data)
     endif
   endif
