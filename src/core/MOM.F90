@@ -1569,13 +1569,16 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
                        CS%tv, CS%t_dyn_rel_adv, CS%use_uh_particles)
   endif
 
+  ! Tracer-step OBC path: active when DT_OBC_SEG_UPDATE_OBGC is ignored (i.e. DT_OBC_SEG_UPDATE_OBGC = DT_TRACER)
+  ! or when the bug fix is enabled (OBC_TRACER_DZ_BUG=F). OBC_TRACER_DZ_BUG controls whether dz is recomputed
+  ! from the current layer thicknesses before reading.
   if (associated(CS%OBC)) then
-    if (CS%OBC%ignore_dt_obc_bgc) then
-      ! If DT_OBC_SEG_UPDATE_OBGC is ignored by the flag, all tracers are read and updated at the
-      ! beginning of every tracer step.  Note that the thickness used here to remap source data is
-      ! not recalculated, therefore not updated by the last dynamic step, to be consistent with
-      ! old answer.
-      call read_OBC_tracer_data(G, GV, US, CS%OBC, Time_local)
+    if (CS%OBC%ignore_dt_obc_bgc .or. (.not. CS%OBC%tracer_dz_bug)) then
+      if (CS%OBC%tracer_dz_bug) then
+        call read_OBC_tracer_data(G, GV, US, CS%OBC, Time_local)
+      else
+        call read_OBC_tracer_data(G, GV, US, CS%OBC, Time_local, h=h, tv=CS%tv)
+      endif
       call update_OBC_tracer_data(CS%OBC)
     endif
   endif

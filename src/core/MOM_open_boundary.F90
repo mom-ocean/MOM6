@@ -488,6 +488,9 @@ type, public :: ocean_OBC_type
                                 !! while BGC follows its own update schedule, which may not reproduce
                                 !! across restarts.  Once DT_OBC_SEG_UPDATE_OBGC is deprecated, only
                                 !! the "true" path will be needed.
+  logical :: tracer_dz_bug      !< If true, recover a bug that OBC tracer segment data is read
+                                !! without recomputing segment layer thicknesses using the current
+                                !! layer thicknesses and thermodynamic state.
 end type ocean_OBC_type
 
 !> Control structure for open boundaries that read from files.
@@ -772,6 +775,10 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                  "update schedule, which may not reproduce across restarts. Once "//&
                  "DT_OBC_SEG_UPDATE_OBGC is deprecated, only the 'true' path will be needed.", &
                  default=.false.)
+  call get_param(param_file, mdl, "OBC_TRACER_DZ_BUG", OBC%tracer_dz_bug, &
+                 "If true, recover a bug that OBC tracer segment data is read without "//&
+                 "recomputing segment layer thicknesses from the current layer thicknesses "//&
+                 "and thermodynamic state.", default=enable_bugs)
   call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, default=.false.)
 
@@ -6854,6 +6861,7 @@ subroutine rotate_OBC_config(OBC_in, G_in, OBC, G, turns)
   OBC%exterior_OBC_bug = OBC_in%exterior_OBC_bug
   OBC%hor_index_bug = OBC_in%hor_index_bug
   OBC%ignore_dt_obc_bgc = OBC_in%ignore_dt_obc_bgc
+  OBC%tracer_dz_bug = OBC_in%tracer_dz_bug
   OBC%n_tide_constituents = OBC_in%n_tide_constituents
   OBC%add_tide_constituents = OBC_in%add_tide_constituents
 
