@@ -165,16 +165,8 @@ function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, 
   ints_sum(:) = 0
   if (over_check) then
     if ((je+1-js)*(ie+1-is) < max_count_prec) then
-      ! This is the most common case, so handle the do_unscale case separately for efficiency.
-      if (do_unscale) then
-        do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sum, unscale*array(i,j), max_mag_term)
-        enddo ; enddo
-      else
-        do j=js,je ; do i=is,ie
-          call increment_ints_faster(ints_sum, array(i,j), max_mag_term)
-        enddo ; enddo
-      endif
+      ! Common case: window is small enough that all carrying happens at the tail.
+      call increment_ints_2d(array, is, ie, js, je, descale, ints_sum, max_mag_term)
       call carry_overflow(ints_sum, prec_error)
     elseif ((ie+1-is) < max_count_prec) then
       do j=js,je
@@ -428,15 +420,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
     overflow_error = .false. ; NaN_error = .false. ; max_mag_term = 0.0
     if (jsz*isz < max_count_prec) then
       do k=1,ke
-        if (do_unscale) then
-          do j=js,je ; do i=is,ie
-            call increment_ints_faster(ints_sums(:,k), unscale*array(i,j,k), max_mag_term)
-          enddo ; enddo
-        else
-          do j=js,je ; do i=is,ie
-            call increment_ints_faster(ints_sums(:,k), array(i,j,k), max_mag_term)
-          enddo ; enddo
-        endif
+        call increment_ints_2d(array(:,:,k), is, ie, js, je, descale, ints_sums(:,k), max_mag_term)
         call carry_overflow(ints_sums(:,k), prec_error)
       enddo
     elseif (isz < max_count_prec) then
@@ -496,15 +480,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
     overflow_error = .false. ; NaN_error = .false. ; max_mag_term = 0.0
     if (jsz*isz < max_count_prec) then
       do k=1,ke
-        if (do_unscale) then
-          do j=js,je ; do i=is,ie
-            call increment_ints_faster(ints_sum, unscale*array(i,j,k), max_mag_term)
-          enddo ; enddo
-        else
-          do j=js,je ; do i=is,ie
-            call increment_ints_faster(ints_sum, array(i,j,k), max_mag_term)
-          enddo ; enddo
-        endif
+        call increment_ints_2d(array(:,:,k), is, ie, js, je, descale, ints_sum, max_mag_term)
         call carry_overflow(ints_sum, prec_error)
       enddo
     elseif (isz < max_count_prec) then
@@ -682,6 +658,93 @@ subroutine increment_ints_faster(int_sum, r, max_mag_term)
   enddo
 
 end subroutine increment_ints_faster
+
+!> Per-slice EFP bin accumulation over a 2d window, GPU-friendly. Equivalent to
+!! looping increment_ints_faster over (is:ie, js:je), modulo: max_mag_term is
+!! updated with the magnitude (>=0) rather than the signed last-winner. Only
+!! consumer of max_mag_term is abs() in the overflow guard, so values are
+!! unchanged; only the sign in one FATAL message can differ.
+subroutine increment_ints_2d(array, is, ie, js, je, descale, ints_sum, max_mag_term)
+  real, dimension(:,:),               intent(in)    :: array  !< Input slice in arbitrary units [a]
+  integer,                            intent(in)    :: is, ie, js, je !< Window bounds (1-based)
+  real,                               intent(in)    :: descale !< unscale factor or 1.0 [a A-1 ~> 1]
+  integer(kind=int64), dimension(ni), intent(inout) :: ints_sum !< EFP bins, incremented in place
+  real,                               intent(inout) :: max_mag_term !< Running max magnitude [a]
+
+  integer :: i, j, sgn
+  integer(kind=int64) :: ival
+  real :: r, rs
+  integer(kind=int64) :: s1, s2, s3, s4, s5, s6
+  real :: mmag
+  integer :: inan, iovf
+
+  s1 = ints_sum(1)
+  s2 = ints_sum(2)
+  s3 = ints_sum(3)
+  s4 = ints_sum(4)
+  s5 = ints_sum(5)
+  s6 = ints_sum(6)
+
+  mmag = abs(max_mag_term)
+  inan = 0 ; iovf = 0
+
+  ! I have to find a nice way to ensure that array is always copied, this is
+  ! terrible for now but since this is not called that often it is OK.
+  !$omp target teams distribute parallel do collapse(2)  &
+  !$omp&  map(to: array)                                 &
+  !$omp&  private(r, rs, sgn, ival)                      &
+  !$omp&  reduction(+: s1, s2, s3, s4, s5, s6)           &
+  !$omp&  reduction(max: mmag) reduction(max: inan, iovf)
+  do j=js,je
+    do i=is,ie
+      r = descale*array(i,j)
+      if ((r >= 1e30) .eqv. (r < 1e30)) then
+        inan = 1
+      else
+        sgn = 1 ; if (r < 0.0) sgn = -1
+        rs = abs(r)
+        if (rs > mmag) mmag = rs
+        if (rs > max_efp_float) then
+          iovf = 1
+        else
+          ival = int(rs*I_pr(1), kind=int64)
+          rs = rs - ival*pr(1)
+          s1 = s1 + sgn*ival
+
+          ival = int(rs*I_pr(2), kind=int64)
+          rs = rs - ival*pr(2)
+          s2 = s2 + sgn*ival
+
+          ival = int(rs*I_pr(3), kind=int64)
+          rs = rs - ival*pr(3)
+          s3 = s3 + sgn*ival
+
+          ival = int(rs*I_pr(4), kind=int64)
+          rs = rs - ival*pr(4)
+          s4 = s4 + sgn*ival
+
+          ival = int(rs*I_pr(5), kind=int64)
+          rs = rs - ival*pr(5)
+          s5 = s5 + sgn*ival
+
+          ival = int(rs*I_pr(6), kind=int64)
+          rs = rs - ival*pr(6)
+          s6 = s6 + sgn*ival
+        endif
+      endif
+    enddo
+  enddo
+
+  ints_sum(1) = s1
+  ints_sum(2) = s2
+  ints_sum(3) = s3
+  ints_sum(4) = s4
+  ints_sum(5) = s5
+  ints_sum(6) = s6
+  max_mag_term = mmag
+  if (inan /= 0) NaN_error = .true.
+  if (iovf /= 0) overflow_error = .true.
+end subroutine increment_ints_2d
 
 !> This subroutine handles carrying of the overflow.
 subroutine carry_overflow(int_sum, prec_error)
