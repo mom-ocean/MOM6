@@ -2366,10 +2366,9 @@ subroutine print_marbl_log(log_to_print, G, i, j, print_lev)
           if (present(i) .and. present(j)) then
             write(message_location, "(A,F8.3,A,F7.3,A,I0,A,I0,A)") &
                 'Message from (lon, lat) (', G%geoLonT(i,j), ', ', G%geoLatT(i,j), &
-                '), which is global (i,j) (', i + G%HI%idg_offset, ', ', j + G%HI%jdg_offset, &
-                ')'
+                '), global (i,j) (', i + G%HI%idg_offset, ', ', j + G%HI%jdg_offset, ')'
             if (print_lev_loc) then
-              write(message_suffix, "(A,I0)") '. Level: ', tmp%ElementInd
+              write(message_suffix, "(A,I0)") ', level ', tmp%ElementInd
               message_location = trim(message_location) // trim(message_suffix)
             endif
           else
