@@ -2369,7 +2369,7 @@ subroutine print_marbl_log(log_to_print, G, i, j, print_lev)
                 '), which is global (i,j) (', i + G%HI%idg_offset, ', ', j + G%HI%jdg_offset, &
                 ')'
             if (print_lev_loc) then
-              write(message_suffix, "(A,I0)"), '. Level: ', tmp%ElementInd
+              write(message_suffix, "(A,I0)") '. Level: ', tmp%ElementInd
               message_location = trim(message_location) // trim(message_suffix)
             endif
           else
