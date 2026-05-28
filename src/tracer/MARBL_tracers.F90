@@ -2343,7 +2343,8 @@ subroutine print_marbl_log(log_to_print, G, i, j, print_lev)
   logical,               optional, intent(in) :: print_lev     !< if true, print "Level: {ElementInd}"
 
   character(len=*), parameter :: subname = 'MARBL_tracers:print_marbl_log'
-  character(len=256)          :: message_prefix, message_location, log_message
+  character(len=256)          :: message_location, log_message
+  character(len=16)           :: message_prefix, message_suffix
   type(marbl_status_log_entry_type), pointer :: tmp
   integer :: msg_lev, elem_old
   logical :: print_lev_loc
@@ -2363,11 +2364,14 @@ subroutine print_marbl_log(log_to_print, G, i, j, print_lev)
       if ((present(G)) .and. (tmp%ElementInd .ne. elem_old)) then
         if (tmp%ElementInd .gt. 0) then
           if (present(i) .and. present(j)) then
-            write(message_location, "(A,F8.3,A,F7.3,A,I0,A,I0,A,I0)") &
+            write(message_location, "(A,F8.3,A,F7.3,A,I0,A,I0,A)") &
                 'Message from (lon, lat) (', G%geoLonT(i,j), ', ', G%geoLatT(i,j), &
-                '), which is global (i,j) (', i + G%HI%idg_offset, ', ', j + G%HI%jdg_offset, ')'
-            if (print_lev_loc) &
-              write(message_location, "(2A,I0)") trim(message_location), ' Level: ', tmp%ElementInd
+                '), which is global (i,j) (', i + G%HI%idg_offset, ', ', j + G%HI%jdg_offset, &
+                ')'
+            if (print_lev_loc) then
+              write(message_suffix, "(A,I0)"), '. Level: ', tmp%ElementInd
+              message_location = trim(message_location) // trim(message_suffix)
+            endif
           else
             write(message_location, "(A)") "Grid cell responsible for message is unknown"
           endif ! i,j present
