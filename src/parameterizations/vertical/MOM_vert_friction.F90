@@ -686,21 +686,23 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   ! over the topmost Hmix fluid.  If DIRECT_STRESS is not defined,
   ! the wind stress is applied as a stress boundary condition.
   if (CS%direct_stress) then
-    do j=G%jsc,G%jec ; do I=Isq,Ieq ; if (G%mask2dCu(I,j) > 0.) then
+    do j=G%jsc,G%jec ; do I=Isq,Ieq
       surface_stress(I,j) = 0.0
-      zDS = 0.0
-      stress = dt_Rho0 * forces%taux(I,j)
-      do k=1,nz
-        h_a = 0.5 * (h(i,j,k) + h(i+1,j,k)) + h_neglect
-        hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
-        u(I,j,k) = u(I,j,k) + I_Hmix * hfr * stress
-        if (associated(ADp%du_dt_str)) ADp%du_dt_str(i,J,k) = (I_Hmix * hfr * stress) * Idt
-        zDS = zDS + h_a ; if (zDS >= Hmix) exit
-      enddo
-    endif ; enddo ; enddo
+      if (G%OBCmaskCu(I,j) > 0.) then
+        zDS = 0.0
+        stress = dt_Rho0 * forces%taux(I,j)
+        do k=1,nz
+          h_a = 0.5 * (h(i,j,k) + h(i+1,j,k)) + h_neglect
+          hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
+          u(I,j,k) = u(I,j,k) + I_Hmix * hfr * stress
+          if (associated(ADp%du_dt_str)) ADp%du_dt_str(i,J,k) = (I_Hmix * hfr * stress) * Idt
+          zDS = zDS + h_a ; if (zDS >= Hmix) exit
+        enddo
+      endif
+    enddo ; enddo
   else
     do j=G%jsc,G%jec ; do I=Isq,Ieq
-      surface_stress(I,j) = dt_Rho0 * (G%mask2dCu(I,j)*forces%taux(I,j))
+      surface_stress(I,j) = dt_Rho0 * (G%OBCmaskCu(I,j)*forces%taux(I,j))
     enddo ; enddo
   endif
 
@@ -906,21 +908,23 @@ subroutine vertvisc(u, v, h, forces, visc, dt, OBC, ADp, CDp, G, GV, US, CS, &
   ! over the topmost Hmix fluid.  If DIRECT_STRESS is not defined,
   ! the wind stress is applied as a stress boundary condition.
   if (CS%direct_stress) then
-    do J=Jsq,Jeq ; do i=is,ie ; if (G%mask2dCv(i,J) > 0.) then
+    do J=Jsq,Jeq ; do i=is,ie
       surface_stress(i,J) = 0.0
-      zDS = 0.0
-      stress = dt_Rho0 * forces%tauy(i,J)
-      do k=1,nz
-        h_a = 0.5 * (h(i,J,k) + h(i,J+1,k)) + h_neglect
-        hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
-        v(i,J,k) = v(i,J,k) + I_Hmix * hfr * stress
-        if (associated(ADp%dv_dt_str)) ADp%dv_dt_str(i,J,k) = (I_Hmix * hfr * stress) * Idt
-        zDS = zDS + h_a ; if (zDS >= Hmix) exit
-      enddo
-    endif ; enddo ; enddo
+      if (G%OBCmaskCv(i,J) > 0.) then
+        zDS = 0.0
+        stress = dt_Rho0 * forces%tauy(i,J)
+        do k=1,nz
+          h_a = 0.5 * (h(i,J,k) + h(i,J+1,k)) + h_neglect
+          hfr = 1.0 ; if ((zDS+h_a) > Hmix) hfr = (Hmix - zDS) / h_a
+          v(i,J,k) = v(i,J,k) + I_Hmix * hfr * stress
+          if (associated(ADp%dv_dt_str)) ADp%dv_dt_str(i,J,k) = (I_Hmix * hfr * stress) * Idt
+          zDS = zDS + h_a ; if (zDS >= Hmix) exit
+        enddo
+      endif
+    enddo ; enddo
   else
     do J=Jsq,Jeq ; do i=is,ie
-      surface_stress(i,J) = dt_Rho0 * (G%mask2dCv(i,J) * forces%tauy(i,J))
+      surface_stress(i,J) = dt_Rho0 * (G%OBCmaskCv(i,J) * forces%tauy(i,J))
     enddo ; enddo
   endif
 
