@@ -257,6 +257,7 @@ target_sources(mom6shared PRIVATE
   tracer/DOME_tracer.F90
   tracer/dyed_obc_tracer.F90
   tracer/dye_example.F90
+  tracer/file_dye_tracer.F90
   tracer/ideal_age_example.F90
   tracer/ISOMIP_tracer.F90
   tracer/MOM_CFC_cap.F90
