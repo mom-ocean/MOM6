@@ -121,8 +121,9 @@ type, public :: MARBL_tracers_CS ; private
   logical :: request_Chl_from_MARBL     !< MARBL can provide Chl to use in set_pen_shortwave()
   integer :: ice_ncat                   !< Number of ice categories when use_ice_category_fields = True
   real    :: IC_min                     !< Minimum value for tracer initial conditions [CU ~> conc]
-  character(len=200) :: IC_file !< The file in which the age-tracer initial values cam be found.
+  character(len=200) :: IC_file         !< The file in which the age-tracer initial values cam be found.
   logical :: ongrid                     !< True if IC_file is already interpolated to MOM grid
+  logical :: Z_IC_file                  !< True if IC_file has Z coordinates
   type(tracer_registry_type), pointer :: tr_Reg => NULL() !< A pointer to the tracer registry
   type(MARBL_tracer_data), dimension(:), allocatable :: tracer_data  !< type containing tracer data and pointer
                                                                      !! into tracer registry
@@ -624,6 +625,9 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
   call get_param(param_file, mdl, "MARBL_TRACERS_IC_FILE", CS%IC_file, &
       "The file in which the MARBL tracers initial values can be found.", &
       default="ecosys_jan_IC_omip_latlon_1x1_180W_c230331.nc")
+  call get_param(param_file, mdl, "MARBL_TRACERS_IC_FILE_IS_Z", CS%Z_IC_file, &
+      "If true, MARBL_TRACERS_IC_FILE_IS_Z is in depth space, not layer space.", &
+      default=.true.)
   if (scan(CS%IC_file,'/') == 0) then
     ! Add the directory if CS%IC_file is not already a complete path.
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
@@ -981,9 +985,13 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
         (CS%tracers_may_reinit .and. &
          .not. query_initialized(CS%tracer_data(m)%tr(:,:,:), name, CS%restart_CSp))) then
       ! TODO: added the ongrid optional argument, but is there a good way to detect if the file is on grid?
-      call MOM_initialize_tracer_from_Z(h, CS%tracer_data(m)%tr, G, GV, US, param_file, &
-          CS%IC_file, name, ongrid=CS%ongrid)
-      tracer_init_from_Z = .true.
+      if (CS%Z_IC_file) then
+        call MOM_initialize_tracer_from_Z(h, CS%tracer_data(m)%tr, G, GV, US, param_file, &
+            CS%IC_file, name, ongrid=CS%ongrid)
+        tracer_init_from_Z = .true.
+      else
+        call MOM_read_data(CS%IC_file, trim(name), CS%tracer_data(m)%tr, G%Domain)
+      end if
       do k=1,GV%ke ; do j=G%jsc, G%jec ; do i=G%isc, G%iec
         ! Ensure tracer concentrations are at / above minimum value
         if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
