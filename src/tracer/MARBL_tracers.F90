@@ -26,7 +26,7 @@ use MOM_io,              only : file_exists, MOM_read_data, slasher, vardesc, va
 use MOM_open_boundary,   only : ocean_OBC_type
 use MOM_remapping,       only : reintegrate_column
 use MOM_remapping,       only : remapping_CS, initialize_remapping, remapping_core_h
-use MOM_restart,         only : query_initialized, MOM_restart_CS, register_restart_field
+use MOM_restart,         only : query_initialized, set_initialized, MOM_restart_CS, register_restart_field
 use MOM_spatial_means,   only : global_mass_int_EFP
 use MOM_sponge,          only : set_up_sponge_field, sponge_CS
 use MOM_time_manager,    only : time_type
@@ -992,6 +992,7 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
       else
         call MOM_read_data(CS%IC_file, trim(name), CS%tracer_data(m)%tr, G%Domain)
       end if
+      call set_initialized(CS%tracer_data(m)%tr, name, CS%restart_CSp)
       do k=1,GV%ke ; do j=G%jsc, G%jec ; do i=G%isc, G%iec
         ! Ensure tracer concentrations are at / above minimum value
         if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
