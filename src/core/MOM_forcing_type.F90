@@ -2425,6 +2425,11 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
 
     fluxes%salt_flux(i,j) = wt1*fluxes%salt_flux(i,j) + wt2*flux_tmp%salt_flux(i,j)
   enddo ; enddo
+  if (associated(fluxes%salt_flux_in) .and. associated(flux_tmp%salt_flux_in)) then
+    do j=js,je ; do i=is,ie
+      fluxes%salt_flux_in(i,j) = wt1*fluxes%salt_flux_in(i,j) + wt2*flux_tmp%salt_flux_in(i,j)
+    enddo ; enddo
+  endif
   if (associated(fluxes%salt_flux_added) .and. associated(flux_tmp%salt_flux_added)) then
     do j=js,je ; do i=is,ie
       fluxes%salt_flux_added(i,j) = wt1*fluxes%salt_flux_added(i,j) + wt2*flux_tmp%salt_flux_added(i,j)
