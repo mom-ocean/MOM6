@@ -221,6 +221,8 @@ type, public :: forcing
                                   !! type variable has not yet been initialized.
   logical :: gustless_accum_bug = .true. !< If true, use an incorrect expression in the time
                                   !! average of the gustless wind stress.
+  logical :: excess_salt_accum_bug = .true. !< If true, use an incorrect expression in the time
+                                  !! average of salt_left_behind
   real :: C_p                   !< heat capacity of seawater [Q C-1 ~> J kg-1 degC-1].
                                 !! C_p is is the same value as in thermovar_ptrs_type.
 
@@ -2435,6 +2437,13 @@ subroutine fluxes_accumulate(flux_tmp, fluxes, G, wt2, forces)
       fluxes%salt_flux_added(i,j) = wt1*fluxes%salt_flux_added(i,j) + wt2*flux_tmp%salt_flux_added(i,j)
     enddo ; enddo
   endif
+  if (associated(fluxes%salt_left_behind) .and. associated(flux_tmp%salt_left_behind)) then
+    if (.not. fluxes%excess_salt_accum_bug) then
+      do j=js,je ; do i=is,ie
+        fluxes%salt_left_behind(i,j) = wt1*fluxes%salt_left_behind(i,j) + wt2*flux_tmp%salt_left_behind(i,j)
+      enddo ; enddo
+    endif
+  endif
   if (associated(fluxes%heat_added) .and. associated(flux_tmp%heat_added)) then
     do j=js,je ; do i=is,ie
       fluxes%heat_added(i,j) = wt1*fluxes%heat_added(i,j) + wt2*flux_tmp%heat_added(i,j)
@@ -3425,8 +3434,8 @@ end subroutine forcing_diagnostics
 
 !> Conditionally allocate fields within the forcing type
 subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
-                                  shelf, iceberg, salt, fix_accum_bug, cfc, marbl, &
-                                  waves, shelf_sfc_accumulation, lamult, hevap, &
+                                  shelf, iceberg, salt, fix_accum_bug, fix_excess_salt_accum_bug, &
+                                  cfc, marbl, waves, shelf_sfc_accumulation, lamult, hevap, &
                                   ice_ncat, tau_mag)
   type(ocean_grid_type), intent(in) :: G       !< Ocean grid structure
   type(forcing),      intent(inout) :: fluxes  !< A structure containing thermodynamic forcing fields
@@ -3439,6 +3448,8 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   logical, optional,     intent(in) :: salt    !< If present and true, allocate salt fluxes
   logical, optional,     intent(in) :: fix_accum_bug !< If present and true, avoid using a bug in
                                                !! accumulation of ustar_gustless
+  logical, optional,     intent(in) :: fix_excess_salt_accum_bug !< If present and true, properly
+                                              !! accumulate salt_left_behind
   logical, optional,     intent(in) :: cfc     !< If present and true, allocate fields needed
                                                !! for cfc surface fluxes
   logical, optional,     intent(in) :: marbl   !< If present and true, allocate fields needed
@@ -3537,6 +3548,8 @@ subroutine allocate_forcing_by_group(G, fluxes, water, heat, ustar, press, &
   call myAlloc(fluxes%lamult,isd,ied,jsd,jed, lamult)
 
   if (present(fix_accum_bug)) fluxes%gustless_accum_bug = .not.fix_accum_bug
+  if (present(fix_excess_salt_accum_bug)) &
+    fluxes%excess_salt_accum_bug = .not.fix_excess_salt_accum_bug
 
   !These fields should only be allocated when USE_MARBL is activated.
   call myAlloc(fluxes%ice_fraction,isd,ied,jsd,jed, marbl)
@@ -3602,9 +3615,10 @@ subroutine allocate_forcing_by_ref(fluxes_ref, G, fluxes, turns)
   call myAlloc(fluxes%ustar_tidal, G%isd, G%ied, G%jsd, G%jed, &
       associated(fluxes_ref%ustar_tidal))
 
-  ! This flag would normally be set by a control flag in allocate_forcing_type.
+  ! These flags would normally be set by a control flag in allocate_forcing_type.
   ! Here we copy the flag from the reference forcing.
   fluxes%gustless_accum_bug = fluxes_ref%gustless_accum_bug
+  fluxes%excess_salt_accum_bug = fluxes_ref%excess_salt_accum_bug
 
   if (coupler_type_initialized(fluxes_ref%tr_fluxes)) then
     ! The data fields in the coupler_2d_bc_type are never rotated.

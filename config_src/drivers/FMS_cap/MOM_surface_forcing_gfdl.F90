@@ -142,6 +142,8 @@ type, public :: surface_forcing_CS ; private
                                 !! to calculate gustiness.
   logical :: ustar_gustless_bug             !< If true, include a bug in the time-averaging of the
                                             !! gustless wind friction velocity.
+  logical :: excess_salt_accum_bug          !< If true, include a bug in the time-averaging of the
+                                            !! salt left in ocean at the surface from brine rejection
   logical :: check_no_land_fluxes           !< Return warning if IOB flux over land is non-zero
 
   type(diag_ctrl), pointer :: diag => NULL()  !< Structure to regulate diagnostic output timing
@@ -289,7 +291,9 @@ subroutine convert_IOB_to_fluxes(IOB, fluxes, index_bounds, Time, valid_time, G,
   ! flux type has been used.
   if (fluxes%dt_buoy_accum < 0) then
     call allocate_forcing_type(G, fluxes, water=.true., heat=.true., ustar=.not.CS%nonBous, press=.true., &
-                               fix_accum_bug=.not.CS%ustar_gustless_bug, tau_mag=CS%nonBous)
+                               fix_accum_bug=.not.CS%ustar_gustless_bug, &
+                               fix_excess_salt_accum_bug=.not.CS%excess_salt_accum_bug, &
+                               tau_mag=CS%nonBous)
 
     call safe_alloc_ptr(fluxes%sw_vis_dir,isd,ied,jsd,jed)
     call safe_alloc_ptr(fluxes%sw_vis_dif,isd,ied,jsd,jed)
@@ -1337,6 +1341,10 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   logical :: new_sim              ! False if this simulation was started from a restart file
                                   ! or other equivalent files.
   logical :: iceberg_flux_diags   ! If true, diagnostics of fluxes from icebergs are available.
+  logical :: enable_bugs          ! If true, the defaults for certain recently added bug-fix flags are
+                                  ! set to recreate the bugs so that the code can be moved forward
+                                  ! without changing answers for existing configurations.  When this is
+                                  ! false, bugs are only used if they are actively selected.
   logical :: fix_ustar_gustless_bug  ! If false, include a bug using an older run-time parameter.
   logical :: test_value  ! This is used to determine whether a logical parameter is being set explicitly.
   logical :: explicit_bug, explicit_fix ! These indicate which parameters are set explicitly.
@@ -1681,6 +1689,11 @@ subroutine surface_forcing_init(Time, G, US, param_file, diag, CS, wind_stagger)
   call log_param(param_file, mdl, "USTAR_GUSTLESS_BUG", CS%ustar_gustless_bug, &
                  "If true include a bug in the time-averaging of the gustless wind friction velocity", &
                  default=.false.)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
+  call get_param(param_file, mdl, "EXCESS_SALT_ACCUM_BUG", CS%excess_salt_accum_bug, &
+                 "If true, recover a bug in the time-averaging of the salt left in ocean at the "//&
+                 "surface from brine rejection", default=enable_bugs)
 
 
 ! See whether sufficiently thick sea ice should be treated as rigid.
