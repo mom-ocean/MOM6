@@ -1,3 +1,7 @@
+dnl This file is part of MOM6, the Modular Ocean Model version 6.
+dnl See the LICENSE file for licensing information.
+dnl SPDX-License-Identifier: Apache-2.0
+dnl
 dnl MOM6_FC_CHECK_LIB(LIBRARY, PROCEDURE,
 dnl                   [MODULE], [ARGS], [FUNC-RESULT], [DECLS],
 dnl                   [ACTION-IF-FOUND], [ACTION-IF-NOT-FOUND],
@@ -32,7 +36,7 @@ dnl
 AC_DEFUN([MOM6_FC_CHECK_LIB],[
   AS_VAR_PUSHDEF([mom6_fc_Lib], [mom6_fc_cv_lib_$1_$2])
   m4_ifval([$9],
-    [mom6_fc_lib_msg_LDFLAGS=" with $9"],
+    [mom6_fc_lib_msg_LDFLAGS=" with m4_normalize([$9])"],
     [mom6_fc_lib_msg_LDFLAGS=""]
   )
   AC_CACHE_CHECK(

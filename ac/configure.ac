@@ -315,16 +315,18 @@ AS_IF([test "$with_cvmix" = yes], [
     -s ${srcdir}/src/parameterizations/CVmix"
 ])
 
-SRC_DIRS="\\
+MAKEDEP_FLAGS="${MAKEDEP_FLAGS}"
+
+MAKEDEP_FLAGS="${MAKEDEP_FLAGS# }"
+AC_SUBST([MAKEDEP_FLAGS])
+
+MAKEDEP_DIRS="\\
   ${srcdir}/src \\
   ${MODEL_FRAMEWORK} \\
   ${srcdir}/config_src/external \\
   ${DRIVER_DIR} \\
   ${MOM_MEMORY_DIR}"
-MAKEDEP_FLAGS="${MAKEDEP_FLAGS} ${SRC_DIRS}"
-
-MAKEDEP_FLAGS="${MAKEDEP_FLAGS# }"
-AC_SUBST([MAKEDEP_FLAGS])
+AC_SUBST([MAKEDEP_DIRS])
 
 # Add makedep to config.status
 AC_CONFIG_COMMANDS(Makefile.dep, [make depend])
@@ -367,7 +369,7 @@ AC_DEFINE_UNQUOTED([SIGSETJMP_NAME], ["${SIGSETJMP}"])
 
 # Validate the siglongjmp symbol
 AX_FC_CHECK_BIND_C([siglongjmp],
-  [SIGLONGJMP="siglongjmp"], [SETJMP="siglongjmp_missing"]
+  [SIGLONGJMP="siglongjmp"], [SIGLONGJMP="siglongjmp_missing"]
 )
 AC_DEFINE_UNQUOTED([SIGLONGJMP_NAME], ["${SIGLONGJMP}"])
 
