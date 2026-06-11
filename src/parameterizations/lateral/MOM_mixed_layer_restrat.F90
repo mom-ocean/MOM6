@@ -1757,7 +1757,7 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
                  "Mixed layer (and mixing-layer) depths in the MLE restratification "//&
                  "schemes are replaced by H / (1 + (H/H0)**P) when "//&
                  "P=MLE_TAPER_FN_POWER > 0 and H0=MLE_TAPER_FN_DEPTH > 0.", &
-                 default=0., scale=US%m_to_Z)
+                 units="m", default=0., scale=US%m_to_Z)
   call get_param(param_file, mdl, "MLE_TAPER_FN_POWER", CS%MLE_TAPER_FN_POWER, &
                  "The power of H/H0 in the MLE mixed-layer depth tapering. "//&
                  "Any positive integer may be used, but even integers are more "//&
