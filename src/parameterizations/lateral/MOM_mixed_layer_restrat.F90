@@ -68,6 +68,11 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! the mixed-layer [nondim].
   real    :: MLE_MLD_stretch       !< A scaling coefficient for stretching/shrinking the MLD used in
                                    !! the MLE scheme [nondim]. This simply multiplies MLD wherever used.
+  real    :: MLE_TAPER_FN_DEPTH    !< The mixed layer depth in the FFH and Bodner schemes can be tapered.
+                                   !! H is replaced by H / (1 + (H/H0)**P) where H0 is MLE_TAPER_FN_DEPTH.
+                                   !! [Z ~> m]
+  integer :: MLE_TAPER_FN_POWER    !< The mixed layer depth in the FFH and Bodner schemes can be tapered.
+                                   !! H is replaced by H / (1 + (H/H0)**P) where P is MLE_TAPER_FN_POWER.
 
   ! The following parameters are used in the Bodner et al., 2023, parameterization
   logical :: use_Bodner = .false.  !< If true, use the Bodner et al., 2023, parameterization.
@@ -324,6 +329,13 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   else
     call MOM_error(FATAL, "mixedlayer_restrat_OM4: "// &
          "No MLD to use for MLE parameterization.")
+  endif
+
+  ! Smoothly turn off the scheme by reducing the MLD when the MLD is greater than CS%MLE_TAPER_FN_DEPTH
+  if ((CS%MLE_TAPER_FN_POWER > 0) .and. (CS%MLE_TAPER_FN_DEPTH > 0.)) then
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      MLD_fast(i,j) = MLD_fast(i,j) / (1. + (MLD_fast(i,j)/CS%MLE_TAPER_FN_DEPTH)**CS%MLE_TAPER_FN_POWER)
+    enddo ; enddo
   endif
 
   ! Apply time filter (to remove diurnal cycle)
@@ -933,6 +945,13 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
     CS%MLD_filtered(i,j) = little_h(i,j)
   enddo ; enddo
 
+  ! Smoothly turn off the scheme by reducing the MLD when the MLD is greater than CS%MLE_TAPER_FN_DEPTH
+  if ((CS%MLE_TAPER_FN_POWER > 0) .and. (CS%MLE_TAPER_FN_DEPTH > 0.)) then
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      little_h(i,j) = little_h(i,j) / (1. + (little_h(i,j)/CS%MLE_TAPER_FN_DEPTH)**CS%MLE_TAPER_FN_POWER)
+    enddo ; enddo
+  endif
+
   ! Calculate "big H", representative of the mixed layer depth, used in B22 formula (eq 27).
   if (CS%MLD_grid) then
     do j=js-1,je+1 ; do i=is-1,ie+1
@@ -951,6 +970,14 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
                             CS%MLD_growing_Tfilt, CS%MLD_decaying_Tfilt, dt)
     enddo ; enddo
   endif
+
+  ! Smoothly turn off the scheme by reducing the MLD when the MLD is greater than CS%MLE_TAPER_FN_DEPTH
+  if ((CS%MLE_TAPER_FN_POWER > 0) .and. (CS%MLE_TAPER_FN_DEPTH > 0.)) then
+    do j=js-1,je+1 ; do i=is-1,ie+1
+      big_H(i,j) = big_H(i,j) / (1. + (big_H(i,j)/CS%MLE_TAPER_FN_DEPTH)**CS%MLE_TAPER_FN_POWER)
+    enddo ; enddo
+  endif
+
   do j=js-1,je+1 ; do i=is-1,ie+1
     CS%MLD_filtered_slow(i,j) = big_H(i,j)
   enddo ; enddo
@@ -1713,6 +1740,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   CS%fl_from_file = .false.
   CS%MLD_grid = .false.
   CS%Cr_grid = .false.
+  CS%MLE_TAPER_FN_POWER = 0
+  CS%MLE_TAPER_FN_DEPTH = 0.0
 
   call get_param(param_file, mdl, "DEBUG", CS%debug, default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
@@ -1724,6 +1753,16 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   call get_param(param_file, mdl, "USE_STANLEY_ML", CS%use_Stanley_ML, &
                  "If true, turn on Stanley SGS T variance parameterization "// &
                  "in ML restrat code.", default=.false.)
+  call get_param(param_file, mdl, "MLE_TAPER_FN_DEPTH", CS%MLE_TAPER_FN_DEPTH, &
+                 "Mixed layer (and mixing-layer) depths in the MLE restratification "//&
+                 "schemes are replaced by H / (1 + (H/H0)**P) when "//&
+                 "P=MLE_TAPER_FN_POWER > 0 and H0=MLE_TAPER_FN_DEPTH > 0.", &
+                 default=0., scale=US%m_to_Z)
+  call get_param(param_file, mdl, "MLE_TAPER_FN_POWER", CS%MLE_TAPER_FN_POWER, &
+                 "The power of H/H0 in the MLE mixed-layer depth tapering. "//&
+                 "Any positive integer may be used, but even integers are more "//&
+                 "efficient to calculate. Very large values may lead to numerical "//&
+                 "instabilities.", default=0)
   if (CS%use_Stanley_ML .and. .not.stoch_eos) then
     call MOM_error(FATAL, "mixedlayer_restrat_init: USE_STANLEY_ML requires STOCH_EOS")
   endif
