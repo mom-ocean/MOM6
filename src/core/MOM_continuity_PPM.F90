@@ -859,7 +859,7 @@ subroutine zonal_BT_mass_flux(u, h_in, h_W, h_E, uhbt, dt, G, GV, US, CS, OBC, p
 
   local_specified_BC = .false.
   if (associated(OBC)) then ; if (OBC%OBC_pe) then
-    local_specified_BC = OBC%specified_v_BCs_exist_globally
+    local_specified_BC = OBC%specified_u_BCs_exist_globally
   endif ; endif
 
   if (present(LB_in)) then
