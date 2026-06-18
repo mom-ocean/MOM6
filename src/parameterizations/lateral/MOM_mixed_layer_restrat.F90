@@ -95,6 +95,9 @@ type, public :: mixedlayer_restrat_CS ; private
                                    !! the answers from the end of 2023, while higher values use the new
                                    !! cuberoot function in the Bodner code to avoid needing to undo
                                    !! dimensional rescaling.
+  logical :: bodner_hmin_bug       !< If true, recover a bug where layer thicknesses in the Bodner
+                                   !! et al. mixed layer restratification are not clamped at a minimum value
+                                   !! of GV%Angstrom_H and can therefore go negative.
 
   logical :: debug = .false.       !< If true, calculate checksums of fields for debugging.
 
@@ -818,6 +821,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   real :: grd_b           ! The vertically average gradient of buoyancy [L H-1 T-2 ~> s-2 or m-3 kg-1 s-2]
   real :: psi_mag         ! Magnitude of stream function [L2 H T-1 ~> m3 s-1 or kg s-1]
   real :: h_neglect       ! tiny thickness usually lost in roundoff so can be neglected [H ~> m or kg m-2]
+  real :: h_min           ! The minimum layer thickness [H ~> m or kg m-2].  h_min could be 0.
   real :: I4dt            ! 1/(4 dt) [T-1 ~> s-1]
   real :: Ihtot,Ihtot_slow! Inverses of the total mixed layer thickness [H-1 ~> m-1 or m2 kg-1]
   real :: hAtVel          ! Thickness at the velocity points [H ~> m or kg m-2]
@@ -841,6 +845,7 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   I4dt = 0.25 / dt
   g_Rho0 = GV%H_to_Z * GV%g_Earth / GV%Rho0
   h_neglect = GV%H_subroundoff
+  h_min = GV%Angstrom_H
 
   covTS(:) = 0.0 ! Might be in tv% in the future. Not implemented for the time being.
   varS(:) = 0.0  ! Ditto.
@@ -1143,6 +1148,9 @@ subroutine mixedlayer_restrat_Bodner(CS, G, GV, US, h, uhtr, vhtr, tv, forces, d
   do j=js,je ; do k=1,nz ; do i=is,ie
     h(i,j,k) = h(i,j,k) - dt*G%IareaT(i,j) * &
         ((uhml(I,j,k) - uhml(I-1,j,k)) + (vhml(i,J,k) - vhml(i,J-1,k)))
+    if (.not. CS%bodner_hmin_bug) then
+      if (h(i,j,k) < h_min) h(i,j,k) = h_min
+    endif
   enddo ; enddo ; enddo
   !$OMP end parallel
 
@@ -1633,6 +1641,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
                            ! temperature variance [nondim]
   integer :: default_answer_date  ! The default setting for the various ANSWER_DATE flags
+  logical :: enable_bugs   ! If true, the defaults for recently added bug-fix flags are set to
+                           ! recreate the bugs, or if false bugs are only used if actively selected.
   ! This include declares and sets the variable "version".
   character(len=200) :: inputdir   ! The directory where NetCDF input files
   character(len=240) :: mle_fl_filename ! A file from which chl_a concentrations are to be read.
@@ -1674,6 +1684,8 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
       "This sets the default value for the various _ANSWER_DATE parameters.", &
       default=99991231, do_not_log=.true.)
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+      default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
   call openParameterBlock(param_file,'MLE') ! Prepend MLE% to all parameters
   if (GV%nkml==0) then
@@ -1723,6 +1735,10 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "to avoid needing to undo dimensional rescaling.", &
              default=default_answer_date, &
              do_not_log=.not.(CS%use_Bodner.and.(GV%Boussinesq.or.GV%semi_Boussinesq)))
+    call get_param(param_file, mdl, "BODNER_HMIN_BUG", CS%bodner_hmin_bug, &
+             "If true, recover a bug where layer thicknesses in the Bodner et al. mixed "//&
+             "layer restratification are not clamped at a minimum value and can therefore "//&
+             "go negative.", default=enable_bugs)
     call get_param(param_file, mdl, "MIN_WSTAR2", CS%min_wstar2, &
              "The minimum lower bound to apply to the vertical momentum flux, w'u', "//&
              "in the Bodner et al., restratification parameterization. This avoids "//&
