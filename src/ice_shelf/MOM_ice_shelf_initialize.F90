@@ -24,7 +24,7 @@ public initialize_ice_flow_from_file
 public initialize_ice_shelf_boundary_from_file
 public initialize_ice_C_basal_friction
 public initialize_ice_AGlen
-public initialize_ice_SMB
+
 ! A note on unit descriptions in comments: MOM6 uses units that can be rescaled for dimensional
 ! consistency testing. These are noted in comments with units like Z, H, L, and T, along with
 ! their mks counterparts with notation like "a velocity [Z T-1 ~> m s-1]".  If the units
@@ -440,7 +440,7 @@ subroutine initialize_ice_flow_from_file(bed_elev,u_shelf, v_shelf,float_cond,&
                  default="ice_shelf_vel.nc")
 
   filename = trim(inputdir)//trim(vel_file)
-  call log_param(PF, mdl, "INPUTDIR/THICKNESS_FILE", filename)
+  call log_param(PF, mdl, "INPUTDIR/ICE_VELOCITY_FILE", filename)
   call get_param(PF, mdl, "ICE_U_VEL_VARNAME", ushelf_varname, &
                  "The name of the u velocity variable in ICE_VELOCITY_FILE.", &
                  default="u_shelf")
@@ -676,49 +676,4 @@ subroutine initialize_ice_AGlen(AGlen, ice_viscosity_compute, G, US, PF)
   endif
 end subroutine initialize_ice_AGlen
 
-!> Initialize ice surface mass balance field that is held constant over time
-subroutine initialize_ice_SMB(SMB, G, US, PF)
-  type(ocean_grid_type), intent(in)    :: G    !< The ocean's grid structure
-  real, dimension(SZDI_(G),SZDJ_(G)), &
-                         intent(inout) :: SMB !< Ice surface mass balance parameter, often in [R Z T-1 ~> kg m-2 s-1]
-  type(unit_scale_type), intent(in)    :: US !< A structure containing unit conversion factors
-  type(param_file_type), intent(in)    :: PF !< A structure to parse for run-time parameters
-
-  real :: SMB_val  ! Constant ice surface mass balance parameter, often in [R Z T-1 ~> kg m-2 s-1]
-  character(len=40)  :: mdl = "initialize_ice_SMB" ! This subroutine's name.
-  character(len=200) :: config
-  character(len=200) :: varname
-  character(len=200) :: inputdir, filename, SMB_file
-
-  call get_param(PF, mdl, "ICE_SMB_CONFIG", config, &
-                 "This specifies how the initial ice surface mass balance parameter is specified. "//&
-                 "Valid values are: CONSTANT and FILE.", &
-                 default="CONSTANT")
-
-  if (trim(config)=="CONSTANT") then
-    call get_param(PF, mdl, "SMB", SMB_val, &
-                 "Surface mass balance.", units="kg m-2 s-1", default=0.0, scale=US%kg_m2s_to_RZ_T)
-
-    SMB(:,:) = SMB_val
-
-  elseif (trim(config)=="FILE") then
-    call MOM_mesg("  MOM_ice_shelf.F90, initialize_ice_shelf: reading SMB parameter")
-    call get_param(PF, mdl, "INPUTDIR", inputdir, default=".")
-    inputdir = slasher(inputdir)
-
-    call get_param(PF, mdl, "ICE_SMB_FILE", SMB_file, &
-                 "The file from which the ice surface mass balance is read.", &
-                 default="ice_SMB.nc")
-    filename = trim(inputdir)//trim(SMB_file)
-    call log_param(PF, mdl, "INPUTDIR/ICE_SMB_FILE", filename)
-    call get_param(PF, mdl, "ICE_SMB_VARNAME", varname, &
-                   "The variable to use as surface mass balance.", &
-                   default="SMB")
-
-    if (.not.file_exists(filename, G%Domain)) call MOM_error(FATAL, &
-       " initialize_ice_SMV_from_file: Unable to open "//trim(filename))
-    call MOM_read_data(filename,trim(varname), SMB, G%Domain, scale=US%kg_m2s_to_RZ_T)
-
-  endif
-end subroutine initialize_ice_SMB
 end module MOM_ice_shelf_initialize
