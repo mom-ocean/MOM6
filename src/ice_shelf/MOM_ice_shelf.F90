@@ -2672,6 +2672,7 @@ subroutine update_ice_SMB(CS, G, SMB, Time)
 
   if (CS%time_varying_smb) then
      call time_interp_external(CS%smb_file, Time, SMB)
+     if (CS%debug) call hchksum(SMB, "updatte_ice_SMB", CS%Grid_in%HI, haloshift=0)
   endif
 
   return
@@ -2825,7 +2826,6 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
     call change_thickness_using_precip(CS, ISS, G, US, fluxes_in, time_step, Time)
     if (CS%smb_diag) dh_adott_sum(is:ie,js:je) = dh_adott_sum(is:ie,js:je) + &
                                              (ISS%h_shelf(is:ie,js:je) - dh_adott(is:ie,js:je))
-
     remaining_time = remaining_time - time_step
 
     ! If the last mini-timestep is a day or less, we cannot expect velocities to change by much.
@@ -2849,6 +2849,7 @@ subroutine solo_step_ice_shelf(CS, time_interval, nsteps, Time, min_time_step_in
   if (CS%id_h_shelf > 0)      call post_data(CS%id_h_shelf      ,ISS%h_shelf     ,CS%diag)
   if (CS%id_dhdt_shelf > 0)   call post_data(CS%id_dhdt_shelf   ,ISS%dhdt_shelf  ,CS%diag)
   if (CS%id_h_mask > 0)       call post_data(CS%id_h_mask       ,ISS%hmask       ,CS%diag)
+  if (CS%id_shelf_sfc_mass_flux > 0) call post_data(CS%id_shelf_sfc_mass_flux, fluxes_in%shelf_sfc_mass_flux, CS%diag)
   call process_and_post_scalar_data(CS, vaf0, vaf0_A, vaf0_G, Ifull_time_step, dh_adott, dh_adott*0.0)
   call disable_averaging(CS%diag)
 
