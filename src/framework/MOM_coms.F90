@@ -53,8 +53,8 @@ real, parameter :: I_prec = 2.**(-prec_width)
 integer, parameter :: max_count_prec = max_summands - 1
   !< Legacy estimate of max_summands.  Should probably not be used.
 
-integer, parameter :: ni=6    !< The number of long integers to use to represent
-                              !< a real number.
+integer, parameter :: efp_digits = 6
+  !< The number of base `prec` digits used to represent an EFP value.
 real, parameter, dimension(efp_digits) :: &
     pr = [r_prec**2, r_prec, 1., r_prec**(-1), r_prec**(-2), r_prec**(-3)]
   !< An array of the real precision of each of the integers in arbitrary
@@ -101,7 +101,7 @@ end interface EFP_sum_across_PEs
 !!   Hallberg, R. & A. Adcroft, 2014: An Order-invariant Real-to-Integer Conversion Sum.
 !!   Parallel Computing, 40(5-6), doi:10.1016/j.parco.2014.04.007.
 type, public :: EFP_type ; private
-  integer(kind=int64), dimension(ni) :: v !< The value in this type
+  integer(kind=int64), dimension(efp_digits) :: v !< The value in this type
 end type EFP_type
 
 !> Add two extended-fixed-point numbers
@@ -146,7 +146,7 @@ function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, 
   ! of real numbers to give order-invariant sums that will reproduce
   ! across PE count.  This idea comes from R. Hallberg and A. Adcroft.
 
-  integer(kind=int64), dimension(ni)  :: ints_sum
+  integer(kind=int64), dimension(efp_digits)  :: ints_sum
   integer(kind=int64) :: ival, prec_error
   real    :: rs ! The remaining value to add, in arbitrary units [a]
   real    :: max_mag_term ! A running maximum magnitude of the values in arbitrary units [a]
@@ -194,7 +194,7 @@ function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, 
     do j=js,je ; do i=is,ie
       sgn = 1 ; if (array(i,j)<0.0) sgn = -1
       rs = abs(descale*array(i,j))
-      do n=1,ni
+      do n=1,efp_digits
         ival = int(rs*I_pr(n), kind=int64)
         rs = rs - ival*pr(n)
         ints_sum(n) = ints_sum(n) + sgn*ival
@@ -209,7 +209,7 @@ function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, 
       err = err+2
     if (NaN_error) &
       err = err+4
-    if (err > 0) then ; do n=1,ni ; ints_sum(n) = 0 ; enddo ; endif
+    if (err > 0) then ; do n=1,efp_digits ; ints_sum(n) = 0 ; enddo ; endif
   else
     if (NaN_error) then
       call MOM_error(FATAL, "NaN in input field of reproducing_EFP_sum(_2d).")
@@ -223,7 +223,7 @@ function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, 
     endif
   endif
 
-  if (do_sum_across_PEs) call sum_across_PEs(ints_sum, ni)
+  if (do_sum_across_PEs) call sum_across_PEs(ints_sum, efp_digits)
 
   call regularize_ints(ints_sum)
 
@@ -266,7 +266,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
                                                    !! arbitrary units as array [a] or [A ~> a]
 
   ! Local variables
-  integer(kind=int64), dimension(ni)  :: ints_sum
+  integer(kind=int64), dimension(efp_digits)  :: ints_sum
   integer(kind=int64) :: prec_error
   real    :: rsum(1)    ! The running sum, in arbitrary units [a]
   real    :: descale    ! A local copy of unscale if it is present [a A-1 ~> 1] or 1
@@ -340,7 +340,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
   endif
 
   if (debug) then
-    write(mesg,'("2d RS: ", ES24.16, 6 Z17.16)') sum*descale, ints_sum(1:ni)
+    write(mesg,'("2d RS: ", ES24.16, 6 Z17.16)') sum*descale, ints_sum(1:efp_digits)
     call MOM_mesg(mesg, 3)
   endif
 
@@ -382,8 +382,8 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
   real    :: max_mag_term ! A running maximum magnitude of the val's in arbitrary units [a]
   real    :: descale    ! A local copy of unscale if it is present [a A-1 ~> 1] or 1
   real    :: I_unscale  ! The Adcroft reciprocal of unscale [A a-1 ~> 1]
-  integer(kind=int64), dimension(ni)  :: ints_sum
-  integer(kind=int64), dimension(ni,size(array,3))  :: ints_sums
+  integer(kind=int64), dimension(efp_digits)  :: ints_sum
+  integer(kind=int64), dimension(efp_digits,size(array,3))  :: ints_sums
   integer(kind=int64) :: prec_error
   character(len=256) :: mesg
   logical :: do_sum_across_PEs, do_unscale
@@ -440,7 +440,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
       if (abs(max_mag_term) >= prec_error*pr(1)) err = err+1
       if (overflow_error) err = err+2
       if (NaN_error) err = err+2
-      if (err > 0) then ; do k=1,ke ; do n=1,ni ; ints_sums(n,k) = 0 ; enddo ; enddo ; endif
+      if (err > 0) then ; do k=1,ke ; do n=1,efp_digits ; ints_sums(n,k) = 0 ; enddo ; enddo ; endif
     else
       if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
       if (abs(max_mag_term) >= prec_error*pr(1)) then
@@ -450,7 +450,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
       if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
 
-    if (do_sum_across_PEs) call sum_across_PEs(ints_sums(:,1:ke), ni*ke)
+    if (do_sum_across_PEs) call sum_across_PEs(ints_sums(:,1:ke), efp_digits*ke)
 
     sum = 0.0
     do k=1,ke
@@ -469,9 +469,9 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
     endif
 
     if (debug) then
-      do n=1,ni ; ints_sum(n) = 0 ; enddo
-      do k=1,ke ; do n=1,ni ; ints_sum(n) = ints_sum(n) + ints_sums(n,k) ; enddo ; enddo
-      write(mesg,'("3D RS: ", ES24.16, 6 Z17.16)') sum, ints_sum(1:ni)
+      do n=1,efp_digits ; ints_sum(n) = 0 ; enddo
+      do k=1,ke ; do n=1,efp_digits ; ints_sum(n) = ints_sum(n) + ints_sums(n,k) ; enddo ; enddo
+      write(mesg,'("3D RS: ", ES24.16, 6 Z17.16)') sum, ints_sum(1:efp_digits)
       call MOM_mesg(mesg, 3)
     endif
   else
@@ -488,7 +488,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
       if (abs(max_mag_term) >= prec_error*pr(1)) err = err+1
       if (overflow_error) err = err+2
       if (NaN_error) err = err+2
-      if (err > 0) then ; do n=1,ni ; ints_sum(n) = 0 ; enddo ; endif
+      if (err > 0) then ; do n=1,efp_digits ; ints_sum(n) = 0 ; enddo ; endif
     else
       if (NaN_error) call MOM_error(FATAL, "NaN in input field of reproducing_sum(_3d).")
       if (abs(max_mag_term) >= prec_error*pr(1)) then
@@ -498,7 +498,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
       if (overflow_error) call MOM_error(FATAL, "Overflow in reproducing_sum(_3d).")
     endif
 
-    if (do_sum_across_PEs) call sum_across_PEs(ints_sum, ni)
+    if (do_sum_across_PEs) call sum_across_PEs(ints_sum, efp_digits)
 
     call regularize_ints(ints_sum)
     sum = ints_to_real(ints_sum)
@@ -506,7 +506,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
     if (present(EFP_sum)) EFP_sum%v(:) = ints_sum(:)
 
     if (debug) then
-      write(mesg,'("3d RS: ", ES24.16, 6 Z17.16)') sum, ints_sum(1:ni)
+      write(mesg,'("3d RS: ", ES24.16, 6 Z17.16)') sum, ints_sum(1:efp_digits)
       call MOM_mesg(mesg, 3)
     endif
   endif
@@ -531,7 +531,7 @@ function real_to_ints(r, prec_error, overflow) result(ints)
                                               !! precision parameter, and is used to detect overflows.
   logical,         optional, intent(inout) :: overflow !< Returns true if the conversion is being
                                               !! done on a value that is too large to be represented
-  integer(kind=int64), dimension(ni)  :: ints
+  integer(kind=int64), dimension(efp_digits)  :: ints
 
   !   This subroutine converts a real number to an equivalent representation
   ! using several long integers.
@@ -557,7 +557,7 @@ function real_to_ints(r, prec_error, overflow) result(ints)
     call MOM_error(FATAL,"Overflow in real_to_ints conversion of "//trim(mesg))
   endif
 
-  do i=1,ni
+  do i=1,efp_digits
     ival = int(rs*I_pr(i), kind=int64)
     rs = rs - ival*pr(i)
     ints(i) = sgn*ival
@@ -568,21 +568,21 @@ end function real_to_ints
 !> Convert the array of integers that constitute an extended-fixed-point
 !! representation into a real number
 function ints_to_real(ints) result(r)
-  integer(kind=int64), dimension(ni), intent(in) :: ints !< The array of EFP integers
+  integer(kind=int64), dimension(efp_digits), intent(in) :: ints !< The array of EFP integers
   real :: r  ! The real number that is extracted in arbitrary units [a]
   ! This subroutine reverses the conversion in real_to_ints.
 
   integer :: i
 
   r = 0.0
-  do i=1,ni ; r = r + pr(i)*ints(i) ; enddo
+  do i=1,efp_digits ; r = r + pr(i)*ints(i) ; enddo
 end function ints_to_real
 
 !> Increment an array of integers that constitutes an extended-fixed-point
 !! representation with a another EFP number
 subroutine increment_ints(int_sum, int2, prec_error)
-  integer(kind=int64), dimension(ni), intent(inout) :: int_sum !< The array of EFP integers being incremented
-  integer(kind=int64), dimension(ni), intent(in)    :: int2    !< The array of EFP integers being added
+  integer(kind=int64), dimension(efp_digits), intent(inout) :: int_sum !< The array of EFP integers being incremented
+  integer(kind=int64), dimension(efp_digits), intent(in)    :: int2    !< The array of EFP integers being added
   integer(kind=int64), optional,      intent(in)    :: prec_error !< The PE-count dependent precision of the
                                               !! integers that is safe from overflows during global
                                               !! sums.  This will be larger than the compile-time
@@ -592,7 +592,7 @@ subroutine increment_ints(int_sum, int2, prec_error)
   ! representation in real_to_ints.
   integer :: i
 
-  do i=ni,2,-1
+  do i=efp_digits,2,-1
     int_sum(i) = int_sum(i) + int2(i)
     ! Carry the local overflow.
     if (int_sum(i) > prec) then
@@ -629,7 +629,7 @@ subroutine increment_block_ints(array, is, ie, js, je, descale, ints_sum, &
     !< End j-index of the summed domain
   real, intent(in) :: descale
     !< Factor to descale array to physical value [a A-1 ~> 1]
-  integer(kind=int64), intent(inout) :: ints_sum(ni)
+  integer(kind=int64), intent(inout) :: ints_sum(efp_digits)
     !< The array of EFP integers being incremented
   real, intent(inout) :: max_mag_term
     !< A running maximum magnitude of the r's, in arbitrary units [a]
@@ -640,7 +640,7 @@ subroutine increment_block_ints(array, is, ie, js, je, descale, ints_sum, &
     ! Loop indices
   integer :: b
     ! Block counter
-  integer :: nipts, nj
+  integer :: ni, nj
     ! Array summation domain size along each axis
   integer :: isize_max
     ! Largest block size in i.  Typically equal to ni
@@ -648,9 +648,9 @@ subroutine increment_block_ints(array, is, ie, js, je, descale, ints_sum, &
     ! Number of j-rows per block.
   integer :: nblocks, niblocks, njblocks
     ! Number of total blocks, and number of blocks in i and j
-  integer(kind=int64) :: e(ni)
+  integer(kind=int64) :: e(efp_digits)
     ! The EPF representation of each array element
-  integer(kind=int64) :: block_sum(ni), array_sum(ni)
+  integer(kind=int64) :: block_sum(efp_digits), array_sum(efp_digits)
     ! The cumulant per-block and total array EFP sums
   real :: r, rmag
     ! Local array element value and its magnitude
@@ -671,11 +671,11 @@ subroutine increment_block_ints(array, is, ie, js, je, descale, ints_sum, &
   max_sum_count = max_summands - 2
 
   ! Get the compute domain size
-  nipts = ie - is + 1
+  ni = ie - is + 1
   nj = je - js + 1
 
   ! Partition in i so that the widest i-slice fits within max_sum_count.
-  niblocks = (nipts + max_sum_count - 1) / max_sum_count
+  niblocks = (ni + max_sum_count - 1) / max_sum_count
          ! = ⌈ni / max_sum_count⌉
 
   ! NOTE: niblocks is typically one, since default max_sum_count is ~130k.
@@ -683,7 +683,7 @@ subroutine increment_block_ints(array, is, ie, js, je, descale, ints_sum, &
   ! For a balanced i-partition, the number of i-points per block is either
   !   ⌊ni / niblocks⌋ or ⌈ni / niblocks⌉.  Use the upper bound to find jsize.
 
-  isize_max = (nipts + niblocks - 1) / niblocks
+  isize_max = (ni + niblocks - 1) / niblocks
           ! = ⌈ni / niblocks⌉
 
   ! Set jsize so that the widest i-slice times the number of j-rows does not
@@ -709,8 +709,8 @@ subroutine increment_block_ints(array, is, ie, js, je, descale, ints_sum, &
     jbs = js + ((jb - 1) * nj) / njblocks
     jbe = js + (jb * nj) / njblocks - 1
 
-    ibs = is + ((ib - 1) * nipts) / niblocks
-    ibe = is + (ib * nipts) / niblocks - 1
+    ibs = is + ((ib - 1) * ni) / niblocks
+    ibe = is + (ib * ni) / niblocks - 1
 
     block_sum(:) = 0
     block_max_pos = 0.
@@ -774,7 +774,7 @@ end subroutine increment_block_ints
 pure subroutine efp_decompose(r, e, rmag, is_nan, is_ovf)
   real, intent(in)  :: r
     !< The real number being decomposed [a]
-  integer(kind=int64), intent(out) :: e(ni)
+  integer(kind=int64), intent(out) :: e(efp_digits)
     !< Signed contribution to EFP bins
   real, intent(out) :: rmag
     !< Equals abs(r), or 0 if r is NaN/Inf [a]
@@ -808,7 +808,7 @@ pure subroutine efp_decompose(r, e, rmag, is_nan, is_ovf)
     return
   endif
 
-  do n=1,ni
+  do n=1,efp_digits
     ival = int(rs * I_pr(n), kind=int64)
     rs = rs - ival * pr(n)
     e(n) = sgn * ival
@@ -818,7 +818,7 @@ end subroutine efp_decompose
 
 !> This subroutine handles carrying of the overflow.
 subroutine carry_overflow(int_sum, prec_error)
-  integer(kind=int64), dimension(ni), intent(inout) :: int_sum  !< The array of EFP integers being
+  integer(kind=int64), dimension(efp_digits), intent(inout) :: int_sum  !< The array of EFP integers being
                                               !! modified by carries, but without changing value.
   integer(kind=int64),                intent(in)    :: prec_error  !< The PE-count dependent precision of the
                                               !! integers that is safe from overflows during global
@@ -828,7 +828,7 @@ subroutine carry_overflow(int_sum, prec_error)
   ! This subroutine handles carrying of the overflow.
   integer :: i, num_carry
 
-  do i=ni,2,-1 ; if (abs(int_sum(i)) >= prec) then
+  do i=efp_digits,2,-1 ; if (abs(int_sum(i)) >= prec) then
     num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
@@ -842,7 +842,7 @@ end subroutine carry_overflow
 !> This subroutine carries the overflow, and then makes sure that
 !! all integers are of the same sign as the overall value.
 subroutine regularize_ints(int_sum)
-  integer(kind=int64), dimension(ni), &
+  integer(kind=int64), dimension(efp_digits), &
     intent(inout) :: int_sum !< The array of integers being modified to take a
                              !! regular form with all integers of the same sign,
                              !! but without changing value.
@@ -852,7 +852,7 @@ subroutine regularize_ints(int_sum)
   logical :: positive
   integer :: i, num_carry
 
-  do i=ni,2,-1 ; if (abs(int_sum(i)) >= prec) then
+  do i=efp_digits,2,-1 ; if (abs(int_sum(i)) >= prec) then
     num_carry = int(int_sum(i) * I_prec)
     int_sum(i) = int_sum(i) - num_carry*prec
     int_sum(i-1) = int_sum(i-1) + num_carry
@@ -860,7 +860,7 @@ subroutine regularize_ints(int_sum)
 
   ! Determine the sign of the final number.
   positive = .true.
-  do i=1,ni
+  do i=1,efp_digits
     if (abs(int_sum(i)) > 0) then
       if (int_sum(i) < 0) positive = .false.
       exit
@@ -868,12 +868,12 @@ subroutine regularize_ints(int_sum)
   enddo
 
   if (positive) then
-    do i=ni,2,-1 ; if (int_sum(i) < 0) then
+    do i=efp_digits,2,-1 ; if (int_sum(i) < 0) then
       int_sum(i) = int_sum(i) + prec
       int_sum(i-1) = int_sum(i-1) - 1
     endif ; enddo
   else
-    do i=ni,2,-1 ; if (int_sum(i) > 0) then
+    do i=efp_digits,2,-1 ; if (int_sum(i) > 0) then
       int_sum(i) = int_sum(i) - prec
       int_sum(i-1) = int_sum(i-1) + 1
     endif ; enddo
@@ -911,7 +911,7 @@ function EFP_minus(EFP1, EFP2)
                         !! subtracted from the first extended fixed point number
   integer :: i
 
-  do i=1,ni ; EFP_minus%v(i) = -1*EFP2%v(i) ; enddo
+  do i=1,efp_digits ; EFP_minus%v(i) = -1*EFP2%v(i) ; enddo
 
   call increment_ints(EFP_minus%v(:), EFP1%v(:))
 end function EFP_minus
@@ -925,7 +925,7 @@ subroutine EFP_assign(EFP1, EFP2)
   ! variable on the RHS (EFP2) to the components of the variable on the LHS
   ! (EFP1).
 
-  do i=1,ni ; EFP1%v(i) = EFP2%v(i) ; enddo
+  do i=1,efp_digits ; EFP1%v(i) = EFP2%v(i) ; enddo
 end subroutine EFP_assign
 
 !> Return the real number that an extended-fixed-point number corresponds with
@@ -988,7 +988,7 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   !   This subroutine does a sum across PEs of a list of EFP variables,
   ! returning the sums in place, with all overflows carried.
 
-  integer(kind=int64), dimension(ni,nval) :: ints
+  integer(kind=int64), dimension(efp_digits,nval) :: ints
   integer(kind=int64) :: prec_error
   logical :: error_found
   character(len=256) :: mesg
@@ -1003,15 +1003,15 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   ! overflow_error is an overflow error flag for the whole module.
   overflow_error = .false. ; error_found = .false.
 
-  do i=1,nval ; do n=1,ni ; ints(n,i) = EFPs(i)%v(n) ; enddo ; enddo
+  do i=1,nval ; do n=1,efp_digits ; ints(n,i) = EFPs(i)%v(n) ; enddo ; enddo
 
-  call sum_across_PEs(ints(:,:), ni*nval)
+  call sum_across_PEs(ints(:,:), efp_digits*nval)
 
   if (present(errors)) errors(:) = .false.
   do i=1,nval
     overflow_error = .false.
     call carry_overflow(ints(:,i), prec_error)
-    do n=1,ni ; EFPs(i)%v(n) = ints(n,i) ; enddo
+    do n=1,efp_digits ; EFPs(i)%v(n) = ints(n,i) ; enddo
     if (present(errors)) errors(i) = overflow_error
     if (overflow_error) then
       write (mesg,'("EFP_list_sum_across_PEs error at ",i0," val was ",ES12.6, ", prec_error = ",ES12.6)') &
@@ -1036,7 +1036,7 @@ subroutine EFP_val_sum_across_PEs(EFP, error)
   !   This subroutine does a sum across PEs of a list of EFP variables,
   ! returning the sums in place, with all overflows carried.
 
-  integer(kind=int64), dimension(ni) :: ints
+  integer(kind=int64), dimension(efp_digits) :: ints
   integer(kind=int64) :: prec_error
   logical :: error_found
   character(len=256) :: mesg
@@ -1051,15 +1051,15 @@ subroutine EFP_val_sum_across_PEs(EFP, error)
   ! overflow_error is an overflow error flag for the whole module.
   overflow_error = .false. ; error_found = .false.
 
-  do n=1,ni ; ints(n) = EFP%v(n) ; enddo
+  do n=1,efp_digits ; ints(n) = EFP%v(n) ; enddo
 
-  call sum_across_PEs(ints(:), ni)
+  call sum_across_PEs(ints(:), efp_digits)
 
   if (present(error)) error = .false.
 
   overflow_error = .false.
   call carry_overflow(ints(:), prec_error)
-  do n=1,ni ; EFP%v(n) = ints(n) ; enddo
+  do n=1,efp_digits ; EFP%v(n) = ints(n) ; enddo
   if (present(error)) error = overflow_error
   if (overflow_error) then
     write (mesg,'("EFP_val_sum_across_PEs error val was ",ES12.6, ", prec_error = ",ES12.6)') &
