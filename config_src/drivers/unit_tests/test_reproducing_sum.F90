@@ -5,7 +5,7 @@
 program test_reproducing_sum
 
 use MOM_coms, only : PE_here, root_PE, num_PEs, reproducing_sum
-use MOM_coms, only : sum_across_PEs, max_across_PEs, max_count_prec
+use MOM_coms, only : sum_across_PEs, max_across_PEs
 use MOM_domains, only : MOM_domain_type, create_MOM_domain, MOM_infra_init, MOM_infra_end
 use MOM_domains, only : MOM_define_layout
 use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, MOM_set_verbosity
@@ -95,13 +95,9 @@ use MOM_hor_index, only : hor_index_type, hor_index_init
   endif
   ! tot_fastR and tot_R should be identical unless too many values are summed
   if (abs(tot_fastR - tot_R) > 0.) then
-    if (n < max_count_prec) then
-      write(mesg,'("Mismatch between reproducing and fast reproducing sums.",4ES13.5)') &
-         tot_fastR, tot_R, tot_fastR - tot_R, ( tot_fastR - tot_R ) / tot_R
-      tests_failed = tests_failed .or. .true.
-    else
-      write(mesg,'("Too many values were summed for the fast reproducing sum to work.")')
-    endif
+    write(mesg,'("Mismatch between reproducing and fast reproducing sums.",4ES13.5)') &
+      tot_fastR, tot_R, tot_fastR - tot_R, ( tot_fastR - tot_R ) / tot_R
+    tests_failed = tests_failed .or. .true.
     call MOM_mesg(mesg)
   endif
 

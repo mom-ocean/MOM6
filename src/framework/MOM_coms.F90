@@ -25,7 +25,6 @@ public :: reproducing_sum, reproducing_sum_EFP, EFP_sum_across_PEs, EFP_list_sum
 public :: EFP_plus, EFP_minus, EFP_to_real, real_to_EFP, EFP_real_diff
 public :: operator(+), operator(-), assignment(=)
 public :: query_EFP_overflow_error, reset_EFP_overflow_error
-public :: max_count_prec
 
 integer, parameter :: accum_width = digits(1_int64)
   !< Accumulator width; total available bits for summation (excluding sign bit)
@@ -49,9 +48,6 @@ real, parameter :: r_prec = 2.**prec_width
   !< Real-value of prec [nondim]
 real, parameter :: I_prec = 2.**(-prec_width)
   !< Inverse real-value of prec [nondim]
-
-integer, parameter :: max_count_prec = max_summands - 1
-  !< Legacy estimate of max_summands.  Should probably not be used.
 
 integer, parameter :: efp_digits = 6
   !< The number of base `prec` digits used to represent an EFP value.
@@ -155,7 +151,7 @@ function reproducing_EFP_sum_2d(array, isr, ier, jsr, jer, overflow_check, err, 
   character(len=256) :: mesg
   integer :: i, j, n, is, ie, js, je, sgn
 
-  if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
+  if (num_PEs() > max_summands) call MOM_error(FATAL, &
     "reproducing_sum: Too many processors are being used for the value of "//&
     "prec.  Reduce prec to (2^63-1)/num_PEs.")
 
@@ -276,7 +272,7 @@ function reproducing_sum_2d(array, isr, ier, jsr, jer, EFP_sum, reproducing, &
   type(EFP_type) :: EFP_val ! An extended fixed point version of the sum
   integer :: i, j, is, ie, js, je
 
-  if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
+  if (num_PEs() > max_summands) call MOM_error(FATAL, &
     "reproducing_sum: Too many processors are being used for the value of "//&
     "prec.  Reduce prec to (2^63-1)/num_PEs.")
 
@@ -389,7 +385,7 @@ function reproducing_sum_3d(array, isr, ier, jsr, jer, sums, EFP_sum, EFP_lay_su
   logical :: do_sum_across_PEs, do_unscale
   integer :: i, j, k, is, ie, js, je, ke, isz, jsz, n
 
-  if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
+  if (num_PEs() > max_summands) call MOM_error(FATAL, &
     "reproducing_sum: Too many processors are being used for the value of "//&
     "prec.  Reduce prec to (2^63-1)/num_PEs.")
 
@@ -653,7 +649,7 @@ subroutine increment_block_ints(array, is, ie, js, je, descale, ints_sum, &
   integer(kind=int64) :: block_sum(efp_digits), array_sum(efp_digits)
     ! The cumulant per-block and total array EFP sums
   real :: r, rmag
-    ! Local array element value and its magnitude
+    ! Local array element value and its magnitude [a]
   real :: max_pos, max_neg, block_max_pos, block_max_neg
     ! Largest positive and negative values (whole array and per-block) used to
     ! find the largest maximum magnitude of array in a thread-safe manner [a]
@@ -994,7 +990,7 @@ subroutine EFP_list_sum_across_PEs(EFPs, nval, errors)
   character(len=256) :: mesg
   integer :: i, n
 
-  if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
+  if (num_PEs() > max_summands) call MOM_error(FATAL, &
     "reproducing_sum: Too many processors are being used for the value of "//&
     "prec.  Reduce prec to (2^63-1)/num_PEs.")
 
@@ -1042,7 +1038,7 @@ subroutine EFP_val_sum_across_PEs(EFP, error)
   character(len=256) :: mesg
   integer :: n
 
-  if (num_PEs() > max_count_prec) call MOM_error(FATAL, &
+  if (num_PEs() > max_summands) call MOM_error(FATAL, &
     "reproducing_sum: Too many processors are being used for the value of "//&
     "prec.  Reduce prec to (2^63-1)/num_PEs.")
 
