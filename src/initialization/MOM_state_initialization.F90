@@ -166,9 +166,8 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: new_sim, rotate_index
   logical :: use_temperature, use_sponge, use_oda_incupd
   logical :: verify_restart_time
-  logical :: OBC_reservoir_init_bug  ! If true, set the OBC tracer reservoirs at the startup of a new
-                         ! run from the interior tracer concentrations regardless of properties that
-                         ! may be explicitly specified for the reservoir concentrations.
+  logical :: OBC_TS_reservoir_init_bug  ! If true, set the OBC temperature and salinity reservoirs
+                         ! at the startup of a new run from initial values that are set before remapping.
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
                          ! by a large surface pressure by squeezing the column.
@@ -442,11 +441,11 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
     ! Log this parameter later with the other OBC parameters.
-    call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
-                 "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
-                 "interior tracer concentrations regardless of properties that may be explicitly "//&
-                 "specified for the reservoir concentrations.", default=enable_bugs, do_not_log=.true.)
-    if (OBC_reservoir_init_bug) then
+    call get_param(PF, mdl, "OBC_TS_RESERVOIR_INIT_BUG", OBC_TS_reservoir_init_bug, &
+                 "If true, set the OBC temperature and salinity reservoirs at the startup of a "//&
+                 "new run from initial values that are set before remapping.", &
+                 default=enable_bugs, do_not_log=.true.)
+    if (OBC_TS_reservoir_init_bug) then
       ! These calls should be moved down to join the OBC code, but doing so changes answers because
       ! the temperatures and salinities can change due to the remapping and reading from the restarts.
       call pass_var(tv%T, G%Domain, complete=.false.)
@@ -670,6 +669,8 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
   logical :: debug      ! If true, write debugging output.
   logical :: debug_obc  ! If true, do additional calls resetting values to help debug the correctness
                         ! of the open boundary condition code.
+  logical :: OBC_TS_reservoir_init_bug  ! If true, set the OBC temperature and salinity reservoirs
+                        ! at the startup of a new run from initial values that are set before remapping.
   logical :: OBC_reservoir_init_bug  ! If true, set the OBC tracer reservoirs at the startup of a new
                         ! run from the interior tracer concentrations regardless of properties that
                         ! may be explicitly specified for the reservoir concentrations.
@@ -683,24 +684,26 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
                  do_not_log=.true., old_name="DEBUG_OBC", debuggingParam=.true.)
     call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
+    call get_param(PF, mdl, "OBC_TS_RESERVOIR_INIT_BUG", OBC_TS_reservoir_init_bug, &
+                 "If true, set the OBC temperature and salinity reservoirs at the startup of a "//&
+                 "new run from initial values that are set before remapping.", default=enable_bugs)
+    if (associated(tv%T) .and. (.not.OBC_TS_reservoir_init_bug)) then
+      ! Store the updated temperatures and salinities at the open boundaries, noting that they may
+      ! still be updated by the calls in the next 50 lines, so the code setting the tracer
+      ! reservoir values will come later in the calling routine.
+      call fill_temp_salt_segments(G, GV, US, OBC, tv)
+    endif
     call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
                  "specified for the reservoir concentrations.", default=enable_bugs)
-    if (associated(tv%T)) then
-      if (OBC_reservoir_init_bug) then
-        if (is_new_run(restart_CS)) then
-          ! Set up OBC%trex_x and OBC%tres_y as they have not been read from a restart file.
-          call setup_OBC_tracer_reservoirs(G, GV, OBC)
-          ! Ensure that the values of the tracer reservoirs that have just been set will not be revised.
-          call set_initialized_OBC_tracer_reservoirs(G, OBC, restart_CS)
-        endif
-      else
-        ! Store the updated temperatures and salinities at the open boundaries, noting that they may
-        ! still be updated by the calls in the next 50 lines, so the code setting the tracer
-        ! reservoir values will come later in the calling routine.
-        call fill_temp_salt_segments(G, GV, US, OBC, tv)
-      endif
+    if (OBC_reservoir_init_bug .and. associated(tv%T) .and. is_new_run(restart_CS)) then
+      ! Set up OBC%trex_x and OBC%tres_y as they have not been read from a restart file.
+      ! When OBC_RESERVOIR_INIT_BUG is false, setup_OBC_tracer_reservoirs() is called from initialize_MOM
+      ! after all tracer package initialization is finished and grid rotation has been dealt with.
+      call setup_OBC_tracer_reservoirs(G, GV, OBC)
+      ! Ensure that the values of the tracer reservoirs that have just been set will not be revised.
+      call set_initialized_OBC_tracer_reservoirs(G, OBC, restart_CS)
     endif
 
     ! This controls user code for setting open boundary data
