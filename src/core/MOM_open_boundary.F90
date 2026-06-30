@@ -755,7 +755,7 @@ subroutine open_boundary_config(G, US, param_file, OBC)
                  "specified for the reservoir concentrations.", default=enable_bugs, do_not_log=.true.)
   call get_param(param_file, mdl, "OBC_TEMP_SALT_NEEDED_BUG", OBC%ts_needed_bug, &
                  "If true, recover a bug that OBC temperature and salinity can be ignored "//&
-                 "even if they are registered tracers in the rest of the model.", default=.true.)
+                 "even if they are registered tracers in the rest of the model.", default=enable_bugs)
   call get_param(param_file, mdl, "REENTRANT_X", reentrant_x, default=.true.)
   call get_param(param_file, mdl, "REENTRANT_Y", reentrant_y, default=.false.)
 

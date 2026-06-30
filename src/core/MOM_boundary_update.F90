@@ -77,6 +77,8 @@ subroutine call_OBC_register(G, GV, US, param_file, CS, OBC, tr_Reg)
 
   ! Local variables
   logical :: debug
+  logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
+                          ! recreate the bugs, or if false bugs are only used if actively selected.
   character(len=200) :: config
   character(len=40)  :: mdl = "MOM_boundary_update" ! This module's name.
   ! This include declares and sets the variable "version".
@@ -89,9 +91,11 @@ subroutine call_OBC_register(G, GV, US, param_file, CS, OBC, tr_Reg)
 
   call log_version(param_file, mdl, version, "")
 
+  call get_param(param_file, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
+                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
   call get_param(param_file, mdl, "OBC_VALUE_UPDATE_BUG", CS%value_update_bug, &
                  "If true, recover a bug that OBC segment data does not update if all segments "//&
-                 "use 'value' and none uses 'file'.", default=.true.)
+                 "use 'value' and none uses 'file'.", default=enable_bugs)
   call get_param(param_file, mdl, "USE_FILE_OBC", CS%use_files, &
                  "If true, use external files for the open boundary.", &
                  default=.false.)

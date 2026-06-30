@@ -5749,7 +5749,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   call get_param(param_file, mdl, "DTBT_RESTART_BUG", dtbt_restart_bug, &
                  "If true, recover a bug where the barotropic timestep DTBT read from a "//&
                  "restart file is immediately overridden by a recalculation on the "//&
-                 "first dynamics step.", default=.true.)
+                 "first dynamics step.", default=enable_bugs)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   if (use_tides .and. present(HA_CSp)) CS%HA_CSp => HA_CSp

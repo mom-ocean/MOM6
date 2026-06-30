@@ -2887,7 +2887,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
                  "If true, recover a bug that the BGC OBC segment update schedule is "//&
                  "referenced to the start of the current run rather than the overall start "//&
                  "time, which can lead to restart reproducibility failures.", &
-                 default=.true., do_not_log=.not.associated(OBC_in))
+                 default=enable_bugs, do_not_log=.not.associated(OBC_in))
 
   ! Copy the grid metrics and bathymetry to the ocean_grid_type
   call copy_dyngrid_to_MOM_grid(dG_in, G_in, US)
