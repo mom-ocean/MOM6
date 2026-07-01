@@ -59,10 +59,12 @@ program Shelf_main
   use MOM_write_cputime,   only : write_cputime, MOM_write_cputime_init
   use MOM_write_cputime,   only : write_cputime_start_clock, write_cputime_CS
   use MOM_forcing_type,    only : forcing
-  use MOM_ice_shelf_initialize, only : initialize_ice_SMB
+  use MOM_ice_shelf, only : initialize_ice_SMB
 
   use MOM_ice_shelf, only : initialize_ice_shelf, ice_shelf_end, ice_shelf_CS
-  use MOM_ice_shelf, only : ice_shelf_save_restart, solo_step_ice_shelf
+  use MOM_ice_shelf, only : ice_shelf_save_restart, solo_step_ice_shelf, update_ice_SMB
+  use MOM_interp_infra, only : time_interp_extern_init
+
 
   implicit none
 
@@ -171,6 +173,8 @@ program Shelf_main
   call write_cputime_start_clock(write_CPU_CSp)
 
   call MOM_infra_init() ; call io_infra_init()
+
+  call time_interp_extern_init()
 
   ! These clocks are on the global pelist.
   initClock = cpu_clock_id( 'Initialization' )
@@ -295,7 +299,8 @@ program Shelf_main
   call initialize_ice_shelf(param_file, ocn_grid, Time, ice_shelf_CSp, diag, &
                             Start_time, dirs%output_directory, fluxes_in=fluxes, solo_ice_sheet_in=.true.)
 
-  call initialize_ice_SMB(fluxes%shelf_sfc_mass_flux, ocn_grid, US, param_file)
+
+  call initialize_ice_SMB(ice_shelf_CSp, fluxes%shelf_sfc_mass_flux, ocn_grid, US, param_file)
 
   ! This is the end of the code that is the counterpart of MOM_initialization.
   call callTree_waypoint("End of ice shelf initialization.")
@@ -402,7 +407,7 @@ program Shelf_main
   ns = 1 ; ns_ice = 1
   do while ((ns < nmax) .and. (Time < Time_end))
     call callTree_enter("Main loop, Shelf_driver.F90", ns)
-
+    call update_ice_SMB(ice_shelf_CSp, ocn_grid, fluxes%shelf_sfc_mass_flux, Time)
     ! This call steps the model over a time time_step.
     Time1 = Master_Time ; Time = Master_Time
     call solo_step_ice_shelf(ice_shelf_CSp, Time_step_shelf, ns_ice, Time, fluxes_in=fluxes)
