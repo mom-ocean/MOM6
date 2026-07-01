@@ -138,10 +138,10 @@ type, public :: MARBL_tracers_CS ; private
   type(vardesc), allocatable :: tr_desc(:) !< Descriptions and metadata for the tracers
   logical :: tracers_may_reinit            !< If true the tracers may be initialized if not found in a restart file
 
-  character(len=256) :: feflux_input_file      !< name of [netCDF] file containing iron sediment fluxes and vent flux
-  character(len=32) :: fe_sedflux_var_name     !< name of iron sediment flux variable in feflux_input_file
-  character(len=32) :: fe_redsedflux_var_name  !< name of iron red sediment flux variable in feflux_input_file
-  character(len=32) :: fe_ventflux_var_name    !< name of iron vent flux variable in feflux_input_file
+  character(len=256) :: fe_interior_source_file  !< name of [netCDF] file containing iron sediment and vent sources
+  character(len=32) :: fe_source_sed_name        !< name of iron sediment source variable in fe_interior_source_file
+  character(len=32) :: fe_source_redsed_name     !< name of iron red sediment source variable in fe_interior_source_file
+  character(len=32) :: fe_source_vent_name       !< name of iron vent source variable in fe_interior_source_file
   type(forcing_timeseries_dataset) :: d14c_dataset(3) !< File and time axis information for d14c forcing
   real, dimension(3) :: d14c_bands       !< forcing is organized into bands: [30 N, 90 N]; [30 S, 30 N]; [90 S, 30 S]
                                          !! This variable contains D14C for each band [CU ~> conc]
@@ -644,24 +644,24 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
       default=.false.)
   if (CS%base_bio_on) then
     ! ** Fe Fluxes
-    call get_param(param_file, mdl, "MARBL_FEFLUX_FILE", CS%feflux_input_file, &
-        "The file in which the iron sediment fluxes and vent flux forcing fields can be found.", &
-        default="feflux.nc")
-    if (scan(CS%feflux_input_file,'/') == 0) then
-      ! Add the directory if CS%feflux_input_file is not already a complete path.
-      CS%feflux_input_file = trim(slasher(inputdir))//trim(CS%feflux_input_file)
-      call log_param(param_file, mdl, "INPUTDIR/MARBL_FEFLUX_FILE", CS%feflux_input_file)
+    call get_param(param_file, mdl, "MARBL_FE_INTERIOR_SOURCE_FILE", CS%fe_interior_source_file, &
+        "The file in which the iron sediment and vent source forcing fields can be found.", &
+        default="fe_interior_source.nc")
+    if (scan(CS%fe_interior_source_file,'/') == 0) then
+      ! Add the directory if CS%fe_interior_source_file is not already a complete path.
+      CS%fe_interior_source_file = trim(slasher(inputdir))//trim(CS%fe_interior_source_file)
+      call log_param(param_file, mdl, "INPUTDIR/MARBL_FE_INTERIOR_SOURCE_FILE", CS%fe_interior_source_file)
     endif
     ! ** Variable Names for Fe Fluxes
-    call get_param(param_file, mdl, "MARBL_FESEDFLUX_VAR", CS%fe_sedflux_var_name, &
-        "The name of the iron sediment flux variable in MARBL_FEFLUX_FILE.", &
-        default="FESEDFLUX")
-    call get_param(param_file, mdl, "MARBL_FEREDSEDFLUX_VAR", CS%fe_redsedflux_var_name, &
-        "The name of the iron red sediment flux variable in MARBL_FEFLUX_FILE.", &
-        default="FEREDSEDFLUX")
-    call get_param(param_file, mdl, "MARBL_FEVENTFLUX_VAR", CS%fe_ventflux_var_name, &
-        "The name of the iron vent flux variable in MARBL_FEFLUX_FILE.", &
-        default="FEVENTFLUX")
+    call get_param(param_file, mdl, "MARBL_FESEDFLUX_VAR", CS%fe_source_sed_name, &
+        "The name of the iron sediment source variable in MARBL_FE_INTERIOR_SOURCE_FILE.", &
+        default="FE_SOURCE_SED")
+    call get_param(param_file, mdl, "MARBL_FEREDSEDFLUX_VAR", CS%fe_source_redsed_name, &
+        "The name of the iron red sediment source variable in MARBL_FE_INTERIOR_SOURCE_FILE.", &
+        default="FE_SOURCE_REDSED")
+    call get_param(param_file, mdl, "MARBL_FEVENTFLUX_VAR", CS%fe_source_vent_name, &
+        "The name of the iron vent source variable in MARBL_FE_INTERIOR_SOURCE_FILE.", &
+        default="FE_SOURCE_VENT")
     ! ** Scale factor for FESEDFLUX
     call get_param(param_file, mdl, "MARBL_FESEDFLUX_SCALE_FACTOR", CS%fesedflux_scale_factor, &
         "Conversion factor between FESEDFLUX file units and MARBL units", &
@@ -1102,10 +1102,10 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
   endif
 
   if (CS%base_bio_on) then
-    ! Read initial fesedflux and feventflux fields from feflux_input_file
+    ! Read initial fesedflux and feventflux fields from fe_interior_source_file
     !     -- note: read_Z_edges treats depth as positive UP => 0 at surface, negative at depth
     fesedflux_use_missing = .false.
-    call read_Z_edges(CS%feflux_input_file, trim(CS%fe_sedflux_var_name), CS%fesedflux_z_edges, &
+    call read_Z_edges(CS%fe_interior_source_file, trim(CS%fe_source_sed_name), CS%fesedflux_z_edges, &
         CS%fesedflux_nz, fesedflux_has_edges, fesedflux_use_missing, fesedflux_missing, scale=US%m_to_Z, &
         missing_scale=1.0)
 
@@ -1117,11 +1117,11 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
 
     ! (3) Read data
     !     TODO: Add US term to scale
-    call MOM_read_data(CS%feflux_input_file, trim(CS%fe_sedflux_var_name), CS%fesedflux_in(:,:,:), &
+    call MOM_read_data(CS%fe_interior_source_file, trim(CS%fe_source_sed_name), CS%fesedflux_in(:,:,:), &
         G%Domain, scale=CS%fesedflux_scale_factor)
-    call MOM_read_data(CS%feflux_input_file, trim(CS%fe_redsedflux_var_name), CS%fesedfluxred_in(:,:,:), &
+    call MOM_read_data(CS%fe_interior_source_file, trim(CS%fe_source_redsed_name), CS%fesedfluxred_in(:,:,:), &
         G%Domain, scale=CS%fesedflux_scale_factor)
-    call MOM_read_data(CS%feflux_input_file, trim(CS%fe_ventflux_var_name), CS%feventflux_in(:,:,:), &
+    call MOM_read_data(CS%fe_interior_source_file, trim(CS%fe_source_vent_name), CS%feventflux_in(:,:,:), &
         G%Domain, scale=CS%fesedflux_scale_factor)
 
     ! (4) Relocate values that are below ocean bottom to layer that intersects bathymetry
