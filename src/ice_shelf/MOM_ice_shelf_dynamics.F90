@@ -19,7 +19,7 @@ use MOM_error_handler, only : MOM_error, MOM_mesg, FATAL, WARNING, is_root_pe
 use MOM_file_parser, only : read_param, get_param, log_param, log_version, param_file_type
 use MOM_grid, only : MOM_grid_init, ocean_grid_type
 use MOM_io, only : file_exists, slasher, MOM_read_data
-use MOM_io, only : open_ASCII_file, get_filename_appendix
+use MOM_io, only : open_ASCII_file, close_file, get_filename_appendix
 use MOM_io, only : APPEND_FILE, WRITEONLY_FILE
 use MOM_restart, only : register_restart_field, MOM_restart_CS
 use MOM_time_manager, only : time_type, get_time, set_time, time_type_to_real, operator(>)
@@ -265,7 +265,8 @@ type, public :: ice_shelf_dyn_CS ; private
   type(time_type) :: Start_time !< The start time of the simulation.
                                 ! Start_time is set in MOM_initialization.F90
   integer :: prev_IS_energy_calls = 0 !< The number of times write_ice_shelf_energy has been called.
-  integer :: IS_fileenergy_ascii   !< The unit number of the ascii version of the energy file.
+  integer :: IS_fileenergy_ascii = -1
+    !< The unit number of the ascii version of the energy file.
   character(len=200) :: IS_energyfile  !< The name of the ice sheet energy file with path.
 
   ! ids for outputting intermediate thickness in advection subroutine (debugging)
@@ -1341,6 +1342,8 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
   character(len=32)  :: mesg_intro, time_units, day_str, n_str, date_str
   integer :: start_of_day, num_days
   real    :: reday  ! Time in units given by CS%Timeunit, but often [days]
+  logical :: is_open
+    ! True if CS%fileenergy_ascii is open
 
   ! write_energy_time is the next integral multiple of energysavedays.
   if (present(time_step)) then
@@ -1405,7 +1408,9 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
 
   if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (day > CS%Start_time) then
-      call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=APPEND_FILE)
+      inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
+      if (.not. is_open) &
+        call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=APPEND_FILE)
     else
       call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=WRITEONLY_FILE)
       if (abs(CS%timeunit - 86400.0) < 1.0) then
@@ -5222,7 +5227,11 @@ end subroutine interpolate_H_to_B
 
 !> Deallocates all memory associated with the ice shelf dynamics module
 subroutine ice_shelf_dyn_end(CS)
-  type(ice_shelf_dyn_CS), pointer   :: CS !< A pointer to the ice shelf dynamics control structure
+  type(ice_shelf_dyn_CS), pointer :: CS
+    !< A pointer to the ice shelf dynamics control structure
+
+  logical :: is_open
+    ! True if CS%fileenergy_ascii is open
 
   if (.not.associated(CS)) return
 
@@ -5250,6 +5259,9 @@ subroutine ice_shelf_dyn_end(CS)
   if (associated(CS%Phi)) deallocate(CS%Phi)
   if (associated(CS%Phisub)) deallocate(CS%Phisub)
   if (associated(CS%PhiC)) deallocate(CS%PhiC)
+
+  inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
+  if (is_open) call close_file(CS%IS_fileenergy_ascii)
 
   deallocate(CS)
 

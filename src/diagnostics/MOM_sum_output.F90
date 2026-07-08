@@ -15,7 +15,7 @@ use MOM_file_parser,   only : get_param, log_param, log_version, param_file_type
 use MOM_forcing_type,  only : forcing
 use MOM_grid,          only : ocean_grid_type
 use MOM_interface_heights, only : find_eta
-use MOM_io,            only : create_MOM_file, reopen_MOM_file
+use MOM_io,            only : create_MOM_file, reopen_MOM_file, close_file
 use MOM_io,            only : MOM_infra_file, MOM_netcdf_file, MOM_field
 use MOM_io,            only : file_exists, slasher, vardesc, var_desc, MOM_write_field
 use MOM_io,            only : field_size, read_variable, read_attribute, open_ASCII_file, stdout
@@ -137,7 +137,8 @@ type, public :: sum_output_CS ; private
   integer :: previous_calls = 0 !< The number of times write_energy has been called.
   integer :: prev_n = 0         !< The value of n from the last call.
   type(MOM_netcdf_file) :: fileenergy_nc !< The file handle for the netCDF version of the energy file.
-  integer :: fileenergy_ascii   !< The unit number of the ascii version of the energy file.
+  integer :: fileenergy_ascii = -1
+    !< The unit number of the ascii version of the energy file.
   type(MOM_field), dimension(NUM_FIELDS+MAX_FIELDS_) :: &
              fields             !< fieldtype variables for the output fields.
   character(len=200) :: energyfile  !< The name of the energy file with path.
@@ -306,13 +307,20 @@ end subroutine MOM_sum_output_init
 
 !> MOM_sum_output_end deallocates memory used by the MOM_sum_output module.
 subroutine MOM_sum_output_end(CS)
-  type(Sum_output_CS), pointer :: CS  !< The control structure returned by a
-                                      !! previous call to MOM_sum_output_init.
+  type(Sum_output_CS), pointer :: CS
+    !< Control structure returned by a previous call to MOM_sum_output_init.
+
+  logical :: is_open
+    ! True if CS%fileenergy_ascii is open
+
   if (associated(CS)) then
     if (CS%do_APE_calc) then
       deallocate(CS%DL%depth, CS%DL%area, CS%DL%vol_below)
       deallocate(CS%lH)
     endif
+
+    inquire(unit=CS%fileenergy_ascii, opened=is_open)
+    if (is_open) call close_file(CS%fileenergy_ascii)
 
     deallocate(CS)
   endif
@@ -477,6 +485,7 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     Tr_units             ! The units for each of the tracers
   integer :: nTr_stocks  ! The total number of tracers in all registered tracer packages
   integer :: iyear, imonth, iday, ihour, iminute, isecond, itick ! For call to get_date()
+  logical :: is_open     ! True if the CS%fileenergy_ascii has been opened
 
  ! A description for output of each of the fields.
   type(vardesc) :: vars(NUM_FIELDS+MAX_FIELDS_)
@@ -616,7 +625,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     !  Reopen or create a text output file, with an explanatory header line.
     if (is_root_pe()) then
       if (day > CS%Start_time) then
-        call open_ASCII_file(CS%fileenergy_ascii, trim(CS%energyfile), action=APPEND_FILE)
+        inquire(unit=CS%fileenergy_ascii, opened=is_open)
+        if (.not. is_open) &
+          call open_ASCII_file(CS%fileenergy_ascii, trim(CS%energyfile), action=APPEND_FILE)
       else
         call open_ASCII_file(CS%fileenergy_ascii, trim(CS%energyfile), action=WRITEONLY_FILE)
         if (abs(CS%timeunit - 86400.0) < 1.0) then
