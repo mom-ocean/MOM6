@@ -11,7 +11,7 @@ use MOM_time_manager,  only : operator(+), operator(-), operator(<), operator(>)
 use MOM_grid,          only : ocean_grid_type
 use MOM_unit_scaling,  only : unit_scale_type
 use MOM_file_parser,   only : param_file_type, get_param
-use MOM_io,            only : file_exists, open_ASCII_file, READONLY_FILE, close_file
+use MOM_io,            only : file_exists, READONLY_FILE, close_file
 use MOM_io,            only : MOM_infra_file, vardesc, MOM_field
 use MOM_io,            only : var_desc, create_MOM_file, SINGLE_FILE, MOM_write_field
 use MOM_error_handler, only : MOM_mesg, MOM_error, NOTE

@@ -319,8 +319,12 @@ subroutine MOM_sum_output_end(CS)
       deallocate(CS%lH)
     endif
 
-    inquire(unit=CS%fileenergy_ascii, opened=is_open)
-    if (is_open) call close_file(CS%fileenergy_ascii)
+    if (is_root_PE()) then
+      is_open = .false.
+      if (CS%fileenergy_ascii /= -1) &
+        inquire(unit=CS%fileenergy_ascii, opened=is_open)
+      if (is_open) call close_file(CS%fileenergy_ascii)
+    endif
 
     deallocate(CS)
   endif
@@ -625,7 +629,9 @@ subroutine write_energy(u, v, h, tv, day, n, G, GV, US, CS, tracer_CSp, dt_forci
     !  Reopen or create a text output file, with an explanatory header line.
     if (is_root_pe()) then
       if (day > CS%Start_time) then
-        inquire(unit=CS%fileenergy_ascii, opened=is_open)
+        is_open = .false.
+        if (CS%fileenergy_ascii /= -1) &
+          inquire(unit=CS%fileenergy_ascii, opened=is_open)
         if (.not. is_open) &
           call open_ASCII_file(CS%fileenergy_ascii, trim(CS%energyfile), action=APPEND_FILE)
       else

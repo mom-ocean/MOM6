@@ -1408,7 +1408,9 @@ subroutine write_ice_shelf_energy(CS, G, US, mass, area, day, time_step)
 
   if (is_root_pe()) then  ! Only the root PE actually writes anything.
     if (day > CS%Start_time) then
-      inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
+      is_open = .false.
+      if (CS%IS_fileenergy_ascii /= -1) &
+        inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
       if (.not. is_open) &
         call open_ASCII_file(CS%IS_fileenergy_ascii, trim(CS%IS_energyfile), action=APPEND_FILE)
     else
@@ -5260,7 +5262,9 @@ subroutine ice_shelf_dyn_end(CS)
   if (associated(CS%Phisub)) deallocate(CS%Phisub)
   if (associated(CS%PhiC)) deallocate(CS%PhiC)
 
-  inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
+  is_open = .false.
+  if (CS%IS_fileenergy_ascii /= -1) &
+    inquire(unit=CS%IS_fileenergy_ascii, opened=is_open)
   if (is_open) call close_file(CS%IS_fileenergy_ascii)
 
   deallocate(CS)
