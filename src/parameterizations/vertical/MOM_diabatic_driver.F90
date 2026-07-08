@@ -1067,8 +1067,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
 
   ! Set diffusivities for VBF diagnostics if enabled
   if (CS%use_energetic_PBL .and. associated(CS%VBF%Kd_ePBL)) CS%VBF%Kd_ePBL(:,:,:) = Kd_ePBL(:,:,:)
-  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
-  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
+  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
+  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
 
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
@@ -1734,8 +1734,8 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   ! Set diffusivities for VBF diagnostics if enabled
   if (CS%use_energetic_PBL .and. associated(CS%VBF%Kd_ePBL)) CS%VBF%Kd_ePBL(:,:,:) = Kd_ePBL(:,:,:)
-  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
-  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
+  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
+  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
   if (CS%id_Kd_heat > 0) call post_data(CS%id_Kd_heat, Kd_heat, CS%diag)

@@ -1071,12 +1071,17 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   real    :: H_limit_fluxes ! A depth scale that specifies when the ocean is shallow that
                             ! it is necessary to eliminate fluxes [H ~> m or kg m-2]
   integer :: i, k
+  type(thermo_var_ptrs) :: tv_rate   ! local copy for rate-only call to extractFluxes1d
 
   !  smg: what do we do when have heat fluxes from calving and river?
   useRiverHeatContent   = .False.
   useCalvingHeatContent = .False.
 
   H_limit_fluxes = max( GV%Angstrom_H, 1.e-30*GV%m_to_H )
+
+  ! Do not update tv%TempxPmE in the diagnostic for the rate-only call to extractFluxes1d
+  tv_rate = tv
+  tv_rate%TempxPmE => null()
 
   ! The surface forcing is contained in the fluxes type.
   ! We aggregate the thermodynamic forcing for a time step into the following:
@@ -1088,7 +1093,7 @@ subroutine calculateBuoyancyFlux1d(G, GV, US, fluxes, optics, nsw, h, Temp, Salt
   call extractFluxes1d(G, GV, US, fluxes, optics, nsw, j, 1.0,                        &
                 H_limit_fluxes, useRiverHeatContent, useCalvingHeatContent, &
                 h(:,j,:), Temp(:,j,:), netH, netEvap, netHeatMinusSW,                 &
-                netSalt, penSWbnd, tv, .false.)
+                netSalt, penSWbnd, tv_rate, .false.)
 
   ! Sum over bands and attenuate as a function of depth
   ! netPen is the netSW as a function of depth
