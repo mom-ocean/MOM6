@@ -120,7 +120,8 @@ type, public :: MARBL_tracers_CS ; private
   logical :: use_ice_category_fields    !< Forcing will include multiple ice categories for ice_frac and shortwave
   logical :: request_Chl_from_MARBL     !< MARBL can provide Chl to use in set_pen_shortwave()
   integer :: ice_ncat                   !< Number of ice categories when use_ice_category_fields = True
-  real    :: IC_min                     !< Minimum value for tracer initial conditions [CU ~> conc]
+  real    :: IC_min                     !< Minimum value for tracer initial conditions
+                                        !! (when initializing from Z) [CU ~> conc]
   character(len=200) :: IC_file         !< The file in which the age-tracer initial values cam be found.
   logical :: ongrid                     !< True if IC_file is already interpolated to MOM grid
   logical :: Z_IC_file                  !< True if IC_file has Z coordinates
@@ -335,9 +336,6 @@ subroutine configure_MARBL_tracers(GV, US, param_file, CS)
   call log_version(param_file, mdl, version, "")
   call get_param(param_file, mdl, "DEBUG", CS%debug, "If true, write out verbose debugging data.", &
        default=.false., debuggingParam=.true.)
-  call get_param(param_file, mdl, "MARBL_IC_MIN_VAL", CS%IC_min, &
-      "Minimum value of tracer initial conditions (set to 1e-100 for dim scaling tests)", &
-      default=0., units="tracer units")
   call get_param(param_file, mdl, "MARBL_SETTINGS_FILE", CS%marbl_settings_file, &
       "The name of a file from which to read the run-time settings for MARBL.", default="marbl_in")
   call get_param(param_file, mdl, "BOT_FLUX_MIX_THICKNESS", CS%bot_flux_mix_thickness, &
@@ -626,13 +624,19 @@ function register_MARBL_tracers(HI, GV, US, param_file, CS, tr_Reg, restart_CS, 
   call get_param(param_file, mdl, "MARBL_TRACERS_IC_FILE", CS%IC_file, &
       "The file in which the MARBL tracers initial values can be found.", &
       default="ecosys_jan_IC_omip_latlon_1x1_180W_c230331.nc")
-  call get_param(param_file, mdl, "MARBL_TRACERS_IC_FILE_IS_Z", CS%Z_IC_file, &
-      "If true, MARBL_TRACERS_IC_FILE_IS_Z is in depth space, not layer space.", &
-      default=.true.)
   if (scan(CS%IC_file,'/') == 0) then
     ! Add the directory if CS%IC_file is not already a complete path.
     CS%IC_file = trim(slasher(inputdir))//trim(CS%IC_file)
     call log_param(param_file, mdl, "INPUTDIR/MARBL_TRACERS_IC_FILE", CS%IC_file)
+  endif
+  call get_param(param_file, mdl, "MARBL_TRACERS_IC_FILE_IS_Z", CS%Z_IC_file, &
+      "If true, MARBL_TRACERS_IC_FILE_IS_Z is in depth space, not layer space.", &
+      default=.true.)
+  if (CS%Z_IC_file) then
+      ! When reading IC files on Z grid, want to impose minimum value
+      call get_param(param_file, mdl, "MARBL_IC_MIN_VAL", CS%IC_min, &
+          "Minimum value of tracer initial conditions (when initializing from Z)", &
+          default=0., units="tracer units")
   endif
   call get_param(param_file, mdl, "MARBL_TRACERS_MAY_REINIT", CS%tracers_may_reinit, &
       "If true, tracers may go through the initialization code if they are not found in the "//&
@@ -987,22 +991,26 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
       end if
       call set_initialized(CS%tracer_data(m)%tr, name, CS%restart_CSp)
       do k=1,GV%ke ; do j=G%jsc, G%jec ; do i=G%isc, G%iec
-        ! Ensure tracer concentrations are at / above minimum value
-        if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
       enddo ; enddo ; enddo
     endif
   enddo
   if (tracer_init_from_Z) then
-    ! For each column, enforce consistency in MARBL tracers
-    ! (no negative concentrations; for a given autotroph, if one tracer is 0 they all are)
+    ! For each column, enforce consistency in MARBL tracers:
+    ! 1. Apply minimum IC value
+    ! 2. For a given autotroph, if one tracer is 0 they all are
     call MOM_error(NOTE, 'Enforcing consistency across autotroph tracer initial conditions')
     do j=G%jsc, G%jec ; do i=G%isc, G%iec
-      ! Copy tracer data into flat array
       do k=1,GV%ke; do m=1, CS%ntr
+        ! Ensure tracer concentrations are at / above minimum value
+        if (CS%tracer_data(m)%tr(i,j,k) < CS%IC_min) CS%tracer_data(m)%tr(i,j,k) = CS%IC_min
+
+        ! Copy tracer data into flat array
         MARBL_instances%tracers(m,k) = CS%tracer_data(m)%tr(i,j,k)
       end do ; end do
+
       ! call consistency enforcement
       call MARBL_instances%autotroph_tracer_consistency_enforce()
+
       ! Copy tracer data out of flat array
       do k=1,GV%ke; do m=1, CS%ntr
         CS%tracer_data(m)%tr(i,j,k) = MARBL_instances%tracers(m,k)
