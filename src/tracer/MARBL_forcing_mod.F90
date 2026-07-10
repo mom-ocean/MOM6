@@ -34,6 +34,8 @@ type, public :: marbl_forcing_CS ; private
                                              !! regulate the timing of diagnostic output.
 
   real    :: dust_ratio_thres               !< coarse/fine dust ratio threshold [1]
+  real    :: min_dust_ratio                 !< minimum value for dust ratio [1]
+  real    :: dust_ratio_offset              !< offset for dust ratio [1]
   real    :: fe_bioavail_frac_offset        !< offset for iron bioavailability fraction [1]
   real    :: atm_fe_to_bc_ratio             !< atmospheric iron to black carbon ratio [1]
   real    :: seaice_fe_to_bc_ratio          !< sea-ice iron to black carbon ratio [1]
@@ -89,10 +91,16 @@ contains
 
     call get_param(param_file, mdl, "DUST_RATIO_THRES", CS%dust_ratio_thres, &
         "coarse/fine dust ratio threshold", units="1", default=90.)
+    call get_param(param_file, mdl, "MIN_DUST_RATIO", CS%min_dust_ratio, &
+        "minimum value for dust ratio", units="1", default=8.5)
+    call get_param(param_file, mdl, "DUST_RATIO_OFFSET", CS%dust_ratio_offset, &
+        "offset for dust ratio", units="1", default=-5.5)
+    call get_param(param_file, mdl, "FE_BIOAVAIL_FRAC_OFFSET", CS%fe_bioavail_frac_offset, &
+        "offset for iron bioavailability fraction", units="1", default=-0.0134)
     call get_param(param_file, mdl, "ATM_FE_TO_BC_RATIO", CS%atm_fe_to_bc_ratio, &
-        "atmospheric iron to black carbon ratio", units="1", default=1.33)
+        "atmospheric iron to black carbon ratio", units="1", default=1.2)
     call get_param(param_file, mdl, "SEAICE_FE_TO_BC_RATIO", CS%seaice_fe_to_bc_ratio, &
-        "sea-ice iron to black carbon ratio", units="1", default=1.33)
+        "sea-ice iron to black carbon ratio", units="1", default=1.2)
     call get_param(param_file, mdl, "IRON_FRAC_IN_ATM_FINE_DUST", CS%iron_frac_in_atm_fine_dust, &
         "Fraction of fine dust from the atmosphere that is iron", units="1", default=0.035)
     call get_param(param_file, mdl, "IRON_FRAC_IN_ATM_COARSE_DUST", CS%iron_frac_in_atm_coarse_dust, &
@@ -279,13 +287,13 @@ contains
         ! Contribution of atmospheric dust to iron flux
         atm_fe_bioavail_frac = 0.005
         if ((atm_coarse_dust_flux(i-i0,j-j0) > 0.) .and. (atm_fine_dust_flux(i-i0,j-j0)) > 0.) then
-          dust_ratio = max(atm_coarse_dust_flux(i-i0,j-j0) / atm_fine_dust_flux(i-i0,j-j0), 9.903)
+          dust_ratio = max(atm_coarse_dust_flux(i-i0,j-j0) / atm_fine_dust_flux(i-i0,j-j0), CS%min_dust_ratio)
         else
-          dust_ratio = 9.903
+          dust_ratio = CS%min_dust_ratio
         endif
-        dust_ratio = dust_ratio - 5.5
+        dust_ratio = dust_ratio + CS%dust_ratio_offset
         if (dust_ratio < CS%dust_ratio_thres) &
-          atm_fe_bioavail_frac = dust_ratio**(-0.9) - 0.0134
+          atm_fe_bioavail_frac = dust_ratio**(-0.9) + CS%fe_bioavail_frac_offset
 
         ! Contribution of atmospheric dust to iron flux
         fluxes%iron_flux(i,j) = (atm_fe_bioavail_frac * &
