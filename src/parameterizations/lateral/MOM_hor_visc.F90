@@ -2700,7 +2700,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "lots of blocking communications, which can be expensive", &
                  default=.true., do_not_log=.not.CS%use_Leithy)
   call get_param(param_file, mdl, "TAPER_LEITHY", CS%taper_leithy, &
-                 "If true, Leith+E c_K coefficient is tapered to zero"//&
+                 "If true, Leith+E c_K coefficient is tapered to zero "//&
                  "below a threshold depth", &
                  default=.false., do_not_log=.not.CS%use_Leithy)
   if (CS%taper_leithy) then
@@ -3002,7 +3002,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
       if (CS%use_Leithy) then
         CS%biharm6_const_xx(i,j) = Leith_bi_const * max(G%dxT(i,j),G%dyT(i,j))**6
         CS%m_const_leithy(i,j) = 0.5 * sqrt(CS%c_K) * max(G%dxT(i,j),G%dyT(i,j))
-        CS%m_leithy_max(i,j) = 4. / max(G%dxT(i,j),G%dyT(i,j))**2 * &
+        CS%m_leithy_max(i,j) = (4. / max(G%dxT(i,j),G%dyT(i,j))**2) * &
                                G%mask2dBu(i,j  ) * G%mask2dBu(i-1,j  ) * &
                                G%mask2dBu(i,j-1) * G%mask2dBu(i-1,j-1)
       endif

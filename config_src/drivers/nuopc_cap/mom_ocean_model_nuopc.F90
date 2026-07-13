@@ -24,7 +24,7 @@ use MOM_diag_mediator,       only : diag_ctrl, enable_averages, disable_averagin
 use MOM_diag_mediator,       only : diag_mediator_close_registration, diag_mediator_end
 use MOM_domains,             only : pass_var, pass_vector, AGRID, BGRID_NE, CGRID_NE
 use MOM_domains,             only : TO_ALL, Omit_Corners
-use MOM_error_handler,       only : MOM_error, FATAL, WARNING, is_root_pe
+use MOM_error_handler,       only : MOM_error, FATAL, WARNING, is_root_pe, MOM_mesg
 use MOM_error_handler,       only : callTree_enter, callTree_leave
 use MOM_file_parser,         only : get_param, log_version, close_param_file, param_file_type
 use MOM_forcing_type,        only : allocate_forcing_type
@@ -287,18 +287,15 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   call time_interp_external_init
 
   OS%Time = Time_in
-  if(present(input_restart_file)) then
-      k = index(input_restart_file, ' ')
-      if (k==0) k = len_trim(input_restart_file)
-      i = index(input_restart_file, '.r.')
-      if (i>0) then
-         stoch_restfile = input_restart_file(1:i)//'r_stoch'//input_restart_file(i+2:k)
-
-         if (is_root_pe()) then
-           write(stdout,*) 'input_restart_file =', input_restart_file
-           write(stdout,*) 'stoch_restfile =', stoch_restfile
-         endif
-      endif
+  if (present(input_restart_file)) then
+    k = index(input_restart_file, ' ')
+    if (k==0) k = len_trim(input_restart_file)
+    i = index(input_restart_file, '.r.')
+    if (i>0) then
+      stoch_restfile = input_restart_file(1:i)//'r_stoch'//input_restart_file(i+2:k)
+      call MOM_mesg("input_restart_file = "//trim(input_restart_file), 3)
+      call MOM_mesg("stoch_restfile = "//trim(stoch_restfile), 3)
+    endif
   endif
   call initialize_MOM(OS%Time, Time_init, param_file, OS%dirs, OS%MOM_CSp, &
                       Time_in, offline_tracer_mode=OS%offline_tracer_mode, &
@@ -452,7 +449,7 @@ subroutine ocean_model_init(Ocean_sfc, OS, Time_init, Time_in, gas_fields_ocn, i
   endif
 
   call extract_surface_state(OS%MOM_CSp, OS%sfc_state)
-! get number of processors and PE list for stocasthci physics initialization
+! get number of processors and PE list for stochastic physics initialization
   call get_param(param_file, mdl, "DO_SPPT", OS%do_sppt, &
                  "If true, then stochastically perturb the thermodynamic "//&
                  "tendencies of T,S, and h.  Amplitude and correlations are "//&

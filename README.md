@@ -3,14 +3,28 @@
 
 # MOM6
 
-This is the MOM6 source code.
+MOM6 (Modular Ocean Model, version 6) is a next-generation open-development-source ocean model developed by a consortium of institutions. It uses a modern Fortran codebase solving the primitive equations for ocean dynamics on an Arakawa C-grid.
+
+- Arbitrary Lagrangian-Eulerian (ALE) vertical coordinate
+- Boussinesq and non-Boussinesq modes
+- Flexible equation of state (Wright, TEOS-10, linear, Roquet (TEOS-10), ...)
+- Comprehensive parameterization library (ePBL, KPP, lateral mixing, tidal forcing)
+- Coupled to SIS2 or CICE (sea ice), ice shelves, and Earth system models via the FMS or NUOPC couplers, or run in stand-alone ocean-only configurations
+- Dimensional unit scaling for consistency testing
 
 
 # Where to find information
 
-Start at the [MOM6-examples wiki](https://github.com/NOAA-GFDL/MOM6-examples/wiki) which has installation instructions.
-
-[Source code documentation](http://mom6.readthedocs.io/) is hosted on read the docs.
+- [MOM6-examples wiki](https://github.com/NOAA-GFDL/MOM6-examples/wiki) -- installation instructions and tutorials
+- [Source code documentation](https://mom6.readthedocs.io/en/main/) -- hosted on Read the Docs
+- [Developers wiki](https://github.com/NOAA-GFDL/MOM6/wiki) -- developer guides and conventions
+- [Developer workflow](https://github.com/NOAA-GFDL/MOM6/wiki/Developer-workflow)
+- [Runtime parameter system](https://github.com/NOAA-GFDL/MOM6/wiki/MOM6-run-time-parameter-system)
+- [Repository policies](https://github.com/NOAA-GFDL/MOM6-examples/wiki/MOM6-repository-policies)
+- [MOM6 forum](https://bb.cgd.ucar.edu/cesm/forums/mom6.148/)
+- [CVMix](https://github.com/CVMix/CVMix-src) -- Community Vertical Mixing
+- [TEOS-10 (GSW)](http://www.teos-10.org/) -- Gibbs Seawater
+- [GOTM](https://gotm.net/) -- General Ocean Turbulence Model
 
 
 # What files are what

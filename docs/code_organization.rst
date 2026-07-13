@@ -3,7 +3,7 @@ Organization of the code
 
 The MOM6 source code is divided into a tree of directories (folders) to group
 related code (e.g. `src/core`) or similar modules (e.g.
-`src/parametizations/vertical`).
+`src/parameterizations/vertical`).
 
 The highest level of directories are:
 
@@ -33,53 +33,45 @@ The highest level of directories are:
 The directory tree is::
 
   MOM6
-  ├── config_src
-  │   ├── drivers
-  │   │   ├── FMS_cap
-  │   │   ├── ice_solo_driver
-  │   │   ├── mct_cap
-  │   │   ├── nuopc_cap
-  │   │   ├── solo_driver
-  │   │   └── unit_drivers
-  │   ├── external
-  │   │   ├── GFDL_ocean_BGC
-  │   │   └── ODA_hooks
-  │   ├── memory
-  │   │   ├── dynamic_nonsymmetric
-  │   │   ├── dynamic_symmetric
-  ├── docs
-  │   └── images
-  ├── pkg
-  │   ├── CVMix-src
-  │   │   ├── ...
-  │   │   └── src
-  │   │       ├── drivers
-  │   │       └── shared
-  │   └── GSW-Fortran
-  ├── src
-  │   ├── ALE
-  │   ├── core
-  │   ├── diagnostics
-  │   ├── equation_of_state
-  │   │   └── TEOS10
-  │   ├── framework
-  │   ├── ice_shelf
-  │   ├── initialization
-  │   ├── parameterizations
-  │   │   ├── CVmix -> ../../pkg/CVMix-src/src/shared
-  │   │   ├── lateral
-  │   │   └── vertical
-  │   ├── tracer
-  │   └── user
-  └── .testing
-      ├── tc0
-      ├── tc1
-      ├── tc1.a
-      ├── tc1.b
-      ├── tc2
-      ├── tc2.a
-      ├── tc3
-      └── tc4
+  +-- config_src
+  |   +-- drivers
+  |   |   +-- FMS_cap                  # GFDL coupler interface
+  |   |   +-- ice_solo_driver          # Ice-only standalone
+  |   |   +-- nuopc_cap                # NUOPC/CESM coupling
+  |   |   +-- solo_driver              # Ocean-only standalone
+  |   |   +-- timing_tests             # Performance benchmarks
+  |   |   +-- unit_tests               # Unit test executables
+  |   +-- external                     # Null hooks for optional components
+  |   +-- infra                        # Framework interface (FMS1/FMS2 wrappers)
+  |   |   +-- FMS1                     # FMS1 wrappers
+  |   |   +-- FMS2                     # FMS2 wrappers
+  |   +-- memory
+  |       +-- dynamic_nonsymmetric
+  |       +-- dynamic_symmetric
+  +-- docs
+  +-- pkg
+  |   +-- CVMix-src                    # Community Vertical Mixing
+  |   +-- GSW-Fortran                  # TEOS-10 Gibbs Seawater
+  +-- src
+  |   +-- ALE                          # Vertical remapping/regridding
+  |   +-- core                         # Dynamical core
+  |   +-- diagnostics                  # Diagnostic calculations
+  |   +-- equation_of_state            # EOS implementations
+  |   +-- framework                    # Infrastructure (diagnostics, I/O, parsing, domains)
+  |   +-- ice_shelf                    # Ice shelf dynamics
+  |   +-- initialization               # Grid/state initialization
+  |   +-- ocean_data_assim             # Data assimilation
+  |   +-- parameterizations
+  |   |   +-- lateral                  # Lateral parameterizations
+  |   |   +-- vertical                 # Vertical mixing
+  |   +-- tracer                       # Tracer transport and specific tracers
+  |   +-- user                         # Idealized configuration initialization
+  +-- .testing
+      +-- tc0                          # Unit tests
+      +-- tc1 / tc1.a / tc1.b          # Benchmark configurations
+      +-- tc2 / tc2.a                  # ALE with tides / sigma-coordinate
+      +-- tc3                          # Open boundary conditions
+      +-- tc4                          # Sponges and I/O initialization
 
 .. _config_src:
 
@@ -88,9 +80,9 @@ The directory tree is::
 
 `memory/dynamic_nonsymmetric/`, `memory/dynamic_symmetric/`
   One or none of `config_src/memory/dynamic_nonsymmetric/` or
-  `config_src/dynamic_symmetric/` can be included at compile time. If neither
+  `config_src/memory/dynamic_symmetric/` can be included at compile time. If neither
   is used then a `MOM_memory.h` file specific to the model configuration must be
-  present - this is known as a"static" compile with fixed layout and domain shape.
+  present - this is known as a "static" compile with fixed layout and domain shape.
 
 `external/`
   Contains "null" modules providing the API to optional components to use
@@ -100,10 +92,14 @@ The directory tree is::
   To use the actual ODA or BGC, add the appropriate source to the search
   paths .
 
-`infra/FMS1`
+`infra/`
   Contains MOM6-specific thin wrappers to all of the FMS types and routines that
   are used by MOM6.  The code in this directory should only be called by the
   infrastructure-agnostic code in src/framework.
+
+`drivers/ice_solo_driver/`
+  This driver produces a stand-alone ice-shelf executable that steps the
+  ice-shelf model without any ocean dynamics.
 
 `drivers/solo_driver/`
   This driver produces an ocean-only executable with no other coupled
@@ -114,6 +110,16 @@ The directory tree is::
   This driver provides an interface for the GFDL coupler to call. It requires
   compiling MOM6 along with at least a sea-ice model and possibly all other
   components in a coupled model.
+
+`drivers/nuopc_cap/`
+  This driver provides a NUOPC-compliant interface for coupling MOM6 within
+  CESM or other NUOPC-based coupled systems.
+
+`drivers/unit_tests/`
+  Unit test executables for testing individual MOM6 components in isolation.
+
+`drivers/timing_tests/`
+  Performance benchmark executables for profiling MOM6 routines.
 
 .. _src:
 
@@ -137,8 +143,14 @@ The directory tree is::
   Low-level wrappers for communication, diagnostics management, parsing
   of input parameters, time management, CPU clocks.
 
+`ice_shelf/`
+  Ice shelf dynamics and thermodynamics.
+
 `initialization/`
   Initialization of the horizontal grid, vertical coordinate, and the state.
+
+`ocean_data_assim/`
+  Data assimilation interfaces.
 
 `parameterizations/lateral`
   Sub-grid scale parameterization with fluxes primarily oriented in the

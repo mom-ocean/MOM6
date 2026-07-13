@@ -1,6 +1,6 @@
 # Organization
 
-The instructions for generation of MOM6 documentation is divided into three sections.
+The instructions for generation of MOM6 documentation are divided into three sections.
 
 * [Documentation process](#documentation-process)
 * [Documentation syntax](#documentation-syntax)
@@ -56,15 +56,16 @@ SRC/
     drivers/
       FMS_cap
       ice_solo_driver
-      mct_cap
       nuopc_cap
       solo_driver
-      unit_drivers
+      timing_tests
+      unit_tests
     external
     infra/
       FMS1
+      FMS2
     memory/
-      dynamic
+      dynamic_nonsymmetric
       dynamic_symmetric
   pkg/
     CVMix-src
@@ -91,14 +92,14 @@ SRC/
 
 ## Doxygen
 
-The [Doxygen](http://www.doxygen.org/) package is used to scan the source code for embedded documentation.  Doxygen also automatically produces API documentation from arguments to subroutines, functions and member of types.  The guide for using doxygen in MOM6 is hosted on the [MOM6 developer's wiki](https://github.com/NOAA-GFDL/MOM6/wiki/Doxygen).
+The [Doxygen](http://www.doxygen.org/) package is used to scan the source code for embedded documentation.  Doxygen also automatically produces API documentation from arguments to subroutines, functions and member of types.  The guide for using doxygen in MOM6 is in [Code-style.md](Code-style.md).
 
 The majority of documentation is embedded in the comments of the source code.  Additional documents have been added in the form of doxygen files (`*.dox`).  The additional documents can be identified as those prefixed with an underscore (`_`) and have the `dox` extension.
 
 The content of the additional documents and source code should conform to usage
 as defined by the doxygen user and reference
 [manuals](https://www.doxygen.nl/manual/index.html).  Further guidance is provided
-on the [MOM6 developer's wiki](https://github.com/NOAA-GFDL/MOM6/wiki/Doxygen).
+in [Code-style.md](Code-style.md).
 [Troubleshooting](details/Details.md) guides are provided with most commonly reported problems with MOM6 documentation.
 
 NOTE: Not all doxygen commands are supported through the sphinx documentation processor.  Support can be added by adding an [issue](https://github.com/NOAA-GFDL/MOM6/issues) to the github repository.
@@ -114,7 +115,7 @@ SRC/
     MOM6.tags
 ```
 
-The main driver for doxygen is a configuration file.  The content on [MOM6 developer's wiki](https://github.com/NOAA-GFDL/MOM6/wiki/Doxygen) uses the `Doxyfile_nortd` configuration file.
+The main driver for doxygen is a configuration file.  The content in [Code-style.md](Code-style.md) uses the `Doxyfile_nortd` configuration file.
 
 By default, the html directory is only available after processing the documentation.  Please see [software operation](software-operation) on how to generate the pdf companion of the documentation.
 
