@@ -860,6 +860,7 @@ WARN_LOGFILE           = _build/doxygen_warn_nortd_latex_log.txt
 
 INPUT                  = ../src \
                          front_page.md \
+                         Consortium-policy-on-AI.md \
                          ../config_src/drivers/solo_driver \
                          ../config_src/memory/dynamic_symmetric \
                          ../config_src/external \

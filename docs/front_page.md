@@ -6,7 +6,7 @@ This documentation is also available as web-linkable pages hosted on [read the d
 
 If you are looking for a user guide, start at the [MOM6-examples wiki](https://github.com/NOAA-GFDL/MOM6-examples/wiki) which has installation instructions, links to tutorials, and more.
 
-The APIs in MOM6 are documented using doxygen - you are viewing the result. A brief style guide for using doxygen in MOM6 is available at https://github.com/NOAA-GFDL/MOM6/wiki/Doxygen.
+The APIs in MOM6 are documented using doxygen - you are viewing the result. A brief style guide for using doxygen in MOM6 is available in docs/Code-style.md in the repository.
 
 ***
 

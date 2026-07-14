@@ -810,6 +810,7 @@ WARN_LOGFILE           = _build/doxygen_warn_rtd_log.txt
 # Note: If this tag is empty the current directory is searched.
 
 INPUT                  = ../src \
+                         Consortium-policy-on-AI.md \
                          ../config_src/drivers/solo_driver \
                          ../config_src/memory/dynamic_symmetric \
                          ../config_src/external \

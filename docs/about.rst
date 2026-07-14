@@ -13,14 +13,14 @@ Download, compile and run
   Installation, compilation and running are platform specific operations for which we can only provide templates (as is
   done in on the wiki) but for which MOM6 developers cannot possibly support since every platform is different. Normally
   a user needs to know where libraries (such as netcdf and MPI) and compilers are on their system but once these have
-  been established the documented compile process can be adpated to the local system.
+  been established the documented compile process can be adapted to the local system.
 
 User guide
-  `This site <http://mom6.readthedocs.org>`_ provides a high-level overview of the model as well as the API reference (documentation
+  `This site <https://mom6.readthedocs.io>`_ provides a high-level overview of the model as well as the API reference (documentation
   of source code).
 
-  The user guide is written in reStructuredText (.rst files) that reside in ``docs/`` of the `MOM6 source code <http://github.com/NOAA-GFDL/MOM6>`_.
-  The rst files are processed by sphinx and hosted on `readthedocs <http://mom6.readthedocs.org>`_.
+  The user guide is written in reStructuredText (.rst files) that reside in ``docs/`` of the `MOM6 source code <https://github.com/mom-ocean/MOM6>`_.
+  The rst files are processed by sphinx and hosted on `readthedocs <https://mom6.readthedocs.io>`_.
 
   The API reference is generated documentation - we use doxygen for
   in-code documentation. The Fortran doxygen format is rather cumbersome for
