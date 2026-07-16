@@ -223,8 +223,8 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
   ! local variables
   real, dimension(SZIB_(G),SZJ_(G))  :: hbl_u   !< boundary layer depth (u-pts) [H ~> m]
   real, dimension(SZI_(G),SZJB_(G))  :: hbl_v   !< boundary layer depth (v-pts) [H ~> m]
-  real, dimension(SZIB_(G),SZJ_(G))  :: taux_u  !< kinematic zonal wind stress (u-pts) [L2 T-2 ~> m2 s-2]
-  real, dimension(SZI_(G),SZJB_(G))  :: tauy_v  !< kinematic merid wind stress (v-pts) [L2 T-2 ~> m2 s-2]
+  real, dimension(SZIB_(G),SZJ_(G))  :: taux_u  !< kinematic zonal wind stress (u-pts) [L Z T-2 ~> m2 s-2]
+  real, dimension(SZI_(G),SZJB_(G))  :: tauy_v  !< kinematic merid wind stress (v-pts) [L Z T-2 ~> m2 s-2]
   real, dimension(SZI_(G),SZJ_(G))   :: uS0     !< surface zonal Stokes drift h-pts [L T-1 ~> m s-1]
   real, dimension(SZI_(G),SZJ_(G))   :: vS0     !< surface zonal Stokes drift h-pts [L T-1 ~> m s-1]
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: uE_u    !< zonal Eulerian u-pts [L T-1 ~> m s-1]
@@ -240,7 +240,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
   real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)+1) :: omega_tau2s !< angle stress to shear (h-pts) [rad]
   real, dimension(SZI_(G) ,SZJ_(G),SZK_(GV)+1) :: omega_tau2w !< angle stress to wind  (h-pts) [rad]
   real :: omega_tmp, omega_s2x, omega_tau2x                    !< temporary angle wrt the x axis [rad]
-  real :: Irho0        !< Inverse of the mean density rescaled to [Z L-1 R-1 ~> m3 kg-1]
+  real :: Irho0        !< Inverse of the mean density [R-1 ~> m3 kg-1]
   real :: pi           !< ! The ratio of the circumference of a circle to its diameter [nondim]
   real :: tmp_u, tmp_v !< temporary ocean mask weights on u and v points [nondim]
   real :: fexp         !< temporary exponential function [nondim]
@@ -257,6 +257,13 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
   pi = 4. * atan2(1.,1.)
   Irho0 = 1.0 / GV%Rho0
 
+  ! initialize arrays
+  uE_h(:,:,:)   = 0.0
+  vE_h(:,:,:)   = 0.0
+  uE_u(:,:,:)   = 0.0
+  vE_v(:,:,:)   = 0.0
+  vInc_v(:,:,:) = 0.0
+  uInc_u(:,:,:) = 0.0
   call pass_var(hbl_h , G%Domain, halo=1)
 
   ! u-points
@@ -279,7 +286,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
             depth = depth + 0.5*CS%h_u(I,j,k)
             call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
             ! nonlocal boundary-layer increment
-            uInc_u(I,j,k)  = dt * Cemp_NL * taux_u(I,j) * dGdsig / hbl_u(I,j)
+            uInc_u(I,j,k)  = dt * Cemp_NL * taux_u(I,j) * dGdsig / (hbl_u(I,j) * GV%H_to_Z)
             ui(I,j,k) = ui(I,j,k) + uInc_u(I,j,k)
           else
             uInc_u(I,j,k) = 0.0
@@ -313,7 +320,7 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
             depth = depth + 0.5* CS%h_v(i,J,k)
             call cvmix_kpp_composite_Gshape(sigma,Gat1,Gsig,dGdsig)
             ! nonlocal boundary-layer increment
-            vInc_v(i,J,k) = dt * Cemp_NL * tauy_v(i,J) * dGdsig / hbl_v(i,J)
+            vInc_v(i,J,k) = dt * Cemp_NL * tauy_v(i,J) * dGdsig / (hbl_v(i,J) * GV%H_to_Z)
             vi(i,J,k) = vi(i,J,k) + vInc_v(i,J,k)
           else
             vInc_v(i,J,k)  = 0.0
@@ -350,20 +357,20 @@ subroutine vertFPmix(ui, vi, uold, vold, hbl_h, h, forces, dt, lpost, Cemp_NL, G
             vInc_h(i,j,k) = (G%mask2dCv(i,j) * vInc_v(i,j,k) + G%mask2dCv(i,j-1) * vInc_v(i,j-1,k)) / tmp_v
           enddo
           ! Wind, Stress and Shear align at surface
-          Omega_tau2w(i,j,1) = 0.0
-          Omega_tau2s(i,j,1) = 0.0
+          Omega_tau2w(i,j,:) = 0.0
+          Omega_tau2s(i,j,:) = 0.0
           do k = 1,nz
             kp1 = min( nz , k+1)
             du = uE_h(i,j,k) - uE_h(i,j,kp1)
             dv = vE_h(i,j,k) - vE_h(i,j,kp1)
-            omega_s2x = atan2( dv , du )
+            omega_s2x = atan2(dv, du)
 
             du = du + uInc_h(i,j,k) - uInc_h(i,j,kp1)
             dv = dv + vInc_h(i,j,k) - vInc_h(i,j,kp1)
-            omega_tau2x = atan2( dv , du )
-
+            omega_tau2x = atan2(dv, du)
             omega_tmp = omega_tau2x - forces%omega_w2x(i,j)
-            if ( (omega_tmp  >   pi   ) )  omega_tmp = omega_tmp - 2.*pi
+
+            if ( (omega_tmp  >   pi   ) ) omega_tmp = omega_tmp - 2.*pi
             if ( (omega_tmp  < (0.-pi)) )  omega_tmp = omega_tmp + 2.*pi
             Omega_tau2w(i,j,kp1) = omega_tmp
 

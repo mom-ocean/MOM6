@@ -295,6 +295,8 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: MLD => NULL()
                 !< Instantaneous active mixing layer depth as used by the mixed layer restratification
                 !! parameterization [Z ~> m].
+  real, pointer, dimension(:,:) :: Lam2 => NULL()
+                !< (Langmuir Number)^-2  [nondim].
   real, pointer, dimension(:,:) :: h_ML => NULL()
                 !< Instantaneous active mixing layer thickness as used by the mixed layer restratification
                 !! parameterization [H ~> m or kg m-2]
@@ -305,7 +307,8 @@ type, public :: vertvisc_type
   real, pointer, dimension(:,:) :: h_ML_param => NULL()
                 !< Instantaneous active mixed or mixing layer thickness as used by the brine plume
                 !! parameterization [H ~> m or kg m-2].
-  real, pointer, dimension(:,:) :: sfc_buoy_flx => NULL() !< Surface buoyancy flux (derived) [Z2 T-3 ~> m2 s-3].
+  real, pointer, dimension(:,:) :: sfc_buoy_flx => NULL()
+                !< Surface buoyancy flux (derived) [Z2 T-3 ~> m2 s-3].
   real, pointer, dimension(:,:,:) :: Kd_shear => NULL()
                 !< The shear-driven turbulent diapycnal diffusivity at the interfaces between layers
                 !! in tracer columns [H Z T-1 ~> m2 s-1 or kg m-1 s-1]
@@ -378,7 +381,7 @@ contains
 !! the ocean model. Unused fields are unallocated.
 subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                   gas_fields_ocn, use_meltpot, use_iceshelves, &
-                                  omit_frazil, sfc_state_in, turns, use_marbl_tracers)
+                                  omit_frazil, sfc_state_in, turns, use_MARBL_tracers)
   type(ocean_grid_type), intent(in)    :: G                !< ocean grid structure
   type(surface),         intent(inout) :: sfc_state        !< ocean surface state type to be allocated.
   logical,     optional, intent(in)    :: use_temperature  !< If true, allocate the space for thermodynamic variables.
@@ -404,7 +407,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
                                               !! is present, it is used and tr_fields_in is ignored.
   integer,     optional, intent(in)    :: turns  !< If present, the number of counterclockwise quarter
                                                  !! turns to use on the new grid.
-  logical,     optional, intent(in)    :: use_marbl_tracers  !< If true, allocate the space for CO2 flux from MARBL
+  logical,     optional, intent(in)    :: use_MARBL_tracers  !< If true, allocate the space for CO2 flux from MARBL
 
   ! local variables
   logical :: use_temp, alloc_integ, use_melt_potential, alloc_iceshelves, alloc_frazil, alloc_fco2
@@ -422,7 +425,7 @@ subroutine allocate_surface_state(sfc_state, G, use_temperature, do_integrals, &
   use_melt_potential = .false. ; if (present(use_meltpot)) use_melt_potential = use_meltpot
   alloc_iceshelves = .false. ; if (present(use_iceshelves)) alloc_iceshelves = use_iceshelves
   alloc_frazil = .true. ; if (present(omit_frazil)) alloc_frazil = .not.omit_frazil
-  alloc_fco2 = .false. ; if (present(use_marbl_tracers)) alloc_fco2 = use_marbl_tracers
+  alloc_fco2 = .false. ; if (present(use_MARBL_tracers)) alloc_fco2 = use_MARBL_tracers
 
   if (sfc_state%arrays_allocated) return
 

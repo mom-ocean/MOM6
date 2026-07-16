@@ -1047,7 +1047,7 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
   endif
 
   if (main_parameters .and. coord_is_state_dependent) then
-    call get_param(param_file, mdl, "MAXIMUM_INT_DEPTH_CONFIG", string, &
+    call get_param(param_file, mdl, "MAXIMUM_INT_DEPTH_CONFIG", longString, &
                  "Determines how to specify the maximum interface depths.\n"//&
                  "Valid options are:\n"//&
                  " NONE        - there are no maximum interface depths\n"//&
@@ -1060,29 +1060,29 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
     message = "The list of maximum depths for each interface."
     allocate(z_max(ke+1))
     allocate(dz_max(ke))
-    if ( trim(string) == "NONE") then
+    if ( trim(longString) == "NONE") then
       ! Do nothing.
-    elseif ( trim(string) ==  "PARAM") then
+    elseif ( trim(longString) ==  "PARAM") then
       call get_param(param_file, mdl, "MAXIMUM_INTERFACE_DEPTHS", z_max, &
                    trim(message), units="m", scale=GV%m_to_H, fail_if_missing=.true.)
       call set_regrid_max_depths(CS, z_max)
-    elseif (index(trim(string),'FILE:')==1) then
-      if (string(6:6)=='.' .or. string(6:6)=='/') then
+    elseif (index(trim(longString),'FILE:')==1) then
+      if (longString(6:6)=='.' .or. longString(6:6)=='/') then
         ! If we specified "FILE:./xyz" or "FILE:/xyz" then we have a relative or absolute path
-        fileName = trim( extractWord(trim(string(6:80)), 1) )
+        fileName = trim( extractWord(trim(longString(6:)), 1) )
       else
         ! Otherwise assume we should look for the file in INPUTDIR
-        fileName = trim(inputdir) // trim( extractWord(trim(string(6:80)), 1) )
+        fileName = trim(inputdir) // trim( extractWord(trim(longString(6:)), 1) )
       endif
       if (.not. file_exists(fileName)) call MOM_error(FATAL,trim(mdl)// &
           ", initialize_regridding: "// &
-          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(string)//")")
+          "Specified file not found: Looking for '"//trim(fileName)//"' ("//trim(longString)//")")
 
       do_sum = .false.
-      varName = trim( extractWord(trim(string(6:)), 2) )
+      varName = trim( extractWord(trim(longString(6:)), 2) )
       if (.not. field_exists(fileName,varName)) call MOM_error(FATAL,trim(mdl)// &
           ", initialize_regridding: "// &
-          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(string)//")")
+          "Specified field not found: Looking for '"//trim(varName)//"' ("//trim(longString)//")")
       if (len_trim(varName)==0) then
         if (field_exists(fileName,'z_max')) then ; varName = 'z_max'
         elseif (field_exists(fileName,'dz')) then ; varName = 'dz' ; do_sum = .true.
@@ -1100,15 +1100,15 @@ subroutine initialize_regridding(CS, G, GV, US, max_depth, param_file, mdl, &
       call log_param(param_file, mdl, "!MAXIMUM_INT_DEPTHS", z_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_depths(CS, z_max, GV%m_to_H)
-    elseif (index(trim(string),'FNC1:')==1) then
-      call dz_function1( trim(string(6:)), dz_max )
+    elseif (index(trim(longString),'FNC1:')==1) then
+      call dz_function1( trim(longString(6:)), dz_max )
       z_max(1) = 0.0 ; do K=1,ke ; z_max(K+1) = z_max(K) + dz_max(K) ; enddo
       call log_param(param_file, mdl, "!MAXIMUM_INT_DEPTHS", z_max, &
                  trim(message), units=coordinateUnits(coord_mode))
       call set_regrid_max_depths(CS, z_max, GV%m_to_H)
     else
       call MOM_error(FATAL,trim(mdl)//", initialize_regridding: "// &
-          "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(string))
+          "Unrecognized MAXIMUM_INT_DEPTH_CONFIG "//trim(longString))
     endif
     deallocate(z_max)
     deallocate(dz_max)

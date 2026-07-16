@@ -15,10 +15,11 @@ use MOM_grid, only : ocean_grid_type
 use MOM_io, only : create_MOM_file, file_exists
 use MOM_io, only : MOM_infra_file, MOM_field
 use MOM_io, only : MOM_read_data, read_data, MOM_write_field, field_exists
-use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc, get_filename_appendix
+use MOM_io, only : vardesc, var_desc, query_vardesc, modify_vardesc
 use MOM_io, only : MULTIPLE, READONLY_FILE, SINGLE_FILE
 use MOM_io, only : CENTER, CORNER, NORTH_FACE, EAST_FACE
 use MOM_io, only : axis_info, get_axis_info
+use MOM_io, only : insert_ensemble_appendix
 use MOM_string_functions, only : lowercase
 use MOM_time_manager,  only : time_type, time_type_to_real, real_to_time
 use MOM_time_manager,  only : days_in_month, get_date, set_date
@@ -134,6 +135,8 @@ type, public :: MOM_restart_CS ; private
   type(p4d), pointer :: var_ptr4d(:) => NULL()
   !>@}
   integer :: max_fields !< The maximum number of restart fields
+  character(len=32) :: ensemble_appendix_prefix !< The prefix after which the ensemble id appendix is added
+                                                !! in output file names.
 end type MOM_restart_CS
 
 !> Register fields for restarts
@@ -1653,15 +1656,7 @@ subroutine save_restart(directory, time, G, CS, time_stamped, filename, GV, num_
   endif ; endif
 
   ! Determine if there is a filename_appendix (used for ensemble runs).
-  call get_filename_appendix(filename_appendix)
-  if (len_trim(filename_appendix) > 0) then
-    length = len_trim(restartname)
-    if (restartname(length-2:length) == '.nc') then
-      restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-    else
-      restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-    endif
-  endif
+  call insert_ensemble_appendix(restartname, CS%ensemble_appendix_prefix)
 
   next_var = 1
   do while (next_var <= CS%novars )
@@ -2133,17 +2128,7 @@ function open_restart_units(filename, directory, G, CS, IO_handles, file_paths, 
       still_looking = (num_restart <= 0) ! Avoid going through the file list twice.
       do while (still_looking)
         restartname = trim(CS%restartfile)
-
-        ! Determine if there is a filename_appendix (used for ensemble runs).
-        call get_filename_appendix(filename_appendix)
-        if (len_trim(filename_appendix) > 0) then
-          length = len_trim(restartname)
-          if (restartname(length-2:length) == '.nc') then
-            restartname = restartname(1:length-3)//'.'//trim(filename_appendix)//'.nc'
-          else
-            restartname = restartname(1:length)  //'.'//trim(filename_appendix)
-          endif
-        endif
+        call insert_ensemble_appendix(restartname, CS%ensemble_appendix_prefix)
         filepath = trim(directory) // trim(restartname)
 
         write(suffix,'("_",I0)') num_restart
@@ -2297,6 +2282,12 @@ subroutine restart_init(param_file, CS, restart_root)
                  "made from a run with a different mask_table than the current run, "//&
                  "in which case the checksums will not match and cause crash.",&
                  default=.true.)
+  call get_param(param_file, mdl, "ENSEMBLE_APPENDIX_PREFIX", CS%ensemble_appendix_prefix, &
+                 "If set to a non-empty string, this value specifies the substring after which "//&
+                 "the ensemble appendix is inserted in restart, initial conditions, and ocean "//&
+                 "geometry file names. If the specified substring is not found in any of those "//&
+                 "output file names, the model terminates with an error.", &
+                 default="")
   call get_param(param_file, mdl, "RESTART_SYMMETRIC_CHECKSUMS", CS%symmetric_checksums, &
                  "If true, do the restart checksums on all the edge points for a non-reentrant "//&
                  "grid.  This requires that SYMMETRIC_MEMORY_ is defined at compile time.", &

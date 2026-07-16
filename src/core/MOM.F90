@@ -36,6 +36,7 @@ use MOM_error_handler,        only : MOM_error, MOM_mesg, FATAL, WARNING, is_roo
 use MOM_error_handler,        only : MOM_set_verbosity, callTree_showQuery
 use MOM_error_handler,        only : callTree_enter, callTree_leave, callTree_waypoint
 use MOM_file_parser,          only : read_param, get_param, log_version, param_file_type
+use MOM_file_parser,          only : openParameterBlock, closeParameterBlock
 use MOM_forcing_type,         only : forcing, mech_forcing, find_ustar
 use MOM_forcing_type,         only : MOM_forcing_chksum, MOM_mech_forcing_chksum
 use MOM_get_input,            only : Get_MOM_Input, directories
@@ -151,6 +152,7 @@ use MOM_tracer_hor_diff,       only : tracer_hor_diff_end, tracer_hor_diff_CS
 use MOM_tracer_registry,       only : tracer_registry_type, register_tracer, tracer_registry_init
 use MOM_tracer_registry,       only : register_tracer_diagnostics, post_tracer_diagnostics_at_sync
 use MOM_tracer_registry,       only : post_tracer_transport_diagnostics, MOM_tracer_chksum
+use MOM_tracer_registry,       only : post_tracer_integral_diagnostics
 use MOM_tracer_registry,       only : preALE_tracer_diagnostics, postALE_tracer_diagnostics
 use MOM_tracer_registry,       only : lock_tracer_registry, tracer_registry_end
 use MOM_tracer_flow_control,   only : call_tracer_register, tracer_flow_control_CS
@@ -325,6 +327,10 @@ type, public :: MOM_control_struct ; private
   logical :: useMEKE                 !< If true, call the MEKE parameterization.
   logical :: use_stochastic_EOS      !< If true, use the stochastic EOS parameterizations.
   logical :: useWaves                !< If true, update Stokes drift
+  logical :: StokesMOST              !< If true, use Stokes Similarity package. Needed to decide if Lam2 should
+                                     !! be passed to mixedlayer_restrat.
+  logical :: wave_enhanced_ustar     !< If true, enhance ustar in Bodner23. Needed to decide if Lam2 should
+                                     !! be passed to mixedlayer_restrat.
   real :: dtbt_reset_period          !< The time interval between dynamic recalculation of the
                                      !! barotropic time step [T ~> s]. If this is negative dtbt is never
                                      !! calculated, and if it is 0, dtbt is calculated every step.
@@ -400,6 +406,15 @@ type, public :: MOM_control_struct ; private
   type(surface_diag_IDs)   :: sfc_IDs  !< Handles used for surface diagnostics.
   type(diag_grid_storage)  :: diag_pre_sync !< The grid (thicknesses) before remapping
   type(diag_grid_storage)  :: diag_pre_dyn  !< The grid (thicknesses) before dynamics
+
+  logical :: accumulate_resolved_flux = .false. !< If true, accumulate resolved flux for tracers for diagnostics
+                                                !! separating the tracer flux due to resolved and parameterized flow
+  logical :: do_resolved_advection = .false.    !< If true, calculate advection by resolved flow
+  logical :: do_param_advection = .false.       !< If true, calculate advection by parameterized flow
+  real, allocatable, dimension(:,:,:) :: &
+    uhtr_resolved   !< accumulated zonal thickness fluxes due to resolved flow to advect tracers [H L2 ~> m3 or kg]
+  real, allocatable, dimension(:,:,:) :: &
+    vhtr_resolved   !< accumulated meridional thickness fluxes due to resolved flow to advect tracers [H L2 ~> m3 or kg]
 
   ! The remainder of this type provides pointers to child module control structures.
 
@@ -1060,6 +1075,8 @@ subroutine step_MOM(forces_in, fluxes_in, sfc_state, Time_start, time_int_in, CS
                           CS%CDp, p_surf, CS%t_dyn_rel_diag, CS%diag_pre_sync,&
                           G, GV, US, CS%diagnostics_CSp)
       call post_tracer_diagnostics_at_sync(CS%Tracer_reg, h, CS%diag_pre_sync, CS%diag, G, GV, CS%t_dyn_rel_diag)
+      call post_tracer_integral_diagnostics(G, GV, US, CS%Tracer_reg, h, CS%tv, CS%diag)
+
       call diag_copy_diag_to_storage(CS%diag_pre_sync, h, CS%diag)
       if (showCallTree) call callTree_waypoint("finished calculate_diagnostic_fields (step_MOM)")
       call disable_averaging(CS%diag)
@@ -1343,6 +1360,19 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
 
   endif ! -------------------------------------------------- end SPLIT
 
+  ! Accumulate resolved flux for tracer diagnostics
+  if (CS%accumulate_resolved_flux) then
+    !$OMP parallel do default(shared)
+    do k=1,nz
+      do j=js-2,je+2 ; do I=Isq-2,Ieq+2
+        CS%uhtr_resolved(I,j,k) = CS%uhtr_resolved(I,j,k) + CS%uh(I,j,k)*dt
+      enddo ; enddo
+      do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
+        CS%vhtr_resolved(i,J,k) = CS%vhtr_resolved(i,J,k) + CS%vh(i,J,k)*dt
+      enddo ; enddo
+    enddo
+  endif
+
   if (CS%use_particles .and. CS%do_dynamics .and. (.not. CS%use_uh_particles)) then
     if (CS%thickness_diffuse_first) call MOM_error(WARNING,"particles_run: "//&
       "Thickness_diffuse_first is true and use_uh_particles is false. "//&
@@ -1421,8 +1451,17 @@ subroutine step_MOM_dynamics(forces, p_surf_begin, p_surf_end, dt, dt_tr_adv, &
                     CS%uhtr, CS%vhtr, G%HI, haloshift=0, unscale=GV%H_to_MKS*US%L_to_m**2)
     endif
     call cpu_clock_begin(id_clock_ml_restrat)
-    call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, CS%visc%h_ML, &
-                            CS%visc%sfc_buoy_flx, CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
+    if (CS%wave_enhanced_ustar .and. CS%StokesMOST) then
+      if (associated(CS%visc%Lam2)) then
+        call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, CS%visc%h_ML, &
+                    CS%visc%sfc_buoy_flx, CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp, CS%visc%Lam2)
+      else
+        call MOM_error(FATAL,'step_MOM_dynamics:CS%visc%Lam2 not associated')
+      endif
+    else
+      call mixedlayer_restrat(h, CS%uhtr, CS%vhtr, CS%tv, forces, dt, CS%visc%MLD, CS%visc%h_ML, &
+                  CS%visc%sfc_buoy_flx, CS%VarMix, G, GV, US, CS%mixedlayer_restrat_CSp)
+    endif
     call cpu_clock_end(id_clock_ml_restrat)
     call pass_var(h, G%Domain, clock=id_clock_pass, halo=CS%dyn_h_stencil)
     if (CS%debug) then
@@ -1493,8 +1532,18 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   type(group_pass_type) :: pass_T_S
   integer :: halo_sz ! The size of a halo where data must be valid.
   logical :: x_first ! If true, advect tracers first in the x-direction, then y.
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: &
+    uhtr_tmp             ! Temp. variable for advecting with alternate volume fluxes [H L2 ~> m3 or kg]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: &
+    vhtr_tmp             ! Temp. variable for advecting with alternate volume fluxes[H L2 ~> m3 or kg]
+  integer :: i, j, k, m, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
+  integer :: IsdB, IedB, JsdB, JedB
   logical :: showCallTree
+
   showCallTree = callTree_showQuery()
+
+  is  = G%isc ; ie  = G%iec ; js  = G%jsc ; je  = G%jec ; nz = GV%ke
+  Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
 
   if (CS%debug) then
     call cpu_clock_begin(id_clock_other)
@@ -1541,7 +1590,27 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   endif
   if (CS%debug) call MOM_tracer_chksum("Pre-advect ", CS%tracer_Reg, G)
   call advect_tracer(h, CS%uhtr, CS%vhtr, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
-                     CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_first)
+                     CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_first, flux_type=0)
+
+  if (CS%do_resolved_advection) then
+    call advect_tracer(h, CS%uhtr_resolved, CS%vhtr_resolved, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
+                       CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_first, flux_type=1)
+  endif
+
+  if (CS%do_param_advection) then
+    !$OMP parallel do default(shared)
+    do k=1,nz
+      do j=js-2,je+2 ; do I=Isq-2,Ieq+2
+        uhtr_tmp(I,j,k) = CS%uhtr(I,j,k) - CS%uhtr_resolved(I,j,k)
+      enddo ; enddo
+      do J=Jsq-2,Jeq+2 ; do i=is-2,ie+2
+        vhtr_tmp(i,J,k) = CS%vhtr(i,J,k) - CS%vhtr_resolved(i,J,k)
+      enddo ; enddo
+    enddo
+    call advect_tracer(h, uhtr_tmp, vhtr_tmp, CS%OBC, CS%t_dyn_rel_adv, G, GV, US, &
+                       CS%tracer_adv_CSp, CS%tracer_Reg, x_first_in=x_first, flux_type=2)
+  endif
+
   if (CS%debug) call MOM_tracer_chksum("Post-advect ", CS%tracer_Reg, G)
   call tracer_hordiff(h, CS%t_dyn_rel_adv, CS%MEKE, CS%VarMix, CS%visc, G, GV, US, &
                       CS%tracer_diff_CSp, CS%tracer_Reg, CS%tv)
@@ -1569,6 +1638,10 @@ subroutine step_MOM_tracer_dyn(CS, G, GV, US, h, Time_local)
   call cpu_clock_begin(id_clock_thermo) ; call cpu_clock_begin(id_clock_tracer)
   CS%uhtr(:,:,:) = 0.0
   CS%vhtr(:,:,:) = 0.0
+  if (CS%accumulate_resolved_flux) then
+    CS%uhtr_resolved(:,:,:) = 0.0
+    CS%vhtr_resolved(:,:,:) = 0.0
+  endif
   CS%n_dyn_steps_in_adv = 0
   CS%t_dyn_rel_adv = 0.0
   call cpu_clock_end(id_clock_tracer) ; call cpu_clock_end(id_clock_thermo)
@@ -1700,7 +1773,7 @@ subroutine step_MOM_thermo(CS, G, GV, US, u, v, h, tv, fluxes, dtdia, &
     fluxes%fluxes_used = .true.
 
     if (CS%stoch_CS%do_skeb) then
-       call apply_skeb(CS%G,CS%GV,CS%stoch_CS,CS%u,CS%v,CS%h,CS%tv,dtdia,Time_end_thermo)
+       call apply_skeb(G, GV, US, CS%stoch_CS, u, v, h, tv, dtdia, Time_end_thermo)
     endif
 
     if (showCallTree) call callTree_waypoint("finished diabatic (step_MOM_thermo)")
@@ -2280,7 +2353,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   ! This include declares and sets the variable "version".
 # include "version_variable.h"
 
-  integer :: i, j, k, is, ie, js, je, isd, ied, jsd, jed, nz
+  integer :: i, j, k, m, is, ie, js, je, isd, ied, jsd, jed, nz
   integer :: IsdB, IedB, JsdB, JedB
   real    :: dtbt              ! If negative, this specifies the barotropic timestep as a fraction
                                ! of the maximum stable value [nondim].
@@ -2427,12 +2500,19 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   call get_param(param_file, '', "FPMIX", fpmix, &
                  "If true, add non-local momentum flux increments and diffuse down the Eulerian gradient.", &
                  default=.false., do_not_log=.true.)
-
   if (fpmix .and. .not. CS%split)  then
     call MOM_error(FATAL, "initialize_MOM: "//&
        "FPMIX=True only works when SPLIT=True.")
   endif
-
+  call openParameterBlock(param_file, 'KPP', do_not_log=.true.)
+  call get_param(param_file, '', 'STOKES_MOST', CS%StokesMOST, &
+                 'If True, use Stokes Similarity package.', &
+                 default=.False., do_not_log=.true.)
+  call closeParameterBlock(param_file)
+  call openParameterBlock(param_file,'MLE', do_not_log=.true.)
+  call get_param(param_file, '', "WAVE_ENHANCED_USTAR", CS%wave_enhanced_ustar, &
+             "If true, enhance ustar in Bodner23.", default=.false., do_not_log=.true.)
+  call closeParameterBlock(param_file)
   call get_param(param_file, "MOM", "BOUSSINESQ", Boussinesq, &
                  "If true, make the Boussinesq approximation.", default=.true., do_not_log=.true.)
   call get_param(param_file, "MOM", "SEMI_BOUSSINESQ", semi_Boussinesq, &
@@ -3706,6 +3786,25 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
     call ALE_register_diags(Time, G, GV, US, diag, CS%ALE_CSp)
   endif
 
+  ! determine if we need to accumulate resolved transports for tracer advection diagnostics
+  do m = 1,CS%tracer_Reg%ntr
+    if (CS%tracer_Reg%Tr(m)%id_adx_resolved > 0 .or. &
+        CS%tracer_Reg%Tr(m)%id_ady_resolved > 0) then
+      CS%accumulate_resolved_flux = .true.
+      CS%do_resolved_advection = .true.
+    endif
+    if (CS%tracer_Reg%Tr(m)%id_adx_param    > 0 .or. &
+        CS%tracer_Reg%Tr(m)%id_ady_param    > 0) then
+      CS%accumulate_resolved_flux = .true.
+      CS%do_param_advection = .true.
+    endif
+  enddo
+  if (CS%accumulate_resolved_flux) then
+    allocate(CS%uhtr_resolved(IsdB:IedB,jsd:jed,nz), source=0.0)
+    allocate(CS%vhtr_resolved(isd:ied,JsdB:JedB,nz), source=0.0)
+  endif
+
+
   ! Do any necessary halo updates on any auxiliary variables that have been initialized.
   call cpu_clock_begin(id_clock_pass_init)
   if (associated(CS%visc%Kv_shear)) &
@@ -3795,7 +3894,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
   endif
 
   ! initialize stochastic physics
-  call stochastics_init(CS%dt_therm, CS%G, CS%GV, CS%stoch_CS, param_file, diag, Time)
+  call stochastics_init(CS%dt_therm, CS%G, CS%GV, US, CS%stoch_CS, param_file, diag, Time)
 
   call callTree_leave("initialize_MOM()")
   call cpu_clock_end(id_clock_init) ; call cpu_clock_end(id_clock_ocean)
@@ -4613,6 +4712,9 @@ subroutine MOM_end(CS)
   ! TODO: debug_truncations deallocation
 
   DEALLOC_(CS%uhtr) ; DEALLOC_(CS%vhtr)
+
+  if (allocated(CS%uhtr_resolved)) deallocate(CS%uhtr_resolved)
+  if (allocated(CS%vhtr_resolved)) deallocate(CS%vhtr_resolved)
 
   if (associated(CS%Hml)) deallocate(CS%Hml)
   if (associated(CS%tv%salt_deficit)) deallocate(CS%tv%salt_deficit)

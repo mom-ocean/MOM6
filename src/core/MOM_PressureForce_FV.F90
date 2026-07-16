@@ -2030,8 +2030,6 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
   type(tidal_forcing_CS), intent(in), target, optional :: tides_CSp !< Tides control structure
 
   ! Local variables
-  real :: Stanley_coeff    ! Coefficient relating the temperature gradient and sub-gridscale
-                           ! temperature variance [nondim]
   integer :: default_answer_date ! Global answer date
   logical :: use_temperature   ! If true, temperature and salinity are used as state variables.
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
@@ -2044,6 +2042,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
 # include "version_variable.h"
   character(len=40)  :: mdl  ! This module's name.
   logical :: use_ALE       ! If true, use the Vertical Lagrangian Remap algorithm
+  logical :: stoch_eos     ! Can't use Stanley param here unless stoch_eos is true
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
 
   isd  = G%isd  ; ied  = G%ied  ; jsd  = G%jsd  ; jed  = G%jed ; nz = GV%ke
@@ -2189,16 +2188,15 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
                  "boundary cells is extrapolated, rather than using PCM "//&
                  "in these cells. If true, the same order polynomial is "//&
                  "used as is used for the interior cells.", default=.true.)
+  call get_param(param_file, mdl, "STOCH_EOS", stoch_eos, &
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "USE_STANLEY_PGF", CS%use_stanley_pgf, &
                  "If true, turn on Stanley SGS T variance parameterization "// &
                  "in PGF code.", default=.false.)
   if (CS%use_stanley_pgf) then
-    call get_param(param_file, mdl, "STANLEY_COEFF", Stanley_coeff, &
-                 "Coefficient correlating the temperature gradient and SGS T variance.", &
-                 units="nondim", default=-1.0, do_not_log=.true.)
-    if (Stanley_coeff < 0.0) call MOM_error(FATAL, &
-                 "STANLEY_COEFF must be set >= 0 if USE_STANLEY_PGF is true.")
-
+    if (.not.stoch_eos) then
+      call MOM_error(FATAL, "PressureForce_FV_init: USE_STANLEY_PGF requires STOCH_EOS")
+    endif
     CS%id_rho_pgf = register_diag_field('ocean_model', 'rho_pgf', diag%axesTL, &
         Time, 'rho in PGF', 'kg m-3', conversion=US%R_to_kg_m3)
     CS%id_rho_stanley_pgf = register_diag_field('ocean_model', 'rho_stanley_pgf', diag%axesTL, &

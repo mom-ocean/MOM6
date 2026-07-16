@@ -18,7 +18,7 @@ GSW_URL ?= https://github.com/mom-ocean/GSW-Fortran.git
 GSW_COMMIT ?= 29e64d652786e1d076a05128c920f394202bfe10
 
 CVMIX_URL ?= https://github.com/mom-ocean/CVMix-src.git
-CVMIX_COMMIT ?= 65ef5c73bc7f5663d5688f75c3855d431da4baea
+CVMIX_COMMIT ?= fce422195a0c58f15a55946b5ed517ba4365e232
 
 
 # List of source files to link this Makefile's dependencies to model Makefiles

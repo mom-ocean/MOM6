@@ -103,7 +103,7 @@ subroutine diagnoseMLDbyDensityDifference(id_MLD, h, tv, densityDiff, G, GV, US,
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
   hRef_MLD(:) = ref_h_mld
-  pRef_MLD(:) = GV%H_to_RZ*GV%g_Earth*ref_h_mld
+  pRef_MLD(:) = GV%H_to_RZ * GV%Z_to_H * GV%g_Earth * ref_h_mld
   z_ref_diag(:,:) = 0.
 
   EOSdom(:) = EOS_domain(G%HI)
@@ -337,6 +337,7 @@ subroutine diagnoseMLDbyEnergy(id_MLD, h, tv, G, GV, US, Mixing_Energy, k_bounds
 
   is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
 
+  use_OM4_iteration = .false.
   if (present(OM4_iteration)) then
     use_OM4_iteration = OM4_iteration
   endif

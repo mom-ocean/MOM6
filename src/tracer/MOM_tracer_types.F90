@@ -22,6 +22,14 @@ type, public :: tracer_type
                                                               !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:,:), pointer :: ad_y           => NULL() !< diagnostic array for y-advective tracer flux
                                                               !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: ad_x_resolved  => NULL() !< diagnostic array for x-advective resolved tracer flux
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: ad_y_resolved  => NULL() !< diagnostic array for y-advective resolved tracer flux
+                                                              !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: ad_x_param     => NULL() !< diagnostic array for x-advective parameterized tracer
+                                                              !! flux [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
+  real, dimension(:,:,:), pointer :: ad_y_param     => NULL() !< diagnostic array for y-advective parameterized tracer
+                                                              !! flux [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: ad2d_x         => NULL() !< diagnostic vertical sum x-advective tracer flux
                                                               !! [CU H L2 T-1 ~> conc m3 s-1 or conc kg s-1]
   real, dimension(:,:),   pointer :: ad2d_y         => NULL() !< diagnostic vertical sum y-advective tracer flux
@@ -108,6 +116,7 @@ type, public :: tracer_type
   !>@{ Diagnostic IDs
   integer :: id_tr = -1, id_tr_post_horzn = -1
   integer :: id_adx = -1, id_ady = -1, id_dfx = -1, id_dfy = -1
+  integer :: id_adx_resolved = -1, id_ady_resolved = -1, id_adx_param = -1, id_ady_param = -1
   integer :: id_hbd_dfx = -1, id_hbd_dfy = -1
   integer :: id_hbd_dfx_2d = -1, id_hbd_dfy_2d = -1
   integer :: id_adx_2d = -1, id_ady_2d = -1, id_dfx_2d = -1, id_dfy_2d = -1

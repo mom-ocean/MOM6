@@ -1100,7 +1100,8 @@ subroutine accumulate_net_input(fluxes, sfc_state, tv, dt, G, US, CS)
         heat_in(i,j) = heat_in(i,j) + dt * G%areaT(i,j) * &
                        (fluxes%heat_content_evap(i,j) + fluxes%heat_content_lprec(i,j) + &
                         fluxes%heat_content_cond(i,j) + fluxes%heat_content_fprec(i,j) + &
-                        fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j))
+                        fluxes%heat_content_lrunoff(i,j) + fluxes%heat_content_frunoff(i,j) + &
+                        fluxes%heat_content_lrunoff_glc(i,j) + fluxes%heat_content_frunoff_glc(i,j))
       enddo ; enddo
     elseif (associated(tv%TempxPmE)) then
       do j=js,je ; do i=is,ie

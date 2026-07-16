@@ -60,6 +60,7 @@ public :: open_file_to_read, close_file_to_read
 public :: file_exists, open_ASCII_file, close_file
 public :: MOM_file, MOM_infra_file, MOM_netcdf_file
 public :: field_exists, get_filename_appendix
+public :: insert_ensemble_appendix
 public :: fieldtype, field_size, get_field_atts
 public :: axistype, get_axis_data
 public :: MOM_read_data, MOM_read_vector, read_field_chksum
@@ -2998,6 +2999,47 @@ subroutine MOM_write_field_0d(IO_handle, field_md, field, tstamp, fill_value, sc
 
   call IO_handle%write_field(field_md, scaled_val, tstamp=tstamp)
 end subroutine MOM_write_field_0d
+
+!> Insert the ensemble appendix into a filename. If provided, the appendix is inserted after
+!! the last occurrence of the insert_after substring in the filename.
+subroutine insert_ensemble_appendix(filename, insert_after)
+  character(len=*),           intent(inout) :: filename     !< The filename to which the appendix is inserted
+  character(len=*), optional, intent(in)    :: insert_after !< The string after which the appendix is inserted.
+                                                            !! If not provided or found, the appendix is inserted
+                                                            !! at the end of the filename.
+  ! Local variables
+  character(len=32) :: filename_appendix            ! ensemble appendix to be inserted into the filename
+  character(len=:), allocatable :: filename_tr      ! trimmed filename
+  character(len=:), allocatable :: insert_after_tr  ! trimmed insert_after
+  integer :: pos ! The filename string index after which the appendix is to be inserted
+
+  call get_filename_appendix(filename_appendix)
+  if (len_trim(filename_appendix) == 0) return
+
+  filename_tr = trim(adjustl(filename))
+  pos = len(filename_tr)
+
+  ! If insert_after is provided, find the last occurrence of insert_after in the filename and set pos accordingly.
+  if (present(insert_after)) then
+    insert_after_tr = trim(adjustl(insert_after))
+    pos = index(filename_tr, insert_after_tr, back=.true.)
+    if (pos == 0) then
+      call MOM_error(FATAL, "insert_ensemble_appendix: The string " // insert_after_tr // &
+                     " was not found in the filename " // filename_tr)
+    endif
+    pos = pos + len(insert_after_tr) - 1
+  endif
+
+  ! Insert the ensemble appendix into the filename. If the appendix is to be added to
+  ! the end of the filename, do so before the .nc extension if it exists.
+  if (pos>3 .and. pos == len(filename_tr)) then
+    if (filename_tr(pos-2:pos) == ".nc") then
+      pos = pos - 3 ! Position before the .nc extension
+    endif
+  endif
+  filename = filename_tr(1:pos) // trim(filename_appendix) // filename_tr(pos+1:)
+
+end subroutine insert_ensemble_appendix
 
 !> Given filename and fieldname, this subroutine returns the size of the field in the file
 subroutine field_size(filename, fieldname, sizes, field_found, no_domain, ndims, ncid_in)

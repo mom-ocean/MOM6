@@ -55,7 +55,7 @@ use MOM_internal_tides,      only : propagate_int_tide, register_int_tide_restar
 use MOM_internal_tides,      only : internal_tides_init, internal_tides_end, int_tide_CS
 use MOM_kappa_shear,         only : kappa_shear_is_used
 use MOM_CVMix_KPP,           only : KPP_CS, KPP_init, KPP_compute_BLD, KPP_calculate
-use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD, register_KPP_restarts
+use MOM_CVMix_KPP,           only : KPP_end, KPP_get_BLD, register_KPP_restarts, KPP_get_Lam2
 use MOM_CVMix_KPP,           only : KPP_NonLocalTransport_temp, KPP_NonLocalTransport_saln
 use MOM_oda_incupd,          only : apply_oda_incupd, oda_incupd_CS
 use MOM_opacity,             only : opacity_init, opacity_end, opacity_CS
@@ -69,7 +69,7 @@ use MOM_set_diffusivity,     only : set_diffusivity_CS
 use MOM_sponge,              only : apply_sponge, sponge_CS
 use MOM_ALE_sponge,          only : apply_ALE_sponge, ALE_sponge_CS
 use MOM_time_manager,        only : time_type, real_to_time, operator(-), operator(<=)
-use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS
+use MOM_tracer_flow_control, only : call_tracer_column_fns, tracer_flow_control_CS, extract_tracer_flow_member
 use MOM_tracer_diabatic,     only : tracer_vertdiff, tracer_vertdiff_Eulerian
 use MOM_unit_scaling,        only : unit_scale_type
 use MOM_variables,           only : thermo_var_ptrs, vertvisc_type, accel_diag_ptrs
@@ -190,6 +190,10 @@ type, public :: diabatic_CS ; private
   logical :: MLD_param_003 = .false. !< Logical flag if MLD in brine plume should use the 0.03 mixed layer depth
   logical :: MLD_param_EN1 = .false. !< Logical flag if MLD in brine plume should use the EN1 mixed layer depth
   logical :: MLD_param_ePBL = .false.!< Logical flag if MLD in brine plume should use the ePBL boundary layer depth
+
+  ! MARBL needs T & S from before the tracer_vertdiff call
+  real, allocatable, dimension(:,:,:) :: prediabatic_T  !< Temperature prior to calling diabatic driver [C ~> degC]
+  real, allocatable, dimension(:,:,:) :: prediabatic_S  !< Salinity prior to calling diabatic driver [S ~> ppt]
 
   !>@{ Diagnostic IDs
   integer :: id_ea       = -1, id_eb       = -1 ! used by layer diabatic
@@ -606,6 +610,7 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     U_star, &    ! The friction velocity [Z T-1 ~> m s-1].
+    Lam2,   &    !  (Langmuir Number)^-2 [nondim]
     KPP_temp_flux, & ! KPP effective temperature flux [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     KPP_salt_flux, & ! KPP effective salt flux [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     SkinBuoyFlux, &  ! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
@@ -664,6 +669,22 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
 
   showCallTree = callTree_showQuery()
   if (showCallTree) call callTree_enter("diabatic_ALE_legacy(), MOM_diabatic_driver.F90")
+
+  ! Some tracer packages require T & S from the beginning of the diabatic step to
+  ! provide forcing consistent with the passive tracer values. The initialization
+  ! routine will allocate prediabatic_T and prediabatic_S if the tracer flow control
+  ! structure indicates it is necessary. If these arrays are allocated, they will store
+  ! a copy of tv%T & tv%S before this subroutine modifies the tv structure.
+  if (allocated(CS%prediabatic_T)) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      CS%prediabatic_T(i,j,k) = tv%T(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if (allocated(CS%prediabatic_S)) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      CS%prediabatic_S(i,j,k) = tv%S(i,j,k)
+    enddo ; enddo ; enddo
+  endif
 
   ! For all other diabatic subroutines, the averaging window should be the entire diabatic timestep
   call enable_averages(dt, Time_end, CS%diag)
@@ -782,10 +803,14 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
     endif
 
     call KPP_get_BLD(CS%KPP_CSp, BLD(:,:), G, US)
+    if (associated(visc%Lam2)) then
+      call KPP_get_Lam2(CS%KPP_CSp, Lam2(:,:), G, US)
+    endif
     ! If visc%MLD or visc%h_ML exist, copy KPP's BLD into them with appropriate conversions.
     if (associated(visc%h_ML)) call convert_MLD_to_ML_thickness(BLD, h, visc%h_ML, tv, G, GV)
     if (associated(visc%MLD)) visc%MLD(:,:) = BLD(:,:)
     if (associated(visc%sfc_buoy_flx)) visc%sfc_buoy_flx(:,:) = KPP_buoy_flux(:,:,1)
+    if (associated(visc%Lam2)) visc%Lam2(:,:) = Lam2(:,:)
 
     if (.not.CS%KPPisPassive) then
       !$OMP parallel do default(shared)
@@ -1059,8 +1084,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
 
   ! Set diffusivities for VBF diagnostics if enabled
   if (CS%use_energetic_PBL .and. associated(CS%VBF%Kd_ePBL)) CS%VBF%Kd_ePBL(:,:,:) = Kd_ePBL(:,:,:)
-  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
-  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
+  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
+  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
 
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
@@ -1221,7 +1246,8 @@ subroutine diabatic_ALE_legacy(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Tim
                               KPP_CSp=CS%KPP_CSp, &
                               nonLocalTrans=KPP_NLTscalar, &
                               evap_CFL_limit=CS%evap_CFL_limit, &
-                              minimum_forcing_depth=CS%minimum_forcing_depth, h_BL=visc%h_ML)
+                              minimum_forcing_depth=CS%minimum_forcing_depth, h_BL=visc%h_ML, &
+                              prediabatic_T=CS%prediabatic_T, prediabatic_S=CS%prediabatic_S)
 
   call cpu_clock_end(id_clock_tracers)
 
@@ -1319,6 +1345,7 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   real, dimension(SZI_(G),SZJ_(G)) :: &
     U_star, &    ! The friction velocity [Z T-1 ~> m s-1].
+    Lam2,   &    !  (Langmuir Number)^-2 [nondim]
     KPP_temp_flux, & ! KPP effective temperature flux [C H T-1 ~> degC m s-1 or degC kg m-2 s-1]
     KPP_salt_flux, & ! KPP effective salt flux [S H T-1 ~> ppt m s-1 or ppt kg m-2 s-1]
     SkinBuoyFlux, &  ! 2d surface buoyancy flux [Z2 T-3 ~> m2 s-3], used by ePBL
@@ -1380,6 +1407,22 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   if (.not. (CS%useALEalgorithm)) call MOM_error(FATAL, "MOM_diabatic_driver: "// &
          "The ALE algorithm must be enabled when using MOM_diabatic_driver.")
+
+  ! Some tracer packages require T & S from the beginning of the diabatic step to
+  ! provide forcing consistent with the passive tracer values. The initialization
+  ! routine will allocate prediabatic_T and prediabatic_S if the tracer flow control
+  ! structure indicates it is necessary. If these arrays are allocated, they will store
+  ! a copy of tv%T & tv%S before this subroutine modifies the tv structure.
+  if (allocated(CS%prediabatic_T)) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      CS%prediabatic_T(i,j,k) = tv%T(i,j,k)
+    enddo ; enddo ; enddo
+  endif
+  if (allocated(CS%prediabatic_S)) then
+    do k=1,nz ; do j=js,je ; do i=is,ie
+      CS%prediabatic_S(i,j,k) = tv%S(i,j,k)
+    enddo ; enddo ; enddo
+  endif
 
   ! For all other diabatic subroutines, the averaging window should be the entire diabatic timestep
   call enable_averages(dt, Time_end, CS%diag)
@@ -1498,11 +1541,16 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
                        Kd_salt, visc%Kv_shear, KPP_NLTheat, KPP_NLTscalar, Waves=Waves)
     endif
 
+
     call KPP_get_BLD(CS%KPP_CSp, BLD(:,:), G, US)
+    if (associated(visc%Lam2)) then
+      call KPP_get_Lam2(CS%KPP_CSp, Lam2(:,:), G, US)
+    endif
     ! If visc%MLD or visc%h_ML exist, copy KPP's BLD into them with appropriate conversions.
     if (associated(visc%h_ML)) call convert_MLD_to_ML_thickness(BLD, h, visc%h_ML, tv, G, GV)
     if (associated(visc%MLD)) visc%MLD(:,:) = BLD(:,:)
-    if (associated(visc%sfc_buoy_flx)) visc%sfc_buoy_flx(:,:) = KPP_buoy_flux(:,:,1)
+    if (associated(visc%sfc_buoy_flx)) visc%sfc_buoy_flx(:,:) = KPP_buoy_flux(:,:,1) * US%L_to_Z**2
+    if (associated(visc%Lam2)) visc%Lam2(:,:) = Lam2(:,:)
 
     if (showCallTree) call callTree_waypoint("done with KPP_calculate (diabatic)")
     if (CS%debug) then
@@ -1703,8 +1751,8 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
 
   ! Set diffusivities for VBF diagnostics if enabled
   if (CS%use_energetic_PBL .and. associated(CS%VBF%Kd_ePBL)) CS%VBF%Kd_ePBL(:,:,:) = Kd_ePBL(:,:,:)
-  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
-  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
+  if (associated(CS%VBF%Kd_salt)) CS%VBF%Kd_salt(:,:,:) = Kd_salt(:,:,:)
+  if (associated(CS%VBF%Kd_temp)) CS%VBF%Kd_temp(:,:,:) = Kd_heat(:,:,:)
 
   ! Diagnose the diapycnal diffusivities and other related quantities.
   if (CS%id_Kd_heat > 0) call post_data(CS%id_Kd_heat, Kd_heat, CS%diag)
@@ -1848,7 +1896,8 @@ subroutine diabatic_ALE(u, v, h, tv, BLD, fluxes, visc, ADp, CDp, dt, Time_end, 
                               KPP_CSp=CS%KPP_CSp, &
                               nonLocalTrans=KPP_NLTscalar, &
                               evap_CFL_limit=CS%evap_CFL_limit, &
-                              minimum_forcing_depth=CS%minimum_forcing_depth, h_BL=visc%h_ML)
+                              minimum_forcing_depth=CS%minimum_forcing_depth, h_BL=visc%h_ML, &
+                              prediabatic_T=CS%prediabatic_T, prediabatic_S=CS%prediabatic_S)
 
   call cpu_clock_end(id_clock_tracers)
 
@@ -3253,7 +3302,7 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
 
   ! Local variables
   real    :: Kd  ! A diffusivity used in the default for other tracer diffusivities [Z2 T-1 ~> m2 s-1]
-  logical :: use_temperature
+  logical :: use_temperature, use_MARBL_tracers
   character(len=20) :: EN1, EN2, EN3
 
   ! This "include" declares and sets the variable "version".
@@ -3271,7 +3320,12 @@ subroutine diabatic_driver_init(Time, G, GV, US, param_file, useALEalgorithm, di
   CS%diag => diag
   CS%Time => Time
 
-  if (associated(tracer_flow_CSp)) CS%tracer_flow_CSp => tracer_flow_CSp
+  if (associated(tracer_flow_CSp)) then
+    CS%tracer_flow_CSp => tracer_flow_CSp
+    call extract_tracer_flow_member(tracer_flow_CSp, use_MARBL_tracers=use_MARBL_tracers)
+    if (use_MARBL_tracers) &
+      allocate(CS%prediabatic_T(SZI_(G),SZJ_(G), SZK_(G)), CS%prediabatic_S(SZI_(G),SZJ_(G), SZK_(G)))
+  end if
   if (associated(sponge_CSp))      CS%sponge_CSp      => sponge_CSp
   if (associated(ALE_sponge_CSp))  CS%ALE_sponge_CSp  => ALE_sponge_CSp
   if (associated(oda_incupd_CSp))  CS%oda_incupd_CSp  => oda_incupd_CSp
@@ -3914,6 +3968,9 @@ subroutine diabatic_driver_end(CS)
     call opacity_end(CS%opacity, CS%optics)
     deallocate(CS%optics)
   endif
+
+  if (allocated(CS%prediabatic_T)) deallocate(CS%prediabatic_T)
+  if (allocated(CS%prediabatic_S)) deallocate(CS%prediabatic_S)
 
   if (CS%debug_energy_req) &
     call diapyc_energy_req_end(CS%diapyc_en_rec_CSp)

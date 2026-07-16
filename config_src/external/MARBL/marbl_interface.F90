@@ -41,6 +41,7 @@ module marbl_interface
         procedure, public  :: put_setting                !< dummy put_setting routine
         procedure, public  :: get_setting                !< dummy get_setting routine
         procedure, public  :: init                       !< dummy init routine
+        procedure, public  :: autotroph_tracer_consistency_enforce  !< dummy consistency enforcement
         procedure, public  :: compute_totChl             !< dummy routine to compute total Chlorophyll
         procedure, public  :: surface_flux_compute       !< dummy surface flux routine
         procedure, public  :: interior_tendency_compute  !< dummy interior tendency routine
@@ -94,6 +95,15 @@ contains
 
         call MOM_error(FATAL, error_msg)
     end subroutine init
+
+    !> Dummy version of MARBL's autotroph_tracer_consistency_enforce() function
+    subroutine autotroph_tracer_consistency_enforce(self)
+
+      class(marbl_interface_class), intent(inout) :: self
+
+      call MOM_error(FATAL, error_msg)
+
+    end subroutine autotroph_tracer_consistency_enforce
 
     !> Dummy version of MARBL's compute_totChl() function
     subroutine compute_totChl(self)

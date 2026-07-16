@@ -102,9 +102,6 @@ type, public :: thickness_diffuse_CS ; private
                                  !! When this is true, it breaks rotational symmetry.
   logical :: use_GM_work_bug     !< If true, use the incorrect sign for the
                                  !! top-level work tendency on the top layer.
-  real :: Stanley_det_coeff      !< The coefficient correlating SGS temperature variance with the mean
-                                 !! temperature gradient in the deterministic part of the Stanley parameterization.
-                                 !! Negative values disable the scheme. [nondim]
   logical :: read_khth           !< If true, read a file containing the spatially varying horizontal
                                  !! isopycnal height diffusivity
   logical :: use_stanley_gm      !< If true, also use the Stanley parameterization in MOM_thickness_diffuse
@@ -2282,6 +2279,7 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                                  ! available.
   logical :: use_meke = .false. ! If true, use the MEKE formulation for the thickness diffusivity.
   integer :: default_answer_date ! The default setting for the various ANSWER_DATE flags.
+  logical :: stoch_eos           ! Can't use Stanley param here unless stoch_eos is true
   integer :: i, j
 
   CS%initialized = .true.
@@ -2415,15 +2413,13 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "streamfunction formulation, expressed as a fraction of planetary "//&
                  "rotation, OMEGA. This should be tiny but non-zero to avoid degeneracy.", &
                  default=1.e-15, units="nondim", scale=US%Z_to_L, do_not_log=.not.CS%use_FGNV_streamfn)
+  call get_param(param_file, mdl, "STOCH_EOS", stoch_eos, &
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "USE_STANLEY_GM", CS%use_stanley_gm, &
                  "If true, turn on Stanley SGS T variance parameterization "// &
                  "in GM code.", default=.false.)
-  if (CS%use_stanley_gm) then
-    call get_param(param_file, mdl, "STANLEY_COEFF", Stanley_coeff, &
-                 "Coefficient correlating the temperature gradient and SGS T variance.", &
-                 units="nondim", default=-1.0, do_not_log=.true.)
-    if (Stanley_coeff < 0.0) call MOM_error(FATAL, &
-                 "STANLEY_COEFF must be set >= 0 if USE_STANLEY_GM is true.")
+  if (CS%use_Stanley_GM .and. .not.stoch_eos) then
+    call MOM_error(FATAL, "thickness_diffuse_init: USE_STANLEY_GM requires STOCH_EOS")
   endif
   call get_param(param_file, mdl, "OMEGA", omega, &
                  "The rotation rate of the earth.", &

@@ -108,6 +108,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
   ! Local variables
   integer, dimension(2) :: layout    ! The number of logical processors in the i- and j- directions
   integer, dimension(2) :: auto_layout ! The layout determined by the auto masking routine
+  integer, dimension(2) :: auto_io_layout ! The IO layout determined by the auto masking routine
   integer, dimension(2) :: layout_unmasked ! A temporary layout for unmasked domain
   integer, dimension(2) :: io_layout ! The layout of logical processors for input and output
   !$ integer :: ocean_nthreads       ! Number of openMP threads
@@ -125,6 +126,7 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
                             ! width of the halos that are updated with each call.
   logical            :: auto_mask_table ! Runtime flag that turns on automatic mask table generator
   integer            :: auto_io_layout_fac ! Used to compute IO layout when auto_mask_table is True.
+  integer            :: target_io_pes ! Target number of IO PEs for when auto_mask_table is True.
   logical            :: mask_table_exists ! True if there is a mask table file
   logical :: is_MOM_domain  ! True if this domain is being set for MOM, and not another component like SIS2.
   character(len=128) :: inputdir   ! The directory in which to find the diag table
@@ -326,13 +328,22 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
     id_clock_auto_mask = cpu_clock_id('(Ocean gen_auto_mask_table)', grain=CLOCK_ROUTINE)
     auto_mask_table_fname = "MOM_auto_mask_table"
 
+    call get_param(param_file, mdl, "TARGET_IO_PES", target_io_pes, &
+            "When AUTO_MASKTABLE is enabled, target number of IO PEs. If the given target number "//&
+            "of IO PEs is not achievable, the target number of IO PEs is set to the nearest smaller "//&
+            "number of PEs that is achievable.", default=1, layoutParam=.true.)
+    if (target_io_pes <= 0) then
+      call MOM_error(FATAL, 'TARGET_IO_PES must be a nonnegative integer.')
+    endif
+
     ! Auto-generate a mask file and determine the layout
     call cpu_clock_begin(id_clock_auto_mask)
     if (is_root_PE()) then
       call gen_auto_mask_table(n_global, reentrant, tripolar_N, PEs_used, param_file, inputdir, &
-                               auto_mask_table_fname, auto_layout, US)
+                               auto_mask_table_fname, target_io_pes, auto_layout, auto_io_layout, US)
     endif
     call broadcast(auto_layout, length=2)
+    call broadcast(auto_io_layout, length=2)
     call cpu_clock_end(id_clock_auto_mask)
 
     mask_table = auto_mask_table_fname
@@ -425,12 +436,20 @@ subroutine MOM_domains_init(MOM_dom, param_file, symmetric, static_memory, &
 
   ! Compute a valid IO layout if auto_mask_table is on. Otherwise, read in IO_LAYOUT parameter,
   if (auto_mask_table) then
+    ! aa: AUTO_IO_LAYOUT_FAC is fragile and should be deprecated/removed in favor of TARGET_IO_PES.
     call get_param(param_file, mdl, "AUTO_IO_LAYOUT_FAC", auto_io_layout_fac, &
             "When AUTO_MASKTABLE is enabled, io layout is calculated by performing integer "//&
             "division of the runtime-determined domain layout with this factor. If the factor "//&
-            "is set to 0 (default), the io layout is set to 1,1.", &
+            "is set to 0 (default), the io layout is set to 1,1. NOTE: TARGET_IO_PES is a more "//&
+            "robust way to set the number of IO PEs when auto masking is turned on.", &
             default=0, layoutParam=.true.)
-    if (auto_io_layout_fac>0) then
+    if (auto_io_layout_fac>1 .and. target_io_pes>1) then
+      call MOM_error(FATAL, 'AUTO_IO_LAYOUT_FAC and TARGET_IO_PES cannot be set simultaneously.')
+    endif
+    if (target_io_pes>1) then
+      io_layout(1) = auto_io_layout(1)
+      io_layout(2) = auto_io_layout(2)
+    elseif (auto_io_layout_fac>0) then
       io_layout(1) = max(layout(1)/auto_io_layout_fac, 1)
       io_layout(2) = max(layout(2)/auto_io_layout_fac, 1)
     elseif (auto_io_layout_fac<0) then
@@ -486,7 +505,8 @@ subroutine MOM_define_layout(n_global, ndivs, layout)
 end subroutine MOM_define_layout
 
 !> Given a desired number of active npes, generate a layout and mask_table
-subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file, inputdir, filename, layout, US)
+subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file, &
+                               inputdir, filename, target_io_pes, layout, io_layout, US)
   integer, dimension(2), intent(in)         :: n_global   !< The total number of gridpoints in 2 directions
   logical, dimension(2), intent(in)         :: reentrant  !< True if the x- and y- directions are periodic.
   logical,               intent(in)         :: tripolar_N !< A flag indicating whether there is n. tripolar connectivity
@@ -494,7 +514,9 @@ subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file
   type(param_file_type), intent(in)         :: param_file !< A structure to parse for run-time parameters
   character(len=128),    intent(in)         :: inputdir   !< INPUTDIR parameter
   character(len=:), allocatable, intent(in) :: filename   !< Mask table file path (to be auto-generated.)
+  integer,               intent(inout)      :: target_io_pes !< Target number of IO PEs when auto_mask_table is True.
   integer, dimension(2), intent(out)        :: layout     !< The generated layout of PEs (incl. masked blocks)
+  integer, dimension(2), intent(out)        :: io_layout  !< The generated IO layout based on target_io_pes.
   type(unit_scale_type), optional, pointer  :: US         !< A dimensional unit scaling type
 
   ! Local variables
@@ -504,20 +526,26 @@ subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file
   character(len=200) :: topo_varname                    ! Variable name in file
   character(len=200) :: topo_config
   character(len=40)  :: mdl = "gen_auto_mask_table"      ! This subroutine's name.
-  integer :: i, j, p
+  integer :: i, j, p, p_up
   real :: Dmask          ! The depth for masking in the same units as D             [Z ~> m]
   real :: min_depth      ! The minimum ocean depth in the same units as D           [Z ~> m]
   real :: mask_depth     ! The depth shallower than which to mask a point as land.  [Z ~> m]
   real :: glob_ocn_frac  ! ratio of ocean points to total number of points          [nondim]
-  real :: r_p            ! aspect ratio for division count p.                       [nondim]
+  real :: ar             ! layout aspect ratio to check if it is too extreme        [nondim]
   real :: m_to_Z         ! A conversion factor from m to height units           [Z m-1 ~> 1]
   integer :: nx, ny      ! global domain sizes
   integer, parameter :: ibuf=2, jbuf=2
   real, parameter :: r_extreme = 4.0 ! aspect ratio limit (>1) for a layout to be considered [nondim]
   integer :: num_masked_blocks
   integer, allocatable :: mask_table(:,:)
+  integer :: max_feasible_p ! max division count that leads to enough land block masking to arrive at target compute PEs
+  real, parameter :: pfrac = 0.01 ! fraction by which to reduce the max_feasible_p if target IO PEs is not achievable.
+                                  ! (This is to provide a wiggle room for the target IO PEs to be achieved.) [nondim]
+  character(len=200) :: mesg      ! A string to use for error messages
 
   m_to_Z = 1.0 ; if (present(US)) m_to_Z = US%m_to_Z
+
+  io_layout = [1, 1]
 
   ! Read in params necessary for auto-masking
   call get_param(param_file, mdl, "MINIMUM_DEPTH", min_depth, &
@@ -592,28 +620,56 @@ subroutine gen_auto_mask_table(n_global, reentrant, tripolar_N, npes, param_file
   endif
 
   glob_ocn_frac = real(sum(mask(1+ibuf:nx+ibuf, 1+jbuf:ny+jbuf))) / (nx * ny)
+  max_feasible_p = 0
 
-  ! Iteratively check for all possible division counts starting from the upper bound of npes/glob_ocn_frac,
-  ! which is over-optimistic for realistic domains, but may be satisfied with idealized domains.
-  do p = ceiling(npes/glob_ocn_frac), npes, -1
+  ! Iteratively check for all possible division counts starting from the upper bound of npes/glob_ocn_frac.
+  ! The first encountered feasible division count is stored in max_feasible_p. If the target_io_pes is not
+  ! achievable with this layout, the iteration continues until max_feasible_p * (1.0 - pfrac) is reached or the
+  ! target_io_pes is satisfiable. If not, the target_io_pes is decremented and the iteration is re-done from
+  ! max_feasible_p to max_feasible_p * (1.0 - pfrac).
+  outer: do i = target_io_pes, 1, -1
 
-    ! compute the layout for the current division count, p
-    call MOM_define_layout(n_global, p, layout)
-
-    ! don't bother checking this p if the aspect ratio is extreme
-    r_p = (real(nx)/layout(1)) / (real(ny)/layout(2))
-    if ( r_p * r_extreme < 1 .or. r_extreme < r_p ) cycle
-
-    ! Get the number of masked_blocks for this particular division count
-    call determine_land_blocks(mask, nx, ny, layout(1), layout(2), ibuf, jbuf, num_masked_blocks)
-
-    ! If we can eliminate enough blocks to reach the target npes, adopt
-    ! this p (and the associated layout) and terminate the iteration.
-    if (p-num_masked_blocks <= npes) then
-      call MOM_error(NOTE, "Found the optimum layout for auto-masking. Terminating iteration...")
-      exit
+    if (max_feasible_p == 0) then ! first iteration
+      p_up = ceiling(npes/glob_ocn_frac)
+    else ! subsequent iterations with reduced target_io_pes
+      p_up = max_feasible_p
     endif
-  enddo
+
+    do p = p_up, npes, -1
+
+      ! compute the layout for the current division count, p
+      call MOM_define_layout(n_global, p, layout)
+
+      ! don't bother checking this p if the aspect ratio is extreme
+      ar = (real(nx)/layout(1)) / (real(ny)/layout(2))
+      if ( ar * r_extreme < 1 .or. r_extreme < ar ) cycle
+
+      ! Get the number of masked_blocks for this particular division count
+      call determine_land_blocks(mask, nx, ny, layout(1), layout(2), ibuf, jbuf, num_masked_blocks)
+
+      ! If we can eliminate enough blocks to reach the target compute npes, check if the target IO PEs can also be
+      ! satisfied with this layout. If so, terminate the whole iteration.
+      if (p-num_masked_blocks <= npes) then ! We can eliminate enough blocks to reach the target compute npes
+        if (max_feasible_p == 0) max_feasible_p = p
+        if (mod(layout(1)*layout(2), i) == 0) then
+          io_layout = auto_determine_io_layout(layout(1), layout(2), i)
+          ! skip if aspect ratio is extreme
+          ar = (real(layout(1))/io_layout(1)) / (real(layout(2))/io_layout(2))
+          if ( ar * r_extreme < 1 .or. r_extreme < ar ) cycle
+          call MOM_error(NOTE, "Found the optimum layout for auto-masking. Terminating iteration.")
+          if (i /= target_io_pes) then
+            write(mesg,'(a,i0)') "For compatibility with compute layout, changed number of IO PEs to: ", i
+            call MOM_error(NOTE, mesg)
+          endif
+          exit outer
+        endif
+      endif
+
+      ! Do not reduce the division count too much to satisfy the target_io_pes. Instead, re-do the iteration
+      ! with a reduced target_io_pes.
+      if (p <= max_feasible_p * (1.0 - pfrac)) exit ! (inner do loop)
+    enddo
+  enddo outer
 
   if (num_masked_blocks == 0) then
     call MOM_error(FATAL, "Couldn't auto-eliminate any land blocks. Try to increase the number "//&
@@ -701,5 +757,42 @@ subroutine write_auto_mask_file(mask_table, layout, npes, filename)
   enddo
   call close_file(file_ascii)
 end subroutine write_auto_mask_file
+
+!> Computes the io layout based on the domain layout and a target number of IO PEs.
+function auto_determine_io_layout(idiv, jdiv, nio) result(best_io_layout)
+  integer, intent(in) :: idiv ! The number of compute divisions along the x-axis
+  integer, intent(in) :: jdiv ! The number of compute divisions along the y-axis
+  integer, intent(in) :: nio  ! Target number of IO PEs, s.t., (idiv_io * jdiv_io) % nio == 0
+  ! return
+  integer :: io_layout(2) ! Temporary IO layout
+  integer :: best_io_layout(2) ! Best IO layout
+  integer :: f, best_idiv_io, best_jdiv_io
+  real :: ratio_diff, min_ratio_diff
+
+  if (mod(idiv*jdiv, nio) /= 0) then
+    call MOM_error(FATAL, "The product of the compute layout must be divisible by the target number of IO PEs.")
+  endif
+
+  min_ratio_diff = 1.0e30  ! Large initial value
+  best_io_layout = [1, nio]
+
+  ! Iterate over all factors of nio
+  do f = 1, nio
+    if (mod(nio, f) /= 0) cycle
+    io_layout = [f, nio / f]
+
+    ! Check divisibility constraints
+    if (mod(idiv, io_layout(1)) == 0 .and. mod(jdiv, io_layout(2)) == 0) then
+      ratio_diff = abs(real(io_layout(1)) / real(io_layout(2)) - real(idiv) / real(jdiv))
+
+      ! Update best choice if ratio_diff is smaller
+      if (ratio_diff < min_ratio_diff) then
+        min_ratio_diff = ratio_diff
+        best_io_layout = [io_layout(1), io_layout(2)]
+      end if
+    end if
+  end do
+
+end function auto_determine_io_layout
 
 end module MOM_domains
