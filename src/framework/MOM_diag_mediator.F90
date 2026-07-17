@@ -1956,7 +1956,7 @@ subroutine post_data_3d_low(diag, field, diag_cs, is_static, mask)
     call post_xy_average(diag_cs, diag, locfield)
   endif
 
-  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.) .and. dl<2) &
+  if ((diag%conversion_factor /= 0.) .and. (diag%conversion_factor /= 1.) .and. dlfac<2) &
     deallocate( locfield )
 
 end subroutine post_data_3d_low
