@@ -2048,7 +2048,8 @@ subroutine horizontal_viscosity(u, v, h, uh, vh, diffu, diffv, MEKE, VarMix, G, 
       endif
     endif
 
-    if (CS%id_FrictWork_bh>0 .or. CS%id_FrictWorkIntz_bh > 0 .or. allocated(MEKE%mom_src_bh)) then
+    if (CS%id_FrictWork_bh>0 .or. CS%id_FrictWorkIntz_bh > 0 .or. allocated(MEKE%mom_src_bh) &
+        .or. (allocated(MEKE%mom_src) .and. MEKE%backscatter_Ro_c /= 0.)) then
       if (CS%FrictWork_bug) then
         ! Diagnose   bhstr_xx*d_x u - bhstr_yy*d_y v + bhstr_xy*(d_y u + d_x v)
         ! This is the old formulation that includes energy diffusion !cyc
