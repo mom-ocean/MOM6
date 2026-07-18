@@ -1655,8 +1655,8 @@ subroutine register_forcing_type_diags(Time, diag, US, use_temperature, &
       handles%id_seaice_bc_flux = register_diag_field('ocean_model', 'SEAICE_BLACK_CARBON_FLUX_CPL', &
           diag%axesT1, Time, 'SEAICE_BLACK_CARBON_FLUX from cpl', 'kg m-2 s', &
           conversion=US%RZ_T_to_kg_m2s)
-    end if
-  end if
+    endif
+  endif
   handles%id_psurf = register_diag_field('ocean_model', 'p_surf', diag%axesT1, Time, &
         'Pressure at ice-ocean or atmosphere-ocean interface', &
         'Pa', conversion=US%RL2_T2_to_Pa, cmor_field_name='pso', &

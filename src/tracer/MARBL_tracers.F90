@@ -996,17 +996,17 @@ subroutine initialize_MARBL_tracers(restart, day, G, GV, US, h, param_file, diag
     call MOM_error(NOTE, 'Enforcing consistency across autotroph tracer initial conditions')
     do j=G%jsc, G%jec ; do i=G%isc, G%iec
       ! Copy tracer data into flat array
-      do k=1,GV%ke; do m=1, CS%ntr
+      do k=1,GV%ke ; do m=1, CS%ntr
         MARBL_instances%tracers(m,k) = CS%tracer_data(m)%tr(i,j,k)
-      end do ; end do
+      enddo ; enddo
       ! call consistency enforcement
       call MARBL_instances%autotroph_tracer_consistency_enforce()
       ! Copy tracer data out of flat array
-      do k=1,GV%ke; do m=1, CS%ntr
+      do k=1,GV%ke ; do m=1, CS%ntr
         CS%tracer_data(m)%tr(i,j,k) = MARBL_instances%tracers(m,k)
-      end do ; end do
-    end do ; end do
-  end if
+      enddo ; enddo
+    enddo ; enddo
+  endif
 
   ! Initialize total chlorophyll to get SW Pen correct (if it wasn't initialized from restart file)
   if ((CS%total_Chl_ind > 0) .and. &
