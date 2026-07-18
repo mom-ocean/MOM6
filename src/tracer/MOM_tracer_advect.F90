@@ -539,11 +539,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             I = segment%HI%IsdB
             do m = 1,segment%tr_Reg%ntseg ! replace tracers with OBC values
               ntr_id = segment%tr_reg%Tr(m)%ntr_index
-              if (segment%direction == OBC_DIRECTION_W) then
-                T_tmp(i,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-              else
-                T_tmp(i+1,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-              endif
+              if (advect_this_tracer(ntr_id)) then
+                if (segment%direction == OBC_DIRECTION_W) then
+                  T_tmp(i,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                else
+                  T_tmp(i+1,ntr_id) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                endif
+              endif ! advect_this_tracer
             enddo
             do m = 1,ntr ! Apply update tracer values for slope calculation
               if (advect_this_tracer(m)) then
@@ -681,7 +683,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
               ! should the reservoir evolve for this case Kate ?? - Nope
                 do m=1,segment%tr_Reg%ntseg
                   ntr_id = segment%tr_reg%Tr(m)%ntr_index
-                  flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
+                  if (advect_this_tracer(ntr_id)) then
+                    flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
+                  endif ! advect_this_tracer
                 enddo
               endif
             endif
@@ -703,7 +707,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
               uhh(I) = uhr(I,j,k)
               do m=1,segment%tr_Reg%ntseg
                 ntr_id = segment%tr_reg%Tr(m)%ntr_index
-                flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
+                if (advect_this_tracer(ntr_id)) then
+                  flux_x(I,j,ntr_id) = uhh(I)*segment%tr_Reg%Tr(m)%tres(I,j,k)
+                endif ! advect_this_tracer
               enddo
             endif
           endif
@@ -761,9 +767,9 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
 
         ! diagnostics
         if (flux_type == 0) then
-          if (associated(Tr(m)%ad_x)) then ; do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+          if (associated(Tr(m)%ad_x)) then ; do I=is-1,ie
             Tr(m)%ad_x(I,j,k) = Tr(m)%ad_x(I,j,k) + flux_x(I,j,m)*Idt
-          endif ; enddo ; endif
+          enddo ; endif
 
           ! diagnose convergence of flux_x (do not use the Ihnew(i) part of the logic).
           ! division by areaT to get into W/m2 for heat and kg/(s*m2) for salt.
@@ -774,13 +780,13 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
             endif ; enddo
           endif
         elseif (flux_type == 1) then
-          if (associated(Tr(m)%ad_x_resolved)) then ; do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+          if (associated(Tr(m)%ad_x_resolved)) then ; do I=is-1,ie
             Tr(m)%ad_x_resolved(I,j,k) = Tr(m)%ad_x_resolved(I,j,k) + flux_x(I,j,m)*Idt
-          endif ; enddo ; endif
+          enddo ; endif
         elseif (flux_type == 2) then
-          if (associated(Tr(m)%ad_x_param)) then ; do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+          if (associated(Tr(m)%ad_x_param)) then ; do I=is-1,ie
             Tr(m)%ad_x_param(I,j,k) = Tr(m)%ad_x_param(I,j,k) + flux_x(I,j,m)*Idt
-          endif ; enddo ; endif
+          enddo ; endif
         endif ! the case of flux_type not equal 0, 1, or 2 is caught in advect_tracer above.
       endif ! advect_this_tracer
     enddo
@@ -802,13 +808,14 @@ subroutine advect_x(Tr, hprev, uhr, uh_neglect, OBC, domore_u, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad2d_x)) then
       do j=js,je ; if (domore_u_initial(j,k)) then
-        do I=is-1,ie ; if (do_i(i,j) .or. do_i(i+1,j)) then
+        do I=is-1,ie
           Tr(m)%ad2d_x(I,j) = Tr(m)%ad2d_x(I,j) + flux_x(I,j,m)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered
   endif
+
 end subroutine advect_x
 
 !> This subroutine does 1-d flux-form advection using a monotonic piecewise
@@ -960,11 +967,13 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
             J = segment%HI%JsdB
             do m = 1,segment%tr_Reg%ntseg ! replace tracers with OBC values
               ntr_id = segment%tr_reg%Tr(m)%ntr_index
-              if (segment%direction == OBC_DIRECTION_S) then
-                T_tmp(i,ntr_id,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-              else
-                T_tmp(i,ntr_id,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
-              endif
+              if (advect_this_tracer(ntr_id)) then
+                if (segment%direction == OBC_DIRECTION_S) then
+                  T_tmp(i,ntr_id,j) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                else
+                  T_tmp(i,ntr_id,j+1) = segment%tr_Reg%Tr(m)%tres(i,j,k)
+                endif
+              endif ! advect_this_tracer
             enddo
             do m = 1,ntr ! Apply update tracer values for slope calculation
               if (advect_this_tracer(m)) then
@@ -1104,7 +1113,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                   vhh(i,J) = vhr(i,J,k)
                   do m=1,segment%tr_Reg%ntseg
                     ntr_id = segment%tr_reg%Tr(m)%ntr_index
-                    flux_y(i,ntr_id,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
+                    if (advect_this_tracer(ntr_id)) then
+                      flux_y(i,ntr_id,J) = vhh(i,J)*OBC%segment(n)%tr_Reg%Tr(m)%tres(i,J,k)
+                    endif ! advect_this_tracer
                   enddo
                 endif
               enddo
@@ -1126,7 +1137,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
                 vhh(i,J) = vhr(i,J,k)
                 do m=1,segment%tr_Reg%ntseg
                   ntr_id = segment%tr_reg%Tr(m)%ntr_index
-                  flux_y(i,ntr_id,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%tres(i,J,k)
+                  if (advect_this_tracer(ntr_id)) then
+                    flux_y(i,ntr_id,J) = vhh(i,J)*segment%tr_Reg%Tr(m)%tres(i,J,k)
+                  endif ! advect_this_tracer
                 enddo
               endif
             enddo
@@ -1212,17 +1225,17 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad_y)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad_y(i,J,k) = Tr(m)%ad_y(i,J,k) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
 
     do m=1,ntr ; if (associated(Tr(m)%ad2d_y)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad2d_y(i,J) = Tr(m)%ad2d_y(i,J) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered
@@ -1230,9 +1243,9 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad_y_resolved)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad_y_resolved(i,J,k) = Tr(m)%ad_y_resolved(i,J,k) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered
@@ -1240,13 +1253,14 @@ subroutine advect_y(Tr, hprev, vhr, vh_neglect, OBC, domore_v, ntr, Idt, &
     !$OMP ordered
     do m=1,ntr ; if (associated(Tr(m)%ad_y_param)) then
       do J=js-1,je ; if (domore_v_initial(J)) then
-        do i=is,ie ; if (do_i(i,j) .or. do_i(i,j+1)) then
+        do i=is,ie
           Tr(m)%ad_y_param(i,J,k) = Tr(m)%ad_y_param(i,J,k) + flux_y(i,m,J)*Idt
-        endif ; enddo
+        enddo
       endif ; enddo
     endif ; enddo ! End of m-loop.
     !$OMP end ordered
   endif ! the case of flux_type not equal 0, 1, or 2 is caught in advect_tracer above.
+
 end subroutine advect_y
 
 !> Initialize lateral tracer advection module
