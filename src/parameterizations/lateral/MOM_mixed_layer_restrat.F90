@@ -330,7 +330,8 @@ subroutine mixedlayer_restrat_OM4(h, uhtr, vhtr, tv, forces, dt, h_MLD, VarMix, 
   if (CS%MLE_MLD_decay_time>0.) then
     if (CS%debug) then
       call hchksum(CS%MLD_filtered, 'mixed_layer_restrat: MLD_filtered', G%HI, haloshift=1, unscale=GV%H_to_mks)
-      call hchksum(h_MLD, 'mixed_layer_restrat: MLD in', G%HI, haloshift=1, unscale=GV%H_to_mks)
+      if (CS%MLE_density_diff <= 0.) &
+        call hchksum(h_MLD, 'mixed_layer_restrat: MLD in', G%HI, haloshift=1, unscale=GV%H_to_mks)
     endif
     aFac = CS%MLE_MLD_decay_time / ( dt + CS%MLE_MLD_decay_time )
     bFac = dt / ( dt + CS%MLE_MLD_decay_time )
@@ -1781,16 +1782,16 @@ logical function mixedlayer_restrat_init(Time, G, GV, US, param_file, diag, CS, 
              "parameter a micron away from the equator.", &
              units="m2 s-2", default=1.0e-24, scale=US%m_to_Z**2*US%T_to_s**2)
     call get_param(param_file, mdl, "WAVE_ENHANCED_USTAR", CS%wave_enhanced_ustar, &
-             "If true, enhance ustar using surface waves, following Eq. 28 in Bodner23. " //&
-             "Use a Langmuir number if provided. Otherwise, assumes equilibrium "// &
+             "If true, enhance ustar using surface waves, following Eq. 28 in Bodner23. "//&
+             "Use a Langmuir number if provided. Otherwise, assumes equilibrium "//&
              "surface waves (La-2=11.).", default=.false.)
     call get_param(param_file, mdl, "TAIL_DH", CS%MLE_tail_dh, &
              "Fraction by which to extend the mixed-layer restratification "//&
              "depth used for a smoother stream function at the base of "//&
              "the mixed-layer.", units="nondim", default=0.0)
     call get_param(param_file, mdl, "USE_CR_GRID", CS%Cr_grid, &
-             "If true, read in a spatially varying Cr field." //&
-             "If CR = 0 (default), this field is scaled by 1.0." //&
+             "If true, read in a spatially varying Cr field. "//&
+             "If CR = 0 (default), this field is scaled by 1.0. "//&
              "If CR>0., this field works as a mask and is scaled by CR.", default=.false.)
     call get_param(param_file, mdl, "USE_MLD_GRID", CS%MLD_grid, &
              "If true, read in a spatially varying MLD_decaying_Tfilt field.", default=.false.)
