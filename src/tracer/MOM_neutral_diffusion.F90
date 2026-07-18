@@ -391,7 +391,7 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, visc, CS, p_surf)
     if (associated(visc%h_ML)) then
       CS%hbl(:,:) = visc%h_ML(:,:)
     else
-      call MOM_error(FATAL, "hor_bnd_diffusion requires that visc%h_ML is associated.")
+      call MOM_error(FATAL, "neutral_diffusion requires that visc%h_ML is associated.")
     endif
     call pass_var(CS%hbl, G%Domain, halo=1)
 
