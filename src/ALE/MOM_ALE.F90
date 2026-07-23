@@ -873,7 +873,7 @@ subroutine ALE_remap_tracers(CS, G, GV, h_old, h_new, Reg, debug, dt, PCM_cell)
   endif  ! endif for ntr > 0
 
 
-  if (CS%id_vert_remap_h > 0) call post_data(CS%id_vert_remap_h, h_old, CS%diag)
+  if (CS%id_vert_remap_h > 0) call post_data(CS%id_vert_remap_h, h_new, CS%diag)
   if ((CS%id_vert_remap_h_tendency > 0) .and. present(dt)) then
     do k = 1, nz ; do j = G%jsc,G%jec ; do i = G%isc,G%iec
       work_cont(i,j,k) = (h_new(i,j,k) - h_old(i,j,k))*Idt
