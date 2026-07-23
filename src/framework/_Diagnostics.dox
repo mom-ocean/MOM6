@@ -135,7 +135,7 @@ An arbitrary number of lines, one per diagnostic field:
 
 The list of available diagnostics is dependent on the particular configuration of the model.
 For this reason the model writes a record of the available diagnostic fields at run-time into a file "available_diags.*".
-See, for example, [available_diags.000000](https://github.com/NOAA-GFDL/MOM6-examples/blob/dev/master/ocean_only/global_ALE/z/available_diags.000000) for the global_ALE z-coordinate ocean-only test case.
+See, for example, [available_diags.000000](https://github.com/NOAA-GFDL/MOM6-examples/blob/dev/gfdl/ocean_only/global_ALE/z/available_diags.000000) for the global_ALE z-coordinate ocean-only test case.
 
 Diagnostic fields in the module "ocean_model" refer to the native variables or diagnostics in the native grid.
 Since the model can be run in arbitrary coordinates, say in hybrid-coordinate mode, then native-space diagnostics can be potentially confusing.

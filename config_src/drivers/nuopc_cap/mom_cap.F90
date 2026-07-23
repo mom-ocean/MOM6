@@ -2044,7 +2044,7 @@ subroutine ModelAdvance(gcomp, rc)
 
         ! write restart file(s)
         call ocean_model_restart(ocean_state, restartname=restartname, &
-                                stoch_restartname=stoch_restartname, num_rest_files=num_rest_files)
+                                stoch_restartname='RESTART/'//stoch_restartname, num_rest_files=num_rest_files)
 
         call outputlog_restart(clock, num_rest_files, rc=rc)
         if (ChkErr(rc,__LINE__,u_FILE_u)) return
