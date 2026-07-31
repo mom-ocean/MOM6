@@ -2071,7 +2071,7 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
                  "If true, recover a bug that RHO_0 (the mean seawater density in Boussinesq mode) "//&
                  "and RHO_PGF_REF (the subtracted reference density in finite volume pressure "//&
                  "gradient forces) are incorrectly interchanged in several instances in Boussinesq mode.", &
-                 default=enable_bugs)
+                 default=enable_bugs, do_not_log=(CS%rho_ref==GV%Rho0))
   call get_param(param_file, mdl, "TIDES", CS%tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   if (CS%tides) then
