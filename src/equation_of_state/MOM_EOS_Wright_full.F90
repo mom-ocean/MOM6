@@ -758,7 +758,6 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
   real :: c5s        ! Partly rescaled version of c5 [m2 s-2 C-1 S-1 ~> m2 s-2 degC-1 PSU-1]
   logical :: do_massWeight ! Indicates whether to do mass weighting.
   logical :: top_massWeight ! Indicates whether to do mass weighting the sea surface
-  logical :: massWeight_bug ! If true, use an incorrect expression to determine where to apply mass weighting
   real, parameter :: C1_3 = 1.0/3.0, C1_7 = 1.0/7.0    ! Rational constants [nondim]
   real, parameter :: C1_9 = 1.0/9.0, C1_90 = 1.0/90.0  ! Rational constants [nondim]
   integer :: Isq, Ieq, Jsq, Jeq, ish, ieh, jsh, jeh, i, j, m, halo
@@ -795,11 +794,10 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
     c4s = c4s * saln_scale ; c5s = c5s * saln_scale
   endif ; endif
 
-  do_massWeight = .false. ; massWeight_bug = .false. ; top_massWeight = .false.
+  do_massWeight = .false. ; top_massWeight = .false.
   if (present(MassWghtInterp)) then
     do_massWeight = BTEST(MassWghtInterp, 0) ! True for odd values
     top_massWeight = BTEST(MassWghtInterp, 1) ! True if the 2 bit is set
-    massWeight_bug = BTEST(MassWghtInterp, 3) ! True if the 8 bit is set
   endif
 
   !  alpha = (lambda + al0*(pressure + p0)) / (pressure + p0)
@@ -826,9 +824,7 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight .and. massWeight_bug) then
-      hWght = max(0., bathyP(i,j)-p_t(i+1,j), bathyP(i+1,j)-p_t(i,j))
-    elseif (do_massWeight) then
+    if (do_massWeight) then
       hWght = max(0., p_t(i+1,j)-bathyP(i,j), p_t(i,j)-bathyP(i+1,j))
     endif
     if (top_massWeight) &
@@ -873,9 +869,7 @@ subroutine int_spec_vol_dp_wright_full(T, S, p_t, p_b, spv_ref, HI, dza, &
     ! hydrostatic consistency. For large hWght we bias the interpolation of
     ! T & S along the top and bottom integrals, akin to thickness weighting.
     hWght = 0.0
-    if (do_massWeight .and. massWeight_bug) then
-      hWght = max(0., bathyP(i,j)-p_t(i,j+1), bathyP(i,j+1)-p_t(i,j))
-    elseif (do_massWeight) then
+    if (do_massWeight) then
       hWght = max(0., p_t(i,j+1)-bathyP(i,j), p_t(i,j)-bathyP(i,j+1))
     endif
     if (top_massWeight) &

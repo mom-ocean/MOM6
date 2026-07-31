@@ -2035,7 +2035,6 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
   logical :: use_EOS           ! If true, density calculated from T & S using an equation of state.
   logical :: useMassWghtInterp ! If true, use near-bottom mass weighting for T and S
   logical :: MassWghtInterpTop ! If true, use near-surface mass weighting for T and S under ice shelves
-  logical :: MassWghtInterp_NonBous_bug ! If true, use a buggy mass weighting when non-Boussinesq
   logical :: enable_bugs  ! If true, the defaults for recently added bug-fix flags are set to
                           ! recreate the bugs, or if false bugs are only used if actively selected.
   ! This include declares and sets the variable "version".
@@ -2130,11 +2129,6 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
                  "interpolating T/S for integrals near the top of the water column in FV "//&
                  "pressure gradient calculations. ", &
                  default=useMassWghtInterp)
-  call get_param(param_file, mdl, "MASS_WEIGHT_IN_PGF_NONBOUS_BUG", MassWghtInterp_NonBous_bug, &
-                 "If true, use a masking bug in non-Boussinesq calculations with mass weighting "//&
-                 "when interpolating T/S for integrals near the bathymetry in FV pressure "//&
-                 "gradient calculations.", &
-                 default=.false., do_not_log=(GV%Boussinesq .or. (.not.useMassWghtInterp)))
   call get_param(param_file, mdl, "MASS_WEIGHT_IN_PGF_VANISHED_ONLY", CS%MassWghtInterpVanOnly, &
                  "If true, use mass weighting when interpolating T/S for integrals "//&
                  "only if one side is vanished according to RESET_INTXPA_H_NONVANISHED. ", &
@@ -2145,8 +2139,6 @@ subroutine PressureForce_FV_init(Time, G, GV, US, param_file, diag, CS, ADp, SAL
     CS%MassWghtInterp = ibset(CS%MassWghtInterp, 0) ! Same as CS%MassWghtInterp + 1
   if (MassWghtInterpTop) &
     CS%MassWghtInterp = ibset(CS%MassWghtInterp, 1) ! Same as CS%MassWghtInterp + 2
-  if ((.not.GV%Boussinesq) .and. MassWghtInterp_NonBous_bug) &
-    CS%MassWghtInterp = ibset(CS%MassWghtInterp, 3) ! Same as CS%MassWghtInterp + 8
 
   call get_param(param_file, mdl, "CORRECTION_INTXPA", CS%correction_intxpa, &
                  "If true, use a correction for surface pressure curvature in intx_pa.", &
