@@ -2642,10 +2642,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                                   ! been rearranged for rotational invariance.
   logical :: pre_gridded
   logical :: separate_mixed_layer  ! If true, handle the mixed layers differently.
-  logical :: density_extrap_bug    ! If true use an expression with a vertical indexing bug for
-                                   ! extrapolating the densities at the bottom of unstable profiles
-                                   ! from data when finding the initial interface locations in
-                                   ! layered mode from a dataset of T and S.
   character(len=64) :: remappingScheme
   logical :: om4_remap_via_sub_cells ! If true, use the OM4 remapping algorithm (only used if useALEremapping)
   logical :: do_conv_adj, ignore
@@ -2782,11 +2778,6 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
                  "A small density tolerance used when finding depths in a density profile.", &
                  units="kg m-3", default=1.0e-10, scale=US%kg_m3_to_R, &
                  do_not_log=useALEremapping.or.just_read)
-    call get_param(PF, mdl, "LAYER_Z_INIT_IC_EXTRAP_BUG", density_extrap_bug, &
-                 "If true use an expression with a vertical indexing bug for extrapolating the "//&
-                 "densities at the bottom of unstable profiles from data when finding the "//&
-                 "initial interface locations in layered mode from a dataset of T and S.", &
-                 default=.false., do_not_log=just_read)
   endif
   call get_param(PF, mdl, "LAND_FILL_TEMP", temp_land_fill, &
                  "A value to use to fill in ocean temperatures on land points.", &
@@ -3003,7 +2994,7 @@ subroutine MOM_temp_salt_initialize_from_Z(h, tv, depth_tot, G, GV, US, PF, just
     enddo ; enddo
 
     call find_interfaces(rho_z, z_in, kd, Rb, Z_bottom, zi, G, GV, US, nlevs, nkml, &
-                         Hmix_depth, eps_z, eps_rho, density_extrap_bug)
+                         Hmix_depth, eps_z, eps_rho)
 
     deallocate(rho_z, Rb)
 
@@ -3070,7 +3061,7 @@ end subroutine MOM_temp_salt_initialize_from_Z
 
 !> Find interface positions corresponding to interpolated depths in a density profile
 subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, nkml, hml, &
-                           eps_z, eps_rho, density_extrap_bug)
+                           eps_z, eps_rho)
   type(ocean_grid_type),      intent(in)  :: G     !< The ocean's grid structure
   type(verticalGrid_type),    intent(in)  :: GV    !< The ocean's vertical grid structure
   integer,                    intent(in)  :: nk_data !< The number of levels in the input data
@@ -3091,11 +3082,6 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, n
   real,                       intent(in)  :: hml   !< mixed layer depth [Z ~> m].
   real,                       intent(in)  :: eps_z !< A negligibly small layer thickness [Z ~> m].
   real,                       intent(in)  :: eps_rho !< A negligibly small density difference [R ~> kg m-3].
-  logical,                    intent(in)  :: density_extrap_bug !< If true use an expression with an
-                                                   !! indexing bug for projecting the densities at
-                                                   !! the bottom of unstable profiles from data when
-                                                   !! finding the initial interface locations in
-                                                   !! layered mode from a dataset of T and S.
 
   ! Local variables
   real, dimension(nk_data) :: rho_ ! A column of densities [R ~> kg m-3]
@@ -3136,11 +3122,7 @@ subroutine find_interfaces(rho, zin, nk_data, Rb, Z_bot, zi, G, GV, US, nlevs, n
       else
         do k=nlevs_data-1,2,-1 ;  if (rho_(k+1) - rho_(k) < 0.0) then
           if (k == nlevs_data-1) then
-            if (density_extrap_bug) then
-              rho_(k+1) = rho_(k-1) + eps_rho
-            else
-              rho_(k+1) = rho_(k) + eps_rho
-            endif
+            rho_(k+1) = rho_(k) + eps_rho
           else
             drhodz = (rho_(k+1)-rho_(k-1)) / (zin(k+1)-zin(k-1))
             if (drhodz < 0.0) unstable = .true.
