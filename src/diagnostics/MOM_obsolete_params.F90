@@ -134,6 +134,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "CHANNEL_FLOW_OBC_TRANSPORT_BUG", .false.)
   call obsolete_logical(param_file, "SHELFWAVE_CORRECT_AMPLITUDE", .true.)
   call obsolete_logical(param_file, "SLOSHING_IC_BUG", .false.)
+  call obsolete_logical(param_file, "LA_MISALIGNMENT_BUG", .false.)
 
   call obsolete_logical(param_file, "INTERNAL_TIDE_CORNER_ADVECT", .false.)
   call obsolete_logical(param_file, "TIDE_USE_SAL_SCALAR", hint="Use SAL_SCALAR_APPROX instead.")
