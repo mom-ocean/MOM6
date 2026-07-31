@@ -61,8 +61,6 @@ type, public :: neutral_diffusion_CS ; private
                       !! interior_only=true.
   logical :: KhTh_use_vert_struct !< If true, uses vertical structure
                                  !! for tracer diffusivity.
-  logical :: use_unmasked_transport_bug !< If true, use an older form for the accumulation of
-                      !! neutral-diffusion transports that were unmasked, as used prior to Jan 2018.
   real,    allocatable, dimension(:,:)  :: hbl    !< Boundary layer depth [H ~> m or kg m-2]
   ! Coefficients used to apply tapering from neutral to horizontal direction
   real,    allocatable, dimension(:) :: coeff_l   !< Non-dimensional coefficient in the left column,
@@ -203,15 +201,11 @@ logical function neutral_diffusion_init(Time, G, GV, US, param_file, diag, EOS, 
   call get_param(param_file, mdl, "KHTR_USE_EBT_STRUCT", KhTh_use_ebt_struct, &
                  "If true, uses the equivalent barotropic structure "//&
                  "as the vertical structure of the tracer diffusivity.",&
-                 default=.false.,do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "KHTR_USE_SQG_STRUCT", KhTh_use_sqg_struct, &
                  "If true, uses the surface geostrophic structure "//&
                  "as the vertical structure of the tracer diffusivity.",&
-                 default=.false.,do_not_log=.true.)
-  call get_param(param_file, mdl, "NDIFF_USE_UNMASKED_TRANSPORT_BUG", CS%use_unmasked_transport_bug, &
-                 "If true, use an older form for the accumulation of neutral-diffusion "//&
-                 "transports that were unmasked, as used prior to Jan 2018. This is not "//&
-                 "recommended.", default=.false.)
+                 default=.false., do_not_log=.true.)
 
   call get_param(param_file, mdl, "DEFAULT_ANSWER_DATE", default_answer_date, &
                  "This sets the default value for the various _ANSWER_DATE parameters.", &
@@ -581,23 +575,12 @@ subroutine neutral_diffusion_calc_coeffs(G, GV, US, h, T, S, visc, CS, p_surf)
   ! calculates hEff from the nondimensional fraction of the layer spanned by adjacent neutral
   ! surfaces, so hEff is already in thickness units.
   if (CS%continuous_reconstruction) then
-    if (CS%use_unmasked_transport_bug) then
-      ! This option is not recommended but needed to recover answers prior to Jan 2018.
-      ! It is independent of the other 2018 answers flags.
-      do k = 1, CS%nsurf-1 ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-        CS%uhEff(I,j,k) = CS%uhEff(I,j,k) / GV%H_to_pa
-      enddo ; enddo ; enddo
-      do k = 1, CS%nsurf-1 ; do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-        CS%vhEff(I,j,k) = CS%vhEff(I,j,k) / GV%H_to_pa
-      enddo ; enddo ; enddo
-    else
-      do k = 1, CS%nsurf-1 ; do j = G%jsc, G%jec ; do I = G%isc-1, G%iec
-        if (G%mask2dCu(I,j) > 0.0) CS%uhEff(I,j,k) = CS%uhEff(I,j,k) * pa_to_H
-      enddo ; enddo ; enddo
-      do k = 1, CS%nsurf-1 ; do J = G%jsc-1, G%jec ; do i = G%isc, G%iec
-        if (G%mask2dCv(i,J) > 0.0) CS%vhEff(i,J,k) = CS%vhEff(i,J,k) * pa_to_H
-      enddo ; enddo ; enddo
-    endif
+    do k=1,CS%nsurf-1 ; do j=G%jsc,G%jec ; do I=G%isc-1,G%iec
+      if (G%mask2dCu(I,j) > 0.0) CS%uhEff(I,j,k) = CS%uhEff(I,j,k) * pa_to_H
+    enddo ; enddo ; enddo
+    do k=1,CS%nsurf-1 ; do J=G%jsc-1,G%jec ; do i=G%isc,G%iec
+      if (G%mask2dCv(i,J) > 0.0) CS%vhEff(i,J,k) = CS%vhEff(i,J,k) * pa_to_H
+    enddo ; enddo ; enddo
   endif
 
   if (CS%id_uhEff_2d>0) then

@@ -138,6 +138,7 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "DETERMINE_TEMP_CONVERGENCE_BUG", .false.)
   call obsolete_real(param_file, "DETERMINE_TEMP_T_TOLERANCE")
   call obsolete_real(param_file, "DETERMINE_TEMP_S_TOLERANCE")
+  call obsolete_logical(param_file, "NDIFF_USE_UNMASKED_TRANSPORT_BUG", .false.)
 
   call obsolete_logical(param_file, "INTERNAL_TIDE_CORNER_ADVECT", .false.)
   call obsolete_logical(param_file, "TIDE_USE_SAL_SCALAR", hint="Use SAL_SCALAR_APPROX instead.")
