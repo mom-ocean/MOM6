@@ -2406,6 +2406,7 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
   real    :: slat_fn       ! sin(lat)**Kh_pwr_of_sine [nondim]
   real    :: aniso_grid_dir(2) ! Vector (n1,n2) for anisotropic direction [nondim]
   integer :: aniso_mode    ! Selects the mode for setting the anisotropic direction
+  integer :: number_of_OBC_segments  ! The number of OBC segments anywhere in the domain
   integer :: is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB
   integer :: i, j
@@ -2695,9 +2696,11 @@ subroutine hor_visc_init(Time, G, GV, US, param_file, diag, CS, ADp)
                  "If true, retain an answer-changing bug in calculating the FrictWork, "//&
                  "which cancels the h in thickness flux and the h at velocity point. This is "//&
                  "not recommended.", default=.false.)
+  call get_param(param_file, mdl, "OBC_NUMBER_OF_SEGMENTS", number_of_OBC_segments, &
+                 default=0, do_not_log=.true.)
   call get_param(param_file, mdl, "OBC_SPECIFIED_STRAIN_BUG", CS%OBC_strain_bug, &
                  "If true, recover a bug that specified shear strain option at open boundaries "//&
-                 "cannot be applied.", default=.true.)
+                 "cannot be applied.", default=enable_bugs, do_not_log=(number_of_OBC_segments<=0))
   call get_param(param_file, mdl, "USE_GME", CS%use_GME, &
                  "If true, use the GM+E backscatter scheme in association \n"//&
                  "with the Gent and McWilliams parameterization.", default=.false.)
