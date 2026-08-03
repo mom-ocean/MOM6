@@ -145,6 +145,12 @@ subroutine find_obsolete_params(param_file)
   call obsolete_logical(param_file, "INTERFACE_FILTER_DT_BUG", .false.)
   call obsolete_logical(param_file, "MEKE_GM_SRC_ALT_SLOPE_BUG", .false.)
   call obsolete_logical(param_file, "OBC_TS_RESERVOIR_INIT_BUG", .false.)
+  call obsolete_char(param_file, "OBC_TIDE_ADD_EQ_PHASE")
+  call obsolete_char(param_file, "OBC_TIDE_ADD_NODAL")
+  call obsolete_char(param_file, "OBC_TIDE_REF_DATE")
+  call obsolete_char(param_file, "OBC_TIDE_NODAL_REF_DATE")
+
+
 
   call obsolete_logical(param_file, "INTERNAL_TIDE_CORNER_ADVECT", .false.)
   call obsolete_logical(param_file, "TIDE_USE_SAL_SCALAR", hint="Use SAL_SCALAR_APPROX instead.")

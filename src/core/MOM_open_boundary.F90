@@ -1562,19 +1562,19 @@ subroutine initialize_obc_tides(OBC, US, param_file)
 
   call get_param(param_file, mdl, "TIDE_USE_EQ_PHASE", OBC%add_eq_phase, &
       "If true, add the equilibrium phase argument to the specified tidal phases.", &
-      old_name="OBC_TIDE_ADD_EQ_PHASE", default=.false., do_not_log=tides)
+      default=.false., do_not_log=tides)
 
   call get_param(param_file, mdl, "TIDE_ADD_NODAL", OBC%add_nodal_terms, &
       "If true, include 18.6 year nodal modulation in the boundary tidal forcing.", &
-      old_name="OBC_TIDE_ADD_NODAL", default=.false., do_not_log=tides)
+      default=.false., do_not_log=tides)
 
   call get_param(param_file, mdl, "TIDE_REF_DATE", tide_ref_date, &
       "Reference date to use for tidal calculations and equilibrium phase.", &
-      old_name="OBC_TIDE_REF_DATE", defaults=(/0, 0, 0/), do_not_log=tides)
+      defaults=(/0, 0, 0/), do_not_log=tides)
 
   call get_param(param_file, mdl, "TIDE_NODAL_REF_DATE", nodal_ref_date, &
       "Fixed reference date to use for nodal modulation of boundary tides.", &
-      old_name="OBC_TIDE_NODAL_REF_DATE", defaults=(/0, 0, 0/), do_not_log=tides)
+      defaults=(/0, 0, 0/), do_not_log=tides)
 
   allocate(OBC%tide_names(OBC%n_tide_constituents))
   read(tide_constituent_str, *) OBC%tide_names
