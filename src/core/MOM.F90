@@ -3369,11 +3369,11 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
           CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in, &
-          frac_shelf_h=CS%frac_shelf_h, mass_shelf=CS%mass_shelf, OBC_for_bug=CS%OBC)
+          frac_shelf_h=CS%frac_shelf_h, mass_shelf=CS%mass_shelf)
     else
       call MOM_initialize_state(CS%u, CS%v, CS%h, CS%tv, Time, G, GV, US, &
           param_file, dirs, restart_CSp, CS%ALE_CSp, CS%tracer_Reg, &
-          CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in, OBC_for_bug=CS%OBC)
+          CS%sponge_CSp, CS%ALE_sponge_CSp, CS%oda_incupd_CSp, CS%OBC, Time_in)
     endif
 
     ! Reset the first direction if it was found in a restart file.

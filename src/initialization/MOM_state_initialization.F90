@@ -116,7 +116,7 @@ contains
 subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                 restart_CS, ALE_CSp, tracer_Reg, sponge_CSp, &
                                 ALE_sponge_CSp, oda_incupd_CSp, OBC_for_remap, &
-                                Time_in, frac_shelf_h, mass_shelf, OBC_for_bug)
+                                Time_in, frac_shelf_h, mass_shelf)
   type(ocean_grid_type),      intent(inout) :: G    !< The ocean's grid structure.
   type(verticalGrid_type),    intent(in)    :: GV   !< The ocean's vertical grid structure.
   type(unit_scale_type),      intent(in)    :: US   !< A dimensional unit scaling type
@@ -152,9 +152,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   real, dimension(SZI_(G),SZJ_(G)), &
                      optional, intent(in)   :: mass_shelf      !< The mass per unit area of the overlying
                                                                !! ice shelf [R Z ~> kg m-2]
-  type(ocean_OBC_type), optional, pointer   :: OBC_for_bug  !< An open boundary condition control structure
-                                                    !! that might be used to store OBC temperatures and
-                                                    !! salinities if OBC_RESERVOIR_INIT_BUG is true.
   ! Local variables
   real :: depth_tot(SZI_(G),SZJ_(G))   ! The nominal total depth of the ocean [Z ~> m]
   real :: dz(SZI_(G),SZJ_(G),SZK_(GV)) ! The layer thicknesses in geopotential (z) units [Z ~> m]
@@ -166,8 +163,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
   logical :: new_sim, rotate_index
   logical :: use_temperature, use_sponge, use_oda_incupd
   logical :: verify_restart_time
-  logical :: OBC_TS_reservoir_init_bug  ! If true, set the OBC temperature and salinity reservoirs
-                         ! at the startup of a new run from initial values that are set before remapping.
   logical :: use_EOS     ! If true, density is calculated from T & S using an equation of state.
   logical :: depress_sfc ! If true, remove the mass that would be displaced
                          ! by a large surface pressure by squeezing the column.
@@ -437,23 +432,6 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
     endif
   endif  ! not from_Z_file.
 
-  if (present(OBC_for_bug)) then ; if (use_temperature .and. associated(OBC_for_bug)) then
-    call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
-                 default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
-    ! Log this parameter later with the other OBC parameters.
-    call get_param(PF, mdl, "OBC_TS_RESERVOIR_INIT_BUG", OBC_TS_reservoir_init_bug, &
-                 "If true, set the OBC temperature and salinity reservoirs at the startup of a "//&
-                 "new run from initial values that are set before remapping.", &
-                 default=enable_bugs, do_not_log=.true.)
-    if (OBC_TS_reservoir_init_bug) then
-      ! These calls should be moved down to join the OBC code, but doing so changes answers because
-      ! the temperatures and salinities can change due to the remapping and reading from the restarts.
-      call pass_var(tv%T, G%Domain, complete=.false.)
-      call pass_var(tv%S, G%Domain, complete=.true.)
-      call fill_temp_salt_segments(G, GV, US, OBC_for_bug, tv)
-    endif
-  endif ; endif
-
   ! Convert thicknesses from geometric distances in depth units to thickness units or mass-per-unit-area.
   if (new_sim .and. convert) call dz_to_thickness(dz, tv, h, G, GV, US)
 
@@ -669,8 +647,6 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
   logical :: debug      ! If true, write debugging output.
   logical :: debug_obc  ! If true, do additional calls resetting values to help debug the correctness
                         ! of the open boundary condition code.
-  logical :: OBC_TS_reservoir_init_bug  ! If true, set the OBC temperature and salinity reservoirs
-                        ! at the startup of a new run from initial values that are set before remapping.
   logical :: OBC_reservoir_init_bug  ! If true, set the OBC tracer reservoirs at the startup of a new
                         ! run from the interior tracer concentrations regardless of properties that
                         ! may be explicitly specified for the reservoir concentrations.
@@ -684,10 +660,7 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
                  do_not_log=.true., old_name="DEBUG_OBC", debuggingParam=.true.)
     call get_param(PF, mdl, "ENABLE_BUGS_BY_DEFAULT", enable_bugs, &
                  default=.true., do_not_log=.true.)  ! This is logged from MOM.F90.
-    call get_param(PF, mdl, "OBC_TS_RESERVOIR_INIT_BUG", OBC_TS_reservoir_init_bug, &
-                 "If true, set the OBC temperature and salinity reservoirs at the startup of a "//&
-                 "new run from initial values that are set before remapping.", default=enable_bugs)
-    if (associated(tv%T) .and. (.not.OBC_TS_reservoir_init_bug)) then
+    if (associated(tv%T)) then
       ! Store the updated temperatures and salinities at the open boundaries, noting that they may
       ! still be updated by the calls in the next 50 lines, so the code setting the tracer
       ! reservoir values will come later in the calling routine.
