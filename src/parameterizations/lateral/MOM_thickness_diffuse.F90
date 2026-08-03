@@ -97,9 +97,6 @@ type, public :: thickness_diffuse_CS ; private
                                  !! calculation when MEKE_GM_SRC_ALT is true.  Values below 20240601
                                  !! recover the answers from the original implementation, while higher
                                  !! values use expressions that satisfy rotational symmetry.
-  logical :: MEKE_src_slope_bug  !< If true, use a bug that limits the positive values, but not the
-                                 !! negative values, of the slopes used when MEKE_GM_SRC_ALT is true.
-                                 !! When this is true, it breaks rotational symmetry.
   logical :: use_GM_work_bug     !< If true, use the incorrect sign for the
                                  !! top-level work tendency on the top layer.
   logical :: read_khth           !< If true, read a file containing the spatially varying horizontal
@@ -1075,13 +1072,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                     int_slope_u(I,j,K) * ((e(i+1,j,K)-e(i,j,K)) * G%IdxCu(I,j))
             slope2_Ratio_u(I,K) = (1.0 - int_slope_u(I,j,K)) * slope2_Ratio_u(I,K)
 
-            if (CS%MEKE_src_slope_bug) then
-              Slope_x_PE(I,j,k) = MIN(Slope, CS%slope_max)
-            else
-              Slope_x_PE(I,j,k) = Slope
-              if (Slope > CS%slope_max) Slope_x_PE(I,j,k) = CS%slope_max
-              if (Slope < -CS%slope_max) Slope_x_PE(I,j,k) = -CS%slope_max
-            endif
+            Slope_x_PE(I,j,k) = Slope
+            if (Slope > CS%slope_max) Slope_x_PE(I,j,k) = CS%slope_max
+            if (Slope < -CS%slope_max) Slope_x_PE(I,j,k) = -CS%slope_max
             if (CS%id_slope_x > 0) CS%diagSlopeX(I,j,k) = Slope
 
             ! Estimate the streamfunction at each interface [H L2 T-1 ~> m3 s-1 or kg s-1].
@@ -1426,13 +1419,9 @@ subroutine thickness_diffuse_full(h, e, Kh_u, Kh_v, tv, uhD, vhD, cg1, dt, G, GV
                     int_slope_v(i,J,K) * ((e(i,j+1,K)-e(i,j,K)) * G%IdyCv(i,J))
             slope2_Ratio_v(i,K) = (1.0 - int_slope_v(i,J,K)) * slope2_Ratio_v(i,K)
 
-            if (CS%MEKE_src_slope_bug) then
-              Slope_y_PE(i,J,k) = MIN(Slope, CS%slope_max)
-            else
-              Slope_y_PE(i,J,k) = Slope
-              if (Slope > CS%slope_max) Slope_y_PE(i,J,k) = CS%slope_max
-              if (Slope < -CS%slope_max) Slope_y_PE(i,J,k) = -CS%slope_max
-            endif
+            Slope_y_PE(i,J,k) = Slope
+            if (Slope > CS%slope_max) Slope_y_PE(i,J,k) = CS%slope_max
+            if (Slope < -CS%slope_max) Slope_y_PE(i,J,k) = -CS%slope_max
             if (CS%id_slope_y > 0) CS%diagSlopeY(I,j,k) = Slope
 
             Sfn_unlim_v(i,K) = -((KH_v(i,J,K)*G%dx_Cv(i,J))*Slope)
@@ -2443,11 +2432,6 @@ subroutine thickness_diffuse_init(Time, G, GV, US, param_file, diag, CDp, CS)
                  "original implementation, while higher values use expressions that satisfy "//&
                  "rotational symmetry.", &
                  default=default_answer_date, do_not_log=.not.CS%GM_src_alt)
-  call get_param(param_file, mdl, "MEKE_GM_SRC_ALT_SLOPE_BUG", CS%MEKE_src_slope_bug, &
-                 "If true, use a bug that limits the positive values, but not the negative values, "//&
-                 "of the slopes used when MEKE_GM_SRC_ALT is true.  When this is true, it breaks "//&
-                 "all of the symmetry rules that MOM6 is supposed to obey.", &
-                 default=.false., do_not_log=.not.CS%GM_src_alt)
 
   call get_param(param_file, mdl, "MEKE_GEOMETRIC", CS%MEKE_GEOMETRIC, &
                  "If true, uses the GM coefficient formulation from the GEOMETRIC "//&
