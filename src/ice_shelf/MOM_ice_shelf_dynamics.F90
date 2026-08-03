@@ -26,6 +26,7 @@ use MOM_time_manager, only : time_type, get_time, set_time, time_type_to_real, o
 use MOM_time_manager,  only : operator(+), operator(-), operator(*), operator(/)
 use MOM_time_manager,  only : operator(/=), operator(<=), operator(>=), operator(<)
 use MOM_unit_scaling, only : unit_scale_type, unit_scaling_init
+use MOM_checksums, only : is_NaN
 !MJH use MOM_ice_shelf_initialize, only : initialize_ice_shelf_boundary
 use MOM_ice_shelf_state, only : ice_shelf_state
 use MOM_coms, only : reproducing_sum, max_across_PEs, min_across_PEs
@@ -230,6 +231,18 @@ type, public :: ice_shelf_dyn_CS ; private
                                  !! If set to <= 0, no Picard [nondim]
   type(group_pass_type) :: pass_visc_and_newton !< Handle for Newton-and-viscosity-related group passes
   type(group_pass_type) :: pass_newton !< Handle for Newton-related group passes
+  logical :: newton_divergence_rescue !< If true, monitor the nonlinear residual while Newton is
+                                 !! active and, on divergence (residual NaN or exceeding
+                                 !! newton_divergence_factor times its value at the Picard-to-
+                                 !! Newton switch), restore the pre-Newton iterate, revert to
+                                 !! Picard with a fresh outer-iteration budget, and reduce the
+                                 !! switch threshold tenfold for the remainder of this solve.
+  real :: newton_divergence_factor !< Factor on the nonlinear residual at the Picard-to-Newton
+                                 !! switch above which the Newton iteration is declared
+                                 !! divergent and rescued [nondim].
+  integer :: newton_max_rescues  !< Maximum number of divergence rescues per velocity solve;
+                                 !! once reached, Newton is disabled and the remainder of the
+                                 !! solve runs pure Picard [nondim]
   logical :: newton_adapt_cg_tol !< Use an adaptive CG tolerance during Newton iterations
   real :: ew_gamma !< Gamma in Eisenstat-Walker adaptive Newton tolerance [nondim].
   real :: ew_alpha !< Alpha in Eisenstat-Walker adaptive Newton tolerance [nondim].
@@ -648,6 +661,26 @@ subroutine initialize_ice_shelf_dyn(param_file, Time, ISS, CS, G, US, diag, new_
                 "Switch from Picard to Newton iterations in the nonlinear ice velocity solve when "//&
                 "the fractional nonlinear residual falls below this tolerance. If <=0, no Picard.",&
                 units="none", default=CS%nonlinear_tolerance)
+    call get_param(param_file, mdl, "NEWTON_DIVERGENCE_RESCUE", CS%newton_divergence_rescue, &
+                "If true, monitor the nonlinear residual while Newton iterations are active "//&
+                "and, if it becomes NaN or exceeds NEWTON_DIVERGENCE_FACTOR times its value "//&
+                "at the Picard-to-Newton switch, restore the pre-Newton velocity iterate, "//&
+                "revert to Picard iterations with a fresh outer-iteration budget, and reduce "//&
+                "the Picard-to-Newton switch threshold by a factor of 10 for the remainder "//&
+                "of this velocity solve (the configured NEWTON_AFTER_TOLERANCE is restored "//&
+                "at the next solve). At most NEWTON_DIVERGENCE_MAX_RESCUES rescues are "//&
+                "attempted per solve, after which Newton is disabled and the solve "//&
+                "completes as pure Picard. No effect when NEWTON_AFTER_TOLERANCE <= 0.", &
+                default=.false.)
+    call get_param(param_file, mdl, "NEWTON_DIVERGENCE_FACTOR", CS%newton_divergence_factor, &
+                "Factor on the nonlinear residual at the Picard-to-Newton switch above "//&
+                "which the Newton iteration is declared divergent and rescued.", &
+                units="nondim", default=10.0, do_not_log=.not.CS%newton_divergence_rescue)
+    call get_param(param_file, mdl, "NEWTON_DIVERGENCE_MAX_RESCUES", CS%newton_max_rescues, &
+                "Maximum number of Newton divergence rescues per velocity solve. Once "//&
+                "reached, Newton is disabled (the working switch threshold is set to "//&
+                "zero) and the remainder of the solve runs pure Picard.", &
+                units="nondim", default=2, do_not_log=.not.CS%newton_divergence_rescue)
     call get_param(param_file, mdl, "NEWTON_ADAPT_CG_TOL", CS%newton_adapt_cg_tol, &
                 "Use an adaptive CG tolerance during Newton iterations.", default=.true.)
     call get_param(param_file, mdl, "NEWTON_EW_GAMMA", CS%ew_gamma, &
@@ -1592,6 +1625,9 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   !real, dimension(SZDIB_(G),SZDJB_(G)) :: v_bdry_cont ! Boundary v-stress contribution [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: Au, Av ! The retarding lateral stress contributions [R L3 Z T-2 ~> kg m s-2]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: u_last, v_last ! Previous velocities [L T-1 ~> m s-1]
+  real, dimension(SZDIB_(G),SZDJB_(G)) :: u_pre_newton, v_pre_newton ! Velocities saved at the
+                                              ! Picard-to-Newton switch, restored if Newton
+                                              ! diverges [L T-1 ~> m s-1]
   real, dimension(SZDIB_(G),SZDJB_(G)) :: H_node ! Ice shelf thickness at corners [Z ~> m].
   real, dimension(SZDI_(G),SZDJ_(G)) :: float_cond ! If GL_regularize=true, indicates cells containing
                                                 ! the grounding line (float_cond=1) or not (float_cond=0)
@@ -1612,6 +1648,15 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   real    :: max_vel  ! The maximum velocity magnitude [L T-1 ~> m s-1]
   real    :: tempu, tempv   ! Temporary variables with velocity magnitudes [L T-1 ~> m s-1]
   real    :: Norm, PrevNorm ! Velocities used to assess convergence [L T-1 ~> m s-1]
+  real    :: newton_after_tol_loc ! Working Picard-to-Newton switch threshold for this solve,
+                                  ! reduced tenfold on each divergence rescue [nondim]
+  real    :: err_newton_enter ! Nonlinear residual at the Picard-to-Newton switch, the
+                              ! reference for the divergence test [R L3 Z T-2 ~> kg m s-2] or [L T-1 ~> m s-1]
+  real    :: Norm_newton_enter ! Norm saved at the switch for restore (err mode 3) [L T-1 ~> m s-1]
+  logical :: rescue_enabled   ! Newton divergence rescue is configured and applicable
+  logical :: newton_armed     ! Pre-Newton state is saved; divergence rescue available
+  logical :: diverging        ! The current Newton residual triggers a rescue
+  integer :: n_rescue         ! Number of divergence rescues performed in this solve
   integer :: Is_sum, Js_sum, Ie_sum, Je_sum ! Loop bounds for global sums or arrays starting at 1.
   integer :: Iscq_sv, Jscq_sv ! Starting loop bound for sum_vec
 
@@ -1653,7 +1698,7 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   endif
 
   ! Warning: This turns off Picard entirely and may not converge.
-  if (CS%newton_after_tolerance<=0.0) CS%doing_newton=.true.
+  if (CS%newton_after_tolerance<0.0) CS%doing_newton=.true.
 
   ! Calculate RHS
   call calc_shelf_driving_stress(CS, ISS, G, US, taudx, taudy, CS%OD_av)
@@ -1765,9 +1810,20 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
   calc_Au_for_convergence = (CS%nonlin_solve_err_mode == 1 .or. CS%nonlin_solve_err_mode == 4 .or. &
                              CS%nonlin_solve_err_mode == 5 .or. CS%ssa_add_rel_resid)
 
+  ! Newton divergence rescue state. The working switch threshold is per-solve: rescues
+  ! reduce it tenfold, and the configured value is restored at the next solve.
+  rescue_enabled = CS%newton_divergence_rescue .and. (CS%newton_after_tolerance > 0.0)
+  newton_after_tol_loc = CS%newton_after_tolerance
+  newton_armed = .false.
+  err_newton_enter = 0.0 ; Norm_newton_enter = 0.0
+  n_rescue = 0
+
   !! begin loop
 
-  do iter=1,50
+  iter = 0
+  do
+    iter = iter + 1
+    if (iter > 50) exit
 
     ! The linear solve
     call ice_shelf_solve_inner(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, H_node, CS%float_cond, &
@@ -1888,8 +1944,49 @@ subroutine ice_shelf_solve_outer(CS, ISS, G, US, u_shlf, v_shlf, taudx, taudy, i
         call MOM_mesg(mesg, 5)
       endif
 
+      ! Newton divergence rescue: if the residual has gone NaN or grown beyond
+      ! NEWTON_DIVERGENCE_FACTOR times its value at the Picard-to-Newton switch,
+      ! Newton was activated outside its basin of attraction. Restore the
+      ! pre-Newton iterate, revert to Picard with a fresh outer-iteration budget,
+      ! and lower the working switch threshold tenfold.
+      if (rescue_enabled .and. CS%doing_newton .and. newton_armed) then
+        diverging = (is_NaN(err_max)) .or. &
+                    (err_max > CS%newton_divergence_factor * err_newton_enter)
+        if (diverging) then
+          n_rescue = n_rescue + 1
+          u_shlf(:,:) = u_pre_newton(:,:) ; v_shlf(:,:) = v_pre_newton(:,:)
+          u_last(:,:) = u_shlf(:,:) ; v_last(:,:) = v_shlf(:,:)
+          if (CS%nonlin_solve_err_mode == 3) Norm = Norm_newton_enter
+          CS%doing_newton = .false. ; newton_armed = .false.
+          ew_prev_resid = 0.0
+          CS%cg_tol_current = CS%cg_tolerance
+          if (n_rescue >= CS%newton_max_rescues) then
+            ! Rescue budget exhausted: pure Picard for the remainder of this solve.
+            newton_after_tol_loc = 0.0
+          else
+            newton_after_tol_loc = 0.1 * newton_after_tol_loc
+          endif
+          iter = 0
+          ! Rebuild the (Picard) viscosity of the restored iterate so the next
+          ! inner solve does not reuse operators from the divergent state.
+          call calc_shelf_visc(CS, ISS, G, US, u_shlf, v_shlf)
+          call pass_var(CS%ice_visc, G%domain, complete=.true.)
+          write(mesg,*) "ice_shelf_solve_outer: Newton diverged (rescue ", n_rescue, &
+              "); restored pre-Newton state, switch threshold now ", newton_after_tol_loc
+          call MOM_mesg(mesg, 5)
+          cycle
+        endif
+      endif
+
       ! Activate Newton
-      if (err_max <= CS%newton_after_tolerance * err_init .and. .not. CS%doing_newton) then
+      if (err_max <= newton_after_tol_loc * err_init .and. .not. CS%doing_newton) then
+        if (rescue_enabled) then
+          ! Save the switch state so a divergent Newton excursion can be undone.
+          u_pre_newton(:,:) = u_shlf(:,:) ; v_pre_newton(:,:) = v_shlf(:,:)
+          err_newton_enter = err_max
+          if (CS%nonlin_solve_err_mode == 3) Norm_newton_enter = Norm
+          newton_armed = .true.
+        endif
         CS%doing_newton = .true.
         write(mesg,*) "ice_shelf_solve_outer: switching to Newton iterations at iter = ", iter
         call MOM_mesg(mesg, 7)
