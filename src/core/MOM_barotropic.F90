@@ -5746,10 +5746,6 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "answers for some configurations that use OBCs.", &
                  default=enable_bugs, do_not_log=.true.)
   CS%interior_OBC_PV = .not.OBC_projection_bug
-  call get_param(param_file, mdl, "DTBT_RESTART_BUG", dtbt_restart_bug, &
-                 "If true, recover a bug where the barotropic timestep DTBT read from a "//&
-                 "restart file is immediately overridden by a recalculation on the "//&
-                 "first dynamics step.", default=enable_bugs)
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
   if (use_tides .and. present(HA_CSp)) CS%HA_CSp => HA_CSp
@@ -5923,6 +5919,10 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "The value of DTBT that will actually be used is an "//&
                  "integer fraction of DT, rounding down.", &
                  units="s or nondim", default=-0.98)
+  call get_param(param_file, mdl, "DTBT_RESTART_BUG", dtbt_restart_bug, &
+                 "If true, recover a bug where the barotropic timestep DTBT read from a restart "//&
+                 "file is immediately overridden by a recalculation on the first dynamics step.", &
+                 default=enable_bugs, do_not_log=(dtbt_input>0.0))
   call get_param(param_file, mdl, "BT_USE_OLD_CORIOLIS_BRACKET_BUG", CS%use_old_coriolis_bracket_bug, &
                  "If True, use an order of operations that is not bitwise "//&
                  "rotationally symmetric in the meridional Coriolis term of "//&
@@ -6260,11 +6260,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
     CS%dtbt = dtbt_restart
   endif
 
-  if (dtbt_restart_bug) then
-    calc_dtbt = .true. ; if ((dtbt_restart > 0.0) .and. (dtbt_input > 0.0)) calc_dtbt = .false.
-  else
-    calc_dtbt = (dtbt_restart <= 0.0)
-  endif
+  calc_dtbt = ((dtbt_restart <= 0.0) .or. (dtbt_restart_bug .and. (dtbt_input <= 0.0)))
 
   call log_param(param_file, mdl, "DTBT as used", CS%dtbt, units="s", unscale=US%T_to_s)
   call log_param(param_file, mdl, "estimated maximum DTBT", CS%dtbt_max, units="s", unscale=US%T_to_s)
