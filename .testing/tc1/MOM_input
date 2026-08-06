@@ -256,6 +256,11 @@ KHTH_SLOPE_CFF = 0.1            !   [nondim] default = 0.0
 KHTR_SLOPE_CFF = 0.1            !   [nondim] default = 0.0
                                 ! The nondimensional coefficient in the Visbeck formula
                                 ! for the epipycnal tracer diffusivity
+INTERPOLATED_SQG_STRUCTURE = False !   [Boolean] default = False
+                                ! If true, interpolate properties to velocity points and
+                                ! then interpolate the buoyancy frequencies and layer
+                                ! thicknesses back to tracer points when calculating the
+                                ! SQG vertical structure.
 VARMIX_KTOP = 6                 !   [nondim] default = 2
                                 ! The layer number at which to start vertical integration
                                 ! of S*N for purposes of finding the Eady growth rate.

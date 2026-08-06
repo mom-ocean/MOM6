@@ -281,6 +281,11 @@ RESOLN_SCALED_KHTR = False      !   [Boolean] default = False
 USE_STORED_SLOPES = True        !   [Boolean] default = False
                                 ! If true, the isopycnal slopes are calculated once and stored for re-use. This
                                 ! uses more memory but avoids calling the equation of state more times than
+INTERPOLATED_SQG_STRUCTURE = False !   [Boolean] default = False
+                                ! If true, interpolate properties to velocity points and
+                                ! then interpolate the buoyancy frequencies and layer
+                                ! thicknesses back to tracer points when calculating the
+                                ! SQG vertical structure.
 
 ! === module MOM_wave_speed ===
 ETA_TOLERANCE = 1.0E-06         !   [m] default = 1.1E-09
