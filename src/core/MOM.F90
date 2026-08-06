@@ -3292,7 +3292,7 @@ subroutine initialize_MOM(Time, Time_init, param_file, dirs, CS, &
         call get_param(param_file, "MOM", "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
                    "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                    "interior tracer concentrations regardless of properties that may be explicitly "//&
-                   "specified for the reservoir concentrations.", default=enable_bugs, do_not_log=.true.)
+                   "specified for the reservoir concentrations.", default=.false., do_not_log=.true.)
         if (OBC_reservoir_init_bug .and. (allocated(CS%OBC%tres_x) .or. allocated(CS%OBC%tres_y))) &
           call MOM_error(FATAL, "OBC_RESERVOIR_INIT_BUG can not be set to true with grid rotation.")
       endif

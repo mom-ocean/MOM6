@@ -669,7 +669,7 @@ subroutine MOM_initialize_OBCs(h, tv, OBC, Time, G, GV, US, PF, restart_CS, trac
     call get_param(PF, mdl, "OBC_RESERVOIR_INIT_BUG", OBC_reservoir_init_bug, &
                  "If true, set the OBC tracer reservoirs at the startup of a new run from the "//&
                  "interior tracer concentrations regardless of properties that may be explicitly "//&
-                 "specified for the reservoir concentrations.", default=enable_bugs)
+                 "specified for the reservoir concentrations.", default=.false.)
     if (OBC_reservoir_init_bug .and. associated(tv%T) .and. is_new_run(restart_CS)) then
       ! Set up OBC%trex_x and OBC%tres_y as they have not been read from a restart file.
       ! When OBC_RESERVOIR_INIT_BUG is false, setup_OBC_tracer_reservoirs() is called from initialize_MOM
