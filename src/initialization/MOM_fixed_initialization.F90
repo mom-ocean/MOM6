@@ -106,7 +106,7 @@ subroutine MOM_initialize_fixed(G, US, OBC, PF)
                    "calculation of terms like the potential vorticity used in the barotropic "//&
                    "solver relies on bathymetry or other fields being projected outward across "//&
                    "OBCs.  This option changes answers for some configurations that use OBCs.", &
-                   default=enable_bugs)
+                   default=.false.)
     open_corners = .not.OBC_projection_bug
 
     if (OBC_projection_bug .and. read_meanSL_file) &

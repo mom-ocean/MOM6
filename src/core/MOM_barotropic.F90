@@ -5744,7 +5744,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
                  "like the potential vorticity used in the barotropic solver relies on bathymetry "//&
                  "or other fields being projected outward across OBCs.  This option changes "//&
                  "answers for some configurations that use OBCs.", &
-                 default=enable_bugs, do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   CS%interior_OBC_PV = .not.OBC_projection_bug
   call get_param(param_file, mdl, "TIDES", use_tides, &
                  "If true, apply tidal momentum forcing.", default=.false.)
