@@ -227,6 +227,13 @@ CDRAG = 0.002                   !   [nondim] default = 0.003
                                 ! the velocity field to the bottom stress.
 
 ! === module MOM_lateral_mixing_coeffs ===
+INTERPOLATED_SQG_STRUCTURE = False !   [Boolean] default = False
+                                ! If true, interpolate properties to velocity points and
+                                ! then interpolate the buoyancy frequencies and layer
+                                ! thicknesses back to tracer points when calculating the
+                                ! SQG vertical structure.
+
+! === module MOM_CoriolisAdv ===
 BOUND_CORIOLIS = True           !   [Boolean] default = False
                                 ! If true, the Coriolis terms at u-points are bounded by
                                 ! the four estimates of (f+rv)v from the four neighboring

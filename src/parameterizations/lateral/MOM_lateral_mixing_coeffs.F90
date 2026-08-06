@@ -1714,7 +1714,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
     call get_param(param_file, mdl, "RESOLN_N2_FILTER_DEPTH", N2_filter_depth, &
                  "The depth below which N2 is monotonized to avoid stratification "//&
                  "artifacts from altering the equivalent barotropic mode structure.  "//&
-                 "This monotonzization is disabled if this parameter is negative.", &
+                 "This monotonization is disabled if this parameter is negative.", &
                  units="m", default=-1.0, scale=GV%m_to_H)
     allocate(CS%ebt_struct(isd:ied,jsd:jed,GV%ke), source=0.0)
   endif
@@ -1722,15 +1722,14 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
   use_SQG = CS%BS_use_sqg_struct .or. CS%khth_use_sqg_struct .or. CS%khtr_use_sqg_struct .or. &
             CS%kdgl90_use_sqg_struct
   call get_param(param_file, mdl, "SQG_EXPO", CS%sqg_expo, &
-                 "Nondimensional exponent coeffecient of the SQG mode that is used for the "//&
-                 "vertical struture of diffusivities.", &
+                 "Nondimensional exponent coefficient of the SQG mode that is used for the "//&
+                 "vertical structure of diffusivities.", &
                  units="nondim", default=1.0, do_not_log=.not.use_SQG)
   call get_param(param_file, mdl, "INTERPOLATED_SQG_STRUCTURE", CS%interpolated_sqg_struct, &
                  "If true, interpolate properties to velocity points and then interpolate the "//&
                  "buoyancy frequencies and layer thicknesses back to tracer points when "//&
                  "calculating the SQG vertical structure.", &
-                 default=.true., do_not_log=.not.use_SQG)
-                 !### Consider changing the default for INTERPOLATED_SQG_STRUCTURE to false.
+                 default=.false., do_not_log=.not.use_SQG)
 
   if ((CS%BS_EBT_power>0.) .and. CS%BS_use_sqg_struct) call MOM_error(FATAL, &
     "calc_resoln_function: BS_EBT_POWER>0. and BS_USE_SQG=True cannot be set together")
@@ -1813,7 +1812,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                      units="nondim", default=2)
       call get_param(param_file, mdl, "MIN_DZ_FOR_SLOPE_N2", CS%h_min_N2, &
                      "The minimum vertical distance to use in the denominator of the "//&
-                     "bouyancy frequency used in the slope calculation.", &
+                     "buoyancy frequency used in the slope calculation.", &
                      units="m", default=1.0, scale=GV%m_to_H, do_not_log=CS%use_stored_slopes)
 
       call get_param(param_file, mdl, "FULL_DEPTH_EADY_GROWTH_RATE", CS%full_depth_Eady_growth_rate, &

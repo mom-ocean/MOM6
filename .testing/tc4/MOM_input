@@ -198,6 +198,11 @@ DIAG_AS_CHKSUM = True           !   [Boolean] default = False
                                 ! containing the checksum (bitcount) of the array.
 
 ! === module MOM_lateral_mixing_coeffs ===
+INTERPOLATED_SQG_STRUCTURE = False !   [Boolean] default = False
+                                ! If true, interpolate properties to velocity points and
+                                ! then interpolate the buoyancy frequencies and layer
+                                ! thicknesses back to tracer points when calculating the
+                                ! SQG vertical structure.
 
 ! === module MOM_set_visc ===
 LINEAR_DRAG = True              !   [Boolean] default = False
