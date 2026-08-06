@@ -1701,7 +1701,7 @@ subroutine VarMix_init(Time, G, GV, US, param_file, diag, CS)
                  "If false, use only interior data for thickness weighting in lateral mixing "//&
                  "coefficient calculations and to calculate stratification and other fields at "//&
                  "open boundary condition faces.", &
-                 default=enable_bugs, do_not_log=(number_of_OBC_segments<=0))
+                 default=.false., do_not_log=(number_of_OBC_segments<=0))
   CS%OBC_friendly = .not. MIXING_COEFS_OBC_BUG
   call get_param(param_file, mdl, "RESOLN_FUNCTION_OBC_BUG", CS%res_fn_OBC_bug, &
                  "If false, use only interior data for calculating the resolution functions at "//&
