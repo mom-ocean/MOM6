@@ -5736,7 +5736,7 @@ subroutine barotropic_init(u, v, h, Time, G, GV, US, param_file, diag, CS, &
   call get_param(param_file, mdl, "EXTERIOR_OBC_BUG", CS%exterior_OBC_bug, &
                  "If true, recover a bug in barotropic solver and other routines when "//&
                  "boundary contitions interior to the domain are used.", &
-                 default=enable_bugs, do_not_log=.true.)
+                 default=.false., do_not_log=.true.)
   call get_param(param_file, mdl, "OBC_PROJECTION_BUG", OBC_projection_bug, &
                  "If false, use only interior ocean points at OBCs to specify several "//&
                  "calculations at OBC points, and it avoids applying a land mask at the bay-like "//&

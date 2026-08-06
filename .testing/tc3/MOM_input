@@ -166,17 +166,32 @@ MAXIMUM_DEPTH = 600.0           !   [m]
 ! Controls where open boundaries are located, what kind of boundary condition to impose, and what data to apply, if any.
 OBC_NUMBER_OF_SEGMENTS = 4      ! default = 0
                                 ! The number of open boundary segments.
-OBC_FREESLIP_VORTICITY = True   !   [Boolean] default = False
-                                ! If true, sets the normal gradient of tangential velocity to
-                                ! zero in the relative vorticity on open boundaries. This cannot
-                                ! be true if OBC_ZERO_VORTICITY is True.
-OBC_FREESLIP_STRAIN = True      !   [Boolean] default = False
-                                ! If true, sets the normal gradient of tangential velocity to
-                                ! zero in the strain use in the stress tensor on open boundaries. This cannot
-                                ! be true if OBC_ZERO_STRAIN is True.
+OBC_VORTICITY_CONFIG = "freeslip" ! default = "freeslip"
+                                ! Configuration for relative vorticity in momentum advection at open boundaries.
+                                ! Options are:
+                                !     none      - No adjustment.
+                                !     zero      - Sets relative vorticity to zero.
+                                !     freeslip  - Sets the normal gradient of tangential velocity to zero.
+                                !     computed  - Computes the normal gradient of tangential velocity using
+                                !                 external values of tangential velocity.
+                                !     specified - Uses the external values of the normal gradient of
+                                !                 tangential velocity.
+OBC_STRAIN_CONFIG = "freeslip"  ! default = "freeslip"
+                                ! Configuration for strain in horizontal viscosity at open boundaries.  Options
+                                ! are:
+                                !     none      - No adjustment.
+                                !     zero      - Sets strain to zero.
+                                !     freeslip  - Sets the normal gradient of tangential velocity to zero.
+                                !     computed  - Computes the normal gradient of tangential velocity using
+                                !                 external values of tangential velocity.
+                                !     specified - Uses the external values of the normal gradient of
+                                !                 tangential velocity.
 OBC_ZERO_BIHARMONIC = True      !   [Boolean] default = False
                                 ! If true, zeros the Laplacian of flow on open boundaries in the biharmonic
                                 ! viscosity term.
+EXTERIOR_OBC_BUG = False        !   [Boolean] default = False
+                                ! If true, recover a bug in barotropic solver and other routines when boundary
+                                ! contitions interior to the domain are used.
 OBC_SEGMENT_001 = "J=N,I=N:0,FLATHER,ORLANSKI" !
                                 ! Documentation needs to be dynamic?????
 OBC_SEGMENT_002 = "J=0,I=0:N,FLATHER,ORLANSKI" !
@@ -189,7 +204,15 @@ OBC_SEGMENT_001_DATA = "U=value:0.0,V=value:0.0,SSH=value:0.0"
 OBC_SEGMENT_002_DATA = "U=value:0.0,V=value:0.0,SSH=value:0.0"
 OBC_SEGMENT_003_DATA = "U=value:0.0,V=value:0.0,SSH=value:0.0"
 OBC_SEGMENT_004_DATA = "U=value:0.0,V=value:0.0,SSH=value:0.0"
+OBC_PROJECTION_BUG = False      !   [Boolean] default = False
+                                ! If false, use only interior ocean points at OBCs to specify several
+                                ! calculations at OBC points, and it avoids applying a land mask at the bay-like
+                                ! intersection of orthogonal OBC segments.  Otherwise the calculation of terms
+                                ! like the potential vorticity used in the barotropic solver relies on
+                                ! bathymetry or other fields being projected outward across OBCs.  This option
+                                ! changes answers for some configurations that use OBCs.
 
+! === module MOM_fixed_initialization ===
 ROTATION = "beta"               ! default = "2omegasinlat"
                                 ! This specifies how the Coriolis parameter is specified:
                                 !     2omegasinlat - Use twice the planetary rotation rate
@@ -200,23 +223,35 @@ THICKNESS_CONFIG = "circle_obcs" !
                                 ! A string that determines how the initial layer
                                 ! thicknesses are specified for a new run:
                                 !     file - read interface heights from the file specified
+                                !       by (THICKNESS_FILE).
                                 !     thickness_file - read thicknesses from the file specified
                                 !       by (THICKNESS_FILE).
+                                !     mass_file - read thicknesses in units of mass per unit area from the file
+                                !       specified by (THICKNESS_FILE).
+                                !     coord - determined by ALE coordinate.
                                 !     uniform - uniform thickness layers evenly distributed
                                 !       between the surface and MAXIMUM_DEPTH.
+                                !     list - read a list of positive interface depths.
+                                !     param - use thicknesses from parameter THICKNESS_INIT_VALUES.
                                 !     DOME - use a slope and channel configuration for the
                                 !       DOME sill-overflow test case.
+                                !     ISOMIP - use a configuration for the
+                                !       ISOMIP test case.
                                 !     benchmark - use the benchmark test case thicknesses.
+                                !     Neverworld - use the Neverworld test case thicknesses.
                                 !     search - search a density profile for the interface
                                 !       densities. This is not yet implemented.
                                 !     circle_obcs - the circle_obcs test case is used.
                                 !     DOME2D - 2D version of DOME initialization.
-                                !     adjustment2d - TBD AJA.
-                                !     sloshing - TBD AJA.
-                                !     seamount - TBD AJA.
+                                !     adjustment2d - 2D lock exchange thickness ICs.
+                                !     sloshing - sloshing gravity thickness ICs.
+                                !     seamount - no motion test with seamount ICs.
+                                !     dumbbell - sloshing channel ICs.
+                                !     soliton - Equatorial Rossby soliton.
+                                !     rossby_front - a mixed layer front in thermal wind balance.
                                 !     USER - call a user modified routine.
 
-! === module circle_obcs_initialize_thickness ===
+! === module circle_obcs_initialization ===
 DISK_RADIUS = 24.0              !   [k]
                                 ! The radius of the initially elevated disk in the
                                 ! circle_obcs test case.
