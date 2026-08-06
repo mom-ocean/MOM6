@@ -62,7 +62,7 @@ type, public :: wave_parameters_CS ; private
   logical, public :: Stokes_VF = .false.    !< True if Stokes vortex force is used
   logical, public :: Passive_Stokes_VF = .false. !< Computes Stokes VF, but doesn't affect dynamics
   logical, public :: Stokes_PGF = .false.   !< True if Stokes shear pressure Gradient force is used
-  logical, public :: robust_Stokes_PGF = .false.  !< If true, use expressions to calculate the
+  logical, public :: robust_Stokes_PGF = .true.  !< If true, use expressions to calculate the
                                             !! Stokes-induced pressure gradient anomalies that are
                                             !! more accurate in the limit of thin layers.
   logical, public :: Passive_Stokes_PGF = .false. !< Keeps Stokes_PGF on, but doesn't affect dynamics
@@ -393,8 +393,7 @@ subroutine MOM_wave_interface_init(time, G, GV, US, param_file, CS, diag)
   call get_param(param_file, mdl, "ROBUST_STOKES_PGF", CS%robust_Stokes_PGF, &
        "If true, use expressions to calculate the Stokes-induced pressure gradient "//&
        "anomalies that are more accurate in the limit of thin layers.", &
-       default=.false., do_not_log=.not.CS%Stokes_PGF)
-       !### Change the default for ROBUST_STOKES_PGF to True.
+       default=.true., do_not_log=.not.CS%Stokes_PGF)
   call get_param(param_file, mdl, "PASSIVE_STOKES_PGF", CS%Passive_Stokes_PGF, &
        "Flag to make Stokes-induced pressure gradient anomaly diagnostic only.", &
        default=.false.)
