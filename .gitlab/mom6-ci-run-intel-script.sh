@@ -36,8 +36,10 @@ set -v
 # Run symmetric intel regressions
 section_start intel_all_sym "Running symmetric intel"
 time make -f tools/MRS/Makefile.run intel_all -s -j
-tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/intel_all_sym -xf -
-tar cf - `find [oicl]* -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --one-top-level=results/intel_params -xf -
+mkdir -p results/intel_all_sym
+tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --directory=results/intel_all_sym -xf -
+mkdir -p results/intel_params
+tar cf - `find [oicl]* -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --directory=results/intel_params -xf -
 check_for_core_files
 section_end
 
@@ -45,14 +47,16 @@ section_end
 section_start intel_all_nonsym "Running nonsymmetric intel"
 time make -f tools/MRS/Makefile.run ocean_only/circle_obcs/ocean.stats.intel -s
 time make -f tools/MRS/Makefile.run intel_all -s -j MEMORY=dynamic_nonsymmetric
-tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/intel_all_nonsym -xf -
+mkdir -p results/intel_all_nonsym
+tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --directory=results/intel_all_nonsym -xf -
 check_for_core_files
 section_end
 
 # Run symmetric intel regressions with alternate layout
 section_start intel_all_layout "Running symmetric intel with alternate layouts"
 time make -f tools/MRS/Makefile.run intel_all -s -j LAYOUT=alt
-tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/intel_all_layout -xf -
+mkdir -p results/intel_all_layout
+tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --directory=results/intel_all_layout -xf -
 check_for_core_files
 section_end
 

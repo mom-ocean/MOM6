@@ -41,7 +41,8 @@ time make -f tools/MRS/Makefile.restart gnu_ocean_only -s -j RESTART_STAGE=02
 time make -f tools/MRS/Makefile.restart gnu_ice_ocean_SIS2 -s -j RESTART_STAGE=02
 time make -f tools/MRS/Makefile.restart gnu_ocean_only -s -j RESTART_STAGE=12
 time make -f tools/MRS/Makefile.restart gnu_ice_ocean_SIS2 -s -j RESTART_STAGE=12
-tar cf - `find [oilc]*/ -path "*/??.ignore/*" -name "ocean.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/gnu_restarts -xf -
+mkdir -p results/gnu_restarts
+tar cf - `find [oilc]*/ -path "*/??.ignore/*" -name "ocean.stats.*[a-z][a-z][a-z]"` | tar --directory=results/gnu_restarts -xf -
 check_for_core_files
 find [oilc]* -name "*.ignore" -type d -prune -exec rm -rf {} \;
 section_end

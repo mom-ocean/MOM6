@@ -230,8 +230,10 @@ mrs-run-sub-suite () {
   fi
   set -e
   time make -f tools/MRS/Makefile.run $1_$2 MEMORY=$3 MODE=$4 LAYOUT=$5 -s -j
-  tar cf - `find $EXP_GROUPS -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/$1-$2-$3-$4-$5-stats -xf -
-  tar cf - `find $EXP_GROUPS -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --one-top-level=results/$1-$2-$3-$4-$5-params -xf -
+  mkdir -p results/$1-$2-$3-$4-$5-stats
+  tar cf - `find $EXP_GROUPS -name "*.stats.*[a-z][a-z][a-z]"` | tar --directory=results/$1-$2-$3-$4-$5-stats -xf -
+  mkdir -p results/$1-$2-$3-$4-$5-params
+  tar cf - `find $EXP_GROUPS -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --directory=results/$1-$2-$3-$4-$5-params -xf -
   check-for-core-files $EXP_GROUPS
   section-end mrs-run-sub-suite-$1-$2-$3-$4-$5
 }

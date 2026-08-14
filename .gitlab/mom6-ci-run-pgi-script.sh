@@ -36,8 +36,10 @@ set -v
 # Run symmetric pgi regressions
 section_start pgi_all_sym "Running symmetric pgi"
 time make -f tools/MRS/Makefile.run pgi_all -s -j
-tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/pgi_all_sym -xf -
-tar cf - `find [oicl]* -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --one-top-level=results/pgi_params -xf -
+mkdir -p results/pgi_all_sym
+tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --directory=results/pgi_all_sym -xf -
+mkdir -p results/pgi_params
+tar cf - `find [oicl]* -name "*_parameter_doc.*" -o -name "*available_diags*"` | tar --directory=results/pgi_params -xf -
 check_for_core_files
 section_end
 
@@ -45,14 +47,16 @@ section_end
 section_start pgi_all_nonsym "Running nonsymmetric pgi"
 time make -f tools/MRS/Makefile.run ocean_only/circle_obcs/ocean.stats.pgi -s
 time make -f tools/MRS/Makefile.run pgi_all -s -j MEMORY=dynamic_nonsymmetric
-tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/pgi_all_nonsym -xf -
+mkdir -p results/pgi_all_nonsym
+tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --directory=results/pgi_all_nonsym -xf -
 check_for_core_files
 section_end
 
 # Run symmetric pgi regressions with alternate layout
 section_start pgi_all_layout "Running symmetric pgi with alternate layouts"
 time make -f tools/MRS/Makefile.run gnu_all -s -j LAYOUT=alt
-tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --one-top-level=results/pgi_all_layout -xf -
+mkdir -p results/pgi_all_layout
+tar cf - `find [oicl]* -name "*.stats.*[a-z][a-z][a-z]"` | tar --directory=results/pgi_all_layout -xf -
 check_for_core_files
 section_end
 
