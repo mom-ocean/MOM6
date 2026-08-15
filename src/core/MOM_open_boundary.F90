@@ -838,33 +838,19 @@ subroutine open_boundary_config(G, US, param_file, OBC)
 
   if (mask_outside) call mask_outside_OBCs(G, US, param_file, OBC)
 
-  Lscale_in = 0.
-  Lscale_out = 0.
-  if (open_boundary_query(OBC, apply_open_OBC=.true.)) then
-    call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT", Lscale_out, &
-                   "An effective length scale for the tracer reservoir update when the flow "//&
-                   "is exiting the domain. If positive, the reservoir relaxes toward the "//&
-                   "interior concentration with this length scale. If zero (default), the "//&
-                   "length scale is truly zero: the reservoir is set instantly to the "//&
-                   "interior concentration on outflow. If negative, the length scale is "//&
-                   "effectively infinite: the reservoir is never updated on outflow.", &
-                   units="m", default=0.0, scale=US%m_to_L)
-    call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_IN", Lscale_in, &
-                   "An effective length scale for the tracer reservoir update when the flow "//&
-                   "is entering the domain. If positive, the reservoir relaxes toward the "//&
-                   "external OBC concentration with this length scale. If zero (default), "//&
-                   "the length scale is truly zero: the reservoir is set instantly to the "//&
-                   "external OBC concentration on inflow. If negative, the length scale is "//&
-                   "effectively infinite: the reservoir is never updated on inflow.", &
-                   units="m", default=0.0, scale=US%m_to_L)
-  endif
+  call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT", Lscale_out, &
+                 "The length scale for updating the tracer reservoir toward the interior "//&
+                 "concentration where flow exits the domain: >0 relaxes over this distance, "//&
+                 "0 resets the reservoir to that concentration immediately, and <0 (infinite "//&
+                 "length scale) leaves the reservoir unchanged.  This applies to all tracers on "//&
+                 "every open boundary segment.", units="m", default=0.0, scale=US%m_to_L)
+  call get_param(param_file, mdl, "OBC_TRACER_RESERVOIR_LENGTH_SCALE_IN", Lscale_in, &
+                 "The length scale for updating the tracer reservoir toward the external OBC "//&
+                 "concentration where flow enters the domain, following the sign convention of "//&
+                 "OBC_TRACER_RESERVOIR_LENGTH_SCALE_OUT.", units="m", default=0.0, scale=US%m_to_L)
 
-  ! All tracers are using the same restoring length scale for now, but we may want to make this
-  ! tracer-specific in the future for example, in cases where certain tracers are poorly constrained
-  ! by data while others are well constrained - MJH.
-  ! All segments also have the same restoring length scale. Internally, each tracer has
-  ! resrv_lfac_in/out attributes to rescale the length scales. resrv_lfac_in/out is only
-  ! used by BGC tracers at the moment.
+  ! All segments have the same restoring length scale. Internally, each tracer has resrv_lfac_in/out
+  ! attributes to rescale the length scales. resrv_lfac_in/out is only used by BGC tracers at the moment.
   do n=1,OBC%number_of_segments
     if (Lscale_in  > 0.0) then
       OBC%segment(n)%Tr_InvLscale_in  = 1.0 / Lscale_in
