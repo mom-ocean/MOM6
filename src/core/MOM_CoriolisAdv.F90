@@ -54,6 +54,7 @@ type, public :: CoriolisAdv_CS ; private
                              !! Valid values are:
                              !! - PV_ADV_CENTERED - centered (aka Sadourny, 75)
                              !! - PV_ADV_UPWIND1  - upwind, first order
+  integer :: nkblock         !< The k block size used in Coriolis/advection calculations [nondim].
   real    :: F_eff_max_blend !< The factor by which the maximum effective Coriolis
                              !! acceleration from any point can be increased when
                              !! blending different discretizations with the
@@ -138,8 +139,51 @@ character*(20), parameter :: PV_ADV_UPWIND1_STRING = "PV_ADV_UPWIND1"
 
 contains
 
-!> Calculates the Coriolis and momentum advection contributions to the acceleration.
+!> Calculate the Coriolis and momentum advection contributions to the acceleration.
 subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Waves)
+  type(ocean_grid_type), intent(in) :: G
+    !< Ocean grid structure
+  type(verticalGrid_type), intent(in) :: GV
+    !< Vertical grid structure
+  real, intent(in) :: u(SZIB_(G),SZJ_(G),SZK_(GV))
+    !< Zonal velocity [L T-1 ~> m s-1]
+  real, intent(in) :: v(SZI_(G),SZJB_(G),SZK_(GV))
+    !< Meridional velocity [L T-1 ~> m s-1]
+  real, intent(in) :: h(SZI_(G),SZJ_(G),SZK_(GV))
+    !< Layer thickness [H ~> m or kg m-2]
+  real, intent(in) :: uh(SZIB_(G),SZJ_(G),SZK_(GV))
+    !< Zonal transport u*h*dy [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, intent(in) :: vh(SZI_(G),SZJB_(G),SZK_(GV))
+    !< Meridional transport v*h*dx [H L2 T-1 ~> m3 s-1 or kg s-1]
+  real, intent(out) :: CAu(SZIB_(G),SZJ_(G),SZK_(GV))
+    !< Zonal acceleration due to Coriolis and momentum advection [L T-2 ~> m s-2]
+  real, intent(out) :: CAv(SZI_(G),SZJB_(G),SZK_(GV))
+    !< Meridional acceleration due to Coriolis and momentum advection [L T-2 ~> m s-2]
+  type(ocean_OBC_type), pointer, intent(in) :: OBC
+    !< Open boundary control structure
+  type(accel_diag_ptrs), intent(inout) :: AD
+    !< Storage for acceleration diagnostics
+  type(unit_scale_type), intent(in) :: US
+    !< A dimensional unit scaling type
+  type(CoriolisAdv_CS), intent(in) :: CS
+    !< Control structure for MOM_CoriolisAdv
+  type(porous_barrier_type), intent(in) :: pbv
+    !< porous barrier fractional cell metrics
+  type(Wave_parameters_CS), pointer, intent(in), optional :: Waves
+    !< An optional pointer to Stokes drift CS
+
+  integer :: nkk
+    ! The resolved k block size used in Coriolis/advection calculations
+
+  nkk = CS%nkblock
+  if (nkk == 0) nkk = GV%ke
+
+  call CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nkk, pbv, Waves)
+end subroutine CorAdCalc
+
+
+!> Calculate the Coriolis and momentum advection contributions to the acceleration for a k block size.
+subroutine CorAdCalc_block(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, nkk, pbv, Waves)
   type(ocean_grid_type),                      intent(in)    :: G  !< Ocean grid structure
   type(verticalGrid_type),                    intent(in)    :: GV !< Vertical grid structure
   real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)    :: u  !< Zonal velocity [L T-1 ~> m s-1]
@@ -153,62 +197,62 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
                                                                   !! and momentum advection [L T-2 ~> m s-2].
   real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(out)   :: CAv !< Meridional acceleration due to Coriolis
                                                                   !! and momentum advection [L T-2 ~> m s-2].
-  type(ocean_OBC_type),                       pointer       :: OBC !< Open boundary control structure
+  type(ocean_OBC_type), pointer,              intent(in)    :: OBC !< Open boundary control structure
   type(accel_diag_ptrs),                      intent(inout) :: AD  !< Storage for acceleration diagnostics
   type(unit_scale_type),                      intent(in)    :: US  !< A dimensional unit scaling type
   type(CoriolisAdv_CS),                       intent(in)    :: CS  !< Control structure for MOM_CoriolisAdv
+  integer,                                    intent(in)    :: nkk !< Resolved k block size [nondim].
   type(porous_barrier_type),                  intent(in)    :: pbv !< porous barrier fractional cell metrics
-  type(Wave_parameters_CS),         optional, pointer       :: Waves !< An optional pointer to Stokes drift CS
+  type(Wave_parameters_CS), pointer, optional, intent(in)   :: Waves !< An optional pointer to Stokes drift CS
 
-  ! Local variables
   real, dimension(SZIB_(G),SZJB_(G)) :: &
+    Area_q      ! The sum of the ocean areas at the 4 adjacent thickness points [L2 ~> m2].
+  real, dimension(SZI_(G),SZJ_(G)) :: &
+    Area_h      ! The ocean area at h points [L2 ~> m2].  Area_h is used to find the
+                ! average thickness in the denominator of q.  0 for land points.
+
+  real, dimension(SZIB_(G),SZJB_(G),nkk) :: &
     q, &        ! Layer potential vorticity [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     qS, &       ! Layer Stokes vorticity [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     Ih_q, &     ! The inverse of thickness interpolated to q points [H-1 ~> m-1 or m2 kg-1].
     h_q, &      ! The thickness interpolated to q points [H-1 ~> m-1 or m2 kg-1].
-    Area_q      ! The sum of the ocean areas at the 4 adjacent thickness points [L2 ~> m2].
-
-  real, dimension(SZIB_(G),SZJ_(G)) :: &
-    a, b, c, d  ! a, b, c, & d are combinations of the potential vorticities
-                ! surrounding an h grid point.  At small scales, a = q/4,
-                ! b = q/4, etc.  All are in [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1],
-                ! and use the indexing of the corresponding u point.
-
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    Area_h, &   ! The ocean area at h points [L2 ~> m2].  Area_h is used to find the
-                ! average thickness in the denominator of q.  0 for land points.
-    KE          ! Kinetic energy per unit mass [L2 T-2 ~> m2 s-2], KE = (u^2 + v^2)/2.
-  real, dimension(SZIB_(G),SZJ_(G)) :: &
-    hArea_u, &  ! The cell area weighted thickness interpolated to u points
-                ! times the effective areas [H L2 ~> m3 or kg].
-    KEx, &      ! The zonal gradient of Kinetic energy per unit mass [L T-2 ~> m s-2],
-                ! KEx = d/dx KE.
-    uh_center   ! Transport based on arithmetic mean h at u-points [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(SZI_(G),SZJB_(G)) :: &
-    hArea_v, &  ! The cell area weighted thickness interpolated to v points
-                ! times the effective areas [H L2 ~> m3 or kg].
-    KEy, &      ! The meridional gradient of Kinetic energy per unit mass [L T-2 ~> m s-2],
-                ! KEy = d/dy KE.
-    vh_center   ! Transport based on arithmetic mean h at v-points [H L2 T-1 ~> m3 s-1 or kg s-1]
-  real, dimension(SZI_(G),SZJ_(G)) :: &
-    uh_min, uh_max, &   ! The smallest and largest estimates of the zonal volume fluxes through
-                        ! the faces (i.e. u*h*dy) [H L2 T-1 ~> m3 s-1 or kg s-1]
-    vh_min, vh_max, &   ! The smallest and largest estimates of the meridional volume fluxes through
-                        ! the faces (i.e. v*h*dx) [H L2 T-1 ~> m3 s-1 or kg s-1]
-    ep_u, ep_v  ! Additional pseudo-Coriolis terms in the Arakawa and Lamb
-                ! discretization [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
-  real, dimension(SZIB_(G),SZJB_(G)) :: &
     dvdx, dudy, & ! Contributions to the circulation around q-points [L2 T-1 ~> m2 s-1]
     dvSdx, duSdy, & ! idem. for Stokes drift [L2 T-1 ~> m2 s-1]
     rel_vort, & ! Relative vorticity at q-points [T-1 ~> s-1].
     abs_vort, & ! Absolute vorticity at q-points [T-1 ~> s-1].
     stk_vort, & ! Stokes vorticity at q-points [T-1 ~> s-1].
     q2          ! Relative vorticity over thickness [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
+
+  real, dimension(SZIB_(G),SZJ_(G),nkk) :: &
+    a, b, c, d, & ! a, b, c, & d are combinations of the potential vorticities
+                  ! surrounding an h grid point.  At small scales, a = q/4,
+                  ! b = q/4, etc.  All are in [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1],
+                  ! and use the indexing of the corresponding u point.
+    hArea_u, &  ! The cell area weighted thickness interpolated to u points
+                ! times the effective areas [H L2 ~> m3 or kg].
+    KEx, &      ! The zonal gradient of Kinetic energy per unit mass [L T-2 ~> m s-2],
+                ! KEx = d/dx KE.
+    uh_center   ! Transport based on arithmetic mean h at u-points [H L2 T-1 ~> m3 s-1 or kg s-1]
+
+  real, dimension(SZI_(G),SZJ_(G),nkk) :: &
+    KE, &       ! Kinetic energy per unit mass [L2 T-2 ~> m2 s-2], KE = (u^2 + v^2)/2.
+    uh_min, uh_max, &   ! The smallest and largest estimates of the zonal volume fluxes through
+                        ! the faces (i.e. u*h*dy) [H L2 T-1 ~> m3 s-1 or kg s-1]
+    vh_min, vh_max, &   ! The smallest and largest estimates of the meridional volume fluxes through
+                        ! the faces (i.e. v*h*dx) [H L2 T-1 ~> m3 s-1 or kg s-1]
+    ep_u, ep_v  ! Additional pseudo-Coriolis terms in the Arakawa and Lamb
+                ! discretization [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
+  real, dimension(SZI_(G),SZJB_(G),nkk) :: &
+    hArea_v, &  ! The cell area weighted thickness interpolated to v points
+                ! times the effective areas [H L2 ~> m3 or kg].
+    KEy, &      ! The meridional gradient of Kinetic energy per unit mass [L T-2 ~> m s-2],
+                ! KEy = d/dy KE.
+    vh_center   ! Transport based on arithmetic mean h at v-points [H L2 T-1 ~> m3 s-1 or kg s-1]
   real, dimension(SZIB_(G),SZJB_(G),SZK_(GV)) :: &
     PV, &       ! A diagnostic array of the potential vorticities [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1].
     RV          ! A diagnostic array of the relative vorticities [T-1 ~> s-1].
-  real, dimension(SZIB_(G),SZJ_(G),SZK_(G)) :: CAuS ! Stokes contribution to CAu [L T-2 ~> m s-2]
-  real, dimension(SZI_(G),SZJB_(G),SZK_(G)) :: CAvS ! Stokes contribution to CAv [L T-2 ~> m s-2]
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)) :: CAuS ! Stokes contribution to CAu [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)) :: CAvS ! Stokes contribution to CAv [L T-2 ~> m s-2]
   real :: fv1, fv2, fv3, fv4   ! (f+rv)*v at the 4 points surrounding a u points[L T-2 ~> m s-2]
   real :: fu1, fu2, fu3, fu4   ! -(f+rv)*u at the 4 points surrounding a v point [L T-2 ~> m s-2]
   real :: max_fv, max_fu       ! The maximum of the neighboring Coriolis accelerations [L T-2 ~> m s-2]
@@ -247,9 +291,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   real :: QUHeff,QVHeff ! More temporary variables [H L2 T-2 ~> m3 s-2 or kg s-2].
   integer :: i, j, k, n, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz
   integer :: Is_q, Ie_q, Js_q, Je_q  ! The scheme-dependent range of values at which vorticity is set.
+  integer :: ksb, keb   ! Start and end index of current block
+  integer :: kk, kke    ! Inblock grid index and upper bound
   logical :: Stokes_VF
   real :: u_v, v_u      ! u_v is the u velocity at v point, v_u is the v velocity at u point [L T-1 ~> m s-1]
   real :: q_v, q_u      ! PV at the u and v points [H-1 T-1 ~> m-1 s-1 or m2 kg-1 s-1]
+  logical :: use_weno   ! True if using one of the WENO schemes
   integer :: seventh_order, fifth_order, third_order ! Order of accuracy for the WENO calculations
   real :: u_q8(8) ! Eight-point zonal velocity at WENO stencils [L T-1 ~> m s-1]
   real :: u_q6(6) ! Six-point zonal velocity at WENO stencils [L T-1 ~> m s-1]
@@ -259,10 +306,10 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
   real :: v_q4(4) ! Four-point meridional velocity at WENO stencils [L T-1 ~> m s-1]
   integer :: stencil    ! Stencil size of WENO scheme
 
-! To work, the following fields must be set outside of the usual
-! is to ie range before this subroutine is called:
-!   v(is-1:ie+2,js-1:je+1), u(is-1:ie+1,js-1:je+2), h(is-1:ie+2,js-1:je+2),
-!   uh(is-1,ie,js:je+1) and vh(is:ie+1,js-1:je).
+  ! To work, the following fields must be set outside of the usual
+  ! is to ie range before this subroutine is called:
+  !   v(is-1:ie+2,js-1:je+1), u(is-1:ie+1,js-1:je+2), h(is-1:ie+2,js-1:je+2),
+  !   uh(is-1,ie,js:je+1) and vh(is:ie+1,js-1:je).
 
   if (.not.CS%initialized) call MOM_error(FATAL, &
          "MOM_CoriolisAdv: Module must be initialized before it is used.")
@@ -276,39 +323,44 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
   stencil = CoriolisAdv_stencil(CS)
 
-  if ((CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO) .or. (CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO) .or. &
-      (CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO)) then
+  use_weno = CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO
+
+  if (use_weno) then
     Is_q = is - stencil ; Ie_q = ie + stencil - 1 ; Js_q = js - stencil ; Je_q = je + stencil - 1
   else
     Is_q = G%IscB - 1 ; Ie_q = G%IecB + 1 ; Js_q = G%JscB - 1 ; Je_q = G%JecB + 1
   endif
 
-  !$OMP parallel do default(private) shared(Is_q,Ie_q,Js_q,Je_q,G,Area_h)
   do j=Js_q,Je_q+1 ; do I=Is_q,Ie_q+1
     Area_h(i,j) = G%mask2dT(i,j) * G%areaT(i,j)
   enddo ; enddo
-  if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-    if (.not. OBC%segment(n)%on_pe) cycle
-    I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-    if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
-      do i = max(Is_q,OBC%segment(n)%HI%isd), min(Ie_q+1,OBC%segment(n)%HI%ied)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-          Area_h(i,j+1) = Area_h(i,j)
-        else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-          Area_h(i,j) = Area_h(i,j+1)
-        endif
-      enddo
-    elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
-      do j = max(Js_q,OBC%segment(n)%HI%jsd), min(Je_q+1,OBC%segment(n)%HI%jed)
-        if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-          Area_h(i+1,j) = Area_h(i,j)
-        else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-          Area_h(i,j) = Area_h(i+1,j)
-        endif
-      enddo
-    endif
-  enddo ; endif
-  !$OMP parallel do default(private) shared(Is_q,Ie_q,Js_q,Je_q,G,Area_h,Area_q)
+
+  if (associated(OBC)) then
+    do n=1,OBC%number_of_segments
+      if (.not. OBC%segment(n)%on_pe) cycle
+      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+      if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
+        do i = max(Is_q,OBC%segment(n)%HI%isd), min(Ie_q+1,OBC%segment(n)%HI%ied)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+            Area_h(i,j+1) = Area_h(i,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+            Area_h(i,j) = Area_h(i,j+1)
+          endif
+        enddo
+      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
+        do j = max(Js_q,OBC%segment(n)%HI%jsd), min(Je_q+1,OBC%segment(n)%HI%jed)
+          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+            Area_h(i+1,j) = Area_h(i,j)
+          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+            Area_h(i,j) = Area_h(i+1,j)
+          endif
+        enddo
+      endif
+    enddo
+  endif
+
   do J=Js_q,Je_q ; do I=Is_q,Ie_q
     Area_q(i,j) = (Area_h(i,j) + Area_h(i+1,j+1)) + &
                   (Area_h(i+1,j) + Area_h(i,j+1))
@@ -319,10 +371,22 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     Stokes_VF = Waves%Stokes_VF
   endif ; endif
 
-  !$OMP parallel do default(private) shared(u,v,h,uh,vh,CAu,CAv,G,GV,CS,AD,Area_h,Area_q,&
-  !$OMP                        RV,PV,is,ie,js,je,Isq,Ieq,Jsq,Jeq,Is_q,Ie_q,Js_q,Je_q,nz,vol_neglect,&
-  !$OMP                        h_tiny,OBC,eps_vel,area_neglect,pbv,Stokes_VF,stencil)
-  do k=1,nz
+  ! Hoist AL_BLEND k-independent scalars out of the block loop.
+  Fe_m2 = 0. ; rat_lin = 0.
+  if (CS%Coriolis_Scheme == AL_BLEND) then
+    Fe_m2 = CS%F_eff_max_blend - 2.
+    rat_lin = 1.5 * Fe_m2 / max(CS%wt_lin_blend, 1.0e-16)
+
+    ! This allows the code to always give Sadourny Energy
+    if (CS%F_eff_max_blend <= 2.0) then
+      Fe_m2 = -1.
+      rat_lin = -1.0
+    endif
+  endif
+
+  do ksb=1,nz,nkk
+    keb = min(ksb + nkk - 1, nz)
+    kke = keb - ksb + 1
 
     ! Here the second order accurate layer potential vorticities, q,
     ! are calculated.  hq is  second order accurate in space.  Relative
@@ -331,243 +395,274 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! First calculate the contributions to the circulation around the q-point.
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-        do J=Js_q,Je_q ; do I=Is_q,Ie_q
-          dvSdx(I,J) = (-Waves%us_y(i+1,J,k)*G%dyCv(i+1,J)) - &
-                       (-Waves%us_y(i,J,k)*G%dyCv(i,J))
-          duSdy(I,J) = (-Waves%us_x(I,j+1,k)*G%dxCu(I,j+1)) - &
-                       (-Waves%us_x(I,j,k)*G%dxCu(I,j))
-        enddo ; enddo
+        do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+          k = ksb + kk - 1
+          dvSdx(I,J,kk) = (-Waves%us_y(i+1,J,k) * G%dyCv(i+1,J)) &
+              - (-Waves%us_y(i,J,k) * G%dyCv(i,J))
+          duSdy(I,J,kk) = (-Waves%us_x(I,j+1,k) * G%dxCu(I,j+1)) &
+              - (-Waves%us_x(I,j,k) * G%dxCu(I,j))
+        enddo ; enddo ; enddo
       endif
       if (.not. Waves%Passive_Stokes_VF) then
-        do J=Js_q,Je_q ; do I=Is_q,Ie_q
-          dvdx(I,J) = ((v(i+1,J,k)-Waves%us_y(i+1,J,k))*G%dyCv(i+1,J)) - &
-                      ((v(i,J,k)-Waves%us_y(i,J,k))*G%dyCv(i,J))
-          dudy(I,J) = ((u(I,j+1,k)-Waves%us_x(I,j+1,k))*G%dxCu(I,j+1)) - &
-                      ((u(I,j,k)-Waves%us_x(I,j,k))*G%dxCu(I,j))
-        enddo ; enddo
+        do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+          k = ksb + kk - 1
+          dvdx(I,J,kk) = ((v(i+1,J,k) - Waves%us_y(i+1,J,k)) * G%dyCv(i+1,J)) &
+              - ((v(i,J,k) - Waves%us_y(i,J,k)) * G%dyCv(i,J))
+          dudy(I,J,kk) = ((u(I,j+1,k) - Waves%us_x(I,j+1,k)) * G%dxCu(I,j+1)) &
+              - ((u(I,j,k) - Waves%us_x(I,j,k)) * G%dxCu(I,j))
+        enddo ; enddo ; enddo
       else
-        do J=Js_q,Je_q ; do I=Is_q,Ie_q
-          dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
-          dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
-        enddo ; enddo
+        do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+          k = ksb + kk - 1
+          dvdx(I,J,kk) = (v(i+1,J,k) * G%dyCv(i+1,J)) - (v(i,J,k) * G%dyCv(i,J))
+          dudy(I,J,kk) = (u(I,j+1,k) * G%dxCu(I,j+1)) - (u(I,j,k) * G%dxCu(I,j))
+        enddo ; enddo ; enddo
       endif
     else
-      do J=Js_q,Je_q ; do I=Is_q,Ie_q
-        dvdx(I,J) = (v(i+1,J,k)*G%dyCv(i+1,J)) - (v(i,J,k)*G%dyCv(i,J))
-        dudy(I,J) = (u(I,j+1,k)*G%dxCu(I,j+1)) - (u(I,j,k)*G%dxCu(I,j))
-      enddo ; enddo
+      do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+        k = ksb + kk - 1
+        dvdx(I,J,kk) = (v(i+1,J,k) * G%dyCv(i+1,J)) - (v(i,J,k) * G%dyCv(i,J))
+        dudy(I,J,kk) = (u(I,j+1,k) * G%dxCu(I,j+1)) - (u(I,j,k) * G%dxCu(I,j))
+      enddo ; enddo ; enddo
     endif
-    do J=Js_q,Je_q ; do i=Is_q,Ie_q+1
-      hArea_v(i,J) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
-    enddo ; enddo
-    do j=Js_q,Je_q+1 ; do I=Is_q,Ie_q
-      hArea_u(I,j) = 0.5*((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
-    enddo ; enddo
+
+    do kk=1,kke ; do J=Js_q,Je_q ; do i=Is_q,Ie_q+1
+      k = ksb + kk - 1
+      hArea_v(i,J,kk) = 0.5 * ((Area_h(i,j) * h(i,j,k)) + (Area_h(i,j+1) * h(i,j+1,k)))
+    enddo ; enddo ; enddo
+
+    do kk=1,kke ; do j=Js_q,Je_q+1 ; do I=Is_q,Ie_q
+      k = ksb + kk - 1
+      hArea_u(I,j,kk) = 0.5 * ((Area_h(i,j) * h(i,j,k)) + (Area_h(i+1,j) * h(i+1,j,k)))
+    enddo ; enddo ; enddo
 
     if (CS%Coriolis_En_Dis) then
-      do j=Jsq,Jeq+1 ; do I=is-1,ie
-        uh_center(I,j) = 0.5 * ((G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
-      enddo ; enddo
-      do J=js-1,je ; do i=Isq,Ieq+1
-        vh_center(i,J) = 0.5 * ((G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
-      enddo ; enddo
+      do kk=1,kke ; do j=Jsq,Jeq+1 ; do I=is-1,ie
+        k = ksb + kk - 1
+        uh_center(I,j,kk) = 0.5 * ((G%dy_Cu(I,j) * pbv%por_face_areaU(I,j,k)) * u(I,j,k)) * (h(i,j,k) + h(i+1,j,k))
+      enddo ; enddo ; enddo
+
+      do kk=1,kke ; do J=js-1,je ; do i=Isq,Ieq+1
+        k = ksb + kk - 1
+        vh_center(i,J,kk) = 0.5 * ((G%dx_Cv(i,J) * pbv%por_face_areaV(i,J,k)) * v(i,J,k)) * (h(i,j,k) + h(i,j+1,k))
+      enddo ; enddo ; enddo
     endif
 
     ! Adjust circulation components to relative vorticity and thickness projected onto
     ! velocity points on open boundaries.
-    if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-      if (.not. OBC%segment(n)%on_pe) cycle
-      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-      if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
-        select case (OBC%vorticity_config)
-          case (OBC_VORTICITY_ZERO)
-            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            enddo
-          case (OBC_VORTICITY_FREESLIP)
-            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
-              dudy(I,J) = 0.
-            enddo
-          case (OBC_VORTICITY_COMPUTED)
-            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+    if (associated(OBC)) then
+      do kk=1,kke
+        k = ksb + kk - 1
+
+        do n=1,OBC%number_of_segments
+          if (.not. OBC%segment(n)%on_pe) cycle
+
+          I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+
+          if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
+            select case (OBC%vorticity_config)
+            case (OBC_VORTICITY_ZERO)
+              do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+                dvdx(I,J,kk) = 0. ; dudy(I,J,kk) = 0.
+              enddo
+            case (OBC_VORTICITY_FREESLIP)
+              do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+                dudy(I,J,kk) = 0.
+              enddo
+            case (OBC_VORTICITY_COMPUTED)
+              do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+                if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                  dudy(I,J,kk) = 2. * (OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k)) * G%dxCu(I,j)
+                else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+                  dudy(I,J,kk) = 2. * (u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k)) * G%dxCu(I,j+1)
+                endif
+              enddo
+            case (OBC_VORTICITY_SPECIFIED)
+              do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+                if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                  dudy(I,J,kk) = OBC%segment(n)%tangential_grad(I,J,k) * G%dxCu(I,j) * G%dyBu(I,J)
+                else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+                  dudy(I,J,kk) = OBC%segment(n)%tangential_grad(I,J,k) * G%dxCu(I,j+1) * G%dyBu(I,J)
+                endif
+              enddo
+            end select
+
+            ! Project thicknesses across OBC points with a no-gradient condition.
+            do i=max(Is_q,OBC%segment(n)%HI%isd), min(Ie_q+1,OBC%segment(n)%HI%ied)
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - u(I,j,k))*G%dxCu(I,j)
+                hArea_v(i,J,kk) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
               else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-                dudy(I,J) = 2.0*(u(I,j+1,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dxCu(I,j+1)
+                hArea_v(i,J,kk) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
               endif
             enddo
-          case (OBC_VORTICITY_SPECIFIED)
-            do I=OBC%segment(n)%HI%IsdB,OBC%segment(n)%HI%IedB
+
+            if (CS%Coriolis_En_Dis) then
+              do i=max(Isq,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
+                  vh_center(i,J,kk) = (G%dx_Cv(i,J) * pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j,k)
+                else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
+                  vh_center(i,J,kk) = (G%dx_Cv(i,J) * pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j+1,k)
+                endif
+              enddo
+            endif
+          elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
+            select case (OBC%vorticity_config)
+            case (OBC_VORTICITY_ZERO)
+              do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+                dvdx(I,J,kk) = 0. ; dudy(I,J,kk) = 0.
+              enddo
+            case (OBC_VORTICITY_FREESLIP)
+              do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+                dvdx(I,J,kk) = 0.
+              enddo
+            case (OBC_VORTICITY_COMPUTED)
+              do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+                if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                  dvdx(I,J,kk) = 2. * (OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k)) * G%dyCv(i,J)
+                else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+                  dvdx(I,J,kk) = 2. * (v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k)) * G%dyCv(i+1,J)
+                endif
+              enddo
+            case (OBC_VORTICITY_SPECIFIED)
+              do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+                if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                  dvdx(I,J,kk) = OBC%segment(n)%tangential_grad(I,J,k) * G%dyCv(i,J) * G%dxBu(I,J)
+                else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+                  dvdx(I,J,kk) = OBC%segment(n)%tangential_grad(I,J,k) * G%dyCv(i+1,J) * G%dxBu(I,J)
+                endif
+              enddo
+            end select
+
+            ! Project thicknesses across OBC points with a no-gradient condition.
+            do j=max(Js_q,OBC%segment(n)%HI%jsd), min(Je_q+1,OBC%segment(n)%HI%jed)
+              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                hArea_u(I,j,kk) = 0.5 * (Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
+              else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+                hArea_u(I,j,kk) = 0.5 * (Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
+              endif
+            enddo
+            if (CS%Coriolis_En_Dis) then
+              do j=max(Jsq,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
+                if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
+                  uh_center(I,j,kk) = (G%dy_Cu(I,j) * pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i,j,k)
+                else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
+                  uh_center(I,j,kk) = (G%dy_Cu(I,j) * pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i+1,j,k)
+                endif
+              enddo
+            endif
+          endif
+        enddo
+
+        ! Now project thicknesses across cell-corner points in the OBCs.  The two
+        ! projections have to occur in sequence and can not be combined easily.
+        do n=1,OBC%number_of_segments
+          if (.not. OBC%segment(n)%on_pe) cycle
+          I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
+          if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
+            do I = max(Is_q,OBC%segment(n)%HI%IsdB), min(Ie_q,OBC%segment(n)%HI%IedB)
               if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-                dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j)*G%dyBu(I,J)
+                if (Area_h(i,j) + Area_h(i+1,j) > 0.) then
+                  hArea_u(I,j+1,kk) = hArea_u(I,j,kk) &
+                      * ((Area_h(i,j+1) + Area_h(i+1,j+1)) / (Area_h(i,j) + Area_h(i+1,j)))
+                else ; hArea_u(I,j+1,kk) = 0. ; endif
               else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-                dudy(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dxCu(I,j+1)*G%dyBu(I,J)
+                if (Area_h(i,j+1) + Area_h(i+1,j+1) > 0.) then
+                  hArea_u(I,j,kk) = hArea_u(I,j+1,kk) &
+                      * ((Area_h(i,j) + Area_h(i+1,j)) / (Area_h(i,j+1) + Area_h(i+1,j+1)))
+                else ; hArea_u(I,j,kk) = 0. ; endif
               endif
             enddo
-        end select
-
-        ! Project thicknesses across OBC points with a no-gradient condition.
-        do i = max(Is_q,OBC%segment(n)%HI%isd), min(Ie_q+1,OBC%segment(n)%HI%ied)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j,k)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
-          endif
-        enddo
-
-        if (CS%Coriolis_En_Dis) then
-          do i = max(Isq,OBC%segment(n)%HI%isd), min(Ieq+1,OBC%segment(n)%HI%ied)
-            if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-              vh_center(i,J) = (G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j,k)
-            else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-              vh_center(i,J) = (G%dx_Cv(i,J)*pbv%por_face_areaV(i,J,k)) * v(i,J,k) * h(i,j+1,k)
-            endif
-          enddo
-        endif
-      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
-        select case (OBC%vorticity_config)
-          case (OBC_VORTICITY_ZERO)
-            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-              dvdx(I,J) = 0. ; dudy(I,J) = 0.
-            enddo
-          case (OBC_VORTICITY_FREESLIP)
-            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-              dvdx(I,J) = 0.
-            enddo
-          case (OBC_VORTICITY_COMPUTED)
-            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
+          elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
+            do J = max(Js_q,OBC%segment(n)%HI%JsdB), min(Je_q,OBC%segment(n)%HI%JedB)
               if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = 2.0*(OBC%segment(n)%tangential_vel(I,J,k) - v(i,J,k))*G%dyCv(i,J)
+                if (Area_h(i,j) + Area_h(i,j+1) > 0.) then
+                  hArea_v(i+1,J,kk) = hArea_v(i,J,kk) &
+                      * ((Area_h(i+1,j) + Area_h(i+1,j+1)) / (Area_h(i,j) + Area_h(i,j+1)))
+                else ; hArea_v(i+1,J,kk) = 0. ; endif
               else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-                dvdx(I,J) = 2.0*(v(i+1,J,k) - OBC%segment(n)%tangential_vel(I,J,k))*G%dyCv(i+1,J)
+                hArea_v(i,J,kk) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
+                if (Area_h(i+1,j) + Area_h(i+1,j+1) > 0.) then
+                  hArea_v(i,J,kk) = hArea_v(i+1,J,kk) &
+                      * ((Area_h(i,j) + Area_h(i,j+1)) / (Area_h(i+1,j) + Area_h(i+1,j+1)))
+                else ; hArea_v(i,J,kk) = 0. ; endif
               endif
             enddo
-          case (OBC_VORTICITY_SPECIFIED)
-            do J=OBC%segment(n)%HI%JsdB,OBC%segment(n)%HI%JedB
-              if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-                dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i,J)*G%dxBu(I,J)
-              else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-                dvdx(I,J) = OBC%segment(n)%tangential_grad(I,J,k)*G%dyCv(i+1,J)*G%dxBu(I,J)
-              endif
-            enddo
-        end select
-
-        ! Project thicknesses across OBC points with a no-gradient condition.
-        do j = max(Js_q,OBC%segment(n)%HI%jsd), min(Je_q+1,OBC%segment(n)%HI%jed)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i,j,k)
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            hArea_u(I,j) = 0.5*(Area_h(i,j) + Area_h(i+1,j)) * h(i+1,j,k)
           endif
         enddo
-        if (CS%Coriolis_En_Dis) then
-          do j = max(Jsq,OBC%segment(n)%HI%jsd), min(Jeq+1,OBC%segment(n)%HI%jed)
-            if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-              uh_center(I,j) = (G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i,j,k)
-            else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-              uh_center(I,j) = (G%dy_Cu(I,j)*pbv%por_face_areaU(I,j,k)) * u(I,j,k) * h(i+1,j,k)
-            endif
-          enddo
-        endif
-      endif
-    enddo ; endif
-
-    if (associated(OBC)) then ; do n=1,OBC%number_of_segments
-      if (.not. OBC%segment(n)%on_pe) cycle
-      ! Now project thicknesses across cell-corner points in the OBCs.  The two
-      ! projections have to occur in sequence and can not be combined easily.
-      I = OBC%segment(n)%HI%IsdB ; J = OBC%segment(n)%HI%JsdB
-      if (OBC%segment(n)%is_N_or_S .and. (J >= Js_q) .and. (J <= Je_q)) then
-        do I = max(Is_q,OBC%segment(n)%HI%IsdB), min(Ie_q,OBC%segment(n)%HI%IedB)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_N) then
-            if (Area_h(i,j) + Area_h(i+1,j) > 0.0) then
-              hArea_u(I,j+1) = hArea_u(I,j) * ((Area_h(i,j+1) + Area_h(i+1,j+1)) / &
-                                               (Area_h(i,j) + Area_h(i+1,j)))
-            else ; hArea_u(I,j+1) = 0.0 ; endif
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_S)
-            if (Area_h(i,j+1) + Area_h(i+1,j+1) > 0.0) then
-              hArea_u(I,j) = hArea_u(I,j+1) * ((Area_h(i,j) + Area_h(i+1,j)) / &
-                                               (Area_h(i,j+1) + Area_h(i+1,j+1)))
-            else ; hArea_u(I,j) = 0.0 ; endif
-          endif
-        enddo
-      elseif (OBC%segment(n)%is_E_or_W .and. (I >= Is_q) .and. (I <= Ie_q)) then
-        do J = max(Js_q,OBC%segment(n)%HI%JsdB), min(Je_q,OBC%segment(n)%HI%JedB)
-          if (OBC%segment(n)%direction == OBC_DIRECTION_E) then
-            if (Area_h(i,j) + Area_h(i,j+1) > 0.0) then
-              hArea_v(i+1,J) = hArea_v(i,J) * ((Area_h(i+1,j) + Area_h(i+1,j+1)) / &
-                                               (Area_h(i,j) + Area_h(i,j+1)))
-            else ; hArea_v(i+1,J) = 0.0 ; endif
-          else ! (OBC%segment(n)%direction == OBC_DIRECTION_W)
-            hArea_v(i,J) = 0.5 * (Area_h(i,j) + Area_h(i,j+1)) * h(i,j+1,k)
-            if (Area_h(i+1,j) + Area_h(i+1,j+1) > 0.0) then
-              hArea_v(i,J) = hArea_v(i+1,J) * ((Area_h(i,j) + Area_h(i,j+1)) / &
-                                               (Area_h(i+1,j) + Area_h(i+1,j+1)))
-            else ; hArea_v(i,J) = 0.0 ; endif
-          endif
-        enddo
-      endif
-    enddo ; endif
+      enddo
+    endif
 
     if (CS%no_slip) then
-      do J=Js_q,Je_q ; do I=Is_q,Ie_q
-        rel_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
-      enddo ; enddo
+      do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+        rel_vort(I,J,kk) = (2. - G%mask2dBu(I,J)) * (dvdx(I,J,kk) - dudy(I,J,kk)) * G%IareaBu(I,J)
+      enddo ; enddo ; enddo
+
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-          do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-            stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
-          enddo ; enddo
+          do kk=1,kke ; do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+            stk_vort(I,J,kk) = (2. - G%mask2dBu(I,J)) * (dvSdx(I,J,kk) - duSdy(I,J,kk)) * G%IareaBu(I,J)
+          enddo ; enddo ; enddo
         endif
       endif
     else
-      do J=Js_q,Je_q ; do I=Is_q,Ie_q
-        rel_vort(I,J) = G%mask2dBu(I,J) * (dvdx(I,J) - dudy(I,J)) * G%IareaBu(I,J)
-      enddo ; enddo
+      do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+        rel_vort(I,J,kk) = G%mask2dBu(I,J) * (dvdx(I,J,kk) - dudy(I,J,kk)) * G%IareaBu(I,J)
+      enddo ; enddo ; enddo
+
       if (Stokes_VF) then
         if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-          do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-            stk_vort(I,J) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J) - duSdy(I,J)) * G%IareaBu(I,J)
-          enddo ; enddo
+          do kk=1,kke ; do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+            stk_vort(I,J,kk) = (2.0 - G%mask2dBu(I,J)) * (dvSdx(I,J,kk) - duSdy(I,J,kk)) * G%IareaBu(I,J)
+          enddo ; enddo ; enddo
         endif
       endif
     endif
 
-    do J=Js_q,Je_q ; do I=Is_q,Ie_q
-      abs_vort(I,J) = G%CoriolisBu(I,J) + rel_vort(I,J)
-    enddo ; enddo
+    do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+      abs_vort(I,J,kk) = G%CoriolisBu(I,J) + rel_vort(I,J,kk)
+    enddo ; enddo ; enddo
 
-    do J=Js_q,Je_q ; do I=Is_q,Ie_q
-      hArea_q = (hArea_u(I,j) + hArea_u(I,j+1)) + (hArea_v(i,J) + hArea_v(i+1,J))
-      Ih_q(I,J) = Area_q(I,J) / (hArea_q + vol_neglect)
-      h_q(I,J) = hArea_q / max(Area_q(I,J), area_neglect)
-      q(I,J) = abs_vort(I,J) * Ih_q(I,J)
-    enddo ; enddo
+    do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+      hArea_q = (hArea_u(I,j,kk) + hArea_u(I,j+1,kk)) + (hArea_v(i,J,kk) + hArea_v(i+1,J,kk))
+      Ih_q(I,J,kk) = Area_q(I,J) / (hArea_q + vol_neglect)
+      q(I,J,kk) = abs_vort(I,J,kk) * Ih_q(I,J,kk)
+    enddo ; enddo ; enddo
+
+    ! NOTE: `h_q` is only used by WENO, with redundant hArea_q calculation.
+    ! It may be preferable to use two full kernels under if-else.
+    if (use_weno) then
+      do kk=1,kke ; do J=Js_q,Je_q ; do I=Is_q,Ie_q
+        hArea_q = (hArea_u(I,j,kk) + hArea_u(I,j+1,kk)) + (hArea_v(i,J,kk) + hArea_v(i+1,J,kk))
+        h_q(I,J,kk) = hArea_q / max(Area_q(I,J), area_neglect)
+      enddo ; enddo ; enddo
+    endif
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
-        do J=js-1,Jeq ; do I=is-1,Ieq
-          qS(I,J) = stk_vort(I,J) * Ih_q(I,J)
-        enddo ; enddo
+        do kk=1,kke ; do J=js-1,Jeq ; do I=is-1,Ieq
+          qS(I,J,kk) = stk_vort(I,J,kk) * Ih_q(I,J,kk)
+        enddo ; enddo ; enddo
       endif
     endif
 
     if (CS%id_rv > 0) then
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        RV(I,J,k) = rel_vort(I,J)
-      enddo ; enddo
+      do kk=1,kke ; do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        k = ksb + kk - 1
+        RV(I,J,k) = rel_vort(I,J,kk)
+      enddo ; enddo ; enddo
     endif
 
     if (CS%id_PV > 0) then
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        PV(I,J,k) = q(I,J)
-      enddo ; enddo
+      do kk=1,kke ; do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        k = ksb + kk - 1
+        PV(I,J,k) = q(I,J,kk)
+      enddo ; enddo ; enddo
     endif
 
     if (associated(AD%rv_x_v) .or. associated(AD%rv_x_u)) then
-      do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
-        q2(I,J) = rel_vort(I,J) * Ih_q(I,J)
-      enddo ; enddo
+      do kk=1,kke ; do J=Jsq-1,Jeq+1 ; do I=Isq-1,Ieq+1
+        q2(I,J,kk) = rel_vort(I,J,kk) * Ih_q(I,J,kk)
+      enddo ; enddo ; enddo
     endif
 
     !   a, b, c, and d are combinations of neighboring potential
@@ -575,37 +670,31 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     ! scheme.  All are defined at u grid points.
 
     if (CS%Coriolis_Scheme == ARAKAWA_HSU90) then
-      do j=Jsq,Jeq+1
-        do I=is-1,Ieq
-          a(I,j) = (q(I,J) + (q(I+1,J) + q(I,J-1))) * C1_12
-          d(I,j) = ((q(I,J) + q(I+1,J-1)) + q(I,J-1)) * C1_12
-        enddo
-        do I=Isq,Ieq
-          b(I,j) = (q(I,J) + (q(I-1,J) + q(I,J-1))) * C1_12
-          c(I,j) = ((q(I,J) + q(I-1,J-1)) + q(I,J-1)) * C1_12
-        enddo
-      enddo
+      do kk=1,kke ; do j=Jsq,Jeq+1 ; do I=is-1,Ieq
+        a(I,j,kk) = (q(I,J,kk) + (q(I+1,J,kk) + q(I,J-1,kk))) * C1_12
+        d(I,j,kk) = ((q(I,J,kk) + q(I+1,J-1,kk)) + q(I,J-1,kk)) * C1_12
+      enddo ; enddo ; enddo
+
+      do kk=1,kke ; do j=Jsq,Jeq+1 ; do I=Isq,Ieq
+        b(I,j,kk) = (q(I,J,kk) + (q(I-1,J,kk) + q(I,J-1,kk))) * C1_12
+        c(I,j,kk) = ((q(I,J,kk) + q(I-1,J-1,kk)) + q(I,J-1,kk)) * C1_12
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == ARAKAWA_LAMB81) then
-      do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
-        a(I-1,j) = (2.0*(q(I,J) + q(I-1,J-1)) + (q(I-1,J) + q(I,J-1))) * C1_24
-        d(I-1,j) = ((q(I,j) + q(I-1,J-1)) + 2.0*(q(I-1,J) + q(I,J-1))) * C1_24
-        b(I,j) =   ((q(I,J) + q(I-1,J-1)) + 2.0*(q(I-1,J) + q(I,J-1))) * C1_24
-        c(I,j) =   (2.0*(q(I,J) + q(I-1,J-1)) + (q(I-1,J) + q(I,J-1))) * C1_24
-        ep_u(i,j) = ((q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
-        ep_v(i,j) = (-(q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
-      enddo ; enddo
+      do kk=1,kke ; do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
+        a(I-1,j,kk) = (2. * (q(I,J,kk) + q(I-1,J-1,kk)) + (q(I-1,J,kk) + q(I,J-1,kk))) * C1_24
+        d(I-1,j,kk) = ((q(I,J,kk) + q(I-1,J-1,kk)) + 2. * (q(I-1,J,kk) + q(I,J-1,kk))) * C1_24
+        b(I,j,kk) =   ((q(I,J,kk) + q(I-1,J-1,kk)) + 2. * (q(I-1,J,kk) + q(I,J-1,kk))) * C1_24
+        c(I,j,kk) =   (2. * (q(I,J,kk) + q(I-1,J-1,kk)) + (q(I-1,J,kk) + q(I,J-1,kk))) * C1_24
+        ep_u(i,j,kk) = ((q(I,J,kk) - q(I-1,J-1,kk)) + (q(I-1,J,kk) - q(I,J-1,kk))) * C1_24
+        ep_v(i,j,kk) = (-(q(I,J,kk) - q(I-1,J-1,kk)) + (q(I-1,J,kk) - q(I,J-1,kk))) * C1_24
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == AL_BLEND) then
-      Fe_m2 = CS%F_eff_max_blend - 2.0
-      rat_lin = 1.5 * Fe_m2 / max(CS%wt_lin_blend, 1.0e-16)
+      do kk=1,kke ; do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
+        min_Ihq = MIN(Ih_q(I-1,J-1,kk), Ih_q(I,J-1,kk), Ih_q(I-1,J,kk), Ih_q(I,J,kk))
+        max_Ihq = MAX(Ih_q(I-1,J-1,kk), Ih_q(I,J-1,kk), Ih_q(I-1,J,kk), Ih_q(I,J,kk))
 
-      ! This allows the code to always give Sadourny Energy
-      if (CS%F_eff_max_blend <= 2.0) then ; Fe_m2 = -1. ; rat_lin = -1.0 ; endif
-
-      do j=Jsq,Jeq+1 ; do I=Isq,Ieq+1
-        min_Ihq = MIN(Ih_q(I-1,J-1), Ih_q(I,J-1), Ih_q(I-1,J), Ih_q(I,J))
-        max_Ihq = MAX(Ih_q(I-1,J-1), Ih_q(I,J-1), Ih_q(I-1,J), Ih_q(I,J))
         rat_m1 = 1.0e15
-        if (max_Ihq < 1.0e15*min_Ihq) rat_m1 = max_Ihq / min_Ihq - 1.0
+        if (max_Ihq < 1.0e15*min_Ihq) rat_m1 = max_Ihq / min_Ihq - 1.
         ! The weights used here are designed to keep the effective Coriolis
         ! acceleration from any one point on its neighbors within a factor
         ! of F_eff_max.  The minimum permitted value is 2 (the factor for
@@ -613,40 +702,42 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
 
         ! Determine the relative weights of Arakawa & Lamb vs. Arakawa and Hsu.
         if (rat_m1 <= Fe_m2) then ; AL_wt = 1.0
-        elseif (rat_m1 < 1.5*Fe_m2) then ; AL_wt = 3.0*Fe_m2 / rat_m1 - 2.0
-        else ; AL_wt = 0.0 ; endif
+        elseif (rat_m1 < 1.5 * Fe_m2) then ; AL_wt = 3. * Fe_m2 / rat_m1 - 2.
+        else ; AL_wt = 0. ; endif
 
         ! Determine the relative weights of Sadourny Energy vs. the other two.
-        if (rat_m1 <= 1.5*Fe_m2) then ; Sad_wt = 0.0
+        if (rat_m1 <= 1.5 * Fe_m2) then ; Sad_wt = 0.
         elseif (rat_m1 <= rat_lin) then
-          Sad_wt = 1.0 - (1.5*Fe_m2) / rat_m1
-        elseif (rat_m1 < 2.0*rat_lin) then
-          Sad_wt = 1.0 - (CS%wt_lin_blend / rat_lin) * (rat_m1 - 2.0*rat_lin)
-        else ; Sad_wt = 1.0 ; endif
+          Sad_wt = 1. - (1.5 * Fe_m2) / rat_m1
+        elseif (rat_m1 < 2. * rat_lin) then
+          Sad_wt = 1. - (CS%wt_lin_blend / rat_lin) * (rat_m1 - 2. * rat_lin)
+        else ; Sad_wt = 1. ; endif
 
-        a(I-1,j) = Sad_wt * 0.25 * q(I-1,J) + (1.0 - Sad_wt) * &
-                   ( ((2.0-AL_wt)* q(I-1,J) + AL_wt*q(I,J-1)) + &
-                      2.0 * (q(I,J) + q(I-1,J-1)) ) * C1_24
-        d(I-1,j) = Sad_wt * 0.25 * q(I-1,J-1) + (1.0 - Sad_wt) * &
-                   ( ((2.0-AL_wt)* q(I-1,J-1) + AL_wt*q(I,J)) + &
-                      2.0 * (q(I-1,J) + q(I,J-1)) ) * C1_24
-        b(I,j) =   Sad_wt * 0.25 * q(I,J) + (1.0 - Sad_wt) * &
-                   ( ((2.0-AL_wt)* q(I,J) + AL_wt*q(I-1,J-1)) + &
-                      2.0 * (q(I-1,J) + q(I,J-1)) ) * C1_24
-        c(I,j) =   Sad_wt * 0.25 * q(I,J-1) + (1.0 - Sad_wt) * &
-                   ( ((2.0-AL_wt)* q(I,J-1) + AL_wt*q(I-1,J)) + &
-                      2.0 * (q(I,J) + q(I-1,J-1)) ) * C1_24
-        ep_u(i,j) = AL_wt  * ((q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
-        ep_v(i,j) = AL_wt * (-(q(I,J) - q(I-1,J-1)) + (q(I-1,J) - q(I,J-1))) * C1_24
-      enddo ; enddo
+        a(I-1,j,kk) = Sad_wt * 0.25 * q(I-1,J,kk) + (1. - Sad_wt) * &
+                      (((2. - AL_wt) * q(I-1,J,kk) + AL_wt * q(I,J-1,kk)) + &
+                         2. * (q(I,J,kk) + q(I-1,J-1,kk))) * C1_24
+        d(I-1,j,kk) = Sad_wt * 0.25 * q(I-1,J-1,kk) + (1. - Sad_wt) * &
+                      ( ((2. - AL_wt) * q(I-1,J-1,kk) + AL_wt * q(I,J,kk)) + &
+                         2. * (q(I-1,J,kk) + q(I,J-1,kk)) ) * C1_24
+        b(I,j,kk) =   Sad_wt * 0.25 * q(I,J,kk) + (1.0 - Sad_wt) * &
+                      (((2. - AL_wt) * q(I,J,kk) + AL_wt * q(I-1,J-1,kk)) + &
+                         2. * (q(I-1,J,kk) + q(I,J-1,kk))) * C1_24
+        c(I,j,kk) =   Sad_wt * 0.25 * q(I,J-1,kk) + (1.0 - Sad_wt) * &
+                      ( ((2. - AL_wt) * q(I,J-1,kk) + AL_wt * q(I-1,J,kk)) + &
+                         2. * (q(I,J,kk) + q(I-1,J-1,kk)) ) * C1_24
+        ep_u(i,j,kk) = AL_wt  * ((q(I,J,kk) - q(I-1,J-1,kk)) + (q(I-1,J,kk) - q(I,J-1,kk))) * C1_24
+        ep_v(i,j,kk) = AL_wt * (-(q(I,J,kk) - q(I-1,J-1,kk)) + (q(I-1,J,kk) - q(I,J-1,kk))) * C1_24
+      enddo ; enddo ; enddo
     endif
 
     if (CS%Coriolis_En_Dis) then
     !  c1 = 1.0-1.5*RANGE ; c2 = 1.0-RANGE ; c3 = 2.0 ; slope = 0.5
       c1 = 1.0-1.5*0.5 ; c2 = 1.0-0.5 ; c3 = 2.0 ; slope = 0.5
 
-      do j=Jsq,Jeq+1 ; do I=is-1,ie
-        uhc = uh_center(I,j)
+      do kk=1,kke ; do j=Jsq,Jeq+1 ; do I=is-1,ie
+        k = ksb + kk - 1
+
+        uhc = uh_center(I,j,kk)
         uhm = uh(I,j,k)
         ! This sometimes matters with some types of open boundary conditions.
         if (G%dy_Cu(I,j) == 0.0) uhc = uhm
@@ -661,13 +752,16 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
         if (uhc > uhm) then
-          uh_min(I,j) = uhm ; uh_max(I,j) = uhc
+          uh_min(I,j,kk) = uhm ; uh_max(I,j,kk) = uhc
         else
-          uh_max(I,j) = uhm ; uh_min(I,j) = uhc
+          uh_max(I,j,kk) = uhm ; uh_min(I,j,kk) = uhc
         endif
-      enddo ; enddo
-      do J=js-1,je ; do i=Isq,Ieq+1
-        vhc = vh_center(i,J)
+      enddo ; enddo ; enddo
+
+      do kk=1,kke ; do J=js-1,je ; do i=Isq,Ieq+1
+        k = ksb + kk - 1
+
+        vhc = vh_center(i,J,kk)
         vhm = vh(i,J,k)
         ! This sometimes matters with some types of open boundary conditions.
         if (G%dx_Cv(i,J) == 0.0) vhc = vhm
@@ -682,15 +776,15 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         endif
 
         if (vhc > vhm) then
-          vh_min(i,J) = vhm ; vh_max(i,J) = vhc
+          vh_min(i,J,kk) = vhm ; vh_max(i,J,kk) = vhc
         else
-          vh_max(i,J) = vhm ; vh_min(i,J) = vhc
+          vh_max(i,J,kk) = vhm ; vh_min(i,J,kk) = vhc
         endif
-      enddo ; enddo
+      enddo ; enddo ; enddo
     endif
 
     ! Calculate KE and the gradient of KE
-    call gradKE(u(:,:,k), v(:,:,k), h(:,:,k), KE, KEx, KEy, G, GV, US, CS)
+    call gradKE(u, v, h, KE, KEx, KEy, ksb, keb, nkk, G, GV, US, CS)
 
     ! Calculate the tendencies of zonal velocity due to the Coriolis
     ! force and momentum advection.  On a Cartesian grid, this is
@@ -698,76 +792,87 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
-        do j=js,je ; do I=Isq,Ieq
-          if (q(I,J)*u(I,j,k) == 0.0) then
-            temp1 = q(I,J) * ( (vh_max(i,j)+vh_max(i+1,j)) &
-                             + (vh_min(i,j)+vh_min(i+1,j)) )*0.5
-          elseif (q(I,J)*u(I,j,k) < 0.0) then
-            temp1 = q(I,J) * (vh_max(i,j)+vh_max(i+1,j))
+        do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+          k = ksb + kk - 1
+
+          if (q(I,J,kk) * u(I,j,k) == 0.0) then
+            temp1 = q(I,J,kk) * ((vh_max(i,j,kk) + vh_max(i+1,j,kk)) &
+                + (vh_min(i,j,kk) + vh_min(i+1,j,kk))) * 0.5
+          elseif (q(I,J,kk) * u(I,j,k) < 0.0) then
+            temp1 = q(I,J,kk) * (vh_max(i,j,kk) + vh_max(i+1,j,kk))
           else
-            temp1 = q(I,J) * (vh_min(i,j)+vh_min(i+1,j))
+            temp1 = q(I,J,kk) * (vh_min(i,j,kk) + vh_min(i+1,j,kk))
           endif
-          if (q(I,J-1)*u(I,j,k) == 0.0) then
-            temp2 = q(I,J-1) * ( (vh_max(i,j-1)+vh_max(i+1,j-1)) &
-                               + (vh_min(i,j-1)+vh_min(i+1,j-1)) )*0.5
-          elseif (q(I,J-1)*u(I,j,k) < 0.0) then
-            temp2 = q(I,J-1) * (vh_max(i,j-1)+vh_max(i+1,j-1))
+          if (q(I,J-1,kk) * u(I,j,k) == 0.0) then
+            temp2 = q(I,J-1,kk) * ((vh_max(i,j-1,kk) + vh_max(i+1,j-1,kk)) &
+                + (vh_min(i,j-1,kk) + vh_min(i+1,j-1,kk))) * 0.5
+          elseif (q(I,J-1,kk) * u(I,j,k) < 0.0) then
+            temp2 = q(I,J-1,kk) * (vh_max(i,j-1,kk) + vh_max(i+1,j-1,kk))
           else
-            temp2 = q(I,J-1) * (vh_min(i,j-1)+vh_min(i+1,j-1))
+            temp2 = q(I,J-1,kk) * (vh_min(i,j-1,kk) + vh_min(i+1,j-1,kk))
           endif
           CAu(I,j,k) = 0.25 * G%IdxCu(I,j) * (temp1 + temp2)
-        enddo ; enddo
+        enddo ; enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
-        do j=js,je ; do I=Isq,Ieq
+        do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+          k = ksb + kk - 1
           CAu(I,j,k) = 0.25 * &
-            ((q(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
-             (q(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
-        enddo ; enddo
+              ((q(I,J,kk) * (vh(i+1,J,k) + vh(i,J,k))) &
+               + (q(I,J-1,kk) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
+        enddo ; enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
-      do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = 0.125 * (G%IdxCu(I,j) * (q(I,J) + q(I,J-1))) * &
-                     ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
-      enddo ; enddo
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+        CAu(I,j,k) = 0.125 * (G%IdxCu(I,j) * (q(I,J,kk) + q(I,J-1,kk))) * &
+            ((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
+      enddo ; enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
             (CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
-      do j=js,je ; do I=Isq,Ieq
-        CAu(I,j,k) = (((a(I,j) * vh(i+1,J,k)) +  (c(I,j) * vh(i,J-1,k)))  + &
-                      ((b(I,j) * vh(i,J,k)) +  (d(I,j) * vh(i+1,J-1,k)))) * G%IdxCu(I,j)
-      enddo ; enddo
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+        CAu(I,j,k) = (((a(I,j,kk) * vh(i+1,J,k)) + (c(I,j,kk) * vh(i,J-1,k))) &
+            + ((b(I,j,kk) * vh(i,J,k)) + (d(I,j,kk) * vh(i+1,J-1,k)))) * G%IdxCu(I,j)
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_v that should be returned by the
       !       continuity solver. AJA
-      do j=js,je ; do I=Isq,Ieq
-        Heff1 = abs(vh(i,J,k) * G%IdxCv(i,J)) / (eps_vel+abs(v(i,J,k)))
-        Heff1 = max(Heff1, min(h(i,j,k),h(i,j+1,k)))
-        Heff1 = min(Heff1, max(h(i,j,k),h(i,j+1,k)))
-        Heff2 = abs(vh(i,J-1,k) * G%IdxCv(i,J-1)) / (eps_vel+abs(v(i,J-1,k)))
-        Heff2 = max(Heff2, min(h(i,j-1,k),h(i,j,k)))
-        Heff2 = min(Heff2, max(h(i,j-1,k),h(i,j,k)))
-        Heff3 = abs(vh(i+1,J,k) * G%IdxCv(i+1,J)) / (eps_vel+abs(v(i+1,J,k)))
-        Heff3 = max(Heff3, min(h(i+1,j,k),h(i+1,j+1,k)))
-        Heff3 = min(Heff3, max(h(i+1,j,k),h(i+1,j+1,k)))
-        Heff4 = abs(vh(i+1,J-1,k) * G%IdxCv(i+1,J-1)) / (eps_vel+abs(v(i+1,J-1,k)))
-        Heff4 = max(Heff4, min(h(i+1,j-1,k),h(i+1,j,k)))
-        Heff4 = min(Heff4, max(h(i+1,j-1,k),h(i+1,j,k)))
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+
+        Heff1 = abs(vh(i,J,k) * G%IdxCv(i,J)) / (eps_vel + abs(v(i,J,k)))
+        Heff1 = max(Heff1, min(h(i,j,k), h(i,j+1,k)))
+        Heff1 = min(Heff1, max(h(i,j,k), h(i,j+1,k)))
+        Heff2 = abs(vh(i,J-1,k) * G%IdxCv(i,J-1)) / (eps_vel + abs(v(i,J-1,k)))
+        Heff2 = max(Heff2, min(h(i,j-1,k), h(i,j,k)))
+        Heff2 = min(Heff2, max(h(i,j-1,k), h(i,j,k)))
+        Heff3 = abs(vh(i+1,J,k) * G%IdxCv(i+1,J)) / (eps_vel + abs(v(i+1,J,k)))
+        Heff3 = max(Heff3, min(h(i+1,j,k), h(i+1,j+1,k)))
+        Heff3 = min(Heff3, max(h(i+1,j,k), h(i+1,j+1,k)))
+        Heff4 = abs(vh(i+1,J-1,k) * G%IdxCv(i+1,J-1)) / (eps_vel + abs(v(i+1,J-1,k)))
+        Heff4 = max(Heff4, min(h(i+1,j-1,k), h(i+1,j,k)))
+        Heff4 = min(Heff4, max(h(i+1,j-1,k), h(i+1,j,k)))
+
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
-          CAu(I,j,k) = 0.5*(abs_vort(I,J)+abs_vort(I,J-1)) * &
-                       ((vh(i,J,k) + vh(i+1,J-1,k)) + (vh(i,J-1,k) + vh(i+1,J,k)) ) /  &
-                       (h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) * G%IdxCu(I,j)
+          CAu(I,j,k) = 0.5 * (abs_vort(I,J,kk) + abs_vort(I,J-1,kk)) &
+              * ((vh(i,J,k) + vh(i+1,J-1,k)) + (vh(i,J-1,k) + vh(i+1,J,k))) &
+              / (h_tiny + ((Heff1 + Heff4) + (Heff2 + Heff3))) * G%IdxCu(I,j)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
-          VHeff = ((vh(i,J,k) + vh(i+1,J-1,k)) + (vh(i,J-1,k) + vh(i+1,J,k)) )
-          QVHeff = 0.5*( ((abs_vort(I,J)+abs_vort(I,J-1))*VHeff) &
-                       - ((abs_vort(I,J)-abs_vort(I,J-1))*abs(VHeff)) )
-          CAu(I,j,k) = (QVHeff / ( h_tiny + ((Heff1+Heff4) + (Heff2+Heff3)) ) ) * G%IdxCu(I,j)
+          VHeff = ((vh(i,J,k) + vh(i+1,J-1,k)) + (vh(i,J-1,k) + vh(i+1,J,k)))
+          QVHeff = 0.5 * (((abs_vort(I,J,kk) + abs_vort(I,J-1,kk)) * VHeff) &
+              - ((abs_vort(I,J,kk) - abs_vort(I,J-1,kk)) * abs(VHeff)))
+          CAu(I,j,k) = (QVHeff / (h_tiny + ((Heff1 + Heff4) + (Heff2 + Heff3)))) &
+              * G%IdxCu(I,j)
         endif
-      enddo ; enddo
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO) then
-      do j=js,je ; do I=Isq,Ieq
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+
         v_u = 0.25*G%IdxCu(I,j)*((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
         ! check whether there is masked land points in the stencil
         third_order = (G%mask2dCu(I,j-2) * G%mask2dCu(I,j-1) * G%mask2dCu(I,j) * &
@@ -776,13 +881,12 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         fifth_order   = third_order * G%mask2dCu(I,j-3) * G%mask2dCu(I,j+3)
         seventh_order = fifth_order * G%mask2dCu(I,j-4) * G%mask2dCu(I,j+4)
 
-
         ! compute the masking to make sure that inland values are not used
         if (seventh_order == 1) then
           ! all values are valid, we use seventh order reconstruction
           u_q8(:) = (u(I,j-4:j+3,k) + u(I,j-3:j+4,k)) * 0.5
-          call weno_seven_h_weight_reconstruction(abs_vort(I,J-4:J+3), &
-                                         h_q(I,J-4:J+3), &
+          call weno_seven_h_weight_reconstruction(abs_vort(I,J-4:J+3,kk), &
+                                         h_q(I,J-4:J+3,kk), &
                                          u_q8, &
                                          GV%H_subroundoff, v_u, q_u, cs%weno_velocity_smooth)
           CAu(I,j,k) = (q_u * v_u)
@@ -790,8 +894,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         elseif (fifth_order == 1) then
           ! all values are valid, we use fifth order reconstruction
           u_q6(:) = (u(I,j-3:j+2,k) + u(I,j-2:j+3,k)) * 0.5
-          call weno_five_h_weight_reconstruction(abs_vort(I,J-3:J+2), &
-                                        h_q(I,J-3:J+2), &
+          call weno_five_h_weight_reconstruction(abs_vort(I,J-3:J+2,kk), &
+                                        h_q(I,J-3:J+2,kk), &
                                         u_q6, &
                                         GV%H_subroundoff, v_u, q_u, CS%weno_velocity_smooth)
           CAu(I,j,k) = (q_u * v_u)
@@ -799,23 +903,25 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         elseif (third_order == 1) then
           ! only the middle values are valid, we use third order reconstruction
           u_q4(:) = (u(I,j-2:j+1,k) + u(I,j-1:j+2,k)) * 0.5
-          call weno_three_h_weight_reconstruction(abs_vort(I,J-2:J+1), &
-                                         h_q(I,J-2:J+1), &
+          call weno_three_h_weight_reconstruction(abs_vort(I,J-2:J+1,kk), &
+                                         h_q(I,J-2:J+1,kk), &
                                          u_q4, &
                                          GV%H_subroundoff, v_u, q_u, CS%weno_velocity_smooth)
           CAu(I,j,k) = (q_u * v_u)
         else ! Upwind first order
           if (v_u>0.) then
-              q_u = q(I,J-1)
+              q_u = q(I,J-1,kk)
           else
-              q_u = q(I,J)
+              q_u = q(I,J,kk)
           endif
           CAu(I,j,k) = (q_u * v_u)
 
         endif
-      enddo ; enddo
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO) then
-      do j=js,je ; do I=Isq,Ieq
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+
         v_u = 0.25*G%IdxCu(I,j)*((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
         third_order = (G%mask2dCu(I,j-2) * G%mask2dCu(I,j-1) * G%mask2dCu(I,j) * &
                        G%mask2dCu(I,j+1) * G%mask2dCu(I,j+2))
@@ -825,8 +931,8 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         if (fifth_order == 1) then
           ! all values are valid, we use fifth order reconstruction
           u_q6(:) = (u(I,j-3:j+2,k) + u(I,j-2:j+3,k)) * 0.5
-          call weno_five_h_weight_reconstruction(abs_vort(I,J-3:J+2), &
-                                        h_q(I,J-3:J+2), &
+          call weno_five_h_weight_reconstruction(abs_vort(I,J-3:J+2,kk), &
+                                        h_q(I,J-3:J+2,kk), &
                                         u_q6, &
                                         GV%H_subroundoff, v_u, q_u, CS%weno_velocity_smooth)
           CAu(I,j,k) = (q_u * v_u)
@@ -834,89 +940,99 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         elseif (third_order == 1) then
           ! only the middle values are valid, we use third order reconstruction
           u_q4(:) = (u(I,j-2:j+1,k) + u(I,j-1:j+2,k)) * 0.5
-          call weno_three_h_weight_reconstruction(abs_vort(I,J-2:J+1), &
-                                         h_q(I,J-2:J+1), &
+          call weno_three_h_weight_reconstruction(abs_vort(I,J-2:J+1,kk), &
+                                         h_q(I,J-2:J+1,kk), &
                                          u_q4, &
                                          GV%H_subroundoff, v_u, q_u, CS%weno_velocity_smooth)
           CAu(I,j,k) = (q_u * v_u)
 
         else ! Upwind first order
           if (v_u>0.) then
-              q_u = q(I,J-1)
+              q_u = q(I,J-1,kk)
           else
-              q_u = q(I,J)
+              q_u = q(I,J,kk)
           endif
           CAu(I,j,k) = (q_u * v_u)
         endif
-      enddo ; enddo
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO) then
-      do j=js,je ; do I=Isq,Ieq
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+
         v_u = 0.25*G%IdxCu(I,j)*((vh(i+1,J,k) + vh(i,J,k)) + (vh(i,J-1,k) + vh(i+1,J-1,k)))
         third_order = (G%mask2dCu(I,j-2) * G%mask2dCu(I,j-1) * G%mask2dCu(I,j) * &
                        G%mask2dCu(I,j+1) * G%mask2dCu(I,j+2))
 
-
         if (third_order == 1) then
           ! only the middle values are valid, we use third order reconstruction
           u_q4(:) = (u(I,j-2:j+1,k) + u(I,j-1:j+2,k)) * 0.5
-          call weno_three_h_weight_reconstruction(abs_vort(I,J-2:J+1), &
-                                         h_q(I,J-2:J+1), &
+          call weno_three_h_weight_reconstruction(abs_vort(I,J-2:J+1,kk), &
+                                         h_q(I,J-2:J+1,kk), &
                                          u_q4, &
                                          GV%H_subroundoff, v_u, q_u, CS%weno_velocity_smooth)
           CAu(I,j,k) = (q_u * v_u)
 
         else ! Upwind first order
           if (v_u>0.) then
-              q_u = q(I,J-1)
+              q_u = q(I,J-1,kk)
           else
-              q_u = q(I,J)
+              q_u = q(I,J,kk)
           endif
           CAu(I,j,k) = (q_u * v_u)
         endif
-      enddo ; enddo
+      enddo ; enddo ; enddo
     endif
+
     ! Add in the additional terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
-        (CS%Coriolis_Scheme == AL_BLEND)) then ; do j=js,je ; do I=Isq,Ieq
-      CAu(I,j,k) = CAu(I,j,k) + &
-            ((ep_u(i,j)*uh(I-1,j,k)) - (ep_u(i+1,j)*uh(I+1,j,k))) * G%IdxCu(I,j)
-    enddo ; enddo ; endif
+        (CS%Coriolis_Scheme == AL_BLEND)) then
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+        CAu(I,j,k) = CAu(I,j,k) &
+            + ((ep_u(i,j,kk) * uh(I-1,j,k)) - (ep_u(i+1,j,kk) * uh(I+1,j,k))) * G%IdxCu(I,j)
+      enddo ; enddo ; enddo
+    endif
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
         ! Computing the diagnostic Stokes contribution to CAu
-        do j=js,je ; do I=Isq,Ieq
-          CAuS(I,j,k) = 0.25 * &
-                ((qS(I,J) * (vh(i+1,J,k) + vh(i,J,k))) + &
-                 (qS(I,J-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
-        enddo ; enddo
+        do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+          k = ksb + kk - 1
+          CAuS(I,j,k) = 0.25 &
+              * ((qS(I,J,kk) * (vh(i+1,J,k) + vh(i,J,k))) &
+                 + (qS(I,J-1,kk) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
+        enddo ; enddo ; enddo
       endif
     endif
 
     if (CS%bound_Coriolis) then
-      do j=js,je ; do I=Isq,Ieq
-        fv1 = abs_vort(I,J) * v(i+1,J,k)
-        fv2 = abs_vort(I,J) * v(i,J,k)
-        fv3 = abs_vort(I,J-1) * v(i+1,J-1,k)
-        fv4 = abs_vort(I,J-1) * v(i,J-1,k)
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+
+        fv1 = abs_vort(I,J,kk) * v(i+1,J,k)
+        fv2 = abs_vort(I,J,kk) * v(i,J,k)
+        fv3 = abs_vort(I,J-1,kk) * v(i+1,J-1,k)
+        fv4 = abs_vort(I,J-1,kk) * v(i,J-1,k)
 
         max_fv = max(fv1, fv2, fv3, fv4)
         min_fv = min(fv1, fv2, fv3, fv4)
 
         CAu(I,j,k) = min(CAu(I,j,k), max_fv)
         CAu(I,j,k) = max(CAu(I,j,k), min_fv)
-      enddo ; enddo
+      enddo ; enddo ; enddo
     endif
 
     ! Term - d(KE)/dx.
-    do j=js,je ; do I=Isq,Ieq
-      CAu(I,j,k) = CAu(I,j,k) - KEx(I,j)
-    enddo ; enddo
+    do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+      k = ksb + kk - 1
+      CAu(I,j,k) = CAu(I,j,k) - KEx(I,j,kk)
+    enddo ; enddo ; enddo
 
     if (associated(AD%gradKEu)) then
-      do j=js,je ; do I=Isq,Ieq
-        AD%gradKEu(I,j,k) = -KEx(I,j)
-      enddo ; enddo
+      do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+        k = ksb + kk - 1
+        AD%gradKEu(I,j,k) = -KEx(I,j,kk)
+      enddo ; enddo ; enddo
     endif
 
     ! Calculate the tendencies of meridional velocity due to the Coriolis
@@ -925,84 +1041,94 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
       if (CS%Coriolis_En_Dis) then
         ! Energy dissipating biased scheme, Hallberg 200x
-        do J=Jsq,Jeq ; do i=is,ie
-          if (q(I-1,J)*v(i,J,k) == 0.0) then
-            temp1 = q(I-1,J) * ( (uh_max(i-1,j)+uh_max(i-1,j+1)) &
-                               + (uh_min(i-1,j)+uh_min(i-1,j+1)) )*0.5
-          elseif (q(I-1,J)*v(i,J,k) > 0.0) then
-            temp1 = q(I-1,J) * (uh_max(i-1,j)+uh_max(i-1,j+1))
+        do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+          k = ksb + kk - 1
+
+          if (q(I-1,J,kk) * v(i,J,k) == 0.0) then
+            temp1 = q(I-1,J,kk) &
+                * ((uh_max(i-1,j,kk) + uh_max(i-1,j+1,kk)) &
+                   + (uh_min(i-1,j,kk) + uh_min(i-1,j+1,kk))) * 0.5
+          elseif (q(I-1,J,kk) * v(i,J,k) > 0.0) then
+            temp1 = q(I-1,J,kk) * (uh_max(i-1,j,kk) + uh_max(i-1,j+1,kk))
           else
-            temp1 = q(I-1,J) * (uh_min(i-1,j)+uh_min(i-1,j+1))
+            temp1 = q(I-1,J,kk) * (uh_min(i-1,j,kk) + uh_min(i-1,j+1,kk))
           endif
-          if (q(I,J)*v(i,J,k) == 0.0) then
-            temp2 = q(I,J) * ( (uh_max(i,j)+uh_max(i,j+1)) &
-                             + (uh_min(i,j)+uh_min(i,j+1)) )*0.5
-          elseif (q(I,J)*v(i,J,k) > 0.0) then
-            temp2 = q(I,J) * (uh_max(i,j)+uh_max(i,j+1))
+
+          if (q(I,J,kk) * v(i,J,k) == 0.0) then
+            temp2 = q(I,J,kk) &
+                * ((uh_max(i,j,kk) + uh_max(i,j+1,kk)) &
+                   + (uh_min(i,j,kk) + uh_min(i,j+1,kk))) * 0.5
+          elseif (q(I,J,kk) * v(i,J,k) > 0.0) then
+            temp2 = q(I,J,kk) * (uh_max(i,j,kk) + uh_max(i,j+1,kk))
           else
-            temp2 = q(I,J) * (uh_min(i,j)+uh_min(i,j+1))
+            temp2 = q(I,J,kk) * (uh_min(i,j,kk) + uh_min(i,j+1,kk))
           endif
+
           CAv(i,J,k) = -0.25 * G%IdyCv(i,J) * (temp1 + temp2)
-        enddo ; enddo
+        enddo ; enddo ; enddo
       else
         ! Energy conserving scheme, Sadourny 1975
-        do J=Jsq,Jeq ; do i=is,ie
-          CAv(i,J,k) = - 0.25* &
-              ((q(I-1,J)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
-               (q(I,J)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
-        enddo ; enddo
+        do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+          k = ksb + kk - 1
+          CAv(i,J,k) = -0.25 &
+              * ((q(I-1,J,kk) * (uh(I-1,j,k) + uh(I-1,j+1,k))) &
+                 + (q(I,J,kk) * (uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
+        enddo ; enddo ; enddo
       endif
     elseif (CS%Coriolis_Scheme == SADOURNY75_ENSTRO) then
-      do J=Jsq,Jeq ; do i=is,ie
-        CAv(i,J,k) = -0.125 * (G%IdyCv(i,J) * (q(I-1,J) + q(I,J))) * &
-                     ((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
-      enddo ; enddo
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+        CAv(i,J,k) = -0.125 * (G%IdyCv(i,J) * (q(I-1,J,kk) + q(I,J,kk))) &
+            * ((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
+      enddo ; enddo ; enddo
     elseif ((CS%Coriolis_Scheme == ARAKAWA_HSU90) .or. &
             (CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
             (CS%Coriolis_Scheme == AL_BLEND)) then
       ! (Global) Energy and (Local) Enstrophy conserving, Arakawa & Hsu 1990
-      do J=Jsq,Jeq ; do i=is,ie
-        CAv(i,J,k) = - (((a(I-1,j)   * uh(I-1,j,k)) + &
-                         (c(I,j+1)   * uh(I,j+1,k)))  &
-                      + ((b(I,j)     * uh(I,j,k)) +   &
-                         (d(I-1,j+1) * uh(I-1,j+1,k)))) * G%IdyCv(i,J)
-      enddo ; enddo
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+        CAv(i,J,k) = -(((a(I-1,j,kk) * uh(I-1,j,k)) + (c(I,j+1,kk) * uh(I,j+1,k))) &
+            + ((b(I,j,kk) * uh(I,j,k)) + (d(I-1,j+1,kk) * uh(I-1,j+1,k)))) * G%IdyCv(i,J)
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == ROBUST_ENSTRO) then
       ! An enstrophy conserving scheme robust to vanishing layers
       ! Note: Heffs are in lieu of h_at_u that should be returned by the
       !       continuity solver. AJA
-      do J=Jsq,Jeq ; do i=is,ie
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+
         Heff1 = abs(uh(I,j,k) * G%IdyCu(I,j)) / (eps_vel+abs(u(I,j,k)))
-        Heff1 = max(Heff1, min(h(i,j,k),h(i+1,j,k)))
-        Heff1 = min(Heff1, max(h(i,j,k),h(i+1,j,k)))
+        Heff1 = max(Heff1, min(h(i,j,k), h(i+1,j,k)))
+        Heff1 = min(Heff1, max(h(i,j,k), h(i+1,j,k)))
         Heff2 = abs(uh(I-1,j,k) * G%IdyCu(I-1,j)) / (eps_vel+abs(u(I-1,j,k)))
-        Heff2 = max(Heff2, min(h(i-1,j,k),h(i,j,k)))
-        Heff2 = min(Heff2, max(h(i-1,j,k),h(i,j,k)))
+        Heff2 = max(Heff2, min(h(i-1,j,k), h(i,j,k)))
+        Heff2 = min(Heff2, max(h(i-1,j,k), h(i,j,k)))
         Heff3 = abs(uh(I,j+1,k) * G%IdyCu(I,j+1)) / (eps_vel+abs(u(I,j+1,k)))
-        Heff3 = max(Heff3, min(h(i,j+1,k),h(i+1,j+1,k)))
-        Heff3 = min(Heff3, max(h(i,j+1,k),h(i+1,j+1,k)))
+        Heff3 = max(Heff3, min(h(i,j+1,k), h(i+1,j+1,k)))
+        Heff3 = min(Heff3, max(h(i,j+1,k), h(i+1,j+1,k)))
         Heff4 = abs(uh(I-1,j+1,k) * G%IdyCu(I-1,j+1)) / (eps_vel+abs(u(I-1,j+1,k)))
-        Heff4 = max(Heff4, min(h(i-1,j+1,k),h(i,j+1,k)))
-        Heff4 = min(Heff4, max(h(i-1,j+1,k),h(i,j+1,k)))
+        Heff4 = max(Heff4, min(h(i-1,j+1,k), h(i,j+1,k)))
+        Heff4 = min(Heff4, max(h(i-1,j+1,k), h(i,j+1,k)))
+
         if (CS%PV_Adv_Scheme == PV_ADV_CENTERED) then
-          CAv(i,J,k) = - 0.5*(abs_vort(I,J)+abs_vort(I-1,J)) * &
-                         ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
-                          (uh(I-1,j  ,k)+uh(I  ,j+1,k)) ) /    &
-                      (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
+          CAv(i,J,k) = - 0.5 * (abs_vort(I,J,kk) + abs_vort(I-1,J,kk)) &
+              * ((uh(I,j,k) + uh(I-1,j+1,k)) + (uh(I-1,j,k)+uh(I  ,j+1,k)) ) &
+              / (h_tiny + ((Heff1 + Heff4) + (Heff2 + Heff3))) * G%IdyCv(i,J)
         elseif (CS%PV_Adv_Scheme == PV_ADV_UPWIND1) then
-          UHeff = ((uh(I  ,j  ,k)+uh(I-1,j+1,k)) +      &
-                   (uh(I-1,j  ,k)+uh(I  ,j+1,k)) )
-          QUHeff = 0.5*( ((abs_vort(I,J)+abs_vort(I-1,J))*UHeff) &
-                       - ((abs_vort(I,J)-abs_vort(I-1,J))*abs(UHeff)) )
-          CAv(i,J,k) = - QUHeff / &
-                       (h_tiny + ((Heff1+Heff4) +(Heff2+Heff3)) ) * G%IdyCv(i,J)
+          UHeff = ((uh(I,j,k) + uh(I-1,j+1,k)) + (uh(I-1,j,k)+uh(I,j+1,k)))
+          QUHeff = 0.5 * (((abs_vort(I,J,kk) + abs_vort(I-1,J,kk)) * UHeff) &
+              - ((abs_vort(I,J,kk) - abs_vort(I-1,J,kk)) * abs(UHeff)))
+          CAv(i,J,k) = -QUHeff &
+              / (h_tiny + ((Heff1 + Heff4) + (Heff2 + Heff3)) ) * G%IdyCv(i,J)
         endif
-      enddo ; enddo
+      enddo ; enddo ; enddo
     ! Calculate the tendencies of meridional velocity due to the Coriolis
     ! force and momentum advection.  On a Cartesian grid, this is
     !     CAv = - q * uh - d(KE)/dy.
     elseif (CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO) then
-      do J=Jsq,Jeq ; do i=is,ie
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+
         u_v = 0.25*G%IdyCv(i,J)*((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
 
         ! check whether there is any masked land values within the stencils
@@ -1011,197 +1137,200 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
         fifth_order   = third_order * G%mask2dCv(i-3,J) * G%mask2dCv(i+3,J)
         seventh_order = fifth_order * G%mask2dCv(i-4,J) * G%mask2dCv(i+4,J)
 
-
-
         ! compute the masking to make sure that inland values are not used
         if (seventh_order == 1) then
           v_q8(:) = (v(i-4:i+3,J,k) + v(i-3:i+4,J,k)) * 0.5
           ! all values are valid, we use seventh order reconstruction
-          call weno_seven_h_weight_reconstruction(abs_vort(I-4:I+3,J), &
-                                         h_q(I-4:I+3,J), &
+          call weno_seven_h_weight_reconstruction(abs_vort(I-4:I+3,J,kk), &
+                                         h_q(I-4:I+3,J,kk), &
                                          v_q8, &
                                          GV%H_subroundoff, u_v, q_v, CS%weno_velocity_smooth)
           CAv(i,J,k) = - (q_v * u_v)
-
         elseif (fifth_order == 1) then
           v_q6(:) = (v(i-3:i+2,J,k) + v(i-2:i+3,J,k)) * 0.5
           ! all values are valid, we use fifth order reconstruction
-          call weno_five_h_weight_reconstruction(abs_vort(I-3:I+2,J), &
-                                        h_q(I-3:I+2,J), &
+          call weno_five_h_weight_reconstruction(abs_vort(I-3:I+2,J,kk), &
+                                        h_q(I-3:I+2,J,kk), &
                                         v_q6, &
                                         GV%H_subroundoff, u_v, q_v, CS%weno_velocity_smooth)
           CAv(i,J,k) = - (q_v * u_v)
-
         elseif (third_order == 1) then
           v_q4(:) = (v(i-2:i+1,J,k) + v(i-1:i+2,J,k)) * 0.5
-!          ! only the middle values are valid, we use third order reconstruction
-          call weno_three_h_weight_reconstruction(abs_vort(I-2:I+1,J), &
-                                                 h_q(I-2:I+1,J), &
+          ! only the middle values are valid, we use third order reconstruction
+          call weno_three_h_weight_reconstruction(abs_vort(I-2:I+1,J,kk), &
+                                                 h_q(I-2:I+1,J,kk), &
                                                  v_q4, &
                                                  GV%H_subroundoff, u_v, q_v, CS%weno_velocity_smooth)
           CAv(i,J,k) = - (q_v * u_v)
         else ! Upwind first order!
           if (u_v>0.) then
-              q_v = q(I-1,J)
+              q_v = q(I-1,J,kk)
           else
-              q_v = q(I,J)
+              q_v = q(I,J,kk)
           endif
           CAv(i,J,k) = - (q_v * u_v)
         endif
-
-      enddo ; enddo
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO) then
-      do J=Jsq,Jeq ; do i=is,ie
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+
         u_v = 0.25*G%IdyCv(i,J)*((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
 
         third_order = (G%mask2dCv(i-2,J) * G%mask2dCv(i-1,J) * G%mask2dCv(i,J) * G%mask2dCv(i+1,J) * &
                        G%mask2dCv(i+2,J))
         fifth_order   = third_order * G%mask2dCv(i-3,J) * G%mask2dCv(i+3,J)
 
-
         ! compute the masking to make sure that inland values are not used
         if (fifth_order == 1) then
           v_q6(:) = (v(i-3:i+2,J,k) + v(i-2:i+3,J,k)) * 0.5
           ! all values are valid, we use fifth order reconstruction
-          call weno_five_h_weight_reconstruction(abs_vort(I-3:I+2,J), &
-                                        h_q(I-3:I+2,J), &
+          call weno_five_h_weight_reconstruction(abs_vort(I-3:I+2,J,kk), &
+                                        h_q(I-3:I+2,J,kk), &
                                         v_q6, &
                                         GV%H_subroundoff, u_v, q_v, CS%weno_velocity_smooth)
           CAv(i,J,k) = - (q_v * u_v)
-
         elseif (third_order == 1) then
           v_q4(:) = (v(i-2:i+1,J,k) + v(i-1:i+2,J,k)) * 0.5
-!          ! only the middle values are valid, we use third order reconstruction
-          call weno_three_h_weight_reconstruction(abs_vort(I-2:I+1,J), &
-                                                 h_q(I-2:I+1,J), &
+          ! only the middle values are valid, we use third order reconstruction
+          call weno_three_h_weight_reconstruction(abs_vort(I-2:I+1,J,kk), &
+                                                 h_q(I-2:I+1,J,kk), &
                                                  v_q4, &
                                                  GV%H_subroundoff, u_v, q_v, CS%weno_velocity_smooth)
           CAv(i,J,k) = - (q_v * u_v)
-
         else
           if (u_v>0.) then
-              q_v = q(I-1,J)
+              q_v = q(I-1,J,kk)
           else
-              q_v = q(I,J)
+              q_v = q(I,J,kk)
           endif
           CAv(i,J,k) = - (q_v * u_v)
         endif
-
-      enddo ; enddo
+      enddo ; enddo ; enddo
     elseif (CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO) then
-      do J=Jsq,Jeq ; do i=is,ie
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+
         u_v = 0.25*G%IdyCv(i,J)*((uh(I-1,j,k) + uh(I-1,j+1,k)) + (uh(I,j,k) + uh(I,j+1,k)))
 
         third_order = (G%mask2dCv(i-2,J) * G%mask2dCv(i-1,J) * G%mask2dCv(i,J) * G%mask2dCv(i+1,J) * &
                        G%mask2dCv(i+2,J))
 
-
         ! compute the masking to make sure that inland values are not used
         if (third_order == 1) then
           v_q4(:) = (v(i-2:i+1,J,k) + v(i-1:i+2,J,k)) * 0.5
-!          ! only the middle values are valid, we use third order reconstruction
-          call weno_three_h_weight_reconstruction(abs_vort(I-2:I+1,J), &
-                                                 h_q(I-2:I+1,J), &
+          ! only the middle values are valid, we use third order reconstruction
+          call weno_three_h_weight_reconstruction(abs_vort(I-2:I+1,J,kk), &
+                                                 h_q(I-2:I+1,J,kk), &
                                                  v_q4, &
                                                  GV%H_subroundoff, u_v, q_v, CS%weno_velocity_smooth)
           CAv(i,J,k) = - (q_v * u_v)
-
         else
           if (u_v>0.) then
-              q_v = q(I-1,J)
+              q_v = q(I-1,J,kk)
           else
-              q_v = q(I,J)
+              q_v = q(I,J,kk)
           endif
           CAv(i,J,k) = - (q_v * u_v)
         endif
-
-      enddo ; enddo
+      enddo ; enddo ; enddo
     endif
     ! Add in the additonal terms with Arakawa & Lamb.
     if ((CS%Coriolis_Scheme == ARAKAWA_LAMB81) .or. &
-        (CS%Coriolis_Scheme == AL_BLEND)) then ; do J=Jsq,Jeq ; do i=is,ie
-      CAv(i,J,k) = CAv(i,J,k) + &
-            ((ep_v(i,j)*vh(i,J-1,k)) - (ep_v(i,j+1)*vh(i,J+1,k))) * G%IdyCv(i,J)
-    enddo ; enddo ; endif
+        (CS%Coriolis_Scheme == AL_BLEND)) then
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+        CAv(i,J,k) = CAv(i,J,k) &
+            + ((ep_v(i,j,kk) * vh(i,J-1,k)) - (ep_v(i,j+1,kk) * vh(i,J+1,k))) * G%IdyCv(i,J)
+      enddo ; enddo ; enddo
+    endif
 
     if (Stokes_VF) then
       if (CS%id_CAuS>0 .or. CS%id_CAvS>0) then
         ! Computing the diagnostic Stokes contribution to CAv
-        do J=Jsq,Jeq ; do i=is,ie
-          CAvS(i,J,k) = 0.25 * &
-                ((qS(I,J) * (uh(I,j+1,k) + uh(I,j,k))) + &
-                 (qS(I-1,J) * (uh(I-1,j,k) + uh(I-1,j+1,k)))) * G%IdyCv(i,J)
-        enddo ; enddo
+        do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+          k = ksb + kk - 1
+          CAvS(i,J,k) = 0.25 &
+              * ((qS(I,J,kk) * (uh(I,j+1,k) + uh(I,j,k))) &
+                 + (qS(I-1,J,kk) * (uh(I-1,j,k) + uh(I-1,j+1,k)))) * G%IdyCv(i,J)
+        enddo ; enddo ; enddo
       endif
     endif
 
     if (CS%bound_Coriolis) then
-      do J=Jsq,Jeq ; do i=is,ie
-        fu1 = -abs_vort(I,J) * u(I,j+1,k)
-        fu2 = -abs_vort(I,J) * u(I,j,k)
-        fu3 = -abs_vort(I-1,J) * u(I-1,j+1,k)
-        fu4 = -abs_vort(I-1,J) * u(I-1,j,k)
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+
+        fu1 = -abs_vort(I,J,kk) * u(I,j+1,k)
+        fu2 = -abs_vort(I,J,kk) * u(I,j,k)
+        fu3 = -abs_vort(I-1,J,kk) * u(I-1,j+1,k)
+        fu4 = -abs_vort(I-1,J,kk) * u(I-1,j,k)
 
         max_fu = max(fu1, fu2, fu3, fu4)
         min_fu = min(fu1, fu2, fu3, fu4)
 
         CAv(I,j,k) = min(CAv(I,j,k), max_fu)
         CAv(I,j,k) = max(CAv(I,j,k), min_fu)
-      enddo ; enddo
+      enddo ; enddo ; enddo
     endif
 
     ! Term - d(KE)/dy.
-    do J=Jsq,Jeq ; do i=is,ie
-      CAv(i,J,k) = CAv(i,J,k) - KEy(i,J)
-    enddo ; enddo
+    do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+      k = ksb + kk - 1
+      CAv(i,J,k) = CAv(i,J,k) - KEy(i,J,kk)
+    enddo ; enddo ; enddo
     if (associated(AD%gradKEv)) then
-      do J=Jsq,Jeq ; do i=is,ie
-        AD%gradKEv(i,J,k) = -KEy(i,J)
-      enddo ; enddo
+      do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+        k = ksb + kk - 1
+        AD%gradKEv(i,J,k) = -KEy(i,J,kk)
+      enddo ; enddo ; enddo
     endif
 
     if (associated(AD%rv_x_u) .or. associated(AD%rv_x_v)) then
       ! Calculate the Coriolis-like acceleration due to relative vorticity.
       if (CS%Coriolis_Scheme == SADOURNY75_ENERGY) then
         if (associated(AD%rv_x_u)) then
-          do J=Jsq,Jeq ; do i=is,ie
-            AD%rv_x_u(i,J,k) = - 0.25* &
-              ((q2(I-1,j)*(uh(I-1,j,k) + uh(I-1,j+1,k))) + &
-               (q2(I,j)*(uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
-          enddo ; enddo
+          do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+            k = ksb + kk - 1
+            AD%rv_x_u(i,J,k) = -0.25 &
+                * ((q2(I-1,j,kk) * (uh(I-1,j,k) + uh(I-1,j+1,k))) &
+                   + (q2(I,j,kk) * (uh(I,j,k) + uh(I,j+1,k)))) * G%IdyCv(i,J)
+          enddo ; enddo ; enddo
         endif
 
         if (associated(AD%rv_x_v)) then
-          do j=js,je ; do I=Isq,Ieq
-            AD%rv_x_v(I,j,k) = 0.25 * &
-              ((q2(I,j) * (vh(i+1,J,k) + vh(i,J,k))) + &
-               (q2(I,j-1) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
-          enddo ; enddo
+          do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+            k = ksb + kk - 1
+            AD%rv_x_v(I,j,k) = 0.25 &
+                * ((q2(I,j,kk) * (vh(i+1,J,k) + vh(i,J,k))) &
+                   + (q2(I,j-1,kk) * (vh(i,J-1,k) + vh(i+1,J-1,k)))) * G%IdxCu(I,j)
+          enddo ; enddo ; enddo
         endif
       else
         if (associated(AD%rv_x_u)) then
-          do J=Jsq,Jeq ; do i=is,ie
+          do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+            k = ksb + kk - 1
             AD%rv_x_u(i,J,k) = -G%IdyCv(i,J) * C1_12 * &
-              (((((q2(I,J) + q2(I-1,J-1)) + q2(I-1,J)) * uh(I-1,j,k)) + &
-                (((q2(I-1,J) + q2(I,J+1)) + q2(I,J)) * uh(I,j+1,k))) + &
-               ((((q2(I-1,J) + q2(I,J-1)) + q2(I,J)) * uh(I,j,k))+ &
-                (((q2(I,J) + q2(I-1,J+1)) + q2(I-1,J)) * uh(I-1,j+1,k))))
-          enddo ; enddo
+              (((((q2(I,J,kk) + q2(I-1,J-1,kk)) + q2(I-1,J,kk)) * uh(I-1,j,k)) + &
+                (((q2(I-1,J,kk) + q2(I,J+1,kk)) + q2(I,J,kk)) * uh(I,j+1,k))) + &
+               ((((q2(I-1,J,kk) + q2(I,J-1,kk)) + q2(I,J,kk)) * uh(I,j,k))+ &
+                (((q2(I,J,kk) + q2(I-1,J+1,kk)) + q2(I-1,J,kk)) * uh(I-1,j+1,k))))
+          enddo ; enddo ; enddo
         endif
 
         if (associated(AD%rv_x_v)) then
-          do j=js,je ; do I=Isq,Ieq
+          do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+            k = ksb + kk - 1
             AD%rv_x_v(I,j,k) = G%IdxCu(I,j) * C1_12 * &
-              (((((q2(I+1,J) + q2(I,J-1)) + q2(I,J)) * vh(i+1,J,k)) + &
-                (((q2(I-1,J-1) + q2(I,J)) + q2(I,J-1)) * vh(i,J-1,k))) + &
-               ((((q2(I-1,J) + q2(I,J-1)) + q2(I,J)) * vh(i,J,k)) + &
-                (((q2(I+1,J-1) + q2(I,J)) + q2(I,J-1)) * vh(i+1,J-1,k))))
-          enddo ; enddo
+              (((((q2(I+1,J,kk) + q2(I,J-1,kk)) + q2(I,J,kk)) * vh(i+1,J,k)) + &
+                (((q2(I-1,J-1,kk) + q2(I,J,kk)) + q2(I,J-1,kk)) * vh(i,J-1,k))) + &
+               ((((q2(I-1,J,kk) + q2(I,J-1,kk)) + q2(I,J,kk)) * vh(i,J,k)) + &
+                (((q2(I+1,J-1,kk) + q2(I,J,kk)) + q2(I,J-1,kk)) * vh(i+1,J-1,k))))
+          enddo ; enddo ; enddo
         endif
       endif
     endif
-
-  enddo ! k-loop.
+  enddo ! end of ksb block loop.
 
   ! Here the various Coriolis-related derived quantities are offered for averaging.
   if (query_averaging_enabled(CS%diag)) then
@@ -1241,159 +1370,168 @@ subroutine CorAdCalc(u, v, h, uh, vh, CAu, CAv, OBC, AD, G, GV, US, CS, pbv, Wav
     if (CS%id_intz_rvxv_2d > 0) call post_product_sum_u(CS%id_intz_rvxv_2d, AD%rv_x_v, AD%diag_hu, G, nz, CS%diag)
     if (CS%id_intz_rvxu_2d > 0) call post_product_sum_v(CS%id_intz_rvxu_2d, AD%rv_x_u, AD%diag_hv, G, nz, CS%diag)
   endif
+end subroutine CorAdCalc_block
 
-end subroutine CorAdCalc
 
-
-!> Calculates the acceleration due to the gradient of kinetic energy in one layer.
-subroutine gradKE(u, v, h, KE, KEx, KEy, G, GV, US, CS)
-  type(ocean_grid_type),             intent(in)  :: G   !< Ocean grid structure
-  type(verticalGrid_type),           intent(in)  :: GV  !< Vertical grid structure
-  real, dimension(SZIB_(G),SZJ_(G)), intent(in)  :: u   !< Zonal velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJB_(G)), intent(in)  :: v   !< Meridional velocity [L T-1 ~> m s-1]
-  real, dimension(SZI_(G),SZJ_(G)),  intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2]
-  real, dimension(SZI_(G),SZJ_(G)),  intent(out) :: KE  !< Kinetic energy per unit mass [L2 T-2 ~> m2 s-2]
-  real, dimension(SZIB_(G),SZJ_(G)), intent(out) :: KEx !< Zonal acceleration due to kinetic
-                                                        !! energy gradient [L T-2 ~> m s-2]
-  real, dimension(SZI_(G),SZJB_(G)), intent(out) :: KEy !< Meridional acceleration due to kinetic
-                                                        !! energy gradient [L T-2 ~> m s-2]
-  type(unit_scale_type),             intent(in)  :: US  !< A dimensional unit scaling type
-  type(CoriolisAdv_CS),              intent(in)  :: CS  !< Control structure for MOM_CoriolisAdv
+!> Calculates the acceleration due to the gradient of kinetic energy for a k-block.
+subroutine gradKE(u, v, h, KE, KEx, KEy, ksb, keb, nkk, G, GV, US, CS)
+  type(ocean_grid_type),                      intent(in)  :: G   !< Ocean grid structure
+  type(verticalGrid_type),                    intent(in)  :: GV  !< Vertical grid structure
+  integer,                                    intent(in)  :: ksb !< First layer in the k-block [nondim].
+  integer,                                    intent(in)  :: keb   !< Last layer in the k-block [nondim].
+  integer,                                    intent(in)  :: nkk !< Size of the k-block [nondim].
+  real, dimension(SZIB_(G),SZJ_(G),SZK_(GV)), intent(in)  :: u   !< Zonal velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJB_(G),SZK_(GV)), intent(in)  :: v   !< Meridional velocity [L T-1 ~> m s-1]
+  real, dimension(SZI_(G),SZJ_(G),SZK_(GV)),  intent(in)  :: h   !< Layer thickness [H ~> m or kg m-2]
+  real, dimension(SZI_(G),SZJ_(G),nkk),   intent(out) :: KE  !< Kinetic energy per unit mass [L2 T-2 ~> m2 s-2]
+  real, dimension(SZIB_(G),SZJ_(G),nkk),  intent(out) :: KEx !< Zonal acceleration due to kinetic
+                                                                 !! energy gradient [L T-2 ~> m s-2]
+  real, dimension(SZI_(G),SZJB_(G),nkk),  intent(out) :: KEy !< Meridional acceleration due to kinetic
+                                                                 !! energy gradient [L T-2 ~> m s-2]
+  type(unit_scale_type),                      intent(in)  :: US  !< A dimensional unit scaling type
+  type(CoriolisAdv_CS),                       intent(in)  :: CS  !< Control structure for MOM_CoriolisAdv
   ! Local variables
   real :: um, up, vm, vp         ! Temporary variables [L T-1 ~> m s-1].
   real :: um2, up2, vm2, vp2     ! Temporary variables [L2 T-2 ~> m2 s-2].
   real :: um2a, up2a, vm2a, vp2a ! Temporary variables [L4 T-2 ~> m4 s-2].
   real :: third_order_u, third_order_v  ! Product of mask values to determine the boundary
-  integer :: i, j, is, ie, js, je, Isq, Ieq, Jsq, Jeq, nz, n
+  integer :: i, j, k, kk, kke, is, ie, js, je, Isq, Ieq, Jsq, Jeq
   real, parameter     :: C1_12 = 1.0/12.0   ! The ratio of 1/12 [nondim]
 
-  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec ; nz = GV%ke
+  is = G%isc ; ie = G%iec ; js = G%jsc ; je = G%jec
   Isq = G%IscB ; Ieq = G%IecB ; Jsq = G%JscB ; Jeq = G%JecB
-
+  kke = keb - ksb + 1
 
   ! Calculate KE (Kinetic energy for use in the -grad(KE) acceleration term).
   if (CS%KE_Scheme == KE_ARAKAWA) then
     ! The following calculation of Kinetic energy includes the metric terms
     ! identified in Arakawa & Lamb 1982 as important for KE conservation.  It
     ! also includes the possibility of partially-blocked tracer cell faces.
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      KE(i,j) = ( ( (G%areaCu( I ,j)*(u( I ,j)*u( I ,j))) + &
-                    (G%areaCu(I-1,j)*(u(I-1,j)*u(I-1,j))) ) + &
-                  ( (G%areaCv(i, J )*(v(i, J )*v(i, J ))) + &
-                    (G%areaCv(i,J-1)*(v(i,J-1)*v(i,J-1))) ) )*0.25*G%IareaT(i,j)
-    enddo ; enddo
+    do kk=1,kke ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      k = ksb + kk - 1
+      KE(i,j,kk) = ( ( (G%areaCu( I ,j)*(u( I ,j,k)*u( I ,j,k))) + &
+                       (G%areaCu(I-1,j)*(u(I-1,j,k)*u(I-1,j,k))) ) + &
+                     ( (G%areaCv(i, J )*(v(i, J ,k)*v(i, J ,k))) + &
+                       (G%areaCv(i,J-1)*(v(i,J-1,k)*v(i,J-1,k))) ) )*0.25*G%IareaT(i,j)
+    enddo ; enddo ; enddo
   elseif (CS%KE_Scheme == KE_SIMPLE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme which does not take into account any geometric factors
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      up = 0.5*( u(I-1,j) + ABS( u(I-1,j) ) ) ; up2 = up*up
-      um = 0.5*( u( I ,j) - ABS( u( I ,j) ) ) ; um2 = um*um
-      vp = 0.5*( v(i,J-1) + ABS( v(i,J-1) ) ) ; vp2 = vp*vp
-      vm = 0.5*( v(i, J ) - ABS( v(i, J ) ) ) ; vm2 = vm*vm
-      KE(i,j) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
-    enddo ; enddo
+    do kk=1,kke ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      k = ksb + kk - 1
+      up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2 = up*up
+      um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2 = um*um
+      vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2 = vp*vp
+      vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2 = vm*vm
+      KE(i,j,kk) = ( max(up2,um2) + max(vp2,vm2) ) *0.5
+    enddo ; enddo ; enddo
   elseif (CS%KE_Scheme == KE_GUDONOV) then
     ! The following discretization of KE is based on the one-dimensional Gudonov
     ! scheme but has been adapted to take horizontal grid factors into account
-    do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-      up = 0.5*( u(I-1,j) + ABS( u(I-1,j) ) ) ; up2a = up*up*G%areaCu(I-1,j)
-      um = 0.5*( u( I ,j) - ABS( u( I ,j) ) ) ; um2a = um*um*G%areaCu( I ,j)
-      vp = 0.5*( v(i,J-1) + ABS( v(i,J-1) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
-      vm = 0.5*( v(i, J ) - ABS( v(i, J ) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
-      KE(i,j) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
-    enddo ; enddo
+    do kk=1,kke ; do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+      k = ksb + kk - 1
+      up = 0.5*( u(I-1,j,k) + ABS( u(I-1,j,k) ) ) ; up2a = up*up*G%areaCu(I-1,j)
+      um = 0.5*( u( I ,j,k) - ABS( u( I ,j,k) ) ) ; um2a = um*um*G%areaCu( I ,j)
+      vp = 0.5*( v(i,J-1,k) + ABS( v(i,J-1,k) ) ) ; vp2a = vp*vp*G%areaCv(i,J-1)
+      vm = 0.5*( v(i, J ,k) - ABS( v(i, J ,k) ) ) ; vm2a = vm*vm*G%areaCv(i, J )
+      KE(i,j,kk) = ( max(um2a,up2a) + max(vm2a,vp2a) )*0.5*G%IareaT(i,j)
+    enddo ; enddo ; enddo
   elseif (CS%KE_Scheme == KE_UP3) then
     ! The following discretization of KE is based on the one-dimensional third-order
     ! upwind scheme which does not take horizontal grid factors into account
-    if (CS%KE_use_limiter) then
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        ! compute the masking to make sure that inland values are not used
-        third_order_u = (G%mask2dCu(I-2,j) * G%mask2dCu(I-1,j)* &
-                       G%mask2dCu(I,j) * G%mask2dCu(I+1,j))
 
-        if (third_order_u == 1) then
-          up = (7.0 * (u(I-1,j) + u(I,j)) - (u(I-2,j) + u(I+1,j))) * C1_12
-          call UP3_Koren_limiter_reconstruction(u(I-2:I+1,j), up, um)
-        else
-          up = (u(I-1,j) + u(I,j))*0.5
-          if (up>0.) then
-            um = u(I-1,j)
-          elseif (up<0.) then
-            um = u(I,j)
+    do kk=1,kke
+      k = ksb + kk - 1
+
+      if (CS%KE_use_limiter) then
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          ! compute the masking to make sure that inland values are not used
+          third_order_u = (G%mask2dCu(I-2,j) * G%mask2dCu(I-1,j)* &
+                         G%mask2dCu(I,j) * G%mask2dCu(I+1,j))
+
+          if (third_order_u == 1) then
+            up = (7.0 * (u(I-1,j,k) + u(I,j,k)) - (u(I-2,j,k) + u(I+1,j,k))) * C1_12
+            call UP3_Koren_limiter_reconstruction(u(I-2:I+1,j,k), up, um)
           else
-            um = up
+            up = (u(I-1,j,k) + u(I,j,k))*0.5
+            if (up>0.) then
+              um = u(I-1,j,k)
+            elseif (up<0.) then
+              um = u(I,j,k)
+            else
+              um = up
+            endif
           endif
-        endif
 
-        third_order_v = (G%mask2dCv(i,J-2) * G%mask2dCv(i,J-1)* &
-                       G%mask2dCv(i,J) * G%mask2dCv(i,J+1))
-        if (third_order_v ==1) then
-          vp = (7.0 * (v(i,J-1) + v(i,J)) - (v(i,J-2) + v(i,J+1))) * C1_12
-          call UP3_Koren_limiter_reconstruction(v(i,J-2:J+1), vp, vm)
-        else
-          vp = (v(i,J-1) + v(i,J))*0.5
-          if (vp>0.) then
-            vm = v(i,J-1)
-          elseif (vp<0.) then
-            vm = v(i,J)
+          third_order_v = (G%mask2dCv(i,J-2) * G%mask2dCv(i,J-1)* &
+                         G%mask2dCv(i,J) * G%mask2dCv(i,J+1))
+          if (third_order_v ==1) then
+            vp = (7.0 * (v(i,J-1,k) + v(i,J,k)) - (v(i,J-2,k) + v(i,J+1,k))) * C1_12
+            call UP3_Koren_limiter_reconstruction(v(i,J-2:J+1,k), vp, vm)
           else
-            vm = vp
+            vp = (v(i,J-1,k) + v(i,J,k))*0.5
+            if (vp>0.) then
+              vm = v(i,J-1,k)
+            elseif (vp<0.) then
+              vm = v(i,J,k)
+            else
+              vm = vp
+            endif
           endif
-        endif
 
-        KE(i,j) = ( (um*um) + (vm*vm) )*0.5
-      enddo ; enddo
-    else
-      do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
-        ! compute the masking to make sure that inland values are not used
-        third_order_u = (G%mask2dCu(I-2,j) * G%mask2dCu(I-1,j)* &
-                       G%mask2dCu(I,j) * G%mask2dCu(I+1,j))
+          KE(i,j,kk) = ( (um*um) + (vm*vm) )*0.5
+        enddo ; enddo
+      else
+        do j=Jsq,Jeq+1 ; do i=Isq,Ieq+1
+          ! compute the masking to make sure that inland values are not used
+          third_order_u = (G%mask2dCu(I-2,j) * G%mask2dCu(I-1,j)* &
+                         G%mask2dCu(I,j) * G%mask2dCu(I+1,j))
 
-        if (third_order_u == 1) then
-          up = (7.0 * (u(I-1,j) + u(I,j)) - (u(I-2,j) + u(I+1,j))) * C1_12
-          call UP3_reconstruction(u(I-2:I+1,j), up, um)
-        else
-          up = (u(I-1,j) + u(I,j))*0.5
-          if (up>0.) then
-            um = u(I-1,j)
-          elseif (up<0.) then
-            um = u(I,j)
+          if (third_order_u == 1) then
+            up = (7.0 * (u(I-1,j,k) + u(I,j,k)) - (u(I-2,j,k) + u(I+1,j,k))) * C1_12
+            call UP3_reconstruction(u(I-2:I+1,j,k), up, um)
           else
-            um = up
+            up = (u(I-1,j,k) + u(I,j,k))*0.5
+            if (up>0.) then
+              um = u(I-1,j,k)
+            elseif (up<0.) then
+              um = u(I,j,k)
+            else
+              um = up
+            endif
           endif
-        endif
 
-        third_order_v = (G%mask2dCv(i,J-2) * G%mask2dCv(i,J-1)* &
-                       G%mask2dCv(i,J) * G%mask2dCv(i,J+1))
-        if (third_order_v ==1) then
-          vp = (7.0 * (v(i,J-1) + v(i,J)) - (v(i,J-2) + v(i,J+1))) * C1_12
-          call UP3_reconstruction(v(i,J-2:J+1), vp, vm)
-        else
-          vp = (v(i,J-1) + v(i,J))*0.5
-          if (vp>0.) then
-            vm = v(i,J-1)
-          elseif (vp<0.) then
-            vm = v(i,J)
+          third_order_v = (G%mask2dCv(i,J-2) * G%mask2dCv(i,J-1)* &
+                         G%mask2dCv(i,J) * G%mask2dCv(i,J+1))
+          if (third_order_v ==1) then
+            vp = (7.0 * (v(i,J-1,k) + v(i,J,k)) - (v(i,J-2,k) + v(i,J+1,k))) * C1_12
+            call UP3_reconstruction(v(i,J-2:J+1,k), vp, vm)
           else
-            vm = vp
+            vp = (v(i,J-1,k) + v(i,J,k))*0.5
+            if (vp>0.) then
+              vm = v(i,J-1,k)
+            elseif (vp<0.) then
+              vm = v(i,J,k)
+            else
+              vm = vp
+            endif
           endif
-        endif
 
-        KE(i,j) = ( (um*um) + (vm*vm) )*0.5
-      enddo ; enddo
-    endif
+          KE(i,j,kk) = ( (um*um) + (vm*vm) )*0.5
+        enddo ; enddo
+      endif
+    enddo
   endif
 
   ! Term - d(KE)/dx.
-  do j=js,je ; do I=Isq,Ieq
-    KEx(I,j) = (KE(i+1,j) - KE(i,j)) * G%IdxCu_OBCmask(I,j)
-  enddo ; enddo
+  do kk=1,kke ; do j=js,je ; do I=Isq,Ieq
+    KEx(I,j,kk) = (KE(i+1,j,kk) - KE(i,j,kk)) * G%IdxCu_OBCmask(I,j)
+  enddo ; enddo ; enddo
 
   ! Term - d(KE)/dy.
-  do J=Jsq,Jeq ; do i=is,ie
-    KEy(i,J) = (KE(i,j+1) - KE(i,j)) * G%IdyCv_OBCmask(i,J)
-  enddo ; enddo
-
+  do kk=1,kke ; do J=Jsq,Jeq ; do i=is,ie
+    KEy(i,J,kk) = (KE(i,j+1,kk) - KE(i,j,kk)) * G%IdyCv_OBCmask(i,J)
+  enddo ; enddo ; enddo
 end subroutine gradKE
 
 !> Reconstruct the scalar (e.g., pv, vorticity) onto point i-1/2 using a third-order upwind scheme
@@ -1888,6 +2026,7 @@ function CoriolisAdv_stencil(CS) result(stencil)
 
 end function CoriolisAdv_stencil
 
+
 !> Initializes the control structure for MOM_CoriolisAdv
 subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   type(time_type), target, intent(in)    :: Time !< Current model time
@@ -1904,7 +2043,9 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
   character(len=40)  :: mdl = "MOM_CoriolisAdv" ! This module's name.
   character(len=20)  :: tmpstr
   character(len=400) :: mesg
+  logical :: use_weno
   integer :: isd, ied, jsd, jed, IsdB, IedB, JsdB, JedB, nz
+  integer, parameter :: default_nkblock = 1
 
   isd = G%isd ; ied = G%ied ; jsd = G%jsd ; jed = G%jed ; nz = GV%ke
   IsdB = G%IsdB ; IedB = G%IedB ; JsdB = G%JsdB ; JedB = G%JedB
@@ -1914,6 +2055,11 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
 
   ! Read all relevant parameters and write them to the model log.
   call log_version(param_file, mdl, version, "")
+  call get_param(param_file, mdl, "CORIOLIS_ADV_NKBLOCK", CS%nkblock, &
+                 "The k-direction block size used in Coriolis and momentum "//&
+                 "advection calculations. The default value of 1 uses "//&
+                 "single-layer blocks.", default=default_nkblock, layoutParam=.true.)
+  if (CS%nkblock < 0) call MOM_error(FATAL, "CORIOLIS_ADV_NKBLOCK must be >= 0.")
   call get_param(param_file, mdl, "NOSLIP", CS%no_slip, &
                  "If true, no slip boundary conditions are used; otherwise "//&
                  "free slip boundary conditions are assumed. The "//&
@@ -1970,8 +2116,11 @@ subroutine CoriolisAdv_init(Time, G, GV, US, param_file, diag, AD, CS)
             "#define CORIOLIS_SCHEME "//trim(tmpstr)//" found in input file.")
   end select
 
-  if (CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO .or. &
-          CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO .or. CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO) then
+  use_weno = CS%Coriolis_Scheme == wenovi7th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi5th_PV_ENSTRO &
+      .or. CS%Coriolis_Scheme == wenovi3rd_PV_ENSTRO
+
+  if (use_weno) then
     call get_param(param_file, mdl, "WENO_VELOCITY_SMOOTH", CS%weno_velocity_smooth, &
             "If true, use velocity to compute weighting for WENO. ", &
                   default=.false.)

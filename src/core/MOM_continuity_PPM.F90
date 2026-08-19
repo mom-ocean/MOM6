@@ -2853,7 +2853,8 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
                        ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, nz, n, stencil
-  integer :: ksb, keb
+  integer :: ksb, keb   ! Start and end domain index bounds of current block
+  integer :: kke        ! Block end index of current block
   logical :: local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
 
@@ -2882,17 +2883,20 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
 
   do ksb=1,nz,nkk
     keb = min(ksb + nkk - 1, nz)
+    kke = keb - ksb + 1
 
     if (simple_2nd) then
-      do k=ksb,keb ; do j=jsl,jel ; do i=isl,iel
+      do kk=1,kke ; do j=jsl,jel ; do i=isl,iel
+        k = ksb + kk - 1
+
         h_im1 = G%mask2dT(i-1,j) * h_in(i-1,j,k) + (1.0-G%mask2dT(i-1,j)) * h_in(i,j,k)
         h_ip1 = G%mask2dT(i+1,j) * h_in(i+1,j,k) + (1.0-G%mask2dT(i+1,j)) * h_in(i,j,k)
         h_W(i,j,k) = 0.5*( h_im1 + h_in(i,j,k) )
         h_E(i,j,k) = 0.5*( h_ip1 + h_in(i,j,k) )
       enddo ; enddo ; enddo
     else
-      do k=ksb,keb ; do j=jsl,jel ; do i=isl-1,iel+1
-        kk = k - ksb + 1
+      do kk=1,kke ; do j=jsl,jel ; do i=isl-1,iel+1
+        k = ksb + kk - 1
 
         if ((G%mask2dT(i-1,j) * G%mask2dT(i,j) * G%mask2dT(i+1,j)) == 0.0) then
           slp(i,j,kk) = 0.0
@@ -2913,9 +2917,7 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
           if (.not. segment%on_pe) cycle
           if (segment%is_E_or_W) then
             I=segment%HI%IsdB
-            do k=ksb,keb ; do j=segment%HI%jsd,segment%HI%jed
-              kk = k - ksb + 1
-
+            do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
               slp(i+1,j,kk) = 0.0
               slp(i,j,kk) = 0.0
             enddo ; enddo
@@ -2923,8 +2925,8 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
         enddo
       endif
 
-      do k=ksb,keb ; do j=jsl,jel ; do i=isl,iel
-        kk = k - ksb + 1
+      do kk=1,kke ; do j=jsl,jel ; do i=isl,iel
+        k = ksb + kk - 1
 
         ! Neighboring values should take into account any boundaries.  The 3
         ! following sets of expressions are equivalent.
@@ -2947,14 +2949,18 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
         if (segment%direction == OBC_DIRECTION_E) then
           I=segment%HI%IsdB
           if (associated(segment%h_Reg)) then
-            do k=ksb,keb ; do j=segment%HI%jsd,segment%HI%jed
+            do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
+              k = ksb + kk - 1
+
               h_W(i+1,j,k) = segment%h_Reg%h_res(i,j,k)
               h_E(i+1,j,k) = segment%h_Reg%h_res(i,j,k)
               h_W(i,j,k) = segment%h_Reg%h_res(i,j,k)
               h_E(i,j,k) = segment%h_Reg%h_res(i,j,k)
             enddo ; enddo
           else
-            do k=ksb,keb ; do j=segment%HI%jsd,segment%HI%jed
+            do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
+              k = ksb + kk - 1
+
               h_W(i+1,j,k) = h_in(i,j,k)
               h_E(i+1,j,k) = h_in(i,j,k)
               h_W(i,j,k) = h_in(i,j,k)
@@ -2964,14 +2970,18 @@ subroutine PPM_reconstruction_x(h_in, h_W, h_E, G, GV, LB, nkk, h_min, monotonic
         elseif (segment%direction == OBC_DIRECTION_W) then
           I=segment%HI%IsdB
           if (associated(segment%h_Reg)) then
-            do k=ksb,keb ; do j=segment%HI%jsd,segment%HI%jed
+            do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
+              k = ksb + kk - 1
+
               h_W(i,j,k) = segment%h_Reg%h_res(i,j,k)
               h_E(i,j,k) = segment%h_Reg%h_res(i,j,k)
               h_W(i+1,j,k) = segment%h_Reg%h_res(i,j,k)
               h_E(i+1,j,k) = segment%h_Reg%h_res(i,j,k)
             enddo ; enddo
           else
-            do k=ksb,keb ; do j=segment%HI%jsd,segment%HI%jed
+            do kk=1,kke ; do j=segment%HI%jsd,segment%HI%jed
+              k = ksb + kk - 1
+
               h_W(i,j,k) = h_in(i+1,j,k)
               h_E(i,j,k) = h_in(i+1,j,k)
               h_W(i+1,j,k) = h_in(i+1,j,k)
@@ -3021,7 +3031,8 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
                        ! minimum (dMn) of the surrounding values [H ~> m or kg m-2]
   character(len=256) :: mesg
   integer :: i, j, isl, iel, jsl, jel, nz, n, stencil
-  integer :: ksb, keb
+  integer :: ksb, keb   ! Start and end domain index bounds of current block
+  integer :: kke        ! Block end index of current block
   logical :: local_open_BC
   type(OBC_segment_type), pointer :: segment => NULL()
 
@@ -3050,17 +3061,20 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
 
   do ksb=1,nz,nkk
     keb = min(ksb + nkk - 1, nz)
+    kke = keb - ksb + 1
 
     if (simple_2nd) then
-      do k=ksb,keb ; do j=jsl,jel ; do i=isl,iel
+      do kk=1,kke ; do j=jsl,jel ; do i=isl,iel
+        k = ksb + kk - 1
+
         h_jm1 = G%mask2dT(i,j-1) * h_in(i,j-1,k) + (1.0-G%mask2dT(i,j-1)) * h_in(i,j,k)
         h_jp1 = G%mask2dT(i,j+1) * h_in(i,j+1,k) + (1.0-G%mask2dT(i,j+1)) * h_in(i,j,k)
         h_S(i,j,k) = 0.5*( h_jm1 + h_in(i,j,k) )
         h_N(i,j,k) = 0.5*( h_jp1 + h_in(i,j,k) )
       enddo ; enddo ; enddo
     else
-      do k=ksb,keb ; do j=jsl-1,jel+1 ; do i=isl,iel
-        kk = k - ksb + 1
+      do kk=1,kke ; do j=jsl-1,jel+1 ; do i=isl,iel
+        k = ksb + kk - 1
 
         if ((G%mask2dT(i,j-1) * G%mask2dT(i,j) * G%mask2dT(i,j+1)) == 0.0) then
           slp(i,j,kk) = 0.0
@@ -3081,9 +3095,7 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
           if (.not. segment%on_pe) cycle
           if (segment%is_N_or_S) then
             J=segment%HI%JsdB
-            do k=ksb,keb ; do i=segment%HI%isd,segment%HI%ied
-              kk = k - ksb + 1
-
+            do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
               slp(i,j+1,kk) = 0.0
               slp(i,j,kk) = 0.0
             enddo ; enddo
@@ -3091,8 +3103,8 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
         enddo
       endif
 
-      do k=ksb,keb ; do j=jsl,jel ; do i=isl,iel
-        kk = k - ksb + 1
+      do kk=1,kke ; do j=jsl,jel ; do i=isl,iel
+        k = ksb + kk - 1
 
         ! Neighboring values should take into account any boundaries.  The 3
         ! following sets of expressions are equivalent.
@@ -3113,14 +3125,18 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
         if (segment%direction == OBC_DIRECTION_N) then
           J=segment%HI%JsdB
           if (associated(segment%h_Reg)) then
-            do k=ksb,keb ; do i=segment%HI%isd,segment%HI%ied
+            do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
+              k = ksb + kk - 1
+
               h_S(i,j+1,k) = segment%h_Reg%h_res(i,j,k)
               h_N(i,j+1,k) = segment%h_Reg%h_res(i,j,k)
               h_S(i,j,k) = segment%h_Reg%h_res(i,j,k)
               h_N(i,j,k) = segment%h_Reg%h_res(i,j,k)
             enddo ; enddo
           else
-            do k=ksb,keb ; do i=segment%HI%isd,segment%HI%ied
+            do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
+              k = ksb + kk - 1
+
               h_S(i,j+1,k) = h_in(i,j,k)
               h_N(i,j+1,k) = h_in(i,j,k)
               h_S(i,j,k) = h_in(i,j,k)
@@ -3130,14 +3146,18 @@ subroutine PPM_reconstruction_y(h_in, h_S, h_N, G, GV, LB, nkk, h_min, monotonic
         elseif (segment%direction == OBC_DIRECTION_S) then
           J=segment%HI%JsdB
           if (associated(segment%h_Reg)) then
-            do k=ksb,keb ; do i=segment%HI%isd,segment%HI%ied
+            do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
+              k = ksb + kk - 1
+
               h_S(i,j,k) = segment%h_Reg%h_res(i,j,k)
               h_N(i,j,k) = segment%h_Reg%h_res(i,j,k)
               h_S(i,j+1,k) = segment%h_Reg%h_res(i,j,k)
               h_N(i,j+1,k) = segment%h_Reg%h_res(i,j,k)
             enddo ; enddo
           else
-            do k=ksb,keb ; do i=segment%HI%isd,segment%HI%ied
+            do kk=1,kke ; do i=segment%HI%isd,segment%HI%ied
+              k = ksb + kk - 1
+
               h_S(i,j,k) = h_in(i,j+1,k)
               h_N(i,j,k) = h_in(i,j+1,k)
               h_S(i,j+1,k) = h_in(i,j+1,k)
