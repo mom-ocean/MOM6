@@ -2815,8 +2815,8 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS, OBC)
                  "Otherwise use the transport averaged areas.", default=.true.)
   call get_param(param_file, mdl, "CONT_USE_H_MARG_MIN", use_h_marg_min, &
                  "If true, the marginal thickness used and returned from continuity "//&
-                 "is bounded from below by a sub-roundoff value. Otherwise the "//&
-                 "minimum is 0.", default=.false.)
+                 "is bounded from below by a sub-roundoff value.  Otherwise the "//&
+                 "minimum is a large negative value to recreate previous answers.", default=.false.)
   CS%diag => diag
 
   id_clock_reconstruct = cpu_clock_id('(Ocean continuity reconstruction)', grain=CLOCK_ROUTINE)
@@ -2826,7 +2826,8 @@ subroutine continuity_PPM_init(Time, G, GV, US, param_file, diag, CS, OBC)
   if (use_h_marg_min) then
     CS%h_marg_min = GV%H_subroundoff
   else
-    CS%h_marg_min = 0.
+    ! The light-year here means there is effectively no floor on negative marginal thicknesses.
+    CS%h_marg_min = -1.0e16*GV%m_to_H  ! Negative 1.057 light years
   endif
 
   if (local_open_BC) then
