@@ -19,7 +19,7 @@ jobs:
     runs-on: macOS-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup/
 
@@ -35,7 +35,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-symmetric.tar .testing/build/symmetric/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-symmetric-artifact
           path: mom6-symmetric.tar
@@ -45,7 +45,7 @@ jobs:
     runs-on: macOS-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup/
 
@@ -61,7 +61,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-asymmetric.tar .testing/build/asymmetric/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-asymmetric-artifact
           path: mom6-asymmetric.tar
@@ -71,7 +71,7 @@ jobs:
     runs-on: macOS-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup/
 
@@ -87,7 +87,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-repro.tar .testing/build/repro/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-repro-artifact
           path: mom6-repro.tar
@@ -97,7 +97,7 @@ jobs:
     runs-on: macOS-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup/
 
@@ -113,7 +113,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-openmp.tar .testing/build/openmp/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-openmp-artifact
           path: mom6-openmp.tar
@@ -124,7 +124,7 @@ jobs:
     runs-on: macOS-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup/
 
@@ -145,7 +145,7 @@ jobs:
       - name: Prepare artifact
         run: tar -cf mom6-target.tar .testing/build/target/MOM6
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: mom6-target-artifact
           path: mom6-target.tar
@@ -160,17 +160,17 @@ jobs:
       - build-asymmetric
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download asymmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-asymmetric-artifact
 
@@ -191,12 +191,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -214,12 +214,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -237,12 +237,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -260,12 +260,12 @@ jobs:
     needs: build-symmetric
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -293,12 +293,12 @@ jobs:
           - {id: r, desc: "density"}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
@@ -318,17 +318,17 @@ jobs:
       - build-openmp
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download OpenMP MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-openmp-artifact
 
@@ -351,17 +351,17 @@ jobs:
       - build-repro
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download DEBUG MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download REPRO MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-repro-artifact
 
@@ -385,17 +385,17 @@ jobs:
       - build-target
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: ./.github/actions/macos-setup
 
       - name: Download symmetric MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-symmetric-artifact
 
       - name: Download target MOM6
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: mom6-target-artifact
 
@@ -424,7 +424,7 @@ jobs:
       - test-repro
 
     steps:
-      - uses: geekyeggo/delete-artifact@v5
+      - uses: geekyeggo/delete-artifact@v6
         with:
           name: |
             mom6-asymmetric-artifact
@@ -451,7 +451,7 @@ jobs:
       - test-repro
 
     steps:
-      - uses: geekyeggo/delete-artifact@v5
+      - uses: geekyeggo/delete-artifact@v6
         with:
           name: |
             mom6-symmetric-artifact
@@ -474,7 +474,7 @@ jobs:
       - test-regression
 
     steps:
-      - uses: geekyeggo/delete-artifact@v5
+      - uses: geekyeggo/delete-artifact@v6
         with:
           name: |
             mom6-symmetric-artifact
