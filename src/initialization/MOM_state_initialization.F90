@@ -364,6 +364,7 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
 
     ! Initialize temperature and salinity (T and S).
     if ( use_temperature ) then
+      config = ""
       call get_param(PF, mdl, "TS_CONFIG", config, &
              "A string that determines how the initial temperatures "//&
              "and salinities are specified for a new run: \n"//&
@@ -431,8 +432,13 @@ subroutine MOM_initialize_state(u, v, h, tv, Time, G, GV, US, PF, dirs, &
                                  dz, just_read=just_read)
         case ("USER"); call user_init_temperature_salinity(tv%T, tv%S, G, GV, PF, &
                                 just_read=just_read)
-        case default ; call MOM_error(FATAL,  "MOM_initialize_state: "//&
+        case default
+          ! Crash when config is unrecognized in a new sim, or if unrecognized config was
+          ! passed in when restarting simulation. Do not fail if TS_CONFIG is missing when restarting.
+          if (new_sim .or. len_trim(config) /= 0) then
+            call MOM_error(FATAL,  "MOM_initialize_state: "//&
                "Unrecognized Temp & salt configuration "//trim(config))
+          endif
       end select
     endif
   endif  ! not from_Z_file.
@@ -801,6 +807,7 @@ subroutine initialize_thickness_from_file(h, depth_tot, G, GV, US, param_file, f
 
   call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".", do_not_log=just_read)
   inputdir = slasher(inputdir)
+  thickness_file = ""
   call get_param(param_file, mdl, "THICKNESS_FILE", thickness_file, &
                  "The name of the thickness file.", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -1201,6 +1208,7 @@ subroutine depress_surface(h, G, GV, US, param_file, tv, just_read, z_top_shelf)
 
     call get_param(param_file, mdl, "INPUTDIR", inputdir, default=".")
     inputdir = slasher(inputdir)
+    eta_srf_file = ""
     call get_param(param_file, mdl, "SURFACE_HEIGHT_IC_FILE", eta_srf_file, &
                    "The initial condition file for the surface height.", &
                    fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -1291,6 +1299,7 @@ subroutine trim_for_ice(PF, G, GV, US, ALE_CSp, tv, h, just_read)
   logical :: use_frac_dp_bugfix   ! If true, use bugfix. Otherwise, pressure input to EOS is negative.
   type(remapping_CS), pointer :: remap_CS => NULL()
 
+  p_surf_file = ""
   call get_param(PF, mdl, "SURFACE_PRESSURE_FILE", p_surf_file, &
                  "The initial condition file for the surface pressure exerted by ice.", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -1590,6 +1599,7 @@ subroutine initialize_velocity_from_file(u, v, G, GV, US, param_file, just_read)
 
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
+  velocity_file = ""
   call get_param(param_file, mdl, "VELOCITY_FILE", velocity_file, &
                  "The name of the velocity initial condition file.", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
@@ -1777,6 +1787,7 @@ subroutine initialize_temp_salt_from_file(T, S, G, GV, US, param_file, just_read
 
   if (.not.just_read) call callTree_enter(trim(mdl)//"(), MOM_state_initialization.F90")
 
+  TS_FILE = ""
   call get_param(param_file, mdl, "TS_FILE", ts_file, &
                  "The initial condition file for temperature.", &
                  fail_if_missing=.not.just_read, do_not_log=just_read)
